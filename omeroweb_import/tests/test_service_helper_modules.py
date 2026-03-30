@@ -22,6 +22,7 @@ from omero_plugin_common import omero_helpers as common_omero_helpers
 
 REPO_ROOT = PurePosixPath(__file__).parents[2]
 TEST_JOBS_ROOT = str(Path(tempfile.gettempdir()) / "import-jobs")
+TEST_OMERO_CLI = "omero-cli"
 
 
 class _FakeValue:
@@ -153,7 +154,7 @@ def dataset_module(monkeypatch):
     monkeypatch.setattr(
         core_functions, "ORPHAN_DATASET_PREFIX", "UploadRoot", raising=False
     )
-    monkeypatch.setattr(core_functions, "OMERO_CLI", "/usr/bin/omero", raising=False)
+    monkeypatch.setattr(core_functions, "OMERO_CLI", TEST_OMERO_CLI, raising=False)
     monkeypatch.setattr(
         core_functions,
         "settings",
@@ -350,7 +351,7 @@ def test_dataset_service_wrapper_uses_canonical_core_functions(
         "omeroserver",
         4064,
     ) == [
-        "/usr/bin/omero",
+        TEST_OMERO_CLI,
         "-k",
         "session-key",
         "-s",

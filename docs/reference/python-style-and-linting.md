@@ -5,7 +5,7 @@ This repository uses [Ruff](https://github.com/astral-sh/ruff) as the canonical 
 ## CI workflow
 
 - `.github/workflows/ruff.yml` runs on `pull_request` to `main`, `push` to `main`, and `workflow_dispatch`.
-- The workflow uses pinned GitHub Actions and a pinned Ruff release (`0.15.7`).
+- The workflow uses pinned GitHub Actions and a pinned Ruff release (`0.15.8`).
 - CI runs:
   - `ruff check .`
   - `ruff format --check .`

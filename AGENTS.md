@@ -7,6 +7,7 @@ It is intentionally short. Deep context lives in the files it points to.
 
 - **Never use background agents or subagents** unless the user explicitly asks for them. All work must be done directly in the main conversation. Background agents have produced hallucinated data (e.g. fabricated commit SHAs) that broke CI workflows.
 - All configuration is environment-driven. Never hard-code paths, credentials, or endpoints.
+- In committed code and tests, do not hard-code installation-specific host paths, filenames, or clone locations. Use environment variables, `tmp_path`/`tempfile`, or repo-relative discovery instead. Absolute paths are allowed only when the shipped product intentionally fixes that runtime path and the test is asserting that contract.
 - Keep changes deterministic, explicit, and reproducible across environments.
 - Prefer small, focused pull requests with clear acceptance criteria.
 - Update documentation in `docs/` whenever behavior or operating assumptions change.
@@ -97,6 +98,7 @@ omeroweb_<name>/
 
 - Plugin packages depend on `omero_plugin_common`, never the reverse.
 - Startup scripts consume only environment-provided configuration.
+- If a Docker image startup/bootstrap script calls a tracked helper, asset, or template file, the corresponding Dockerfile must copy that file into the image and a regression test must assert that packaging contract. Never assume a file under `startup/` is present at runtime just because it exists in the repository tree.
 - All health checks are defined in `docker-compose.yml` with `healthcheck:` blocks.
 - The `omeroweb` container runs two processes via supervisord: OMERO.web and the Imaris Celery worker.
 - Job state files use `portalocker` for safe concurrent access on tmpfs.
@@ -190,6 +192,7 @@ omeroweb_<name>/
 
 ### Testing
 - When tests fail, fix the actual production code using best practices. Do not weaken, loosen, or remove tests to make them pass unless the tests themselves are fundamentally incorrect (e.g. relying on mock-specific behavior that does not match real runtime semantics). If a test must be changed, the change must make the test *more* correct, not less.
+- When writing or rewriting committed tests, model runtime behavior without baking in installation-specific absolute paths. Prefer temporary directories, fixture-generated filenames, symbolic command names, and values derived from the repository tree or environment. If an absolute path appears in a committed test, it must represent a real supported runtime contract and the test should make that intent obvious.
 - Run each test directory as a separate `pytest` invocation to avoid cross-contamination from `conftest.py` mock stubs. Running all suites in a single `pytest` call causes false failures in log-sanitization and multipart-upload tests.
 - In root-owned deployment clones, disable the pytest cache provider so verification stays warning-free even when the repo root is not writable.
 - Before rerunning `pytest`, confirm the selected Python environment can import Django. If `python3 -m pytest ...` fails while loading `/opt/omero/conftest.py` with `ModuleNotFoundError: django`, do **not** keep retrying the same host-interpreter command.

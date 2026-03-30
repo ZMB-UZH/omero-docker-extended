@@ -142,8 +142,12 @@ def _open_service_connection(host: str, port: int, group_id=None):
             try:
                 effective_group = int(group_override)
             except Exception:
-                effective_group = None
-        elif group_id is not None:
+                logger.warning(
+                    "Ignoring invalid %s override %r; falling back to the job group context.",
+                    JOB_SERVICE_GROUP_ENV,
+                    sanitize_log_value(group_override),
+                )
+        if effective_group is None and group_id is not None:
             effective_group = int(group_id)
 
         if effective_group is not None:

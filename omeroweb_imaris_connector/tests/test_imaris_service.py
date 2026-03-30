@@ -328,6 +328,7 @@ def test_poll_process_job_persists_completed_live_process(
     monkeypatch.setattr(imaris_service, "PROCESS_JOB_DIR", str(tmp_path))
     monkeypatch.setattr(imaris_service.time, "time", lambda: 105.0)
     detach_calls = []
+    export_path = tmp_path / f"{tmp_path.name}.ims"
     monkeypatch.setattr(
         imaris_service,
         "_detach_script_process",
@@ -339,7 +340,7 @@ def test_poll_process_job_persists_completed_live_process(
             return "finished"
 
         def getResults(self, *_args):
-            return {"Export_Path": SimpleNamespace(val="/tmp/export.ims")}
+            return {"Export_Path": SimpleNamespace(val=str(export_path))}
 
     proc = DummyProcess()
     imaris_service._PROCESS_JOBS.clear()
@@ -348,12 +349,12 @@ def test_poll_process_job_persists_completed_live_process(
     state, outputs, error = imaris_service._poll_process_job("proc-1")
 
     assert state == "FINISHED"
-    assert outputs == {"Export_Path": SimpleNamespace(val="/tmp/export.ims")}
+    assert outputs == {"Export_Path": SimpleNamespace(val=str(export_path))}
     assert error is None
     assert imaris_service._get_process_job("proc-1") is None
     assert detach_calls == [(proc, "process job completed")]
     assert imaris_service._read_process_job_file("proc-1")["outputs"] == {
-        "Export_Path": "/tmp/export.ims"
+        "Export_Path": str(export_path)
     }
 
 
@@ -503,6 +504,26 @@ def test_exception_helpers_detect_chained_security_and_processor_errors(
     )
 
 
+def test_no_processor_detector_ignores_non_type_omero_sentinel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+    monkeypatch.setattr(
+        imaris_service.omero,
+        "NoProcessorAvailable",
+        SimpleNamespace(marker="not-a-type"),
+        raising=False,
+    )
+
+    assert (
+        imaris_service._is_no_processor_available(
+            RuntimeError("No processor available")
+        )
+        is True
+    )
+
+
 def test_extract_job_id_handles_dict_sequence_and_accessor_objects(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -520,11 +541,11 @@ def test_extract_job_id_handles_dict_sequence_and_accessor_objects(
 
 
 def test_get_job_state_and_outputs_supports_outputs_only_path(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
-    outputs = {"Export_Path": SimpleNamespace(val="/tmp/export.ims")}
+    outputs = {"Export_Path": SimpleNamespace(val=str(tmp_path / "export.ims"))}
     svc = SimpleNamespace(getJobOutputs=lambda job_id: outputs)
     monkeypatch.setattr(imaris_service, "_get_script_services", lambda conn: [svc])
 
@@ -730,3 +751,244 @@ def test_build_download_response_reports_missing_or_invalid_paths(
     assert outside.content.decode("utf-8") == "IMS export path is invalid."
     assert absent.status_code == 404
     assert absent.content.decode("utf-8") == "IMS export file not found on server."
+
+
+def test_register_and_monitor_process_job_persists_running_and_finished_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+    monkeypatch.setattr(imaris_service, "PROCESS_JOB_DIR", str(tmp_path))
+    export_name = f"{tmp_path.name}.ims"
+    monkeypatch.setattr(
+        imaris_service,
+        "_wait_for_process",
+        lambda proc, timeout: (
+            "FINISHED",
+            {"Export_Name": SimpleNamespace(val=export_name)},
+        ),
+    )
+    monkeypatch.setattr(
+        imaris_service.uuid, "uuid4", lambda: SimpleNamespace(hex="abc123")
+    )
+
+    class _ImmediateThread:
+        def __init__(self, target, args=(), daemon=False):
+            self._target = target
+            self._args = args
+            self.daemon = daemon
+
+        def start(self):
+            self._target(*self._args)
+
+    monkeypatch.setattr(imaris_service.threading, "Thread", _ImmediateThread)
+
+    job_id = imaris_service._register_process_job(object())
+    record = json.loads((tmp_path / f"{job_id}.json").read_text(encoding="utf-8"))
+
+    assert job_id == "proc-abc123"
+    assert record["state"] == "FINISHED"
+    assert record["outputs"] == {"Export_Name": export_name}
+    assert imaris_service._get_process_job(job_id) is None
+
+
+def test_poll_process_job_covers_unknown_job_ids_and_live_timeouts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+    monkeypatch.setattr(imaris_service, "_read_process_job_file", lambda job_id: None)
+
+    assert imaris_service._poll_process_job("missing") == (
+        None,
+        None,
+        "Unknown job id",
+    )
+
+    detached = []
+    monkeypatch.setattr(
+        imaris_service,
+        "_detach_script_process",
+        lambda proc, reason="": detached.append((proc, reason)),
+    )
+    monkeypatch.setattr(imaris_service, "EXPORT_TIMEOUT", 10)
+    monkeypatch.setattr(imaris_service.time, "time", lambda: 100.0)
+    handle = object()
+    imaris_service._PROCESS_JOBS["proc-live"] = {
+        "handle": handle,
+        "created": 0.0,
+    }
+
+    assert imaris_service._poll_process_job("proc-live") == (
+        "TIMEOUT",
+        None,
+        "Timed out waiting for IMS export job.",
+    )
+    assert detached == [(handle, "process job timeout")]
+    assert imaris_service._get_process_job("proc-live") is None
+
+
+def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+    resolved_export = tmp_path / "export.ims"
+
+    raw_service = object()
+
+    class _Conn:
+        def getScriptService(self):
+            raise RuntimeError("gateway unavailable")
+
+        c = SimpleNamespace(sf=SimpleNamespace(getScriptService=lambda: raw_service))
+
+    assert imaris_service._get_script_services(_Conn()) == [raw_service]
+
+    class _Service:
+        def runScriptAsync(self):
+            return None
+
+        def executeScript(self):
+            return None
+
+        def begin_runScript(self):
+            return None
+
+        def canRunScript(self):
+            return None
+
+    method_names = [name for name, _ in imaris_service._iter_script_methods(_Service())]
+    assert "runScriptAsync" in method_names
+    assert "executeScript" in method_names
+    assert "begin_runScript" not in method_names
+    assert "canRunScript" not in method_names
+
+    calls = []
+
+    def async_method(*args):
+        calls.append(args)
+        if len(args) != 2:
+            raise TypeError("wrong signature")
+        return "async-result"
+
+    assert (
+        imaris_service._call_script_method(
+            async_method, "runScriptAsync", 7, {"a": 1}, 5
+        )
+        == "async-result"
+    )
+    assert calls[0] == (7, {"a": 1})
+
+    class _DedicatedStateService:
+        def getJobStatus(self, job_id):
+            return "FINISHED"
+
+        def getJobOutputs(self, job_id):
+            return {"Export_Path": str(resolved_export)}
+
+    monkeypatch.setattr(
+        imaris_service, "_get_script_services", lambda conn: [_DedicatedStateService()]
+    )
+    assert imaris_service._get_job_state_and_outputs(object(), 11) == (
+        "FINISHED",
+        {"Export_Path": str(resolved_export)},
+    )
+
+    class _JobInfoService:
+        def getJobs(self):
+            return [
+                SimpleNamespace(
+                    id=SimpleNamespace(val=77),
+                    status=SimpleNamespace(val="RUNNING"),
+                )
+            ]
+
+    monkeypatch.setattr(
+        imaris_service, "_get_script_services", lambda conn: [_JobInfoService()]
+    )
+    assert imaris_service._get_job_state_and_outputs(object(), 77) == ("RUNNING", None)
+
+
+def test_find_script_id_and_async_result_resolution_prefer_official_paths_and_fallbacks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+    official_script_path = str(Path("omero") / "export" / imaris_service.SCRIPT_NAME)
+    resolved_export = str(tmp_path / f"{tmp_path.name}.ims")
+
+    script_service = SimpleNamespace(
+        getScripts=lambda: [
+            SimpleNamespace(
+                name=imaris_service.SCRIPT_NAME,
+                path=str(Path("custom") / imaris_service.SCRIPT_NAME),
+                id=SimpleNamespace(val=9),
+            ),
+            SimpleNamespace(
+                name=imaris_service.SCRIPT_NAME,
+                path=official_script_path,
+                id=SimpleNamespace(val=7),
+            ),
+            SimpleNamespace(
+                name=imaris_service.SCRIPT_NAME,
+                path=official_script_path,
+                id=SimpleNamespace(val=11),
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        imaris_service, "_get_script_services", lambda conn: [script_service]
+    )
+
+    assert imaris_service._find_script_id(object()) == 11
+
+    class _AsyncResult:
+        def waitForCompleted(self):
+            raise RuntimeError("wait failed")
+
+        def getResponse(self):
+            raise RuntimeError("response missing")
+
+        def getResults(self):
+            return {"Export_Path": resolved_export}
+
+    class _AsyncService:
+        def end_runScript(self, result):
+            raise RuntimeError("end failed")
+
+    assert imaris_service._resolve_async_result(
+        _AsyncService(),
+        "begin_runScript",
+        _AsyncResult(),
+    ) == {"Export_Path": resolved_export}
+
+
+def test_wait_for_process_timeout_and_request_bool_helpers_cover_remaining_edges(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+    detached = []
+
+    class _NeverFinishes:
+        def poll(self):
+            return None
+
+        def getResults(self, *_args):
+            raise AssertionError("results should not be requested")
+
+    time_values = iter([0.0, 0.5, 1.5])
+    monkeypatch.setattr(imaris_service.time, "time", lambda: next(time_values))
+    monkeypatch.setattr(imaris_service.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(
+        imaris_service,
+        "_detach_script_process",
+        lambda proc, reason="": detached.append((proc, reason)),
+    )
+
+    assert imaris_service._wait_for_process(_NeverFinishes(), timeout=1) == (None, None)
+    assert detached[0][1] == "process wait completed"
+    assert imaris_service._bool_from_request("YES") is True
+    assert imaris_service._bool_from_request("0") is False
+    assert imaris_service._bool_from_request(None) is None

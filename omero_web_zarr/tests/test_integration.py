@@ -1168,3 +1168,246 @@ def test_render_tile_bad_request_escapes_user_input():
     assert xss_payload not in body
     assert html_escape(xss_payload) in body
     assert response["Content-Type"] == "text/plain; charset=utf-8"
+
+
+def test_store_backed_render_response_and_pixel_helpers_cover_download_paths(
+    monkeypatch,
+):
+    request = RequestFactory().get("/webclient/render_image/7/", {"format": "png"})
+
+    class _Image:
+        id = 7
+
+        def getName(self):
+            return "demo image.zarr"
+
+    monkeypatch.setattr(
+        integration,
+        "render_store_backed_pil_image",
+        lambda image, z=None, t=None: object(),
+    )
+    monkeypatch.setattr(
+        integration,
+        "encode_store_backed_pil_image",
+        lambda pil_image, requested_format: (b"image-bytes", "image/png", "png"),
+    )
+
+    response = integration._store_backed_render_response(
+        _Image(), request, z=0, t=0, download=True
+    )
+
+    assert response.status_code == 200
+    assert response["Content-Length"] == "11"
+    assert response["Content-Disposition"] == "attachment; filename=demo_image.zarr.png"
+
+    contrast_node = type(
+        "Node",
+        (),
+        {
+            "metadata": {"contrast_limits": [[5, 15], [2, 20]]},
+            "data": [type("Array", (), {"dtype": np.dtype(np.uint16)})()],
+        },
+    )()
+    float_node = type(
+        "Node",
+        (),
+        {
+            "metadata": {},
+            "data": [type("Array", (), {"dtype": np.dtype(np.float32)})()],
+        },
+    )()
+
+    assert integration._store_backed_pixel_range(contrast_node) == (2.0, 20.0)
+    assert integration._store_backed_pixel_range(float_node) == (0.0, 1.0)
+    assert integration._select_marshaled_key({"a": {"b": {"c": 9}}}, "a.b.c") == 9
+    assert integration._select_marshaled_key({"a": 1}, "a.b") is None
+
+
+def test_store_backed_metadata_and_rendering_model_cover_parent_resolution():
+    class _Project:
+        id = 51
+        name = "Project A"
+        description = "A project"
+
+    class _Dataset:
+        OMERO_CLASS = "Dataset"
+        id = 61
+        name = "Dataset A"
+        description = "A dataset"
+
+    class _Well:
+        def __init__(self):
+            self.id = type("Value", (), {"val": 71})()
+
+    class _WellSample:
+        OMERO_CLASS = "WellSample"
+
+        def __init__(self):
+            self.well = _Well()
+
+    class _Image:
+        id = 99
+        name = "managed.zarr"
+        description = "Store-backed image"
+        archived = True
+
+        def getProject(self):
+            return _Project()
+
+        def listParents(self):
+            return [_Dataset(), _WellSample()]
+
+        def getName(self):
+            return self.name
+
+        def getAuthor(self):
+            return "Alice"
+
+        def getDate(self):
+            return datetime(2026, 3, 30, 7, 0, 0)
+
+        def getPixelsType(self):
+            return "uint16"
+
+    metadata = integration._store_backed_metadata(_Image())
+    assert metadata["projectName"] == "Project A"
+    assert metadata["datasetName"] == "Dataset A"
+    assert metadata["wellId"] == 71
+    assert metadata["pixelsType"] == "uint16"
+
+    assert integration._store_backed_rendering_model([_FakeChannel()]) == "greyscale"
+    assert integration._store_backed_rendering_model(
+        [_FakeChannel(), _FakeChannel()]
+    ) == ("color")
+
+
+def test_load_metadata_preview_with_safe_rendering_dedupes_rendering_defs(
+    monkeypatch,
+):
+    request = RequestFactory().get("/webclient/metadata_preview/image/42/")
+    request.session = {}
+
+    class _Image:
+        def getAllRenderingDefs(self):
+            return [
+                {
+                    "id": 1,
+                    "owner": {"id": 7, "name": "alice"},
+                    "c": [
+                        {
+                            "active": True,
+                            "color": "FF0000",
+                            "start": 0,
+                            "end": 255,
+                            "inverted": False,
+                        }
+                    ],
+                    "model": "color",
+                },
+                {
+                    "id": 2,
+                    "owner": {"id": 7, "name": "alice"},
+                    "c": [
+                        {
+                            "active": False,
+                            "lut": "ice",
+                            "start": 5,
+                            "end": 10,
+                            "inverted": True,
+                        }
+                    ],
+                    "model": "greyscale",
+                },
+            ]
+
+        def getRenderingDefId(self):
+            return 2
+
+        def getSizeX(self):
+            return 256
+
+        def getSizeY(self):
+            return 256
+
+    class _Manager:
+        def __init__(self, conn, **kwargs):
+            self.image = _Image()
+
+    from omeroweb.webclient import views as webclient_views
+
+    monkeypatch.setattr(webclient_views, "BaseContainer", _Manager)
+    monkeypatch.setattr(webclient_views, "BaseShare", lambda conn, share_id: share_id)
+    monkeypatch.setattr(
+        webclient_views,
+        "getIntOrDefault",
+        lambda request, key, default: default,
+    )
+
+    context = integration._load_metadata_preview_with_safe_rendering(
+        request,
+        "image",
+        "42",
+        conn=type("Conn", (), {"getMaxPlaneSize": lambda self: (1024, 1024)})(),
+    )
+
+    assert context["tiledImage"] is False
+    assert context["rdefs"][0]["id"] == 2
+    assert '"m": "g"' in context["rdefsJson"]
+    assert "5:10r$ice" in context["rdefsJson"]
+
+
+def test_store_backed_region_response_rejects_invalid_requests(monkeypatch):
+    node = type(
+        "FakeNode",
+        (),
+        {
+            "data": [
+                type(
+                    "FakeArray",
+                    (),
+                    {"shape": (1, 1, 8, 8), "chunks": ((1,), (1,), (4, 4), (4, 4))},
+                )(),
+                type(
+                    "FakeArray",
+                    (),
+                    {"shape": (1, 1, 4, 4), "chunks": ((1,), (1,), (4,), (4,))},
+                )(),
+            ],
+            "metadata": {"axes": ["t", "c", "y", "x"]},
+        },
+    )()
+
+    monkeypatch.setattr(integration, "load_store_backed_image_node", lambda image: node)
+
+    invalid_level = integration._store_backed_region_response(
+        object(),
+        RequestFactory().get(
+            "/webclient/render_image_region/7/0/0/", {"tile": "3,0,0"}
+        ),
+        z=0,
+        t=0,
+        conn=None,
+    )
+    malformed_region = integration._store_backed_region_response(
+        object(),
+        RequestFactory().get(
+            "/webclient/render_image_region/7/0/0/", {"region": "1,2"}
+        ),
+        z=0,
+        t=0,
+        conn=None,
+    )
+    missing_args = integration._store_backed_region_response(
+        object(),
+        RequestFactory().get("/webclient/render_image_region/7/0/0/"),
+        z=0,
+        t=0,
+        conn=None,
+    )
+
+    assert invalid_level.status_code == 400
+    assert invalid_level.content.decode("utf-8") == "invalid resolution level"
+    assert malformed_region.status_code == 400
+    assert malformed_region.content.decode("utf-8") == "malformed region argument"
+    assert missing_args.status_code == 400
+    assert missing_args.content.decode("utf-8") == "tile or region argument required"

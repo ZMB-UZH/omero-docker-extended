@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import django
 import logging
 from types import SimpleNamespace
 
 from django.conf import settings
+import pytest
 from django.test import RequestFactory
 
 if not settings.configured:
@@ -164,3 +166,260 @@ def test_imaris_export_start_logs_escape_wait_and_ip_values(
         in caplog.text
     )
     assert "wait_param=0\nline" not in caplog.text
+
+
+def test_imaris_view_helpers_cover_url_ip_port_and_session_resolution() -> None:
+    request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        HTTP_X_FORWARDED_FOR="203.0.113.5, 198.51.100.1",
+    )
+    request.session = SimpleNamespace(session_key=None)
+    views = _import_views()
+
+    assert views._parse_base_url("https://omero.example.org:4080") == (
+        "https://omero.example.org:4080"
+    )
+    assert (
+        views._build_absolute_url(
+            request,
+            "/omeroweb_imaris_connector/export/?job=1",
+            base_url_override="https://omero.example.org:4080",
+        )
+        == "https://omero.example.org:4080/omeroweb_imaris_connector/export/?job=1"
+    )
+    assert views._get_client_ip(request) == "203.0.113.5"
+    assert views._parse_port_param(" 4064 ") == 4064
+    assert views._parse_port_param("") is None
+    assert (
+        views._get_session_key(
+            SimpleNamespace(
+                getSessionId=lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+                c=SimpleNamespace(getSessionId=lambda: "session-2"),
+            )
+        )
+        == "session-2"
+    )
+
+
+def test_poll_celery_job_covers_pending_failure_success_revoked_and_unknown(
+    monkeypatch,
+):
+    views = _import_views()
+
+    def _set_result(state, result=None, info=None):
+        monkeypatch.setattr(
+            views.celery_app,
+            "AsyncResult",
+            lambda task_id: SimpleNamespace(state=state, result=result, info=info),
+            raising=False,
+        )
+
+    _set_result(views.celery_states.PENDING)
+    assert views._poll_celery_job("celery-job-1") == ("RUNNING", None, None, None)
+
+    _set_result(views.celery_states.FAILURE, result=RuntimeError("boom"), info={})
+    state, outputs, error, meta = views._poll_celery_job("celery-job-2")
+    assert (state, outputs, meta) == ("FAILED", None, {})
+    assert "boom" in error
+
+    _set_result(
+        views.celery_states.SUCCESS,
+        result={"state": "FINISHED", "outputs": {"Export_Name": "demo.ims"}},
+        info={"status": "finished"},
+    )
+    assert views._poll_celery_job("celery-job-3") == (
+        "FINISHED",
+        {"Export_Name": "demo.ims"},
+        None,
+        {"status": "finished"},
+    )
+
+    _set_result(views.celery_states.REVOKED, info={"status": "cancelled"})
+    assert views._poll_celery_job("celery-job-4") == (
+        "CANCELLED",
+        None,
+        "Job was cancelled",
+        {"status": "cancelled"},
+    )
+
+    _set_result("CUSTOM", info={"status": "custom"})
+    assert views._poll_celery_job("celery-job-5") == (
+        "CUSTOM",
+        None,
+        None,
+        {"status": "custom"},
+    )
+
+
+def test_start_celery_job_validates_connection_metadata_and_dispatches(monkeypatch):
+    views = _import_views()
+    dispatched = {}
+    monkeypatch.setattr(views, "_get_session_key", lambda conn: "session-key")
+    monkeypatch.setattr(
+        views, "_resolve_omero_host_port", lambda conn: ("omeroserver", 4064)
+    )
+    monkeypatch.setattr(views, "_resolve_omero_secure", lambda conn: True)
+    monkeypatch.setattr(
+        views.run_ims_export_task,
+        "apply_async",
+        lambda kwargs, queue: dispatched.setdefault(
+            "result",
+            SimpleNamespace(id="task-123", kwargs=kwargs, queue=queue),
+        ),
+        raising=False,
+    )
+
+    assert views._start_celery_job(SimpleNamespace(), 17) == "celery-task-123"
+    assert dispatched["result"].kwargs == {
+        "image_id": 17,
+        "session_key": "session-key",
+        "host": "omeroserver",
+        "port": 4064,
+        "secure": True,
+    }
+
+    monkeypatch.setattr(views, "_get_session_key", lambda conn: None)
+    with pytest.raises(RuntimeError, match="session key unavailable"):
+        views._start_celery_job(SimpleNamespace(), 17)
+
+    monkeypatch.setattr(views, "_get_session_key", lambda conn: "session-key")
+    monkeypatch.setattr(
+        views, "_resolve_omero_host_port", lambda conn: ("omeroserver", 70000)
+    )
+    with pytest.raises(RuntimeError, match="out of range"):
+        views._start_celery_job(SimpleNamespace(), 17)
+
+
+def test_imaris_export_covers_async_status_download_and_sync_success_paths(monkeypatch):
+    views = _import_views()
+
+    async_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"image": "7", "async": "1", "base_url": "https://omero.example.org"},
+    )
+    async_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(views, "use_celery", lambda: True)
+    monkeypatch.setattr(views, "_find_script_id", lambda conn: 9)
+    monkeypatch.setattr(
+        views, "_start_celery_job", lambda conn, image_id: "celery-job-7"
+    )
+    async_response = views.imaris_export(async_request, conn=SimpleNamespace())
+    async_payload = json.loads(async_response.content)
+    assert async_payload == {
+        "job_id": "celery-job-7",
+        "status_url": "https://omero.example.org/omeroweb_imaris_connector/export/?job=celery-job-7&base_url=https%3A%2F%2Fomero.example.org",
+    }
+
+    status_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"job": "celery-job-7", "base_url": "https://omero.example.org"},
+    )
+    status_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(
+        views,
+        "_poll_celery_job",
+        lambda job_id: (
+            "FINISHED",
+            {"Export_Name": "demo.ims"},
+            None,
+            {"status": "complete"},
+        ),
+    )
+    status_response = views.imaris_export(status_request, conn=None)
+    status_payload = json.loads(status_response.content)
+    assert status_payload["finished"] is True
+    assert status_payload["status"] == "complete"
+    assert status_payload["download_url"] == (
+        "https://omero.example.org/omeroweb_imaris_connector/export/?job=celery-job-7&download=1"
+    )
+
+    download_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"job": "celery-job-7", "download": "1"},
+    )
+    download_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(
+        views,
+        "_build_download_response",
+        lambda conn, outputs: views.HttpResponse("downloaded"),
+    )
+    download_response = views.imaris_export(download_request, conn=SimpleNamespace())
+    assert download_response.content.decode("utf-8") == "downloaded"
+
+    sync_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"image": "7"},
+    )
+    sync_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(
+        views, "_start_celery_job", lambda conn, image_id: "celery-job-8"
+    )
+    monkeypatch.setattr(
+        views,
+        "_poll_celery_job",
+        lambda job_id: (
+            "FINISHED",
+            {"Export_Name": "demo.ims"},
+            None,
+            {"status": "done"},
+        ),
+    )
+    monkeypatch.setattr(
+        views,
+        "_build_download_response",
+        lambda conn, outputs, export_name=None: views.HttpResponse(
+            export_name or "missing"
+        ),
+    )
+    sync_response = views.imaris_export(sync_request, conn=SimpleNamespace())
+    assert sync_response.content.decode("utf-8") == "demo.ims"
+
+
+def test_imaris_export_rejects_missing_image_invalid_image_no_celery_and_timeout(
+    monkeypatch,
+) -> None:
+    views = _import_views()
+
+    missing_request = RequestFactory().get("/omeroweb_imaris_connector/export/")
+    missing_request.session = SimpleNamespace(session_key=None)
+    assert views.imaris_export(missing_request, conn=None).status_code == 400
+
+    invalid_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"image": "bad"},
+    )
+    invalid_request.session = SimpleNamespace(session_key=None)
+    assert views.imaris_export(invalid_request, conn=None).status_code == 400
+
+    no_celery_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"image": "1"},
+    )
+    no_celery_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(views, "use_celery", lambda: False)
+    assert (
+        views.imaris_export(no_celery_request, conn=SimpleNamespace()).status_code
+        == 500
+    )
+
+    timeout_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"image": "1"},
+    )
+    timeout_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(views, "use_celery", lambda: True)
+    monkeypatch.setattr(views, "_find_script_id", lambda conn: 7)
+    monkeypatch.setattr(
+        views, "_start_celery_job", lambda conn, image_id: "celery-job-9"
+    )
+    monkeypatch.setattr(
+        views,
+        "_poll_celery_job",
+        lambda job_id: ("RUNNING", None, None, {"status": "running"}),
+    )
+    time_values = iter([0.0, 0.0, views.EXPORT_TIMEOUT + 1.0])
+    monkeypatch.setattr(views.time, "time", lambda: next(time_values))
+    monkeypatch.setattr(views.time, "sleep", lambda *_args: None)
+    assert (
+        views.imaris_export(timeout_request, conn=SimpleNamespace()).status_code == 504
+    )

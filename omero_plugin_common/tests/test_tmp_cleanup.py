@@ -59,3 +59,65 @@ def test_safe_mark_path_for_deferred_cleanup_writes_markers_for_files_and_dirs(
     assert not tmp_cleanup.safe_mark_path_for_deferred_cleanup(
         root / "missing", root, ttl_seconds=0
     )
+
+
+def test_tmp_cleanup_helpers_reject_invalid_roots_and_symlinked_children(tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    nested = root / "nested"
+    nested.mkdir()
+    (nested / "payload.txt").write_text("payload", encoding="utf-8")
+    (nested / "escape-link").symlink_to(outside, target_is_directory=True)
+
+    assert tmp_cleanup.is_within_root(nested / "payload.txt", root) is True
+    assert tmp_cleanup.is_within_root(outside / "payload.txt", root) is False
+    assert tmp_cleanup.safe_remove_tree(nested, root) is False
+    assert nested.exists()
+
+
+def test_safe_mark_path_for_deferred_cleanup_rejects_invalid_inputs_and_cleans_temp_file(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / "root"
+    root.mkdir()
+    target = root / "artifact.txt"
+    target.write_text("payload", encoding="utf-8")
+    symlink = root / "artifact-link"
+    symlink.symlink_to(target)
+
+    assert not tmp_cleanup.safe_mark_path_for_deferred_cleanup(
+        target, root, ttl_seconds="bad"
+    )
+    assert not tmp_cleanup.safe_mark_path_for_deferred_cleanup(
+        target, root, ttl_seconds=0
+    )
+    assert not tmp_cleanup.safe_mark_path_for_deferred_cleanup(
+        symlink, root, ttl_seconds=60
+    )
+    outside_path = tmp_path / "outside.txt"
+    outside_path.write_text("outside", encoding="utf-8")
+    assert not tmp_cleanup.safe_mark_path_for_deferred_cleanup(
+        outside_path,
+        root,
+        ttl_seconds=60,
+    )
+
+    created_tmp = {}
+    real_replace = tmp_cleanup.os.replace
+
+    def _failing_replace(src, dst):
+        created_tmp["path"] = src
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(tmp_cleanup.os, "replace", _failing_replace)
+    assert (
+        tmp_cleanup.safe_mark_path_for_deferred_cleanup(
+            target, root, ttl_seconds=60, now=1000
+        )
+        is False
+    )
+    assert "path" in created_tmp
+    assert not created_tmp["path"].exists()
+    monkeypatch.setattr(tmp_cleanup.os, "replace", real_replace)

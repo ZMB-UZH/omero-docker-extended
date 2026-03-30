@@ -11,6 +11,7 @@ from unittest import TestCase, mock, main as unittest_main
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TEST_TMP_ROOT = Path(tempfile.gettempdir()) / "omp-plugin-tests"
+TEST_OMERO_CLI = "omero-cli"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -179,7 +180,7 @@ def _install_omp_dependency_stubs() -> None:
     sys.modules["omeroweb_omp_plugin.strings"] = strings_package
 
     constants_module = types.ModuleType("omeroweb_omp_plugin.constants")
-    constants_module.OMERO_CLI = "/usr/bin/omero"
+    constants_module.OMERO_CLI = TEST_OMERO_CLI
     constants_module.CHUNK_SIZE = 5
     constants_module.MAP_NS = "map-ns"
     constants_module.HASH_KEY = "hash-key"
@@ -381,7 +382,7 @@ class OmpPluginViewRegressionTests(TestCase):
                 view_module,
                 "build_omero_cli_base_command",
                 return_value=[
-                    "/usr/bin/omero",
+                    TEST_OMERO_CLI,
                     "-k",
                     "session-123",
                     "-s",
@@ -422,7 +423,7 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertEqual(1, len(recorded_commands))
         self.assertEqual(
             [
-                "/usr/bin/omero",
+                TEST_OMERO_CLI,
                 "-k",
                 "session-123",
                 "-s",
@@ -461,7 +462,7 @@ class OmpPluginViewRegressionTests(TestCase):
                 view_module,
                 "build_omero_cli_base_command",
                 return_value=[
-                    "/usr/bin/omero",
+                    TEST_OMERO_CLI,
                     "-k",
                     "session-123",
                     "-s",
@@ -497,7 +498,7 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertEqual(1, len(recorded_commands))
         self.assertEqual(
             [
-                "/usr/bin/omero",
+                TEST_OMERO_CLI,
                 "-k",
                 "session-123",
                 "-s",
@@ -617,7 +618,7 @@ class OmpPluginViewRegressionTests(TestCase):
                         view_module,
                         "build_omero_cli_base_command",
                         return_value=[
-                            "/usr/bin/omero",
+                            TEST_OMERO_CLI,
                             "-k",
                             "session-123",
                             "-s",

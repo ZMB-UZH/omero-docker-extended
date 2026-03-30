@@ -1533,7 +1533,8 @@ def _has_read_write_permissions(obj):
         checker = getattr(obj, attr, None)
         if callable(checker):
             try:
-                return bool(checker())
+                if checker():
+                    return True
             except Exception:
                 logger.debug("Permission check via %s failed", attr)
                 continue
@@ -2322,7 +2323,7 @@ def _extract_imported_object_ids(output: str) -> list[str]:
 def _reports_no_processor_available(stdout: str, stderr: str) -> bool:
     combined = "\n".join(part for part in (stdout, stderr) if part)
     lowered = combined.lower()
-    return "noprocessoravailable" in combined or "no processor available" in lowered
+    return "noprocessoravailable" in lowered or "no processor available" in lowered
 
 
 BACKGROUND_IMPORT_SESSION_TTL_SLACK_SECONDS = 10 * 60
@@ -3251,8 +3252,12 @@ def _open_service_connection(
             try:
                 effective_group = int(group_override)
             except Exception:
-                effective_group = None
-        elif group_id is not None:
+                logger.warning(
+                    "Ignoring invalid %s override %r; falling back to the job group context.",
+                    JOB_SERVICE_GROUP_ENV,
+                    sanitize_log_value(group_override),
+                )
+        if effective_group is None and group_id is not None:
             effective_group = int(group_id)
 
         if effective_group is not None:

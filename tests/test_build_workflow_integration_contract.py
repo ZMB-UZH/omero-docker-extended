@@ -179,6 +179,18 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('"${python_bin}" "${REPO_ROOT_SYNC_HELPER}"', script_text)
         self.assertNotIn("repo-root-lookup.XXXXXX.py", script_text)
 
+    def test_omeroserver_image_copies_repo_root_sync_helper(self) -> None:
+        dockerfile_text = (
+            self.repo_root / "docker" / "omero-server.Dockerfile"
+        ).read_text(encoding="utf-8")
+        helper_rel = self.repo_root.joinpath("startup", "repo_root_sync_helper.py")
+        helper_name = helper_rel.name
+        self.assertIn(
+            f"COPY startup/{helper_name} /startup/{helper_name}",
+            dockerfile_text,
+        )
+        self.assertIn(f"/startup/{helper_name}", dockerfile_text)
+
     def test_server_bootstrap_uses_dedicated_runtime_tmp_slot(self) -> None:
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
