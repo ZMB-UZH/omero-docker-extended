@@ -23,10 +23,12 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         cls.helper_path = cls.repo_root / "startup" / "repo_root_sync_helper.py"
         cls.helper_script = cls.helper_path.read_text(encoding="utf-8")
 
-    def test_helper_plan_unions_configured_and_active_prefixes(self) -> None:
+    def test_helper_plan_uses_only_configured_shared_prefix_seeds(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "ManagedRepository"
             (managed_root / "users_legacy" / "alice").mkdir(parents=True)
+            (managed_root / ".omero").mkdir(parents=True)
+            (managed_root / "codex-zarr-20260322live" / "alice").mkdir(parents=True)
 
             result = self._run_helper(
                 "plan",
@@ -43,7 +45,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             )
 
         self.assertEqual(
-            ["users_private", "users_read", "users_ldap", "users_legacy"],
+            ["users_private", "users_read", "users_ldap"],
             result.stdout.strip().splitlines(),
         )
 
@@ -80,6 +82,30 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             )
 
         self.assertEqual(["shared"], result.stdout.strip().splitlines())
+
+    def test_helper_plan_does_not_infer_group_prefixes_from_repository_contents(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            managed_root = Path(tmpdir) / "ManagedRepository"
+            (managed_root / "users_private" / "alice").mkdir(parents=True)
+            (managed_root / "guest").mkdir(parents=True)
+
+            result = self._run_helper(
+                "plan",
+                "--managed-root",
+                str(managed_root),
+                "--repo-template",
+                "%group%/%user%/%year%-%month%-%day%/%time%",
+                "--install-groups",
+                "",
+                "--ldap-config",
+                "false",
+                "--ldap-group",
+                "",
+            )
+
+        self.assertEqual("", result.stdout.strip())
 
     def test_helper_plan_is_read_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -4,7 +4,7 @@
 
 # Pull image
 # ----------
-FROM openmicroscopy/omero-web-standalone:5.31.0
+FROM openmicroscopy/omero-web-standalone:5.31.0@sha256:47e22f00e8466ca14247936b4d312a03ec48d883a12dd5a645aa93f60d2555d7
 
 # Run as root (REQUIRED)
 # ----------------------

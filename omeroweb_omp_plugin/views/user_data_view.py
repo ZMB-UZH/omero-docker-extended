@@ -1,7 +1,6 @@
 import logging
 
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
@@ -20,7 +19,6 @@ from ..strings import errors
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def delete_api_keys(request, conn=None, url=None, **kwargs):
@@ -53,7 +51,6 @@ def delete_api_keys(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def delete_variable_sets(request, conn=None, url=None, **kwargs):
@@ -84,7 +81,6 @@ def delete_variable_sets(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def delete_all_data(request, conn=None, url=None, **kwargs):

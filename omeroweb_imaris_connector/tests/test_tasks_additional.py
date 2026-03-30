@@ -8,6 +8,7 @@ import pytest
 
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parent / "_runtime"
+TEST_SERVICE_AUTH_VALUE = "job-auth-fixture"
 
 
 def _install_omero_stubs() -> None:
@@ -77,7 +78,7 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "OMERO_IMS_PROCESSOR_CONFIG_CACHE_TTL": "10",
         "OMERO_TMP_PATH": str(TEST_RUNTIME_ROOT / "tmp"),
         "OMERO_JOB_SERVICE_USER": "job-service",
-        "OMERO_JOB_SERVICE_PASSWORD": "job-secret",
+        "OMERO_JOB_SERVICE_PASSWORD": TEST_SERVICE_AUTH_VALUE,
     }
     for key, value in values.items():
         monkeypatch.setenv(key, value)
@@ -180,7 +181,10 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
     assert outputs["Export_Path"] == str(export_path)
     assert captured["cmd"][:5] == [str(cli_path), "-q", "script", "launch", "7"]
     assert captured["timeout"] == tasks.EXPORT_TIMEOUT + 120
-    assert captured["env"]["HOME"] == "/tmp"
+    assert captured["env"]["HOME"] == captured["env"]["OMERO_USERDIR"]
+    assert Path(captured["env"]["OMERO_USERDIR"]).is_relative_to(
+        TEST_RUNTIME_ROOT / "tmp"
+    )
 
     with pytest.raises(RuntimeError, match="live OMERO session key"):
         tasks._run_script_via_omero_cli(7, 11, "omeroserver", 4064, session_key=None)
@@ -249,7 +253,7 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
     monkeypatch.setattr(
         tasks,
         "get_job_service_credentials",
-        lambda: ("job-service", "job-secret"),
+        lambda: ("job-service", TEST_SERVICE_AUTH_VALUE),
     )
     conn = tasks._open_job_service_connection("omeroserver", 4064, secure=True)
     assert conn.group == "-1"

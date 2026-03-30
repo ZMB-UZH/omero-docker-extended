@@ -1,7 +1,6 @@
 import logging
 
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
@@ -13,7 +12,6 @@ from ..strings import errors, messages
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def save_settings(request, conn=None, url=None, **kwargs):

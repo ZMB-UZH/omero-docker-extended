@@ -27,6 +27,7 @@ BIOFORMATS_ARTIFACTS_SUBDIR = os.path.join("artifacts", BIOFORMATS_SUBDIR)
 BIOFORMATS_JAR_NAME = "bioformats_package.jar"
 BIOFORMATS_MIN_SIZE_BYTES = 10_000_000
 DEFAULT_TIMEOUT_SECONDS = 600
+_PRIVATE_FILE_MODE = 0o600
 
 
 def _get_export_root():
@@ -88,7 +89,7 @@ def _ensure_bioformats_jar(install_dir):
                 jar_path,
                 cache_path,
                 expected_sha256=_sha256_file(jar_path),
-                file_mode=0o640,
+                file_mode=_PRIVATE_FILE_MODE,
                 description="cached Bio-Formats jar",
             ):
                 _write_expected_sha256(cache_sha256_path, _sha256_file(jar_path))
@@ -101,7 +102,7 @@ def _ensure_bioformats_jar(install_dir):
             cache_path,
             jar_path,
             expected_sha256=restored_sha256,
-            file_mode=0o640,
+            file_mode=_PRIVATE_FILE_MODE,
             description="restored Bio-Formats jar",
         ):
             print(f"Restored Bio-Formats jar from local cache: {cache_path}")
@@ -137,7 +138,7 @@ def _write_expected_sha256(path, sha256_value):
     try:
         with open(tmp_path, "w", encoding="ascii") as handle:
             handle.write(f"{sha256_value}  {BIOFORMATS_JAR_NAME}\n")
-        os.chmod(tmp_path, 0o640)
+        os.chmod(tmp_path, _PRIVATE_FILE_MODE)
         os.replace(tmp_path, path)
         return True
     except OSError as exc:

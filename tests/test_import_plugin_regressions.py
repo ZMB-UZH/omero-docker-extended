@@ -2667,8 +2667,8 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 destination,
             )
             self.assertTrue((destination / "0" / "0").is_file())
-            self.assertEqual(0o755, destination.stat().st_mode & 0o777)
-            self.assertEqual(0o644, (destination / "0" / "0").stat().st_mode & 0o777)
+            self.assertEqual(0o750, destination.stat().st_mode & 0o777)
+            self.assertEqual(0o640, (destination / "0" / "0").stat().st_mode & 0o777)
 
     def test_shared_tmp_root_requires_persisted_server_config(self):
         manage_script = _load_manage_zarr_script_module()

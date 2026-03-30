@@ -1,6 +1,5 @@
 from django.conf import settings
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 import time
@@ -160,7 +159,6 @@ def _save_annotation_link(update, link):
 # ==============================================================================
 # START JOB
 # ==============================================================================
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def start_job(request, conn=None, url=None, **kwargs):
@@ -256,7 +254,6 @@ def start_job(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def start_acq_job(request, conn=None, url=None, **kwargs):
@@ -324,7 +321,6 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def start_delete_all_job(request, conn=None, url=None, **kwargs):
@@ -398,7 +394,6 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
@@ -475,7 +470,6 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
 # ==============================================================================
 # JOB PROGRESS
 # ==============================================================================
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def job_progress(request, job_id, conn=None, url=None, **kwargs):

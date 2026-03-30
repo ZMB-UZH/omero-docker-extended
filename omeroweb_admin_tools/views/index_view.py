@@ -27,7 +27,7 @@ from django.http import JsonResponse
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.urls import reverse
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from omeroweb.decorators import login_required
 from omero_plugin_common.logging_utils import (
     sanitize_log_value,
@@ -1859,6 +1859,7 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_root_user
+@ensure_csrf_cookie
 def storage_view(request, conn=None, url=None, **kwargs):
     """Render storage capacity distribution page."""
     return render(request, "omeroweb_admin_tools/storage.html", {})
@@ -2006,7 +2007,6 @@ def storage_data(request, conn=None, url=None, **kwargs):
     )
 
 
-@csrf_exempt
 @login_required()
 @require_root_user
 def storage_quota_data(request, conn=None, url=None, **kwargs):
@@ -2050,7 +2050,6 @@ def storage_quota_data(request, conn=None, url=None, **kwargs):
     )
 
 
-@csrf_exempt
 @login_required()
 @require_root_user
 def storage_quota_update(request, conn=None, url=None, **kwargs):
@@ -2114,7 +2113,6 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
     )
 
 
-@csrf_exempt
 @login_required()
 @require_root_user
 def storage_quota_import(request, conn=None, url=None, **kwargs):
@@ -2172,6 +2170,7 @@ def storage_quota_template(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_root_user
+@ensure_csrf_cookie
 def server_database_testing_view(request, conn=None, url=None, **kwargs):
     """Render OMERO.server and database diagnostics page."""
     return render(
@@ -2181,7 +2180,6 @@ def server_database_testing_view(request, conn=None, url=None, **kwargs):
     )
 
 
-@csrf_exempt
 @login_required()
 @require_root_user
 def server_database_testing_run(request, conn=None, url=None, **kwargs):

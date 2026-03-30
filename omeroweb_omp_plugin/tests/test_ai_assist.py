@@ -1,6 +1,5 @@
-import io
 import json
-import urllib.error
+from urllib.parse import urlunsplit
 
 import pytest
 
@@ -68,25 +67,26 @@ def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeyp
     captured = []
 
     class _Response:
-        def __init__(self, payload):
+        def __init__(self, payload, status_code=200, headers=None):
             self.payload = payload
+            self.status_code = status_code
+            self.headers = headers or {}
+            self.text = payload.decode("utf-8")
 
-        def read(self):
-            return self.payload
+        def json(self):
+            return json.loads(self.payload.decode("utf-8"))
 
-        def __enter__(self):
-            return self
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                exc = ai_assist.requests.HTTPError("request failed")
+                exc.response = self
+                raise exc
 
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-    def fake_urlopen(request, timeout=15):
-        captured.append(
-            (request.full_url, dict(request.headers), request.data, timeout)
-        )
+    def fake_post(url, headers=None, data=None, timeout=15):
+        captured.append((url, dict(headers or {}), data, timeout))
         return _Response(b'{"ok": true}')
 
-    monkeypatch.setattr(ai_assist.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(ai_assist.requests, "post", fake_post)
 
     assert ai_assist._post_json(
         "https://api.example.test/v1/chat",
@@ -98,29 +98,31 @@ def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeyp
     assert json.loads(captured[0][2].decode("utf-8")) == {"hello": "world"}
     assert captured[0][3] == 7
 
+    insecure_url = urlunsplit(("http", "api.example.test", "/v1/chat", "", ""))
     with pytest.raises(ai_assist.AiAssistError):
-        ai_assist._post_json("http://api.example.test/v1/chat", {}, {})
+        ai_assist._post_json(insecure_url, {}, {})
 
-    def raise_http_error(request, timeout=15):
-        raise urllib.error.HTTPError(
-            request.full_url,
-            429,
-            "too many requests",
-            {"Retry-After": "11"},
-            io.BytesIO(b'{"error": {"message": "slow down"}}'),
+    def raise_http_error(url, headers=None, data=None, timeout=15):
+        response = _Response(
+            b'{"error": {"message": "slow down"}}',
+            status_code=429,
+            headers={"Retry-After": "11"},
         )
+        exc = ai_assist.requests.HTTPError("too many requests")
+        exc.response = response
+        raise exc
 
-    monkeypatch.setattr(ai_assist.urllib.request, "urlopen", raise_http_error)
+    monkeypatch.setattr(ai_assist.requests, "post", raise_http_error)
     with pytest.raises(ai_assist.AiAssistError) as exc_info:
         ai_assist._post_json("https://api.example.test/v1/chat", {}, {})
     assert "429" in str(exc_info.value)
     assert "11" in str(exc_info.value)
 
     monkeypatch.setattr(
-        ai_assist.urllib.request,
-        "urlopen",
-        lambda request, timeout=15: (_ for _ in ()).throw(
-            urllib.error.URLError("connection refused")
+        ai_assist.requests,
+        "post",
+        lambda url, headers=None, data=None, timeout=15: (_ for _ in ()).throw(
+            ai_assist.requests.RequestException("connection refused")
         ),
     )
     with pytest.raises(ai_assist.AiAssistError):

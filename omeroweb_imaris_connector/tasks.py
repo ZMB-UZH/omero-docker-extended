@@ -9,6 +9,7 @@ from typing import Any
 import omero
 from celery import states
 from omero.gateway import BlitzGateway
+from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 from .celery_app import app
 from .config import get_job_service_credentials, use_job_service_session
@@ -119,15 +120,17 @@ def _run_script_via_omero_cli(
         image_id,
     )
     env = os.environ.copy()
-    # Keep OMERO CLI session/cache files in a writable location for the worker.
-    omero_userdir = "/tmp/omero-cli"
-    os.makedirs(omero_userdir, exist_ok=True)
-    env["HOME"] = "/tmp"
-    env["OMERO_USERDIR"] = omero_userdir
-    env["OMERO_SESSIONDIR"] = os.path.join(omero_userdir, "sessions")
-    env["OMERO_TMPDIR"] = os.path.join(omero_userdir, "tmp")
-    os.makedirs(env["OMERO_SESSIONDIR"], exist_ok=True)
-    os.makedirs(env["OMERO_TMPDIR"], exist_ok=True)
+    # Keep OMERO CLI session/cache files on the managed plugin tmp volume
+    # rather than a shared world-writable system temp directory.
+    omero_userdir = get_plugin_tmp_dir("omero-cli")
+    session_dir = omero_userdir / "sessions"
+    tmp_dir = omero_userdir / "tmp"
+    session_dir.mkdir(parents=True, exist_ok=True)
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    env["HOME"] = str(omero_userdir)
+    env["OMERO_USERDIR"] = str(omero_userdir)
+    env["OMERO_SESSIONDIR"] = str(session_dir)
+    env["OMERO_TMPDIR"] = str(tmp_dir)
 
     result = subprocess.run(
         cmd,

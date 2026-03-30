@@ -8,6 +8,8 @@ import pytest
 
 from omeroweb_omp_plugin.services import data_store
 
+TEST_DB_AUTH_VALUE = "plugin-db-auth-value"
+
 
 class _FakeSqlTemplate:
     def __init__(self, query):
@@ -90,7 +92,7 @@ def _patch_connection_queue(monkeypatch, connections):
 def test_connection_and_schema_helpers_cover_env_validation_and_cleanup(monkeypatch):
     env_values = {
         data_store.ENV_USER: "plugin-user",
-        data_store.ENV_AUTH: "plugin-db-password",
+        data_store.ENV_AUTH: TEST_DB_AUTH_VALUE,
         data_store.ENV_HOST: "database-plugin",
         data_store.ENV_DB: "plugin-db",
         data_store.ENV_PORT: "5433",
@@ -104,7 +106,7 @@ def test_connection_and_schema_helpers_cover_env_validation_and_cleanup(monkeypa
     assert data_store._db_params() == [
         {
             "user": "plugin-user",
-            "password": "plugin-db-password",
+            "password": TEST_DB_AUTH_VALUE,
             "host": "database-plugin",
             "dbname": "plugin-db",
             "port": 5433,
@@ -257,7 +259,7 @@ def test_import_and_connection_helpers_raise_store_errors_on_backend_failures(
         lambda: [
             {
                 "user": "plugin-user",
-                "password": "plugin-db-password",
+                "password": TEST_DB_AUTH_VALUE,
                 "host": "database-plugin",
                 "dbname": "plugin-db",
                 "port": 5433,

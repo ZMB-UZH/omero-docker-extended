@@ -1,7 +1,6 @@
 import logging
 
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
@@ -20,7 +19,6 @@ from ..strings import errors, messages
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def list_sets(request, conn=None, url=None, **kwargs):
@@ -51,7 +49,6 @@ def list_sets(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def save_set(request, conn=None, url=None, **kwargs):
@@ -127,7 +124,6 @@ def save_set(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def load_set(request, conn=None, url=None, **kwargs):
@@ -171,7 +167,6 @@ def load_set(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def delete_set(request, conn=None, url=None, **kwargs):

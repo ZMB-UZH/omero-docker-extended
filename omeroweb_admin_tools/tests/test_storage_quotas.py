@@ -88,7 +88,7 @@ def test_write_state_temp_file_is_not_world_writable(tmp_path) -> None:
         _write_state(state_path, {"quotas_gb": {}, "logs": []})
 
     assert seen_modes
-    assert seen_modes[0] == 0o640
+    assert seen_modes[0] == 0o600
 
 
 def test_reconcile_rejects_unknown_schema_version(tmp_path, monkeypatch) -> None:

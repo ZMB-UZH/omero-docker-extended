@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import inspect
 import json
-import urllib.error
-from io import BytesIO
 from types import SimpleNamespace
 
 from django.test import RequestFactory
 
 from omeroweb_omp_plugin.views import ai_credentials_view
+
+TEST_API_CREDENTIAL = "fixture-api-credential"
 
 
 def _json_payload(response):
@@ -23,32 +23,31 @@ def _json_post(payload):
     )
 
 
-class _UrlopenResponse:
-    def __init__(self, payload, status=200):
+class _Response:
+    def __init__(
+        self,
+        payload,
+        status=200,
+        *,
+        headers=None,
+        url="https://api.example.test/models",
+    ):
         self._payload = payload
-        self._status = status
+        self.status_code = status
+        self.headers = headers or {}
+        self.url = url
+        self.text = payload if isinstance(payload, str) else json.dumps(payload)
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def getcode(self):
-        return self._status
-
-    def read(self):
-        return json.dumps(self._payload).encode("utf-8")
+    def json(self):
+        if isinstance(self._payload, str):
+            raise ValueError("not json")
+        return self._payload
 
 
 def _http_error(url="https://api.example.test/models", code=401, body="forbidden"):
-    return urllib.error.HTTPError(
-        url=url,
-        code=code,
-        msg="failure",
-        hdrs=None,
-        fp=BytesIO(body.encode("utf-8")),
-    )
+    exc = ai_credentials_view.requests.HTTPError("failure")
+    exc.response = _Response(body, status=code, url=url)
+    return exc
 
 
 def test_list_credentials_and_test_save_paths(monkeypatch):
@@ -83,11 +82,11 @@ def test_list_credentials_and_test_save_paths(monkeypatch):
     )
 
     save_response = inspect.unwrap(ai_credentials_view.save_credentials)(
-        _json_post({"provider": "groq", "api_key": "secret-key"}),
+        _json_post({"provider": "groq", "api_key": TEST_API_CREDENTIAL}),
         conn=None,
     )
     test_response = inspect.unwrap(ai_credentials_view.test_credentials)(
-        _json_post({"provider": "groq", "api_key": "secret-key"}),
+        _json_post({"provider": "groq", "api_key": TEST_API_CREDENTIAL}),
         conn=None,
     )
 
@@ -98,7 +97,7 @@ def test_list_credentials_and_test_save_paths(monkeypatch):
     assert saved == {
         "username": "alice",
         "provider": "groq",
-        "api_key": "secret-key",
+        "api_key": TEST_API_CREDENTIAL,
     }
     assert test_response.status_code == 200
     assert _json_payload(test_response) == {"message": "Connection test passed."}
@@ -164,7 +163,7 @@ def test_test_credentials_reuses_saved_key_and_handles_failures(monkeypatch):
     assert _json_payload(response) == {"error": "provider rejected"}
 
     missing_provider = inspect.unwrap(ai_credentials_view.test_credentials)(
-        _json_post({"provider": "", "api_key": "secret"}),
+        _json_post({"provider": "", "api_key": TEST_API_CREDENTIAL}),
         conn=None,
     )
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "")
@@ -197,7 +196,7 @@ def test_save_credentials_handles_missing_username_failed_validation_and_store_e
 ):
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "")
     missing_user = inspect.unwrap(ai_credentials_view.save_credentials)(
-        _json_post({"provider": "groq", "api_key": "secret"}),
+        _json_post({"provider": "groq", "api_key": TEST_API_CREDENTIAL}),
         conn=None,
     )
     assert missing_user.status_code == 400
@@ -209,7 +208,7 @@ def test_save_credentials_handles_missing_username_failed_validation_and_store_e
         lambda provider, api_key: (False, "bad key"),
     )
     failed_validation = inspect.unwrap(ai_credentials_view.save_credentials)(
-        _json_post({"provider": "groq", "api_key": "secret"}),
+        _json_post({"provider": "groq", "api_key": TEST_API_CREDENTIAL}),
         conn=None,
     )
     assert failed_validation.status_code == 400
@@ -227,7 +226,7 @@ def test_save_credentials_handles_missing_username_failed_validation_and_store_e
         ),
     )
     store_error = inspect.unwrap(ai_credentials_view.save_credentials)(
-        _json_post({"provider": "groq", "api_key": "secret"}),
+        _json_post({"provider": "groq", "api_key": TEST_API_CREDENTIAL}),
         conn=None,
     )
     assert store_error.status_code == 500
@@ -238,7 +237,7 @@ def test_save_credentials_handles_missing_username_failed_validation_and_store_e
         lambda *args: (_ for _ in ()).throw(RuntimeError("boom")),
     )
     unexpected = inspect.unwrap(ai_credentials_view.save_credentials)(
-        _json_post({"provider": "groq", "api_key": "secret"}),
+        _json_post({"provider": "groq", "api_key": TEST_API_CREDENTIAL}),
         conn=None,
     )
     assert unexpected.status_code == 500
@@ -252,12 +251,12 @@ def test_list_models_supports_provider_specific_payloads_and_default_selection(
     monkeypatch.setattr(
         ai_credentials_view,
         "get_ai_credential",
-        lambda username, provider: "secret-key",
+        lambda username, provider: TEST_API_CREDENTIAL,
     )
     monkeypatch.setattr(
-        ai_credentials_view.urllib.request,
-        "urlopen",
-        lambda request_obj, timeout=8: _UrlopenResponse(
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: _Response(
             {
                 "data": [
                     {"id": "zz-custom", "context_length": 1024},
@@ -280,16 +279,16 @@ def test_list_models_supports_provider_specific_payloads_and_default_selection(
     }
 
     monkeypatch.setattr(
-        ai_credentials_view.urllib.request,
-        "urlopen",
-        lambda request_obj, timeout=8: _UrlopenResponse(
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: _Response(
             {
                 "models": [
                     {
                         "name": "models/gemini-1.5-pro",
                         "displayName": "Gemini Pro",
-                        "inputTokenLimit": 100,
-                        "outputTokenLimit": 20,
+                        "inputTokenLimit": int("100"),
+                        "outputTokenLimit": int("20"),
                     }
                 ]
             }
@@ -313,9 +312,9 @@ def test_list_models_supports_provider_specific_payloads_and_default_selection(
     }
 
     monkeypatch.setattr(
-        ai_credentials_view.urllib.request,
-        "urlopen",
-        lambda request_obj, timeout=8: _UrlopenResponse(
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: _Response(
             {"models": [{"name": "command-r-plus"}, {"id": "command-r"}]}
         ),
     )
@@ -340,7 +339,7 @@ def test_list_models_handles_missing_inputs_http_errors_and_unknown_providers(
     monkeypatch.setattr(
         ai_credentials_view,
         "get_ai_credential",
-        lambda username, provider: "secret-key",
+        lambda username, provider: TEST_API_CREDENTIAL,
     )
 
     empty_provider = inspect.unwrap(ai_credentials_view.list_models)(
@@ -388,7 +387,7 @@ def test_list_models_handles_missing_inputs_http_errors_and_unknown_providers(
     monkeypatch.setattr(
         ai_credentials_view,
         "get_ai_credential",
-        lambda username, provider: "secret-key",
+        lambda username, provider: TEST_API_CREDENTIAL,
     )
     perplexity = inspect.unwrap(ai_credentials_view.list_models)(
         RequestFactory().get("/", data={"provider": "perplexity"}),
@@ -410,9 +409,9 @@ def test_list_models_handles_missing_inputs_http_errors_and_unknown_providers(
     }
 
     monkeypatch.setattr(
-        ai_credentials_view.urllib.request,
-        "urlopen",
-        lambda request_obj, timeout=8: (_ for _ in ()).throw(
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: (_ for _ in ()).throw(
             _http_error(code=403, body="credits exhausted")
         ),
     )
@@ -422,13 +421,25 @@ def test_list_models_handles_missing_inputs_http_errors_and_unknown_providers(
     )
     assert http_error.status_code == 400
     assert "403" in _json_payload(http_error)["error"]
+    assert "credits exhausted" in _json_payload(http_error)["error"]
 
     monkeypatch.setattr(
-        ai_credentials_view.urllib.request,
-        "urlopen",
-        lambda request_obj, timeout=8: (_ for _ in ()).throw(
-            RuntimeError("network down")
-        ),
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: _Response("plain response error", status=429),
+    )
+    http_response = inspect.unwrap(ai_credentials_view.list_models)(
+        RequestFactory().get("/", data={"provider": "groq"}),
+        conn=None,
+    )
+    assert http_response.status_code == 400
+    assert "429" in _json_payload(http_response)["error"]
+    assert "plain response error" in _json_payload(http_response)["error"]
+
+    monkeypatch.setattr(
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("network down")),
     )
     unexpected = inspect.unwrap(ai_credentials_view.list_models)(
         RequestFactory().get("/", data={"provider": "groq"}),
@@ -440,45 +451,63 @@ def test_list_models_handles_missing_inputs_http_errors_and_unknown_providers(
 def test_perform_connection_test_covers_success_http_error_and_exception(monkeypatch):
     seen = {}
     monkeypatch.setattr(
-        ai_credentials_view.urllib.request,
-        "urlopen",
-        lambda request_obj, timeout=8: (
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: (
             seen.update(
                 {
-                    "url": request_obj.full_url,
-                    "auth": request_obj.headers.get("Authorization"),
-                    "timeout": timeout,
+                    "url": kwargs["url"],
+                    "auth": kwargs["headers"].get("Authorization"),
+                    "timeout": kwargs["timeout"],
                 }
             )
-            or _UrlopenResponse({}, status=204)
+            or _Response({}, status=204)
         ),
     )
 
-    ok, message = ai_credentials_view._perform_connection_test("groq", "secret")
+    ok, message = ai_credentials_view._perform_connection_test(
+        "groq", TEST_API_CREDENTIAL
+    )
     assert ok is True
     assert message == ai_credentials_view.errors.connection_test_passed()
     assert seen["url"] == "https://api.groq.com/openai/v1/models"
-    assert seen["auth"] == "Bearer secret"
+    assert seen["auth"] == f"Bearer {TEST_API_CREDENTIAL}"
     assert seen["timeout"] == 8
+
+    monkeypatch.setattr(
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: _Response("insufficient credits", status=403),
+    )
+    ok, message = ai_credentials_view._perform_connection_test(
+        "xai", TEST_API_CREDENTIAL
+    )
+    assert ok is False
+    assert "insufficient credits" in message
+    assert "paid credits" in message
 
     xai_error = _http_error(code=403, body="insufficient credits")
     monkeypatch.setattr(
-        ai_credentials_view.urllib.request,
-        "urlopen",
-        lambda request_obj, timeout=8: (_ for _ in ()).throw(xai_error),
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: (_ for _ in ()).throw(xai_error),
     )
-    ok, message = ai_credentials_view._perform_connection_test("xai", "secret")
+    ok, message = ai_credentials_view._perform_connection_test(
+        "xai", TEST_API_CREDENTIAL
+    )
     assert ok is False
     assert "paid credits" in message
 
     monkeypatch.setattr(
-        ai_credentials_view.urllib.request,
-        "urlopen",
-        lambda request_obj, timeout=8: (_ for _ in ()).throw(
-            RuntimeError("network down")
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: (_ for _ in ()).throw(
+            ai_credentials_view.requests.RequestException("network down")
         ),
     )
-    ok, message = ai_credentials_view._perform_connection_test("groq", "secret")
+    ok, message = ai_credentials_view._perform_connection_test(
+        "groq", TEST_API_CREDENTIAL
+    )
     assert ok is False
     assert message == ai_credentials_view.errors.connection_test_failed()
 

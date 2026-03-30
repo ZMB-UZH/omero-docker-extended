@@ -2,7 +2,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils.html import format_html_join
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import ensure_csrf_cookie
 from omeroweb.decorators import login_required
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 import json
@@ -445,8 +445,8 @@ def _suggest_separator_regex(filenames):
     return suggest_separator_regex(filenames)
 
 
-@csrf_exempt
 @login_required()
+@ensure_csrf_cookie
 def index(request, conn=None, url=None, **kwargs):
     """
     OMP filename+metadata harverster UI

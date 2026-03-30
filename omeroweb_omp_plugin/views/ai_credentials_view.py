@@ -1,10 +1,10 @@
 import json
 import logging
-import urllib.error
-import urllib.request
+import urllib.parse
+
+import requests
 
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
@@ -85,6 +85,22 @@ _MODEL_ENDPOINTS = {
 _PROVIDER_TESTS = _MODEL_ENDPOINTS
 
 
+def _validated_provider_url(url):
+    parsed = urllib.parse.urlparse(str(url or "").strip())
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise ValueError("Invalid provider URL")
+    return urllib.parse.urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            parsed.query,
+            "",
+        )
+    )
+
+
 def _perform_connection_test(provider, api_key):
     provider = (provider or "").strip().lower()
     api_key = (api_key or "").strip()
@@ -102,28 +118,56 @@ def _perform_connection_test(provider, api_key):
     data = None
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=8) as response:
-            status = response.getcode()
-            if 200 <= status < 300:
-                return True, errors.connection_test_passed()
-            return False, errors.connection_test_failed_status(status)
-    except urllib.error.HTTPError as e:
-        detail = extract_error_details(e)
-        message = errors.connection_test_failed_status(e.code)
+        response = requests.request(
+            method=method,
+            url=_validated_provider_url(url),
+            headers=headers,
+            data=data,
+            timeout=8,
+        )
+        status = int(response.status_code)
+        if 200 <= status < 300:
+            return True, errors.connection_test_passed()
+        detail = extract_error_details(response)
+        message = errors.connection_test_failed_status(status)
         if detail:
             message = f"{message} {detail}"
-        if provider == "xai" and e.code == 403:
+        if provider == "xai" and status == 403:
             message = f"{message} xAI accounts need paid credits to access the API."
         return False, message
-    except Exception as e:
+    except requests.HTTPError as e:
+        status = int(e.response.status_code) if e.response is not None else 0
+        detail = extract_error_details(e)
+        message = (
+            errors.connection_test_failed_status(status)
+            if status > 0
+            else errors.connection_test_failed()
+        )
+        if detail:
+            message = f"{message} {detail}"
+        if provider == "xai" and status == 403:
+            message = f"{message} xAI accounts need paid credits to access the API."
         logger.error(
             "AI provider connection test failed for %s: %s",
             sanitize_log_value(provider),
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
+        return False, message
+    except requests.RequestException as e:
+        detail = extract_error_details(e)
+        message = errors.connection_test_failed()
+        if detail:
+            message = f"{message} {detail}"
+        logger.error(
+            "AI provider connection test failed for %s: %s",
+            sanitize_log_value(provider),
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
+        return False, message
+    except ValueError:
         return False, errors.connection_test_failed()
 
 
@@ -198,7 +242,6 @@ def _parse_cohere_models(payload):
     return models
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def list_credentials(request, conn=None, url=None, **kwargs):
@@ -229,7 +272,6 @@ def list_credentials(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def test_credentials(request, conn=None, url=None, **kwargs):
@@ -265,7 +307,6 @@ def test_credentials(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def save_credentials(request, conn=None, url=None, **kwargs):
@@ -304,7 +345,6 @@ def save_credentials(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def list_models(request, conn=None, url=None, **kwargs):
@@ -348,16 +388,44 @@ def list_models(request, conn=None, url=None, **kwargs):
 
     url = config["url"](api_key) if callable(config["url"]) else config["url"]
     headers = config["headers"](api_key)
-    request_obj = urllib.request.Request(url, headers=headers, method="GET")
     try:
-        with urllib.request.urlopen(request_obj, timeout=8) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
+        response = requests.request(
+            method="GET",
+            url=_validated_provider_url(url),
+            headers=headers,
+            timeout=8,
+        )
+        status = int(response.status_code)
+        if status >= 400:
+            detail = extract_error_details(response)
+            message = errors.provider_http_status(status)
+            if detail:
+                message = errors.provider_http_status_with_detail(status, detail)
+            return JsonResponse({"error": message}, status=400)
+        payload = response.json()
+    except requests.HTTPError as e:
+        status = int(e.response.status_code) if e.response is not None else 0
         detail = extract_error_details(e)
-        message = errors.provider_http_status(e.code)
+        message = errors.provider_http_status(status)
         if detail:
-            message = errors.provider_http_status_with_detail(e.code, detail)
+            message = errors.provider_http_status_with_detail(status, detail)
         return JsonResponse({"error": message}, status=400)
+    except requests.RequestException as e:
+        detail = extract_error_details(e)
+        if detail and getattr(e, "response", None) is not None:
+            message = errors.provider_http_status_with_detail(
+                e.response.status_code, detail
+            )
+            return JsonResponse({"error": message}, status=400)
+        logger.error(
+            "Unexpected error fetching models for %s: %s",
+            sanitize_log_value(provider),
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
+        return JsonResponse({"error": errors.unexpected_error()}, status=500)
+    except ValueError:
+        return JsonResponse({"error": errors.unexpected_error()}, status=500)
     except Exception as e:
         logger.error(
             "Unexpected error fetching models for %s: %s",
