@@ -132,3 +132,109 @@ def test_import_data_store_connection_schema_and_crud(monkeypatch):
     assert import_data_store.load_special_method_settings("alice", "grouped") == {
         "enabled": True
     }
+
+
+def test_import_data_store_validates_credentials_ports_and_connection_failures(
+    monkeypatch,
+):
+    monkeypatch.delenv(import_data_store.ENV_USER, raising=False)
+    monkeypatch.delenv(import_data_store.ENV_AUTH, raising=False)
+    monkeypatch.delenv(import_data_store.ENV_HOST, raising=False)
+    monkeypatch.delenv(import_data_store.ENV_DB, raising=False)
+
+    try:
+        import_data_store._db_params()
+    except import_data_store.UserSettingsStoreError as exc:
+        assert str(exc) == import_data_store.errors.missing_db_credentials()
+    else:
+        raise AssertionError("Expected missing credentials error")
+
+    monkeypatch.setenv(import_data_store.ENV_USER, "import-user")
+    monkeypatch.setenv(import_data_store.ENV_AUTH, "import-pass")
+    monkeypatch.setenv(import_data_store.ENV_HOST, "database-plugin")
+    monkeypatch.setenv(import_data_store.ENV_DB, "import-db")
+    monkeypatch.setenv(import_data_store.ENV_PORT, "bad")
+    monkeypatch.setenv("PGPORT", "5435")
+
+    assert [entry["port"] for entry in import_data_store._db_params()] == [
+        5435,
+        5433,
+        5432,
+    ]
+
+    monkeypatch.setattr(
+        import_data_store,
+        "_load_psycopg2",
+        lambda: (
+            SimpleNamespace(
+                connect=lambda **kwargs: (_ for _ in ()).throw(OSError("offline"))
+            ),
+            _FakeExtras,
+        ),
+    )
+
+    try:
+        with import_data_store._connect():
+            raise AssertionError("unreachable")
+    except import_data_store.UserSettingsStoreError as exc:
+        assert str(exc) == import_data_store.errors.db_connection_failed()
+    else:
+        raise AssertionError("Expected connection failure")
+
+
+def test_import_data_store_persistence_and_load_failures_are_sanitized(monkeypatch):
+    monkeypatch.setattr(import_data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
+    monkeypatch.setattr(
+        import_data_store,
+        "_load_psycopg2",
+        lambda: (SimpleNamespace(), _FakeExtras),
+    )
+    monkeypatch.setattr(
+        import_data_store, "_ensure_user_settings_schema", lambda conn: None
+    )
+    monkeypatch.setattr(
+        import_data_store, "_ensure_special_method_settings_schema", lambda conn: None
+    )
+
+    @contextmanager
+    def _missing_user_row():
+        yield _FakeConnection([_FakeCursor(), _FakeCursor(fetchone=None)])
+
+    monkeypatch.setattr(import_data_store, "_connect", _missing_user_row)
+    try:
+        import_data_store.save_user_settings("alice", {"layout": "grid"})
+    except import_data_store.UserSettingsStoreError as exc:
+        assert str(exc) == import_data_store.errors.user_settings_not_persisted()
+    else:
+        raise AssertionError("Expected user settings persistence failure")
+
+    @contextmanager
+    def _missing_special_row():
+        yield _FakeConnection([_FakeCursor(), _FakeCursor(fetchone=None)])
+
+    monkeypatch.setattr(import_data_store, "_connect", _missing_special_row)
+    try:
+        import_data_store.save_special_method_settings(
+            "alice",
+            "grouped",
+            {"enabled": True},
+        )
+    except import_data_store.UserSettingsStoreError as exc:
+        assert (
+            str(exc) == import_data_store.errors.special_method_settings_not_persisted()
+        )
+    else:
+        raise AssertionError("Expected special method persistence failure")
+
+    @contextmanager
+    def _load_failure():
+        raise RuntimeError("database unavailable")
+        yield
+
+    monkeypatch.setattr(import_data_store, "_connect", _load_failure)
+    try:
+        import_data_store.load_special_method_settings("alice", "grouped")
+    except import_data_store.UserSettingsStoreError as exc:
+        assert str(exc) == import_data_store.errors.db_connection_failed()
+    else:
+        raise AssertionError("Expected wrapped load failure")
