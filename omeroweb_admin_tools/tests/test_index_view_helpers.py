@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import inspect
+import json
 from http.client import HTTPMessage
 from types import SimpleNamespace
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
+import pytest
 
 from omeroweb_admin_tools.views import index_view
 
@@ -279,3 +283,219 @@ def test_admin_listing_helpers_collect_users_groups_and_permissions():
     assert permissions["users_collab"] == "Read-annotate"
     assert groups_by_user["alice"] == {"users_private", "users_collab"}
     assert users_by_group["users_collab"] == {"alice", "bob"}
+
+
+def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypatch):
+    class _TextPermission:
+        def isGroupRead(self):
+            raise RuntimeError("bad read")
+
+        def isGroupWrite(self):
+            raise RuntimeError("bad write")
+
+        def isGroupAnnotate(self):
+            raise RuntimeError("bad annotate")
+
+        def __str__(self):
+            return "read-only"
+
+    fallback_group = SimpleNamespace(
+        getDetails=lambda: SimpleNamespace(getPermissions=lambda: _TextPermission())
+    )
+
+    class _CallableListingService:
+        def lookupGroups(self, *_args):
+            return [_Group(12, "users_rw", _Permissions("rwrw--", group_write=True))]
+
+        def containedGroups(self, *_args):
+            raise TypeError("wrong signature")
+
+    monkeypatch.setattr(
+        index_view,
+        "_docker_compose_json",
+        lambda command: (
+            {"services": {"web": {"healthcheck": {}}, "db": {}, "ignored": "bad"}}
+            if command[2] == "config"
+            else [
+                {"Service": "web", "State": "running", "Health": "healthy"},
+                {"Service": "db", "State": "exited", "Health": ""},
+                "ignored",
+            ]
+        ),
+    )
+
+    assert index_view._unwrap_rtype_value(_Value("wrapped")) == "wrapped"
+    assert (
+        index_view._safe_full_name(_User(3, "carol", "Carol", "Curator"))
+        == "Carol Curator"
+    )
+    assert (
+        index_view._safe_username(SimpleNamespace(getOmeName=lambda: _Value("root")))
+        == "root"
+    )
+    assert (
+        index_view._safe_group_name(_Group(10, "users_private", _Permissions("rw----")))
+        == "users_private"
+    )
+    assert (
+        index_view._call_admin_listing(_CallableListingService(), "containedGroups")
+        == []
+    )
+    assert index_view._safe_object_id(SimpleNamespace(id=_Value("bad"))) is None
+    assert index_view._safe_group_permission_label(fallback_group) == "Read-only"
+    assert index_view._load_compose_healthcheck_config() == {"web": True, "db": False}
+    assert index_view._load_compose_runtime_health() == {
+        "web": {"state": "running", "health": "healthy"},
+        "db": {"state": "exited", "health": ""},
+    }
+
+
+def test_proxy_and_admin_post_views_cover_remaining_error_and_success_paths(
+    monkeypatch,
+):
+    factory = RequestFactory()
+    conn = object()
+
+    monkeypatch.setattr(index_view, "_require_root_user", lambda *_args: None)
+    monkeypatch.setattr(index_view, "current_username", lambda *_args: "root")
+
+    bad_grafana = inspect.unwrap(index_view.grafana_proxy)(
+        factory.get("/grafana"), "../escape", conn=conn
+    )
+    assert bad_grafana.status_code == 400
+
+    monkeypatch.setattr(index_view, "_build_proxy_backend_urls", lambda *_args: [])
+    home = inspect.unwrap(index_view.grafana_proxy)(
+        factory.get("/grafana/"), "", conn=conn
+    )
+    assert home.status_code == 302
+
+    monkeypatch.setattr(
+        index_view,
+        "_build_proxy_backend_urls",
+        lambda *_args: ["http://prometheus:9090"],
+    )
+    bad_prometheus = inspect.unwrap(index_view.prometheus_proxy)(
+        factory.get("/prometheus"), "../escape", conn=conn
+    )
+    assert bad_prometheus.status_code == 400
+
+    monkeypatch.setattr(index_view, "_build_proxy_backend_urls", lambda *_args: [])
+    with pytest.raises(RuntimeError, match="No Prometheus backend URLs configured"):
+        inspect.unwrap(index_view.prometheus_proxy)(
+            factory.get("/prometheus"), "api/v1/query", conn=conn
+        )
+
+    storage_method = inspect.unwrap(index_view.storage_quota_import)(
+        factory.get("/storage/import"), conn=conn
+    )
+    assert storage_method.status_code == 405
+    missing_file = inspect.unwrap(index_view.storage_quota_import)(
+        factory.post("/storage/import", data={}),
+        conn=conn,
+    )
+    assert missing_file.status_code == 400
+
+    invalid_encoding = inspect.unwrap(index_view.storage_quota_import)(
+        factory.post(
+            "/storage/import",
+            data={
+                "file": SimpleUploadedFile(
+                    "quotas.csv", b"\xff", content_type="text/csv"
+                )
+            },
+        ),
+        conn=conn,
+    )
+    assert invalid_encoding.status_code == 400
+
+    monkeypatch.setattr(
+        index_view,
+        "import_quotas_csv",
+        lambda *_args: (_ for _ in ()).throw(index_view.CsvError("bad csv")),
+    )
+    invalid_csv = inspect.unwrap(index_view.storage_quota_import)(
+        factory.post(
+            "/storage/import",
+            data={
+                "file": SimpleUploadedFile(
+                    "quotas.csv", b"group,quota\n", content_type="text/csv"
+                )
+            },
+        ),
+        conn=conn,
+    )
+    assert invalid_csv.status_code == 400
+
+    monkeypatch.setattr(
+        index_view, "import_quotas_csv", lambda *_args: {"quotas_gb": {"g": 1}}
+    )
+    monkeypatch.setattr(index_view, "_list_omero_group_names", lambda *_args: ["g"])
+    monkeypatch.setattr(
+        index_view, "reconcile_quotas", lambda groups: {"created": groups}
+    )
+    success = inspect.unwrap(index_view.storage_quota_import)(
+        factory.post(
+            "/storage/import",
+            data={
+                "file": SimpleUploadedFile(
+                    "quotas.csv", b"group,quota\n", content_type="text/csv"
+                )
+            },
+        ),
+        conn=conn,
+    )
+    assert json.loads(success.content.decode("utf-8")) == {
+        "quotas_gb": {"g": 1},
+        "reconcile": {"created": ["g"]},
+    }
+
+    invalid_json = inspect.unwrap(index_view.server_database_testing_run)(
+        factory.post("/diag/run", data=b"{bad", content_type="application/json"),
+        conn=conn,
+    )
+    assert invalid_json.status_code == 400
+
+    missing_scripts = inspect.unwrap(index_view.server_database_testing_run)(
+        factory.post(
+            "/diag/run",
+            data=json.dumps({}).encode("utf-8"),
+            content_type="application/json",
+        ),
+        conn=conn,
+    )
+    assert missing_scripts.status_code == 400
+
+    empty_script_id = inspect.unwrap(index_view.server_database_testing_run)(
+        factory.post(
+            "/diag/run",
+            data=json.dumps({"scripts": ["ok", " "]}).encode("utf-8"),
+            content_type="application/json",
+        ),
+        conn=conn,
+    )
+    assert empty_script_id.status_code == 400
+
+    class _RequestId:
+        def __str__(self):
+            return "req-1"
+
+    monkeypatch.setattr(index_view.uuid, "uuid4", lambda: _RequestId())
+    monkeypatch.setattr(
+        index_view,
+        "run_diagnostic_script",
+        lambda script_id: {"id": script_id, "ok": True},
+    )
+    diagnostics = inspect.unwrap(index_view.server_database_testing_run)(
+        factory.post(
+            "/diag/run",
+            data=json.dumps({"scripts": ["disk", "db"]}).encode("utf-8"),
+            content_type="application/json",
+        ),
+        conn=conn,
+    )
+    assert diagnostics.status_code == 200
+    assert json.loads(diagnostics.content.decode("utf-8"))["results"] == [
+        {"id": "disk", "ok": True},
+        {"id": "db", "ok": True},
+    ]

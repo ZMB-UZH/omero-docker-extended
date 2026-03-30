@@ -306,3 +306,119 @@ def test_run_ims_export_task_updates_failure_meta_and_closes_connections(monkeyp
     assert updates[-1][0] == tasks.states.FAILURE
     assert updates[-1][1]["error"] == "IMS export job failed."
     assert closed == [True]
+
+
+def test_task_helpers_cover_cli_resolution_connection_errors_and_success(monkeypatch):
+    tasks = _import_tasks(monkeypatch)
+
+    monkeypatch.setattr(tasks.os.path, "exists", lambda path: False)
+    monkeypatch.setattr(tasks.shutil, "which", lambda name: None)
+    with pytest.raises(RuntimeError, match="OMERO CLI binary not found"):
+        tasks._resolve_omero_cli()
+
+    assert tasks._build_failure_meta(RuntimeError("boom")) == {
+        "exc_type": "RuntimeError",
+        "exc_module": "builtins",
+        "exc_message": "IMS export job failed.",
+        "error": "IMS export job failed.",
+    }
+
+    with pytest.raises(RuntimeError, match="Session key is required"):
+        tasks._open_session_connection("", "omeroserver", 4064)
+    with pytest.raises(RuntimeError, match="OMERO host is required"):
+        tasks._open_session_connection("session", "", 4064)
+    with pytest.raises(RuntimeError, match="OMERO port is required"):
+        tasks._open_session_connection("session", "omeroserver", None)
+
+    class _ClientError(Exception):
+        pass
+
+    class _SecurityViolation(Exception):
+        pass
+
+    omero_stub = types.SimpleNamespace(
+        ClientError=_ClientError,
+        SecurityViolation=_SecurityViolation,
+    )
+    monkeypatch.setattr(tasks, "omero", omero_stub)
+
+    monkeypatch.setattr(
+        omero_stub,
+        "client",
+        lambda host, port: types.SimpleNamespace(
+            joinSession=lambda session_key: (_ for _ in ()).throw(
+                _ClientError("bad client")
+            )
+        ),
+        raising=False,
+    )
+    with pytest.raises(RuntimeError, match="Failed to connect to OMERO"):
+        tasks._open_session_connection("session", "omeroserver", 4064)
+
+    monkeypatch.setattr(
+        tasks,
+        "get_job_service_credentials",
+        lambda: ("job-service", TEST_SERVICE_AUTH_VALUE),
+    )
+
+    class _FailingGateway:
+        def __init__(self, *args, **kwargs):
+            self.SERVICE_OPTS = types.SimpleNamespace(setOmeroGroup=lambda value: None)
+
+        def connect(self):
+            return False
+
+    monkeypatch.setattr(tasks, "BlitzGateway", _FailingGateway)
+    with pytest.raises(RuntimeError, match="job-service session"):
+        tasks._open_job_service_connection("omeroserver", 4064)
+
+    updates = []
+    closed = []
+    conn = types.SimpleNamespace(
+        close=lambda: closed.append(True),
+        SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda value: None),
+    )
+
+    monkeypatch.setattr(tasks, "use_job_service_session", lambda: False)
+    monkeypatch.setattr(
+        tasks,
+        "_open_session_connection",
+        lambda session_key, host, port, secure=None: conn,
+    )
+    monkeypatch.setattr(tasks, "_find_script_id", lambda current_conn: 88)
+    monkeypatch.setattr(
+        tasks,
+        "_run_script_via_omero_cli",
+        lambda **kwargs: {"Export_Path": "/tmp/demo.ims", "Export_Name": "demo.ims"},
+    )
+    monkeypatch.setattr(
+        tasks,
+        "_serialize_outputs",
+        lambda outputs: {"Export_Name": outputs["Export_Name"]},
+    )
+
+    task_self = types.SimpleNamespace(
+        request=types.SimpleNamespace(id="task-2"),
+        update_state=lambda state, meta: updates.append((state, meta)),
+    )
+
+    result = tasks.run_ims_export_task(
+        task_self,
+        image_id=7,
+        session_key="session-key",
+        host="omeroserver",
+        port=4064,
+        secure=True,
+    )
+
+    assert [meta["status"] for state, meta in updates] == [
+        "connecting",
+        "finding_script",
+        "running_script",
+    ]
+    assert result == {
+        "state": "FINISHED",
+        "outputs": {"Export_Name": "demo.ims"},
+        "error": None,
+    }
+    assert closed == [True]
