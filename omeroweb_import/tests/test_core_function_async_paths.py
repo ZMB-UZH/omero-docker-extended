@@ -775,3 +775,422 @@ def test_process_import_job_covers_lock_timeout_success_and_failure_cleanup(
     assert failure_state["job"]["status"] == "error"
     assert "job failed" in failure_state["job"]["errors"]
     assert deferred_jobs == [job_id]
+
+
+def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
+    tmp_path: Path, monkeypatch
+):
+    txt_path = tmp_path / "spectrum.txt"
+    txt_path.write_text("energy,count\n1,2\n", encoding="utf-8")
+    plot_path = tmp_path / "spectrum.png"
+    plot_path.write_bytes(b"\x89PNG\r\n\x1a\n")
+    table_calls = []
+
+    class _OriginalFileI:
+        def __init__(self):
+            self._id = 0
+            self.name = None
+            self.path = None
+            self.size = None
+            self.mimetype = None
+
+        def setName(self, value):
+            self.name = value
+
+        def setPath(self, value):
+            self.path = value
+
+        def setSize(self, value):
+            self.size = value
+
+        def setMimetype(self, value):
+            self.mimetype = value
+
+        def getId(self):
+            return _Value(self._id)
+
+        def proxy(self):
+            return self
+
+    class _FileAnnotationI:
+        def __init__(self):
+            self.ns = None
+            self.file = None
+
+        def setNs(self, value):
+            self.ns = value
+
+        def setFile(self, value):
+            self.file = value
+
+    class _FileAnnotationWrapper:
+        def __init__(self, conn, annotation):
+            self.conn = conn
+            self.annotation = annotation
+
+    omero_model = types.ModuleType("omero.model")
+    omero_model.FileAnnotationI = _FileAnnotationI
+    omero_model.OriginalFileI = _OriginalFileI
+    monkeypatch.setitem(sys.modules, "omero.model", omero_model)
+
+    omero_rtypes = types.ModuleType("omero.rtypes")
+    omero_rtypes.rstring = lambda value: value
+    omero_rtypes.rlong = lambda value: value
+    monkeypatch.setitem(sys.modules, "omero.rtypes", omero_rtypes)
+
+    omero_gateway = types.ModuleType("omero.gateway")
+    omero_gateway.FileAnnotationWrapper = _FileAnnotationWrapper
+    monkeypatch.setitem(sys.modules, "omero.gateway", omero_gateway)
+
+    stores = []
+    linked_annotations = []
+
+    class _RawFileStore:
+        def __init__(self):
+            self.file_id = None
+            self.payload = b""
+            self.saved = False
+            self.closed = False
+
+        def setFileId(self, value):
+            self.file_id = value
+
+        def write(self, data, offset, length):
+            self.payload = data[offset : offset + length]
+
+        def save(self):
+            self.saved = True
+
+        def close(self):
+            self.closed = True
+
+    class _UpdateService:
+        def __init__(self):
+            self.saved = []
+            self._next_id = 101
+
+        def saveAndReturnObject(self, obj):
+            if hasattr(obj, "_id"):
+                obj._id = self._next_id
+                self._next_id += 1
+            self.saved.append(obj)
+            return obj
+
+    update_service = _UpdateService()
+
+    class _Image:
+        def linkAnnotation(self, wrapper):
+            linked_annotations.append(wrapper.annotation)
+
+    image = _Image()
+
+    class _UserConn:
+        def __init__(self):
+            self.closed = False
+            self.c = types.SimpleNamespace(
+                sf=types.SimpleNamespace(createRawFileStore=self._create_raw_file_store)
+            )
+
+        def _create_raw_file_store(self):
+            store = _RawFileStore()
+            stores.append(store)
+            return store
+
+        def getUpdateService(self):
+            return update_service
+
+        def getObject(self, object_type, object_id):
+            assert (object_type, object_id) == ("Image", 99)
+            return image
+
+        def close(self):
+            self.closed = True
+
+    user_conn = _UserConn()
+    monkeypatch.setattr(
+        core_functions,
+        "_open_user_owned_background_connection",
+        lambda *args, **kwargs: user_conn,
+    )
+    monkeypatch.setattr(
+        "omeroweb_import.services.omero.sem_edx_parser.attach_sem_edx_tables",
+        lambda conn, image_id, source_path, persist_table=True: (
+            table_calls.append((image_id, source_path, persist_table)) or 77
+        ),
+    )
+
+    core_functions._attach_txt_to_image_service(
+        types.SimpleNamespace(),
+        99,
+        txt_path,
+        "alice",
+        create_tables=True,
+        plot_path=plot_path,
+        session_key="session",
+        host="omeroserver",
+        port=4064,
+        group_id=5,
+    )
+
+    assert table_calls == [(99, txt_path, True)]
+    assert len(stores) == 2
+    assert stores[0].payload == txt_path.read_bytes()
+    assert stores[1].payload == plot_path.read_bytes()
+    assert all(store.saved is True for store in stores)
+    assert all(store.closed is True for store in stores)
+    assert len(linked_annotations) == 2
+    assert user_conn.closed is True
+
+
+def test_verify_import_and_cleanup_imported_images_cover_dataset_and_admin_paths(
+    monkeypatch,
+):
+    dataset = types.SimpleNamespace(
+        listChildren=lambda: [
+            types.SimpleNamespace(getName=lambda: "match.ome.tif"),
+            types.SimpleNamespace(getName=lambda: "other.ome.tif"),
+        ]
+    )
+    conn = types.SimpleNamespace(
+        getObject=lambda object_type, object_id: (
+            dataset if object_type == "Dataset" else None
+        ),
+        getObjects=lambda object_type, attributes=None: [
+            types.SimpleNamespace(getName=lambda: "global.ome.tif")
+        ],
+    )
+
+    assert core_functions._verify_import(conn, "match.ome.tif", dataset_id=7) is True
+    assert core_functions._verify_import(conn, "missing.ome.tif", dataset_id=7) is False
+    assert core_functions._verify_import(conn, "global.ome.tif") is True
+
+    class _AdminConn:
+        def __init__(self):
+            self.groups = []
+            self.deleted = []
+            self.closed = False
+            self.SERVICE_OPTS = types.SimpleNamespace(setOmeroGroup=self.groups.append)
+
+        def deleteObjects(self, object_type, object_ids, wait=True):
+            self.deleted.append((object_type, object_ids, wait))
+
+        def close(self):
+            self.closed = True
+
+    admin_conn = _AdminConn()
+    monkeypatch.setattr(
+        core_functions, "_open_admin_connection", lambda host, port: admin_conn
+    )
+
+    core_functions._cleanup_imported_images("omeroserver", 4064, ["10", "bad", "11"])
+
+    assert admin_conn.groups == ["-1"]
+    assert admin_conn.deleted == [("Image", [10, 11], True)]
+    assert admin_conn.closed is True
+
+
+def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
+    tmp_path: Path, monkeypatch
+):
+    jobs_root = tmp_path / "jobs"
+    upload_root = tmp_path / "uploads"
+    jobs_root.mkdir()
+    upload_root.mkdir()
+    monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: jobs_root)
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(core_functions.time, "time", lambda: 3000.0)
+
+    job_id = "d" * 32
+    staged_txt = upload_root / job_id / "_staged" / "spectra" / "sample.txt"
+    staged_txt.parent.mkdir(parents=True, exist_ok=True)
+    staged_txt.write_text("energy,count\n1,2\n", encoding="utf-8")
+
+    plot_source = tmp_path / "sample_plot.png"
+    plot_source.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    job = {
+        "job_id": job_id,
+        "username": "alice",
+        "host": "omeroserver",
+        "port": 4064,
+        "group_id": 5,
+        "group_name": "users_private",
+        "session_key": "session",
+        "files": [
+            {
+                "relative_path": "images/sample.ome.tif",
+                "status": "uploaded",
+                "size": 5,
+                "errors": [],
+            },
+            {
+                "relative_path": "spectra/sample.txt",
+                "staged_path": "_staged/spectra/sample.txt",
+                "status": "uploaded",
+                "size": 3,
+                "errors": [],
+            },
+        ],
+        "errors": [],
+        "messages": [],
+        "status": "ready",
+        "dataset_map": {"images": 11},
+        "orphan_dataset_name": "images",
+        "imported_bytes": 0,
+        "total_bytes": 8,
+        "sem_edx_associations": {},
+        "sem_edx_settings": {
+            "create_tables": True,
+            "create_figures_attachments": True,
+            "create_figures_images": True,
+        },
+        "special_upload": "sem_edx_spectra",
+    }
+    state = _job_state(monkeypatch, job)
+    job_lock = _DummyLock(acquired=True)
+    monkeypatch.setattr(core_functions, "_get_import_lock", lambda username: job_lock)
+    monkeypatch.setattr(core_functions, "_resolve_job_batch_size", lambda job: 1)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_units",
+        lambda job_dict, root: [
+            {
+                "relative_path": "images/sample.ome.tif",
+                "covered_indexes": [0],
+                "cleanup_staged_paths": [],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_ensure_job_dataset_targets",
+        lambda job_dict, entries: (True, None),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_build_sem_edx_associations_from_entries",
+        lambda entries: {"images/sample.ome.tif": ["spectra/sample.txt"]},
+    )
+
+    class _ImportedImage:
+        def __init__(self):
+            self._obj = types.SimpleNamespace(id=types.SimpleNamespace(val=301))
+
+        def listParents(self):
+            return [types.SimpleNamespace(getId=lambda: 88)]
+
+    imported_image = _ImportedImage()
+
+    class _ServiceConn:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    service_conn = _ServiceConn()
+    monkeypatch.setattr(
+        core_functions,
+        "_open_service_connection",
+        lambda host, port, group_id=None: service_conn,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_batch_find_images_by_name",
+        lambda conn, names, dataset_id: (
+            {"sample.ome.tif": imported_image}
+            if dataset_id == 11 or dataset_id is None
+            else {}
+        ),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_resolve_staged_target_path",
+        lambda root, staged_path: (root / staged_path, None),
+    )
+    monkeypatch.setattr(
+        "omeroweb_import.services.omero.sem_edx_parser.create_edx_spectrum_plot",
+        lambda txt_path: plot_source,
+    )
+
+    attached = []
+    monkeypatch.setattr(
+        core_functions,
+        "_attach_txt_to_image_service",
+        lambda conn, image_id, txt_path, username, create_tables, plot_path=None, **kwargs: (
+            attached.append(
+                {
+                    "image_id": image_id,
+                    "txt_path": txt_path,
+                    "username": username,
+                    "create_tables": create_tables,
+                    "plot_path": plot_path,
+                    "kwargs": kwargs,
+                }
+            )
+        ),
+    )
+
+    plot_imports = []
+
+    def fake_import_job_entry(entry, *args, **kwargs):
+        if entry.get("relative_path") == "images/sample.ome.tif":
+            return {
+                "status": "imported",
+                "covered_indexes": [0],
+                "cleanup_staged_paths": [],
+                "rel_path": "images/sample.ome.tif",
+            }
+        plot_imports.append(
+            (
+                entry.get("relative_path"),
+                entry.get("dataset_id_override"),
+                entry.get("staged_path"),
+            )
+        )
+        return {"status": "imported"}
+
+    monkeypatch.setattr(core_functions, "_import_job_entry", fake_import_job_entry)
+
+    removed_jobs = []
+    deferred_jobs = []
+    monkeypatch.setattr(
+        core_functions,
+        "safe_remove_job_data",
+        lambda target_job_id, root: removed_jobs.append((target_job_id, root)),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_mark_failed_job_for_deferred_cleanup",
+        lambda target_job_id: deferred_jobs.append(target_job_id) or True,
+    )
+
+    core_functions._process_import_job(job_id)
+
+    assert job_lock.released is True
+    assert service_conn.closed is True
+    assert state["job"]["status"] == "done"
+    assert state["job"]["files"][0]["status"] == "imported"
+    assert state["job"]["files"][1]["status"] == "imported"
+    assert state["job"]["imported_bytes"] == 8
+    assert any(
+        "derived 1 TXT attachment" in message for message in state["job"]["messages"]
+    )
+    assert any(
+        "Txt attachment success" in message for message in state["job"]["messages"]
+    )
+    assert any("sample_plot.png" in message for message in state["job"]["messages"])
+    assert len(attached) == 1
+    assert attached[0]["image_id"] == 301
+    assert attached[0]["txt_path"] == staged_txt
+    assert attached[0]["plot_path"] == plot_source
+    assert attached[0]["kwargs"]["session_key"] == "session"
+    assert plot_imports == [
+        (
+            "images/sample_plot.png",
+            88,
+            core_functions._build_staged_relative_path("images/sample_plot.png"),
+        )
+    ]
+    assert removed_jobs == [(job_id, upload_root)]
+    assert deferred_jobs == []

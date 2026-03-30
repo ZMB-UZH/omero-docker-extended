@@ -462,6 +462,106 @@ def test_extract_acquisition_metadata_collects_searchable_fields_and_attaches_lo
     assert raw_store.closed is True
 
 
+def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures():
+    class _ImageWithFallbacks:
+        def __init__(self):
+            self._raw_store = _FakeRawFileStore()
+            self._update = _FakeUpdateServiceForMetadata()
+            self._conn = SimpleNamespace(
+                getUpdateService=lambda: self._update,
+                c=SimpleNamespace(
+                    sf=SimpleNamespace(createRawFileStore=lambda: self._raw_store)
+                ),
+            )
+            self._obj = "image-obj"
+
+        def getId(self):
+            return 101
+
+        def getAcquisitionDate(self):
+            return "2026-03-21T10:11:12"
+
+        def getObjectiveSettings(self):
+            return SimpleNamespace(
+                getID=lambda: "OBJ-7",
+                getCorrectionCollar=lambda: 0.20,
+            )
+
+        def getChannels(self):
+            return [
+                SimpleNamespace(
+                    getIndex=lambda: (_ for _ in ()).throw(RuntimeError("no index")),
+                    getLabel=lambda: "DNA",
+                    getEmissionWave=lambda: "525",
+                    getExcitationWave=lambda: (_ for _ in ()).throw(
+                        RuntimeError("missing excitation")
+                    ),
+                ),
+                SimpleNamespace(
+                    getIndex=lambda: 1,
+                    getLabel=lambda: (_ for _ in ()).throw(RuntimeError("bad label")),
+                    getEmissionWave=lambda: None,
+                    getExcitationWave=lambda: "405",
+                ),
+            ]
+
+        def getDetectorSettings(self):
+            return [
+                SimpleNamespace(
+                    getID=lambda: (_ for _ in ()).throw(
+                        RuntimeError("bad detector id")
+                    ),
+                    getBinning=lambda: "1x1",
+                    getGain=lambda: None,
+                )
+            ]
+
+        def loadOriginalMetadata(self):
+            return (
+                1,
+                [("Exposure", 100), ("OnlyKey",), None],
+                [("Series", "B"), ("Comment", "ok")],
+            )
+
+    cleaned = metadata_service.extract_acquisition_metadata(_ImageWithFallbacks())
+
+    assert cleaned == {
+        "acquisition_date": "2026-03-21T10:11:12",
+        "objective_id": "OBJ-7",
+        "objective_collar": "0.2",
+        "channel_unknown_label": "DNA",
+        "channel_unknown_emission": "525",
+        "channel_1_excitation": "405",
+        "detector_unknown_binning": "1x1",
+        "BF_Exposure": "100",
+        "BF_Series": "B",
+        "BF_Comment": "ok",
+    }
+
+
+def test_extract_acquisition_metadata_returns_empty_when_sections_raise():
+    class _BrokenImage:
+        def getId(self):
+            return 202
+
+        def getAcquisitionDate(self):
+            raise RuntimeError("date failed")
+
+        def getObjectiveSettings(self):
+            raise RuntimeError("objective failed")
+
+        def getChannels(self):
+            raise RuntimeError("channels failed")
+
+        def getDetectorSettings(self):
+            raise RuntimeError("detectors failed")
+
+        def loadOriginalMetadata(self):
+            raise RuntimeError("metadata failed")
+
+    assert metadata_service.extract_acquisition_metadata(_BrokenImage()) == {}
+
+
 class _FakeOriginalFileRef:
     def __init__(self, name, fmt):
         self._name = name

@@ -675,6 +675,61 @@ def test_response_from_file_annotation_streams_file_bytes(
     assert store.closed is True
 
 
+def test_unwrap_rtype_and_file_annotation_response_support_get_value_wrappers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+
+    class _GetValueWrapper:
+        def __init__(self, value):
+            self._value = value
+
+        def getValue(self):
+            return self._value
+
+    class DummyStore:
+        def __init__(self):
+            self.file_id = None
+            self.closed = False
+            self.chunks = [b"ab", b"cd", b""]
+
+        def setFileId(self, file_id):
+            self.file_id = file_id
+
+        def read(self, _offset, _size):
+            return self.chunks.pop(0)
+
+        def close(self):
+            self.closed = True
+
+    store = DummyStore()
+    original_file = SimpleNamespace(
+        getName=lambda: _GetValueWrapper("../wrapped export.ims"),
+        getSize=lambda: _GetValueWrapper("4"),
+        getId=lambda: _GetValueWrapper("66"),
+    )
+    file_annotation = SimpleNamespace(getFile=lambda: original_file)
+    conn = SimpleNamespace(
+        getObject=lambda kind, obj_id: (
+            file_annotation if (kind, obj_id) == ("FileAnnotation", 12) else None
+        ),
+        c=SimpleNamespace(sf=SimpleNamespace(createRawFileStore=lambda: store)),
+    )
+
+    assert imaris_service._unwrap_rtype(_GetValueWrapper("wrapped")) == "wrapped"
+
+    response = imaris_service._response_from_file_annotation(conn, "12")
+
+    assert response["Content-Length"] == "4"
+    assert (
+        response["Content-Disposition"] == 'attachment; filename="wrapped export.ims"'
+    )
+    assert b"".join(response.streaming_content) == b"abcd"
+    assert store.file_id == 66
+    assert store.closed is True
+
+
 def test_build_download_response_prefers_safe_export_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

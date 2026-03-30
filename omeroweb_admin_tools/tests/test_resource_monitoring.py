@@ -1289,6 +1289,157 @@ def test_logs_data_runtime_error_is_sanitized(monkeypatch) -> None:
     assert payload["error"] == "Failed to fetch logs."
 
 
+def test_logs_data_filters_entries_and_validates_inputs(monkeypatch) -> None:
+    captured = {}
+
+    def _fake_fetch(
+        log_config,
+        containers,
+        lookback_seconds,
+        max_entries,
+        *,
+        internal_files,
+        since_ns,
+        text_query,
+    ):
+        captured.update(
+            {
+                "containers": containers,
+                "lookback_seconds": lookback_seconds,
+                "max_entries": max_entries,
+                "internal_files": internal_files,
+                "since_ns": since_ns,
+                "text_query": text_query,
+            }
+        )
+        return [
+            SimpleNamespace(
+                container="omeroserver",
+                level="error",
+                message="Managed repository error",
+            ),
+            SimpleNamespace(
+                container="omeroweb",
+                level="info",
+                message="background worker ready",
+            ),
+        ]
+
+    request = RequestFactory().get(
+        "/omeroweb_admin_tools/logs/data/",
+        data=[
+            ("container", "omeroserver"),
+            ("container", "omeroweb"),
+            ("internal_file", "omeroserver_internal/master.err"),
+            ("internal_file", "omeroweb_internal/web.log"),
+            ("internal_file", "bad-entry"),
+            ("internal_file", "redis/dump.rdb"),
+            ("lookback", "120"),
+            ("limit", "25"),
+            ("query", "error"),
+            ("level", "error"),
+            ("since", "2026-03-30T06:56:57Z"),
+        ],
+    )
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.optional_log_config",
+        lambda: SimpleNamespace(lookback_seconds=60, max_entries=50),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.fetch_loki_logs",
+        _fake_fetch,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.serialize_entries",
+        lambda entries: [
+            {
+                "container": entry.container,
+                "level": entry.level,
+                "message": entry.message,
+            }
+            for entry in entries
+        ],
+    )
+
+    response = logs_data(request, conn=None)
+    payload = json.loads(response.content)
+
+    assert response.status_code == 200
+    assert payload == {
+        "entries": [
+            {
+                "container": "omeroserver",
+                "level": "error",
+                "message": "Managed repository error",
+            }
+        ]
+    }
+    assert captured["containers"] == ["omeroserver", "omeroweb"]
+    assert captured["lookback_seconds"] == 120
+    assert captured["max_entries"] == 25
+    assert captured["internal_files"] == {
+        "omeroserver_internal": {"master.err"},
+        "omeroweb_internal": {"web.log"},
+    }
+    assert captured["since_ns"] > 0
+    assert captured["text_query"] == "error"
+
+
+def test_logs_data_rejects_invalid_query_parameters(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.optional_log_config",
+        lambda: SimpleNamespace(lookback_seconds=60, max_entries=50),
+    )
+
+    invalid_limit = logs_data(
+        RequestFactory().get(
+            "/omeroweb_admin_tools/logs/data/",
+            data={"container": ["omeroweb"], "lookback": "bad"},
+        ),
+        conn=None,
+    )
+    invalid_since = logs_data(
+        RequestFactory().get(
+            "/omeroweb_admin_tools/logs/data/",
+            data={"container": ["omeroweb"], "since": "definitely-not-a-date"},
+        ),
+        conn=None,
+    )
+    invalid_level = logs_data(
+        RequestFactory().get(
+            "/omeroweb_admin_tools/logs/data/",
+            data={"container": ["omeroweb"], "level": "verbose"},
+        ),
+        conn=None,
+    )
+
+    assert (
+        json.loads(invalid_limit.content)["error"] == "Invalid lookback or limit value."
+    )
+    assert invalid_limit.status_code == 400
+    assert json.loads(invalid_since.content)["error"] == "Invalid since value."
+    assert invalid_since.status_code == 400
+    assert json.loads(invalid_level.content)["error"] == "Invalid log level."
+    assert invalid_level.status_code == 400
+
+
 def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -> None:
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/data/",

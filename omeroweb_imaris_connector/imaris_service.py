@@ -222,7 +222,14 @@ def _unwrap_rtype(v):
     try:
         return v.val
     except Exception:
-        return v
+        pass
+    try:
+        getter = getattr(v, "getValue", None)
+        if callable(getter):
+            return getter()
+    except Exception:
+        pass
+    return v
 
 
 def _get_script_services(conn):

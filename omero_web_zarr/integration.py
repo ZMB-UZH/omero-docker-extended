@@ -807,7 +807,8 @@ def _patch_urlpatterns(urlpatterns, replacements):
             continue
         replacement = replacements.get(pattern.name)
         if replacement is not None:
-            pattern._callback = replacement
+            pattern.callback = replacement
+            pattern.__dict__.pop("lookup_str", None)
 
 
 def install_webgateway_overrides():

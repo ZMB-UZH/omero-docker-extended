@@ -3590,6 +3590,9 @@ def _attach_txt_to_image_service(
         try:
             store.setFileId(of.getId().getValue())
             store.write(binary_data, 0, len(binary_data))
+            save = getattr(store, "save", None)
+            if callable(save):
+                save()
         finally:
             try:
                 store.close()

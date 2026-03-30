@@ -29,6 +29,7 @@ from omeroweb_admin_tools.services.storage_quotas import (
 )
 from omeroweb_admin_tools.views.index_view import (
     storage_data,
+    storage_quota_data,
     storage_quota_import,
     storage_quota_template,
     storage_quota_update,
@@ -694,6 +695,225 @@ def test_storage_data_failure_is_sanitized(monkeypatch) -> None:
 
     assert response.status_code == 500
     assert body["error"] == "Storage query failed."
+
+
+def test_storage_data_merges_known_users_groups_and_quota_fallback(
+    monkeypatch,
+) -> None:
+    class _Value:
+        def __init__(self, value):
+            self.val = value
+
+        def getValue(self):
+            return self.val
+
+    rows = [
+        [None, _Value("alice"), None, _Value("users_private"), _Value(10)],
+        [None, _Value("alice"), None, _Value("users_collaboration"), _Value(5)],
+    ]
+    group_calls = []
+    conn = SimpleNamespace(
+        SERVICE_OPTS=SimpleNamespace(
+            setOmeroGroup=lambda value: group_calls.append(value)
+        ),
+        getQueryService=lambda: SimpleNamespace(
+            projection=lambda query, params, opts: rows
+        ),
+    )
+
+    monkeypatch.setenv("OMERO_DATA_DIR", "/srv/omero")
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._list_all_users_and_groups",
+        lambda conn: (
+            {"alice": "Alice Admin", "bob": "Bob Builder"},
+            {"users_private", "users_collaboration", "users_read"},
+            {
+                "users_private": "Private",
+                "users_collaboration": "Read-annotate",
+            },
+            {
+                "alice": {"users_private", "users_collaboration"},
+                "bob": {"users_read"},
+            },
+            {
+                "users_private": {"alice"},
+                "users_collaboration": {"alice"},
+                "users_read": {"bob"},
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.shutil.disk_usage",
+        lambda path: (100, 60, 40),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.reconcile_quotas",
+        lambda known_groups: (_ for _ in ()).throw(
+            RuntimeError("quota backend offline")
+        ),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.is_quota_enforcement_available",
+        lambda: True,
+    )
+
+    response = storage_data(
+        RequestFactory().get("/omeroweb_admin_tools/storage/data/"),
+        conn=conn,
+    )
+    payload = json.loads(response.content)
+
+    assert response.status_code == 200
+    assert group_calls == [-1]
+    assert payload["totals"] == {
+        "omero_binary_bytes": 15,
+        "data_root": "/srv/omero",
+        "data_root_total_bytes": 100,
+        "data_root_used_bytes": 60,
+        "data_root_free_bytes": 40,
+    }
+    assert payload["by_user"] == [
+        {
+            "username": "alice",
+            "full_name": "Alice Admin",
+            "groups": ["users_collaboration", "users_private"],
+            "bytes": 15,
+        },
+        {
+            "username": "bob",
+            "full_name": "Bob Builder",
+            "groups": ["users_read"],
+            "bytes": 0,
+        },
+    ]
+    assert payload["by_group"] == [
+        {
+            "group": "users_private",
+            "users": ["alice"],
+            "permissions": "Private",
+            "bytes": 10,
+        },
+        {
+            "group": "users_collaboration",
+            "users": ["alice"],
+            "permissions": "Read-annotate",
+            "bytes": 5,
+        },
+        {
+            "group": "users_read",
+            "users": ["bob"],
+            "permissions": "Private",
+            "bytes": 0,
+        },
+    ]
+    assert payload["by_user_group"] == [
+        {"username": "alice", "group": "users_private", "bytes": 10},
+        {"username": "alice", "group": "users_collaboration", "bytes": 5},
+    ]
+    assert payload["quotas"] == {
+        "quotas_gb": {},
+        "logs": [],
+        "quota_enforcement_available": True,
+    }
+
+
+def test_storage_quota_data_returns_current_state_and_reconcile_summary(
+    monkeypatch,
+) -> None:
+    request = RequestFactory().get("/omeroweb_admin_tools/storage/quota/data/")
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.get_quota_state",
+        lambda: {
+            "quotas_gb": {"users_private": 12.5},
+            "logs": [{"level": "info", "message": "ok"}],
+        },
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._list_omero_group_names",
+        lambda conn: ["users_private"],
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.reconcile_quotas",
+        lambda known_groups: {
+            "quotas_gb": {"users_private": 12.5},
+            "logs": [{"level": "info", "message": "reconciled"}],
+            "quota_enforcement_available": False,
+        },
+    )
+
+    response = storage_quota_data(request, conn=None)
+    payload = json.loads(response.content)
+
+    assert response.status_code == 200
+    assert payload == {
+        "quotas_gb": {"users_private": 12.5},
+        "logs": [{"level": "info", "message": "ok"}],
+        "reconcile": {
+            "quotas_gb": {"users_private": 12.5},
+            "logs": [{"level": "info", "message": "reconciled"}],
+            "quota_enforcement_available": False,
+        },
+    }
+
+
+def test_storage_quota_data_uses_safe_fallbacks_when_state_or_reconcile_fail(
+    monkeypatch,
+) -> None:
+    request = RequestFactory().get("/omeroweb_admin_tools/storage/quota/data/")
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.get_quota_state",
+        lambda: (_ for _ in ()).throw(RuntimeError("state file unreadable")),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._list_omero_group_names",
+        lambda conn: ["users_private"],
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.reconcile_quotas",
+        lambda known_groups: (_ for _ in ()).throw(RuntimeError("reconcile failed")),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.is_quota_enforcement_available",
+        lambda: True,
+    )
+
+    response = storage_quota_data(request, conn=None)
+    payload = json.loads(response.content)
+
+    assert response.status_code == 200
+    assert payload == {
+        "quotas_gb": {},
+        "logs": [],
+        "reconcile": {
+            "quotas_gb": {},
+            "logs": [],
+            "quota_enforcement_available": True,
+        },
+    }
 
 
 def test_managed_repository_compatibility_requires_group_user_prefix(

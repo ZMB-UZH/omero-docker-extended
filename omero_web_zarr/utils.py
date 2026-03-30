@@ -408,7 +408,7 @@ def _load_store_backed_image_node_from_metadata(store_root):
 
 
 def _resolve_ome_zarr_format(store_root):
-    version = None
+    version = ""
     try:
         attrs = _read_store_attrs(store_root)
         multiscales = attrs.get("multiscales") or []
@@ -466,7 +466,16 @@ def load_store_backed_image_node(image):
     if cached is not _MISSING:
         return cached
 
-    store_root = resolve_image_backing_zarr_store(image)
+    try:
+        store_root = resolve_image_backing_zarr_store(image)
+    except OSError:
+        LOGGER.debug(
+            "Failed to resolve store-backed image root for %s",
+            getattr(image, "id", None),
+            exc_info=True,
+        )
+        setattr(image, "_omero_web_zarr_node", None)
+        return None
     if store_root is None:
         setattr(image, "_omero_web_zarr_node", None)
         return None
