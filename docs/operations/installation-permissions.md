@@ -86,9 +86,10 @@ Managed-repository shared-prefix bridge:
   - refuses startup if an unexpected image-local `ManagedRepository` already exists
     under `/opt/omero/server`,
   - builds its normalization plan from deterministic configured seeds
-    (`OMERO_INSTALL_GROUP_LIST` plus a static LDAP new-user group when present)
-    and shared-prefix directories that already exist in the active managed
-    repository,
+    (`OMERO_INSTALL_GROUP_LIST` plus a static LDAP new-user group when present),
+  - treats those configured group seeds as the only authoritative source when
+    `%group%` appears in `CONFIG_omero_fs_repo_path`; it does not infer
+    normalization targets from arbitrary repository directories on disk,
   - creates missing shared prefixes with `omero fs mkdir --parents`,
   - reassigns those shared prefix directory objects to `root`,
   - repeats the same repair in the background on

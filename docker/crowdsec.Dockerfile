@@ -1,4 +1,4 @@
-FROM crowdsecurity/crowdsec:v1.7.6
+FROM crowdsecurity/crowdsec:v1.7.6@sha256:63b595fef92de1778573b375897a45dd226637ee9a3d3db9f57ac7355c369493
 
 # Optional: enable OS package security updates at build time
 # ----------------------------------------------------------

@@ -1,5 +1,4 @@
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 import subprocess
@@ -24,7 +23,6 @@ logger = logging.getLogger(__name__)
 OMERO = OMERO_CLI
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
@@ -41,7 +39,10 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
         data, error = load_json_body(request)
         if error:
-            return JsonResponse({"error": error}, status=400)
+            return JsonResponse(
+                {"error": error_messages.invalid_json_body()},
+                status=400,
+            )
 
         project_id = data.get("project_id")
         password = data.get("password")

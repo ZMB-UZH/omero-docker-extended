@@ -9,6 +9,8 @@ from django.test import RequestFactory
 
 from omeroweb_omp_plugin.views import job_view
 
+TEST_AUTH_INPUT = "fixture-auth-input"
+
 
 class _Value:
     def __init__(self, value):
@@ -96,7 +98,7 @@ def test_validate_user_password_handles_missing_details_and_auth_failure(monkeyp
     conn = _Conn()
     missing_host_conn = _Conn(host=None, port=None)
 
-    valid, error = job_view._validate_user_password(missing_host_conn, "secret")
+    valid, error = job_view._validate_user_password(missing_host_conn, TEST_AUTH_INPUT)
     assert valid is False
     assert error is not None
 
@@ -209,11 +211,11 @@ def test_start_acq_and_delete_jobs_apply_types_and_password_checks(monkeypatch):
         conn=conn,
     )
     delete_all = inspect.unwrap(job_view.start_delete_all_job)(
-        _json_request({"project_id": 5, "password": "secret"}),
+        _json_request({"project_id": 5, "password": TEST_AUTH_INPUT}),
         conn=conn,
     )
     delete_plugin = inspect.unwrap(job_view.start_delete_plugin_job)(
-        _json_request({"project_id": 5, "password": "secret"}),
+        _json_request({"project_id": 5, "password": TEST_AUTH_INPUT}),
         conn=conn,
     )
 
