@@ -1,10 +1,11 @@
 import json
 import logging
 import re
-import urllib.error
-import urllib.request
 import urllib.parse
 from collections import Counter
+
+import requests
+
 from omero_plugin_common.logging_utils import sanitize_url_for_logging
 from .filename_utils import (
     build_hyphen_protection_pattern,
@@ -251,28 +252,36 @@ def _post_json(url, headers, payload, timeout=15):
     )
     data = json.dumps(payload).encode("utf-8")
     safe_url = sanitize_url_for_logging(validated_url)
-    request = urllib.request.Request(
-        validated_url, data=data, headers=headers, method="POST"
-    )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
+        response = requests.post(
+            validated_url,
+            headers=headers,
+            data=data,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.HTTPError as exc:
         detail = extract_error_details(exc)
-        retry_after = exc.headers.get("Retry-After") if exc.headers else None
+        retry_after = (
+            exc.response.headers.get("Retry-After")
+            if exc.response is not None and exc.response.headers is not None
+            else None
+        )
+        status_code = exc.response.status_code if exc.response is not None else 0
         logger.warning(
             "AI provider HTTP error %s from %s (detail=%s)",
-            exc.code,
+            status_code,
             safe_url,
             detail or "n/a",
         )
-        message = errors.provider_http_status(exc.code)
+        message = errors.provider_http_status(status_code)
         if detail:
-            message = errors.provider_http_status_with_detail(exc.code, detail)
+            message = errors.provider_http_status_with_detail(status_code, detail)
         if retry_after:
             message = errors.provider_http_retry_after(message, retry_after)
         raise AiAssistError(message)
-    except urllib.error.URLError as exc:
+    except requests.RequestException as exc:
         logger.warning(
             "AI provider connection error for %s: %s",
             safe_url,

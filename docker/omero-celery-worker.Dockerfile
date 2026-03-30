@@ -4,7 +4,7 @@
 ## Dedicated Celery worker image for OMERO Imaris exports
 ## Ubuntu 24.04 base (NOT slim), pinned Python packages.
 
-FROM ubuntu:24.04
+FROM ubuntu:24.04@sha256:186072bba1b2f436cbb91ef2567abca677337cfc786c86e107d25b7072feef0c
 
 USER root
 

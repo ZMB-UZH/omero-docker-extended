@@ -7,6 +7,9 @@ from django.test import RequestFactory
 
 from omeroweb_admin_tools.views import index_view
 
+GRAFANA_URL = "https://grafana.example.test:3000"
+EXTERNAL_GRAFANA_URL = "https://grafana.example.org"
+
 
 class _Value:
     def __init__(self, value):
@@ -137,7 +140,7 @@ def test_normalize_proxy_request_target_rejects_path_traversal():
 def test_build_proxied_response_rewrites_html_locations_and_cookies():
     headers = HTTPMessage()
     headers.add_header("Content-Type", "text/html; charset=utf-8")
-    headers.add_header("Location", "http://grafana:3000/login")
+    headers.add_header("Location", f"{GRAFANA_URL}/login")
     headers.add_header(
         "Set-Cookie",
         "grafana_session=session; Path=/; HttpOnly; Secure; SameSite=Lax",
@@ -147,14 +150,14 @@ def test_build_proxied_response_rewrites_html_locations_and_cookies():
         '<img src="/public/logo.svg">'
         '<form action="/login"></form>'
         '<script>{"appSubUrl":"","appUrl":"/"}</script>'
-        "http://grafana:3000"
+        f"{GRAFANA_URL}"
     ).encode("utf-8")
 
     response = index_view._build_proxied_response(
         html,
         status_code=200,
         headers=headers,
-        base_url="http://grafana:3000",
+        base_url=GRAFANA_URL,
         proxy_prefix="/admin/grafana",
     )
 
@@ -178,28 +181,28 @@ def test_proxy_backend_helpers_build_expected_urls_and_fallbacks(monkeypatch):
     )
     assert (
         index_view._rewrite_proxied_location(
-            "http://grafana:3000/login",
-            "http://grafana:3000",
+            f"{GRAFANA_URL}/login",
+            GRAFANA_URL,
             "/admin/grafana",
         )
         == "/admin/grafana/login"
     )
     assert index_view._build_proxy_backend_urls(
-        "http://grafana:3000",
-        "https://grafana.example.org",
-    ) == ["http://grafana:3000", "https://grafana.example.org"]
+        GRAFANA_URL,
+        EXTERNAL_GRAFANA_URL,
+    ) == [GRAFANA_URL, EXTERNAL_GRAFANA_URL]
 
     home = index_view._grafana_proxy_home_fallback_response("/admin/grafana")
     unavailable = index_view._grafana_unavailable_response(
         proxy_prefix="/admin/grafana",
-        attempted_backends=["http://grafana:3000", "https://grafana.example.org"],
+        attempted_backends=[GRAFANA_URL, EXTERNAL_GRAFANA_URL],
         status_code=502,
     )
 
     assert home.status_code == 302
     assert home["Location"] == "/admin/grafana/d/infra/server-overview"
     assert unavailable.status_code == 503
-    assert "grafana:3000" in unavailable.content.decode("utf-8")
+    assert "grafana.example.test:3000" in unavailable.content.decode("utf-8")
     assert unavailable["Retry-After"] == "30"
 
 
@@ -220,7 +223,7 @@ def test_request_and_public_url_helpers_cover_reverse_proxy_cases():
     assert index_view._safe_request_host(direct) == "localhost"
     assert (
         index_view._build_public_service_url(
-            "http://grafana:3000/grafana",
+            f"{GRAFANA_URL}/grafana",
             "http",
             "omero.example.org",
             3000,
@@ -231,12 +234,12 @@ def test_request_and_public_url_helpers_cover_reverse_proxy_cases():
     )
     assert (
         index_view._build_public_service_url(
-            "http://grafana:3000",
+            GRAFANA_URL,
             "http",
             "2001:db8::1",
             3000,
         )
-        == "http://[2001:db8::1]:3000"
+        == "https://[2001:db8::1]:3000"
     )
 
 

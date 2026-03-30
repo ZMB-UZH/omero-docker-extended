@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from pathlib import Path
 from typing import Iterable
 
 
@@ -197,45 +196,6 @@ def configured_seed_paths(
     return emitted
 
 
-def discovered_active_paths(managed_root: str, repo_template: str) -> list[str]:
-    stable_parts = stable_shared_prefix_parts(repo_template)
-    if not stable_parts:
-        return []
-
-    root = Path(str(managed_root or "")).resolve(strict=False)
-    if not root.is_dir():
-        raise ValueError(f"Managed repository root does not exist: {root}")
-
-    matchers = [_stable_prefix_matcher(raw_part) for raw_part in stable_parts]
-    discovered: list[str] = []
-    seen: set[str] = set()
-
-    def walk(current_dir: Path, depth: int, current_parts: list[str]) -> None:
-        if depth >= len(matchers):
-            return
-
-        children = sorted(
-            child
-            for child in current_dir.iterdir()
-            if child.is_dir() and not child.is_symlink()
-        )
-        for child in children:
-            if not matchers[depth].fullmatch(child.name):
-                continue
-            _validate_path_component(
-                child.name, "managed-repository stable shared-prefix segment"
-            )
-            next_parts = [*current_parts, child.name]
-            joined = "/".join(next_parts)
-            if joined not in seen:
-                seen.add(joined)
-                discovered.append(joined)
-            walk(child, depth + 1, next_parts)
-
-    walk(root, 0, [])
-    return discovered
-
-
 def planned_paths(
     managed_root: str,
     repo_template: str,
@@ -243,24 +203,17 @@ def planned_paths(
     ldap_enabled: str,
     ldap_group: str,
 ) -> list[str]:
-    seen: set[str] = set()
-    planned: list[str] = []
-
-    for path in configured_seed_paths(
-        repo_template, install_groups, ldap_enabled, ldap_group
-    ):
-        if path in seen:
-            continue
-        seen.add(path)
-        planned.append(path)
-
-    for path in discovered_active_paths(managed_root, repo_template):
-        if path in seen:
-            continue
-        seen.add(path)
-        planned.append(path)
-
-    return planned
+    del managed_root
+    # Only deterministic configured seeds are authoritative here. The raw
+    # filesystem root can contain internal OMERO directories, stale test data,
+    # or historical group trees that should not block installation-time
+    # normalization of the current deployment contract.
+    return configured_seed_paths(
+        repo_template,
+        install_groups,
+        ldap_enabled,
+        ldap_group,
+    )
 
 
 def lookup_prefix(root_pass: str, repo_dir_path: str, expected_managed_dir: str) -> int:
