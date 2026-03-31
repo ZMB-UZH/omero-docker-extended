@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import urllib.error
+import requests
 
 import pytest
 
@@ -78,13 +78,13 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
         == "fallback"
     )
 
-    previous_psycopg2_mod = system_diagnostics._psycopg2_mod
+    previous_psycopg2_mod = system_diagnostics._get_cached_psycopg2_module()
     try:
-        system_diagnostics._psycopg2_mod = None
+        system_diagnostics._set_cached_psycopg2_module(None)
         with pytest.raises(RuntimeError, match="psycopg2-binary"):
             system_diagnostics._load_psycopg2()
     finally:
-        system_diagnostics._psycopg2_mod = previous_psycopg2_mod
+        system_diagnostics._set_cached_psycopg2_module(previous_psycopg2_mod)
 
     calls = []
 
@@ -178,17 +178,12 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
     assert value is None
     assert error == "SQL query returned no rows."
 
-    http_error = urllib.error.HTTPError(
-        "https://omeroserver",
-        503,
-        "Service Unavailable",
-        hdrs=None,
-        fp=None,
-    )
     monkeypatch.setattr(
-        system_diagnostics.urllib.request,
-        "urlopen",
-        lambda request, timeout=1.0: (_ for _ in ()).throw(http_error),
+        system_diagnostics.requests,
+        "get",
+        lambda url, timeout=1.0, allow_redirects=True: (_ for _ in ()).throw(
+            requests.RequestException("offline")
+        ),
     )
     http_result = system_diagnostics._http_probe(
         "http",
@@ -197,7 +192,7 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
         1.0,
     )
     assert http_result.status == "fail"
-    assert http_result.summary == "HTTP probe returned 503"
+    assert http_result.summary == "HTTP probe failed"
 
     monkeypatch.setattr(
         system_diagnostics,

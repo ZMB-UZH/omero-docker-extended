@@ -1127,13 +1127,8 @@ def test_install_webgateway_overrides_falls_back_for_metadata_preview_rendering_
     assert context["tiledImage"] is True
 
 
-def test_render_tile_bad_request_escapes_user_input():
-    """HttpResponseBadRequest from tile parsing must HTML-escape reflected input.
-
-    User-supplied tile/region values flow into error messages.  They must be
-    escaped to prevent reflected XSS when a browser renders the response.
-    """
-    from django.utils.html import escape as html_escape
+def test_render_tile_bad_request_does_not_reflect_user_input():
+    """Tile parsing errors must not echo attacker-controlled values."""
     from omeroweb.webgateway import views as webgateway_views
 
     xss_payload = '<script>alert("xss")</script>'
@@ -1168,7 +1163,7 @@ def test_render_tile_bad_request_escapes_user_input():
     assert response.status_code == 400
     body = response.content.decode("utf-8")
     assert xss_payload not in body
-    assert html_escape(xss_payload) in body
+    assert body == "malformed tile argument"
     assert response["Content-Type"] == "text/plain; charset=utf-8"
 
 

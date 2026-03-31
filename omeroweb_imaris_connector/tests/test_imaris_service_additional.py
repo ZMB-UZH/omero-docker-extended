@@ -162,6 +162,10 @@ def test_script_service_helpers_cover_discovery_selection_and_introspection(
     assert imaris_service._find_script_id(object()) == 9
 
     class _Service:
+        @property
+        def brokenScriptRunner(self):
+            raise RuntimeError("broken attribute")
+
         def runScript(self):
             return "run-script"
 
@@ -182,11 +186,6 @@ def test_script_service_helpers_cover_discovery_selection_and_introspection(
                 "canRunScript",
                 "brokenScriptRunner",
             ]
-
-        def __getattr__(self, name):
-            if name == "brokenScriptRunner":
-                raise RuntimeError("broken attribute")
-            raise AttributeError(name)
 
     yielded = list(imaris_service._iter_script_methods(_Service()))
     assert [name for name, _ in yielded] == ["runScript", "executeCustomScript"]

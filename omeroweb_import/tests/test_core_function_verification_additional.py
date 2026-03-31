@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 import types
 
 from omeroweb_import.views import core_functions
@@ -400,6 +399,7 @@ def test_verify_imported_zarr_images_renderable_reports_remaining_failures(
 
 def test_run_zarr_managed_repo_script_and_cleanup_helpers_cover_error_paths(
     monkeypatch,
+    tmp_path,
 ) -> None:
     assert core_functions._run_zarr_managed_repo_script(
         "stage",
@@ -496,5 +496,5 @@ def test_run_zarr_managed_repo_script_and_cleanup_helpers_cover_error_paths(
         4064,
         username="alice",
         group_name="users_private",
-        managed_path=Path("/tmp/managed.zarr"),
+        managed_path=tmp_path / "managed.zarr",
     )
