@@ -1,0 +1,218 @@
+from __future__ import annotations
+
+import inspect
+import json
+from types import SimpleNamespace
+
+import pytest
+from django.http import Http404
+from django.test import RequestFactory
+
+from omeroweb_omp_plugin.services import core, http_utils
+from omeroweb_omp_plugin.services.omero import annotation_service
+from omeroweb_omp_plugin.services.parsing import filename_parser
+from omeroweb_omp_plugin.views import help_view, user_settings_view
+
+
+def _json_payload(response):
+    return json.loads(response.content.decode("utf-8"))
+
+
+def test_http_utils_cover_response_and_stream_fallback_paths():
+    nested_response = SimpleNamespace(
+        json=lambda: {"message": {"message": "nested detail"}},
+        text="ignored",
+    )
+    plain_response = SimpleNamespace(
+        json=lambda: {"error": "plain detail"},
+        text="ignored",
+    )
+    string_response = SimpleNamespace(
+        json=lambda: "  raw detail  ",
+        text="ignored",
+    )
+    text_fallback = SimpleNamespace(
+        json=lambda: (_ for _ in ()).throw(ValueError("bad json")),
+        text="  text fallback  ",
+    )
+
+    class _UnreadableBody:
+        def read(self):
+            raise RuntimeError("unreadable")
+
+    assert http_utils.extract_error_details(
+        SimpleNamespace(response=nested_response)
+    ) == ("nested detail")
+    assert http_utils.extract_error_details(plain_response) == "plain detail"
+    assert http_utils.extract_error_details(string_response) == "raw detail"
+    assert http_utils.extract_error_details(text_fallback) == "text fallback"
+    assert http_utils.extract_error_details(_UnreadableBody()) is None
+
+
+def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        annotation_service,
+        "canonicalize_mapping",
+        lambda mapping: f"canonical:{mapping['id']}",
+    )
+    monkeypatch.setattr(
+        annotation_service,
+        "is_plugin_annotation",
+        lambda annotation: annotation == "ann",
+    )
+    monkeypatch.setattr(
+        annotation_service,
+        "find_plugin_annotation_ids",
+        lambda conn, image_id, allow_legacy=True: [image_id, allow_legacy],
+    )
+    monkeypatch.setattr(
+        annotation_service,
+        "find_annotation_link_ids",
+        lambda conn, annotation_ids: ["links", annotation_ids],
+    )
+    monkeypatch.setattr(
+        annotation_service,
+        "find_map_annotation_ids",
+        lambda conn, image_id: [image_id, "map"],
+    )
+    monkeypatch.setattr(
+        annotation_service,
+        "delete_existing_annotations",
+        lambda conn, image_id, **kwargs: (image_id, kwargs),
+    )
+
+    assert core._canonicalize_mapping({"id": 3}) == "canonical:3"
+    assert core.is_plugin_annotation("ann") is True
+    assert core.find_plugin_annotation_ids(object(), 7, allow_legacy=False) == [
+        7,
+        False,
+    ]
+    assert core.find_annotation_link_ids(object(), [1, 2]) == ["links", [1, 2]]
+    assert core.find_map_annotation_ids(object(), 9) == [9, "map"]
+    assert core.delete_existing_annotations(
+        object(),
+        11,
+        annotation_ids=[1],
+        link_ids=[2],
+        allow_legacy=False,
+    ) == (
+        11,
+        {"annotation_ids": [1], "link_ids": [2], "allow_legacy": False},
+    )
+
+    assert filename_parser.parse_filename("prefix [sample-A].ome.tif", "_") == [
+        "sample-A"
+    ]
+    assert filename_parser.parse_filename("folder sample_A-01.tif", "[-_]") == [
+        "sample",
+        "A",
+        "01",
+    ]
+    assert filename_parser.parse_filename("sample_A.ome.tif", "_") == [
+        "sample",
+        "A.ome",
+    ]
+
+    with pytest.raises(ValueError, match="Invalid separator regex"):
+        filename_parser.parse_filename("sample.ome.tif", 7)
+
+    with pytest.raises(ValueError, match="Invalid separator regex"):
+        filename_parser.parse_filename("sample.ome.tif", "x" * 129)
+
+    with pytest.raises(ValueError, match="Invalid separator regex"):
+        filename_parser.parse_filename("sample.ome.tif", r"(?=_)")
+
+
+def test_help_page_and_user_settings_views_cover_success_and_error_paths(
+    monkeypatch,
+):
+    factory = RequestFactory()
+
+    response = inspect.unwrap(help_view.help_page)(factory.get("/help"))
+    assert response.status_code == 200
+    assert response["Content-Type"] == "text/markdown"
+    response.close()
+
+    monkeypatch.setattr(help_view.Path, "exists", lambda self: False)
+    with pytest.raises(Http404):
+        inspect.unwrap(help_view.help_page)(factory.get("/help"))
+
+    assert (
+        inspect.unwrap(user_settings_view.save_settings)(
+            factory.get("/settings"),
+            conn=object(),
+        ).status_code
+        == 405
+    )
+
+    post_request = factory.post("/settings", data={})
+    monkeypatch.setattr(user_settings_view, "current_username", lambda *_args: "")
+    missing_username = inspect.unwrap(user_settings_view.save_settings)(
+        post_request,
+        conn=object(),
+    )
+    assert missing_username.status_code == 400
+
+    monkeypatch.setattr(user_settings_view, "current_username", lambda *_args: "alice")
+    monkeypatch.setattr(
+        user_settings_view, "load_request_data", lambda request: {"settings": []}
+    )
+    invalid_payload = inspect.unwrap(user_settings_view.save_settings)(
+        post_request,
+        conn=object(),
+    )
+    assert invalid_payload.status_code == 400
+
+    saved = {}
+    monkeypatch.setattr(
+        user_settings_view,
+        "load_request_data",
+        lambda request: {"settings": {"chunk_size": 5}},
+    )
+    monkeypatch.setattr(
+        user_settings_view,
+        "save_user_settings",
+        lambda username, payload: saved.update(
+            {"username": username, "payload": payload}
+        ),
+    )
+    success = inspect.unwrap(user_settings_view.save_settings)(
+        post_request, conn=object()
+    )
+    assert success.status_code == 200
+    assert _json_payload(success)["success"] is True
+    assert saved == {"username": "alice", "payload": {"chunk_size": 5}}
+
+    monkeypatch.setattr(
+        user_settings_view,
+        "save_user_settings",
+        lambda username, payload: (_ for _ in ()).throw(
+            user_settings_view.UserSettingsStoreError("store failed")
+        ),
+    )
+    store_failure = inspect.unwrap(user_settings_view.save_settings)(
+        post_request,
+        conn=object(),
+    )
+    assert store_failure.status_code == 500
+    assert (
+        _json_payload(store_failure)["error"]
+        == user_settings_view.errors.user_settings_save_failed()
+    )
+
+    monkeypatch.setattr(
+        user_settings_view,
+        "load_request_data",
+        lambda request: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    unexpected = inspect.unwrap(user_settings_view.save_settings)(
+        post_request,
+        conn=object(),
+    )
+    assert unexpected.status_code == 500
+    assert (
+        _json_payload(unexpected)["error"]
+        == user_settings_view.errors.unexpected_error()
+    )

@@ -145,6 +145,64 @@ def test_safe_filename_and_checksum_helpers_cover_edge_cases(tmp_path) -> None:
     assert module._read_expected_sha256(str(checksum_path)) == "a" * 64
 
 
+def test_export_root_and_checksum_helpers_cover_fallback_cleanup_and_altsep(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script_module()
+    printed = []
+
+    monkeypatch.setattr(
+        module,
+        "get_env",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("missing env")),
+    )
+    monkeypatch.setattr("builtins.print", lambda *args, **kwargs: printed.append(args))
+
+    assert module._get_export_root() == "/OMERO/ImarisExports"
+    assert any(
+        "Falling back to default" in " ".join(map(str, line)) for line in printed
+    )
+
+    monkeypatch.setattr(module.os, "altsep", "\\", raising=False)
+    assert (
+        module._safe_filename("  unsafe\\name  ", fallback="fallback") == "unsafe_name"
+    )
+    assert module._safe_filename("   ", fallback="fallback") == "fallback"
+
+    checksum_path = tmp_path / "bioformats.sha256"
+    real_replace = module.os.replace
+    real_exists = module.os.path.exists
+    tmp_checksum = pathlib.Path(str(checksum_path) + ".tmp")
+
+    monkeypatch.setattr(
+        module.os,
+        "replace",
+        lambda src, dst: (_ for _ in ()).throw(OSError("replace failed")),
+    )
+    monkeypatch.setattr(
+        module.os.path,
+        "exists",
+        lambda path: str(path) == str(tmp_checksum) or real_exists(path),
+    )
+    monkeypatch.setattr(
+        module.os,
+        "remove",
+        lambda path: (_ for _ in ()).throw(OSError("cleanup failed")),
+    )
+
+    assert module._write_expected_sha256(str(checksum_path), "b" * 64) is False
+
+    monkeypatch.setattr(module.os, "replace", real_replace)
+    monkeypatch.setattr(module.os.path, "exists", real_exists)
+    monkeypatch.setattr(module.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(
+        module.os.path,
+        "getsize",
+        lambda path: (_ for _ in ()).throw(OSError("size failed")),
+    )
+    assert module._is_valid_bioformats_jar(str(tmp_path / "missing.jar")) is False
+
+
 def test_copy_and_validate_bioformats_jar_cover_integrity_paths(
     monkeypatch, tmp_path
 ) -> None:
@@ -186,6 +244,81 @@ def test_copy_and_validate_bioformats_jar_cover_integrity_paths(
             description="broken jar",
         )
         is False
+    )
+
+
+def test_copy_and_path_helpers_cover_error_and_exception_fallbacks(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script_module()
+    source = tmp_path / "source.jar"
+    source.write_text("payload", encoding="utf-8")
+    destination = tmp_path / "nested" / "bioformats.jar"
+    tmp_destination = pathlib.Path(str(destination) + ".tmp")
+    real_exists = module.os.path.exists
+
+    monkeypatch.setattr(
+        module.shutil,
+        "copyfile",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("copy failed")),
+    )
+    monkeypatch.setattr(
+        module.os.path,
+        "exists",
+        lambda path: str(path) == str(tmp_destination) or real_exists(path),
+    )
+    monkeypatch.setattr(
+        module.os,
+        "remove",
+        lambda path: (_ for _ in ()).throw(OSError("cleanup failed")),
+    )
+
+    assert (
+        module._copy_bioformats_jar(
+            str(source),
+            str(destination),
+            expected_sha256="a" * 64,
+            file_mode=0o600,
+            description="runtime jar",
+        )
+        is False
+    )
+
+    class _BadPhysicalSize:
+        def getValue(self):
+            raise RuntimeError("bad value")
+
+    class _BadPrimaryPixels:
+        def getPhysicalSizeX(self):
+            return _BadPhysicalSize()
+
+        def getPhysicalSizeY(self):
+            return _BadPhysicalSize()
+
+        def getPhysicalSizeZ(self):
+            return _BadPhysicalSize()
+
+    image = types.SimpleNamespace(getPrimaryPixels=lambda: _BadPrimaryPixels())
+    assert module._get_voxel_size_from_image(image) == (1.0, 1.0, 1.0)
+
+    broken_image = types.SimpleNamespace(
+        getPrimaryPixels=lambda: (_ for _ in ()).throw(RuntimeError("pixels failed"))
+    )
+    assert module._get_voxel_size_from_image(broken_image) == (1.0, 1.0, 1.0)
+
+    empty_fileset_image = types.SimpleNamespace(
+        getFileset=lambda: types.SimpleNamespace(listFiles=lambda: [])
+    )
+    assert module.get_original_file_path(object(), empty_fileset_image) is None
+
+    assert (
+        module.get_original_file_path(
+            object(),
+            types.SimpleNamespace(
+                getFileset=lambda: (_ for _ in ()).throw(RuntimeError("fileset failed"))
+            ),
+        )
+        is None
     )
 
 
@@ -340,6 +473,115 @@ def test_convert_and_run_conversion_cover_missing_runtime_and_success_paths(
     assert module.run_conversion(missing_conn, 8, str(tmp_path))[0] is False
 
 
+def test_convert_to_ims_and_run_conversion_cover_failure_paths(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script_module()
+    install_dir = tmp_path / "install"
+    real_bin = install_dir / "ImarisConvertBioformats"
+    real_bin.parent.mkdir(parents=True, exist_ok=True)
+    real_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    input_file = tmp_path / "input.ome.tif"
+    input_file.write_text("data", encoding="utf-8")
+    output_file = tmp_path / "output.ims"
+
+    class _FixedDatetime:
+        @staticmethod
+        def utcnow():
+            class _Now:
+                def strftime(self, fmt):
+                    return "20260331T120000Z"
+
+            return _Now()
+
+    monkeypatch.setattr(module, "datetime", _FixedDatetime)
+
+    monkeypatch.setattr(module, "IMARISCONVERT_INSTALL_DIR", str(install_dir))
+    monkeypatch.setattr(module.shutil, "which", lambda name: None)
+    monkeypatch.setattr(module, "_ensure_bioformats_jar", lambda _install_dir: None)
+    assert (
+        module.convert_to_ims(
+            types.SimpleNamespace(getName=lambda: "demo.ome.tif"),
+            str(input_file),
+            str(output_file),
+        )
+        is False
+    )
+
+    jar_path = tmp_path / "bioformats_package.jar"
+    jar_path.write_text("jar", encoding="utf-8")
+    monkeypatch.setattr(
+        module, "_ensure_bioformats_jar", lambda _install_dir: str(jar_path)
+    )
+    monkeypatch.setattr(
+        module, "_get_voxel_size_from_image", lambda image: (1.0, 2.0, 3.0)
+    )
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/runtime/lib")
+    monkeypatch.setenv("CLASSPATH", "/runtime/classes")
+
+    calls = []
+
+    def _failed_run(cmd, capture_output, text, timeout, env, cwd):
+        calls.append({"env": env, "cwd": cwd})
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=1, stdout="bad", stderr="boom"
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", _failed_run)
+    assert (
+        module.convert_to_ims(
+            types.SimpleNamespace(getName=lambda: "demo.ome.tif"),
+            str(input_file),
+            str(output_file),
+        )
+        is False
+    )
+    assert calls[0]["env"]["LD_LIBRARY_PATH"].startswith("/runtime/lib:")
+    assert calls[0]["env"]["CLASSPATH"].startswith(f"{jar_path}{module.os.pathsep}")
+
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("subprocess boom")),
+    )
+    assert (
+        module.convert_to_ims(
+            types.SimpleNamespace(getName=lambda: "demo.ome.tif"),
+            str(input_file),
+            str(output_file),
+        )
+        is False
+    )
+
+    image = types.SimpleNamespace(getName=lambda: "demo.ome.tif")
+    conn = types.SimpleNamespace(getObject=lambda kind, image_id: image)
+    missing_source = tmp_path / "missing.ome.tif"
+    monkeypatch.setattr(
+        module,
+        "get_original_file_path",
+        lambda current_conn, current_image: str(missing_source),
+    )
+    assert module.run_conversion(conn, 7, str(tmp_path)) == (
+        False,
+        f"Original file not found: {missing_source}",
+        None,
+    )
+
+    source_file = tmp_path / "source.ome.tif"
+    source_file.write_text("source", encoding="utf-8")
+    monkeypatch.setattr(
+        module,
+        "get_original_file_path",
+        lambda current_conn, current_image: str(source_file),
+    )
+    monkeypatch.setattr(module, "convert_to_ims", lambda current_image, src, dst: False)
+    assert module.run_conversion(conn, 7, str(tmp_path)) == (
+        False,
+        "Conversion to IMS failed",
+        None,
+    )
+
+
 def test_run_script_sets_outputs_and_attaches_exported_file(
     monkeypatch, tmp_path
 ) -> None:
@@ -483,3 +725,137 @@ def test_run_script_survives_attachment_failure_and_reports_export_path(
     assert outputs["Export_Path"] == str(export_path)
     assert outputs["Export_Name"] == "failed-demo.ims"
     assert outputs["closed"] is True
+
+
+def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script_module()
+    export_root = tmp_path / "exports"
+    export_path = export_root / "image_9" / "demo.ims"
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    export_path.write_text("ims", encoding="utf-8")
+
+    output_calls = []
+
+    class _Client:
+        def getInputs(self, unwrap=True):
+            return {"Image_ID": 9}
+
+        def setOutput(self, key, value):
+            output_calls.append((key, value))
+            if key == "File_Annotation":
+                raise RuntimeError("output failed")
+
+        def closeSession(self):
+            output_calls.append(("closed", True))
+
+    client = _Client()
+    file_annotation = types.SimpleNamespace(_obj=object(), getId=lambda: 99)
+    image = types.SimpleNamespace(
+        getName=lambda: "demo.ome.tif",
+        getDetails=lambda: types.SimpleNamespace(
+            getGroup=lambda: types.SimpleNamespace(getId=lambda: 9)
+        ),
+        linkAnnotation=lambda annotation: None,
+    )
+    conn = types.SimpleNamespace(
+        SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda value: None),
+        getObject=lambda kind, image_id: image if image_id == 9 else None,
+        createFileAnnfromLocalFile=lambda *args, **kwargs: file_annotation,
+    )
+
+    monkeypatch.setattr(module, "_get_export_root", lambda: str(export_root))
+    monkeypatch.setattr(module.os, "makedirs", lambda path, exist_ok=True: None)
+    monkeypatch.setattr(
+        module.scripts, "client", lambda *args, **kwargs: client, raising=False
+    )
+    monkeypatch.setattr(
+        module.scripts,
+        "Long",
+        lambda *args, **kwargs: ("Long", args, kwargs),
+        raising=False,
+    )
+    monkeypatch.setattr(module, "BlitzGateway", lambda client_obj=None: conn)
+    monkeypatch.setattr(
+        module,
+        "run_conversion",
+        lambda current_conn, image_id, current_root: (
+            True,
+            f"Successfully exported IMS: {export_path}",
+            str(export_path),
+        ),
+    )
+    monkeypatch.setattr(
+        module.omero.rtypes, "robject", lambda value: value, raising=False
+    )
+    monkeypatch.setattr(
+        module.omero.rtypes, "rlong", lambda value: value, raising=False
+    )
+
+    module.run_script()
+
+    assert ("Export_Path", str(export_path)) in output_calls
+    assert ("Export_Name", "demo.ims") in output_calls
+    assert ("File_Annotation_Id", 99) in output_calls
+    assert ("closed", True) in output_calls
+
+    missing_image_calls = []
+
+    class _MissingImageClient:
+        def getInputs(self, unwrap=True):
+            return {"Image_ID": 10}
+
+        def setOutput(self, key, value):
+            missing_image_calls.append((key, value))
+
+        def closeSession(self):
+            missing_image_calls.append(("closed", True))
+
+    monkeypatch.setattr(
+        module.scripts,
+        "client",
+        lambda *args, **kwargs: _MissingImageClient(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module,
+        "BlitzGateway",
+        lambda client_obj=None: types.SimpleNamespace(
+            SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda value: None),
+            getObject=lambda kind, image_id: None,
+        ),
+    )
+
+    module.run_script()
+
+    assert ("Export_Path", str(export_path)) in missing_image_calls
+    assert ("Export_Name", "demo.ims") in missing_image_calls
+    assert ("closed", True) in missing_image_calls
+
+    error_calls = []
+
+    class _ExplodingClient:
+        def setOutput(self, key, value):
+            error_calls.append((key, value))
+
+        def closeSession(self):
+            error_calls.append(("closed", True))
+
+    monkeypatch.setattr(
+        module.scripts,
+        "client",
+        lambda *args, **kwargs: _ExplodingClient(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module,
+        "BlitzGateway",
+        lambda client_obj=None: (_ for _ in ()).throw(RuntimeError("gateway failed")),
+    )
+
+    module.run_script()
+
+    assert error_calls[0][0] == "Message"
+    assert "Script error:" in error_calls[0][1]
+    assert ("closed", True) in error_calls
