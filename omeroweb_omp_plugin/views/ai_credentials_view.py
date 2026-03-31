@@ -14,7 +14,6 @@ from ..services.data_store import (
     list_ai_credentials,
     save_ai_credentials,
 )
-from ..services.http_utils import extract_error_details
 from ..views.utils import current_username, load_request_data, require_non_root_user
 from ..strings import errors, messages
 
@@ -101,6 +100,12 @@ def _validated_provider_url(url):
     )
 
 
+def _with_xai_credit_guidance(provider, status, message):
+    if provider == "xai" and int(status or 0) == 403:
+        return f"{message} xAI accounts need paid credits to access the API."
+    return message
+
+
 def _perform_connection_test(provider, api_key):
     provider = (provider or "").strip().lower()
     api_key = (api_key or "").strip()
@@ -129,44 +134,42 @@ def _perform_connection_test(provider, api_key):
         status = int(response.status_code)
         if 200 <= status < 300:
             return True, errors.connection_test_passed()
-        detail = extract_error_details(response)
-        message = errors.connection_test_failed_status(status)
-        if detail:
-            message = f"{message} {detail}"
-        if provider == "xai" and status == 403:
-            message = f"{message} xAI accounts need paid credits to access the API."
-        return False, message
+        return (
+            False,
+            _with_xai_credit_guidance(
+                provider,
+                status,
+                errors.connection_test_failed_status(status),
+            ),
+        )
     except requests.HTTPError as e:
         status = int(e.response.status_code) if e.response is not None else 0
-        detail = extract_error_details(e)
         message = (
             errors.connection_test_failed_status(status)
             if status > 0
             else errors.connection_test_failed()
         )
-        if detail:
-            message = f"{message} {detail}"
-        if provider == "xai" and status == 403:
-            message = f"{message} xAI accounts need paid credits to access the API."
         logger.error(
             "AI provider connection test failed for %s: %s",
             sanitize_log_value(provider),
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        return False, message
+        return False, _with_xai_credit_guidance(provider, status, message)
     except requests.RequestException as e:
-        detail = extract_error_details(e)
-        message = errors.connection_test_failed()
-        if detail:
-            message = f"{message} {detail}"
+        status = int(getattr(getattr(e, "response", None), "status_code", 0) or 0)
+        message = (
+            errors.connection_test_failed_status(status)
+            if status > 0
+            else errors.connection_test_failed()
+        )
         logger.error(
             "AI provider connection test failed for %s: %s",
             sanitize_log_value(provider),
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        return False, message
+        return False, _with_xai_credit_guidance(provider, status, message)
     except ValueError:
         return False, errors.connection_test_failed()
 
@@ -397,24 +400,30 @@ def list_models(request, conn=None, url=None, **kwargs):
         )
         status = int(response.status_code)
         if status >= 400:
-            detail = extract_error_details(response)
-            message = errors.provider_http_status(status)
-            if detail:
-                message = errors.provider_http_status_with_detail(status, detail)
+            message = _with_xai_credit_guidance(
+                provider,
+                status,
+                errors.provider_http_status(status),
+            )
             return JsonResponse({"error": message}, status=400)
         payload = response.json()
     except requests.HTTPError as e:
         status = int(e.response.status_code) if e.response is not None else 0
-        detail = extract_error_details(e)
-        message = errors.provider_http_status(status)
-        if detail:
-            message = errors.provider_http_status_with_detail(status, detail)
+        message = _with_xai_credit_guidance(
+            provider,
+            status,
+            errors.provider_http_status(status),
+        )
         return JsonResponse({"error": message}, status=400)
     except requests.RequestException as e:
-        detail = extract_error_details(e)
-        if detail and getattr(e, "response", None) is not None:
-            message = errors.provider_http_status_with_detail(
-                e.response.status_code, detail
+        response_status = int(
+            getattr(getattr(e, "response", None), "status_code", 0) or 0
+        )
+        if response_status > 0:
+            message = _with_xai_credit_guidance(
+                provider,
+                response_status,
+                errors.provider_http_status(response_status),
             )
             return JsonResponse({"error": message}, status=400)
         logger.error(

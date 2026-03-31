@@ -219,16 +219,14 @@ def _poll_process_job(job_id):
 
 def _unwrap_rtype(v):
     # OMERO.rtypes: rstring/rlong/etc have .val
-    try:
+    if hasattr(v, "val"):
         return v.val
-    except Exception:
-        pass
-    try:
-        getter = getattr(v, "getValue", None)
-        if callable(getter):
+    getter = getattr(v, "getValue", None)
+    if callable(getter):
+        try:
             return getter()
-    except Exception:
-        pass
+        except Exception:
+            logger.debug("Suppressed getValue failure while unwrapping OMERO rtype")
     return v
 
 
@@ -476,7 +474,7 @@ def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
             continue
     if last_type_error is not None:
         raise last_type_error
-    return meth(script_id, inputs)
+    raise RuntimeError("No callable argument combinations were available.")
 
 
 def _run_script(

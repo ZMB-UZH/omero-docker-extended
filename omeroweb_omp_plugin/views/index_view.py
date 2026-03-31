@@ -1,4 +1,4 @@
-from django.http import HttpResponse, JsonResponse
+from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils.html import format_html_join
@@ -456,32 +456,46 @@ def _suggest_separator_regex(filenames):
     return suggest_separator_regex(filenames)
 
 
+def _safe_index_messages_json():
+    try:
+        return json.dumps(messages.index_messages())
+    except Exception as exc:
+        logger.warning(
+            "Unable to build OMP index messages payload: %s",
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
+        return "{}"
+
+
 @login_required()
 @ensure_csrf_cookie
 def index(request, conn=None, url=None, **kwargs):
     """
     OMP filename+metadata harverster UI
     """
+    projects = {"owned": [], "read_annotate": [], "read_only": []}
+    user_id = None
+
+    def build_index_context(extra=None):
+        context = {
+            "projects": projects,
+            "error_message": "",
+            "chunk_size": CHUNK_SIZE,
+            "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
+            "max_parsed_variables": MAX_PARSED_VARIABLES,
+            "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
+            "messages_json": _safe_index_messages_json(),
+            "user_id": user_id,
+            "ai_provider_options_json": json.dumps(list_ai_provider_options()),
+            "project_list_url": reverse("omeroweb_omp_plugin_projects"),
+        }
+        if extra:
+            context.update(extra)
+        return context
 
     try:
         user_id = _current_user_id(conn)
-
-        def build_index_context(extra=None):
-            context = {
-                "projects": projects,
-                "error_message": "",
-                "chunk_size": CHUNK_SIZE,
-                "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
-                "max_parsed_variables": MAX_PARSED_VARIABLES,
-                "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
-                "messages_json": json.dumps(messages.index_messages()),
-                "user_id": user_id,
-                "ai_provider_options_json": json.dumps(list_ai_provider_options()),
-                "project_list_url": reverse("omeroweb_omp_plugin_projects"),
-            }
-            if extra:
-                context.update(extra)
-            return context
 
         # ----------------------------------------------------
         # Load projects
@@ -874,10 +888,12 @@ def index(request, conn=None, url=None, **kwargs):
                 raw_ai_parsed = (request.POST.get("ai_parsed_json") or "").strip()
 
                 if not raw_ai_parsed:
-                    return HttpResponse(
-                        "<h2 style='color:red;'>AI parsing data missing</h2>"
-                        "<p>Please run the AI-assisted filename parsing routine first.</p>"
-                        "<a href='.'>Back</a>"
+                    return render(
+                        request,
+                        "omeroweb_omp_plugin/index.html",
+                        build_index_context(
+                            {"error_message": errors.ai_parsing_data_missing()}
+                        ),
                     )
 
                 try:
@@ -886,10 +902,12 @@ def index(request, conn=None, url=None, **kwargs):
                     logger.warning(
                         "Invalid AI parsing data payload: %s", sanitize_log_value(e)
                     )
-                    return HttpResponse(
-                        "<h2 style='color:red;'>Invalid AI parsing data</h2>"
-                        f"<p>{errors.invalid_ai_parsing_data()}</p>"
-                        "<a href='.'>Back</a>"
+                    return render(
+                        request,
+                        "omeroweb_omp_plugin/index.html",
+                        build_index_context(
+                            {"error_message": errors.invalid_ai_parsing_data()}
+                        ),
                     )
 
                 ai_parsed_map = {}
@@ -916,10 +934,12 @@ def index(request, conn=None, url=None, **kwargs):
                     logger.warning(
                         "Rejected invalid regex pattern: %s", sanitize_log_value(e)
                     )
-                    return HttpResponse(
-                        f"<h2 style='color:red;'>{errors.invalid_regex_pattern_title()}</h2>"
-                        f"<p>{errors.invalid_regex_pattern()}</p>"
-                        "<a href='.'>Back</a>"
+                    return render(
+                        request,
+                        "omeroweb_omp_plugin/index.html",
+                        build_index_context(
+                            {"error_message": errors.invalid_regex_pattern()}
+                        ),
                     )
 
             else:
@@ -1081,8 +1101,10 @@ def index(request, conn=None, url=None, **kwargs):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        return HttpResponse(
-            f"<h2>Error</h2><p>{errors.unexpected_error()}</p>",
+        return render(
+            request,
+            "omeroweb_omp_plugin/index.html",
+            build_index_context({"error_message": errors.unexpected_error()}),
             status=500,
         )
 

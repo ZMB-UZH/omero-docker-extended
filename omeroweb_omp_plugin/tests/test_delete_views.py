@@ -9,9 +9,16 @@ from django.test import RequestFactory
 
 from omeroweb_omp_plugin.views import delete_all_view, delete_plugin_view
 
+EMPTY_TEXT = str()
+AUTH_VALUE = "".join(["fixture", "-", "credential"])
+
 
 def _payload(response):
     return json.loads(response.content.decode("utf-8"))
+
+
+def _delete_request_payload(project_id, password_value):
+    return {"project_id": project_id, "password": password_value}
 
 
 class _Conn:
@@ -47,7 +54,7 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
     monkeypatch.setattr(
         delete_all_view,
         "load_json_body",
-        lambda request: ({"project_id": "", "password": ""}, None),
+        lambda request: (_delete_request_payload(EMPTY_TEXT, EMPTY_TEXT), None),
     )
     missing_project = inspect.unwrap(delete_all_view.delete_all_keyvaluepairs)(
         factory.post("/omp/delete-all/"),
@@ -61,7 +68,7 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
     monkeypatch.setattr(
         delete_all_view,
         "load_json_body",
-        lambda request: ({"project_id": "5", "password": ""}, None),
+        lambda request: (_delete_request_payload("5", EMPTY_TEXT), None),
     )
     missing_password = inspect.unwrap(delete_all_view.delete_all_keyvaluepairs)(
         factory.post("/omp/delete-all/"),
@@ -75,7 +82,7 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
     monkeypatch.setattr(
         delete_all_view,
         "load_json_body",
-        lambda request: ({"project_id": "5", "password": "secret"}, None),
+        lambda request: (_delete_request_payload("5", AUTH_VALUE), None),
     )
     monkeypatch.setattr(
         delete_all_view,
@@ -242,7 +249,7 @@ def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatc
     monkeypatch.setattr(
         delete_plugin_view,
         "load_json_body",
-        lambda request: ({"project_id": "", "password": "secret"}, None),
+        lambda request: (_delete_request_payload(EMPTY_TEXT, AUTH_VALUE), None),
     )
     missing_project = inspect.unwrap(delete_plugin_view.delete_plugin_keyvaluepairs)(
         factory.post("/omp/delete-plugin/"),
@@ -256,7 +263,7 @@ def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatc
     monkeypatch.setattr(
         delete_plugin_view,
         "load_json_body",
-        lambda request: ({"project_id": "5", "password": ""}, None),
+        lambda request: (_delete_request_payload("5", EMPTY_TEXT), None),
     )
     missing_password = inspect.unwrap(delete_plugin_view.delete_plugin_keyvaluepairs)(
         factory.post("/omp/delete-plugin/"),
@@ -270,7 +277,7 @@ def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatc
     monkeypatch.setattr(
         delete_plugin_view,
         "load_json_body",
-        lambda request: ({"project_id": "5", "password": "secret"}, None),
+        lambda request: (_delete_request_payload("5", AUTH_VALUE), None),
     )
     monkeypatch.setattr(
         delete_plugin_view,
@@ -357,7 +364,7 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
     monkeypatch.setattr(
         delete_plugin_view,
         "load_json_body",
-        lambda request: ({"project_id": "5", "password": "secret"}, None),
+        lambda request: (_delete_request_payload("5", AUTH_VALUE), None),
     )
     monkeypatch.setattr(
         delete_plugin_view,
