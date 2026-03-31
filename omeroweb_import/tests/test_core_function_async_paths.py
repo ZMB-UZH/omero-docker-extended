@@ -138,6 +138,9 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
         def add(self, key, value):
             self.values[key] = value
 
+        def addList(self, key, value):
+            self.values[key] = list(value)
+
     monkeypatch.setattr(
         core_functions.omero,
         "sys",
@@ -226,6 +229,9 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
         group_name="users_private",
     )
     assert image_ids == ["41", "42"]
+    dataset_query, dataset_params = conn.query_service.calls[-1]
+    assert "i.name IN (:names)" in dataset_query
+    assert dataset_params["names"] == ["imported.ome.tif", "input.ome.tif"]
     assert conn.closed is True
     assert admin_conn.closed is True
 

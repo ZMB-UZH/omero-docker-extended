@@ -3,6 +3,7 @@ Core helper functions for upload views.
 All non-view functions extracted here to reduce index_view.py size.
 """
 
+import errno
 import os
 import json
 import logging
@@ -884,17 +885,27 @@ def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, up
 
     bytes_written = 0
     try:
-        target = _resolve_managed_child_parts(
+        relative_parts = PurePosixPath(normalized_path).parts
+        with _managed_parent_directory_fd(
             Path(upload_root),
-            PurePosixPath(normalized_path).parts,
+            relative_parts,
             max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
-        )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("ab") as handle:
-            for chunk in upload.chunks():
-                handle.write(chunk)
-                bytes_written += len(chunk)
-        saved_size = target.stat().st_size if target.exists() else 0
+            create_parents=True,
+        ) as (dir_fd, file_name):
+            with os.fdopen(
+                _open_managed_upload_file_fd(
+                    dir_fd,
+                    file_name,
+                    os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+                    normalized_path,
+                ),
+                "ab",
+            ) as handle:
+                for chunk in upload.chunks():
+                    handle.write(chunk)
+                    bytes_written += len(chunk)
+            stat_result = _managed_child_lstat(dir_fd, file_name, normalized_path)
+            saved_size = stat_result.st_size if stat_result is not None else 0
     except ValueError as exc:
         return None, None, str(exc) or normalize_error
     except OSError as exc:
@@ -908,14 +919,19 @@ def _reset_staged_upload_file(upload_root: Path, staged_path: str):
         return normalize_error
 
     try:
-        target = _resolve_managed_child_parts(
+        relative_parts = PurePosixPath(normalized_path).parts
+        with _managed_parent_directory_fd(
             Path(upload_root),
-            PurePosixPath(normalized_path).parts,
+            relative_parts,
             max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
-        )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            target.unlink()
+            create_parents=True,
+        ) as (dir_fd, file_name):
+            stat_result = _managed_child_lstat(dir_fd, file_name, normalized_path)
+            if stat_result is not None:
+                try:
+                    os.unlink(file_name, dir_fd=dir_fd)
+                except FileNotFoundError:
+                    pass
     except ValueError as exc:
         return str(exc) or normalize_error
     except OSError as exc:
@@ -929,13 +945,15 @@ def _staged_upload_size(upload_root: Path, staged_path: str):
         return None, normalize_error
 
     try:
-        target = _resolve_managed_child_parts(
+        relative_parts = PurePosixPath(normalized_path).parts
+        with _managed_parent_directory_fd(
             Path(upload_root),
-            PurePosixPath(normalized_path).parts,
+            relative_parts,
             max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
-        )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        return (target.stat().st_size if target.exists() else 0), None
+            create_parents=True,
+        ) as (dir_fd, file_name):
+            stat_result = _managed_child_lstat(dir_fd, file_name, normalized_path)
+            return (stat_result.st_size if stat_result is not None else 0), None
     except ValueError as exc:
         return None, str(exc) or normalize_error
     except OSError as exc:
@@ -948,20 +966,32 @@ def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
         return None, normalize_error
 
     try:
-        target = _resolve_managed_child_parts(
+        relative_parts = PurePosixPath(normalized_path).parts
+        with _managed_parent_directory_fd(
             Path(upload_root),
-            PurePosixPath(normalized_path).parts,
+            relative_parts,
             max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
-        )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("wb") as handle:
-            for chunk in upload.chunks():
-                handle.write(chunk)
+            create_parents=True,
+        ) as (dir_fd, file_name):
+            with os.fdopen(
+                _open_managed_upload_file_fd(
+                    dir_fd,
+                    file_name,
+                    os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+                    normalized_path,
+                ),
+                "wb",
+            ) as handle:
+                for chunk in upload.chunks():
+                    handle.write(chunk)
     except ValueError as exc:
         return None, str(exc) or normalize_error
     except OSError as exc:
         return None, exc
-    return target.stat().st_size if target.exists() else 0, None
+    size, size_error = _staged_upload_size(upload_root, normalized_path)
+    if size_error is not None:
+        return None, size_error
+    return size, None
 
 
 def _build_staged_relative_path(relative_path: str) -> str:
@@ -3165,6 +3195,29 @@ def _params_add_long(params, key, value):
     raise AttributeError(f"Unsupported OMERO parameter object for integer key {key!r}")
 
 
+def _params_add_string_list(params, key, values):
+    normalized_values = [str(value) for value in values]
+
+    add_list = getattr(params, "addList", None)
+    if callable(add_list):
+        add_list(key, normalized_values)
+        return
+
+    generic_add = getattr(params, "add", None)
+    if callable(generic_add):
+        generic_add(key, normalized_values)
+        return
+
+    param_values = getattr(params, "values", None)
+    if isinstance(param_values, dict):
+        param_values[key] = normalized_values
+        return
+
+    raise AttributeError(
+        f"Unsupported OMERO parameter object for string-list key {key!r}"
+    )
+
+
 def _params_page(params, offset, size):
     page = getattr(params, "page", None)
     if callable(page):
@@ -3192,25 +3245,20 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
         qs = conn.getQueryService()
 
         params = omero.sys.ParametersI()
-        name_clauses = []
-        for idx, file_name in enumerate(file_names):
-            param_name = f"name_{idx}"
-            name_clauses.append(f"i.name = :{param_name}")
-            _params_add_string(params, param_name, file_name)
-        name_filter = " OR ".join(name_clauses)
+        _params_add_string_list(params, "names", file_names)
 
         if dataset_id:
-            query = f"""
+            query = """
                 SELECT i FROM Image i
                 JOIN FETCH i.datasetLinks dil
                 WHERE dil.parent.id = :did
-                AND ({name_filter})
+                AND i.name IN (:names)
             """
             _params_add_long(params, "did", dataset_id)
         else:
-            query = f"""
+            query = """
                 SELECT i FROM Image i
-                WHERE ({name_filter})
+                WHERE i.name IN (:names)
             """
 
         logger.info(
@@ -3893,15 +3941,20 @@ def _job_lock_path(job_id: str) -> Path:
     )
 
 
-def _resolve_managed_child_parts(
+_MANAGED_DIRECTORY_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+_MANAGED_NOFOLLOW_FLAG = getattr(os, "O_NOFOLLOW", 0)
+
+
+def _validate_managed_relative_parts(
     root: Path, relative_parts: tuple[str, ...], *, max_bytes: int = None
-) -> Path:
+) -> tuple[Path, tuple[str, ...]]:
     if not relative_parts:
         raise ValueError(errors.invalid_filename(""))
 
     root_path = Path(root)
     current = root_path
     display_path = []
+    normalized_parts = []
 
     for part in relative_parts:
         part_text = str(part or "")
@@ -3913,18 +3966,129 @@ def _resolve_managed_child_parts(
         ):
             raise ValueError(errors.invalid_filename("/".join(relative_parts)))
         display_path.append(part_text)
+        normalized_parts.append(part_text)
         current = current / part_text
         if max_bytes is not None and len(os.fsencode(str(current))) > max_bytes:
             raise ValueError(
                 errors.file_path_too_long("/".join(display_path), max_bytes)
             )
-        try:
-            if current.exists() and current.is_symlink():
-                raise ValueError(errors.invalid_filename("/".join(display_path)))
-        except OSError as exc:
-            raise ValueError(errors.invalid_filename("/".join(display_path))) from exc
 
-    return current
+    return root_path, tuple(normalized_parts)
+
+
+def _open_managed_directory_fd(path: Path) -> int:
+    return os.open(path, _MANAGED_DIRECTORY_OPEN_FLAGS)
+
+
+def _open_managed_subdirectory_fd(parent_fd: int, directory_name: str) -> int:
+    return os.open(
+        directory_name,
+        _MANAGED_DIRECTORY_OPEN_FLAGS | _MANAGED_NOFOLLOW_FLAG,
+        dir_fd=parent_fd,
+    )
+
+
+def _managed_child_lstat(parent_fd: int, child_name: str, display_path: str):
+    try:
+        stat_result = os.stat(child_name, dir_fd=parent_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise ValueError(errors.invalid_filename(display_path)) from exc
+    if stat.S_ISLNK(stat_result.st_mode):
+        raise ValueError(errors.invalid_filename(display_path))
+    return stat_result
+
+
+def _open_managed_upload_file_fd(
+    parent_fd: int, child_name: str, flags: int, display_path: str
+) -> int:
+    _managed_child_lstat(parent_fd, child_name, display_path)
+    try:
+        return os.open(
+            child_name,
+            flags | _MANAGED_NOFOLLOW_FLAG,
+            0o666,
+            dir_fd=parent_fd,
+        )
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise ValueError(errors.invalid_filename(display_path)) from exc
+        raise
+
+
+def _validate_existing_managed_path_segments(
+    root_path: Path, normalized_parts: tuple[str, ...]
+) -> None:
+    display_parts = []
+    try:
+        dir_fd = _open_managed_directory_fd(root_path)
+    except FileNotFoundError:
+        return
+    try:
+        for directory_name in normalized_parts[:-1]:
+            display_parts.append(directory_name)
+            try:
+                next_fd = _open_managed_subdirectory_fd(dir_fd, directory_name)
+            except FileNotFoundError:
+                return
+            except OSError as exc:
+                raise ValueError(
+                    errors.invalid_filename("/".join(display_parts))
+                ) from exc
+            os.close(dir_fd)
+            dir_fd = next_fd
+        _managed_child_lstat(dir_fd, normalized_parts[-1], "/".join(normalized_parts))
+    finally:
+        os.close(dir_fd)
+
+
+@contextmanager
+def _managed_parent_directory_fd(
+    root: Path,
+    relative_parts: tuple[str, ...],
+    *,
+    max_bytes: int = None,
+    create_parents: bool = False,
+):
+    root_path, normalized_parts = _validate_managed_relative_parts(
+        root,
+        relative_parts,
+        max_bytes=max_bytes,
+    )
+    display_parts = []
+    dir_fd = _open_managed_directory_fd(root_path)
+    try:
+        for directory_name in normalized_parts[:-1]:
+            display_parts.append(directory_name)
+            try:
+                next_fd = _open_managed_subdirectory_fd(dir_fd, directory_name)
+            except FileNotFoundError:
+                if not create_parents:
+                    raise
+                os.mkdir(directory_name, dir_fd=dir_fd)
+                next_fd = _open_managed_subdirectory_fd(dir_fd, directory_name)
+            except OSError as exc:
+                raise ValueError(errors.invalid_filename("/".join(display_parts))) from exc
+            os.close(dir_fd)
+            dir_fd = next_fd
+        yield dir_fd, normalized_parts[-1]
+    except FileNotFoundError as exc:
+        raise ValueError(errors.invalid_filename("/".join(display_parts))) from exc
+    finally:
+        os.close(dir_fd)
+
+
+def _resolve_managed_child_parts(
+    root: Path, relative_parts: tuple[str, ...], *, max_bytes: int = None
+) -> Path:
+    root_path, normalized_parts = _validate_managed_relative_parts(
+        root,
+        relative_parts,
+        max_bytes=max_bytes,
+    )
+    _validate_existing_managed_path_segments(root_path, normalized_parts)
+    return root_path.joinpath(*normalized_parts)
 
 
 def _resolve_managed_child_path(
@@ -6170,16 +6334,11 @@ def _verify_import_via_api(
         candidates = [n for n in (import_name, file_name) if n]
         if not candidates:
             return []
-        placeholders = []
-        for idx, name in enumerate(candidates):
-            param_name = f"n{idx}"
-            placeholders.append(f"i.name = :{param_name}")
-            _params_add_string(params, param_name, name)
-        name_clause = " OR ".join(placeholders)
+        _params_add_string_list(params, "names", candidates)
         query = (
             "SELECT i.id FROM Image i "
             "JOIN i.datasetLinks dl "
-            f"WHERE dl.parent.id = :id AND ({name_clause})"
+            "WHERE dl.parent.id = :id AND i.name IN (:names)"
         )
         qs = conn.getQueryService()
         rows = qs.projection(query, params, conn.SERVICE_OPTS)
