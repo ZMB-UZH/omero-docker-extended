@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 _DOCKER_RUNTIME_ERROR_SUMMARY = "Docker runtime inspection failed"
 _DIRECT_SQL_ERROR_SUMMARY = "Direct SQL sanity test failed"
 
-_psycopg2_mod = None
-_psycopg2_load_attempted = False
+_PSYCOPG2_UNSET = object()
+_psycopg2_mod = _PSYCOPG2_UNSET
 
 
 @dataclass(frozen=True)
@@ -89,19 +89,17 @@ def _elapsed_ms(start: float) -> int:
 
 
 def _load_psycopg2():
-    global _psycopg2_mod, _psycopg2_load_attempted
+    global _psycopg2_mod
 
-    if _psycopg2_load_attempted:
-        if _psycopg2_mod is None:
-            raise RuntimeError(
-                "psycopg2-binary is not installed in the OMERO.web runtime."
-            )
+    if _psycopg2_mod is None:
+        raise RuntimeError("psycopg2-binary is not installed in the OMERO.web runtime.")
+    if _psycopg2_mod is not _PSYCOPG2_UNSET:
         return _psycopg2_mod
 
-    _psycopg2_load_attempted = True
     try:
         import psycopg2  # type: ignore
     except ImportError as exc:
+        _psycopg2_mod = None
         raise RuntimeError(
             "psycopg2-binary is not installed in the OMERO.web runtime."
         ) from exc
