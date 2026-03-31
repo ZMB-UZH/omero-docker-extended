@@ -4069,7 +4069,9 @@ def _managed_parent_directory_fd(
                 os.mkdir(directory_name, dir_fd=dir_fd)
                 next_fd = _open_managed_subdirectory_fd(dir_fd, directory_name)
             except OSError as exc:
-                raise ValueError(errors.invalid_filename("/".join(display_parts))) from exc
+                raise ValueError(
+                    errors.invalid_filename("/".join(display_parts))
+                ) from exc
             os.close(dir_fd)
             dir_fd = next_fd
         yield dir_fd, normalized_parts[-1]
