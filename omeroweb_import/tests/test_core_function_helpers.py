@@ -104,10 +104,12 @@ def test_staged_upload_file_helpers_reject_symlink_leaf_targets(tmp_path) -> Non
     staged_dir.mkdir(parents=True, exist_ok=True)
     os.symlink(protected, staged_dir / "file.bin")
 
-    bytes_written, size, append_error = core_functions._append_upload_chunks_to_staged_path(
-        upload_root,
-        "_staged/folder/file.bin",
-        _Upload(b"hello"),
+    bytes_written, size, append_error = (
+        core_functions._append_upload_chunks_to_staged_path(
+            upload_root,
+            "_staged/folder/file.bin",
+            _Upload(b"hello"),
+        )
     )
     assert bytes_written is None
     assert size is None
