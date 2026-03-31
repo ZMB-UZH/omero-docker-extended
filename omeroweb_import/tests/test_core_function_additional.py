@@ -581,7 +581,9 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
             self.killed = True
 
     proc = _Proc()
-    monkeypatch.setattr(core_functions, "_build_cli_env", lambda: {"HOME": "/tmp"})
+    monkeypatch.setattr(
+        core_functions, "_build_cli_env", lambda: {"HOME": str(tmp_path)}
+    )
     monkeypatch.setattr(core_functions, "_get_path_total_size", lambda _path: 9)
     monkeypatch.setattr(
         core_functions.subprocess, "Popen", lambda *args, **kwargs: proc

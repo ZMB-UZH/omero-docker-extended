@@ -10,7 +10,6 @@ from django.conf import settings
 from django.http import Http404
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
-from django.utils.html import escape as _html_escape
 import omero
 from django.urls.resolvers import URLPattern, URLResolver
 import numpy as np
@@ -38,6 +37,7 @@ from .utils import sanitize_download_basename
 from .utils import select_store_backed_viewer_level
 
 LOGGER = logging.getLogger(__name__)
+
 
 _SAFE_RENDERING_ENV = "OMERO_WEB_ZARR_ALTERNATIVE_RENDERING"
 
@@ -420,7 +420,7 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
                 message = "Invalid resolution level %d < 0" % viewer_level
                 LOGGER.debug(message, exc_info=True)
                 return HttpResponseBadRequest(
-                    _html_escape(message), content_type="text/plain; charset=utf-8"
+                    message, content_type="text/plain; charset=utf-8"
                 )
 
             if max_viewer_level == 0:
@@ -430,7 +430,7 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
                     )
                     LOGGER.debug(message, exc_info=True)
                     return HttpResponseBadRequest(
-                        _html_escape(message),
+                        message,
                         content_type="text/plain; charset=utf-8",
                     )
                 level = None
@@ -443,15 +443,15 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
                     )
                     LOGGER.debug(message, exc_info=True)
                     return HttpResponseBadRequest(
-                        _html_escape(message),
+                        message,
                         content_type="text/plain; charset=utf-8",
                     )
 
             x = int(fields[1]) * width
             y = int(fields[2]) * height
         except Exception:
-            message = "malformed tile argument, tile=%s" % _html_escape(str(tile))
-            LOGGER.debug(message, exc_info=True)
+            message = "malformed tile argument"
+            LOGGER.debug("%s; rejected tile argument", message, exc_info=True)
             return HttpResponseBadRequest(
                 message, content_type="text/plain; charset=utf-8"
             )
@@ -459,8 +459,8 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
         try:
             x, y, width, height = [int(value) for value in region.split(",")]
         except Exception:
-            message = "malformed region argument, region=%s" % _html_escape(str(region))
-            LOGGER.debug(message, exc_info=True)
+            message = "malformed region argument"
+            LOGGER.debug("%s; rejected region argument", message, exc_info=True)
             return HttpResponseBadRequest(
                 message, content_type="text/plain; charset=utf-8"
             )

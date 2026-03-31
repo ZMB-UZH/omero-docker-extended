@@ -11,11 +11,13 @@ from dataclasses import asdict
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-import urllib.error
 import urllib.parse
-import urllib.request
+import requests
 
-from omero_plugin_common.logging_utils import sanitize_log_value
+from omero_plugin_common.logging_utils import (
+    sanitize_log_value,
+    sanitize_url_for_logging,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,14 @@ _DOCKER_RUNTIME_ERROR_SUMMARY = "Docker runtime inspection failed"
 _DIRECT_SQL_ERROR_SUMMARY = "Direct SQL sanity test failed"
 
 _PSYCOPG2_UNSET = object()
-_psycopg2_mod = _PSYCOPG2_UNSET
+
+
+def _get_cached_psycopg2_module():
+    return getattr(_load_psycopg2, "_cached_module", _PSYCOPG2_UNSET)
+
+
+def _set_cached_psycopg2_module(module) -> None:
+    _load_psycopg2._cached_module = module
 
 
 @dataclass(frozen=True)
@@ -89,22 +98,21 @@ def _elapsed_ms(start: float) -> int:
 
 
 def _load_psycopg2():
-    global _psycopg2_mod
-
-    if _psycopg2_mod is None:
+    cached_module = _get_cached_psycopg2_module()
+    if cached_module is None:
         raise RuntimeError("psycopg2-binary is not installed in the OMERO.web runtime.")
-    if _psycopg2_mod is not _PSYCOPG2_UNSET:
-        return _psycopg2_mod
+    if cached_module is not _PSYCOPG2_UNSET:
+        return cached_module
 
     try:
         import psycopg2  # type: ignore
     except ImportError as exc:
-        _psycopg2_mod = None
+        _set_cached_psycopg2_module(None)
         raise RuntimeError(
             "psycopg2-binary is not installed in the OMERO.web runtime."
         ) from exc
-    _psycopg2_mod = psycopg2
-    return _psycopg2_mod
+    _set_cached_psycopg2_module(psycopg2)
+    return psycopg2
 
 
 def _resolve_db_profile(
@@ -410,22 +418,37 @@ def _http_probe(
     check_id: str, label: str, url: str, timeout_s: float
 ) -> DiagnosticCheckResult:
     start = time.monotonic()
-    try:
-        request = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:
-            status_code = int(getattr(response, "status", 0) or 0)
-    except urllib.error.HTTPError as exc:
-        status_code = int(exc.code)
+    parsed = urllib.parse.urlsplit(str(url or "").strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
             status="fail",
             duration_ms=_elapsed_ms(start),
-            summary=f"HTTP probe returned {status_code}",
-            details=f"{url} returned HTTP {status_code}",
+            summary="HTTP probe failed",
+            details="HTTP probe URL is invalid.",
         )
-    except urllib.error.URLError as exc:
-        logger.warning("HTTP probe failed for %s: %s", url, exc)
+    if parsed.username or parsed.password or parsed.fragment:
+        return DiagnosticCheckResult(
+            check_id=check_id,
+            label=label,
+            status="fail",
+            duration_ms=_elapsed_ms(start),
+            summary="HTTP probe failed",
+            details="HTTP probe URL is invalid.",
+        )
+    safe_url = urllib.parse.urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path or "/", parsed.query, "")
+    )
+    try:
+        response = requests.get(safe_url, timeout=timeout_s, allow_redirects=True)
+        status_code = int(response.status_code)
+    except requests.RequestException as exc:
+        logger.warning(
+            "HTTP probe failed for %s: %s",
+            sanitize_url_for_logging(safe_url),
+            sanitize_log_value(exc),
+        )
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
@@ -441,7 +464,7 @@ def _http_probe(
         status=status,
         duration_ms=_elapsed_ms(start),
         summary=f"HTTP probe returned {status_code}",
-        details=url,
+        details=safe_url,
     )
 
 

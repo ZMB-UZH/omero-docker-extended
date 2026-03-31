@@ -80,7 +80,9 @@ def test_path_and_external_lsid_helpers_cover_additional_invalid_inputs(
     )
 
 
-def test_node_and_channel_helpers_cover_cache_mismatch_and_error_paths(monkeypatch):
+def test_node_and_channel_helpers_cover_cache_mismatch_and_error_paths(
+    monkeypatch, tmp_path
+):
     image = SimpleNamespace(id=7)
     monkeypatch.setattr(
         utils,
@@ -103,7 +105,7 @@ def test_node_and_channel_helpers_cover_cache_mismatch_and_error_paths(monkeypat
     monkeypatch.setattr(
         utils,
         "resolve_image_backing_zarr_store",
-        lambda current_image: Path("/tmp/demo.zarr"),
+        lambda current_image: tmp_path / "demo.zarr",
     )
     monkeypatch.setattr(
         utils,

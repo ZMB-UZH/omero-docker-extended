@@ -138,6 +138,32 @@ def test_staged_upload_file_helpers_reject_symlink_leaf_targets(tmp_path) -> Non
     assert protected.read_bytes() == b"outside"
 
 
+def test_replace_staged_upload_file_creates_private_modes(tmp_path) -> None:
+    class _Upload:
+        def __init__(self, *chunks):
+            self._chunks = chunks
+
+        def chunks(self):
+            return list(self._chunks)
+
+    upload_root = tmp_path / "uploads"
+    upload_root.mkdir()
+
+    size, replace_error = core_functions._replace_staged_upload_file(
+        upload_root,
+        "_staged/folder/file.bin",
+        _Upload(b"replaced"),
+    )
+
+    created_dir = upload_root / "_staged" / "folder"
+    created_file = created_dir / "file.bin"
+    assert replace_error is None
+    assert size == len(b"replaced")
+    assert created_file.read_bytes() == b"replaced"
+    assert (created_dir.stat().st_mode & 0o777) == 0o700
+    assert (created_file.stat().st_mode & 0o777) == 0o600
+
+
 def test_write_read_job_file_and_apply_upload_updates(monkeypatch, tmp_path) -> None:
     jobs_root = tmp_path / "jobs"
     jobs_root.mkdir()

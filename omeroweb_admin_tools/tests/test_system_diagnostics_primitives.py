@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import socket
-import urllib.error
+import requests
 
 from omeroweb_admin_tools.services import system_diagnostics
 from omeroweb_admin_tools.services.system_diagnostics import (
@@ -14,16 +14,13 @@ from omeroweb_admin_tools.services.system_diagnostics import (
 class _FakeResponse:
     def __init__(self, status, payload):
         self.status = status
+        self.status_code = status
         self._payload = payload
+        self.content = payload
+        self.text = payload.decode("utf-8", errors="replace")
 
     def read(self):
         return self._payload
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
 
 
 class _FakeConnection:
@@ -251,9 +248,9 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
     assert tcp_pass.status == "pass"
 
     monkeypatch.setattr(
-        system_diagnostics.urllib.request,
-        "urlopen",
-        lambda request, timeout=1.0: _FakeResponse(200, b""),
+        system_diagnostics.requests,
+        "get",
+        lambda url, timeout=1.0, allow_redirects=True: _FakeResponse(200, b""),
     )
     http_pass = system_diagnostics._http_probe(
         "http", "Probe HTTP", "https://omeroserver", 1.0
@@ -261,10 +258,10 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
     assert http_pass.status == "pass"
 
     monkeypatch.setattr(
-        system_diagnostics.urllib.request,
-        "urlopen",
-        lambda request, timeout=1.0: (_ for _ in ()).throw(
-            urllib.error.URLError("offline")
+        system_diagnostics.requests,
+        "get",
+        lambda url, timeout=1.0, allow_redirects=True: (_ for _ in ()).throw(
+            requests.RequestException("offline")
         ),
     )
     http_fail = system_diagnostics._http_probe(
@@ -291,14 +288,18 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
     assert dns_fail.status == "fail"
 
     monkeypatch.setattr(
-        system_diagnostics.urllib.request,
-        "urlopen",
-        lambda request, timeout=1.0: _FakeResponse(503, b""),
+        system_diagnostics.requests,
+        "get",
+        lambda url, timeout=1.0, allow_redirects=True: _FakeResponse(503, b""),
     )
     http_warn = system_diagnostics._http_probe(
         "http", "Probe HTTP", "https://omeroserver", 1.0
     )
     assert http_warn.status == "warn"
+    invalid_http = system_diagnostics._http_probe(
+        "http", "Probe HTTP", "file:///tmp/not-allowed", 1.0
+    )
+    assert invalid_http.status == "fail"
 
     def _psycopg2_bad_value():
         return type(

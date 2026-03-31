@@ -28,8 +28,8 @@ _CONFIG_MANAGED_DIR = "omero.managed.dir"
 _CONFIG_REPO_PATH = "omero.fs.repo.path"
 _CONFIG_SHARED_TMP_PATH = "omero.web.import.shared_tmp_path"
 _RUNTIME_STATE_FILENAME = "managed-zarr-runtime.env"
-_MANAGED_DIRECTORY_MODE = 0o750
-_MANAGED_FILE_MODE = 0o640
+_MANAGED_DIRECTORY_MODE = 0o700
+_MANAGED_FILE_MODE = 0o600
 
 
 def _require_config_value(config: dict[str, str], key: str) -> str:
