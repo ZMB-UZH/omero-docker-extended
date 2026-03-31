@@ -175,7 +175,7 @@ def test_import_data_store_validates_credentials_ports_and_connection_failures(
 
     try:
         with import_data_store._connect():
-            raise AssertionError("unreachable")
+            pass
     except import_data_store.UserSettingsStoreError as exc:
         assert str(exc) == import_data_store.errors.db_connection_failed()
     else:

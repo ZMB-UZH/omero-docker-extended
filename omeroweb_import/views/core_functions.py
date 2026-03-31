@@ -43,7 +43,6 @@ from ..constants import (
     OMERO_IMPORT_SCAN_DEPTH,
 )
 from ..services.ome_zarr_support import (
-    OME_ZARR_IMPORT_KIND_BIOFORMATS2RAW,
     OME_ZARR_IMPORT_KIND_IMAGE,
     inspect_ome_zarr_image,
     normalize_native_ome_zarr_copy,
@@ -5059,7 +5058,6 @@ class _NativeZarrImportPlan:
 
 
 _NATIVE_ZARR_KIND_OME_ZARR = OME_ZARR_IMPORT_KIND_IMAGE
-_NATIVE_ZARR_KIND_BIOFORMATS2RAW = OME_ZARR_IMPORT_KIND_BIOFORMATS2RAW
 _ZARR_IMPORT_BACKEND_BIOFORMATS = "bioformats"
 _ZARR_IMPORT_BACKEND_NATIVE = "native_zarr"
 _IMPORT_ROUTING_ENTRY_FIELDS = (
@@ -5556,6 +5554,7 @@ def _import_zarr_via_cli(
 
     managed_zarr = None
     stage_message = None
+    stage_outputs = {}
     try:
         try:
             stage_success, stage_outputs, stage_message = _run_zarr_managed_repo_script(
@@ -5568,7 +5567,6 @@ def _import_zarr_via_cli(
             )
         except Exception as exc:
             stage_success = False
-            stage_outputs = {}
             stage_message = str(exc) or (
                 "Failed to stage Zarr into the managed repository."
             )

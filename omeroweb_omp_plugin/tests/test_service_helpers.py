@@ -5,7 +5,7 @@ import re
 from types import SimpleNamespace
 
 from omeroweb_omp_plugin.constants import HASH_KEY, HASH_PREFIX, MAP_NS
-from omeroweb_omp_plugin.services import filename_utils, http_utils, rate_limit
+from omeroweb_omp_plugin.services import core, filename_utils, http_utils, rate_limit
 from omeroweb_omp_plugin.services.omero import (
     annotation_service,
     image_service,
@@ -40,6 +40,18 @@ def test_extract_error_details_prefers_nested_messages_and_plaintext():
     assert http_utils.extract_error_details(plain) == "permission denied"
     assert http_utils.extract_error_details(empty) is None
     assert http_utils.extract_error_details(None) is None
+
+
+def test_core_reexports_follow_live_annotation_service_bindings(monkeypatch):
+    monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "secret")
+    monkeypatch.setattr(
+        annotation_service,
+        "compute_plugin_hash",
+        lambda mapping: f"hash:{mapping['name']}",
+    )
+
+    assert core._get_hash_secret() == "secret"
+    assert core.compute_plugin_hash({"name": "demo"}) == "hash:demo"
 
 
 def test_filename_helpers_detect_label_value_pairs_and_protect_scientific_hyphens():

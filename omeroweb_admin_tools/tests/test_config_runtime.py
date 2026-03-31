@@ -78,10 +78,13 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
         == "fallback"
     )
 
-    system_diagnostics._psycopg2_load_attempted = True
-    system_diagnostics._psycopg2_mod = None
-    with pytest.raises(RuntimeError, match="psycopg2-binary"):
-        system_diagnostics._load_psycopg2()
+    previous_psycopg2_mod = system_diagnostics._psycopg2_mod
+    try:
+        system_diagnostics._psycopg2_mod = None
+        with pytest.raises(RuntimeError, match="psycopg2-binary"):
+            system_diagnostics._load_psycopg2()
+    finally:
+        system_diagnostics._psycopg2_mod = previous_psycopg2_mod
 
     calls = []
 

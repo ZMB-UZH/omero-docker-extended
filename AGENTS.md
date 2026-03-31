@@ -184,10 +184,12 @@ omeroweb_<name>/
 
 ### Security scanning policy
 - **Before writing any new code**, consult `docs/reference/code-scanning-resolved-findings.md`. This ledger catalogs 1 845 previously resolved scanner alerts with specific prevention rules. Reintroducing a pattern that has already been fixed is a regression and must be treated as a defect.
+- **Before writing any new code**, consult `docs/reference/code-scanning-resolved-findings.md`, especially the `2026-03-31 API refresh` and `Agent prevention playbooks` sections. That ledger now catalogs 2 011 closed scanner alerts with rule-level prevention examples. Reintroducing a pattern that has already been fixed is a regression and must be treated as a defect.
 - When addressing code scanning findings, always fix the root cause. Do not add inline suppression comments (`# nosemgrep`, `# DevSkim: ignore`, `# nosec`, etc.) as a first resort.
 - Investigate each finding using multiple tools and online documentation to confirm whether it is a genuine issue or a false positive.
 - Suppression is permitted only when all evidence confirms the finding is a verified false positive (e.g. `psycopg2.sql.SQL().format(sql.Identifier())` is safe parameterized SQL; internal Docker network services legitimately use HTTP) **and** the root cause cannot be fixed without breaking functionality.
 - Every suppression must include a clear explanation of why it is a false positive and link to the verifying evidence.
+- Refresh the exact open-alert total from the GitHub API before each remediation batch and after each remediation push. Do not rely on stale counts in docs, comments, or prior agent messages.
 - Do not modify security scan workflow files unless explicitly instructed to do so.
 - For the complete coding guidelines that prevent new findings, see `docs/operations/code-scanning.md` § "AI agent coding guidelines".
 

@@ -1,11 +1,12 @@
 # Code Scanning — Resolved Findings Ledger
 
-This document catalogs the **1 845 code scanning alerts** that have been identified, triaged, and resolved across the project's lifetime. Its purpose is twofold:
+This document catalogs the **2 011 closed code scanning alerts** that have been identified, triaged, and resolved across the project's lifetime. Its purpose is twofold:
 
 1. **Institutional memory** — so the same classes of issues are never reintroduced.
 2. **Agent directive** — AI agents modifying this codebase must consult this ledger before writing new code. Every pattern listed below has been fixed at least once; introducing the same pattern again is a regression.
 
 > **Canonical reference**: `docs/operations/code-scanning.md` tracks _open_ alerts and triage SLAs. This file tracks _closed_ alerts and the lessons they teach.
+> **Live refresh note**: The counts in this document were refreshed from the GitHub code-scanning API on **2026-03-31**. Re-query the API before acting on exact totals.
 
 ## How to use this document
 
@@ -13,20 +14,219 @@ This document catalogs the **1 845 code scanning alerts** that have been identif
 - **When a scanner flags new code**: look up the rule ID in the tables below. If a prevention rule exists, apply it. If the finding is a known false positive, document it per the suppression policy in `docs/operations/code-scanning.md`.
 - **After fixing a batch of alerts**: add a row to the timeline at the bottom and update counts.
 
+## 2026-03-31 API refresh — authoritative snapshot
+
+GitHub reported the following branch-level totals when this ledger was refreshed:
+
+| State | Alerts |
+|---|---:|
+| Open on `main` (pre-remediation snapshot for this pass) | 123 |
+| Closed on `main` | 2 011 |
+
+### Closed alerts by scanner
+
+| Scanner | Closed alerts | Share |
+|---|---:|---:|
+| Bandit | 794 | 39.5 % |
+| CodeQL | 555 | 27.6 % |
+| Semgrep OSS | 273 | 13.6 % |
+| devskim | 226 | 11.2 % |
+| Scorecard | 101 | 5.0 % |
+| Trivy | 43 | 2.1 % |
+| Hadolint | 19 | 0.9 % |
+| **Total** | **2 011** | **100 %** |
+
+### Closed-alert themes derived from all 2 011 closed alerts
+
+| Theme | Representative rules | Closed alerts | What the fixes taught us |
+|---|---|---:|---|
+| Assertions and swallowed exceptions | `B101`, `py/empty-except`, `B110`, `B112` | 659 | Production code must not rely on `assert`, and silent `except` blocks are treated as defects, not style issues. |
+| SQL and query construction | `sqlalchemy-execute-raw-query`, `B608` | 178 | Query text and user data must be separated consistently, even in tests and helper layers. |
+| Logging and user-data exposure | `py/log-injection`, `py/clear-text-logging-sensitive-data`, `py/stack-trace-exposure`, `logger-credential-leak` | 256 | Log every failure usefully, but never echo credentials, session keys, raw URLs, or exception text back to users. |
+| Filesystem and path safety | `py/path-injection`, `py/overly-permissive-file`, `insecure-file-permissions`, `B108` | 157 | Every path must stay anchored under an allowlisted root, and every created file/dir must use the minimum viable mode. |
+| Workflow and supply-chain pinning | `PinnedDependenciesID`, `DS173237`, `DS162092` | 178 | CI/workflow changes need the same rigor as application code: pin actions, document accepted false positives, and avoid brittle secrets patterns. |
+| Django response and CSRF issues | `csrf-exempt`, `direct-use-of-httpresponse` | 48 | Prefer templated or structured responses, and make CSRF-compatible request paths the default instead of opting out. |
+| Imports, dead code, and low-signal regressions | `py/unused-import`, `py/unused-global-variable`, `py/unused-local-variable`, `py/unnecessary-lambda`, `py/import-and-import-from` | 82 | Cleanup findings are not noise. They usually signal a refactor that drifted away from the real runtime contract. |
+| Dockerfile and shell hygiene | `DS137138`, `DS026`, `DS002`, `SC2012`, `DL3008`, `DL3018`, `ifs-tampering` | 225 | Docker and shell fixes must respect the deployment architecture, but they still need explicit health, pinning, quoting, and privilege reasoning. |
+
+### Hotspot files from the full closed-alert history
+
+| File | Closed alerts | Why future edits need extra care |
+|---|---:|---|
+| `omeroweb_admin_tools/tests/test_resource_monitoring.py` | 195 | Historical scanner-noise hotspot; test-only patterns must stay intentional and documented. |
+| `omeroweb_import/views/core_functions.py` | 120 | Highest-risk application hotspot for path handling, logging, job storage, and import orchestration. |
+| `omeroweb_omp_plugin/services/data_store.py` | 116 | Dense SQL/data-store logic with many prior raw-query and logging fixes. |
+| `.github/workflows/security-code-scanning.yml` | 66 | Workflow edits can easily reintroduce supply-chain and pinning regressions. |
+| `omeroweb_admin_tools/views/index_view.py` | 55 | Proxying, HTTP, and user-visible error handling converge here. |
+
+## Agent prevention playbooks
+
+These are the repository's **mandatory** security examples for AI agents. Follow the safe pattern unless you have a documented reason not to.
+
+### 1. Path handling and staged uploads
+
+Bad:
+
+```python
+target = upload_root / request.data["relative_path"]
+with target.open("wb") as handle:
+    handle.write(payload)
+```
+
+Good:
+
+```python
+target, path_error = _resolve_staged_target_path(upload_root, relative_path)
+if path_error:
+    return json_error(path_error, status=400)
+with target.open("wb") as handle:
+    handle.write(payload)
+```
+
+Rule: untrusted paths never reach `open()`, `mkdir()`, `unlink()`, `rename()`, or `shutil.*` until they have been normalized and re-anchored under an allowed root.
+
+### 2. Logging untrusted values
+
+Bad:
+
+```python
+logger.warning("Import failed for %s with session %s", rel_path, session_key)
+```
+
+Good:
+
+```python
+logger.warning(
+    "Import failed for %s.",
+    sanitize_log_value(rel_path),
+)
+```
+
+Rule: log the event, not the secret. Any user-controlled value must be sanitized before logging, and any credential-adjacent value must be redacted entirely.
+
+### 3. User-visible errors
+
+Bad:
+
+```python
+return JsonResponse({"error": str(exc)}, status=500)
+```
+
+Good:
+
+```python
+logger.error("Import failed.", exc_info=sanitized_exc_info(exc))
+return JsonResponse({"error": errors.unexpected_server_error_importing()}, status=500)
+```
+
+Rule: detailed exceptions belong in server logs, not in HTTP responses, HTML fragments, or JSON payloads returned to users.
+
+### 4. SQL composition
+
+Bad:
+
+```python
+cursor.execute(f"SELECT * FROM settings WHERE username = '{username}'")
+```
+
+Good:
+
+```python
+cursor.execute(
+    "SELECT * FROM settings WHERE username = %s",
+    (username,),
+)
+```
+
+Rule: never concatenate user input into SQL. Use database parameterization or safe SQL-construction helpers every time.
+
+### 5. Temporary paths and file permissions
+
+Bad:
+
+```python
+export_path = "/tmp/demo.ims"
+os.chmod(export_path, 0o777)
+```
+
+Good:
+
+```python
+export_path = tmp_path / "demo.ims"
+os.chmod(export_path, 0o640)
+```
+
+Rule: tests must use `tmp_path`/`tempfile`, and production code must use repository-configured or environment-driven paths with minimum required permissions.
+
+### 6. HTTP, SSRF, and internal services
+
+Bad:
+
+```python
+urllib.request.urlopen(user_supplied_url)
+```
+
+Good:
+
+```python
+parsed = urlsplit(candidate_url)
+if parsed.scheme not in {"http", "https"} or parsed.hostname not in allowed_hosts:
+    raise ValueError("Invalid upstream target")
+response = requests.get(candidate_url, timeout=timeout_seconds)
+```
+
+Rule: URL scheme, host, and method must be validated before any outbound request, even for internal Docker-network services.
+
+### 7. Subprocess boundaries
+
+Bad:
+
+```python
+subprocess.run(["omero", "delete", request.POST["object_ref"]], check=False)
+```
+
+Good:
+
+```python
+object_type, object_id = _parse_delete_target(request.POST["object_ref"])
+subprocess.run(
+    ["omero", "delete", f"{object_type}:{object_id}"],
+    check=False,
+)
+```
+
+Rule: parse and validate the untrusted parts first, then construct the subprocess arguments from typed values instead of passing raw request text through.
+
+### 8. Workflow and Docker pinning
+
+Bad:
+
+```yaml
+- uses: actions/checkout@v6
+```
+
+Good:
+
+```yaml
+- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+```
+
+Rule: workflow actions and base images must be pinned to audited immutable identifiers, not floating tags.
+
 ---
 
 ## Closed alerts by scanner
 
 | Scanner | Closed alerts | Share |
 |---|---:|---:|
-| Bandit | 753 | 40.8 % |
-| CodeQL | 521 | 28.2 % |
-| Semgrep | 221 | 12.0 % |
-| DevSkim | 208 | 11.3 % |
-| Scorecard | 91 | 4.9 % |
-| Trivy | 35 | 1.9 % |
-| Hadolint | 16 | 0.9 % |
-| **Total** | **1 845** | **100 %** |
+| Bandit | 794 | 39.5 % |
+| CodeQL | 555 | 27.6 % |
+| Semgrep OSS | 273 | 13.6 % |
+| devskim | 226 | 11.2 % |
+| Scorecard | 101 | 5.0 % |
+| Trivy | 43 | 2.1 % |
+| Hadolint | 19 | 0.9 % |
+| **Total** | **2 011** | **100 %** |
 
 ---
 

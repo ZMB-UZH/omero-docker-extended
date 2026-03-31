@@ -387,7 +387,7 @@ def test_core_function_helpers_cover_native_zarr_plan_and_shared_transfer_cleanu
     caplog,
 ):
     plan = core_functions._NativeZarrImportPlan(
-        kind=core_functions._NATIVE_ZARR_KIND_BIOFORMATS2RAW,
+        kind=support.OME_ZARR_IMPORT_KIND_BIOFORMATS2RAW,
         recognized_zarr=True,
         validation_error="unsupported plate layout",
         verify_lsid_prefix=True,
@@ -395,7 +395,7 @@ def test_core_function_helpers_cover_native_zarr_plan_and_shared_transfer_cleanu
     )
     payload = core_functions._serialize_native_zarr_plan(plan)
     assert payload == {
-        "kind": core_functions._NATIVE_ZARR_KIND_BIOFORMATS2RAW,
+        "kind": support.OME_ZARR_IMPORT_KIND_BIOFORMATS2RAW,
         "recognized_zarr": True,
         "validation_error": "unsupported plate layout",
         "verify_lsid_prefix": True,
