@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import io
 import json
-import socket
-import urllib.error
+import requests
 
 import pytest
 
@@ -23,16 +21,13 @@ class _DummyResponse:
     def __init__(self, payload, status=200):
         self._payload = payload
         self.status = status
+        self.status_code = status
         self.headers = {}
+        self.content = payload
+        self.text = payload.decode("utf-8", errors="replace")
 
     def read(self):
         return self._payload
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
 
 
 def _config():
@@ -48,9 +43,9 @@ def _config():
 def test_execute_loki_query_returns_json_payload(monkeypatch) -> None:
     payload = {"status": "success", "data": {"result": []}}
     monkeypatch.setattr(
-        log_query_module.urllib.request,
-        "urlopen",
-        lambda request, timeout: _DummyResponse(json.dumps(payload).encode("utf-8")),
+        log_query_module.requests,
+        "get",
+        lambda url, timeout: _DummyResponse(json.dumps(payload).encode("utf-8")),
     )
 
     result = _execute_loki_query(_config(), '{compose_service="omeroserver"}', 60, 20)
@@ -64,32 +59,25 @@ def test_execute_loki_query_wraps_non_json_http_and_timeout_errors(
     config = _config()
 
     monkeypatch.setattr(
-        log_query_module.urllib.request,
-        "urlopen",
-        lambda request, timeout: _DummyResponse(b"not-json", status=200),
+        log_query_module.requests,
+        "get",
+        lambda url, timeout: _DummyResponse(b"not-json", status=200),
     )
     with pytest.raises(RuntimeError, match="non-JSON response"):
         _execute_loki_query(config, '{compose_service="omeroserver"}', 60, 20)
 
-    http_error = urllib.error.HTTPError(
-        url="https://loki:3100",
-        code=502,
-        msg="Bad Gateway",
-        hdrs={},
-        fp=io.BytesIO(b"upstream failed"),
-    )
     monkeypatch.setattr(
-        log_query_module.urllib.request,
-        "urlopen",
-        lambda request, timeout: (_ for _ in ()).throw(http_error),
+        log_query_module.requests,
+        "get",
+        lambda url, timeout: _DummyResponse(b"upstream failed", status=502),
     )
     with pytest.raises(RuntimeError, match="Loki HTTP error 502: upstream failed"):
         _execute_loki_query(config, '{compose_service="omeroserver"}', 60, 20)
 
     monkeypatch.setattr(
-        log_query_module.urllib.request,
-        "urlopen",
-        lambda request, timeout: (_ for _ in ()).throw(socket.timeout("late")),
+        log_query_module.requests,
+        "get",
+        lambda url, timeout: (_ for _ in ()).throw(requests.Timeout("late")),
     )
     with pytest.raises(RuntimeError, match="timed out"):
         _execute_loki_query(config, '{compose_service="omeroserver"}', 60, 20)

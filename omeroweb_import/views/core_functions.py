@@ -931,6 +931,7 @@ def _reset_staged_upload_file(upload_root: Path, staged_path: str):
                 try:
                     os.unlink(file_name, dir_fd=dir_fd)
                 except FileNotFoundError:
+                    # Another request may have already removed the staged leaf.
                     pass
     except ValueError as exc:
         return str(exc) or normalize_error
@@ -3943,6 +3944,8 @@ def _job_lock_path(job_id: str) -> Path:
 
 _MANAGED_DIRECTORY_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
 _MANAGED_NOFOLLOW_FLAG = getattr(os, "O_NOFOLLOW", 0)
+_MANAGED_DIRECTORY_CREATE_MODE = 0o700
+_MANAGED_FILE_CREATE_MODE = 0o600
 
 
 def _validate_managed_relative_parts(
@@ -3977,20 +3980,40 @@ def _validate_managed_relative_parts(
 
 
 def _open_managed_directory_fd(path: Path) -> int:
-    return os.open(path, _MANAGED_DIRECTORY_OPEN_FLAGS)
+    root_path = Path(path)
+    if not root_path.is_dir():
+        raise FileNotFoundError(os.fspath(root_path))
+    return os.open(root_path, _MANAGED_DIRECTORY_OPEN_FLAGS)
 
 
-def _open_managed_subdirectory_fd(parent_fd: int, directory_name: str) -> int:
+def _validated_managed_component(component: str, display_path: str) -> str:
+    component_text = str(component or "")
+    if (
+        not component_text
+        or component_text in {".", ".."}
+        or "/" in component_text
+        or "\\" in component_text
+        or "\x00" in component_text
+    ):
+        raise ValueError(errors.invalid_filename(display_path))
+    return component_text
+
+
+def _open_managed_subdirectory_fd(
+    parent_fd: int, directory_name: str, display_path: str
+) -> int:
+    safe_name = _validated_managed_component(directory_name, display_path)
     return os.open(
-        directory_name,
+        safe_name,
         _MANAGED_DIRECTORY_OPEN_FLAGS | _MANAGED_NOFOLLOW_FLAG,
         dir_fd=parent_fd,
     )
 
 
 def _managed_child_lstat(parent_fd: int, child_name: str, display_path: str):
+    safe_name = _validated_managed_component(child_name, display_path)
     try:
-        stat_result = os.stat(child_name, dir_fd=parent_fd, follow_symlinks=False)
+        stat_result = os.stat(safe_name, dir_fd=parent_fd, follow_symlinks=False)
     except FileNotFoundError:
         return None
     except OSError as exc:
@@ -4003,12 +4026,13 @@ def _managed_child_lstat(parent_fd: int, child_name: str, display_path: str):
 def _open_managed_upload_file_fd(
     parent_fd: int, child_name: str, flags: int, display_path: str
 ) -> int:
-    _managed_child_lstat(parent_fd, child_name, display_path)
+    safe_name = _validated_managed_component(child_name, display_path)
+    _managed_child_lstat(parent_fd, safe_name, display_path)
     try:
         return os.open(
-            child_name,
+            safe_name,
             flags | _MANAGED_NOFOLLOW_FLAG,
-            0o666,
+            _MANAGED_FILE_CREATE_MODE,
             dir_fd=parent_fd,
         )
     except OSError as exc:
@@ -4029,7 +4053,11 @@ def _validate_existing_managed_path_segments(
         for directory_name in normalized_parts[:-1]:
             display_parts.append(directory_name)
             try:
-                next_fd = _open_managed_subdirectory_fd(dir_fd, directory_name)
+                next_fd = _open_managed_subdirectory_fd(
+                    dir_fd,
+                    directory_name,
+                    "/".join(display_parts),
+                )
             except FileNotFoundError:
                 return
             except OSError as exc:
@@ -4041,6 +4069,14 @@ def _validate_existing_managed_path_segments(
         _managed_child_lstat(dir_fd, normalized_parts[-1], "/".join(normalized_parts))
     finally:
         os.close(dir_fd)
+
+
+def _create_managed_subdirectory(
+    parent_fd: int, directory_name: str, display_path: str
+):
+    safe_name = _validated_managed_component(directory_name, display_path)
+    os.mkdir(safe_name, _MANAGED_DIRECTORY_CREATE_MODE, dir_fd=parent_fd)
+    return _open_managed_subdirectory_fd(parent_fd, safe_name, display_path)
 
 
 @contextmanager
@@ -4061,17 +4097,23 @@ def _managed_parent_directory_fd(
     try:
         for directory_name in normalized_parts[:-1]:
             display_parts.append(directory_name)
+            display_path = "/".join(display_parts)
             try:
-                next_fd = _open_managed_subdirectory_fd(dir_fd, directory_name)
+                next_fd = _open_managed_subdirectory_fd(
+                    dir_fd,
+                    directory_name,
+                    display_path,
+                )
             except FileNotFoundError:
                 if not create_parents:
                     raise
-                os.mkdir(directory_name, dir_fd=dir_fd)
-                next_fd = _open_managed_subdirectory_fd(dir_fd, directory_name)
+                next_fd = _create_managed_subdirectory(
+                    dir_fd,
+                    directory_name,
+                    display_path,
+                )
             except OSError as exc:
-                raise ValueError(
-                    errors.invalid_filename("/".join(display_parts))
-                ) from exc
+                raise ValueError(errors.invalid_filename(display_path)) from exc
             os.close(dir_fd)
             dir_fd = next_fd
         yield dir_fd, normalized_parts[-1]

@@ -2280,9 +2280,10 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
-    {% if error_message %}
-    showNonBlockingModal("{{ error_message|escapejs }}");
-    {% endif %}
+    const initialErrorMessage = "{{ error_message|default_if_none:''|escapejs }}";
+    if (initialErrorMessage) {
+        showNonBlockingModal(initialErrorMessage);
+    }
 
     function normalizeProjectEntry(entry) {
         if (!entry) return null;
