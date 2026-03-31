@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+import re
 
 
 class BuildWorkflowIntegrationContractTests(unittest.TestCase):
@@ -608,6 +609,23 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 suite,
                 ci_text,
                 f"Test suite {suite!r} missing from CI workflow",
+            )
+
+    def test_all_workflow_checkout_steps_use_verified_v6_pin(self) -> None:
+        expected_checkout = "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd"
+        workflow_dir = self.repo_root / ".github" / "workflows"
+        for workflow_path in workflow_dir.glob("*.yml"):
+            workflow_text = workflow_path.read_text(encoding="utf-8")
+            checkout_uses = re.findall(
+                r"actions/checkout@[0-9a-f]{40}",
+                workflow_text,
+            )
+            if not checkout_uses:
+                continue
+            self.assertEqual(
+                {expected_checkout},
+                set(checkout_uses),
+                f"{workflow_path.name} has an unexpected checkout pin",
             )
 
     def test_codecov_yml_has_component_for_each_source_directory(self) -> None:

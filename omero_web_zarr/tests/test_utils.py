@@ -10,10 +10,14 @@ import numpy as np
 import pytest
 from PIL import Image
 
-import omero_web_zarr.utils as zarr_utils
+from omero_web_zarr.utils import _load_store_backed_image_node_cached
+from omero_web_zarr.utils import _read_store_attrs
+from omero_web_zarr.utils import _resolve_image_external_lsid
+from omero_web_zarr.utils import _resolve_ome_zarr_format
 from omero_web_zarr.utils import collect_store_metadata_documents
 from omero_web_zarr.utils import encode_store_backed_pil_image
 from omero_web_zarr.utils import generate_coordinate_transformations
+from omero_web_zarr.utils import get_store_backed_datasets
 from omero_web_zarr.utils import get_safe_image_tile_size
 from omero_web_zarr.utils import open_compat_array
 from omero_web_zarr.utils import is_store_metadata_path
@@ -123,6 +127,16 @@ class _FakeConnForTileSize:
 
     def getConfigService(self):
         return self._config
+
+
+class _BrokenQueryService:
+    def projection(self, *args, **kwargs):
+        raise RuntimeError("boom")
+
+
+class _EmptyQueryService:
+    def projection(self, *args, **kwargs):
+        return []
 
 
 class _FakeChannel:
@@ -726,35 +740,15 @@ def test_marshal_axes_and_pixel_sizes_cover_supported_and_invalid_versions():
 
 def test_resolve_image_external_lsid_covers_missing_ids_and_query_failures(monkeypatch):
     image_without_conn = _FakeImage(None)
-    assert zarr_utils._resolve_image_external_lsid(image_without_conn) is None
+    assert _resolve_image_external_lsid(image_without_conn) is None
 
     query_fail_image = _FakeImage(None, query_lsid="ignored")
-    monkeypatch.setattr(
-        query_fail_image._conn,
-        "getQueryService",
-        lambda: type(
-            "BrokenQueryService",
-            (),
-            {
-                "projection": lambda self, *args, **kwargs: (_ for _ in ()).throw(
-                    RuntimeError("boom")
-                )
-            },
-        )(),
-    )
-    assert zarr_utils._resolve_image_external_lsid(query_fail_image) is None
+    monkeypatch.setattr(query_fail_image._conn, "getQueryService", _BrokenQueryService)
+    assert _resolve_image_external_lsid(query_fail_image) is None
 
     no_row_image = _FakeImage(None, query_lsid="ignored")
-    monkeypatch.setattr(
-        no_row_image._conn,
-        "getQueryService",
-        lambda: type(
-            "EmptyQueryService",
-            (),
-            {"projection": lambda self, *args, **kwargs: []},
-        )(),
-    )
-    assert zarr_utils._resolve_image_external_lsid(no_row_image) is None
+    monkeypatch.setattr(no_row_image._conn, "getQueryService", _EmptyQueryService)
+    assert _resolve_image_external_lsid(no_row_image) is None
 
 
 def test_read_store_attrs_and_format_resolution_support_zarr_json_and_v04(
@@ -767,21 +761,20 @@ def test_read_store_attrs_and_format_resolution_support_zarr_json_and_v04(
     }
     (tmp_path / "zarr.json").write_text(json.dumps(payload), encoding="utf-8")
 
-    assert zarr_utils._read_store_attrs(tmp_path) == payload["attributes"]
+    assert _read_store_attrs(tmp_path) == payload["attributes"]
 
     fake_format_module = SimpleNamespace(
         CurrentFormat=lambda: "current-format",
         FormatV04=lambda: "format-v04",
     )
     monkeypatch.setitem(sys.modules, "ome_zarr.format", fake_format_module)
-    assert zarr_utils._resolve_ome_zarr_format(tmp_path) == "format-v04"
+    assert _resolve_ome_zarr_format(tmp_path) == "format-v04"
 
     monkeypatch.setattr(
-        zarr_utils,
-        "_read_store_attrs",
+        "omero_web_zarr.utils._read_store_attrs",
         lambda store_root: (_ for _ in ()).throw(OSError("missing")),
     )
-    assert zarr_utils._resolve_ome_zarr_format(tmp_path) == "current-format"
+    assert _resolve_ome_zarr_format(tmp_path) == "current-format"
 
 
 def test_load_store_backed_image_node_reader_and_cache_fallbacks(tmp_path, monkeypatch):
@@ -796,16 +789,14 @@ def test_load_store_backed_image_node_reader_and_cache_fallbacks(tmp_path, monke
     monkeypatch.setitem(sys.modules, "ome_zarr.io", fake_io)
     monkeypatch.setitem(sys.modules, "ome_zarr.reader", fake_reader)
     monkeypatch.setattr(
-        zarr_utils,
-        "_resolve_ome_zarr_format",
+        "omero_web_zarr.utils._resolve_ome_zarr_format",
         lambda store_root: "fmt",
     )
     monkeypatch.setattr(
-        zarr_utils,
-        "_load_store_backed_image_node_from_metadata",
+        "omero_web_zarr.utils._load_store_backed_image_node_from_metadata",
         lambda store_root: (_ for _ in ()).throw(RuntimeError("metadata failed")),
     )
-    zarr_utils._load_store_backed_image_node_cached.cache_clear()
+    _load_store_backed_image_node_cached.cache_clear()
 
     node = load_store_backed_image_node(image)
     cached = load_store_backed_image_node(image)
@@ -818,8 +809,7 @@ def test_load_store_backed_image_node_reader_and_cache_fallbacks(tmp_path, monke
 
     missing_store_image = _MissingStoreImage()
     monkeypatch.setattr(
-        zarr_utils,
-        "resolve_image_backing_zarr_store",
+        "omero_web_zarr.utils.resolve_image_backing_zarr_store",
         lambda image: (_ for _ in ()).throw(OSError("gone")),
     )
     assert load_store_backed_image_node(missing_store_image) is None
@@ -834,7 +824,7 @@ def test_store_backed_dataset_and_render_helpers_cover_fallback_paths():
         {"axes": ["z", "y", "x"]},
     )
 
-    assert zarr_utils.get_store_backed_datasets(node) == [{"path": "0"}, {"path": "1"}]
+    assert get_store_backed_datasets(node) == [{"path": "0"}, {"path": "1"}]
 
     colorful_node = _FakeNode(
         [np.array([[[0, 10], [10, 0]]], dtype=np.uint16)],

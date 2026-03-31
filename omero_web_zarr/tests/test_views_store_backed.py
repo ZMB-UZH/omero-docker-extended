@@ -26,6 +26,10 @@ django.setup()
 from omero_web_zarr import views
 
 
+def _response_text(response) -> str:
+    return b"".join(response.streaming_content).decode("utf-8")
+
+
 class _Value:
     def __init__(self, value):
         self.val = value
@@ -390,7 +394,7 @@ def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
         "/zarr/vizarr/", {"source": "/zarr/v0.4/image/9.zarr"}
     )
     shell_response = views.apps(shell_request, "vizarr", "")
-    shell_html = shell_response.content.decode("utf-8")
+    shell_html = _response_text(shell_response)
 
     assert shell_response.status_code == 200
     assert '<base href="https://hms-dbmi.github.io/vizarr/">' in shell_html

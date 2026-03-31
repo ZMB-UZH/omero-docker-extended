@@ -11,7 +11,6 @@ from csv import Error as CsvError
 from html import escape
 from http.cookies import SimpleCookie
 from http.client import HTTPConnection
-from http.client import HTTPMessage
 from urllib.parse import quote
 from urllib.parse import urlparse
 from urllib.parse import urlencode
@@ -19,15 +18,17 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
-import urllib.error
-import urllib.request
 import urllib.parse
+import requests
 
 from django.http import JsonResponse
 from django.http import HttpResponse
+from django.http import HttpResponseNotAllowed
 from django.shortcuts import render
+from django.template.backends.django import DjangoTemplates
+from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie
 from omeroweb.decorators import login_required
 from omero_plugin_common.logging_utils import (
     sanitize_log_value,
@@ -57,6 +58,15 @@ logger = logging.getLogger(__name__)
 LOG_TABLE_ROW_CAP = 5000
 _SAFE_REDIRECT_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_PROXY_SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
+_INLINE_TEMPLATE_BACKEND = DjangoTemplates(
+    {
+        "NAME": "inline_admin_tools",
+        "DIRS": [],
+        "APP_DIRS": False,
+        "OPTIONS": {},
+    }
+)
 
 
 def _to_int_env(name: str, default: int) -> int:
@@ -69,17 +79,43 @@ def _to_int_env(name: str, default: int) -> int:
         return default
 
 
+def _validated_http_url(url: str, *, allow_query: bool = False) -> str:
+    """Return a normalized HTTP(S) URL or raise ValueError."""
+    parsed = urlparse(str(url or "").strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Invalid URL")
+    if parsed.username or parsed.password or parsed.fragment:
+        raise ValueError("Invalid URL")
+    if not allow_query and parsed.query:
+        raise ValueError("Invalid URL")
+    return urllib.parse.urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path.rstrip("/"),
+            "",
+            parsed.query if allow_query else "",
+            "",
+        )
+    )
+
+
 def _probe_http_url(url: str, timeout_seconds: float = 2.5) -> Dict[str, object]:
     """Probe an HTTP endpoint and return availability diagnostics."""
     try:
-        request = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            status_code = int(getattr(response, "status", 0) or 0)
-            return {"ok": 200 <= status_code < 400, "status": status_code, "error": ""}
-    except urllib.error.HTTPError as exc:
-        return {"ok": False, "status": int(exc.code), "error": f"HTTP {exc.code}"}
-    except urllib.error.URLError as exc:
-        logger.warning("HTTP probe failed for %s: %s", url, exc.reason)
+        response = requests.get(
+            _validated_http_url(url),
+            timeout=timeout_seconds,
+            allow_redirects=True,
+        )
+        status_code = int(response.status_code)
+        return {"ok": 200 <= status_code < 400, "status": status_code, "error": ""}
+    except (ValueError, requests.RequestException) as exc:
+        logger.warning(
+            "HTTP probe failed for %s: %s",
+            sanitize_url_for_logging(url),
+            sanitize_log_value(exc),
+        )
         return {"ok": False, "status": 0, "error": "Connection failed"}
 
 
@@ -146,9 +182,7 @@ def _proxy_http_request(
     """Proxy an HTTP request to a backend URL and return the response body."""
     try:
         normalized_path, _ignored_query = _normalize_proxy_request_target(path)
-        base_parsed = urllib.parse.urlparse(base_url)
-        if base_parsed.scheme not in {"http", "https"} or not base_parsed.netloc:
-            return JsonResponse({"error": "Invalid proxy target"}, status=400)
+        base_parsed = urllib.parse.urlparse(_validated_http_url(base_url))
         # Reconstruct the URL from validated base components + normalized path
         # to prevent any user-controlled input from altering the scheme or host.
         safe_path = base_parsed.path.rstrip("/")
@@ -166,7 +200,7 @@ def _proxy_http_request(
                 "",  # fragment
             )
         )
-    except Exception:
+    except ValueError:
         return JsonResponse({"error": "Invalid URL format"}, status=400)
 
     forwarded_headers = {}
@@ -191,60 +225,39 @@ def _proxy_http_request(
             if forwarded_headers.get("Referer"):
                 forwarded_headers["Referer"] = f"{backend_origin}/"
 
-    request = urllib.request.Request(
-        target_url,
-        data=(
-            django_request.body
-            if django_request.method in {"POST", "PUT", "PATCH"}
-            else None
-        ),
-        headers=forwarded_headers,
-        method=django_request.method,
-    )
     try:
-        with urllib.request.urlopen(request, timeout=10.0) as response:
-            headers: HTTPMessage = response.headers
-            content_type = str(headers.get("Content-Type", "") or "").lower()
-            if (
-                normalized_path == "api/v1/notifications/live"
-                and content_type.startswith("text/event-stream")
-            ):
-                logger.info(
-                    "Proxy suppressed unsupported event stream target=%s",
-                    sanitize_url_for_logging(target_url),
-                )
-                suppressed = HttpResponse(status=204)
-                suppressed["Cache-Control"] = "no-store"
-                return suppressed
-
-            payload = response.read()
-            return _build_proxied_response(
-                payload,
-                status_code=int(response.status),
-                headers=headers,
-                base_url=base_url,
-                proxy_prefix=proxy_prefix,
+        response = requests.request(
+            method=django_request.method,
+            url=target_url,
+            data=(
+                django_request.body
+                if django_request.method in {"POST", "PUT", "PATCH"}
+                else None
+            ),
+            headers=forwarded_headers,
+            timeout=10.0,
+            allow_redirects=False,
+        )
+        headers = getattr(getattr(response, "raw", None), "headers", response.headers)
+        content_type = str(response.headers.get("Content-Type", "") or "").lower()
+        if normalized_path == "api/v1/notifications/live" and content_type.startswith(
+            "text/event-stream"
+        ):
+            logger.info(
+                "Proxy suppressed unsupported event stream target=%s",
+                sanitize_url_for_logging(target_url),
             )
-    except urllib.error.HTTPError as exc:
-        body = exc.read()
+            suppressed = HttpResponse(status=204)
+            suppressed["Cache-Control"] = "no-store"
+            return suppressed
         return _build_proxied_response(
-            body,
-            status_code=int(exc.code),
-            headers=exc.headers,
+            response.content,
+            status_code=int(response.status_code),
+            headers=headers,
             base_url=base_url,
             proxy_prefix=proxy_prefix,
         )
-    except urllib.error.URLError as exc:
-        logger.warning(
-            "Proxy backend unreachable target=%s reason=%s",
-            sanitize_url_for_logging(target_url),
-            sanitize_log_value(exc.reason),
-        )
-        return JsonResponse(
-            {"error": "Backend unreachable."},
-            status=502,
-        )
-    except (TimeoutError, socket.timeout) as exc:
+    except (requests.Timeout, TimeoutError, socket.timeout) as exc:
         logger.warning(
             "Proxy backend timed out target=%s reason=%s",
             sanitize_url_for_logging(target_url),
@@ -254,18 +267,49 @@ def _proxy_http_request(
             {"error": "Backend timed out."},
             status=504,
         )
+    except requests.RequestException as exc:
+        logger.warning(
+            "Proxy backend unreachable target=%s reason=%s",
+            sanitize_url_for_logging(target_url),
+            sanitize_log_value(exc),
+        )
+        return JsonResponse(
+            {"error": "Backend unreachable."},
+            status=502,
+        )
+
+
+def _header_first(headers, name: str, default: str = "") -> str:
+    value = None
+    getter = getattr(headers, "get", None)
+    if callable(getter):
+        value = getter(name, default)
+    if value in (None, ""):
+        value = default
+    return str(value or default)
+
+
+def _header_values(headers, name: str) -> List[str]:
+    for attr in ("get_all", "getlist"):
+        getter = getattr(headers, attr, None)
+        if callable(getter):
+            values = getter(name)
+            if values:
+                return [str(value) for value in values if value]
+    value = _header_first(headers, name, "")
+    return [value] if value else []
 
 
 def _build_proxied_response(
     payload: bytes,
     *,
     status_code: int,
-    headers: HTTPMessage,
+    headers,
     base_url: str,
     proxy_prefix: str,
 ) -> HttpResponse:
     """Build a Django response from backend payload and headers."""
-    content_type = headers.get("Content-Type", "application/octet-stream")
+    content_type = _header_first(headers, "Content-Type", "application/octet-stream")
     if "text/html" in content_type and proxy_prefix:
         try:
             text = payload.decode("utf-8")
@@ -297,11 +341,11 @@ def _build_proxied_response(
         payload = text.encode("utf-8")
     proxied = HttpResponse(payload, status=status_code, content_type=content_type)
     for header_name in ("Cache-Control", "ETag", "Last-Modified"):
-        header_value = headers.get(header_name)
+        header_value = _header_first(headers, header_name, "")
         if header_value:
             proxied[header_name] = header_value
     _copy_set_cookie_headers(headers, proxied, proxy_prefix)
-    location = headers.get("Location")
+    location = _header_first(headers, "Location", "")
     if location:
         proxied["Location"] = _rewrite_proxied_location(
             location, base_url, proxy_prefix
@@ -359,12 +403,12 @@ def _rewrite_proxied_location(location: str, base_url: str, proxy_prefix: str) -
 
 
 def _copy_set_cookie_headers(
-    backend_headers: HTTPMessage,
+    backend_headers,
     response: HttpResponse,
     proxy_prefix: str,
 ) -> None:
     """Copy backend Set-Cookie headers and rewrite path for proxied requests."""
-    raw_set_cookie_headers = backend_headers.get_all("Set-Cookie", [])
+    raw_set_cookie_headers = _header_values(backend_headers, "Set-Cookie")
     for raw_cookie in raw_set_cookie_headers:
         parsed_cookie = SimpleCookie()
         parsed_cookie.load(raw_cookie)
@@ -442,64 +486,72 @@ def _grafana_unavailable_response(
     if not attempted_targets:
         attempted_targets = "configured Grafana endpoints"
 
-    template = f"""<!doctype html>
-<html lang=\"en\">
+    template = _INLINE_TEMPLATE_BACKEND.from_string(
+        """<!doctype html>
+<html lang="en">
   <head>
-    <meta charset=\"utf-8\" />
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Grafana temporarily unavailable</title>
     <style>
-      body {{
+      body {
         margin: 0;
         padding: 24px;
         background: #0b1020;
         color: #e5e7eb;
         font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      }}
-      .panel {{
+      }
+      .panel {
         max-width: 880px;
         margin: 24px auto;
         border: 1px solid #334155;
         border-radius: 12px;
         background: #111827;
         padding: 24px;
-      }}
-      h1 {{ margin: 0 0 8px; font-size: 1.5rem; }}
-      p {{ margin: 0 0 12px; line-height: 1.5; }}
-      code {{ background: #0f172a; border-radius: 4px; padding: 2px 6px; }}
-      .actions {{ margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap; }}
-      .btn {{
+      }
+      h1 { margin: 0 0 8px; font-size: 1.5rem; }
+      p { margin: 0 0 12px; line-height: 1.5; }
+      code { background: #0f172a; border-radius: 4px; padding: 2px 6px; }
+      .actions { margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap; }
+      .btn {
         text-decoration: none;
         color: #111827;
         background: #38bdf8;
         border-radius: 8px;
         padding: 8px 14px;
         font-weight: 600;
-      }}
-      .btn.secondary {{ background: #374151; color: #f9fafb; }}
+      }
+      .btn.secondary { background: #374151; color: #f9fafb; }
     </style>
   </head>
   <body>
-    <div class=\"panel\">
+    <div class="panel">
       <h1>Grafana is temporarily unavailable</h1>
       <p>The monitoring dashboard cannot be loaded right now because Grafana is not reachable from OMERO.web.</p>
-      <p><strong>Upstream status:</strong> <code>{status_code}</code></p>
-      <p><strong>Checked endpoints:</strong> <code>{attempted_targets}</code></p>
+      <p><strong>Upstream status:</strong> <code>{{ status_code }}</code></p>
+      <p><strong>Checked endpoints:</strong> <code>{{ attempted_targets }}</code></p>
       <p>Recommended checks: ensure the Grafana container is running and healthy, then retry.</p>
-      <div class=\"actions\">
-        <a class=\"btn\" href=\"{escape(refreshed_path)}\">Retry dashboard</a>
-        <a class=\"btn secondary\" href=\"javascript:window.history.back()\">Back</a>
+      <div class="actions">
+        <a class="btn" href="{{ refreshed_path }}">Retry dashboard</a>
+        <a class="btn secondary" href="javascript:window.history.back()">Back</a>
       </div>
     </div>
   </body>
-</html>
-"""
-    response = HttpResponse(
-        template, status=503, content_type="text/html; charset=utf-8"
+</html>"""
+    )
+    response = TemplateResponse(
+        None,
+        template,
+        {
+            "status_code": status_code,
+            "attempted_targets": attempted_targets,
+            "refreshed_path": refreshed_path,
+        },
+        status=503,
     )
     response["Cache-Control"] = "no-store"
     response["Retry-After"] = "30"
-    return response
+    return response.render()
 
 
 def _is_internal_hostname(hostname: str) -> bool:
@@ -1023,10 +1075,12 @@ def _load_compose_service_names(compose_file: str = "docker-compose.yml") -> Lis
 
 def _prometheus_instant_query(prometheus_base_url: str, expr: str) -> Optional[float]:
     """Execute a Prometheus instant query and return the first numeric value."""
-    query = urlencode({"query": expr})
-    query_url = f"{prometheus_base_url.rstrip('/')}/api/v1/query?{query}"
-    with urllib.request.urlopen(query_url, timeout=5.0) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    response = requests.get(
+        f"{_validated_http_url(prometheus_base_url).rstrip('/')}/api/v1/query",
+        params={"query": expr},
+        timeout=5.0,
+    )
+    payload = response.json()
     results = payload.get("data", {}).get("result", [])
     if not results:
         return None
@@ -1067,10 +1121,12 @@ def _collect_recently_seen_services(prometheus_base_url: str) -> List[str]:
         "(max_over_time(container_last_seen"
         '{container_label_com_docker_compose_service!="",image!=""}[5m]))'
     )
-    query = urlencode({"query": expr})
-    query_url = f"{prometheus_base_url.rstrip('/')}/api/v1/query?{query}"
-    with urllib.request.urlopen(query_url, timeout=5.0) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    response = requests.get(
+        f"{_validated_http_url(prometheus_base_url).rstrip('/')}/api/v1/query",
+        params={"query": expr},
+        timeout=5.0,
+    )
+    payload = response.json()
 
     if payload.get("status") != "success":
         return []
@@ -1671,9 +1727,11 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         "services": [],
     }
     try:
-        targets_api = f"{prometheus_base_url.rstrip('/')}/api/v1/targets"
-        with urllib.request.urlopen(targets_api, timeout=5.0) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        response = requests.get(
+            f"{_validated_http_url(prometheus_base_url).rstrip('/')}/api/v1/targets",
+            timeout=5.0,
+        )
+        payload = response.json()
         active_targets = payload.get("data", {}).get("activeTargets", [])
         targets_overview["active"] = len(active_targets)
         targets_overview["up"] = sum(
@@ -1746,7 +1804,6 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     )
 
 
-@csrf_exempt
 @login_required()
 @require_root_user
 def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
@@ -1754,6 +1811,8 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     root_error = _require_root_user(request, conn)
     if root_error:
         return root_error
+    if request.method not in _PROXY_SAFE_METHODS:
+        return HttpResponseNotAllowed(_PROXY_SAFE_METHODS)
 
     grafana_base_url = os.environ.get(
         "ADMIN_TOOLS_GRAFANA_URL",
@@ -1806,7 +1865,6 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     return last_response
 
 
-@csrf_exempt
 @login_required()
 @require_root_user
 def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
@@ -1814,6 +1872,8 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     root_error = _require_root_user(request, conn)
     if root_error:
         return root_error
+    if request.method not in _PROXY_SAFE_METHODS:
+        return HttpResponseNotAllowed(_PROXY_SAFE_METHODS)
 
     prometheus_base_url = os.environ.get(
         "ADMIN_TOOLS_PROMETHEUS_URL",

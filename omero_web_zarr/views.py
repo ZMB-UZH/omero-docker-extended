@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -20,6 +21,7 @@ from django.http import (
     HttpResponse,
     HttpResponseRedirect,
     JsonResponse,
+    StreamingHttpResponse,
 )
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -124,9 +126,13 @@ def _build_store_backed_preview_context(request, image):
 def index(request, conn=None, **kwargs):
     home = reverse("omero_web_zarr_index")
     vizarr = reverse("zarr_app", kwargs={"app": "vizarr", "url": ""})
-    return HttpResponse(
+    instruction = (
         "To open an Image in Vizarr go to "
-        "%s?source=%sv0.4/image/[IMAGE_ID].zarr" % (vizarr, home)
+        f"{vizarr}?source={home}v0.4/image/[IMAGE_ID].zarr"
+    )
+    return StreamingHttpResponse(
+        (instruction,),
+        content_type="text/plain; charset=utf-8",
     )
 
 
@@ -333,7 +339,10 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
             data = reader.read()
 
     chunk_name = ".".join(str(dim) for dim in [t, c, z, y, x])
-    rsp = HttpResponse(data)
+    rsp = FileResponse(
+        io.BytesIO(data),
+        content_type="application/octet-stream",
+    )
     rsp["Content-Length"] = len(data)
     rsp["Content-Disposition"] = "attachment; filename=%s" % chunk_name
     return rsp
@@ -633,10 +642,11 @@ def apps(request, app, url):
             sanitize_log_value(app),
             exc_info=True,
         )
-        return HttpResponse(status=502)
+        return StreamingHttpResponse((), status=502)
 
-    response = HttpResponse(
-        _inject_launcher_head(html, base_url), content_type="text/html; charset=utf-8"
+    response = StreamingHttpResponse(
+        (_inject_launcher_head(html, base_url),),
+        content_type="text/html; charset=utf-8",
     )
     response["Cache-Control"] = f"private, max-age={_APP_SHELL_CACHE_SECONDS}"
     return response

@@ -28,6 +28,10 @@ django.setup()
 from omero_web_zarr import views
 
 
+def _response_text(response) -> str:
+    return b"".join(response.streaming_content).decode("utf-8")
+
+
 class _FakeLength:
     def __init__(self, value, symbol):
         self._value = value
@@ -237,7 +241,7 @@ def test_index_and_image_zgroup_return_non_store_defaults(monkeypatch):
     zgroup = views.image_zgroup(RequestFactory().get("/zarr/v0.4/image/1.zarr/.zgroup"))
 
     assert response.status_code == 200
-    assert "/zarr/v0.4/image/[IMAGE_ID].zarr" in response.content.decode("utf-8")
+    assert "/zarr/v0.4/image/[IMAGE_ID].zarr" in _response_text(response)
     assert json.loads(zgroup.content) == {"zarr_format": 2}
 
 
@@ -381,7 +385,7 @@ def test_image_chunk_pads_edge_tiles_for_non_store_pyramids(monkeypatch):
 
     assert response.status_code == 200
     assert response["Content-Disposition"] == "attachment; filename=0.0.0.1.1"
-    assert len(response.content) == 4
+    assert len(b"".join(response.streaming_content)) == 4
 
 
 def test_image_chunk_uses_raw_pixels_store_for_lower_pyramid_levels(monkeypatch):

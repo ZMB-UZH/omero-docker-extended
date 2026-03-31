@@ -781,8 +781,11 @@ def test_index_preview_rejects_invalid_ai_payloads_regexes_and_empty_results(
         ),
         conn=conn,
     )
-    assert missing_ai_payload.status_code == 200
-    assert b"AI parsing data missing" in missing_ai_payload.content
+    assert missing_ai_payload["template"] == "omeroweb_omp_plugin/index.html"
+    assert (
+        rendered["context"]["error_message"]
+        == index_view.errors.ai_parsing_data_missing()
+    )
 
     invalid_ai_payload = inspect.unwrap(index_view.index)(
         RequestFactory().post(
@@ -796,8 +799,11 @@ def test_index_preview_rejects_invalid_ai_payloads_regexes_and_empty_results(
         ),
         conn=conn,
     )
-    assert invalid_ai_payload.status_code == 200
-    assert b"Invalid AI parsing data" in invalid_ai_payload.content
+    assert invalid_ai_payload["template"] == "omeroweb_omp_plugin/index.html"
+    assert (
+        rendered["context"]["error_message"]
+        == index_view.errors.invalid_ai_parsing_data()
+    )
 
     invalid_regex = inspect.unwrap(index_view.index)(
         RequestFactory().post(
@@ -811,8 +817,11 @@ def test_index_preview_rejects_invalid_ai_payloads_regexes_and_empty_results(
         ),
         conn=conn,
     )
-    assert invalid_regex.status_code == 200
-    assert b"Invalid regex pattern" in invalid_regex.content
+    assert invalid_regex["template"] == "omeroweb_omp_plugin/index.html"
+    assert (
+        rendered["context"]["error_message"]
+        == index_view.errors.invalid_regex_pattern()
+    )
 
     monkeypatch.setattr(
         index_view, "check_major_action_rate_limit", lambda *_args: (True, 0)
@@ -884,8 +893,9 @@ def test_index_landing_page_and_top_level_error_paths(monkeypatch):
         RequestFactory().get("/"), conn=conn
     )
 
-    assert error_response.status_code == 500
-    assert b"Unexpected error" in error_response.content
+    assert error_response["template"] == "omeroweb_omp_plugin/index.html"
+    assert rendered["status"] == 500
+    assert rendered["context"]["error_message"] == index_view.errors.unexpected_error()
 
 
 def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkeypatch):

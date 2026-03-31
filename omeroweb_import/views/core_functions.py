@@ -100,6 +100,7 @@ __all__ = [
     "_append_job_message",
     "_append_txt_attachment_message",
     "_apply_upload_updates",
+    "_append_upload_chunks_to_staged_path",
     "_attach_txt_to_image_service",
     "_batch_find_images_by_name",
     "_build_staged_relative_path",
@@ -162,12 +163,15 @@ __all__ = [
     "_resolve_omero_host_port",
     "_resolve_staged_target_path",
     "_resolve_upload_root",
+    "_replace_staged_upload_file",
+    "_reset_staged_upload_file",
     "_robust_update_job",
     "_run_compatibility_check",
     "_run_omero_cli",
     "_safe_job_id",
     "_safe_relative_path",
     "_save_job",
+    "_staged_upload_size",
     "_native_zarr_import_enabled",
     "_special_methods_enabled",
     "_should_auto_skip_import",
@@ -501,9 +505,7 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
 
 
 def _job_path(job_id: str) -> Path:
-    return _resolve_managed_child_path(
-        _get_jobs_root(), f"{_validated_job_id(job_id)}.json"
-    )
+    return _get_jobs_root().resolve(strict=False) / f"{_validated_job_id(job_id)}.json"
 
 
 def _get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> int:
@@ -738,7 +740,7 @@ def _save_job(
             )
         try:
             with portalocker.Lock(lock_path, "a+", timeout=timeout):
-                _write_job_file(job_id, job_dict)
+                _write_json_file(path, job_dict)
             return True
         except (portalocker.exceptions.LockException, OSError) as exc:
             logger.warning(
@@ -871,6 +873,65 @@ def _resolve_staged_target_path(upload_root: Path, staged_path: str):
 def _validate_staged_target_path(upload_root: Path, staged_path: str):
     _, error = _resolve_staged_target_path(upload_root, staged_path)
     return error
+
+
+def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, upload):
+    target, error = _resolve_staged_target_path(upload_root, staged_path)
+    if error:
+        return None, None, error
+
+    bytes_written = 0
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("ab") as handle:
+            for chunk in upload.chunks():
+                handle.write(chunk)
+                bytes_written += len(chunk)
+        saved_size = target.stat().st_size if target.exists() else 0
+    except OSError as exc:
+        return None, None, exc
+    return bytes_written, saved_size, None
+
+
+def _reset_staged_upload_file(upload_root: Path, staged_path: str):
+    target, error = _resolve_staged_target_path(upload_root, staged_path)
+    if error:
+        return error
+
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            target.unlink()
+    except OSError as exc:
+        return exc
+    return None
+
+
+def _staged_upload_size(upload_root: Path, staged_path: str):
+    target, error = _resolve_staged_target_path(upload_root, staged_path)
+    if error:
+        return None, error
+
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        return (target.stat().st_size if target.exists() else 0), None
+    except OSError as exc:
+        return None, exc
+
+
+def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
+    target, error = _resolve_staged_target_path(upload_root, staged_path)
+    if error:
+        return None, error
+
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("wb") as handle:
+            for chunk in upload.chunks():
+                handle.write(chunk)
+    except OSError as exc:
+        return None, exc
+    return target.stat().st_size if target.exists() else 0, None
 
 
 def _build_staged_relative_path(relative_path: str) -> str:
@@ -2987,9 +3048,9 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
                 """
 
                 params = omero.sys.ParametersI()
-                params.addLong("did", dataset_id)
-                params.addString("name", file_name)
-                params.page(0, 100)  # Limit results
+                _params_add_long(params, "did", dataset_id)
+                _params_add_string(params, "name", file_name)
+                _params_page(params, 0, 100)  # Limit results
 
                 images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
 
@@ -3009,8 +3070,8 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
         try:
             query = "SELECT i FROM Image i WHERE i.name = :name"
             params = omero.sys.ParametersI()
-            params.addString("name", file_name)
-            params.page(0, 100)
+            _params_add_string(params, "name", file_name)
+            _params_page(params, 0, 100)
 
             images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
 
@@ -3035,6 +3096,51 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
         return None
 
 
+def _params_add_string(params, key, value):
+    add_string = getattr(params, "addString", None)
+    if callable(add_string):
+        add_string(key, value)
+        return
+
+    generic_add = getattr(params, "add", None)
+    if callable(generic_add):
+        rstring_factory = getattr(getattr(omero, "rtypes", None), "rstring", rstring)
+        generic_add(key, rstring_factory(value))
+        return
+
+    values = getattr(params, "values", None)
+    if isinstance(values, dict):
+        values[key] = value
+        return
+
+    raise AttributeError(f"Unsupported OMERO parameter object for string key {key!r}")
+
+
+def _params_add_long(params, key, value):
+    add_long = getattr(params, "addLong", None)
+    if callable(add_long):
+        add_long(key, value)
+        return
+
+    generic_add = getattr(params, "add", None)
+    if callable(generic_add):
+        generic_add(key, value)
+        return
+
+    values = getattr(params, "values", None)
+    if isinstance(values, dict):
+        values[key] = value
+        return
+
+    raise AttributeError(f"Unsupported OMERO parameter object for integer key {key!r}")
+
+
+def _params_page(params, offset, size):
+    page = getattr(params, "page", None)
+    if callable(page):
+        page(offset, size)
+
+
 def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_seconds=60):
     """
     Find multiple images in a single query - MUCH faster than individual lookups.
@@ -3055,25 +3161,27 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
     try:
         qs = conn.getQueryService()
 
-        # Build IN clause safely
-        escaped_names = [name.replace("'", "''") for name in file_names]
-        name_list = ", ".join([f"'{name}'" for name in escaped_names])
+        params = omero.sys.ParametersI()
+        name_clauses = []
+        for idx, file_name in enumerate(file_names):
+            param_name = f"name_{idx}"
+            name_clauses.append(f"i.name = :{param_name}")
+            _params_add_string(params, param_name, file_name)
+        name_filter = " OR ".join(name_clauses)
 
         if dataset_id:
             query = f"""
                 SELECT i FROM Image i
                 JOIN FETCH i.datasetLinks dil
                 WHERE dil.parent.id = :did
-                AND i.name IN ({name_list})
+                AND ({name_filter})
             """
-            params = omero.sys.ParametersI()
-            params.addLong("did", dataset_id)
+            _params_add_long(params, "did", dataset_id)
         else:
             query = f"""
                 SELECT i FROM Image i
-                WHERE i.name IN ({name_list})
+                WHERE ({name_filter})
             """
-            params = omero.sys.ParametersI()
 
         logger.info(
             "Batch searching for %d images (dataset_id=%s)", len(file_names), dataset_id
@@ -3265,9 +3373,8 @@ def _open_service_connection(
                 effective_group = int(group_override)
             except Exception:
                 logger.warning(
-                    "Ignoring invalid %s override %r; falling back to the job group context.",
+                    "Ignoring invalid %s override; falling back to the job group context.",
                     JOB_SERVICE_GROUP_ENV,
-                    sanitize_log_value(group_override),
                 )
         if effective_group is None and group_id is not None:
             effective_group = int(group_id)
@@ -3750,9 +3857,23 @@ def _validated_job_id(value: str) -> str:
 
 
 def _job_lock_path(job_id: str) -> Path:
-    return _resolve_managed_child_path(
-        _get_jobs_root(), f".{_validated_job_id(job_id)}.lock"
-    )
+    return _get_jobs_root().resolve(strict=False) / f".{_validated_job_id(job_id)}.lock"
+
+
+def _resolve_managed_child_parts(
+    root: Path, relative_parts: tuple[str, ...], *, max_bytes: int = None
+) -> Path:
+    if not relative_parts:
+        raise ValueError(errors.invalid_filename(""))
+
+    root_resolved = root.resolve(strict=False)
+    target = root_resolved.joinpath(*relative_parts)
+    if max_bytes is not None and len(os.fsencode(str(target))) > max_bytes:
+        raise ValueError(errors.file_path_too_long("/".join(relative_parts), max_bytes))
+
+    target_resolved = target.resolve(strict=False)
+    target_resolved.relative_to(root_resolved)
+    return target_resolved
 
 
 def _resolve_managed_child_path(
@@ -3762,28 +3883,26 @@ def _resolve_managed_child_path(
     if normalize_error:
         raise ValueError(normalize_error)
 
-    root_resolved = root.resolve(strict=False)
-    target = root_resolved / normalized_path
-    if max_bytes is not None and len(os.fsencode(str(target))) > max_bytes:
-        raise ValueError(errors.file_path_too_long(relative_path, max_bytes))
-
-    target_resolved = target.resolve(strict=False)
-    target_resolved.relative_to(root_resolved)
-    return target_resolved
+    return _resolve_managed_child_parts(
+        root,
+        PurePosixPath(normalized_path).parts,
+        max_bytes=max_bytes,
+    )
 
 
 def _resolve_managed_directory_path(path: Path) -> Path:
-    candidate = Path(path)
+    candidate = Path(path).resolve(strict=False)
     for root in (_get_upload_root(), _get_jobs_root()):
+        root_resolved = root.resolve(strict=False)
         try:
-            relative = candidate.relative_to(root)
+            relative = candidate.relative_to(root_resolved)
         except ValueError:
             continue
         if not relative.parts:
-            return root.resolve(strict=False)
+            return root_resolved
         if any(part in ("", ".", "..") for part in relative.parts):
             raise ValueError("Invalid managed directory path.")
-        return _resolve_managed_child_path(root, "/".join(relative.parts))
+        return _resolve_managed_child_parts(root_resolved, relative.parts)
     raise ValueError("Directory is outside managed upload roots.")
 
 
@@ -3802,14 +3921,16 @@ def _fsync_jobs_directory():
     _fsync_directory(_get_jobs_root())
 
 
-def _read_job_file(job_id: str):
-    path = _job_path(job_id)
+def _read_json_file(path: Path):
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
-def _write_job_file(job_id: str, job_dict):
-    path = _job_path(job_id)
+def _read_job_file(job_id: str):
+    return _read_json_file(_job_path(job_id))
+
+
+def _write_json_file(path: Path, payload):
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -3821,7 +3942,7 @@ def _write_job_file(job_id: str, job_dict):
             delete=False,
         ) as handle:
             tmp_path = Path(handle.name)
-            json.dump(job_dict, handle)
+            json.dump(payload, handle)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_path, path)
@@ -3834,6 +3955,10 @@ def _write_job_file(job_id: str, job_dict):
                 tmp_path.unlink()
             except OSError:
                 logger.debug("Suppressed exception in cleanup", exc_info=True)
+
+
+def _write_job_file(job_id: str, job_dict):
+    return _write_json_file(_job_path(job_id), job_dict)
 
 
 def _apply_upload_updates(job_id: str, updates: list, errors: list):
@@ -5996,15 +6121,16 @@ def _verify_import_via_api(
         candidates = [n for n in (import_name, file_name) if n]
         if not candidates:
             return []
-        placeholders = " OR ".join(
-            ["i.name = :n%d" % idx for idx in range(len(candidates))]
-        )
+        placeholders = []
         for idx, name in enumerate(candidates):
-            params.add("n%d" % idx, omero.rtypes.rstring(name))
+            param_name = f"n{idx}"
+            placeholders.append(f"i.name = :{param_name}")
+            _params_add_string(params, param_name, name)
+        name_clause = " OR ".join(placeholders)
         query = (
             "SELECT i.id FROM Image i "
             "JOIN i.datasetLinks dl "
-            "WHERE dl.parent.id = :id AND (%s)" % placeholders
+            f"WHERE dl.parent.id = :id AND ({name_clause})"
         )
         qs = conn.getQueryService()
         rows = qs.projection(query, params, conn.SERVICE_OPTS)

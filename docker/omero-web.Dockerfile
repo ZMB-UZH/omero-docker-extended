@@ -65,7 +65,9 @@ RUN set -euo pipefail; \
         echo "Skipping optional OS updates (APPLY_OMEROWEB_DNF_UPDATES=${APPLY_OMEROWEB_DNF_UPDATES}, APPLY_DNF_UPDATES=${APPLY_DNF_UPDATES})."; \
         exit 0; \
     fi; \
-    dnf -y update --security || dnf -y update
+    dnf -y update --security || dnf -y update; \
+    dnf clean all || true; \
+    rm -rf /var/cache/dnf /var/tmp/* || true
 
 # Install build dependencies required for installing OMERO Python API (omero-py)
 # NOTE: omero-py depends on ZeroC Ice (native extension) and cannot be installed without a compiler
@@ -379,6 +381,8 @@ RUN set -euo pipefail; \
     fi; \
     echo "=== Final security hardening: OS packages (dnf) ==="; \
     dnf -y update || echo "WARNING: dnf update failed (non-fatal for hardening)."; \
+    dnf clean all || true; \
+    rm -rf /var/cache/dnf /var/tmp/* || true; \
     echo "=== Final security hardening: removing unnecessary packages ==="; \
     dnf -y remove --noautoremove \
         vim-minimal \

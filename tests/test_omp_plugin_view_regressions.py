@@ -885,8 +885,10 @@ class OmpPluginViewRegressionTests(TestCase):
             response = view_module.index(request, conn=mock.Mock())
 
         self.assertEqual(200, response["status"])
-        self.assertIn("Invalid AI parsing data", response["content"])
-        self.assertNotIn("Expecting", response["content"])
+        self.assertEqual(
+            "Invalid AI parsing data.",
+            response["context"]["error_message"],
+        )
 
     def test_index_view_preview_hides_regex_exception_details(self) -> None:
         view_module = importlib.import_module("omeroweb_omp_plugin.views.index_view")
@@ -911,8 +913,10 @@ class OmpPluginViewRegressionTests(TestCase):
             response = view_module.index(request, conn=mock.Mock())
 
         self.assertEqual(200, response["status"])
-        self.assertIn("Invalid regex pattern.", response["content"])
-        self.assertNotIn("unterminated", response["content"])
+        self.assertEqual(
+            "Invalid regex pattern.",
+            response["context"]["error_message"],
+        )
 
     def test_index_view_hides_top_level_exception_details(self) -> None:
         view_module = importlib.import_module("omeroweb_omp_plugin.views.index_view")
@@ -927,8 +931,7 @@ class OmpPluginViewRegressionTests(TestCase):
             )
 
         self.assertEqual(500, response["status"])
-        self.assertIn("Unexpected error.", response["content"])
-        self.assertNotIn("secret", response["content"])
+        self.assertEqual("Unexpected error.", response["context"]["error_message"])
 
 
 if __name__ == "__main__":
