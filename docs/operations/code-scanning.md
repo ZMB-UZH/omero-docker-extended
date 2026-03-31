@@ -32,7 +32,24 @@ GitHub-native code scanning is the supported repository scanning surface here. R
 
 ## Alert inventory
 
-Last updated: 2026-03-15. Total open alerts: **~940** pre-config, **~370** post-config (scanner configuration eliminates ~570 false positives).
+Last full API refresh: **2026-03-31**.
+
+GitHub reported **123 open alerts on `main`** and **2 011 closed alerts** at the time of the latest refresh used for this runbook update.
+
+These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
+
+### Mandatory agent workflow
+
+1. Pull the latest open-alert total and exact alert list from the GitHub API before editing any code.
+2. Pull the closed-alert history from `docs/reference/code-scanning-resolved-findings.md` and copy the matching prevention rule into your working notes before you start coding.
+3. Fix root causes, not scanner strings. Avoid suppressions unless you can prove a false positive and document that proof.
+4. Prefer the narrowest safe rewrite that removes the vulnerable pattern at the helper boundary so sibling call sites inherit the fix.
+5. Re-run targeted tests for every touched package, plus repo-wide `ruff check`, `ruff format --check`, and `python3 tools/lint_docs_structure.py`.
+6. After pushing, refresh the live GitHub alert total again. Do not assume a local fix cleared an alert until GitHub reports it.
+
+### Historical snapshots below
+
+The detailed severity and scanner tables that follow are useful for understanding the repository's historical risk shape, but the live totals above are the authoritative starting point for new remediation work.
 
 ### Summary by severity
 
@@ -213,6 +230,8 @@ These categories may contain genuine issues that should be reviewed:
    ```
    Example: `Fix CodeQL/py/path-injection: validate upload path against managed root`
 
+8. **Stale-count rule**: Never quote an open-alert total from memory or from this document alone. Always refresh it from the GitHub API first and include the refresh date in your notes or PR text.
+
 ## AI agent coding guidelines — preventing new findings
 
 **These rules prevent introducing new code scanning alerts.** Follow them when writing or modifying code in this repository.
@@ -247,6 +266,10 @@ These categories may contain genuine issues that should be reviewed:
 9. **Use `random` only for non-security purposes.** For jitter, shuffling, or display randomization, `random` is fine. For tokens, session IDs, nonces, or any security-sensitive value, use `secrets` or `os.urandom`.
 
 10. **Environment variable names are not passwords.** Constants like `PASSWORD_ENV = "OMERO_DB_PASSWORD"` store the *name* of an env var, not a credential. Bandit B105 flags these — they are acceptable. Do not rename them to avoid the pattern; instead ensure actual secrets never appear in source code.
+
+11. **Treat cleanup findings as security signals.** `unused-import`, `unused-local-variable`, `unused-global-variable`, `import-and-import-from`, and `unreachable-statement` alerts usually mean a refactor drifted away from the real runtime behavior. Do not dismiss them as cosmetic.
+
+12. **Copy safe helper patterns instead of re-inventing them.** Before adding path, logging, SQL, subprocess, or HTTP code, search the repo for the corresponding hardened helper and reuse it. If you cannot reuse it, add a new helper and route all call sites through that helper.
 
 ### JavaScript in Django templates
 
