@@ -731,7 +731,11 @@ def test_upload_helpers_non_chunked_paths_and_preparation_errors(tmp_path, monke
         conn=object(),
     )
     assert response.status_code == 500
-    assert _payload(response) == {"ok": False, "error": "prep failed"}
+    assert _payload(response) == {
+        "ok": False,
+        "error": errors.unexpected_server_error_uploading_files(),
+    }
+    assert "prep failed" not in response.content.decode("utf-8")
 
     import_started = []
     job["files"][0]["status"] = "pending"
@@ -1070,7 +1074,11 @@ def test_chunk_import_confirm_prune_and_status_control_paths(tmp_path, monkeypat
         job_root,
     )
     assert response.status_code == 500
-    assert _payload(response) == {"ok": False, "error": "prep failed"}
+    assert _payload(response) == {
+        "ok": False,
+        "error": errors.unexpected_server_error_uploading_files(),
+    }
+    assert "prep failed" not in response.content.decode("utf-8")
 
     original_import_step = index_view._import_step
     monkeypatch.setattr(
@@ -1133,7 +1141,11 @@ def test_chunk_import_confirm_prune_and_status_control_paths(tmp_path, monkeypat
         conn=object(),
     )
     assert response.status_code == 500
-    assert _payload(response) == {"ok": False, "error": "prep failed"}
+    assert _payload(response) == {
+        "ok": False,
+        "error": errors.unexpected_server_error_importing(),
+    }
+    assert "prep failed" not in response.content.decode("utf-8")
 
     started = []
     monkeypatch.setattr(
@@ -1231,7 +1243,10 @@ def test_chunk_import_confirm_prune_and_status_control_paths(tmp_path, monkeypat
         RequestFactory().post("/"), job_id=job_id, conn=object()
     )
     assert response.status_code == 500
-    assert _payload(response) == {"ok": False, "error": "prep failed"}
+    assert _payload(response) == {
+        "ok": False,
+        "error": errors.unexpected_server_error_importing(),
+    }
 
     response = index_view.prune_upload(
         RequestFactory().get("/"), job_id=job_id, conn=object()
@@ -1340,7 +1355,10 @@ def test_chunk_import_confirm_prune_and_status_control_paths(tmp_path, monkeypat
         conn=object(),
     )
     assert response.status_code == 500
-    assert _payload(response) == {"ok": False, "error": "prep failed"}
+    assert _payload(response) == {
+        "ok": False,
+        "error": errors.unexpected_server_error_importing(),
+    }
 
     monkeypatch.setattr(
         index_view,
@@ -1378,4 +1396,7 @@ def test_chunk_import_confirm_prune_and_status_control_paths(tmp_path, monkeypat
         RequestFactory().get("/"), job_id=job_id, conn=object()
     )
     assert response.status_code == 500
-    assert _payload(response) == {"ok": False, "error": "prep failed"}
+    assert _payload(response) == {
+        "ok": False,
+        "error": errors.unexpected_server_error_importing(),
+    }
