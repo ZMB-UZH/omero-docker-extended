@@ -504,7 +504,10 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
 
 
 def _job_path(job_id: str) -> Path:
-    return _get_jobs_root().resolve(strict=False) / f"{_validated_job_id(job_id)}.json"
+    return _resolve_managed_child_parts(
+        _get_jobs_root(),
+        (f"{_validated_job_id(job_id)}.json",),
+    )
 
 
 def _get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> int:
@@ -739,7 +742,7 @@ def _save_job(
             )
         try:
             with portalocker.Lock(lock_path, "a+", timeout=timeout):
-                _write_json_file(path, job_dict)
+                _write_job_file(job_id, job_dict)
             return True
         except (portalocker.exceptions.LockException, OSError) as exc:
             logger.warning(
@@ -875,59 +878,87 @@ def _validate_staged_target_path(upload_root: Path, staged_path: str):
 
 
 def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, upload):
-    target, error = _resolve_staged_target_path(upload_root, staged_path)
-    if error:
-        return None, None, error
+    normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
+    if normalize_error:
+        return None, None, normalize_error
 
     bytes_written = 0
     try:
+        target = _resolve_managed_child_parts(
+            Path(upload_root),
+            PurePosixPath(normalized_path).parts,
+            max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
+        )
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("ab") as handle:
             for chunk in upload.chunks():
                 handle.write(chunk)
                 bytes_written += len(chunk)
         saved_size = target.stat().st_size if target.exists() else 0
+    except ValueError as exc:
+        return None, None, str(exc) or normalize_error
     except OSError as exc:
         return None, None, exc
     return bytes_written, saved_size, None
 
 
 def _reset_staged_upload_file(upload_root: Path, staged_path: str):
-    target, error = _resolve_staged_target_path(upload_root, staged_path)
-    if error:
-        return error
+    normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
+    if normalize_error:
+        return normalize_error
 
     try:
+        target = _resolve_managed_child_parts(
+            Path(upload_root),
+            PurePosixPath(normalized_path).parts,
+            max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
+        )
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists():
             target.unlink()
+    except ValueError as exc:
+        return str(exc) or normalize_error
     except OSError as exc:
         return exc
     return None
 
 
 def _staged_upload_size(upload_root: Path, staged_path: str):
-    target, error = _resolve_staged_target_path(upload_root, staged_path)
-    if error:
-        return None, error
+    normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
+    if normalize_error:
+        return None, normalize_error
 
     try:
+        target = _resolve_managed_child_parts(
+            Path(upload_root),
+            PurePosixPath(normalized_path).parts,
+            max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
+        )
         target.parent.mkdir(parents=True, exist_ok=True)
         return (target.stat().st_size if target.exists() else 0), None
+    except ValueError as exc:
+        return None, str(exc) or normalize_error
     except OSError as exc:
         return None, exc
 
 
 def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
-    target, error = _resolve_staged_target_path(upload_root, staged_path)
-    if error:
-        return None, error
+    normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
+    if normalize_error:
+        return None, normalize_error
 
     try:
+        target = _resolve_managed_child_parts(
+            Path(upload_root),
+            PurePosixPath(normalized_path).parts,
+            max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
+        )
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("wb") as handle:
             for chunk in upload.chunks():
                 handle.write(chunk)
+    except ValueError as exc:
+        return None, str(exc) or normalize_error
     except OSError as exc:
         return None, exc
     return target.stat().st_size if target.exists() else 0, None
@@ -3852,11 +3883,14 @@ def _safe_job_id(value: str) -> bool:
 def _validated_job_id(value: str) -> str:
     if not _safe_job_id(value):
         raise ValueError("Invalid job id.")
-    return str(value).lower()
+    return uuid.UUID(hex=str(value).lower()).hex
 
 
 def _job_lock_path(job_id: str) -> Path:
-    return _get_jobs_root().resolve(strict=False) / f".{_validated_job_id(job_id)}.lock"
+    return _resolve_managed_child_parts(
+        _get_jobs_root(),
+        (f".{_validated_job_id(job_id)}.lock",),
+    )
 
 
 def _resolve_managed_child_parts(
@@ -3865,14 +3899,32 @@ def _resolve_managed_child_parts(
     if not relative_parts:
         raise ValueError(errors.invalid_filename(""))
 
-    root_resolved = root.resolve(strict=False)
-    target = root_resolved.joinpath(*relative_parts)
-    if max_bytes is not None and len(os.fsencode(str(target))) > max_bytes:
-        raise ValueError(errors.file_path_too_long("/".join(relative_parts), max_bytes))
+    root_path = Path(root)
+    current = root_path
+    display_path = []
 
-    target_resolved = target.resolve(strict=False)
-    target_resolved.relative_to(root_resolved)
-    return target_resolved
+    for part in relative_parts:
+        part_text = str(part or "")
+        if (
+            not part_text
+            or part_text in {".", ".."}
+            or "/" in part_text
+            or "\\" in part_text
+        ):
+            raise ValueError(errors.invalid_filename("/".join(relative_parts)))
+        display_path.append(part_text)
+        current = current / part_text
+        if max_bytes is not None and len(os.fsencode(str(current))) > max_bytes:
+            raise ValueError(
+                errors.file_path_too_long("/".join(display_path), max_bytes)
+            )
+        try:
+            if current.exists() and current.is_symlink():
+                raise ValueError(errors.invalid_filename("/".join(display_path)))
+        except OSError as exc:
+            raise ValueError(errors.invalid_filename("/".join(display_path))) from exc
+
+    return current
 
 
 def _resolve_managed_child_path(
@@ -3890,18 +3942,23 @@ def _resolve_managed_child_path(
 
 
 def _resolve_managed_directory_path(path: Path) -> Path:
-    candidate = Path(path).resolve(strict=False)
+    candidate = Path(path)
     for root in (_get_upload_root(), _get_jobs_root()):
-        root_resolved = root.resolve(strict=False)
+        root_path = Path(root)
         try:
-            relative = candidate.relative_to(root_resolved)
+            relative = candidate.relative_to(root_path)
         except ValueError:
-            continue
+            candidate_absolute = candidate.absolute()
+            root_absolute = root_path.absolute()
+            try:
+                relative = candidate_absolute.relative_to(root_absolute)
+            except ValueError:
+                continue
         if not relative.parts:
-            return root_resolved
+            return root_path
         if any(part in ("", ".", "..") for part in relative.parts):
             raise ValueError("Invalid managed directory path.")
-        return _resolve_managed_child_parts(root_resolved, relative.parts)
+        return _resolve_managed_child_parts(root_path, relative.parts)
     raise ValueError("Directory is outside managed upload roots.")
 
 
@@ -3920,16 +3977,14 @@ def _fsync_jobs_directory():
     _fsync_directory(_get_jobs_root())
 
 
-def _read_json_file(path: Path):
+def _read_job_file(job_id: str):
+    path = _job_path(job_id)
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
-def _read_job_file(job_id: str):
-    return _read_json_file(_job_path(job_id))
-
-
-def _write_json_file(path: Path, payload):
+def _write_job_file(job_id: str, job_dict):
+    path = _job_path(job_id)
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -3941,7 +3996,7 @@ def _write_json_file(path: Path, payload):
             delete=False,
         ) as handle:
             tmp_path = Path(handle.name)
-            json.dump(payload, handle)
+            json.dump(job_dict, handle)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_path, path)
@@ -3954,10 +4009,6 @@ def _write_json_file(path: Path, payload):
                 tmp_path.unlink()
             except OSError:
                 logger.debug("Suppressed exception in cleanup", exc_info=True)
-
-
-def _write_job_file(job_id: str, job_dict):
-    return _write_json_file(_job_path(job_id), job_dict)
 
 
 def _apply_upload_updates(job_id: str, updates: list, errors: list):

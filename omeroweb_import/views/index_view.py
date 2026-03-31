@@ -456,6 +456,26 @@ def _prepare_job_import_datasets(job_id, job, conn):
     return _prepare_uploaded_job_dataset_targets(job_id, job, conn)
 
 
+def _upload_internal_error_response(job_id, detail, *, context: str):
+    logger.warning(
+        "%s for upload job %s: %s",
+        context,
+        sanitize_log_value(job_id),
+        sanitize_log_value(detail),
+    )
+    return json_error(errors.unexpected_server_error_uploading_files(), status=500)
+
+
+def _import_internal_error_response(job_id, detail, *, context: str):
+    logger.warning(
+        "%s for import job %s: %s",
+        context,
+        sanitize_log_value(job_id),
+        sanitize_log_value(detail),
+    )
+    return json_error(errors.unexpected_server_error_importing(), status=500)
+
+
 def _get_session_key(conn):
     from .core_functions import _get_session_key as _core_get_session_key
 
@@ -586,8 +606,8 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
             "Chunk offset mismatch for %s in job %s: existing=%s request_start=%s",
             sanitize_log_value(rel_path),
             sanitize_log_value(job_id),
-            existing_size,
-            chunk_start,
+            sanitize_log_value(existing_size),
+            sanitize_log_value(chunk_start),
         )
         return json_error(
             errors.upload_chunk_offset_mismatch(rel_path, existing_size, chunk_start),
@@ -627,8 +647,8 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
             "Chunk size mismatch for %s in job %s: expected=%s wrote=%s",
             sanitize_log_value(rel_path),
             sanitize_log_value(job_id),
-            expected_chunk_size,
-            bytes_written,
+            sanitize_log_value(expected_chunk_size),
+            sanitize_log_value(bytes_written),
         )
         return json_error(
             errors.upload_chunk_size_mismatch(
@@ -658,8 +678,8 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
             "Final chunk saved unexpected size for %s in job %s: expected=%s actual=%s",
             sanitize_log_value(rel_path),
             sanitize_log_value(job_id),
-            file_size,
-            saved_size,
+            sanitize_log_value(file_size),
+            sanitize_log_value(saved_size),
         )
         return json_error(
             errors.upload_chunk_incomplete(rel_path, file_size, saved_size), status=400
@@ -675,7 +695,11 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
         job_id, updated_job, conn
     )
     if prep_error:
-        return json_error(prep_error, status=500)
+        return _upload_internal_error_response(
+            job_id,
+            prep_error,
+            context="Failed to prepare uploaded chunk batch for import",
+        )
 
     if updated_job["status"] == "ready":
         _start_import_thread(job_id)
@@ -832,7 +856,11 @@ def _upload_files(request, job_id, conn):
         job_id, updated_job, conn
     )
     if prep_error:
-        return json_error(prep_error, status=500)
+        return _upload_internal_error_response(
+            job_id,
+            prep_error,
+            context="Failed to prepare uploaded files for import",
+        )
 
     if updated_job["status"] == "ready":
         _start_import_thread(job_id)
@@ -883,7 +911,11 @@ def _import_step(request, job_id, conn):
     if job.get("status") == "ready":
         job, prep_error = _prepare_ready_job_for_import_start(job_id, job, conn)
         if prep_error:
-            return json_error(prep_error, status=500)
+            return _import_internal_error_response(
+                job_id,
+                prep_error,
+                context="Failed to prepare import job before starting import",
+            )
         _start_import_thread(job_id)
         job = _load_job(job_id) or job
 
@@ -929,7 +961,11 @@ def confirm_import(request, job_id, conn=None, url=None, **kwargs):
         return json_error(errors.unable_update_upload_job_state(), status=500)
     prepared_job, prep_error = _prepare_ready_job_for_import_start(job_id, job, conn)
     if prep_error:
-        return json_error(prep_error, status=500)
+        return _import_internal_error_response(
+            job_id,
+            prep_error,
+            context="Failed to prepare confirmed import job",
+        )
     _start_import_thread(job_id)
 
     return JsonResponse({"ok": True, "status": "ready"})
@@ -1036,7 +1072,11 @@ def prune_upload(request, job_id, conn=None, url=None, **kwargs):
     if job.get("status") == "ready":
         job, prep_error = _prepare_ready_job_for_import_start(job_id, job, conn)
         if prep_error:
-            return json_error(prep_error, status=500)
+            return _import_internal_error_response(
+                job_id,
+                prep_error,
+                context="Failed to prepare pruned upload job for import",
+            )
         _start_import_thread(job_id)
 
     return JsonResponse({"ok": True, "status": job.get("status")})
@@ -1056,7 +1096,11 @@ def job_status(request, job_id, conn=None, url=None, **kwargs):
 
     job, prep_error = _prepare_uploaded_job_dataset_targets(job_id, job, conn)
     if prep_error:
-        return json_error(prep_error, status=500)
+        return _import_internal_error_response(
+            job_id,
+            prep_error,
+            context="Failed to prepare upload job status for import",
+        )
 
     if job.get("status") == "ready" and not job.get("import_thread_started"):
         _start_import_thread(job_id)
