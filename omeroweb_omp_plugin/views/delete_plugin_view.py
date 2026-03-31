@@ -25,6 +25,33 @@ from ..strings import errors as error_messages
 logger = logging.getLogger(__name__)
 
 OMERO = OMERO_CLI
+_DELETE_TARGET_KINDS = frozenset({"Annotation", "ImageAnnotationLink"})
+
+
+def _validated_delete_object_id(value, label: str) -> int:
+    object_id = int(value)
+    if object_id <= 0:
+        raise ValueError(f"Invalid {label}.")
+    return object_id
+
+
+def _run_omero_delete(cli_base_cmd, object_kind: str, object_id: int):
+    if object_kind not in _DELETE_TARGET_KINDS:
+        raise ValueError("Unsupported OMERO delete target.")
+    validated_id = _validated_delete_object_id(object_id, f"{object_kind} id")
+    cmd = [
+        *cli_base_cmd,
+        "delete",
+        f"{object_kind}:{validated_id}",
+        "--force",
+    ]
+    return subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        stdin=subprocess.DEVNULL,
+    )
 
 
 @login_required()
@@ -115,20 +142,14 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
             for aid in plugin_ann_ids:
                 try:
+                    aid = _validated_delete_object_id(aid, "annotation id")
                     link_ids = find_annotation_link_ids(conn, aid)
                     for lid in link_ids:
-                        link_cmd = [
-                            *cli_base_cmd,
-                            "delete",
-                            f"ImageAnnotationLink:{int(lid)}",
-                            "--force",
-                        ]
-                        link_result = subprocess.run(
-                            link_cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            text=True,
-                            stdin=subprocess.DEVNULL,
+                        lid = _validated_delete_object_id(lid, "annotation link id")
+                        link_result = _run_omero_delete(
+                            cli_base_cmd,
+                            "ImageAnnotationLink",
+                            lid,
                         )
                         if link_result.returncode != 0:
                             logger.warning(
@@ -161,20 +182,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                         )
                         continue
 
-                    cmd = [
-                        *cli_base_cmd,
-                        "delete",
-                        f"Annotation:{int(aid)}",
-                        "--force",
-                    ]
-
-                    result = subprocess.run(
-                        cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True,
-                        stdin=subprocess.DEVNULL,
-                    )
+                    result = _run_omero_delete(cli_base_cmd, "Annotation", aid)
 
                     if result.returncode != 0:
                         logger.warning(

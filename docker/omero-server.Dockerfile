@@ -303,7 +303,7 @@ RUN set -euo pipefail; \
     if [[ ! -d /tmp/ome-omero-scripts/omero ]]; then \
         echo "ERROR: Expected path 'omero/' not found in omero-scripts repo" >&2; \
         echo "Repo layout:" >&2; \
-        (cd /tmp/ome-omero-scripts && find . -maxdepth 2 -type d -print) >&2 || true; \
+        find /tmp/ome-omero-scripts -maxdepth 2 -type d -print >&2 || true; \
         exit 1; \
     fi; \
     \
@@ -341,7 +341,7 @@ RUN set -euo pipefail; \
     if [[ ! -f "${SCRIPT_SRC}" ]]; then \
         echo "ERROR: Figure_To_Pdf.py not found in the cloned OMERO.figure repo." >&2; \
         echo "Repo top-level layout is (FYI):" >&2; \
-        (cd /tmp/ome-omero-figure && find . -maxdepth 3 -type d -print) >&2 || true; \
+        find /tmp/ome-omero-figure -maxdepth 3 -type d -print >&2 || true; \
         exit 1; \
     fi; \
     mkdir -p /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts; \
@@ -363,9 +363,9 @@ RUN set -euo pipefail; \
     if [[ -z "${SCRIPT_SRC}" ]]; then \
         echo "ERROR: Export_CellProfiler_IDs.py not found anywhere in the cloned BIOP repo." >&2; \
         echo "Repo top-level layout is (FYI):" >&2; \
-        (cd /tmp/biop-omero-scripts && find . -maxdepth 2 -type d -print) >&2 || true; \
+        find /tmp/biop-omero-scripts -maxdepth 2 -type d -print >&2 || true; \
         echo "Nearest matches (filenames containing 'CellProfiler'):" >&2; \
-        (cd /tmp/biop-omero-scripts && find . -type f -iname '*cellprofiler*' -print) >&2 || true; \
+        find /tmp/biop-omero-scripts -type f -iname '*cellprofiler*' -print >&2 || true; \
         exit 1; \
     fi; \
     \

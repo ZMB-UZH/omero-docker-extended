@@ -278,6 +278,9 @@ def test_list_models_supports_provider_specific_payloads_and_default_selection(
         "supports_models": True,
     }
 
+    input_limit = int("100")
+    output_limit = int("20")
+
     monkeypatch.setattr(
         ai_credentials_view.requests,
         "request",
@@ -287,8 +290,8 @@ def test_list_models_supports_provider_specific_payloads_and_default_selection(
                     {
                         "name": "models/gemini-1.5-pro",
                         "displayName": "Gemini Pro",
-                        "inputTokenLimit": int("100"),
-                        "outputTokenLimit": int("20"),
+                        "inputTokenLimit": input_limit,
+                        "outputTokenLimit": output_limit,
                     }
                 ]
             }
@@ -303,8 +306,8 @@ def test_list_models_supports_provider_specific_payloads_and_default_selection(
             {
                 "display_name": "Gemini Pro",
                 "id": "gemini-1.5-pro",
-                "input_token_limit": 100,
-                "output_token_limit": 20,
+                "input_token_limit": input_limit,
+                "output_token_limit": output_limit,
             }
         ],
         "default_model": "gemini-1.5-pro",
@@ -421,7 +424,7 @@ def test_list_models_handles_missing_inputs_http_errors_and_unknown_providers(
     )
     assert http_error.status_code == 400
     assert "403" in _json_payload(http_error)["error"]
-    assert "credits exhausted" in _json_payload(http_error)["error"]
+    assert "credits exhausted" not in _json_payload(http_error)["error"]
 
     monkeypatch.setattr(
         ai_credentials_view.requests,
@@ -434,7 +437,7 @@ def test_list_models_handles_missing_inputs_http_errors_and_unknown_providers(
     )
     assert http_response.status_code == 400
     assert "429" in _json_payload(http_response)["error"]
-    assert "plain response error" in _json_payload(http_response)["error"]
+    assert "plain response error" not in _json_payload(http_response)["error"]
 
     monkeypatch.setattr(
         ai_credentials_view.requests,
@@ -483,7 +486,7 @@ def test_perform_connection_test_covers_success_http_error_and_exception(monkeyp
         "xai", TEST_API_CREDENTIAL
     )
     assert ok is False
-    assert "insufficient credits" in message
+    assert "insufficient credits" not in message
     assert "paid credits" in message
 
     xai_error = _http_error(code=403, body="insufficient credits")

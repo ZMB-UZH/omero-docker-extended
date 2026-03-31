@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from http.client import HTTPMessage
 from types import SimpleNamespace
+
 from django.test import RequestFactory
 
 from omeroweb_admin_tools.views.index_view import (
@@ -29,6 +30,23 @@ def _make_headers(d: dict) -> HTTPMessage:
     for key, value in d.items():
         msg[key] = value
     return msg
+
+
+class _RequestsResponse:
+    def __init__(
+        self,
+        status_code: int,
+        *,
+        headers: dict[str, str] | None = None,
+        payload: bytes = b"",
+    ) -> None:
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.content = payload
+        self.raw = SimpleNamespace(headers=_make_headers(self.headers))
+
+    def json(self):
+        return json.loads(self.content.decode("utf-8"))
 
 
 def test_load_compose_service_names_reads_service_block(tmp_path, monkeypatch) -> None:
@@ -152,24 +170,22 @@ def test_origin_from_url_normalizes_scheme_and_host() -> None:
 def test_proxy_http_request_rewrites_origin_headers_when_enabled(monkeypatch) -> None:
     captured = {}
 
-    class DummyResponse:
-        status = 200
-        headers = _make_headers({"Content-Type": "application/json"})
+    def fake_request(
+        method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
+    ):
+        captured["method"] = method
+        captured["url"] = url
+        captured["headers"] = dict(headers or {})
+        return _RequestsResponse(
+            200,
+            headers={"Content-Type": "application/json"},
+            payload=b'{"status":"ok"}',
+        )
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self):
-            return b'{"status":"ok"}'
-
-    def fake_urlopen(request, timeout=10.0):
-        captured["headers"] = dict(request.header_items())
-        return DummyResponse()
-
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.requests.request",
+        fake_request,
+    )
 
     class DummyDjangoRequest:
         method = "GET"
@@ -187,6 +203,8 @@ def test_proxy_http_request_rewrites_origin_headers_when_enabled(monkeypatch) ->
     )
 
     assert response.status_code == 200
+    assert captured["method"] == "GET"
+    assert captured["url"] == "https://grafana:3000/api/user"
     assert captured["headers"]["Origin"] == "https://grafana:3000"
     assert captured["headers"]["Referer"] == "https://grafana:3000/"
 
@@ -194,26 +212,22 @@ def test_proxy_http_request_rewrites_origin_headers_when_enabled(monkeypatch) ->
 def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
     captured = {}
 
-    class DummyResponse:
-        status = 200
-        headers = _make_headers({"Content-Type": "application/json"})
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self):
-            return b'{"status":"ok"}'
-
-    def fake_urlopen(request, timeout=10.0):
-        captured["method"] = request.get_method()
-        captured["data"] = request.data
+    def fake_request(
+        method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
+    ):
+        captured["method"] = method
+        captured["data"] = data
         captured["timeout"] = timeout
-        return DummyResponse()
+        return _RequestsResponse(
+            200,
+            headers={"Content-Type": "application/json"},
+            payload=b'{"status":"ok"}',
+        )
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.requests.request",
+        fake_request,
+    )
 
     class DummyDjangoRequest:
         method = "POST"
@@ -242,29 +256,23 @@ def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
 def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> None:
     captured = {}
 
-    class DummyResponse:
-        status = 200
-        headers = _make_headers(
-            {
+    def fake_request(
+        method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
+    ):
+        captured["headers"] = dict(headers or {})
+        return _RequestsResponse(
+            200,
+            headers={
                 "Content-Type": "application/json",
                 "Set-Cookie": "grafana_session=abc123; Path=/; HttpOnly",
-            }
+            },
+            payload=b'{"status":"ok"}',
         )
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self):
-            return b'{"status":"ok"}'
-
-    def fake_urlopen(request, timeout=10.0):
-        captured["headers"] = dict(request.header_items())
-        return DummyResponse()
-
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.requests.request",
+        fake_request,
+    )
 
     class DummyDjangoRequest:
         method = "GET"
@@ -314,23 +322,18 @@ def test_normalize_proxy_request_target_strips_absolute_url_to_safe_path() -> No
 
 
 def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> None:
-    class DummyResponse:
-        status = 302
-        headers = _make_headers(
-            {"Content-Type": "text/plain", "Location": "/d/omero-infrastructure"}
-        )
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self):
-            return b"redirect"
-
     monkeypatch.setattr(
-        "urllib.request.urlopen", lambda request, timeout=10.0: DummyResponse()
+        "omeroweb_admin_tools.views.index_view.requests.request",
+        lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
+            _RequestsResponse(
+                302,
+                headers={
+                    "Content-Type": "text/plain",
+                    "Location": "/d/omero-infrastructure",
+                },
+                payload=b"redirect",
+            )
+        ),
     )
 
     class DummyDjangoRequest:
@@ -365,21 +368,15 @@ def test_rewrite_proxied_location_blocks_external_redirects() -> None:
 def test_proxy_http_request_rewrites_non_root_relative_location_header(
     monkeypatch,
 ) -> None:
-    class DummyResponse:
-        status = 302
-        headers = _make_headers({"Content-Type": "text/plain", "Location": "login"})
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self):
-            return b"redirect"
-
     monkeypatch.setattr(
-        "urllib.request.urlopen", lambda request, timeout=10.0: DummyResponse()
+        "omeroweb_admin_tools.views.index_view.requests.request",
+        lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
+            _RequestsResponse(
+                302,
+                headers={"Content-Type": "text/plain", "Location": "login"},
+                payload=b"redirect",
+            )
+        ),
     )
 
     class DummyDjangoRequest:
@@ -403,9 +400,9 @@ def test_proxy_http_request_rewrites_non_root_relative_location_header(
 
 def test_proxy_http_request_rejects_traversal_before_backend_call(monkeypatch) -> None:
     monkeypatch.setattr(
-        "urllib.request.urlopen",
+        "omeroweb_admin_tools.views.index_view.requests.request",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("urlopen should not run")
+            AssertionError("requests.request should not run")
         ),
     )
 
@@ -505,27 +502,23 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
         lambda: ({}, {}),
     )
 
-    class DummyResponse:
-        def __init__(self, payload: str):
-            self._payload = payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self):
-            return self._payload.encode("utf-8")
-
-    def fake_urlopen(url, timeout=5.0):
+    def fake_get(url, timeout=5.0, allow_redirects=True, params=None):
         if "api/v1/targets" in url:
-            return DummyResponse('{"data": {"activeTargets": []}}')
+            return _RequestsResponse(
+                200,
+                payload=b'{"data": {"activeTargets": []}}',
+            )
         if "label/container_label_com_docker_compose_service/values" in url:
-            return DummyResponse('{"status": "success", "data": []}')
+            return _RequestsResponse(
+                200,
+                payload=b'{"status": "success", "data": []}',
+            )
         raise AssertionError(f"unexpected url: {url}")
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.requests.get",
+        fake_get,
+    )
     monkeypatch.setenv("GRAFANA_HOST_PORT", "3000")
     monkeypatch.setenv("PROMETHEUS_HOST_PORT", "9090")
 
@@ -600,30 +593,21 @@ def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> N
         lambda: ({}, {}),
     )
 
-    class DummyResponse:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self):
-            return b'{"status": "success", "data": []}'
-
-    def fake_urlopen(url, timeout=5.0):
+    def fake_get(url, timeout=5.0, allow_redirects=True, params=None):
         if "api/v1/targets" in url:
-            return type(
-                "X",
-                (),
-                {
-                    "__enter__": lambda self: self,
-                    "__exit__": lambda self, a, b, c: False,
-                    "read": lambda self: b'{"data": {"activeTargets": []}}',
-                },
-            )()
-        return DummyResponse()
+            return _RequestsResponse(
+                200,
+                payload=b'{"data": {"activeTargets": []}}',
+            )
+        return _RequestsResponse(
+            200,
+            payload=b'{"status": "success", "data": []}',
+        )
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.requests.get",
+        fake_get,
+    )
     monkeypatch.setenv(
         "ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "https://monitor.example.org/grafana"
     )
@@ -1122,25 +1106,19 @@ def test_build_public_service_url_direct_access_unchanged() -> None:
 def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
     """The proxy should rewrite Grafana appSubUrl to the proxy prefix."""
 
-    class DummyResponse:
-        status = 200
-        headers = _make_headers({"Content-Type": "text/html; charset=utf-8"})
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def read(self):
-            return (
-                b"<html><head><script>"
-                b'window.grafanaBootData={"settings":{"appSubUrl":""}};'
-                b"</script></head><body></body></html>"
-            )
-
     monkeypatch.setattr(
-        "urllib.request.urlopen", lambda req, timeout=10.0: DummyResponse()
+        "omeroweb_admin_tools.views.index_view.requests.request",
+        lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
+            _RequestsResponse(
+                200,
+                headers={"Content-Type": "text/html; charset=utf-8"},
+                payload=(
+                    b"<html><head><script>"
+                    b'window.grafanaBootData={"settings":{"appSubUrl":""}};'
+                    b"</script></head><body></body></html>"
+                ),
+            )
+        ),
     )
 
     class DummyDjangoRequest:
@@ -1164,25 +1142,19 @@ def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
 
 
 def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:
-    class DummyResponse:
-        status = 200
-        headers = _make_headers({"Content-Type": "text/html; charset=utf-8"})
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def read(self):
-            return (
-                b"<html><head><script>"
-                b'window.grafanaBootData={"settings":{"appUrl":"https://grafana:3000/"}};'
-                b"</script></head><body></body></html>"
-            )
-
     monkeypatch.setattr(
-        "urllib.request.urlopen", lambda req, timeout=10.0: DummyResponse()
+        "omeroweb_admin_tools.views.index_view.requests.request",
+        lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
+            _RequestsResponse(
+                200,
+                headers={"Content-Type": "text/html; charset=utf-8"},
+                payload=(
+                    b"<html><head><script>"
+                    b'window.grafanaBootData={"settings":{"appUrl":"https://grafana:3000/"}};'
+                    b"</script></head><body></body></html>"
+                ),
+            )
+        ),
     )
 
     class DummyDjangoRequest:
@@ -1474,27 +1446,23 @@ def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -
         lambda: ({}, {}),
     )
 
-    class R:
-        def __init__(self, p):
-            self._p = p
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def read(self):
-            return self._p.encode()
-
-    def fake(url, timeout=5.0):
+    def fake_get(url, timeout=5.0, allow_redirects=True, params=None):
         if "api/v1/targets" in url:
-            return R('{"data": {"activeTargets": []}}')
+            return _RequestsResponse(
+                200,
+                payload=b'{"data": {"activeTargets": []}}',
+            )
         if "label/" in url:
-            return R('{"status": "success", "data": []}')
+            return _RequestsResponse(
+                200,
+                payload=b'{"status": "success", "data": []}',
+            )
         raise AssertionError(url)
 
-    monkeypatch.setattr("urllib.request.urlopen", fake)
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.requests.get",
+        fake_get,
+    )
     monkeypatch.setenv("GRAFANA_HOST_PORT", "3000")
     monkeypatch.delenv("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", raising=False)
 
@@ -1515,28 +1483,18 @@ def test_cookie_path_for_proxy_rewrites_root_to_proxy_prefix() -> None:
 
 
 def test_proxy_rewrites_set_cookie_path_for_grafana(monkeypatch) -> None:
-    class DummyResponse:
-        status = 200
-
-        def __init__(self) -> None:
-            self.headers = _make_headers(
-                {
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.requests.request",
+        lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
+            _RequestsResponse(
+                200,
+                headers={
                     "Content-Type": "text/html; charset=utf-8",
                     "Set-Cookie": "grafana_session=abc123; Path=/; HttpOnly; SameSite=Lax",
-                }
+                },
+                payload=b"<html><body>ok</body></html>",
             )
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def read(self):
-            return b"<html><body>ok</body></html>"
-
-    monkeypatch.setattr(
-        "urllib.request.urlopen", lambda req, timeout=10.0: DummyResponse()
+        ),
     )
 
     class DummyDjangoRequest:

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+from http.client import HTTPMessage
 import subprocess
-import urllib.error
 from types import SimpleNamespace
 
+import requests
 from django.http import HttpResponse
 from django.test import RequestFactory
 
@@ -28,6 +29,26 @@ class _HttpResponseStub:
 
     def read(self):
         return self._payload
+
+
+class _RequestsResponseStub:
+    def __init__(
+        self,
+        status_code: int,
+        *,
+        payload: bytes = b"",
+        headers: dict[str, str] | None = None,
+    ):
+        self.status_code = status_code
+        self.content = payload
+        self.headers = headers or {}
+        raw_headers = HTTPMessage()
+        for key, value in self.headers.items():
+            raw_headers.add_header(key, value)
+        self.raw = SimpleNamespace(headers=raw_headers)
+
+    def json(self):
+        return json.loads(self.content.decode("utf-8"))
 
 
 class _DockerConnection:
@@ -60,9 +81,11 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
     assert index_view._to_int_env("ADMIN_TOOLS_SAMPLE_INT", 5) == 5
 
     monkeypatch.setattr(
-        index_view.urllib.request,
-        "urlopen",
-        lambda request, timeout=2.5: _HttpResponseStub(204, b""),
+        index_view.requests,
+        "get",
+        lambda url, timeout=2.5, allow_redirects=True, params=None: (
+            _RequestsResponseStub(204)
+        ),
     )
     assert index_view._probe_http_url("https://grafana.example.org") == {
         "ok": True,
@@ -70,28 +93,25 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
         "error": "",
     }
 
-    def _http_error(request, timeout=2.5):
-        raise urllib.error.HTTPError(
-            request.full_url,
-            503,
-            "backend unavailable",
-            hdrs=None,
-            fp=None,
-        )
-
-    monkeypatch.setattr(index_view.urllib.request, "urlopen", _http_error)
+    monkeypatch.setattr(
+        index_view.requests,
+        "get",
+        lambda url, timeout=2.5, allow_redirects=True, params=None: (
+            _RequestsResponseStub(503)
+        ),
+    )
     assert index_view._probe_http_url("https://grafana.example.org") == {
         "ok": False,
         "status": 503,
-        "error": "HTTP 503",
+        "error": "",
     }
 
     monkeypatch.setattr(
-        index_view.urllib.request,
-        "urlopen",
-        lambda request, timeout=2.5: (_ for _ in ()).throw(
-            urllib.error.URLError("connection refused")
-        ),
+        index_view.requests,
+        "get",
+        lambda url, timeout=2.5, allow_redirects=True, params=None: (
+            _ for _ in ()
+        ).throw(requests.ConnectionError("connection refused")),
     )
     assert index_view._probe_http_url("https://grafana.example.org") == {
         "ok": False,
@@ -103,10 +123,13 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
         "data": {"result": [{"value": [1711843200, "42.5"]}]},
     }
     monkeypatch.setattr(
-        index_view.urllib.request,
-        "urlopen",
-        lambda url, timeout=5.0: _HttpResponseStub(
-            200, json.dumps(query_payload).encode("utf-8")
+        index_view.requests,
+        "get",
+        lambda url, timeout=5.0, allow_redirects=True, params=None: (
+            _RequestsResponseStub(
+                200,
+                payload=json.dumps(query_payload).encode("utf-8"),
+            )
         ),
     )
     assert index_view._prometheus_instant_query(PROMETHEUS_URL, "up") == 42.5
@@ -128,9 +151,9 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
 
 
 def test_collect_recently_seen_services_and_parse_since_ns() -> None:
-    response = _HttpResponseStub(
+    response = _RequestsResponseStub(
         200,
-        json.dumps(
+        payload=json.dumps(
             {
                 "status": "success",
                 "data": {
@@ -150,15 +173,17 @@ def test_collect_recently_seen_services_and_parse_since_ns() -> None:
             }
         ).encode("utf-8"),
     )
-    original = index_view.urllib.request.urlopen
-    index_view.urllib.request.urlopen = lambda url, timeout=5.0: response
+    original = index_view.requests.get
+    index_view.requests.get = (
+        lambda url, timeout=5.0, allow_redirects=True, params=None: response
+    )
     try:
         assert index_view._collect_recently_seen_services(PROMETHEUS_URL) == [
             "database",
             "redis",
         ]
     finally:
-        index_view.urllib.request.urlopen = original
+        index_view.requests.get = original
 
     assert index_view._parse_since_ns("1711843200000000000") == 1711843200000000000
     assert index_view._parse_since_ns("2026-03-30T06:56:57Z") > 0

@@ -24,6 +24,7 @@ from .core_functions import (
     UPLOAD_BATCH_FILES_ENV,
     UPLOAD_CONCURRENCY_ENV,
     _apply_upload_updates,
+    _append_upload_chunks_to_staged_path,
     _build_staged_relative_path,
     _collect_project_payload,
     _compatibility_pending_entries,
@@ -33,8 +34,6 @@ from .core_functions import (
     _generate_orphan_dataset_name,
     _get_env_int,
     _get_jobs_root,
-    _get_or_create_dataset,  # noqa: F401 -- re-exported for test monkeypatching
-    _get_session_key,  # noqa: F401 -- re-exported for test monkeypatching
     _get_text,
     _get_upload_root,
     _has_read_write_permissions,
@@ -44,14 +43,16 @@ from .core_functions import (
     _normalize_sem_edx_associations,
     _normalize_sem_edx_settings,
     _normalize_upload_relative_path,
-    _prepare_job_import_datasets,  # noqa: F401 -- re-exported for test monkeypatching
     _prepare_uploaded_job_for_request_path_import,
     _refresh_job_status,
     _resolve_omero_host_port,
     _resolve_staged_target_path,
+    _replace_staged_upload_file,
+    _reset_staged_upload_file,
     _safe_job_id,
     _safe_relative_path,
     _save_job,
+    _staged_upload_size,
     _should_auto_skip_import,
     _special_methods_enabled,
     _start_import_thread,
@@ -447,6 +448,26 @@ def _prepare_uploaded_job_dataset_targets(job_id, job, conn):
     return _prepare_uploaded_job_for_request_path_import(job_id, job, conn)
 
 
+def _prepare_job_import_datasets(job_id, job, conn):
+    """
+    Compatibility wrapper retained for tests and callers that patch this symbol
+    to assert request handlers do not perform heavy dataset preparation inline.
+    """
+    return _prepare_uploaded_job_dataset_targets(job_id, job, conn)
+
+
+def _get_session_key(conn):
+    from .core_functions import _get_session_key as _core_get_session_key
+
+    return _core_get_session_key(conn)
+
+
+def _get_or_create_dataset(conn, name, dataset_map, project_id=None):
+    from .core_functions import _get_or_create_dataset as _core_get_or_create_dataset
+
+    return _core_get_or_create_dataset(conn, name, dataset_map, project_id=project_id)
+
+
 def _parse_chunk_int(raw_value, field_name):
     try:
         value = int(raw_value)
@@ -508,22 +529,58 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
         return json_error(errors.unexpected_file(rel_path), status=400)
 
     staged_path = entry.get("staged_path") or rel_path
-    target, staged_error = _resolve_staged_target_path(job_root, staged_path)
-    if staged_error:
-        return json_error(staged_error, status=400)
-    target.parent.mkdir(parents=True, exist_ok=True)
-
-    if chunk_start == 0 and target.exists():
-        try:
-            target.unlink()
-        except OSError as exc:
+    if chunk_start == 0:
+        reset_error = _reset_staged_upload_file(job_root, staged_path)
+    else:
+        reset_error = None
+    if reset_error:
+        if isinstance(reset_error, OSError):
             logger.warning(
                 "Failed to reset staged upload %s for chunked retry: %s",
                 sanitize_log_value(rel_path),
-                sanitize_log_value(exc),
+                sanitize_log_value(reset_error),
             )
+            generic_error = errors.unexpected_server_error_uploading_files()
+            updated_job = _apply_upload_updates(
+                job_id,
+                [
+                    {
+                        "upload_id": entry.get("upload_id"),
+                        "status": "error",
+                        "errors": [generic_error],
+                    }
+                ],
+                [generic_error],
+            )
+            if not updated_job:
+                return json_error(errors.unable_update_upload_job_state(), status=500)
+            return json_error(generic_error, status=500)
+        return json_error(reset_error, status=400)
 
-    existing_size = target.stat().st_size if target.exists() else 0
+    existing_size, staged_error = _staged_upload_size(job_root, staged_path)
+    if staged_error:
+        if isinstance(staged_error, OSError):
+            logger.warning(
+                "Failed to inspect staged upload %s: %s",
+                sanitize_log_value(rel_path),
+                sanitize_log_value(staged_error),
+            )
+            generic_error = errors.unexpected_server_error_uploading_files()
+            updated_job = _apply_upload_updates(
+                job_id,
+                [
+                    {
+                        "upload_id": entry.get("upload_id"),
+                        "status": "error",
+                        "errors": [generic_error],
+                    }
+                ],
+                [generic_error],
+            )
+            if not updated_job:
+                return json_error(errors.unable_update_upload_job_state(), status=500)
+            return json_error(generic_error, status=500)
+        return json_error(staged_error, status=400)
     if existing_size != chunk_start:
         logger.warning(
             "Chunk offset mismatch for %s in job %s: existing=%s request_start=%s",
@@ -537,17 +594,16 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
             status=409,
         )
 
-    bytes_written = 0
-    try:
-        with target.open("ab") as handle:
-            for chunk in upload.chunks():
-                handle.write(chunk)
-                bytes_written += len(chunk)
-    except OSError as exc:
+    bytes_written, saved_size, write_error = _append_upload_chunks_to_staged_path(
+        job_root, staged_path, upload
+    )
+    if write_error:
+        if isinstance(write_error, str):
+            return json_error(write_error, status=400)
         logger.warning(
             "Failed to save chunk for %s: %s",
             sanitize_log_value(rel_path),
-            sanitize_log_value(exc),
+            sanitize_log_value(write_error),
         )
         generic_error = errors.unexpected_server_error_uploading_files()
         updated_job = _apply_upload_updates(
@@ -581,7 +637,6 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
             status=400,
         )
 
-    saved_size = target.stat().st_size if target.exists() else 0
     is_last_chunk = (
         _as_bool(request.POST.get("is_last_chunk")) or saved_size >= file_size
     )
@@ -706,37 +761,33 @@ def _upload_files(request, job_id, conn):
         entry = entry_queue.pop(0)
 
         staged_path = entry.get("staged_path") or rel_path
-        target, staged_error = _resolve_staged_target_path(job_root, staged_path)
-        if staged_error:
-            logger.warning(
-                "Rejected staged upload target for %s: %s",
-                sanitize_log_value(rel_path),
-                sanitize_log_value(staged_error),
-            )
-            upload_errors.append(staged_error)
-            entry["status"] = "error"
-            entry.setdefault("errors", []).append(staged_error)
-            updates.append(
-                {
-                    "upload_id": entry.get("upload_id"),
-                    "status": "error",
-                    "errors": [staged_error],
-                }
-            )
-            continue
-        try:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with target.open("wb") as handle:
-                for chunk in upload.chunks():
-                    handle.write(chunk)
-            saved.append(rel_path)
-            entry["status"] = "uploaded"
-            updates.append({"upload_id": entry.get("upload_id"), "status": "uploaded"})
-        except OSError as exc:
+        saved_size, save_error = _replace_staged_upload_file(
+            job_root, staged_path, upload
+        )
+        if save_error:
+            if isinstance(save_error, str):
+                staged_error = save_error
+                logger.warning(
+                    "Rejected staged upload target for %s: %s",
+                    sanitize_log_value(rel_path),
+                    sanitize_log_value(staged_error),
+                )
+                upload_errors.append(staged_error)
+                entry["status"] = "error"
+                entry.setdefault("errors", []).append(staged_error)
+                updates.append(
+                    {
+                        "upload_id": entry.get("upload_id"),
+                        "status": "error",
+                        "errors": [staged_error],
+                    }
+                )
+                continue
+
             logger.warning(
                 "Failed to save upload %s: %s",
                 sanitize_log_value(rel_path),
-                sanitize_log_value(exc),
+                sanitize_log_value(save_error),
             )
             generic_error = errors.unexpected_server_error_uploading_files()
             upload_errors.append(generic_error)
@@ -749,6 +800,29 @@ def _upload_files(request, job_id, conn):
                     "errors": [generic_error],
                 }
             )
+            continue
+
+        if saved_size is None:
+            logger.warning(
+                "Failed to save upload %s: missing saved size",
+                sanitize_log_value(rel_path),
+            )
+            generic_error = errors.unexpected_server_error_uploading_files()
+            upload_errors.append(generic_error)
+            entry["status"] = "error"
+            entry.setdefault("errors", []).append(generic_error)
+            updates.append(
+                {
+                    "upload_id": entry.get("upload_id"),
+                    "status": "error",
+                    "errors": [generic_error],
+                }
+            )
+            continue
+
+        saved.append(rel_path)
+        entry["status"] = "uploaded"
+        updates.append({"upload_id": entry.get("upload_id"), "status": "uploaded"})
 
     updated_job = _apply_upload_updates(job_id, updates, upload_errors)
     if not updated_job:
