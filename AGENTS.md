@@ -3,6 +3,16 @@
 This file is the **table of contents** for repository-local knowledge used by coding agents.
 It is intentionally short. Deep context lives in the files it points to.
 
+## Mandatory security read order
+
+Before writing or rewriting code or tests that touch filesystem paths, file I/O, logs, HTTP responses, outbound HTTP, SQL, subprocesses, Dockerfiles, workflows, secrets, authentication, or authorization, read these documents in order:
+
+1. `docs/reference/ai-agent-security-prevention-playbook.md` -- primary anti-regression playbook for AI agents; normative best practices, bad/good examples, stop-sign rules, and document ownership boundaries.
+2. `docs/reference/code-scanning-resolved-findings.md` -- full resolved-alert history and per-rule prevention lessons. Reintroducing one of these patterns is a regression.
+3. `docs/operations/code-scanning.md` -- live open-alert inventory, remediation workflow, SLAs, and refresh procedure.
+
+Do not start coding until you can name the helper boundary you will harden and the regression tests that will prove the fix.
+
 ## Working contract
 
 - **Never use background agents or subagents** unless the user explicitly asks for them. All work must be done directly in the main conversation. Background agents have produced hallucinated data (e.g. fabricated commit SHAs) that broke CI workflows.
@@ -38,8 +48,9 @@ It is intentionally short. Deep context lives in the files it points to.
 4. **`docs/QUALITY_SCORE.md`** -- current quality grades and debt priorities.
 5. **`docs/exec-plans/`** -- active and completed implementation plans.
 6. **`docs/operations/installation-permissions.md`** -- authoritative install/update/bootstrap permission and ownership model.
-7. **`docs/reference/code-scanning-resolved-findings.md`** -- **MANDATORY READING** before writing new code. Catalogs 1 845 resolved scanner alerts with prevention rules. Every pattern there has been fixed at least once — reintroducing the same pattern is a regression.
-8. **`docs/operations/code-scanning.md`** -- live alert inventory, triage SLAs, and coding guidelines that prevent new scanner findings.
+7. **`docs/reference/ai-agent-security-prevention-playbook.md`** -- **MANDATORY READING** before writing security-relevant code. Canonical best-practice guide for agents, with concrete examples and anti-drift ownership rules.
+8. **`docs/reference/code-scanning-resolved-findings.md`** -- full resolved scanner history with rule-level prevention lessons. Every pattern there has been fixed at least once — reintroducing the same pattern is a regression.
+9. **`docs/operations/code-scanning.md`** -- live alert inventory, triage SLAs, and remediation workflow for new scanning batches.
 
 ## Domain map
 
@@ -183,15 +194,15 @@ omeroweb_<name>/
 - If a container Python command fails with `ModuleNotFoundError` for repository modules, do not retry the same command. Switch to the runtime virtualenv interpreter or fix the import path first.
 
 ### Security scanning policy
-- **Before writing any new code**, consult `docs/reference/code-scanning-resolved-findings.md`. This ledger catalogs 1 845 previously resolved scanner alerts with specific prevention rules. Reintroducing a pattern that has already been fixed is a regression and must be treated as a defect.
-- **Before writing any new code**, consult `docs/reference/code-scanning-resolved-findings.md`, especially the `2026-03-31 API refresh` and `Agent prevention playbooks` sections. That ledger now catalogs 2 011 closed scanner alerts with rule-level prevention examples. Reintroducing a pattern that has already been fixed is a regression and must be treated as a defect.
+- **Before writing any new code or tests in security-relevant areas**, consult `docs/reference/ai-agent-security-prevention-playbook.md`. It is the canonical source for current best practices, concrete bad/good patterns, stop-sign rules, and document ownership boundaries.
+- **Before remediating or extending scanner-touched code**, consult `docs/reference/code-scanning-resolved-findings.md` for historical rule IDs and `docs/operations/code-scanning.md` for the live inventory. Reintroducing a previously fixed pattern is a regression and must be treated as a defect.
 - When addressing code scanning findings, always fix the root cause. Do not add inline suppression comments (`# nosemgrep`, `# DevSkim: ignore`, `# nosec`, etc.) as a first resort.
 - Investigate each finding using multiple tools and online documentation to confirm whether it is a genuine issue or a false positive.
 - Suppression is permitted only when all evidence confirms the finding is a verified false positive (e.g. `psycopg2.sql.SQL().format(sql.Identifier())` is safe parameterized SQL; internal Docker network services legitimately use HTTP) **and** the root cause cannot be fixed without breaking functionality.
 - Every suppression must include a clear explanation of why it is a false positive and link to the verifying evidence.
 - Refresh the exact open-alert total from the GitHub API before each remediation batch and after each remediation push. Do not rely on stale counts in docs, comments, or prior agent messages.
 - Do not modify security scan workflow files unless explicitly instructed to do so.
-- For the complete coding guidelines that prevent new findings, see `docs/operations/code-scanning.md` § "AI agent coding guidelines".
+- For the canonical coding patterns that prevent new findings, see `docs/reference/ai-agent-security-prevention-playbook.md`. For live counts, SLAs, and remediation workflow, see `docs/operations/code-scanning.md`.
 
 ### Testing
 - When tests fail, fix the actual production code using best practices. Do not weaken, loosen, or remove tests to make them pass unless the tests themselves are fundamentally incorrect (e.g. relying on mock-specific behavior that does not match real runtime semantics). If a test must be changed, the change must make the test *more* correct, not less.

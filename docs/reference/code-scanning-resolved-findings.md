@@ -1,11 +1,12 @@
 # Code Scanning — Resolved Findings Ledger
 
-This document catalogs the **2 011 closed code scanning alerts** that have been identified, triaged, and resolved across the project's lifetime. Its purpose is twofold:
+This document catalogs the **2 040 closed code scanning alerts** that have been identified, triaged, and resolved across the project's lifetime. Its purpose is twofold:
 
 1. **Institutional memory** — so the same classes of issues are never reintroduced.
 2. **Agent directive** — AI agents modifying this codebase must consult this ledger before writing new code. Every pattern listed below has been fixed at least once; introducing the same pattern again is a regression.
 
-> **Canonical reference**: `docs/operations/code-scanning.md` tracks _open_ alerts and triage SLAs. This file tracks _closed_ alerts and the lessons they teach.
+> **Canonical reference for live open alerts**: `docs/operations/code-scanning.md` tracks _open_ alerts and triage SLAs.
+> **Canonical prevention guide**: `docs/reference/ai-agent-security-prevention-playbook.md` holds the normative coding rules, external best-practice links, and bad/good examples.
 > **Live refresh note**: The counts in this document were refreshed from the GitHub code-scanning API on **2026-03-31**. Re-query the API before acting on exact totals.
 
 ## How to use this document
@@ -20,23 +21,40 @@ GitHub reported the following branch-level totals when this ledger was refreshed
 
 | State | Alerts |
 |---|---:|
-| Open on `main` (pre-remediation snapshot for this pass) | 123 |
-| Closed on `main` | 2 011 |
+| Open on `main` | 116 |
+| Closed on `main` | 2 040 |
 
 ### Closed alerts by scanner
 
 | Scanner | Closed alerts | Share |
 |---|---:|---:|
-| Bandit | 794 | 39.5 % |
-| CodeQL | 555 | 27.6 % |
-| Semgrep OSS | 273 | 13.6 % |
-| devskim | 226 | 11.2 % |
+| Bandit | 795 | 39.0 % |
+| CodeQL | 583 | 28.6 % |
+| Semgrep OSS | 273 | 13.4 % |
+| devskim | 226 | 11.1 % |
 | Scorecard | 101 | 5.0 % |
 | Trivy | 43 | 2.1 % |
 | Hadolint | 19 | 0.9 % |
-| **Total** | **2 011** | **100 %** |
+| **Total** | **2 040** | **100 %** |
 
-### Closed-alert themes derived from all 2 011 closed alerts
+### Highest-recurrence rule families from the 2 040-alert closed history
+
+| Rule family | Closed alerts | What the repeated fixes taught us |
+|---|---:|---|
+| `B101` | 492 | Production code must not rely on `assert`; test code may. |
+| `python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query` | 165 | Raw SQL keeps regressing unless composition and parameterization are separated deliberately. |
+| `DS137138` | 147 | Internal Docker-network HTTP is common here; accepted false positives must be documented instead of guessed. |
+| `py/log-injection` | 123 | Any unsanitized user string in logs eventually returns as a regression. |
+| `py/empty-except` | 108 | Silent exception handling is a defect pattern, not a stylistic issue. |
+| `PinnedDependenciesID` | 99 | Workflows and supply-chain definitions drift unless pinning is explicit and audited. |
+| `B108` | 75 | Temporary-path handling needs helper-level discipline, not ad-hoc `/tmp` usage. |
+| `py/path-injection` | 70 | Path validation must happen at the helper boundary before every filesystem sink. |
+| `py/stack-trace-exposure` | 59 | User-visible error responses drift toward internal detail unless generic responses are mandatory. |
+| `py/clear-text-logging-sensitive-data` | 54 | Secret redaction must be systematic, not best-effort. |
+| `python.django.security.audit.csrf-exempt.no-csrf-exempt` | 32 | Browser-facing shortcuts around CSRF quickly accumulate debt. |
+| `python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure` | 23 | Credential-adjacent variables need the same care as explicit passwords or tokens. |
+
+### Closed-alert themes derived from the full-history review
 
 | Theme | Representative rules | Closed alerts | What the fixes taught us |
 |---|---|---:|---|
@@ -59,176 +77,17 @@ GitHub reported the following branch-level totals when this ledger was refreshed
 | `.github/workflows/security-code-scanning.yml` | 66 | Workflow edits can easily reintroduce supply-chain and pinning regressions. |
 | `omeroweb_admin_tools/views/index_view.py` | 55 | Proxying, HTTP, and user-visible error handling converge here. |
 
-## Agent prevention playbooks
+## Mandatory prevention guide
 
-These are the repository's **mandatory** security examples for AI agents. Follow the safe pattern unless you have a documented reason not to.
+The canonical bad/good examples, stop signs, external references, and anti-drift rules now live in `docs/reference/ai-agent-security-prevention-playbook.md`.
 
-### 1. Path handling and staged uploads
+This ledger intentionally stays focused on:
 
-Bad:
+- the full closed-alert history
+- hotspot files and recurring rule families
+- per-rule prevention lessons
 
-```python
-target = upload_root / request.data["relative_path"]
-with target.open("wb") as handle:
-    handle.write(payload)
-```
-
-Good:
-
-```python
-target, path_error = _resolve_staged_target_path(upload_root, relative_path)
-if path_error:
-    return json_error(path_error, status=400)
-with target.open("wb") as handle:
-    handle.write(payload)
-```
-
-Rule: untrusted paths never reach `open()`, `mkdir()`, `unlink()`, `rename()`, or `shutil.*` until they have been normalized and re-anchored under an allowed root.
-
-### 2. Logging untrusted values
-
-Bad:
-
-```python
-logger.warning("Import failed for %s with session %s", rel_path, session_key)
-```
-
-Good:
-
-```python
-logger.warning(
-    "Import failed for %s.",
-    sanitize_log_value(rel_path),
-)
-```
-
-Rule: log the event, not the secret. Any user-controlled value must be sanitized before logging, and any credential-adjacent value must be redacted entirely.
-
-### 3. User-visible errors
-
-Bad:
-
-```python
-return JsonResponse({"error": str(exc)}, status=500)
-```
-
-Good:
-
-```python
-logger.error("Import failed.", exc_info=sanitized_exc_info(exc))
-return JsonResponse({"error": errors.unexpected_server_error_importing()}, status=500)
-```
-
-Rule: detailed exceptions belong in server logs, not in HTTP responses, HTML fragments, or JSON payloads returned to users.
-
-### 4. SQL composition
-
-Bad:
-
-```python
-cursor.execute(f"SELECT * FROM settings WHERE username = '{username}'")
-```
-
-Good:
-
-```python
-cursor.execute(
-    "SELECT * FROM settings WHERE username = %s",
-    (username,),
-)
-```
-
-Rule: never concatenate user input into SQL. Use database parameterization or safe SQL-construction helpers every time.
-
-### 5. Temporary paths and file permissions
-
-Bad:
-
-```python
-export_path = "/tmp/demo.ims"
-os.chmod(export_path, 0o777)
-```
-
-Good:
-
-```python
-export_path = tmp_path / "demo.ims"
-os.chmod(export_path, 0o640)
-```
-
-Rule: tests must use `tmp_path`/`tempfile`, and production code must use repository-configured or environment-driven paths with minimum required permissions.
-
-### 6. HTTP, SSRF, and internal services
-
-Bad:
-
-```python
-urllib.request.urlopen(user_supplied_url)
-```
-
-Good:
-
-```python
-parsed = urlsplit(candidate_url)
-if parsed.scheme not in {"http", "https"} or parsed.hostname not in allowed_hosts:
-    raise ValueError("Invalid upstream target")
-response = requests.get(candidate_url, timeout=timeout_seconds)
-```
-
-Rule: URL scheme, host, and method must be validated before any outbound request, even for internal Docker-network services.
-
-### 7. Subprocess boundaries
-
-Bad:
-
-```python
-subprocess.run(["omero", "delete", request.POST["object_ref"]], check=False)
-```
-
-Good:
-
-```python
-object_type, object_id = _parse_delete_target(request.POST["object_ref"])
-subprocess.run(
-    ["omero", "delete", f"{object_type}:{object_id}"],
-    check=False,
-)
-```
-
-Rule: parse and validate the untrusted parts first, then construct the subprocess arguments from typed values instead of passing raw request text through.
-
-### 8. Workflow and Docker pinning
-
-Bad:
-
-```yaml
-- uses: actions/checkout@v6
-```
-
-Good:
-
-```yaml
-- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-```
-
-Rule: workflow actions and base images must be pinned to audited immutable identifiers, not floating tags.
-
----
-
-## Closed alerts by scanner
-
-| Scanner | Closed alerts | Share |
-|---|---:|---:|
-| Bandit | 794 | 39.5 % |
-| CodeQL | 555 | 27.6 % |
-| Semgrep OSS | 273 | 13.6 % |
-| devskim | 226 | 11.2 % |
-| Scorecard | 101 | 5.0 % |
-| Trivy | 43 | 2.1 % |
-| Hadolint | 19 | 0.9 % |
-| **Total** | **2 011** | **100 %** |
-
----
+Use the playbook when you need the current normative coding pattern. Use this ledger when you need to understand how often a rule has already regressed here and what the prior fixes taught us.
 
 ## Resolved finding categories — full catalog
 
@@ -261,8 +120,8 @@ Rule: workflow actions and base images must be pinned to audited immutable ident
 |---|---:|---|---|---|
 | `py/log-injection` | 120 | User-controlled data interpolated into log messages without sanitization | Wrapped all user values with `sanitize_log_value()` | **Always pass user input through `sanitize_log_value()` before logging.** Newlines and control characters in logs enable log injection. |
 | `py/clear-text-logging-sensitive-data` | 53 | Passwords, tokens, or session keys appearing in log output | Redacted sensitive fields before logging; used `sanitize_url_for_logging()` for URLs | **Never log credentials.** Redact passwords, API keys, and session tokens before any log call. |
-| `py/stack-trace-exposure` | 52 | Exception tracebacks returned in HTTP error responses | Returned generic error messages to clients; logged full traces server-side only | **Return generic error strings to users.** Log `exc_info=True` server-side. |
-| `py/path-injection` | 39 | User-supplied filenames/paths used in `open()`, `os.path.join()` without containment | Added `path.resolve().relative_to(root)` checks; used `_resolve_managed_child_path()` | **Validate every user-supplied path** with `resolve()` + `relative_to(allowed_root)` before any filesystem operation. |
+| `py/stack-trace-exposure` | 52 | Exception tracebacks returned in HTTP error responses | Returned generic error messages to clients; logged full traces server-side only | **Return generic error strings to users.** Log server-side details only. Never expose `str(exc)`, tracebacks, internal paths, or service topology in HTTP responses. |
+| `py/path-injection` | 39 | User-supplied filenames/paths used in `open()`, `os.path.join()` without containment | Added managed-path helpers, component validation, and sink-level re-anchoring | **Validate every user-supplied path before every filesystem sink.** Check each component, reject `..`/embedded separators/symlinked segments, enforce length limits, and keep the final path under an allowlisted root. |
 | `py/partial-ssrf` | 4 | URL construction with partially user-controlled components | Validated `scheme in {"http","https"}` and `netloc` against allowlists | **Validate URL scheme and host** before any outbound HTTP request. |
 | `py/regex-injection` | 1 | User input compiled as regex pattern | Added length limit, unsafe-pattern blocklist, and try/except around `re.compile` | **Validate user-supplied regex** with length limits and pattern blocklists before compilation. |
 | `py/overly-permissive-file` | 10 | `os.chmod` with 0o777, 0o666, 0o644 on sensitive files | Tightened to 0o640/0o750; documented cases where group/world read is architecturally required | **Use minimum required permissions.** 0o640 for files, 0o750 for directories. Document exceptions. |
@@ -273,7 +132,7 @@ Rule: workflow actions and base images must be pinned to audited immutable ident
 
 | Rule ID | Count | Root cause | Fix applied | Prevention rule |
 |---|---:|---|---|---|
-| `B108` | 64 | Hardcoded `/tmp` paths | Replaced with `tempfile.mkdtemp()`, config-driven paths, or environment variables | **Use `tempfile` or configured paths**, not bare `/tmp`. |
+| `B108` | 64 | Hardcoded `/tmp` paths | Replaced with `tempfile.mkdtemp()`, config-driven paths, or environment variables | **Use `tempfile` or configured paths**, not bare `/tmp`. Temporary files that become durable state must still be finalized with atomic replace semantics. |
 | `B105` | 40 | Variable names matching password patterns (e.g., `PASSWORD_ENV = "OMERO_DB_PASS"`) | Documented as false positives — these hold env-var names, not credentials | **Acceptable when holding env-var names.** Do not rename to avoid the pattern. |
 | `B311` | 37 | `random.uniform()` / `random.choice()` for non-security purposes | Left as-is — used for jitter and display randomization, not cryptography | **`random` is fine for non-security use.** Use `secrets` only for tokens/nonces. |
 | `B607` | 23 | `subprocess.run` with partial executable path | Used full paths or validated existence | **Use full paths in subprocess calls** or verify the executable exists. |
@@ -300,7 +159,7 @@ Rule: workflow actions and base images must be pinned to audited immutable ident
 | `DS137138` | 129 | HTTP URLs without TLS in Docker configs | Internal Docker-network traffic — TLS at reverse proxy. Accepted. | **Expected for container-internal traffic.** TLS terminates at the reverse proxy. |
 | `PinnedDependenciesID` | 89 | Unpinned GitHub Actions or Docker base images | Pinned actions to full commit SHAs; base images to exact tags | **Pin all actions to SHA; base images to exact tags.** Never use `:latest`. |
 | `DS162092` | 46 | Localhost references in Docker healthchecks and networking | Excluded in DevSkim config — expected for Docker infrastructure | **Expected in Docker infrastructure.** No action needed. |
-| `DS173237` | 33 | Token-like strings in test files | Documented as dummy credentials for unit tests | **Use obviously fake values** (`"test_password"`, `"dummy_token"`) in test fixtures. |
+| `DS173237` | 33 | Token-like strings in test files | Documented as dummy credentials for unit tests | **Use obviously fake values** (`"test_password"`, `"dummy_token"`) in test fixtures, and never paste real credentials, PATs, or session keys into commands, remotes, repo files, or long-lived local config. |
 | `DS026` / `DS002` | 30 | Missing HEALTHCHECK / root user in Dockerfiles | Health checks in `docker-compose.yml`; root required for bind-mount volumes | **Add HEALTHCHECK in compose.** Document containers requiring root with inline comments. |
 | `SC2012` | 9 | `ls` in Dockerfile RUN commands | Replaced with `find` | **Use `find` instead of `ls`** in Dockerfile RUN commands. |
 | `DL3003` / `DL3008` / `DL3018` | 7 | WORKDIR/package pinning in Dockerfiles | Used WORKDIR; pinned where practical | **Use WORKDIR instead of cd.** Pin system packages where feasible. |
@@ -330,13 +189,14 @@ These files have historically generated the most scanning alerts. Extra review a
 | 2026-03-25 | ~200 | ~2 | Code fixes | SQL refactoring (_safe_query helper) |
 | 2026-03-26 | 198 | 15 | Code fixes | Reflected-data escaping, mark_safe removal, B101→if/raise, permission tightening |
 | 2026-03-26 | 183 | — | Current | Remaining: CSRF (29), path-injection (20), urllib (20), Dockerfile design (47), Scorecard (17) |
+| 2026-03-31 | 123 | 7 | Code fixes | Managed upload path hardening, atomic job-file writes, and generic import/upload server-error responses |
 
 ---
 
 ## Cross-references
 
 - **Open alerts and triage SLAs**: `docs/operations/code-scanning.md`
+- **Canonical prevention guide**: `docs/reference/ai-agent-security-prevention-playbook.md`
 - **Security policy and hardening**: `docs/SECURITY.md`
 - **Scanner workflow**: `.github/workflows/security-code-scanning.yml`
-- **AI agent coding guidelines**: `docs/operations/code-scanning.md` § "AI agent coding guidelines"
 - **Agent working contract**: `AGENTS.md` § "Security scanning policy"

@@ -67,10 +67,11 @@ Central navigation hub for all project documentation. Start here, then follow li
 
 ## 8. Reference
 
+- `reference/ai-agent-security-prevention-playbook.md` -- canonical anti-regression security playbook for AI agents; external best-practice links, concrete examples, and document ownership rules
 - `reference/service-endpoints.md` -- infrastructure ports, plugin routes, proxy forwarding
 - `reference/release-notes.md` -- release history and change documentation template
 - `reference/python-style-and-linting.md` -- Ruff formatter/lint policy, CI workflow, pre-commit usage
-- `reference/code-scanning-resolved-findings.md` -- catalog of 1 845 resolved scanner alerts with prevention rules (mandatory reading for agents writing new code)
+- `reference/code-scanning-resolved-findings.md` -- resolved scanner history and per-rule prevention lessons from the full closed-alert set
 - `generated/db-schema.md` -- generated schema artifacts (reserved)
 - `references/design-system-reference-llms.txt` -- agent-facing design system notes
 - `references/docker-compose-llms.txt` -- agent-facing Docker Compose reference notes
