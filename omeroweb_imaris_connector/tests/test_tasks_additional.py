@@ -267,7 +267,9 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
         tasks._open_job_service_connection("omeroserver", 4064)
 
 
-def test_run_ims_export_task_updates_failure_meta_and_closes_connections(monkeypatch):
+def test_run_ims_export_task_updates_failure_meta_and_closes_connections(
+    monkeypatch, tmp_path
+):
     tasks = _import_tasks(monkeypatch)
     updates = []
     closed = []
@@ -308,7 +310,9 @@ def test_run_ims_export_task_updates_failure_meta_and_closes_connections(monkeyp
     assert closed == [True]
 
 
-def test_task_helpers_cover_cli_resolution_connection_errors_and_success(monkeypatch):
+def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
+    monkeypatch, tmp_path
+):
     tasks = _import_tasks(monkeypatch)
 
     monkeypatch.setattr(tasks.os.path, "exists", lambda path: False)
@@ -389,7 +393,10 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(monkeyp
     monkeypatch.setattr(
         tasks,
         "_run_script_via_omero_cli",
-        lambda **kwargs: {"Export_Path": "/tmp/demo.ims", "Export_Name": "demo.ims"},
+        lambda **kwargs: {
+            "Export_Path": str(tmp_path / "demo.ims"),
+            "Export_Name": "demo.ims",
+        },
     )
     monkeypatch.setattr(
         tasks,

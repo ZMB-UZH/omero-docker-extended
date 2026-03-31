@@ -39,22 +39,56 @@ from .omero.image_service import (
 )
 
 # Annotation service functions
-from .omero.annotation_service import (
-    get_hash_secret as _get_hash_secret,
-    canonicalize_mapping as _canonicalize_mapping,
-    compute_plugin_hash,
-    is_plugin_annotation,
-    find_plugin_annotation_ids,
-    find_annotation_link_ids,
-    find_map_annotation_ids,
-    delete_existing_annotations,
-)
+from .omero import annotation_service as _annotation_service
 
 # Metadata service functions
 from .omero.metadata_service import extract_acquisition_metadata
 
 # Parsing functions
 from .parsing.filename_parser import parse_filename
+
+
+def _get_hash_secret():
+    return _annotation_service.get_hash_secret()
+
+
+def _canonicalize_mapping(mapping):
+    return _annotation_service.canonicalize_mapping(mapping)
+
+
+def compute_plugin_hash(mapping):
+    return _annotation_service.compute_plugin_hash(mapping)
+
+
+def is_plugin_annotation(annotation):
+    return _annotation_service.is_plugin_annotation(annotation)
+
+
+def find_plugin_annotation_ids(conn, image_id, allow_legacy=True):
+    return _annotation_service.find_plugin_annotation_ids(
+        conn, image_id, allow_legacy=allow_legacy
+    )
+
+
+def find_annotation_link_ids(conn, annotation_ids):
+    return _annotation_service.find_annotation_link_ids(conn, annotation_ids)
+
+
+def find_map_annotation_ids(conn, image_id):
+    return _annotation_service.find_map_annotation_ids(conn, image_id)
+
+
+def delete_existing_annotations(
+    conn, image_id, *, annotation_ids=None, link_ids=None, allow_legacy=True
+):
+    return _annotation_service.delete_existing_annotations(
+        conn,
+        image_id,
+        annotation_ids=annotation_ids,
+        link_ids=link_ids,
+        allow_legacy=allow_legacy,
+    )
+
 
 # Export all for backward compatibility
 __all__ = [
