@@ -7,13 +7,20 @@
 -->
 {% endcomment %}
 
-    <script type="text/javascript">
-        
-        $(document).ready(function()
-            {
-                {% if link_string %}
-                $("#link_info_popup_string").val(location.protocol + "//" + location.host + "{{ webclient_path }}?show={{ link_string }}");
-                {% endif %}
+	    <script type="text/javascript">
+	        
+	        $(document).ready(function()
+	            {
+	                var linkInfoQuery = "{{ link_string|default_if_none:''|escapejs }}";
+	                if (linkInfoQuery) {
+	                    $("#link_info_popup_string").val(
+	                        location.protocol +
+	                            "//" +
+	                            location.host +
+	                            "{{ webclient_path }}?show=" +
+	                            linkInfoQuery
+	                    );
+	                }
 
                 OME.initToolbarDropdowns();
 
@@ -103,11 +110,11 @@
                   $("#right_panel_openwith").html(html);
                 });
 
-                $("#right_panel_openwith").on("click", "a", function (event) {
-                  var $a = $(this);
-                  if ($a.data('openwith_disabled')) {
-                    event.preventDefault();
-                    return;
+	                $("#right_panel_openwith").on("click", "a", function (event) {
+	                  var $a = $(this);
+	                  if ($a.data('openwith_disabled')) {
+	                    event.preventDefault();
+	                    return;
                   }
                   if ($a.attr('href') === '#') {
                     event.preventDefault();
@@ -118,11 +125,20 @@
                       if (typeof fn === 'function') {
                         fn();
                       }
-                    }
-                  }
-                });
+	                    }
+	                  }
+	                });
 
-              {% endif %}
+	                $("a[data-popup-url]").on("click", function(event) {
+	                  var popupUrl = $(this).attr("data-popup-url");
+	                  if (!popupUrl) {
+	                    return;
+	                  }
+	                  event.preventDefault();
+	                  return OME.openPopup(popupUrl);
+	                });
+
+	              {% endif %}
             
         });
     </script>
@@ -170,14 +186,14 @@
                   {% with filesetInfo=image.getImportedFilesInfo %}
                 <li>
                     <a id="download-origfile" 
-                      {% if filesetInfo.count == 1 %}
-                        href="{% url 'archived_files' image.id %}"
-                      {% else %}
-                        href="#"
-                        onClick="return OME.openPopup('{% url 'download_placeholder' %}?ids=image-{{ image.id }}&fileCount={{ fileCount }}&name={{ image.name }}');"
-                      {% endif %}
-                    title="Download {{ filesetInfo.count }} original imported file{{ filesetInfo.count|pluralize:'s'}} ({{ filesetInfo.size|filesizeformat }})"
-                    >
+	                      {% if filesetInfo.count == 1 %}
+	                        href="{% url 'archived_files' image.id %}"
+	                      {% else %}
+	                        href="#"
+	                        data-popup-url="{% url 'download_placeholder' %}?ids=image-{{ image.id }}&fileCount={{ fileCount }}&name={{ image.name|urlencode }}"
+	                      {% endif %}
+	                    title="Download {{ filesetInfo.count }} original imported file{{ filesetInfo.count|pluralize:'s'}} ({{ filesetInfo.size|filesizeformat }})"
+	                    >
                     Download...</a>
                 </li>
                   {% endwith %}
@@ -193,14 +209,14 @@
                     {% if filesetInfo.count == 0 %}
                       href="#"
                     {% else %}
-                      {% if filesetInfo.count == 1 %}
-                        href="{% url 'archived_files' %}?{{ obj_string }}"
-                      {% else %}
-                        href="#"
-                        onClick="return OME.openPopup('{% url 'download_placeholder' %}?ids={{ link_string }}&fileCount={{ filesetInfo.count }}&index={{ index }}');"
-                      {% endif %}
-                    {% endif %}
-                    title="Download {{ filesetInfo.count }} original imported file{{ filesetInfo.count|pluralize:'s'}} ({{ filesetInfo.size|filesizeformat }})"
+	                      {% if filesetInfo.count == 1 %}
+	                        href="{% url 'archived_files' %}?{{ obj_string }}"
+	                      {% else %}
+	                        href="#"
+	                        data-popup-url="{% url 'download_placeholder' %}?ids={{ link_string }}&fileCount={{ filesetInfo.count }}&index={{ index }}"
+	                      {% endif %}
+	                    {% endif %}
+	                    title="Download {{ filesetInfo.count }} original imported file{{ filesetInfo.count|pluralize:'s'}} ({{ filesetInfo.size|filesizeformat }})"
                     >
                     Download...</a>
                 </li>
@@ -338,37 +354,37 @@
               {% with ex=canExportAsJpg %}
               <li {% if not ex %}class="disabled"{% endif %}>
                 <a href="#"
-                  {% if not ex %}
-                      class="disabled" title="Images are too big to download as JPEGs"
-                  {% else %}
-                      onClick="return OME.openPopup('{% url 'download_placeholder' %}?ids={{ link_string }}&format=jpeg&index={{ index }}');"
-                      title="Download as JPEGs (zip)"
-                  {% endif %}
-                  >
+	                  {% if not ex %}
+	                      class="disabled" title="Images are too big to download as JPEGs"
+	                  {% else %}
+	                      data-popup-url="{% url 'download_placeholder' %}?ids={{ link_string }}&format=jpeg&index={{ index }}"
+	                      title="Download as JPEGs (zip)"
+	                  {% endif %}
+	                  >
                   Export as JPEG
                 </a>
               </li>
               <li {% if not ex %}class="disabled"{% endif %}>
                 <a href="#"
-                  {% if not ex %}
-                      class="disabled" title="Images are too big to download as PNGs"
-                  {% else %}
-                      onClick="return OME.openPopup('{% url 'download_placeholder' %}?ids={{ link_string }}&format=png&index={{ index }}');"
-                      title="Download as PNGs (zip)"
-                  {% endif %}
-                  >
+	                  {% if not ex %}
+	                      class="disabled" title="Images are too big to download as PNGs"
+	                  {% else %}
+	                      data-popup-url="{% url 'download_placeholder' %}?ids={{ link_string }}&format=png&index={{ index }}"
+	                      title="Download as PNGs (zip)"
+	                  {% endif %}
+	                  >
                   Export as PNG
                 </a>
               </li>
               <li {% if not ex %}class="disabled"{% endif %}>
                 <a href="#"
-                  {% if not ex %}
-                      class="disabled" title="Images are too big to download as TIFFs"
-                  {% else %}
-                      onClick="return OME.openPopup('{% url 'download_placeholder' %}?ids={{ link_string }}&format=tif&index={{ index }}');"
-                      title="Download as TIFFs (zip)"
-                  {% endif %}
-                  >
+	                  {% if not ex %}
+	                      class="disabled" title="Images are too big to download as TIFFs"
+	                  {% else %}
+	                      data-popup-url="{% url 'download_placeholder' %}?ids={{ link_string }}&format=tif&index={{ index }}"
+	                      title="Download as TIFFs (zip)"
+	                  {% endif %}
+	                  >
                   Export as TIFF
                 </a>
               </li>

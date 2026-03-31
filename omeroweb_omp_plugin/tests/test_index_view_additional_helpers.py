@@ -99,18 +99,16 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
 
     class _MissingAttrPermissions:
         def __getattr__(self, name):
-            raise RuntimeError("missing attr")
+            raise AttributeError(name)
 
-    class _CallablePermissions:
+    class _FailingPermissions:
         def failing(self):
             raise RuntimeError("flag failed")
 
     assert index_view._permissions_flag(_MissingAttrPermissions(), "isRead") is False
     assert (
         index_view._permissions_flag(
-            SimpleNamespace(
-                failing=lambda: (_ for _ in ()).throw(RuntimeError("flag"))
-            ),
+            _FailingPermissions(),
             "failing",
         )
         is False
@@ -152,12 +150,20 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
         == []
     )
 
-    bad_count_group = SimpleNamespace(
-        getMemberCount=lambda: SimpleNamespace(val="bad"),
-        getMembers=lambda: object(),
-        getExperimenters=lambda: object(),
-        getExperimenterIds=lambda: object(),
-    )
+    class _BadCountGroup:
+        def getMemberCount(self):
+            return SimpleNamespace(val="bad")
+
+        def getMembers(self):
+            return object()
+
+        def getExperimenters(self):
+            return object()
+
+        def getExperimenterIds(self):
+            return object()
+
+    bad_count_group = _BadCountGroup()
     assert (
         index_view._group_member_count(
             SimpleNamespace(getObjects=lambda *args, **kwargs: []), bad_count_group

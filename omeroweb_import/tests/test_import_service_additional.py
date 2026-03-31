@@ -163,7 +163,7 @@ def test_open_service_connection_reraises_unexpected_group_id_failures(
 ):
     class _BadGroupId:
         def __int__(self):
-            raise ValueError("bad group id")
+            raise TypeError("bad group id")
 
     class _Conn:
         def __init__(self):
@@ -184,7 +184,7 @@ def test_open_service_connection_reraises_unexpected_group_id_failures(
     monkeypatch.setattr(import_service, "BlitzGateway", lambda *args, **kwargs: conn)
 
     with caplog.at_level(logging.DEBUG, logger=import_service.logger.name):
-        with pytest.raises(ValueError, match="bad group id"):
+        with pytest.raises(TypeError, match="bad group id"):
             import_service._open_service_connection(
                 "omeroserver", 4064, group_id=_BadGroupId()
             )

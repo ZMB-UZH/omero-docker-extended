@@ -16,11 +16,14 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-import urllib.error
 import urllib.parse
-import urllib.request
+import requests
 
 from ..config import LogConfig
+from omero_plugin_common.logging_utils import (
+    sanitize_log_value,
+    sanitize_url_for_logging,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -499,45 +502,41 @@ def _execute_loki_query(
             "end": str(end_ns),
         }
     )
-    url = f"{config.loki_url}/loki/api/v1/query_range?{params}"
-
-    # FIX: Validate URL against config to prevent SSRF (CodeQL #91)
-    base_parsed = urllib.parse.urlparse(config.loki_url)
-    url_parsed = urllib.parse.urlparse(url)
-    if (
-        url_parsed.scheme != base_parsed.scheme
-        or url_parsed.netloc != base_parsed.netloc
-    ):
+    base_parsed = urllib.parse.urlsplit(str(config.loki_url or "").strip())
+    if base_parsed.scheme not in {"http", "https"} or not base_parsed.netloc:
         raise RuntimeError("Invalid Loki URL (SSRF protection)")
-
-    request = urllib.request.Request(url, method="GET")
+    if base_parsed.username or base_parsed.password or base_parsed.fragment:
+        raise RuntimeError("Invalid Loki URL (SSRF protection)")
+    url = urllib.parse.urlunsplit(
+        (
+            base_parsed.scheme,
+            base_parsed.netloc,
+            f"{base_parsed.path.rstrip('/')}/loki/api/v1/query_range",
+            params,
+            "",
+        )
+    )
     try:
-        with urllib.request.urlopen(
-            request, timeout=config.timeout_seconds
-        ) as response:
-            raw = response.read()
-            try:
-                return json.loads(raw.decode("utf-8", errors="replace"))
-            except json.JSONDecodeError as exc:
-                snippet = raw[:800].decode("utf-8", errors="replace")
-                raise RuntimeError(
-                    f"Loki returned non-JSON response (status {getattr(response, 'status', 'unknown')}): "
-                    f"{snippet}"
-                ) from exc
-
-    except urllib.error.HTTPError as exc:
-        # HTTPError is also a file-like object; read the body for diagnostics.
-        try:
-            body = exc.read()
-            snippet = body[:800].decode("utf-8", errors="replace")
-        except Exception:
-            snippet = "<unable to read error body>"
-        raise RuntimeError(f"Loki HTTP error {exc.code}: {snippet}") from exc
-
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Loki request failed: {exc}") from exc
-    except (TimeoutError, socket.timeout) as exc:
+        response = requests.get(url, timeout=config.timeout_seconds)
+    except (requests.Timeout, TimeoutError, socket.timeout) as exc:
         raise RuntimeError(f"Loki request timed out: {exc}") from exc
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            f"Loki request failed for {sanitize_url_for_logging(url)}: {sanitize_log_value(exc)}"
+        ) from exc
+
+    if response.status_code >= 400:
+        snippet = response.text[:800]
+        raise RuntimeError(f"Loki HTTP error {response.status_code}: {snippet}")
+
+    raw = response.content
+    try:
+        return json.loads(raw.decode("utf-8", errors="replace"))
+    except json.JSONDecodeError as exc:
+        snippet = raw[:800].decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"Loki returned non-JSON response (status {response.status_code}): {snippet}"
+        ) from exc
 
 
 def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
