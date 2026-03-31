@@ -671,8 +671,8 @@ def test_upload_helpers_non_chunked_paths_and_preparation_errors(tmp_path, monke
     )
     monkeypatch.setattr(
         index_view,
-        "_resolve_staged_target_path",
-        lambda job_root, staged_path: (None, "Unsafe staged target"),
+        "_replace_staged_upload_file",
+        lambda job_root, staged_path, upload: (None, "Unsafe staged target"),
     )
     response = index_view._upload_files(
         RequestFactory().post(
@@ -686,8 +686,8 @@ def test_upload_helpers_non_chunked_paths_and_preparation_errors(tmp_path, monke
 
     monkeypatch.setattr(
         index_view,
-        "_resolve_staged_target_path",
-        lambda job_root, staged_path: (job_root / staged_path, None),
+        "_replace_staged_upload_file",
+        lambda job_root, staged_path, upload: (3, None),
     )
     monkeypatch.setattr(
         index_view, "_apply_upload_updates", lambda job_id, updates, upload_errors: None
@@ -793,12 +793,6 @@ def test_chunk_import_confirm_prune_and_status_control_paths(tmp_path, monkeypat
     monkeypatch.setattr(
         index_view, "_find_job_upload_entry", index_view._find_job_upload_entry
     )
-    monkeypatch.setattr(
-        index_view,
-        "_resolve_staged_target_path",
-        lambda current_root, staged_path: (current_root / staged_path, None),
-    )
-
     response = index_view._handle_chunk_upload(
         RequestFactory().post(f"/omeroweb_import/upload/{job_id}/", data={}),
         job_id,

@@ -437,19 +437,6 @@ def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatc
         index_view, "_load_job", lambda value: job if value == job_id else None
     )
 
-    class _DummyParent:
-        def mkdir(self, parents=True, exist_ok=True):
-            return None
-
-    class _DummyTarget:
-        parent = _DummyParent()
-
-        def exists(self):
-            return False
-
-        def open(self, *_args, **_kwargs):
-            raise OSError("sensitive filesystem path")
-
     apply_calls = []
 
     def fake_apply_upload_updates(current_job_id, updates, upload_errors):
@@ -458,8 +445,22 @@ def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatc
 
     monkeypatch.setattr(
         index_view,
-        "_resolve_staged_target_path",
-        lambda root, staged_path: (_DummyTarget(), None),
+        "_reset_staged_upload_file",
+        lambda root, staged_path: None,
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_staged_upload_size",
+        lambda root, staged_path: (0, None),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_append_upload_chunks_to_staged_path",
+        lambda root, staged_path, upload: (
+            None,
+            None,
+            OSError("sensitive filesystem path"),
+        ),
     )
     monkeypatch.setattr(index_view, "_apply_upload_updates", fake_apply_upload_updates)
 
@@ -538,17 +539,13 @@ def test_upload_files_hides_oserror_details(tmp_path: Path, monkeypatch):
         lambda current_job_id, updates, upload_errors: {"status": "uploading"},
     )
 
-    class BrokenTarget:
-        def __init__(self, path: Path):
-            self.parent = path.parent
-
-        def open(self, *_args, **_kwargs):
-            raise OSError("permission denied: /tmp/secret-path")
-
     monkeypatch.setattr(
         index_view,
-        "_resolve_staged_target_path",
-        lambda root, staged_path: (BrokenTarget(root / staged_path), None),
+        "_replace_staged_upload_file",
+        lambda root, staged_path, upload: (
+            None,
+            OSError("permission denied: /tmp/secret-path"),
+        ),
     )
 
     request = RequestFactory().post(

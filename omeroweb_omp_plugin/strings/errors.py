@@ -138,6 +138,10 @@ def invalid_ai_parsing_data():
     return "Invalid AI parsing data."
 
 
+def ai_parsing_data_missing():
+    return "AI parsing data is missing. Please run the AI-assisted filename parsing routine first."
+
+
 def invalid_regex_pattern_title():
     return "Invalid regex pattern."
 
