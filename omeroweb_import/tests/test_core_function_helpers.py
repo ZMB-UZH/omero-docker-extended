@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 
 from omeroweb_import.views import core_functions
@@ -82,6 +83,57 @@ def test_resolve_managed_child_path_rejects_symlinked_segments(
         assert "Invalid filename" in str(exc)
     else:
         raise AssertionError("Expected symlinked managed path rejection")
+
+
+def test_staged_upload_file_helpers_reject_symlink_leaf_targets(tmp_path) -> None:
+    class _Upload:
+        def __init__(self, *chunks):
+            self._chunks = chunks
+
+        def chunks(self):
+            return list(self._chunks)
+
+    upload_root = tmp_path / "uploads"
+    outside_root = tmp_path / "outside"
+    upload_root.mkdir()
+    outside_root.mkdir()
+    protected = outside_root / "file.bin"
+    protected.write_bytes(b"outside")
+
+    staged_dir = upload_root / "_staged" / "folder"
+    staged_dir.mkdir(parents=True, exist_ok=True)
+    os.symlink(protected, staged_dir / "file.bin")
+
+    bytes_written, size, append_error = core_functions._append_upload_chunks_to_staged_path(
+        upload_root,
+        "_staged/folder/file.bin",
+        _Upload(b"hello"),
+    )
+    assert bytes_written is None
+    assert size is None
+    assert "Invalid filename" in append_error
+    assert protected.read_bytes() == b"outside"
+
+    size, size_error = core_functions._staged_upload_size(
+        upload_root, "_staged/folder/file.bin"
+    )
+    assert size is None
+    assert "Invalid filename" in size_error
+
+    reset_error = core_functions._reset_staged_upload_file(
+        upload_root, "_staged/folder/file.bin"
+    )
+    assert "Invalid filename" in reset_error
+    assert protected.read_bytes() == b"outside"
+
+    size, replace_error = core_functions._replace_staged_upload_file(
+        upload_root,
+        "_staged/folder/file.bin",
+        _Upload(b"replaced"),
+    )
+    assert size is None
+    assert "Invalid filename" in replace_error
+    assert protected.read_bytes() == b"outside"
 
 
 def test_write_read_job_file_and_apply_upload_updates(monkeypatch, tmp_path) -> None:
