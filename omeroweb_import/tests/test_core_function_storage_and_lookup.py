@@ -107,6 +107,10 @@ def test_batch_find_images_by_name_covers_dataset_global_and_failure_paths(monke
             self.values[key] = value
             return self
 
+        def addList(self, key, value):
+            self.values[key] = list(value)
+            return self
+
     monkeypatch.setattr(
         core_functions.omero,
         "sys",
@@ -139,7 +143,9 @@ def test_batch_find_images_by_name_covers_dataset_global_and_failure_paths(monke
     )
     assert sorted(scoped) == ["alpha.tif", "beta.tif"]
     assert "JOIN FETCH i.datasetLinks" in queries[0][0]
+    assert "i.name IN (:names)" in queries[0][0]
     assert queries[0][1]["did"] == 9
+    assert queries[0][1]["names"] == ["alpha.tif", "beta.tif", "missing.tif"]
 
     queries.clear()
     unscoped = core_functions._batch_find_images_by_name(
@@ -148,6 +154,8 @@ def test_batch_find_images_by_name_covers_dataset_global_and_failure_paths(monke
     )
     assert sorted(unscoped) == ["alpha.tif", "beta.tif"]
     assert "JOIN FETCH i.datasetLinks" not in queries[0][0]
+    assert "i.name IN (:names)" in queries[0][0]
+    assert queries[0][1]["names"] == ["alpha.tif", "beta.tif"]
 
     failing_conn = SimpleNamespace(
         SERVICE_OPTS=object(),

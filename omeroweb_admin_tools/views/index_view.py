@@ -23,7 +23,6 @@ import requests
 
 from django.http import JsonResponse
 from django.http import HttpResponse
-from django.http import HttpResponseNotAllowed
 from django.shortcuts import render
 from django.template.backends.django import DjangoTemplates
 from django.template.response import TemplateResponse
@@ -67,6 +66,15 @@ _INLINE_TEMPLATE_BACKEND = DjangoTemplates(
         "OPTIONS": {},
     }
 )
+
+
+def _proxy_method_not_allowed_response() -> JsonResponse:
+    response = JsonResponse(
+        {"error": "Method not allowed", "allowed_methods": list(_PROXY_SAFE_METHODS)},
+        status=405,
+    )
+    response["Allow"] = ", ".join(_PROXY_SAFE_METHODS)
+    return response
 
 
 def _to_int_env(name: str, default: int) -> int:
@@ -1812,7 +1820,7 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     if root_error:
         return root_error
     if request.method not in _PROXY_SAFE_METHODS:
-        return HttpResponseNotAllowed(_PROXY_SAFE_METHODS)
+        return _proxy_method_not_allowed_response()
 
     grafana_base_url = os.environ.get(
         "ADMIN_TOOLS_GRAFANA_URL",
@@ -1873,7 +1881,7 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     if root_error:
         return root_error
     if request.method not in _PROXY_SAFE_METHODS:
-        return HttpResponseNotAllowed(_PROXY_SAFE_METHODS)
+        return _proxy_method_not_allowed_response()
 
     prometheus_base_url = os.environ.get(
         "ADMIN_TOOLS_PROMETHEUS_URL",
