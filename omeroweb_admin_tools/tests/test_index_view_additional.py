@@ -417,22 +417,29 @@ def test_proxy_quota_and_diagnostics_views_cover_error_paths(monkeypatch) -> Non
 
     monkeypatch.setattr(index_view, "_require_root_user", lambda request, conn: None)
 
-    assert (
-        grafana_proxy(
-            RequestFactory().post("/admin_tools/grafana/api/health"),
-            "api/health",
-            conn=None,
-        ).status_code
-        == 405
+    grafana_method = grafana_proxy(
+        RequestFactory().post("/admin_tools/grafana/api/health"),
+        "api/health",
+        conn=None,
     )
-    assert (
-        prometheus_proxy(
-            RequestFactory().post("/admin_tools/prometheus/api/v1/query"),
-            "api/v1/query",
-            conn=None,
-        ).status_code
-        == 405
+    assert grafana_method.status_code == 405
+    assert grafana_method["Allow"] == "GET, HEAD, OPTIONS"
+    assert _payload(grafana_method) == {
+        "error": "Method not allowed",
+        "allowed_methods": ["GET", "HEAD", "OPTIONS"],
+    }
+
+    prometheus_method = prometheus_proxy(
+        RequestFactory().post("/admin_tools/prometheus/api/v1/query"),
+        "api/v1/query",
+        conn=None,
     )
+    assert prometheus_method.status_code == 405
+    assert prometheus_method["Allow"] == "GET, HEAD, OPTIONS"
+    assert _payload(prometheus_method) == {
+        "error": "Method not allowed",
+        "allowed_methods": ["GET", "HEAD", "OPTIONS"],
+    }
 
     monkeypatch.setattr(
         index_view,
