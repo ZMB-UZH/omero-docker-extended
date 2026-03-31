@@ -15,11 +15,13 @@ def test_ai_provider_options_return_copy():
 def test_job_storage_validates_and_roundtrips_jobs(tmp_path, monkeypatch):
     monkeypatch.setattr(job_storage, "JOBS_DIR", str(tmp_path))
     job_id = "d" * 32
-    job = {"job_id": job_id, "status": "queued"}
+    uppercase_job_id = job_id.upper()
+    job = {"job_id": uppercase_job_id, "status": "queued"}
 
-    assert job_storage.get_job_path(job_id).endswith(f"{job_id}.json")
-    assert job_storage.get_job_lock_path(job_id).endswith(f"{job_id}.lock")
+    assert job_storage.get_job_path(uppercase_job_id).endswith(f"{job_id}.json")
+    assert job_storage.get_job_lock_path(uppercase_job_id).endswith(f"{job_id}.lock")
     job_storage.save_job(job)
+    assert job_storage.load_job(uppercase_job_id) == job
     assert job_storage.load_job(job_id) == job
     assert job_storage.load_job("invalid") is None
 

@@ -62,6 +62,28 @@ def test_job_id_and_managed_path_helpers_enforce_managed_roots(
         raise AssertionError("Expected outside-root rejection")
 
 
+def test_resolve_managed_child_path_rejects_symlinked_segments(
+    monkeypatch, tmp_path
+) -> None:
+    upload_root = tmp_path / "uploads"
+    jobs_root = tmp_path / "jobs"
+    outside_root = tmp_path / "outside"
+    upload_root.mkdir()
+    jobs_root.mkdir()
+    outside_root.mkdir()
+    (upload_root / "linked").symlink_to(outside_root, target_is_directory=True)
+
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: jobs_root)
+
+    try:
+        core_functions._resolve_managed_child_path(upload_root, "linked/escape.txt")
+    except ValueError as exc:
+        assert "Invalid filename" in str(exc)
+    else:
+        raise AssertionError("Expected symlinked managed path rejection")
+
+
 def test_write_read_job_file_and_apply_upload_updates(monkeypatch, tmp_path) -> None:
     jobs_root = tmp_path / "jobs"
     jobs_root.mkdir()
