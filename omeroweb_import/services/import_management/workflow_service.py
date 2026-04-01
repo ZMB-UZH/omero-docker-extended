@@ -8,7 +8,8 @@ workflow implementation.
 from ...views import core_functions as _core
 
 OMERO_CLI = _core.OMERO_CLI
-subprocess = _core.subprocess
+process_utils = _core.process_utils
+subprocess = _core.process_utils
 
 _build_sem_edx_associations_from_entries = (
     _core._build_sem_edx_associations_from_entries
@@ -27,6 +28,7 @@ _start_import_thread = _core._start_import_thread
 
 __all__ = [
     "OMERO_CLI",
+    "process_utils",
     "subprocess",
     "_classify_compatibility_output",
     "_has_import_candidates_in_output",
