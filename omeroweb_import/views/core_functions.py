@@ -12,7 +12,6 @@ import re
 import secrets
 import stat
 import string
-import subprocess
 import shutil
 import threading
 import time
@@ -50,6 +49,7 @@ from ..services.ome_zarr_support import (
 )
 from ..strings import errors, messages
 from ..utils.file_helpers import resolve_upload_root, resolve_jobs_root
+from omero_plugin_common import process_utils
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 from omero_plugin_common.env_utils import get_bool_env, ENV_FILE_OMEROWEB
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
@@ -58,6 +58,8 @@ from omero_plugin_common.tmp_cleanup import (
     safe_remove_job_data,
 )
 from .utils import current_username, json_error, load_json_body
+
+subprocess = process_utils
 
 __all__ = [
     "BlitzGateway",
@@ -2802,13 +2804,10 @@ def _classify_import_failure(stdout: str, stderr: str) -> str:
 
 
 def _run_omero_cli(cmd, timeout=None):
-    return subprocess.run(
+    return process_utils.run(
         cmd,
-        capture_output=True,
-        text=True,
         check=False,
         timeout=timeout,
-        stdin=subprocess.DEVNULL,
         env=_build_cli_env(),
     )
 
@@ -2840,17 +2839,24 @@ def _run_local_import_scan(path: Path, timeout: Optional[int] = None):
     env["XDG_CACHE_HOME"] = str(cli_cache)
 
     try:
-        return subprocess.run(
+        return process_utils.run(
             cmd,
-            capture_output=True,
-            text=True,
             check=False,
             timeout=timeout,
             env=env,
-            stdin=subprocess.DEVNULL,
         )
     finally:
         shutil.rmtree(omerodir_path, ignore_errors=True)
+
+
+def _run_omero_cli_streaming(cmd, *, env, timeout, on_tick=None):
+    return process_utils.run_streaming(
+        cmd,
+        timeout=timeout,
+        env=env,
+        tick_interval=_IMPORT_PROGRESS_INTERVAL,
+        on_tick=on_tick,
+    )
 
 
 def _parse_cli_id(output: str, expected_type: str):
@@ -2898,7 +2904,7 @@ def _build_cli_env():
     """Build the environment dict for OMERO CLI sub-processes.
 
     Factored out of ``_run_omero_cli`` so that ``_import_file`` can re-use it
-    for both the blocking *subprocess.run* path and the streaming *Popen* path.
+    for both the blocking and streaming command paths.
     """
     cli_env = os.environ.copy()
     cli_home = _get_upload_root() / ".omero-cli-home"
@@ -2933,12 +2939,12 @@ def _import_file(
 ):
     """Run ``omero import`` for *path*.
 
-    When *progress_job* is a mutable job dict the function uses
-    ``subprocess.Popen`` instead of ``subprocess.run`` and periodically writes
-    an estimated ``import_progress_bytes`` value into the dict (and persists it
-    to disk).  The estimate is derived from ``/proc/{pid}/io`` – the number of
-    bytes the CLI process has read so far – giving a real, data-driven progress
-    signal that the front-end can relay through the orange progress bar.
+    When *progress_job* is a mutable job dict the function uses a streaming
+    command runner and periodically writes an estimated
+    ``import_progress_bytes`` value into the dict (and persists it to disk).
+    The estimate is derived from ``/proc/{pid}/io`` – the number of bytes the
+    CLI process has read so far – giving a real, data-driven progress signal
+    that the front-end can relay through the orange progress bar.
 
     Returns ``(success, stdout, stderr)`` – the same contract as before.
     """
@@ -2956,13 +2962,12 @@ def _import_file(
     import_start = time.time()
 
     # ------------------------------------------------------------------
-    # Fast path: no progress tracking requested – keep the proven
-    # subprocess.run() behaviour unchanged.
+    # Fast path: no progress tracking requested.
     # ------------------------------------------------------------------
     if progress_job is None:
         try:
             result = _run_omero_cli(cmd, timeout=_get_import_timeout_seconds())
-        except subprocess.TimeoutExpired:
+        except process_utils.TimeoutExpired:
             logger.error(
                 "Import CLI timed out after %ds for %s",
                 _get_import_timeout_seconds(),
@@ -2994,106 +2999,63 @@ def _import_file(
         return success, result.stdout, result.stderr
 
     # ------------------------------------------------------------------
-    # Progress-tracking path: use Popen so we can monitor /proc/{pid}/io
-    # while the CLI runs.
+    # Progress-tracking path: stream output while monitoring /proc/{pid}/io.
     # ------------------------------------------------------------------
     cli_env = _build_cli_env()
     file_size = _get_path_total_size(path)
     timeout_seconds = _get_import_timeout_seconds()
     imported_base = progress_job.get("imported_bytes", 0)
 
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        stdin=subprocess.DEVNULL,
-        text=True,
-        env=cli_env,
-    )
+    baseline_rchar: Optional[int] = None
+    last_save = 0.0
 
-    # Drain stdout/stderr in background threads to prevent pipe deadlock.
-    stdout_lines = []
-    stderr_lines = []
-
-    def _drain(pipe, dest):
+    def _update_progress(pid: int, _elapsed: float) -> None:
+        nonlocal baseline_rchar, last_save
+        if file_size <= 0:
+            return
+        rchar = _read_proc_rchar(pid)
+        if rchar is None:
+            return
+        if baseline_rchar is None:
+            baseline_rchar = rchar
+        now = time.time()
+        if now - last_save < _IMPORT_PROGRESS_INTERVAL:
+            return
+        bytes_read = max(0, rchar - baseline_rchar)
+        capped = min(file_size, bytes_read)
+        progress_job["import_progress_bytes"] = imported_base + capped
         try:
-            for line in pipe:
-                dest.append(line)
+            _save_job(progress_job)
         except Exception:
             logger.debug("Suppressed exception in cleanup", exc_info=True)
-
-    t_out = threading.Thread(
-        target=_drain, args=(proc.stdout, stdout_lines), daemon=True
-    )
-    t_err = threading.Thread(
-        target=_drain, args=(proc.stderr, stderr_lines), daemon=True
-    )
-    t_out.start()
-    t_err.start()
-
-    baseline_rchar = _read_proc_rchar(proc.pid)
-    last_save = 0.0  # force first save
+        last_save = now
 
     try:
-        while proc.poll() is None:
-            elapsed = time.time() - import_start
-            if elapsed > timeout_seconds:
-                proc.kill()
-                logger.error(
-                    "Import CLI timed out after %ds for %s", timeout_seconds, path
-                )
-                t_out.join(timeout=5)
-                t_err.join(timeout=5)
-                for pipe in (proc.stdout, proc.stderr):
-                    if pipe is not None:
-                        try:
-                            pipe.close()
-                        except Exception:
-                            logger.debug(
-                                "Suppressed exception in cleanup", exc_info=True
-                            )
-                return (
-                    False,
-                    "".join(stdout_lines),
-                    f"Import timed out after {timeout_seconds} seconds",
-                )
+        result = _run_omero_cli_streaming(
+            cmd,
+            env=cli_env,
+            timeout=timeout_seconds,
+            on_tick=_update_progress,
+        )
+    except process_utils.TimeoutExpired as exc:
+        logger.error("Import CLI timed out after %ds for %s", timeout_seconds, path)
+        return (
+            False,
+            exc.stdout,
+            f"Import timed out after {timeout_seconds} seconds",
+        )
 
-            # Update progress from /proc I/O – lightweight read, max every
-            # _IMPORT_PROGRESS_INTERVAL seconds.
-            now = time.time()
-            if now - last_save >= _IMPORT_PROGRESS_INTERVAL and file_size > 0:
-                rchar = _read_proc_rchar(proc.pid)
-                if rchar is not None and baseline_rchar is not None:
-                    bytes_read = max(0, rchar - baseline_rchar)
-                    capped = min(file_size, bytes_read)
-                    progress_job["import_progress_bytes"] = imported_base + capped
-                    try:
-                        _save_job(progress_job)
-                    except Exception:
-                        logger.debug(
-                            "Suppressed exception in cleanup", exc_info=True
-                        )  # best-effort; don't derail the import
-                    last_save = now
-
-            time.sleep(2)
-    except Exception:
-        proc.kill()
-        raise
-    finally:
-        t_out.join(timeout=10)
-        t_err.join(timeout=10)
-        # Close pipes to avoid ResourceWarning for unclosed file objects.
-        for pipe in (proc.stdout, proc.stderr):
-            if pipe is not None:
-                try:
-                    pipe.close()
-                except Exception:
-                    logger.debug("Suppressed exception in cleanup", exc_info=True)
-
-    stdout = "".join(stdout_lines)
-    stderr = "".join(stderr_lines)
+    stdout = result.stdout
+    stderr = result.stderr
     elapsed = time.time() - import_start
-    success = proc.returncode == 0
+    success = result.returncode == 0
+
+    if success and file_size > 0:
+        progress_job["import_progress_bytes"] = imported_base + file_size
+        try:
+            _save_job(progress_job)
+        except Exception:
+            logger.debug("Suppressed exception in cleanup", exc_info=True)
 
     logger.info(
         "Import CLI: finished for %s in %.1fs (success=%s, returncode=%d, "
@@ -3101,7 +3063,7 @@ def _import_file(
         path.name,
         elapsed,
         success,
-        proc.returncode,
+        result.returncode,
         len(stdout.splitlines()),
         len(stderr.splitlines()),
     )
@@ -5147,7 +5109,7 @@ def _check_import_compatibility(
 
     try:
         result = _run_local_import_scan(file_path)
-    except subprocess.TimeoutExpired:
+    except process_utils.TimeoutExpired:
         timeout_seconds = _get_local_import_scan_timeout_seconds()
         response = {
             "status": "error",
@@ -5865,16 +5827,13 @@ def _run_zarr_managed_repo_script(
 
     while True:
         try:
-            result = subprocess.run(
+            result = process_utils.run(
                 cmd,
-                capture_output=True,
-                text=True,
                 check=False,
                 timeout=helper_timeout,
                 env=env,
-                stdin=subprocess.DEVNULL,
             )
-        except subprocess.TimeoutExpired:
+        except process_utils.TimeoutExpired:
             return False, {}, "Managed-repository Zarr helper timed out."
         except Exception as exc:
             return False, {}, str(exc)
@@ -6089,14 +6048,11 @@ def _import_zarr_via_cli(
 
     env = _build_cli_env()
     try:
-        result = subprocess.run(
+        result = process_utils.run(
             cmd,
-            capture_output=True,
-            text=True,
             check=False,
             timeout=_get_import_timeout_seconds(),
             env=env,
-            stdin=subprocess.DEVNULL,
         )
         stdout = result.stdout or ""
         stderr = result.stderr or ""
@@ -6109,7 +6065,7 @@ def _import_zarr_via_cli(
             _sanitize_cli_output_for_logging(stdout.strip()[:500]),
             _sanitize_cli_output_for_logging(stderr.strip()[:500]),
         )
-    except subprocess.TimeoutExpired:
+    except process_utils.TimeoutExpired:
         logger.error("omero zarr import timed out for %s", sanitize_log_value(rel_path))
         success = False
         stdout = ""
@@ -6720,7 +6676,7 @@ def _import_job_entry(
             native_plan = _native_zarr_import_plan(file_path)
         try:
             zarr_scan_result = _run_local_import_scan(file_path)
-        except subprocess.TimeoutExpired:
+        except process_utils.TimeoutExpired:
             timeout_seconds = _get_local_import_scan_timeout_seconds()
             zarr_scan_status = "error"
             zarr_scan_details = (
