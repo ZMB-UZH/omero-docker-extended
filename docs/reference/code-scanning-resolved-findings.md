@@ -160,7 +160,7 @@ Use the playbook when you need the current normative coding pattern. Use this le
 | `PinnedDependenciesID` | 89 | Unpinned GitHub Actions or Docker base images | Pinned actions to full commit SHAs; base images to exact tags | **Pin all actions to SHA; base images to exact tags.** Never use `:latest`. |
 | `DS162092` | 46 | Localhost references in Docker healthchecks and networking | Excluded in DevSkim config — expected for Docker infrastructure | **Expected in Docker infrastructure.** No action needed. |
 | `DS173237` | 33 | Token-like strings in test files | Documented as dummy credentials for unit tests | **Use obviously fake values** (`"test_password"`, `"dummy_token"`) in test fixtures, and never paste real credentials, PATs, or session keys into commands, remotes, repo files, or long-lived local config. |
-| `DS026` / `DS002` | 30 | Missing HEALTHCHECK / root user in Dockerfiles | Health checks in `docker-compose.yml`; root required for bind-mount volumes | **Add HEALTHCHECK in compose.** Document containers requiring root with inline comments. |
+| `DS026` / `DS002` | 30 | Missing HEALTHCHECK / root user in Dockerfiles | Added image-level HEALTHCHECK instructions where reusable images have a real runtime contract; root-required images document why they still need privilege transitions | **Add HEALTHCHECK in compose and in reusable Docker images when a standalone health contract exists.** Document containers that must retain root with inline comments and explicit privilege drop paths. |
 | `SC2012` | 9 | `ls` in Dockerfile RUN commands | Replaced with `find` | **Use `find` instead of `ls`** in Dockerfile RUN commands. |
 | `DL3003` / `DL3008` / `DL3018` | 7 | WORKDIR/package pinning in Dockerfiles | Used WORKDIR; pinned where practical | **Use WORKDIR instead of cd.** Pin system packages where feasible. |
 
@@ -190,6 +190,7 @@ These files have historically generated the most scanning alerts. Extra review a
 | 2026-03-26 | 198 | 15 | Code fixes | Reflected-data escaping, mark_safe removal, B101→if/raise, permission tightening |
 | 2026-03-26 | 183 | — | Current | Remaining: CSRF (29), path-injection (20), urllib (20), Dockerfile design (47), Scorecard (17) |
 | 2026-03-31 | 123 | 7 | Code fixes | Managed upload path hardening, atomic job-file writes, and generic import/upload server-error responses |
+| 2026-04-01 | 56 | 8 | Code fixes | Added image-level Dockerfile healthchecks for reusable images, removed the last bare `except`/`continue` normalization path, and moved Zarr toolbar selection bootstrap out of inline JS expressions |
 
 ---
 

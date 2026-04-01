@@ -32,9 +32,9 @@ GitHub-native code scanning is the supported repository scanning surface here. R
 
 ## Alert inventory
 
-Last live API refresh: **2026-03-31**.
+Last live API refresh: **2026-04-01**.
 
-GitHub reported **116 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
+GitHub reported **48 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
 These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
 
@@ -56,6 +56,17 @@ To prevent documentation drift:
 5. Prefer the narrowest safe rewrite that removes the vulnerable pattern at the helper boundary so sibling call sites inherit the fix.
 6. Re-run targeted tests for every touched package, plus repo-wide `ruff check`, `ruff format --check`, and `python3 tools/lint_docs_structure.py` when those tools are available in the active environment.
 7. After pushing, refresh the live GitHub alert total again. Do not assume a local fix cleared an alert until GitHub reports it.
+
+### Live by-tool snapshot
+
+| Scanner | Open alerts |
+|---|---:|
+| CodeQL | 9 |
+| Hadolint | 11 |
+| Scorecard | 9 |
+| Semgrep OSS | 9 |
+| Trivy | 10 |
+| **Total** | **48** |
 
 ### Historical snapshots below
 
