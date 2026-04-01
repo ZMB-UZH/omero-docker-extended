@@ -91,3 +91,8 @@ RUN set -euo pipefail; \
 
 USER celery
 ENV PATH="/opt/venv/bin:${PATH}"
+
+# This image is primarily reused by standalone smoke/debug runs, so the
+# healthcheck validates that the packaged worker environment is importable.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD /opt/venv/bin/python -c 'import celery, omeroweb_imaris_connector, omero_plugin_common' || exit 1

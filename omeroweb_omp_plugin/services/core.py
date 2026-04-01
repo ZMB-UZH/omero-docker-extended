@@ -101,15 +101,21 @@ def _normalize_annotation_ids(values):
     normalized = []
     seen = set()
     for value in values or []:
-        try:
-            item_id = int(value)
-        except Exception:
+        item_id = _try_normalize_annotation_id(value)
+        if item_id is None:
             continue
         if item_id in seen:
             continue
         seen.add(item_id)
         normalized.append(item_id)
     return normalized
+
+
+def _try_normalize_annotation_id(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 def _delete_object_by_id(conn, update, object_type, stub_type, object_id):

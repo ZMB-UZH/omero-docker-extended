@@ -12,4 +12,7 @@ RUN set -eu; \
 COPY docker/firewall-bouncer-entrypoint.sh /usr/local/bin/custom-entrypoint.sh
 RUN chmod +x /usr/local/bin/custom-entrypoint.sh
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD test -x /usr/local/bin/custom-entrypoint.sh || exit 1
+
 ENTRYPOINT ["/usr/local/bin/custom-entrypoint.sh"]
