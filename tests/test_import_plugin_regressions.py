@@ -1,3 +1,4 @@
+import importlib
 import importlib.util
 import inspect
 import os
@@ -123,6 +124,7 @@ def _install_import_stubs():
 
     if "omero_plugin_common.logging_utils" not in sys.modules:
         common_module = types.ModuleType("omero_plugin_common")
+        common_module.__path__ = [str(REPO_ROOT / "omero_plugin_common")]
         logging_utils = types.ModuleType("omero_plugin_common.logging_utils")
         logging_utils.sanitize_log_value = lambda value: value
         logging_utils.sanitized_exc_info = lambda exc: None
@@ -151,6 +153,9 @@ def _install_import_stubs():
         sys.modules["omero_plugin_common.tmp_cleanup"] = tmp_cleanup
         sys.modules["omero_plugin_common.request_utils"] = request_utils
         sys.modules["omero_plugin_common.env_utils"] = env_utils
+        common_module.process_utils = importlib.import_module(
+            "omero_plugin_common.process_utils"
+        )
 
     if "omeroweb_import.services.data_store" not in sys.modules:
         data_store = types.ModuleType("omeroweb_import.services.data_store")

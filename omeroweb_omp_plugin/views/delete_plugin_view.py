@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from omeroweb.decorators import login_required
+from omero_plugin_common import process_utils
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
-import subprocess
 import logging
 from ..services.core import (
     collect_images_in_project,
@@ -23,6 +23,7 @@ from ..views.utils import (
 from ..strings import errors as error_messages
 
 logger = logging.getLogger(__name__)
+subprocess = process_utils
 
 OMERO = OMERO_CLI
 _DELETE_TARGET_KINDS = frozenset({"Annotation", "ImageAnnotationLink"})
@@ -45,12 +46,8 @@ def _run_omero_delete(cli_base_cmd, object_kind: str, object_id: int):
         f"{object_kind}:{validated_id}",
         "--force",
     ]
-    return subprocess.run(
+    return process_utils.run(
         cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        stdin=subprocess.DEVNULL,
     )
 
 

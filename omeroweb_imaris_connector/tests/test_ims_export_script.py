@@ -401,7 +401,7 @@ def test_convert_to_ims_uses_resolved_binary_runtime_env_and_output(
 
     captured = {}
 
-    def fake_run(cmd, capture_output, text, timeout, env, cwd):
+    def fake_run(cmd, *, timeout, env, cwd, **_kwargs):
         captured["cmd"] = cmd
         captured["timeout"] = timeout
         captured["env"] = env
@@ -521,7 +521,7 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
 
     calls = []
 
-    def _failed_run(cmd, capture_output, text, timeout, env, cwd):
+    def _failed_run(cmd, *, timeout, env, cwd, **_kwargs):
         calls.append({"env": env, "cwd": cwd})
         return subprocess.CompletedProcess(
             args=cmd, returncode=1, stdout="bad", stderr="boom"

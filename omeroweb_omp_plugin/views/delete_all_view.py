@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from omeroweb.decorators import login_required
+from omero_plugin_common import process_utils
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
-import subprocess
 import logging
 
 from ..services.core import collect_images_in_project, find_map_annotation_ids, get_id
@@ -19,6 +19,7 @@ from ..views.utils import (
 from ..strings import errors as error_messages
 
 logger = logging.getLogger(__name__)
+subprocess = process_utils
 
 OMERO = OMERO_CLI
 
@@ -109,12 +110,8 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                 "--force",
             ]
 
-            result = subprocess.run(
+            result = process_utils.run(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                stdin=subprocess.DEVNULL,
             )
 
             if result.returncode != 0:

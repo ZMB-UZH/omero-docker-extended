@@ -155,7 +155,7 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
 
     captured = {}
 
-    def successful_run(cmd, capture_output, text, timeout, check, env):
+    def successful_run(cmd, *, timeout, check, env, **_kwargs):
         captured["cmd"] = cmd
         captured["timeout"] = timeout
         captured["env"] = {
