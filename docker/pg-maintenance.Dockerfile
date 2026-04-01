@@ -40,4 +40,7 @@ RUN chmod +x /usr/local/bin/pg-maintenance.sh && \
 COPY maintenance/postgres/pg-maintenance-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+HEALTHCHECK --interval=10s --timeout=10s --start-period=10s --retries=30 \
+    CMD pgrep -x cron >/dev/null || exit 1
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
