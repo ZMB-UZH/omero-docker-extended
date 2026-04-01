@@ -189,10 +189,10 @@ def test_request_and_string_helpers_cover_user_resolution_json_fallbacks_and_pay
     assert error is None
     data, error = request_utils.parse_json_body(invalid_json_request)
     assert data is None
-    assert error is not None
+    assert error == "Request body is not valid JSON."
     data, error = request_utils.parse_json_body(invalid_utf8_request)
     assert data is None
-    assert error is not None
+    assert error == "Request body is not valid UTF-8."
     assert string_utils.snake_to_camel("alpha_beta_gamma") == "alphaBetaGamma"
     assert string_utils.snake_to_camel("single") == "single"
     assert string_utils.build_message_payload(

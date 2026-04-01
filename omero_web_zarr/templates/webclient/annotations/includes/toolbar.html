@@ -65,6 +65,18 @@
                 var shareMode = "{{ share|yesno:'true,false' }}" === "true";
 
                 if (!shareMode) {
+                  function sanitizeOpenwithUrl(candidateUrl) {
+                    try {
+                      var resolvedUrl = new URL(candidateUrl, window.location.origin);
+                      if (resolvedUrl.protocol !== "http:" && resolvedUrl.protocol !== "https:") {
+                        return "#";
+                      }
+                      return resolvedUrl.href;
+                    } catch (error) {
+                      return "#";
+                    }
+                  }
+
                   function findOpenwithLink(openwithId) {
                     return $("#right_panel_openwith a").filter(function() {
                       return $(this).attr("data-openwithid") === String(openwithId);
@@ -109,10 +121,11 @@
                           liClass = "disabled";
                           tooltip = tooltip.replace("Open", "Cannot open");
                       }
+                      var safeUrl = sanitizeOpenwithUrl(url);
                       var $link = $("<a/>")
                         .attr("title", tooltip)
                         .attr("target", "_blank")
-                        .attr("href", url)
+                        .attr("href", safeUrl)
                         .attr("data-openwithid", String(v.id))
                         .data("openwith_disabled", !enabled)
                         .text(label);

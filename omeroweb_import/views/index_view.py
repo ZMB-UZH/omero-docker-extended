@@ -37,8 +37,10 @@ from .core_functions import (
     _get_text,
     _get_upload_root,
     _has_read_write_permissions,
+    _is_managed_upload_internal_error,
     _is_owned_by_user,
     _load_job,
+    _managed_upload_error_message,
     _normalize_job_batch_size,
     _normalize_sem_edx_associations,
     _normalize_sem_edx_settings,
@@ -57,6 +59,7 @@ from .core_functions import (
     _special_methods_enabled,
     _start_import_thread,
     _update_job,
+    _validated_job_id,
     _validate_staged_target_path,
     logger,
 )
@@ -554,13 +557,18 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
     else:
         reset_error = None
     if reset_error:
-        if isinstance(reset_error, OSError):
+        if _is_managed_upload_internal_error(reset_error) or isinstance(
+            reset_error, OSError
+        ):
             logger.warning(
-                "Failed to reset staged upload %s for chunked retry: %s",
+                "Failed to reset staged upload %s for chunked retry.",
                 sanitize_log_value(rel_path),
-                sanitize_log_value(reset_error),
             )
-            generic_error = errors.unexpected_server_error_uploading_files()
+            generic_error = (
+                _managed_upload_error_message(reset_error)
+                if _is_managed_upload_internal_error(reset_error)
+                else errors.unexpected_server_error_uploading_files()
+            )
             updated_job = _apply_upload_updates(
                 job_id,
                 [
@@ -579,13 +587,18 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
 
     existing_size, staged_error = _staged_upload_size(job_root, staged_path)
     if staged_error:
-        if isinstance(staged_error, OSError):
+        if _is_managed_upload_internal_error(staged_error) or isinstance(
+            staged_error, OSError
+        ):
             logger.warning(
-                "Failed to inspect staged upload %s: %s",
+                "Failed to inspect staged upload %s.",
                 sanitize_log_value(rel_path),
-                sanitize_log_value(staged_error),
             )
-            generic_error = errors.unexpected_server_error_uploading_files()
+            generic_error = (
+                _managed_upload_error_message(staged_error)
+                if _is_managed_upload_internal_error(staged_error)
+                else errors.unexpected_server_error_uploading_files()
+            )
             updated_job = _apply_upload_updates(
                 job_id,
                 [
@@ -618,14 +631,19 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
         job_root, staged_path, upload
     )
     if write_error:
-        if isinstance(write_error, str):
+        if isinstance(write_error, str) and not _is_managed_upload_internal_error(
+            write_error
+        ):
             return json_error(write_error, status=400)
         logger.warning(
-            "Failed to save chunk for %s: %s",
+            "Failed to save chunk for %s.",
             sanitize_log_value(rel_path),
-            sanitize_log_value(write_error),
         )
-        generic_error = errors.unexpected_server_error_uploading_files()
+        generic_error = (
+            _managed_upload_error_message(write_error)
+            if _is_managed_upload_internal_error(write_error)
+            else errors.unexpected_server_error_uploading_files()
+        )
         updated_job = _apply_upload_updates(
             job_id,
             [
@@ -661,7 +679,6 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
         _as_bool(request.POST.get("is_last_chunk")) or saved_size >= file_size
     )
     if not is_last_chunk:
-        # codeql[py/stack-trace-exposure]
         return JsonResponse(
             {
                 "ok": True,
@@ -744,6 +761,16 @@ def _upload_files(request, job_id, conn):
         logger.warning("Upload job %s not found.", safe_job_id)
         return error_response
 
+    try:
+        job_id = _validated_job_id(job.get("job_id"))
+    except (TypeError, ValueError):
+        logger.warning(
+            "Upload job %s contained an invalid persisted identifier.",
+            safe_job_id,
+        )
+        return json_error(errors.upload_job_not_found())
+    safe_job_id = sanitize_log_value(job_id)
+
     job_root = upload_root / job_id
     if not _ensure_dir(job_root):
         logger.warning("Unable to initialize upload folder for job %s.", safe_job_id)
@@ -790,7 +817,9 @@ def _upload_files(request, job_id, conn):
             job_root, staged_path, upload
         )
         if save_error:
-            if isinstance(save_error, str):
+            if isinstance(save_error, str) and not _is_managed_upload_internal_error(
+                save_error
+            ):
                 staged_error = save_error
                 logger.warning(
                     "Rejected staged upload target for %s: %s",
@@ -810,11 +839,14 @@ def _upload_files(request, job_id, conn):
                 continue
 
             logger.warning(
-                "Failed to save upload %s: %s",
+                "Failed to save upload %s.",
                 sanitize_log_value(rel_path),
-                sanitize_log_value(save_error),
             )
-            generic_error = errors.unexpected_server_error_uploading_files()
+            generic_error = (
+                _managed_upload_error_message(save_error)
+                if _is_managed_upload_internal_error(save_error)
+                else errors.unexpected_server_error_uploading_files()
+            )
             upload_errors.append(generic_error)
             entry["status"] = "error"
             entry.setdefault("errors", []).append(generic_error)
@@ -867,7 +899,6 @@ def _upload_files(request, job_id, conn):
         _start_import_thread(job_id)
         logger.info("Upload job %s ready; import thread started.", safe_job_id)
 
-    # codeql[py/stack-trace-exposure]
     return JsonResponse(
         {
             "ok": len(upload_errors) == 0,
