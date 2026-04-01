@@ -7,6 +7,9 @@ from types import SimpleNamespace
 
 import django
 import numpy as np
+import pytest
+from django.http import Http404
+from django.test import RequestFactory
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "omeroweb.settings")
 warnings.filterwarnings(
@@ -208,6 +211,76 @@ class _MarshalImage:
         return SimpleNamespace(getValue=lambda: 1.25)
 
 
+class _SingleLevelImage:
+    description = ""
+    archived = False
+
+    def __init__(self, *, objective_mode="raise", projection_mode="raise"):
+        self.id = 9
+        self.name = "single.zarr"
+        self._objective_mode = objective_mode
+        self._projection_mode = projection_mode
+        self._conn = SimpleNamespace(
+            getMaxPlaneSize=lambda: (_ for _ in ()).throw(RuntimeError("plane-size"))
+        )
+
+    def getChannels(self, noRE=False):
+        return [_Channel(label="DNA")]
+
+    def getProjection(self):
+        if self._projection_mode == "raise":
+            raise RuntimeError("projection")
+        return "maximum"
+
+    def getPixelSizeX(self, units=None):
+        raise RuntimeError("x")
+
+    def getPixelSizeY(self, units=None):
+        return None
+
+    def getPixelSizeZ(self, units=None):
+        return SimpleNamespace(getValue=lambda: 1.5)
+
+    def getObjectiveSettings(self):
+        if self._objective_mode == "raise":
+            raise RuntimeError("objective")
+        if self._objective_mode == "none":
+            return None
+        return SimpleNamespace(
+            getObjective=lambda: SimpleNamespace(getNominalMagnification=lambda: 63)
+        )
+
+    def canAnnotate(self):
+        return True
+
+    def canEdit(self):
+        return False
+
+    def canDelete(self):
+        return False
+
+    def canLink(self):
+        return True
+
+    def getSizeX(self):
+        return 128
+
+    def getSizeY(self):
+        return 64
+
+    def getSizeZ(self):
+        return 2
+
+    def getSizeT(self):
+        return 1
+
+    def getSizeC(self):
+        return 1
+
+    def splitChannelDims(self):
+        return {"g": {"width": 128, "height": 64}}
+
+
 def test_store_backed_render_helpers_cover_metadata_ranges_and_downloads(monkeypatch):
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
     assert integration._safe_rendering_enabled() is True
@@ -235,6 +308,11 @@ def test_store_backed_render_helpers_cover_metadata_ranges_and_downloads(monkeyp
     assert wrapper.isInverted() is False
     assert wrapper.getWindowStart() == 3.0
     assert wrapper.getWindowEnd() == 9.0
+
+    passthrough_wrapper = integration._StoreBackedChannelWrapper(_Channel(active=True), {})
+    assert passthrough_wrapper.isActive() is True
+    assert passthrough_wrapper.getWindowStart() == 1.0
+    assert passthrough_wrapper.getWindowEnd() == 5.0
 
     monkeypatch.setattr(
         integration,
@@ -347,6 +425,255 @@ def test_store_backed_render_helpers_cover_metadata_ranges_and_downloads(monkeyp
         "Error instantiating pixel buffer\nZarrPixelsService.getPixelBuffer"
     )
     assert integration._is_known_rendering_engine_failure(exc) is True
+
+
+def test_store_backed_image_data_covers_projection_tile_and_objective_fallbacks(
+    monkeypatch,
+):
+    monkeypatch.setattr(integration, "load_store_backed_image_node", lambda image: None)
+    monkeypatch.setattr(
+        integration,
+        "_decorate_store_backed_channels",
+        lambda image, channels: channels,
+    )
+    monkeypatch.setattr(integration, "channelMarshal", lambda channel: channel.getLabel())
+    monkeypatch.setattr(
+        integration,
+        "_store_backed_metadata",
+        lambda image: {"imageName": image.name},
+    )
+
+    request = SimpleNamespace(
+        session={"server_settings": {"viewer": {"initial_zoom_level": -1}}}
+    )
+    fallback_payload = integration._store_backed_image_data(_SingleLevelImage(), request)
+
+    assert fallback_payload["tiles"] is False
+    assert fallback_payload["pixel_size"] == {"z": 1.5}
+    assert fallback_payload["rdefs"]["projection"] == "normal"
+    assert fallback_payload["init_zoom"] == 0
+    assert "nominalMagnification" not in fallback_payload
+
+    magnified_payload = integration._store_backed_image_data(
+        _SingleLevelImage(objective_mode="value", projection_mode="value"),
+        SimpleNamespace(session={"server_settings": {"viewer": {}}}),
+    )
+    assert magnified_payload["nominalMagnification"] == 63
+    assert magnified_payload["rdefs"]["projection"] == "maximum"
+
+
+def test_load_metadata_preview_with_safe_rendering_covers_share_well_and_reraises(
+    monkeypatch,
+):
+    from omeroweb.webclient import views as webclient_views
+
+    preview_image = SimpleNamespace(
+        id=17,
+        getAllRenderingDefs=lambda: (_ for _ in ()).throw(RuntimeError("renderer busy")),
+        getRenderingDefId=lambda: 3,
+        getSizeX=lambda: 256,
+        getSizeY=lambda: 128,
+    )
+    manager = SimpleNamespace(
+        image=None,
+        well=SimpleNamespace(getImage=lambda index: preview_image),
+    )
+
+    monkeypatch.setattr(webclient_views, "getIntOrDefault", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(
+        webclient_views,
+        "BaseContainer",
+        lambda conn, **kwargs: manager,
+    )
+    monkeypatch.setattr(
+        webclient_views,
+        "BaseShare",
+        lambda conn, share_id: f"share-{share_id}",
+    )
+    monkeypatch.setattr(
+        integration,
+        "_is_known_rendering_engine_failure",
+        lambda exc: True,
+    )
+
+    context = integration._load_metadata_preview_with_safe_rendering(
+        RequestFactory().get("/webclient/metadata_preview/"),
+        "well",
+        4,
+        conn=SimpleNamespace(getMaxPlaneSize=lambda: (32, 32)),
+        share_id=9,
+    )
+    assert context["share"] == "share-9"
+    assert context["manager"] is manager
+    assert context["tiledImage"] is True
+
+    monkeypatch.setattr(
+        integration,
+        "_is_known_rendering_engine_failure",
+        lambda exc: False,
+    )
+    with pytest.raises(RuntimeError, match="renderer busy"):
+        integration._load_metadata_preview_with_safe_rendering(
+            RequestFactory().get("/webclient/metadata_preview/"),
+            "image",
+            4,
+            conn=SimpleNamespace(getMaxPlaneSize=lambda: (32, 32)),
+        )
+
+
+def test_region_helpers_cover_remaining_error_paths(monkeypatch):
+    from omeroweb.webgateway import views as webgateway_views
+
+    class _RegularImage:
+        def __init__(self, levels=2, jpeg_payload=b"jpeg"):
+            self._re = SimpleNamespace(getResolutionLevels=lambda: levels)
+            self._jpeg_payload = jpeg_payload
+
+        def _prepareRenderingEngine(self):
+            return None
+
+        def renderJpegRegion(self, *args, **kwargs):
+            return self._jpeg_payload
+
+    monkeypatch.setattr(
+        integration,
+        "get_safe_image_tile_size",
+        lambda image, conn=None: (32, 16),
+    )
+
+    request = RequestFactory().get(
+        "/webgateway/render_image_region/7/0/0/",
+        {"tile": "-1,0,0,2048,2048"},
+    )
+    request.session = {"connector": {"server_id": 1}}
+    monkeypatch.setattr(
+        webgateway_views,
+        "_get_prepared_image",
+        lambda *args, **kwargs: (_RegularImage(levels=2), 0.9),
+    )
+    response = integration._render_regular_image_region_with_safe_tile_size(
+        request,
+        7,
+        0,
+        0,
+        conn=SimpleNamespace(
+            getConfigService=lambda: (_ for _ in ()).throw(RuntimeError("config"))
+        ),
+    )
+    assert response.status_code == 400
+
+    zero_level_request = RequestFactory().get(
+        "/webgateway/render_image_region/7/0/0/",
+        {"tile": "1,0,0"},
+    )
+    zero_level_request.session = {"connector": {"server_id": 1}}
+    monkeypatch.setattr(
+        webgateway_views,
+        "_get_prepared_image",
+        lambda *args, **kwargs: (_RegularImage(levels=1), 0.9),
+    )
+    invalid_level = integration._render_regular_image_region_with_safe_tile_size(
+        zero_level_request,
+        7,
+        0,
+        0,
+    )
+    assert invalid_level.status_code == 400
+
+    missing_args_request = RequestFactory().get("/webgateway/render_image_region/7/0/0/")
+    missing_args_request.session = {"connector": {"server_id": 1}}
+    monkeypatch.setattr(
+        webgateway_views,
+        "_get_prepared_image",
+        lambda *args, **kwargs: (_RegularImage(levels=2), 0.9),
+    )
+    missing_args = integration._render_regular_image_region_with_safe_tile_size(
+        missing_args_request,
+        7,
+        0,
+        0,
+    )
+    assert missing_args.status_code == 400
+
+    region_request = RequestFactory().get(
+        "/webgateway/render_image_region/7/0/0/",
+        {"region": "1,2,3,4"},
+    )
+    region_request.session = {"connector": {"server_id": 1}}
+    monkeypatch.setattr(
+        webgateway_views,
+        "_get_prepared_image",
+        lambda *args, **kwargs: (_RegularImage(levels=2, jpeg_payload=None), 0.9),
+    )
+    with pytest.raises(Http404):
+        integration._render_regular_image_region_with_safe_tile_size(
+            region_request,
+            7,
+            0,
+            0,
+        )
+
+    monkeypatch.setattr(integration, "load_store_backed_image_node", lambda image: None)
+    assert (
+        integration._store_backed_region_response(
+            SimpleNamespace(id=7),
+            RequestFactory().get("/webgateway/render_image_region/7/0/0/"),
+            conn=None,
+        ).status_code
+        == 400
+    )
+
+    fake_node = SimpleNamespace()
+    monkeypatch.setattr(
+        integration,
+        "load_store_backed_image_node",
+        lambda image: fake_node,
+    )
+    monkeypatch.setattr(integration, "get_store_backed_level_count", lambda node: 2)
+    monkeypatch.setattr(
+        integration,
+        "get_store_backed_tile_size",
+        lambda node: {"width": 64, "height": 32},
+    )
+    monkeypatch.setattr(
+        integration,
+        "select_store_backed_viewer_level",
+        lambda node, viewer_level: 1 - viewer_level,
+    )
+    monkeypatch.setattr(
+        integration,
+        "render_store_backed_region_pil_image",
+        lambda *args, **kwargs: object(),
+    )
+    monkeypatch.setattr(
+        integration,
+        "encode_store_backed_pil_image",
+        lambda image, requested_format: (b"payload", "image/jpeg", "jpg"),
+    )
+
+    store_request = RequestFactory().get(
+        "/webgateway/render_image_region/7/0/0/",
+        {"tile": "0,1,2,2048,2048"},
+    )
+    response = integration._store_backed_region_response(
+        SimpleNamespace(id=7),
+        store_request,
+        conn=SimpleNamespace(
+            getConfigService=lambda: (_ for _ in ()).throw(RuntimeError("config"))
+        ),
+    )
+    assert response.status_code == 200
+    assert response.content == b"payload"
+
+    malformed_tile = integration._store_backed_region_response(
+        SimpleNamespace(id=7),
+        RequestFactory().get(
+            "/webgateway/render_image_region/7/0/0/",
+            {"tile": "0,nope,2"},
+        ),
+        conn=None,
+    )
+    assert malformed_tile.status_code == 400
 
 
 def test_marshal_regular_image_data_with_safe_tile_size_handles_engine_fallbacks(

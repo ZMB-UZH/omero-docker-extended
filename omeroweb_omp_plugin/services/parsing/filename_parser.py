@@ -6,7 +6,7 @@ import re
 import logging
 
 logger = logging.getLogger(__name__)
-_UNSAFE_SEPARATOR_REGEX_RE = re.compile(r"(\(\?[:!=<]|\\[1-9]|\{\d|\*\+|\+\+)")
+_UNSAFE_SEPARATOR_REGEX_RE = re.compile(r"(\(\?(?!:)|\\[1-9]|\{\d|\*\+|\+\+)")
 
 
 def _parse_separator_fragment(separator_fragment):

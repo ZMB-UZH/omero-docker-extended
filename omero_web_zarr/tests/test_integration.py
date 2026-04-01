@@ -244,6 +244,7 @@ def test_install_webgateway_overrides_routes_store_backed_channels_off_re(monkey
     monkeypatch.setattr(
         webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False
     )
+    monkeypatch.setattr(integration.settings, "THUMBNAILS_BATCH", 2, raising=False)
 
     integration.install_webgateway_overrides()
 
@@ -932,6 +933,9 @@ def test_install_webgateway_overrides_skips_safe_marshal_when_disabled(monkeypat
     monkeypatch.setattr(
         webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False
     )
+    monkeypatch.setattr(
+        integration.settings._wrapped, "THUMBNAILS_BATCH", 2, raising=False
+    )
 
     integration.install_webgateway_overrides()
 
@@ -1016,6 +1020,9 @@ def test_install_webgateway_overrides_propagates_tile_failure_when_safe_renderin
     monkeypatch.setattr(webclient_urls, "urlpatterns", [])
     monkeypatch.setattr(
         webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False
+    )
+    monkeypatch.setattr(
+        integration.settings._wrapped, "THUMBNAILS_BATCH", 2, raising=False
     )
 
     integration.install_webgateway_overrides()
@@ -1626,3 +1633,279 @@ def test_install_webgateway_overrides_renders_store_backed_thumbnails_and_images
     assert thumbs_json[7].startswith("data:image/jpeg;base64,")
     assert thumbs_json[8].startswith("data:image/jpeg;base64,")
     assert image_response.content == b"store-image"
+
+
+def test_install_webgateway_overrides_cover_regular_fallback_and_error_paths(
+    monkeypatch,
+):
+    monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
+
+    def _identity_decorator():
+        return lambda func: func
+
+    from omeroweb.webclient import urls as webclient_urls
+    from omeroweb.webclient import views as webclient_views
+    from omeroweb.webclient import webclient_gateway
+    from omeroweb.webgateway import marshal as webgateway_marshal
+    from omeroweb.webgateway import urls as webgateway_urls
+    from omeroweb.webgateway import views as webgateway_views
+
+    regular_image = type("RegularImage", (), {"store_backed": False})()
+    store_backed_image = type("StoreBackedImage", (), {"store_backed": True})()
+
+    class _ThumbMap:
+        def __getitem__(self, image_id):
+            if image_id == 3:
+                raise KeyError(image_id)
+            if image_id == 4:
+                raise RuntimeError("thumbnail lookup failed")
+            return b"thumb"
+
+    class _Conn:
+        def __init__(self, image_map):
+            self._image_map = image_map
+
+        def getObject(self, object_type, iid):
+            assert object_type == "Image"
+            return self._image_map.get(iid)
+
+        def getThumbnailSet(self, ids, width):
+            return _ThumbMap()
+
+    thumb_calls = []
+    original_thumb_calls = []
+    original_render_image_calls = []
+    marshal_calls = []
+    fallback_region_calls = []
+
+    def original_render_thumbnail(
+        request, iid, w=None, h=None, conn=None, _defcb=None, **kwargs
+    ):
+        original_thumb_calls.append((iid, w, h))
+        return HttpResponse(b"regular-thumb", content_type="image/jpeg")
+
+    def original_get_thumbnails_json(request, w=None, conn=None, **kwargs):
+        return {"source": "original", "width": w}
+
+    def original_render_image(request, iid, z=None, t=None, conn=None, **kwargs):
+        original_render_image_calls.append((iid, z, t, kwargs))
+        return HttpResponse(b"regular-image", content_type="image/jpeg")
+
+    def failing_render_image_region(request, iid, z, t, conn=None, **kwargs):
+        raise RuntimeError("tile too large")
+
+    def failing_image_data_json(request, conn=None, _internal=False, **kwargs):
+        if kwargs["iid"] == 9:
+            return {"source": "original", "iid": kwargs["iid"]}
+        raise RuntimeError("tile too large")
+
+    def failing_load_metadata_preview(
+        request, c_type, c_id, conn=None, share_id=None, **kwargs
+    ):
+        raise RuntimeError("preview boom")
+
+    monkeypatch.setattr(integration, "login_required", _identity_decorator)
+    monkeypatch.setattr(
+        integration,
+        "is_store_backed_image",
+        lambda image: getattr(image, "store_backed", False),
+    )
+    monkeypatch.setattr(
+        integration,
+        "render_store_backed_thumbnail_bytes",
+        lambda image, size, z=None, t=None: (
+            thumb_calls.append((size, z, t, image.store_backed)) or b"store-thumb"
+        ),
+    )
+    monkeypatch.setattr(
+        integration,
+        "_render_regular_image_region_with_safe_tile_size",
+        lambda request, iid, z, t, conn=None: (
+            fallback_region_calls.append((iid, z, t))
+            or HttpResponse(b"fallback-region")
+        ),
+    )
+    monkeypatch.setattr(
+        integration,
+        "_marshal_regular_image_data_with_safe_tile_size",
+        lambda image, request: marshal_calls.append(image) or {"nested": {"value": 7}},
+    )
+    monkeypatch.setattr(
+        integration,
+        "_is_known_rendering_engine_failure",
+        lambda exc: False,
+    )
+    monkeypatch.setattr(
+        integration,
+        "HttpJavascriptResponseServerError",
+        lambda message: HttpResponse(message, status=500),
+    )
+    monkeypatch.setattr(
+        integration, "settings", type("Settings", (), {"THUMBNAILS_BATCH": 2})()
+    )
+    monkeypatch.setattr(
+        integration,
+        "is_known_tile_size_failure",
+        lambda exc: "tile too large" in str(exc),
+    )
+    monkeypatch.setattr(
+        webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: []
+    )
+    monkeypatch.setattr(webgateway_views, "_render_thumbnail", original_render_thumbnail)
+    monkeypatch.setattr(
+        webgateway_views, "get_thumbnails_json", original_get_thumbnails_json
+    )
+    monkeypatch.setattr(webgateway_views, "render_image", original_render_image)
+    monkeypatch.setattr(
+        webgateway_views, "render_image_region", failing_render_image_region
+    )
+    monkeypatch.setattr(webgateway_views, "imageData_json", failing_image_data_json)
+    monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
+    monkeypatch.setattr(
+        webgateway_views,
+        "getIntOrDefault",
+        lambda request, name, default=None: request.GET.get(name, default),
+    )
+    monkeypatch.setattr(
+        webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {}
+    )
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_safe_image_marshal_installed",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_original_image_marshal",
+        None,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webclient_views, "load_metadata_preview", failing_load_metadata_preview
+    )
+    monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
+    monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
+    monkeypatch.setattr(webclient_urls, "urlpatterns", [])
+    monkeypatch.setattr(
+        webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False
+    )
+
+    integration.install_webgateway_overrides()
+
+    regular_conn = _Conn({1: regular_image, 3: regular_image, 4: regular_image, 9: None})
+    store_conn = _Conn({2: store_backed_image})
+
+    regular_thumb_request = RequestFactory().get("/webgateway/render_thumbnail/1/")
+    regular_thumb_request.session = {}
+    regular_thumb = webgateway_views._render_thumbnail(
+        regular_thumb_request,
+        1,
+        w=16,
+        h=20,
+        conn=regular_conn,
+    )
+    assert regular_thumb.content == b"regular-thumb"
+    assert original_thumb_calls == [(1, 16, 20)]
+
+    store_thumb_request = RequestFactory().get(
+        "/webgateway/render_thumbnail/2/",
+        {"z": 3, "t": 4},
+    )
+    store_thumb_request.session = {}
+    store_thumb = webgateway_views._render_thumbnail(
+        store_thumb_request,
+        2,
+        w=16,
+        h=24,
+        conn=store_conn,
+    )
+    assert store_thumb == b"store-thumb"
+    assert thumb_calls[-1] == (24, "3", "4", True)
+
+    monkeypatch.setattr(webgateway_views, "get_longs", lambda request, name: [1])
+    original_thumbs_request = RequestFactory().get("/webgateway/thumbs-json/")
+    original_thumbs_request.session = {}
+    assert webgateway_views.get_thumbnails_json(
+        original_thumbs_request,
+        w=32,
+        conn=regular_conn,
+    ) == {"source": "original", "width": 32}
+
+    monkeypatch.setattr(
+        webgateway_views,
+        "get_longs",
+        lambda request, name: [0, 1, 2],
+    )
+    too_many_request = RequestFactory().get("/webgateway/thumbs-json/")
+    too_many_request.session = {}
+    too_many = webgateway_views.get_thumbnails_json(
+        too_many_request,
+        conn=store_conn,
+    )
+    assert getattr(too_many, "status_code", 500) == 500
+
+    integration.settings.THUMBNAILS_BATCH = 5
+    monkeypatch.setattr(webgateway_views, "get_longs", lambda request, name: [2, 3, 4])
+    monkeypatch.setattr(
+        integration,
+        "render_store_backed_thumbnail_bytes",
+        lambda image, size, z=None, t=None: (_ for _ in ()).throw(
+            RuntimeError("render failed")
+        ),
+    )
+    mixed_thumbs_request = RequestFactory().get("/webgateway/thumbs-json/")
+    mixed_thumbs_request.session = {}
+    mixed_thumbs = webgateway_views.get_thumbnails_json(
+        mixed_thumbs_request,
+        w=None,
+        conn=_Conn({2: store_backed_image, 3: regular_image, 4: regular_image}),
+    )
+    assert mixed_thumbs == {2: None, 3: None, 4: None}
+
+    regular_image_response = webgateway_views.render_image(
+        RequestFactory().get("/webgateway/render_image/1/"),
+        1,
+        z=0,
+        t=1,
+        conn=regular_conn,
+    )
+    assert regular_image_response.content == b"regular-image"
+    assert original_render_image_calls == [(1, 0, 1, {})]
+
+    fallback_region = webgateway_views.render_image_region(
+        RequestFactory().get(
+            "/webgateway/render_image_region/1/0/0/",
+            {"tile": "0,0,0"},
+        ),
+        1,
+        0,
+        0,
+        conn=regular_conn,
+    )
+    assert fallback_region.content == b"fallback-region"
+    assert fallback_region_calls == [(1, 0, 0)]
+
+    assert webgateway_views.imageData_json(
+        RequestFactory().get("/webgateway/imgData/9/"),
+        conn=regular_conn,
+        iid=9,
+    ) == {"source": "original", "iid": 9}
+    assert (
+        webgateway_views.imageData_json(
+            RequestFactory().get("/webgateway/imgData/1/"),
+            conn=_Conn({1: regular_image}),
+            iid=1,
+            key="nested.value",
+        )
+        == 7
+    )
+    assert marshal_calls == [regular_image]
+
+    with pytest.raises(RuntimeError, match="preview boom"):
+        webclient_views.load_metadata_preview(
+            RequestFactory().get("/webclient/metadata_preview/"),
+            "image",
+            1,
+            conn=regular_conn,
+        )
