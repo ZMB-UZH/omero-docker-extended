@@ -1,5 +1,4 @@
 import base64
-import importlib
 import json
 import logging
 import time
@@ -417,7 +416,7 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
 
             viewer_level = int(fields[0])
             if viewer_level < 0:
-                message = "Invalid resolution level %d < 0" % viewer_level
+                message = "invalid resolution level"
                 LOGGER.debug(message, exc_info=True)
                 return HttpResponseBadRequest(
                     message, content_type="text/plain; charset=utf-8"
@@ -425,9 +424,7 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
 
             if max_viewer_level == 0:
                 if viewer_level > 0:
-                    message = (
-                        "Invalid resolution level %d, non pyramid file" % viewer_level
-                    )
+                    message = "invalid resolution level"
                     LOGGER.debug(message, exc_info=True)
                     return HttpResponseBadRequest(
                         message,
@@ -437,10 +434,7 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
             else:
                 level = max_viewer_level - viewer_level
                 if level < 0:
-                    message = (
-                        "Invalid resolution level, %d > number of available levels %d "
-                        % (viewer_level, max_viewer_level)
-                    )
+                    message = "invalid resolution level"
                     LOGGER.debug(message, exc_info=True)
                     return HttpResponseBadRequest(
                         message,
@@ -518,15 +512,24 @@ def _install_safe_image_marshal_overrides(webgateway_marshal):
     webgateway_marshal._omero_web_zarr_original_image_marshal = original_image_marshal
     webgateway_marshal._omero_web_zarr_safe_image_marshal_installed = True
 
-    for module_name in (
-        "omeroweb.webgateway.views",
-        "omero_iviewer.views",
-        "omero_figure.views",
-    ):
-        try:
-            module = importlib.import_module(module_name)
-        except ImportError:
-            continue
+    candidate_modules = []
+    from omeroweb.webgateway import views as webgateway_views
+
+    candidate_modules.append(webgateway_views)
+    try:
+        import omero_iviewer.views as iviewer_views
+    except ImportError:
+        iviewer_views = None
+    if iviewer_views is not None:
+        candidate_modules.append(iviewer_views)
+    try:
+        import omero_figure.views as figure_views
+    except ImportError:
+        figure_views = None
+    if figure_views is not None:
+        candidate_modules.append(figure_views)
+
+    for module in candidate_modules:
         if getattr(module, "imageMarshal", None) is not None:
             module.imageMarshal = safe_image_marshal
 

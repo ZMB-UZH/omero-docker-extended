@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import subprocess
 
+import pytest
+
 from omeroweb_import.views import core_functions
 
 
@@ -83,6 +85,18 @@ def test_resolve_managed_child_path_rejects_symlinked_segments(
         assert "Invalid filename" in str(exc)
     else:
         raise AssertionError("Expected symlinked managed path rejection")
+
+
+def test_managed_path_helpers_reject_embedded_null_bytes(monkeypatch, tmp_path) -> None:
+    upload_root = tmp_path / "uploads"
+    jobs_root = tmp_path / "jobs"
+    upload_root.mkdir()
+    jobs_root.mkdir()
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: jobs_root)
+
+    with pytest.raises(ValueError, match="Invalid filename"):
+        core_functions._resolve_managed_child_parts(upload_root, ("bad\x00name",))
 
 
 def test_staged_upload_file_helpers_reject_symlink_leaf_targets(tmp_path) -> None:

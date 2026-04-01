@@ -150,6 +150,39 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
     assert len(seen) == 5
 
 
+def test_internal_service_base_url_builds_valid_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("ADMIN_TOOLS_PROMETHEUS_URL", raising=False)
+    monkeypatch.delenv("ADMIN_TOOLS_INTERNAL_SERVICE_SCHEME", raising=False)
+    assert (
+        index_view._internal_service_base_url(
+            "ADMIN_TOOLS_PROMETHEUS_URL",
+            default_host="prometheus",
+            default_port=9090,
+        )
+        == "http://prometheus:9090"
+    )
+
+    monkeypatch.setenv("ADMIN_TOOLS_INTERNAL_SERVICE_SCHEME", "https")
+    assert (
+        index_view._internal_service_base_url(
+            "ADMIN_TOOLS_GRAFANA_URL",
+            default_host="grafana",
+            default_port=3000,
+        )
+        == "https://grafana:3000"
+    )
+
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_URL", "https://grafana.internal:3443")
+    assert (
+        index_view._internal_service_base_url(
+            "ADMIN_TOOLS_GRAFANA_URL",
+            default_host="grafana",
+            default_port=3000,
+        )
+        == "https://grafana.internal:3443"
+    )
+
+
 def test_collect_recently_seen_services_and_parse_since_ns() -> None:
     response = _RequestsResponseStub(
         200,

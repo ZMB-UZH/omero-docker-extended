@@ -125,6 +125,73 @@ def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
         filename_parser.parse_filename("sample.ome.tif", r"(?=_)")
 
 
+def test_core_delete_existing_annotations_supports_runtime_positional_signature(
+    monkeypatch,
+):
+    captured = {}
+
+    def fake_delete(conn, update, img, var_names, mode):
+        captured["args"] = (conn, update, img, var_names, mode)
+        return (1, 2, 3)
+
+    monkeypatch.setattr(annotation_service, "delete_existing_annotations", fake_delete)
+
+    result = core.delete_existing_annotations(
+        "conn",
+        "update",
+        "img",
+        ["var_a"],
+        "plugin",
+    )
+
+    assert result == (1, 2, 3)
+    assert captured["args"] == ("conn", "update", "img", ["var_a"], "plugin")
+
+
+def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
+    monkeypatch,
+):
+    deleted = []
+
+    class _Stub:
+        def setId(self, value):
+            self.id = value
+
+    class _Update:
+        def deleteObject(self, obj):
+            deleted.append(obj.id)
+
+    class _Conn:
+        def getObject(self, *_args):
+            return None
+
+        def getUpdateService(self):
+            return _Update()
+
+    def fake_delete(conn, update, img, var_names, mode):
+        raise AssertionError("legacy id-based fallback should handle this path")
+
+    monkeypatch.setattr(annotation_service, "delete_existing_annotations", fake_delete)
+    monkeypatch.setattr(
+        annotation_service,
+        "find_plugin_annotation_ids",
+        lambda *_args, **_kwargs: [7, 8],
+    )
+    monkeypatch.setattr(
+        annotation_service,
+        "find_annotation_link_ids",
+        lambda _conn, annotation_id: [annotation_id + 100],
+    )
+    monkeypatch.setattr(core, "MapAnnotationI", _Stub)
+    monkeypatch.setattr(core, "ImageAnnotationLinkI", _Stub)
+    monkeypatch.setattr(core, "rlong", lambda value: value)
+
+    result = core.delete_existing_annotations(_Conn(), 11, allow_legacy=False)
+
+    assert result == (2, 2, 2)
+    assert deleted == [107, 108, 7, 8]
+
+
 def test_help_page_and_user_settings_views_cover_success_and_error_paths(
     monkeypatch,
 ):

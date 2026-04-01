@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -410,7 +411,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
     def _run_helper(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["python3", str(self.helper_path), *args],
+            [sys.executable, str(self.helper_path), *args],
             check=True,
             text=True,
             stdout=subprocess.PIPE,
