@@ -1,0 +1,2 @@
+# Pinned Bandit install for reproducible SARIF generation in GitHub code scanning.
+bandit[sarif]==1.9.4
