@@ -407,6 +407,122 @@ def test_start_celery_job_validates_connection_metadata_and_dispatches(monkeypat
         views._start_celery_job(SimpleNamespace(), 17)
 
 
+def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
+    monkeypatch,
+) -> None:
+    views = _import_views()
+    original_poll_celery_job = views._poll_celery_job
+
+    class _BrokenStr:
+        def __str__(self):
+            raise RuntimeError("bad string")
+
+    assert views._parse_base_url(None) is None
+    assert views._parse_base_url("   ") is None
+    assert views._parse_port_param(_BrokenStr()) is None
+
+    assert views._get_session_key(None) is None
+    assert (
+        views._get_session_key(SimpleNamespace(getSessionId=lambda: "session-1"))
+        == "session-1"
+    )
+    assert views._get_session_key(SimpleNamespace(_sessionUuid="session-2")) == (
+        "session-2"
+    )
+    assert (
+        views._get_session_key(
+            SimpleNamespace(
+                getSessionId=lambda: "",
+                c=SimpleNamespace(
+                    getSessionId=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+                ),
+            )
+        )
+        is None
+    )
+
+    monkeypatch.setattr(
+        views,
+        "get_env",
+        lambda key, env_file=None: {
+            "OMEROHOST": "env-host",
+            "OMERO_PORT": "4064",
+            "CONFIG_omero_security_ssl": "yes",
+        }.get(key),
+    )
+    assert views._resolve_omero_host_port(SimpleNamespace(host=None, port=None)) == (
+        "env-host",
+        4064,
+    )
+    assert views._resolve_omero_host_port(SimpleNamespace(host="direct", port="   ")) == (
+        "direct",
+        None,
+    )
+    assert views._resolve_omero_host_port(SimpleNamespace(host=None, port="bad")) == (
+        "env-host",
+        None,
+    )
+    assert views._resolve_omero_secure(SimpleNamespace(secure=False)) is False
+    assert views._resolve_omero_secure(SimpleNamespace(secure=None)) is True
+
+    request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"image": "7"},
+    )
+    request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(views, "use_celery", lambda: True)
+    monkeypatch.setattr(views, "_find_script_id", lambda conn: 9)
+    monkeypatch.setattr(
+        views, "_start_celery_job", lambda conn, image_id: "celery-job-12"
+    )
+    time_values = iter([0.0, views.EXPORT_TIMEOUT + 1.0])
+    monkeypatch.setattr(views.time, "time", lambda: next(time_values, 0.0))
+    monkeypatch.setattr(views.time, "sleep", lambda *_args: None)
+    unknown_status = views.imaris_export(request, conn=SimpleNamespace())
+    assert unknown_status.status_code == 500
+    assert b"Could not determine IMS export job status" in unknown_status.content
+
+    failing_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"image": "8"},
+    )
+    failing_request.session = SimpleNamespace(session_key=None)
+    time_values = iter([0.0, 0.0, 0.2])
+    monkeypatch.setattr(views.time, "time", lambda: next(time_values, 0.2))
+    poll_results = iter(
+        [
+            ("RUNNING", None, None, {"error": "meta-error"}),
+            ("FAILED", None, None, None),
+        ]
+    )
+    monkeypatch.setattr(views, "_poll_celery_job", lambda job_id: next(poll_results))
+    failed = views.imaris_export(failing_request, conn=SimpleNamespace())
+    assert failed.status_code == 500
+    assert failed.content.decode("utf-8") == views.IMS_EXPORT_JOB_FAILED_MESSAGE
+
+    class _BrokenResult:
+        def __str__(self):
+            raise RuntimeError("cannot stringify")
+
+    monkeypatch.setattr(
+        views.celery_app,
+        "AsyncResult",
+        lambda task_id: SimpleNamespace(
+            state=views.celery_states.FAILURE,
+            result=_BrokenResult(),
+            info={},
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(views, "_poll_celery_job", original_poll_celery_job)
+    assert views._poll_celery_job("celery-job-13") == (
+        "FAILED",
+        None,
+        "Unknown error",
+        {},
+    )
+
+
 def test_imaris_export_covers_async_status_download_and_sync_success_paths(monkeypatch):
     views = _import_views()
 

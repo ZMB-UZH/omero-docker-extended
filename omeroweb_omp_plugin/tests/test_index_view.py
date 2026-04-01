@@ -1184,3 +1184,246 @@ def test_index_ai_provider_and_preview_fallbacks_cover_error_paths(monkeypatch):
         rendered["context"]["max_variable_sets"] == index_view.MAX_VARIABLE_SET_ENTRIES
     )
     assert rendered["context"]["preview_rows"][0]["img_id"] == 17
+
+
+def test_index_helper_and_validation_edges_cover_remaining_branch_paths(monkeypatch):
+    class _OwnerWithVal:
+        def getOmeName(self):
+            raise RuntimeError("no ome name")
+
+        def getName(self):
+            raise RuntimeError("no display name")
+
+        def getFirstName(self):
+            raise RuntimeError("no first name")
+
+        def getId(self):
+            return SimpleNamespace(val=77)
+
+    project = SimpleNamespace(getDetails=lambda: None, getOwner=lambda: _OwnerWithVal())
+    assert index_view._get_owner_username(project) == "77"
+    assert index_view._has_read_annotate_permissions(SimpleNamespace(getDetails=lambda: None)) is False
+
+    conn = _Conn()
+    fallback_project = _Project(12, "Fallback")
+    conn.raise_all_groups = True
+    conn.raise_opts_groups = True
+    conn.list_projects = [fallback_project]
+    assert list(index_view._iter_accessible_projects(conn)) == [fallback_project]
+
+    class _BrokenPermissionText:
+        def __str__(self):
+            raise RuntimeError("bad permissions")
+
+    broken_group = SimpleNamespace(
+        getDetails=lambda: None,
+        getPermissions=lambda: _BrokenPermissionText(),
+    )
+    original_permissions_flag = index_view._permissions_flag
+    monkeypatch.setattr(
+        index_view,
+        "_permissions_flag",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    assert index_view._group_is_read_write(broken_group) is False
+    assert index_view._group_is_read_annotate(broken_group) is False
+    original_iter_member_groups = index_view._iter_member_groups
+    monkeypatch.setattr(index_view, "_iter_member_groups", lambda *_args: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert index_view._is_user_in_group(object(), 1, 2) is False
+    assert index_view._is_user_in_group(object(), None, 2) is False
+    monkeypatch.setattr(index_view, "_permissions_flag", original_permissions_flag)
+    monkeypatch.setattr(index_view, "_iter_member_groups", original_iter_member_groups)
+
+    monkeypatch.setattr(
+        index_view,
+        "_iter_accessible_projects",
+        lambda *_args: [
+            _Project(1, "NoGroup", owner=_Owner(11, "bob"), group=None),
+            _Project(
+                2,
+                "NoGroupId",
+                owner=_Owner(11, "bob"),
+                group=SimpleNamespace(getId=lambda: None),
+            ),
+        ],
+    )
+    monkeypatch.setattr(index_view, "_has_collaboration_groups", lambda *_args: False)
+    assert index_view._collect_project_payload(_Conn(), 10) == {
+        "owned": [],
+        "collab": [],
+        "collab_annotate": [],
+        "collab_available": False,
+    }
+    monkeypatch.setattr(
+        index_view,
+        "_iter_accessible_projects",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    assert index_view._collect_project_payload(_Conn(), 10)["owned"] == []
+
+    ra_group = _Group(
+        2,
+        _Permissions(
+            "rwra--",
+            group_read=True,
+            group_write=False,
+            group_annotate=True,
+        ),
+        2,
+    )
+    conn = _Conn()
+    conn.project_by_id = {
+        7: _Project(7, "Annotate", owner=_Owner(11, "bob"), group=ra_group)
+    }
+    conn.groups = [ra_group]
+    assert index_view._get_accessible_project(conn, "7", 10)[1] == "read_annotate"
+
+    factory = RequestFactory()
+    conn = _Conn()
+    monkeypatch.setattr(index_view, "_collect_project_payload", lambda *_args: {"owned": []})
+    monkeypatch.setattr(index_view, "reverse", lambda _name: "/omp/projects/")
+    monkeypatch.setattr(index_view, "_current_user_id", lambda *_args: None)
+
+    list_missing_user = inspect.unwrap(index_view.index)(
+        factory.post("/", data={"action": "list_datasets", "project": "5"}),
+        conn=conn,
+    )
+    assert list_missing_user.status_code == 400
+    assert _json_payload(list_missing_user)["error"] == index_view.errors.unable_to_determine_username()
+
+    monkeypatch.setattr(index_view, "_current_user_id", lambda *_args: 10)
+    monkeypatch.setattr(index_view, "_get_accessible_project", lambda *_args: (None, None))
+    list_inaccessible = inspect.unwrap(index_view.index)(
+        factory.post("/", data={"action": "list_datasets", "project": "5"}),
+        conn=conn,
+    )
+    assert list_inaccessible.status_code == 400
+    assert _json_payload(list_inaccessible)["error"] == index_view.errors.select_project_first()
+
+    ai_regex_missing_project = inspect.unwrap(index_view.index)(
+        factory.post("/", data={"action": "ai_regex", "project": "", "selected_datasets": "10"}),
+        conn=conn,
+    )
+    assert ai_regex_missing_project.status_code == 400
+    assert _json_payload(ai_regex_missing_project)["error"] == index_view.errors.select_project_first()
+
+    monkeypatch.setattr(
+        index_view,
+        "_get_accessible_project",
+        lambda *_args: (_Project(5, "Project"), "owned"),
+    )
+    ai_regex_missing_datasets = inspect.unwrap(index_view.index)(
+        factory.post("/", data={"action": "ai_regex", "project": "5", "selected_datasets": " , "}),
+        conn=conn,
+    )
+    assert ai_regex_missing_datasets.status_code == 400
+    assert _json_payload(ai_regex_missing_datasets)["error"] == index_view.errors.datasets_required()
+
+    monkeypatch.setattr(index_view, "check_major_action_rate_limit", lambda *_args: (True, 0))
+    monkeypatch.setattr(
+        index_view,
+        "collect_images_by_selected_datasets",
+        lambda *_args, **_kwargs: [(_Dataset(10, "Dataset"), [SimpleNamespace(getName=lambda: (_ for _ in ()).throw(RuntimeError("bad name")))] )],
+    )
+    no_filenames = inspect.unwrap(index_view.index)(
+        factory.post("/", data={"action": "ai_regex", "project": "5", "selected_datasets": "10"}),
+        conn=conn,
+    )
+    assert no_filenames.status_code == 400
+    assert _json_payload(no_filenames)["error"] == index_view.errors.no_filenames_available()
+
+    rendered = {}
+    monkeypatch.setattr(
+        index_view,
+        "render",
+        lambda request, template, context=None, status=200: (
+            rendered.update(
+                {"template": template, "context": context or {}, "status": status}
+            )
+            or rendered.copy()
+        ),
+    )
+    missing_project_preview = inspect.unwrap(index_view.index)(
+        factory.post(
+            "/",
+            data={"project": "", "selected_datasets": "10", "separator_mode": "chars", "separator": "_"},
+        ),
+        conn=conn,
+    )
+    assert missing_project_preview["template"] == "omeroweb_omp_plugin/index.html"
+    assert rendered["context"]["error_message"] == index_view.errors.select_project_first()
+
+    monkeypatch.setattr(index_view, "_current_user_id", lambda *_args: None)
+    missing_user_preview = inspect.unwrap(index_view.index)(
+        factory.post(
+            "/",
+            data={"project": "5", "selected_datasets": "10", "separator_mode": "chars", "separator": "_"},
+        ),
+        conn=conn,
+    )
+    assert missing_user_preview["template"] == "omeroweb_omp_plugin/index.html"
+    assert rendered["context"]["error_message"] == index_view.errors.unable_to_determine_username()
+
+    monkeypatch.setattr(index_view, "_current_user_id", lambda *_args: 10)
+    monkeypatch.setattr(index_view, "_get_accessible_project", lambda *_args: (None, None))
+    inaccessible_preview = inspect.unwrap(index_view.index)(
+        factory.post(
+            "/",
+            data={"project": "5", "selected_datasets": "10", "separator_mode": "chars", "separator": "_"},
+        ),
+        conn=conn,
+    )
+    assert inaccessible_preview["template"] == "omeroweb_omp_plugin/index.html"
+    assert rendered["context"]["error_message"] == index_view.errors.select_project_first()
+
+    monkeypatch.setattr(
+        index_view,
+        "_get_accessible_project",
+        lambda *_args: (_Project(5, "Project"), "owned"),
+    )
+    no_separator_preview = inspect.unwrap(index_view.index)(
+        factory.post(
+            "/",
+            data={"project": "5", "selected_datasets": "10", "separator_mode": "chars", "separator": "   "},
+        ),
+        conn=conn,
+    )
+    assert no_separator_preview["template"] == "omeroweb_omp_plugin/index.html"
+    assert rendered["context"]["error_message"] == index_view.errors.filename_input_empty()
+
+    no_dataset_preview = inspect.unwrap(index_view.index)(
+        factory.post(
+            "/",
+            data={"project": "5", "selected_datasets": " , ", "separator_mode": "chars", "separator": "_"},
+        ),
+        conn=conn,
+    )
+    assert no_dataset_preview["template"] == "omeroweb_omp_plugin/index.html"
+    assert rendered["context"]["error_message"] == index_view.errors.datasets_required()
+
+    monkeypatch.setattr(index_view, "check_major_action_rate_limit", lambda *_args: (True, 0))
+    monkeypatch.setattr(
+        index_view,
+        "collect_images_by_selected_datasets",
+        lambda *_args, **_kwargs: [
+            (
+                _Dataset(10, "Dataset"),
+                [SimpleNamespace(getId=lambda: _Value(17), getName=lambda: "sample_A-01.tif")],
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        index_view,
+        "parse_filename",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("bad parse")),
+    )
+    parse_failure_preview = inspect.unwrap(index_view.index)(
+        factory.post(
+            "/",
+            data={"project": "5", "selected_datasets": "10", "separator_mode": "chars", "separator": "_"},
+        ),
+        conn=conn,
+    )
+    assert parse_failure_preview["template"] == "omeroweb_omp_plugin/preview.html"
+    assert rendered["context"]["max_vars"] == 1
+    assert rendered["context"]["preview_rows"] == []

@@ -366,3 +366,439 @@ def test_request_path_dataset_preparation_covers_success_and_failure(
     )
     assert checking_job["job_id"] == "h" * 32
     assert checking_error is None
+
+
+def test_dataset_creation_helpers_cover_cache_link_and_failure_paths(
+    monkeypatch,
+) -> None:
+    class _NewDataset:
+        def __init__(self):
+            self.name = None
+
+        def setName(self, value):
+            self.name = value
+
+    link_calls = []
+
+    monkeypatch.setattr(core_functions, "DatasetI", _NewDataset)
+    monkeypatch.setattr(core_functions, "rstring", lambda value: value)
+    monkeypatch.setattr(
+        core_functions,
+        "_link_dataset_to_project",
+        lambda conn, dataset_id, project_id: link_calls.append((dataset_id, project_id)),
+    )
+
+    dataset_map = {"Cached": 11}
+    assert core_functions._get_or_create_dataset(object(), "", dataset_map) is None
+    assert core_functions._get_or_create_dataset(object(), "Cached", dataset_map) == 11
+
+    existing = SimpleNamespace(getId=lambda: _Value(66))
+    existing_conn = SimpleNamespace(
+        getObjects=lambda model, attributes=None: iter([existing]),
+        getUpdateService=lambda: None,
+    )
+    monkeypatch.setattr(core_functions, "_get_id", lambda obj: None)
+    assert core_functions._get_or_create_dataset(existing_conn, "Existing", {}, 7) == 66
+    assert link_calls == [(66, 7)]
+
+    create_conn = SimpleNamespace(
+        getObjects=lambda model, attributes=None: (_ for _ in ()).throw(
+            RuntimeError("lookup exploded")
+        ),
+        getUpdateService=lambda: SimpleNamespace(
+            saveAndReturnObject=lambda dataset: SimpleNamespace(getId=lambda: _Value(88))
+        ),
+    )
+    assert core_functions._get_or_create_dataset(create_conn, "Fresh", {}, 9) == 88
+    assert link_calls[-1] == (88, 9)
+
+    failing_conn = SimpleNamespace(
+        getObjects=lambda model, attributes=None: iter([]),
+        getUpdateService=lambda: SimpleNamespace(
+            saveAndReturnObject=lambda dataset: (_ for _ in ()).throw(
+                RuntimeError("save exploded")
+            )
+        ),
+    )
+    assert core_functions._get_or_create_dataset(failing_conn, "Broken", {}, 9) is None
+
+
+def test_request_path_dataset_helpers_cover_fallback_and_save_failures(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        core_functions, "_generate_orphan_dataset_name", lambda: "UploadRoot_TEST"
+    )
+    assert core_functions._plan_request_job_dataset_targets(
+        {
+            "files": [
+                {"relative_path": "top-level.ome.tif"},
+                {"relative_path": "folder/sample.ome.tif"},
+                {"import_skip": True, "relative_path": "skip/sample.ome.tif"},
+                {"relative_path": ""},
+                "not-a-dict",
+            ]
+        }
+    ) == ("UploadRoot_TEST", ["UploadRoot_TEST", "folder"])
+
+    generic_error = import_errors.unable_prepare_import_destination()
+    assert core_functions._prepare_request_job_import_datasets(
+        "x" * 32,
+        {"job_id": "x" * 32, "files": [{"relative_path": "demo.ome.tif"}]},
+        conn=None,
+    ) == (None, generic_error)
+
+    monkeypatch.setattr(
+        core_functions,
+        "_get_or_create_dataset",
+        lambda conn, name, dataset_map, project_id=None: dataset_map.setdefault(
+            name, 21
+        ),
+    )
+    monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
+
+    class _ScopeFailConn:
+        SERVICE_OPTS = SimpleNamespace(
+            setOmeroGroup=lambda value: (_ for _ in ()).throw(
+                RuntimeError("scope exploded")
+            )
+        )
+
+    scoped_job, scoped_error = core_functions._prepare_request_job_import_datasets(
+        "y" * 32,
+        {
+            "job_id": "y" * 32,
+            "group_id": 4,
+            "project_id": 9,
+            "dataset_map": {},
+            "files": [{"relative_path": "folder/sample.ome.tif"}],
+        },
+        conn=_ScopeFailConn(),
+    )
+    assert scoped_job["dataset_map"] == {"folder": 21}
+    assert scoped_error is None
+
+    monkeypatch.setattr(
+        core_functions,
+        "_get_or_create_dataset",
+        lambda conn, name, dataset_map, project_id=None: (_ for _ in ()).throw(
+            RuntimeError("dataset exploded")
+        ),
+    )
+    failed_job, failed_error = core_functions._prepare_request_job_import_datasets(
+        "z" * 32,
+        {
+            "job_id": "z" * 32,
+            "group_id": 4,
+            "project_id": 9,
+            "dataset_map": {},
+            "files": [{"relative_path": "folder/sample.ome.tif"}],
+        },
+        conn=_ScopeFailConn(),
+    )
+    assert failed_job is None
+    assert failed_error == generic_error
+
+    monkeypatch.setattr(
+        core_functions,
+        "_get_or_create_dataset",
+        lambda conn, name, dataset_map, project_id=None: dataset_map.setdefault(
+            name, 21
+        ),
+    )
+    monkeypatch.setattr(core_functions, "_save_job", lambda job: False)
+    failed_job, failed_error = core_functions._prepare_request_job_import_datasets(
+        "w" * 32,
+        {
+            "job_id": "w" * 32,
+            "group_id": 4,
+            "project_id": 9,
+            "dataset_map": {},
+            "files": [{"relative_path": "folder/sample.ome.tif"}],
+        },
+        conn=_ScopeFailConn(),
+    )
+    assert failed_job is None
+    assert failed_error == import_errors.unable_update_upload_job_state()
+
+
+def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_branches(
+    monkeypatch,
+) -> None:
+    saved = {}
+    monkeypatch.setattr(core_functions, "_load_job", lambda job_id: {"job_id": job_id})
+    monkeypatch.setattr(
+        core_functions,
+        "_start_compatibility_check_thread",
+        lambda job_id: saved.setdefault("thread_calls", []).append(job_id),
+    )
+
+    class _Conn:
+        SERVICE_OPTS = SimpleNamespace(
+            setOmeroGroup=lambda value: (_ for _ in ()).throw(
+                RuntimeError("scope exploded")
+            )
+        )
+
+    compatibility_job, compatibility_error = (
+        core_functions._prepare_uploaded_job_for_request_path_import(
+            "a" * 32,
+            {
+                "job_id": "a" * 32,
+                "status": "ready",
+                "compatibility_enabled": True,
+                "files": [{"status": "uploaded", "relative_path": "demo.ome.tif"}],
+            },
+            conn=_Conn(),
+        )
+    )
+    assert compatibility_job["job_id"] == "a" * 32
+    assert compatibility_error is None
+
+    monkeypatch.setattr(
+        core_functions,
+        "_planned_import_units_for_request",
+        lambda job_dict: [],
+    )
+    plan_job, plan_error = core_functions._prepare_uploaded_job_for_request_path_import(
+        "b" * 32,
+        {
+            "job_id": "b" * 32,
+            "status": "ready",
+            "compatibility_enabled": False,
+            "compatibility_thread_active": False,
+            "files": [{"status": "uploaded", "relative_path": "demo.ome.tif"}],
+        },
+        conn=_Conn(),
+    )
+    assert plan_job["job_id"] == "b" * 32
+    assert plan_error is None
+
+    paused_job, paused_error = core_functions._prepare_uploaded_job_for_request_path_import(
+        "c" * 32,
+        {
+            "job_id": "c" * 32,
+            "status": "queued",
+            "files": [{"relative_path": "demo.ome.tif"}],
+        },
+        conn=_Conn(),
+    )
+    assert paused_job["job_id"] == "c" * 32
+    assert paused_error is None
+
+    monkeypatch.setattr(
+        core_functions,
+        "_prepare_request_job_import_datasets",
+        lambda job_id, job_dict, conn=None: (None, "prep exploded"),
+    )
+    prep_failed_job, prep_failed_error = (
+        core_functions._prepare_uploaded_job_for_request_path_import(
+            "d" * 32,
+            {
+                "job_id": "d" * 32,
+                "status": "ready",
+                "compatibility_enabled": False,
+                "compatibility_thread_active": False,
+                "planned_import_units": [
+                    {
+                        "relative_path": "bundle/data.bin",
+                        "dataset_relative_path": "bundle/data.bin",
+                        "covered_relative_paths": ["bundle/data.bin"],
+                    }
+                ],
+                "files": [{"relative_path": "bundle/data.bin"}],
+            },
+            conn=_Conn(),
+        )
+    )
+    assert prep_failed_job["job_id"] == "d" * 32
+    assert prep_failed_error == "prep exploded"
+
+    monkeypatch.setattr(
+        core_functions,
+        "_prepare_request_job_import_datasets",
+        lambda job_id, job_dict, conn=None: (job_dict, None),
+    )
+    prepared_job, prepared_error = core_functions._prepare_uploaded_job_for_request_path_import(
+        "e" * 32,
+        {
+            "job_id": "e" * 32,
+            "status": "ready",
+            "compatibility_enabled": False,
+            "compatibility_thread_active": False,
+            "planned_import_units": [
+                {
+                    "relative_path": "bundle/data.bin",
+                    "dataset_relative_path": "bundle/data.bin",
+                    "covered_relative_paths": ["bundle/data.bin"],
+                }
+            ],
+            "files": [{"relative_path": "bundle/data.bin"}],
+        },
+        conn=_Conn(),
+    )
+    assert prepared_job["job_id"] == "e" * 32
+    assert prepared_error is None
+
+    no_missing_job = {
+        "job_id": "f" * 32,
+        "dataset_map": {"folder": 12},
+        "orphan_dataset_name": None,
+    }
+    ok, error = core_functions._ensure_job_dataset_targets(
+        no_missing_job,
+        [
+            {
+                "relative_path": "folder/sample.ome.tif",
+                "dataset_relative_path": "folder/sample.ome.tif",
+                "covered_relative_paths": ["folder/sample.ome.tif"],
+            }
+        ],
+        conn=_Conn(),
+    )
+    assert ok is True
+    assert error is None
+
+    monkeypatch.setattr(
+        core_functions,
+        "_get_or_create_dataset",
+        lambda conn, name, dataset_map, project_id=None: None,
+    )
+    ok, error = core_functions._ensure_job_dataset_targets(
+        {
+            "job_id": "g" * 32,
+            "group_id": 4,
+            "project_id": 9,
+            "dataset_map": {},
+            "files": [{"relative_path": "folder/sample.ome.tif"}],
+        },
+        [
+            {
+                "relative_path": "folder/sample.ome.tif",
+                "dataset_relative_path": "folder/sample.ome.tif",
+                "covered_relative_paths": ["folder/sample.ome.tif"],
+            }
+        ],
+        conn=_Conn(),
+    )
+    assert ok is False
+    assert error == import_errors.unable_prepare_import_destination()
+
+    monkeypatch.setattr(
+        core_functions,
+        "_get_or_create_dataset",
+        lambda conn, name, dataset_map, project_id=None: (_ for _ in ()).throw(
+            RuntimeError("dataset exploded")
+        ),
+    )
+    ok, error = core_functions._ensure_job_dataset_targets(
+        {
+            "job_id": "h" * 32,
+            "group_id": 4,
+            "project_id": 9,
+            "dataset_map": {},
+            "files": [{"relative_path": "folder/sample.ome.tif"}],
+        },
+        [
+            {
+                "relative_path": "folder/sample.ome.tif",
+                "dataset_relative_path": "folder/sample.ome.tif",
+                "covered_relative_paths": ["folder/sample.ome.tif"],
+            }
+        ],
+        conn=_Conn(),
+    )
+    assert ok is False
+    assert error == import_errors.unable_prepare_import_destination()
+
+    assert core_functions._ensure_job_dataset_targets(
+        {
+            "job_id": "i" * 32,
+            "dataset_map": {},
+            "files": [{"relative_path": "folder/sample.ome.tif"}],
+        },
+        [
+            {
+                "relative_path": "folder/sample.ome.tif",
+                "dataset_relative_path": "folder/sample.ome.tif",
+                "covered_relative_paths": ["folder/sample.ome.tif"],
+            }
+        ],
+    ) == (False, import_errors.unable_prepare_import_destination())
+
+    monkeypatch.setattr(
+        core_functions,
+        "_open_service_connection",
+        lambda host, port, group_id=None: None,
+    )
+    assert core_functions._ensure_job_dataset_targets(
+        {
+            "job_id": "j" * 32,
+            "host": "omeroserver",
+            "port": 4064,
+            "username": "alice",
+            "dataset_map": {},
+        },
+        [
+            {
+                "relative_path": "folder/sample.ome.tif",
+                "dataset_relative_path": "folder/sample.ome.tif",
+                "covered_relative_paths": ["folder/sample.ome.tif"],
+            }
+        ],
+    ) == (False, import_errors.unable_prepare_import_destination())
+
+    class _ServiceConn:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+            raise RuntimeError("service close exploded")
+
+    class _UserConn:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+            raise RuntimeError("user close exploded")
+
+    service_conn = _ServiceConn()
+    user_conn = _UserConn()
+    monkeypatch.setattr(
+        core_functions,
+        "_open_service_connection",
+        lambda host, port, group_id=None: service_conn,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_open_user_owned_background_connection",
+        lambda username, **kwargs: user_conn,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_get_or_create_dataset",
+        lambda conn, name, dataset_map, project_id=None: None,
+    )
+    ok, error = core_functions._ensure_job_dataset_targets(
+        {
+            "job_id": "k" * 32,
+            "host": "omeroserver",
+            "port": 4064,
+            "username": "alice",
+            "group_id": 4,
+            "dataset_map": {},
+        },
+        [
+            {
+                "relative_path": "folder/sample.ome.tif",
+                "dataset_relative_path": "folder/sample.ome.tif",
+                "covered_relative_paths": ["folder/sample.ome.tif"],
+            }
+        ],
+    )
+    assert ok is False
+    assert error == import_errors.unable_prepare_import_destination()
+    assert user_conn.closed is True
+    assert service_conn.closed is True

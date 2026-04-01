@@ -239,3 +239,81 @@ def test_parse_prompt_rows_and_generate_ai_parsed_values_cover_validation(monkey
 
     with pytest.raises(ai_assist.AiAssistError):
         ai_assist.generate_ai_parsed_values("groq", "token", [])
+
+
+def test_ai_assist_helper_edges_cover_empty_inputs_and_provider_shape_failures(
+    monkeypatch,
+):
+    filenames = [
+        "sample_A-01.tif",
+        "sample_B-02.tif",
+    ]
+
+    assert ai_assist._extract_cohere_response_text(None) is None
+    assert ai_assist._extract_cohere_response_text({"text": "direct"}) == "direct"
+    assert (
+        ai_assist._extract_cohere_response_text({"message": {"content": "message"}})
+        == "message"
+    )
+    assert (
+        ai_assist._extract_cohere_response_text(
+            {"message": {"content": [{"ignored": True}]}}
+        )
+        is None
+    )
+    assert ai_assist._summarize_separators(["plain"]) == ""
+    assert ai_assist._separator_candidates(["plain"]) == []
+    assert ai_assist._clean_regex("") == ""
+    assert ai_assist._clean_regex("Regex: (?:_|-)+") == "(?:_|-)+"
+    assert ai_assist._clean_regex("pattern regex: (?:_)+") == "(?:_)+"
+    assert ai_assist._is_regex_reasonable("", filenames) is False
+    assert ai_assist._is_regex_reasonable("(", filenames) is False
+    assert ai_assist._is_regex_reasonable(".*", filenames) is False
+    assert ai_assist._is_regex_reasonable("ZZZ", filenames) is False
+    assert ai_assist._is_regex_too_generic("", filenames) is True
+    assert ai_assist._is_regex_too_generic("(", filenames) is True
+    assert ai_assist._is_regex_too_generic(".*", filenames) is True
+    assert ai_assist._is_regex_too_generic("_", ["plain"]) is False
+
+    with pytest.raises(ai_assist.AiAssistError):
+        ai_assist._parse_ai_value_rows("", 1)
+
+    original_extract_base_name = ai_assist.extract_base_name
+    monkeypatch.setattr(
+        ai_assist,
+        "extract_base_name",
+        lambda name: (_ for _ in ()).throw(RuntimeError("bad name"))
+        if name == "sample_A-01.tif"
+        else "sample_B-02",
+    )
+    assert ai_assist._parse_ai_value_rows(
+        "alpha\nbeta", 2, filenames=filenames
+    ) == [["alpha"], ["beta"]]
+    monkeypatch.setattr(ai_assist, "extract_base_name", original_extract_base_name)
+    with pytest.raises(ai_assist.AiAssistError):
+        ai_assist._parse_ai_value_rows(",\nvalue", 2)
+
+    monkeypatch.setattr(
+        ai_assist, "_post_json", lambda *_args, **_kwargs: {"content": []}
+    )
+    with pytest.raises(ai_assist.AiAssistError):
+        ai_assist._call_ai_provider_raw("claude", "token", "prompt", 64)
+
+    monkeypatch.setattr(
+        ai_assist, "_post_json", lambda *_args, **_kwargs: {"candidates": []}
+    )
+    with pytest.raises(ai_assist.AiAssistError):
+        ai_assist._call_ai_provider_raw("gemini", "token", "prompt", 64)
+
+    monkeypatch.setattr(
+        ai_assist, "_post_json", lambda *_args, **_kwargs: {"message": {}}
+    )
+    with pytest.raises(ai_assist.AiAssistError):
+        ai_assist._call_ai_provider_raw("cohere", "token", "prompt", 64)
+
+    with pytest.raises(ai_assist.AiAssistError):
+        ai_assist.generate_ai_regex("", "token", filenames)
+
+    monkeypatch.setattr(ai_assist, "_call_ai_provider_raw", lambda *_args, **_kwargs: "")
+    with pytest.raises(ai_assist.AiAssistError):
+        ai_assist.generate_ai_regex("groq", "token", filenames)

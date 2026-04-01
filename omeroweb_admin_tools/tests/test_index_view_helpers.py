@@ -247,6 +247,60 @@ def test_request_and_public_url_helpers_cover_reverse_proxy_cases():
     )
 
 
+def test_validation_and_identity_helpers_cover_remaining_guard_paths(monkeypatch):
+    with pytest.raises(ValueError):
+        index_view._validated_http_url("grafana.example.test")
+    with pytest.raises(ValueError):
+        index_view._validated_http_url("https://user@grafana.example.test")
+    with pytest.raises(ValueError):
+        index_view._validated_http_url("https://grafana.example.test/#frag")
+    with pytest.raises(ValueError):
+        index_view._validated_http_url("https://grafana.example.test/?refresh=5s")
+
+    assert (
+        index_view._validated_http_url(
+            "https://grafana.example.test/?refresh=5s",
+            allow_query=True,
+        )
+        == "https://grafana.example.test?refresh=5s"
+    )
+
+    monkeypatch.setenv("ADMIN_TOOLS_INTERNAL_SERVICE_SCHEME", "ftp")
+    assert (
+        index_view._internal_service_base_url(
+            "ADMIN_TOOLS_FAKE_URL",
+            default_host="grafana",
+            default_port=3000,
+        )
+        == "http://grafana:3000"
+    )
+
+    assert index_view._safe_redirect_segment("", "fallback") == "fallback"
+    assert (
+        index_view._safe_redirect_segment("https://evil.example.test", "fallback")
+        == "fallback"
+    )
+    assert index_view._safe_dashboard_uid("", "dashboard") == "dashboard"
+
+    with pytest.raises(ValueError):
+        index_view._normalize_proxy_request_target("/grafana/%00/api")
+
+    assert (
+        index_view._build_public_service_url(
+            f"{GRAFANA_URL}/grafana",
+            "http",
+            "omero.example.org",
+            3000,
+        )
+        == "https://omero.example.org:3000/grafana"
+    )
+    assert index_view._unwrap_rtype_value("raw") == "raw"
+    assert index_view._safe_username(SimpleNamespace()) == ""
+    assert index_view._safe_group_name(SimpleNamespace()) == ""
+    assert index_view._safe_object_id(SimpleNamespace()) is None
+    assert index_view._permission_flag(SimpleNamespace(), "missing") is False
+
+
 def test_admin_listing_helpers_collect_users_groups_and_permissions():
     users = [
         _User(1, "alice", "Alice", "Admin"),
@@ -283,6 +337,91 @@ def test_admin_listing_helpers_collect_users_groups_and_permissions():
     assert permissions["users_collab"] == "Read-annotate"
     assert groups_by_user["alice"] == {"users_private", "users_collab"}
     assert users_by_group["users_collab"] == {"alice", "bob"}
+
+
+def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
+    missing_user = SimpleNamespace(
+        getId=lambda: _Value(3),
+        getOmeName=lambda: _Value(""),
+    )
+    unnamed_group = SimpleNamespace(
+        getId=lambda: _Value(22),
+        getName=lambda: _Value(""),
+        getDetails=lambda: SimpleNamespace(getPermissions=lambda: _Permissions("rw----")),
+    )
+    valid_group = _Group(23, "team", _Permissions("private", group_read=False))
+    username_less_user = SimpleNamespace(
+        getOmeName=lambda: _Value(""),
+        getFirstName=lambda: _Value("Ghost"),
+        getLastName=lambda: _Value("User"),
+    )
+
+    class _SparseAdminService:
+        def lookupExperimenters(self):
+            return [missing_user]
+
+        def lookupGroups(self):
+            return [unnamed_group, valid_group]
+
+        def containedGroups(self, identifier=None, *_args):
+            if identifier == 3:
+                return [SimpleNamespace(getName=lambda: _Value(""))]
+            return []
+
+        def containedExperimenters(self, identifier=None, *_args):
+            if identifier == 23:
+                return [username_less_user]
+            return []
+
+    users_map, group_names, permissions, groups_by_user, users_by_group = (
+        index_view._list_all_users_and_groups(
+            SimpleNamespace(getAdminService=lambda: _SparseAdminService())
+        )
+    )
+
+    assert users_map == {}
+    assert group_names == {"team"}
+    assert permissions == {"team": "Private"}
+    assert groups_by_user == {}
+    assert users_by_group == {"team": set()}
+
+    services = index_view._build_target_service_status(
+        active_targets=[
+            {
+                "health": "unknown",
+                "labels": {},
+                "discoveredLabels": {
+                    "__meta_docker_container_name": "stack_prometheus_server_1"
+                },
+            },
+            {
+                "health": "down",
+                "labels": {"job": "/cadvisor"},
+                "discoveredLabels": {},
+            },
+        ],
+        expected_services=["Prometheus-Server", "cadvisor"],
+        service_healthcheck_config={"Prometheus-Server": True, "cadvisor": False},
+        runtime_health_by_service={
+            "prometheus-server": {"state": "running", "health": ""},
+            "cadvisor": {"state": "running", "health": ""},
+        },
+    )
+
+    assert services == [
+        {
+            "service": "Prometheus-Server",
+            "health": "up",
+            "state": "running",
+            "healthcheck": "",
+        },
+        {
+            "service": "cadvisor",
+            "health": "down",
+            "state": "running",
+            "healthcheck": "none",
+        },
+    ]
 
 
 def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypatch):

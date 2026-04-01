@@ -1208,3 +1208,293 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     ]
     assert removed_jobs == [(job_id, upload_root)]
     assert deferred_jobs == []
+
+
+def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
+    tmp_path: Path, monkeypatch
+):
+    jobs_root = tmp_path / "jobs"
+    upload_root = tmp_path / "uploads"
+    jobs_root.mkdir()
+    upload_root.mkdir()
+    monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: jobs_root)
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(core_functions.time, "time", lambda: 3600.0)
+
+    job_id = "f" * 32
+    first_image = "images/sample.ome.tif"
+    second_image = "images/missing.ome.tif"
+    first_txts = [
+        "spectra/no-id.txt",
+        "spectra/missing-entry.txt",
+        "spectra/staged-error.txt",
+        "spectra/missing-file.txt",
+        "spectra/plot-stage-error.txt",
+        "spectra/plot-copy-error.txt",
+        "spectra/plot-import-error.txt",
+        "spectra/attach-error.txt",
+        "spectra/attach-ok-1.txt",
+        "spectra/attach-ok-2.txt",
+    ]
+    second_txts = ["spectra/image-missing.txt"]
+
+    files = [
+        {
+            "relative_path": first_image,
+            "status": "uploaded",
+            "size": 5,
+            "errors": [],
+        },
+        {
+            "relative_path": second_image,
+            "status": "uploaded",
+            "size": 5,
+            "errors": [],
+        },
+    ]
+    for relative_path in first_txts + second_txts:
+        if relative_path == "spectra/missing-entry.txt":
+            continue
+        staged_path = f"_staged/{relative_path}"
+        files.append(
+            {
+                "relative_path": relative_path,
+                "staged_path": staged_path,
+                "status": "uploaded",
+                "size": 1,
+                "errors": [],
+            }
+        )
+        if relative_path != "spectra/missing-file.txt":
+            target = upload_root / job_id / staged_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("energy,count\n1,2\n", encoding="utf-8")
+
+    job = {
+        "job_id": job_id,
+        "username": "alice",
+        "host": "omeroserver",
+        "port": 4064,
+        "group_id": 5,
+        "group_name": "users_private",
+        "session_key": "session",
+        "files": files,
+        "errors": [],
+        "messages": [],
+        "status": "ready",
+        "dataset_map": {"images": 11},
+        "orphan_dataset_name": "images",
+        "imported_bytes": 0,
+        "total_bytes": 20,
+        "sem_edx_associations": {},
+        "sem_edx_settings": {
+            "create_tables": True,
+            "create_figures_attachments": True,
+            "create_figures_images": True,
+        },
+        "special_upload": "sem_edx_spectra",
+    }
+    state = _job_state(monkeypatch, job)
+    job_lock = _DummyLock(acquired=True)
+    monkeypatch.setattr(core_functions, "_get_import_lock", lambda username: job_lock)
+    monkeypatch.setattr(core_functions, "_resolve_job_batch_size", lambda job_dict: 1)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_units",
+        lambda job_dict, root: [
+            {
+                "relative_path": first_image,
+                "covered_indexes": [0],
+                "cleanup_staged_paths": [],
+            },
+            {
+                "relative_path": second_image,
+                "covered_indexes": [1],
+                "cleanup_staged_paths": [],
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_ensure_job_dataset_targets",
+        lambda job_dict, entries: (True, None),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_build_sem_edx_associations_from_entries",
+        lambda entries: {first_image: list(first_txts), second_image: list(second_txts)},
+    )
+
+    class _ImportedImage:
+        def __init__(self):
+            self._obj = types.SimpleNamespace(id=types.SimpleNamespace(val=301))
+
+        def listParents(self):
+            raise RuntimeError("parents unavailable")
+
+    imported_image = _ImportedImage()
+
+    class _ServiceConn:
+        def __init__(self, name):
+            self.name = name
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    connections = [_ServiceConn("initial"), _ServiceConn("reopened")]
+    connection_iter = iter(connections)
+    monkeypatch.setattr(
+        core_functions,
+        "_open_service_connection",
+        lambda host, port, group_id=None: next(connection_iter),
+    )
+
+    validate_iter = iter((False,))
+    monkeypatch.setattr(
+        core_functions,
+        "_validate_session",
+        lambda conn: next(validate_iter, True),
+    )
+
+    batch_calls = []
+
+    def _batch_find(conn, names, dataset_id):
+        batch_calls.append((conn.name, tuple(sorted(names)), dataset_id))
+        if "sample.ome.tif" in names:
+            return {"sample.ome.tif": imported_image}
+        return {}
+
+    monkeypatch.setattr(core_functions, "_batch_find_images_by_name", _batch_find)
+
+    def _resolve_staged(root, staged_path):
+        target = root / staged_path
+        name = target.name
+        if name == "staged-error.txt":
+            return None, "Rejected staged text path"
+        if name == "missing-file.txt":
+            return target, None
+        if name == "plot-stage-error.png":
+            return None, "Rejected staged plot path"
+        return target, None
+
+    monkeypatch.setattr(core_functions, "_resolve_staged_target_path", _resolve_staged)
+
+    sem_edx_parser = types.ModuleType("omeroweb_import.services.omero.sem_edx_parser")
+
+    def _create_plot(txt_path):
+        plot_path = tmp_path / f"{txt_path.stem}.png"
+        plot_path.write_bytes(b"\x89PNG\r\n\x1a\n")
+        return plot_path
+
+    sem_edx_parser.create_edx_spectrum_plot = _create_plot
+    monkeypatch.setitem(
+        sys.modules,
+        "omeroweb_import.services.omero.sem_edx_parser",
+        sem_edx_parser,
+    )
+
+    copied_plots = []
+
+    def _copy2(src, dst):
+        copied_plots.append(dst.name)
+        if dst.name == "plot-copy-error.png":
+            raise RuntimeError("copy failed")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(src.read_bytes())
+
+    monkeypatch.setattr(core_functions.shutil, "copy2", _copy2)
+
+    id_values = iter((None, 301, 301, 301, 301, 301, 301, 301, 301, 301))
+    monkeypatch.setattr(core_functions, "_get_id", lambda image_obj: next(id_values))
+
+    attached = []
+
+    def _attach_txt(
+        conn,
+        image_id,
+        txt_path,
+        username,
+        create_tables,
+        plot_path=None,
+        **kwargs,
+    ):
+        attached.append((txt_path.name, plot_path and plot_path.name))
+        if txt_path.name == "attach-error.txt":
+            raise RuntimeError("attach exploded")
+
+    monkeypatch.setattr(core_functions, "_attach_txt_to_image_service", _attach_txt)
+
+    plot_imports = []
+
+    def _import_job_entry(entry, *args, **kwargs):
+        relative_path = entry.get("relative_path")
+        if relative_path == first_image:
+            return {
+                "status": "imported",
+                "covered_indexes": [0],
+                "cleanup_staged_paths": [],
+                "rel_path": relative_path,
+            }
+        if relative_path == second_image:
+            return {
+                "status": "imported",
+                "covered_indexes": [1],
+                "cleanup_staged_paths": [],
+                "rel_path": relative_path,
+            }
+        plot_imports.append(relative_path)
+        if relative_path.endswith("plot-import-error.png"):
+            return {
+                "status": "error",
+                "job_error": "plot import failed",
+                "job_message": "plot import failed",
+            }
+        return {"status": "imported"}
+
+    monkeypatch.setattr(core_functions, "_import_job_entry", _import_job_entry)
+
+    removed_jobs = []
+    deferred_jobs = []
+    monkeypatch.setattr(
+        core_functions,
+        "safe_remove_job_data",
+        lambda target_job_id, root: removed_jobs.append((target_job_id, root)),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_mark_failed_job_for_deferred_cleanup",
+        lambda target_job_id: deferred_jobs.append(target_job_id) or True,
+    )
+
+    core_functions._process_import_job(job_id)
+
+    assert job_lock.released is True
+    assert all(conn.closed for conn in connections)
+    assert any(call[0] == "reopened" for call in batch_calls)
+    assert state["job"]["status"] == "error"
+    assert any(
+        "Txt attachment failure: no-id.txt into sample.ome.tif" in message
+        for message in state["job"]["messages"]
+    )
+    assert any(
+        "Txt attachment failure: image-missing.txt into missing.ome.tif" in message
+        for message in state["job"]["messages"]
+    )
+    assert any(
+        "plot import failed" in message for message in state["job"]["messages"]
+    )
+    assert any(
+        "Rejected staged text path" in error for error in state["job"]["errors"]
+    )
+    assert any(
+        "Rejected staged plot path" in error for error in state["job"]["errors"]
+    )
+    assert any(
+        "Failed to stage SEM-EDX plot PNG for import: plot-copy-error.png" in error
+        for error in state["job"]["errors"]
+    )
+    assert any(name == "attach-error.txt" for name, _plot in attached)
+    assert "images/plot-import-error.png" in plot_imports
+    assert removed_jobs == []
+    assert deferred_jobs == [job_id]

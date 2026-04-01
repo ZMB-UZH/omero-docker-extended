@@ -634,6 +634,126 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
     assert saved_jobs[0]["import_progress_bytes"] == 9
 
 
+def test_import_file_progress_loop_covers_timeout_and_unexpected_cleanup_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "image.ome.tif"
+    source.write_text("payload", encoding="utf-8")
+    monkeypatch.setattr(
+        core_functions,
+        "_build_omero_cli_command",
+        lambda args, session_key, host, port: ["omero", *args],
+    )
+    monkeypatch.setattr(
+        core_functions, "_build_cli_env", lambda: {"HOME": str(tmp_path)}
+    )
+    monkeypatch.setattr(core_functions, "_get_path_total_size", lambda _path: 10)
+    monkeypatch.setattr(core_functions, "_read_proc_rchar", lambda _pid: 0)
+
+    class _Pipe:
+        def __init__(self, *, fail_on_iter=False, fail_on_close=False):
+            self._fail_on_iter = fail_on_iter
+            self._fail_on_close = fail_on_close
+            self.closed = False
+
+        def __iter__(self):
+            if self._fail_on_iter:
+                raise RuntimeError("drain exploded")
+            yield from ()
+
+        def close(self):
+            self.closed = True
+            if self._fail_on_close:
+                raise RuntimeError("close exploded")
+
+    class _TimeoutProc:
+        def __init__(self):
+            self.pid = 111
+            self.returncode = None
+            self.stdout = _Pipe(fail_on_iter=True, fail_on_close=True)
+            self.stderr = _Pipe(fail_on_close=True)
+            self.killed = False
+
+        def poll(self):
+            return None
+
+        def kill(self):
+            self.killed = True
+
+    timeout_proc = _TimeoutProc()
+    monkeypatch.setattr(
+        core_functions.subprocess, "Popen", lambda *args, **kwargs: timeout_proc
+    )
+    monkeypatch.setattr(core_functions, "_get_import_timeout_seconds", lambda: 1)
+    timeout_times = iter((0.0, 2.0))
+    monkeypatch.setattr(core_functions.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        core_functions.time,
+        "time",
+        lambda: next(timeout_times, 2.0),
+    )
+
+    timed_out = core_functions._import_file(
+        None,
+        "session",
+        "omeroserver",
+        4064,
+        source,
+        progress_job={"imported_bytes": 0},
+    )
+
+    assert timed_out == (False, "", "Import timed out after 1 seconds")
+    assert timeout_proc.killed is True
+    assert timeout_proc.stdout.closed is True
+    assert timeout_proc.stderr.closed is True
+
+    class _FailingProc:
+        def __init__(self):
+            self.pid = 222
+            self.returncode = None
+            self.stdout = _Pipe()
+            self.stderr = _Pipe()
+            self.killed = False
+
+        def poll(self):
+            return None
+
+        def kill(self):
+            self.killed = True
+
+    failing_proc = _FailingProc()
+    monkeypatch.setattr(
+        core_functions.subprocess, "Popen", lambda *args, **kwargs: failing_proc
+    )
+    monkeypatch.setattr(core_functions, "_get_path_total_size", lambda _path: 0)
+    monkeypatch.setattr(core_functions, "_get_import_timeout_seconds", lambda: 30)
+    failure_times = iter((0.0, 0.0))
+    monkeypatch.setattr(
+        core_functions.time,
+        "time",
+        lambda: next(failure_times, 0.0),
+    )
+    monkeypatch.setattr(
+        core_functions.time,
+        "sleep",
+        lambda _seconds: (_ for _ in ()).throw(RuntimeError("sleep exploded")),
+    )
+
+    with pytest.raises(RuntimeError, match="sleep exploded"):
+        core_functions._import_file(
+            None,
+            "session",
+            "omeroserver",
+            4064,
+            source,
+            progress_job={"imported_bytes": 0},
+        )
+
+    assert failing_proc.killed is True
+    assert failing_proc.stdout.closed is True
+    assert failing_proc.stderr.closed is True
+
+
 def test_start_compatibility_check_thread_marks_job_and_skips_when_already_active(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

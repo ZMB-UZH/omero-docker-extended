@@ -1413,6 +1413,123 @@ def test_import_job_entry_fails_when_cli_nonzero_and_no_objects(
     assert result["status"] == "error"
 
 
+def test_import_job_entry_uses_api_verification_after_cli_failure(
+    tmp_path: Path, monkeypatch
+):
+    upload_root = tmp_path / "job-root"
+    staged_file = upload_root / "_staged" / "test.tif"
+    staged_file.parent.mkdir(parents=True, exist_ok=True)
+    staged_file.write_text("x", encoding="utf-8")
+
+    monkeypatch.setattr(
+        core_functions,
+        "_import_file",
+        lambda *args, **kwargs: (False, "", "post-commit warning"),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_verify_import_via_api",
+        lambda *args, **kwargs: ["42"],
+    )
+    _patch_background_import_session(monkeypatch)
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "test.tif",
+            "staged_path": "_staged/test.tif",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["test.tif"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {"Default": 11},
+        "Default",
+        username="alice",
+        group_id=7,
+        group_name="users_private",
+    )
+
+    assert result["status"] == "imported"
+
+
+def test_import_job_entry_reports_api_verification_miss_and_import_exceptions(
+    tmp_path: Path, monkeypatch
+):
+    upload_root = tmp_path / "job-root"
+    staged_file = upload_root / "_staged" / "test.tif"
+    staged_file.parent.mkdir(parents=True, exist_ok=True)
+    staged_file.write_text("x", encoding="utf-8")
+
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_verify_import_via_api",
+        lambda *args, **kwargs: [],
+    )
+    _patch_background_import_session(monkeypatch)
+
+    monkeypatch.setattr(
+        core_functions,
+        "_import_file",
+        lambda *args, **kwargs: (True, "", ""),
+    )
+    no_objects = core_functions._import_job_entry(
+        {
+            "relative_path": "test.tif",
+            "staged_path": "_staged/test.tif",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["test.tif"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {"Default": 11},
+        "Default",
+        username="alice",
+        group_id=7,
+        group_name="users_private",
+    )
+    assert no_objects["status"] == "error"
+    assert no_objects["entry_error"] == errors.import_no_objects_created()
+
+    monkeypatch.setattr(
+        core_functions,
+        "_import_file",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("cli exploded")),
+    )
+    import_failure = core_functions._import_job_entry(
+        {
+            "relative_path": "test.tif",
+            "staged_path": "_staged/test.tif",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["test.tif"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {"Default": 11},
+        "Default",
+        username="alice",
+        group_id=7,
+        group_name="users_private",
+    )
+    assert import_failure["status"] == "error"
+    assert import_failure["entry_error"] == errors.import_failed()
+
+
 def test_import_job_entry_sets_import_name_for_zarr_directory(
     tmp_path: Path, monkeypatch
 ):
