@@ -2,7 +2,6 @@
 # shellcheck disable=SC2317
 
 set -Eeuo pipefail
-IFS=$'\n\t'
 # Generate reports readable by non-root users when script is run via sudo.
 # Individual environments can still tighten permissions externally if required.
 umask 022

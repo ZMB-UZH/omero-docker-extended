@@ -2,6 +2,7 @@
 import os
 import re
 import shutil
+import stat
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -28,8 +29,14 @@ _CONFIG_MANAGED_DIR = "omero.managed.dir"
 _CONFIG_REPO_PATH = "omero.fs.repo.path"
 _CONFIG_SHARED_TMP_PATH = "omero.web.import.shared_tmp_path"
 _RUNTIME_STATE_FILENAME = "managed-zarr-runtime.env"
-_MANAGED_DIRECTORY_MODE = 0o700
-_MANAGED_FILE_MODE = 0o600
+
+
+def _set_owner_only_directory_mode(path: Path | str) -> None:
+    os.chmod(path, stat.S_IRWXU)
+
+
+def _set_owner_only_file_mode(path: Path | str) -> None:
+    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
 
 
 def _require_config_value(config: dict[str, str], key: str) -> str:
@@ -262,7 +269,7 @@ def _user_prefix_dir(
             raise RuntimeError(
                 f"Managed-repository prefix path is not a directory: {prefix_dir}"
             )
-        os.chmod(prefix_dir, _MANAGED_DIRECTORY_MODE)
+        _set_owner_only_directory_mode(prefix_dir)
     return prefix_dir, suffix_parts
 
 
@@ -280,7 +287,7 @@ def _ensure_suffix_dir(
             f"Managed-repository target escaped its root: {target_dir}"
         ) from exc
     target_dir.mkdir(parents=True, exist_ok=True)
-    os.chmod(target_dir, _MANAGED_DIRECTORY_MODE)
+    _set_owner_only_directory_mode(target_dir)
     return target_dir
 
 
@@ -308,11 +315,11 @@ def _allocate_destination_dir(target_dir: Path, source_name: str) -> Path:
 
 def _normalize_tree_permissions(root: Path) -> None:
     for dirpath, dirnames, filenames in os.walk(root):
-        os.chmod(dirpath, _MANAGED_DIRECTORY_MODE)
+        _set_owner_only_directory_mode(dirpath)
         for dirname in dirnames:
-            os.chmod(os.path.join(dirpath, dirname), _MANAGED_DIRECTORY_MODE)
+            _set_owner_only_directory_mode(os.path.join(dirpath, dirname))
         for filename in filenames:
-            os.chmod(os.path.join(dirpath, filename), _MANAGED_FILE_MODE)
+            _set_owner_only_file_mode(os.path.join(dirpath, filename))
 
 
 def _stage_zarr(

@@ -662,6 +662,66 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 f"Codecov component for {prefix!r} is missing",
             )
 
+    def test_ci_workflows_install_from_pinned_requirement_manifests(self) -> None:
+        tests_workflow = (
+            self.repo_root / ".github" / "workflows" / "tests.yml"
+        ).read_text(encoding="utf-8")
+        security_workflow = (
+            self.repo_root / ".github" / "workflows" / "security-code-scanning.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('python3 -m pip install --upgrade "pip==26.0.1"', tests_workflow)
+        self.assertIn(
+            "python3 -m pip install --requirement .github/requirements/tests-ci.txt",
+            tests_workflow,
+        )
+        self.assertIn(
+            "python3 -m pip install --requirement .github/requirements/security-code-scanning.txt",
+            security_workflow,
+        )
+
+    def test_ci_requirement_manifests_pin_every_dependency(self) -> None:
+        requirement_paths = [
+            self.repo_root / ".github" / "requirements" / "tests-ci.txt",
+            self.repo_root / ".github" / "requirements" / "security-code-scanning.txt",
+        ]
+        pinned_requirement = re.compile(
+            r"^[A-Za-z0-9_.-]+(?:\[[A-Za-z0-9_,.-]+\])?==[^=].+$"
+        )
+
+        for requirement_path in requirement_paths:
+            requirement_text = requirement_path.read_text(encoding="utf-8")
+            for line in requirement_text.splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                self.assertRegex(
+                    stripped,
+                    pinned_requirement,
+                    f"{requirement_path.name} contains an unpinned dependency: {stripped!r}",
+                )
+
+    def test_shell_helpers_avoid_global_ifs_mutation(self) -> None:
+        extra_packages_script = (
+            self.repo_root
+            / "helper_scripts_debian"
+            / "extra_packages_debian_13_install_script"
+        ).read_text(encoding="utf-8")
+        docker_analysis_script = (
+            self.repo_root / "helper_scripts_debian" / "docker_image_analysis.sh"
+        ).read_text(encoding="utf-8")
+        public_pull_script = (
+            self.repo_root / "github_pull_project_bash_example"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("IFS=$'\\n\\t'", extra_packages_script)
+        self.assertNotIn("IFS=$'\\n\\t'", docker_analysis_script)
+        self.assertNotIn("IFS='/'", public_pull_script)
+        self.assertIn(
+            'while [ -n "${_remaining_rel}" ]; do',
+            public_pull_script,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -373,7 +373,7 @@ def test_proxy_and_admin_post_views_cover_remaining_error_and_success_paths(
     monkeypatch.setattr(
         index_view,
         "_build_proxy_backend_urls",
-        lambda *_args: ["http://prometheus:9090"],
+        lambda *_args: ["https://prometheus:9090"],
     )
     bad_prometheus = inspect.unwrap(index_view.prometheus_proxy)(
         factory.get("/prometheus"), "../escape", conn=conn

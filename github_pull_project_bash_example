@@ -205,14 +205,15 @@ collect_sentinel_dir_names() {
                 _rel="$(basename "${_path}")"
             fi
 
-            # Split the relative path on '/' and emit every component.
-            local _saved_IFS="${IFS}"
-            IFS='/'
-            # shellcheck disable=SC2086
-            for _component in ${_rel}; do
+            # Split the relative path on '/' without mutating shell word-splitting state.
+            local _remaining_rel="${_rel}"
+            local _component=""
+            while [ -n "${_remaining_rel}" ]; do
+                _component="${_remaining_rel%%/*}"
                 [ -n "${_component}" ] && printf '%s\n' "${_component}"
+                [ "${_remaining_rel}" = "${_component}" ] && break
+                _remaining_rel="${_remaining_rel#*/}"
             done
-            IFS="${_saved_IFS}"
         done
     ) | sort -u
 }
