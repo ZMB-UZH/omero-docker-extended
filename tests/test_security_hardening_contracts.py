@@ -36,7 +36,7 @@ class SecurityHardeningContractTests(unittest.TestCase):
             self.server_dockerfile,
         )
         self.assertIn(
-            '-exec sh -c \'strip --strip-unneeded "$1" 2>/dev/null || true\' _ {} \\; || true',
+            "-exec sh -c 'strip --strip-unneeded \"$1\" 2>/dev/null || true' _ {} \\; || true",
             self.server_dockerfile,
         )
 

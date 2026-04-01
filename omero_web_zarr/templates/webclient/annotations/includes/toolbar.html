@@ -65,15 +65,21 @@
                 var shareMode = "{{ share|yesno:'true,false' }}" === "true";
 
                 if (!shareMode) {
-                  function getOpenwithHtml() {
-                    var openwith_html = WEBCLIENT.OPEN_WITH.map(function(v){
+                  function findOpenwithLink(openwithId) {
+                    return $("#right_panel_openwith a").filter(function() {
+                      return $(this).attr("data-openwithid") === String(openwithId);
+                    });
+                  }
+
+                  function buildOpenwithMenuItems() {
+                    return WEBCLIENT.OPEN_WITH.map(function(v){
                       var label = v.label || v.id;
                       var enabled = false;
                       var tooltip = "Open " + selectedType + " with " + label;
 
                       if (typeof v.isEnabled === "function") {
                           enabled = v.isEnabled(selJson, function(enable) {
-                            let $a = $(`#right_panel_openwith a[data-openwithid="${v.id}"]`);
+                            let $a = findOpenwithLink(v.id);
                             $a.data('openwith_disabled', !enable);
                             if (!enable) {
                               $a.parent().addClass('disabled');
@@ -103,25 +109,27 @@
                           liClass = "disabled";
                           tooltip = tooltip.replace("Open", "Cannot open");
                       }
-                      var html = `
-                        <li class='${ liClass }'>
-                          <a title='${ tooltip }'
-                            target='_blank'
-                            href = '${ url }'
-                            data-openwith_disabled=${ !enabled }
-                            data-openwithid='${ v.id }' >
-                            ${ label }
-                          </a>
-                        </li>
-                      `;
-                      return html;
+                      var $link = $("<a/>")
+                        .attr("title", tooltip)
+                        .attr("target", "_blank")
+                        .attr("href", url)
+                        .attr("data-openwithid", String(v.id))
+                        .data("openwith_disabled", !enabled)
+                        .text(label);
+                      var $item = $("<li/>").append($link);
+                      if (liClass) {
+                        $item.addClass(liClass);
+                      }
+                      return $item;
                     });
-                    return openwith_html.join("");
                   }
 
                   $("#show_openwith_menu").on('click', function() {
-                    let html = getOpenwithHtml();
-                    $("#right_panel_openwith").html(html);
+                    let $menu = $("#right_panel_openwith");
+                    $menu.empty();
+                    buildOpenwithMenuItems().forEach(function($item) {
+                      $menu.append($item);
+                    });
                   });
 
                   $("#right_panel_openwith").on("click", "a", function (event) {

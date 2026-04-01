@@ -123,24 +123,10 @@ def test_path_and_sem_edx_helpers_normalize_and_validate_entries(monkeypatch, tm
     assert "too long" in core_functions._validate_relative_path_lengths("dir/toolong")
     assert core_functions._normalize_upload_relative_path("../escape")[0] is None
 
-    monkeypatch.setattr(
-        core_functions,
-        "_resolve_managed_child_path",
-        lambda root, relative_path, max_bytes=None: root / relative_path,
-    )
-    resolved, error = core_functions._resolve_root_relative_path(
-        tmp_path, "nested/file.txt"
-    )
-    assert resolved == tmp_path / "nested/file.txt"
+    resolved, error = core_functions._resolve_root_relative_path(tmp_path, "nest/f.txt")
+    assert resolved == tmp_path / "nest" / "f.txt"
     assert error is None
 
-    monkeypatch.setattr(
-        core_functions,
-        "_resolve_managed_child_path",
-        lambda root, relative_path, max_bytes=None: (_ for _ in ()).throw(
-            ValueError("invalid path")
-        ),
-    )
     assert core_functions._resolve_root_relative_path(tmp_path, "../escape")[0] is None
     assert (
         core_functions._build_staged_relative_path("nested/file.txt")
@@ -186,21 +172,21 @@ def test_path_and_sem_edx_helpers_normalize_and_validate_entries(monkeypatch, tm
     assert derived == {"group/image_a.tif": ["group/spec-1.txt", "group/spec-2.txt"]}
 
 
-def test_resolve_root_relative_path_hides_unexpected_value_errors(monkeypatch, tmp_path):
+def test_resolve_root_relative_path_returns_safe_validation_errors(
+    monkeypatch, tmp_path
+):
     monkeypatch.setattr(
         core_functions,
-        "_resolve_managed_child_path",
-        lambda root, relative_path, max_bytes=None: (_ for _ in ()).throw(
-            ValueError("internal path leak: /tmp/secret")
+        "_managed_runtime_validation_error",
+        lambda root, relative_parts, max_bytes=None: (
+            core_functions.errors.invalid_filename("/".join(relative_parts))
         ),
     )
 
-    resolved, error = core_functions._resolve_root_relative_path(
-        tmp_path, "nested/file.txt"
-    )
+    resolved, error = core_functions._resolve_root_relative_path(tmp_path, "nest/f.txt")
 
     assert resolved is None
-    assert error == core_functions.errors.invalid_filename("nested/file.txt")
+    assert error == core_functions.errors.invalid_filename("nest/f.txt")
     assert "secret" not in error
 
 
