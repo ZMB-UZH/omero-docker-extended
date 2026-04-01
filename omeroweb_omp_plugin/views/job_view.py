@@ -21,13 +21,13 @@ from ..services.core import (
     collect_images_in_project,
     get_id,
     get_text,
-    is_supported_separator_pattern,
     parse_filename,
     fetch_images_by_ids,
     compute_plugin_hash,
     delete_existing_annotations,
     extract_acquisition_metadata,
 )
+from ..services.parsing.filename_parser import is_supported_separator_pattern
 from ..services.rate_limit import (
     build_rate_limit_message,
     check_major_action_rate_limit,
@@ -36,7 +36,6 @@ from ..views.utils import current_username, load_request_data, require_non_root_
 from ..strings import errors as error_messages
 
 logger = logging.getLogger(__name__)
-_UNSAFE_SEPARATOR_REGEX_RE = re.compile(r"(\(\?[:!=<]|\\[1-9]|\{\d|\*\+|\+\+)")
 
 
 def _is_safe_separator_regex(pattern):
@@ -191,16 +190,6 @@ def start_job(request, conn=None, url=None, **kwargs):
                 return JsonResponse(
                     {"error": error_messages.invalid_regex_pattern_title()},
                     status=400,
-                )
-            try:
-                re.compile(raw_seps)
-            except re.error as e:
-                logger.warning(
-                    "Rejected invalid regex pattern for job start: %s",
-                    sanitize_log_value(e),
-                )
-                return JsonResponse(
-                    {"error": error_messages.invalid_regex_pattern()}, status=400
                 )
 
         if delete_mode not in ("keep", "all", "plugin"):

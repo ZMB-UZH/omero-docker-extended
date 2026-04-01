@@ -50,7 +50,7 @@ from .omero import annotation_service as _annotation_service
 from .omero.metadata_service import extract_acquisition_metadata
 
 # Parsing functions
-from .parsing.filename_parser import parse_filename, is_supported_separator_pattern
+from .parsing.filename_parser import parse_filename
 
 
 def _get_hash_secret():

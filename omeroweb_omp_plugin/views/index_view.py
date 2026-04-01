@@ -13,9 +13,9 @@ from ..services.core import (
     get_text,
     collect_images_by_selected_datasets,
     collect_dataset_summaries,
-    is_supported_separator_pattern,
     parse_filename,
 )
+from ..services.parsing.filename_parser import is_supported_separator_pattern
 from ..services.ai_assist import (
     AiAssistError,
     generate_ai_regex,

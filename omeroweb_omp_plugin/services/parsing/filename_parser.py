@@ -9,19 +9,19 @@ logger = logging.getLogger(__name__)
 _UNSAFE_SEPARATOR_REGEX_RE = re.compile(r"(\(\?[:!=<]|\\[1-9]|\{\d|\*\+|\+\+)")
 
 
-def _parse_separator_token(token):
-    if token == r"\s":
+def _parse_separator_fragment(separator_fragment):
+    if separator_fragment == r"\s":
         return "", True
-    if token.startswith("\\"):
-        if len(token) != 2:
+    if separator_fragment.startswith("\\"):
+        if len(separator_fragment) != 2:
             raise ValueError("Invalid separator regex.")
-        return token[1], False
-    if len(token) != 1 or token in "()[]{}?*+|.^$":
+        return separator_fragment[1], False
+    if len(separator_fragment) != 1 or separator_fragment in "()[]{}?*+|.^$":
         raise ValueError("Invalid separator regex.")
-    return token, False
+    return separator_fragment, False
 
 
-def _extract_separator_tokens(pattern):
+def _extract_separator_fragments(pattern):
     if (
         not isinstance(pattern, str)
         or not pattern
@@ -30,13 +30,13 @@ def _extract_separator_tokens(pattern):
     ):
         raise ValueError("Invalid separator regex.")
 
-    tokens = []
+    fragments = []
     match_whitespace = False
     length = len(pattern)
     index = 0
 
     while index < length:
-        token_values = None
+        fragment_values = None
         char = pattern[index]
 
         if pattern.startswith("(?:", index):
@@ -46,17 +46,17 @@ def _extract_separator_tokens(pattern):
             group_body = pattern[index + 3 : end]
             if not group_body:
                 raise ValueError("Invalid separator regex.")
-            token_values = []
-            for group_token in group_body.split("|"):
-                if not group_token:
+            fragment_values = []
+            for group_fragment in group_body.split("|"):
+                if not group_fragment:
                     raise ValueError("Invalid separator regex.")
-                parsed_group_token, group_whitespace = _parse_separator_token(
-                    group_token
+                parsed_group_fragment, group_whitespace = _parse_separator_fragment(
+                    group_fragment
                 )
                 if group_whitespace:
                     match_whitespace = True
                     continue
-                token_values.append(parsed_group_token)
+                fragment_values.append(parsed_group_fragment)
             index = end + 1
         elif char == "[":
             end = pattern.find("]", index + 1)
@@ -65,7 +65,7 @@ def _extract_separator_tokens(pattern):
             class_body = pattern[index + 1 : end]
             if not class_body or class_body.startswith("^"):
                 raise ValueError("Invalid separator regex.")
-            token_values = []
+            fragment_values = []
             class_index = 0
             while class_index < len(class_body):
                 class_char = class_body[class_index]
@@ -76,49 +76,49 @@ def _extract_separator_tokens(pattern):
                     if escaped == "s":
                         match_whitespace = True
                     else:
-                        token_values.append(escaped)
+                        fragment_values.append(escaped)
                     class_index += 2
                     continue
-                token_values.append(class_char)
+                fragment_values.append(class_char)
                 class_index += 1
             index = end + 1
         else:
-            parsed_token, token_whitespace = _parse_separator_token(char)
-            token_values = [] if token_whitespace else [parsed_token]
-            match_whitespace = match_whitespace or token_whitespace
+            parsed_fragment, fragment_whitespace = _parse_separator_fragment(char)
+            fragment_values = [] if fragment_whitespace else [parsed_fragment]
+            match_whitespace = match_whitespace or fragment_whitespace
             index += 1
 
         if index < length and pattern[index] == "+":
             index += 1
 
-        tokens.extend(token_values)
+        fragments.extend(fragment_values)
 
-    normalized_tokens = []
+    normalized_fragments = []
     seen = set()
-    for token in tokens:
-        if not token or token in seen:
+    for fragment in fragments:
+        if not fragment or fragment in seen:
             continue
-        seen.add(token)
-        normalized_tokens.append(token)
-    if not normalized_tokens and not match_whitespace:
+        seen.add(fragment)
+        normalized_fragments.append(fragment)
+    if not normalized_fragments and not match_whitespace:
         raise ValueError("Invalid separator regex.")
-    return tuple(normalized_tokens), match_whitespace
+    return tuple(normalized_fragments), match_whitespace
 
 
-def _split_on_separator_tokens(value, tokens, match_whitespace):
+def _split_on_separator_fragments(value, fragments, match_whitespace):
     parts = []
     current = []
     index = 0
-    sorted_tokens = sorted(tokens, key=len, reverse=True)
+    sorted_fragments = sorted(fragments, key=len, reverse=True)
 
     while index < len(value):
         matched_length = 0
         if match_whitespace and value[index].isspace():
             matched_length = 1
         else:
-            for token in sorted_tokens:
-                if value.startswith(token, index):
-                    matched_length = len(token)
+            for fragment in sorted_fragments:
+                if value.startswith(fragment, index):
+                    matched_length = len(fragment)
                     break
 
         if matched_length:
@@ -131,9 +131,9 @@ def _split_on_separator_tokens(value, tokens, match_whitespace):
                     index += 1
                     continue
                 next_length = 0
-                for token in sorted_tokens:
-                    if value.startswith(token, index):
-                        next_length = len(token)
+                for fragment in sorted_fragments:
+                    if value.startswith(fragment, index):
+                        next_length = len(fragment)
                         break
                 if not next_length:
                     break
@@ -150,7 +150,7 @@ def _split_on_separator_tokens(value, tokens, match_whitespace):
 
 def is_supported_separator_pattern(sep_pattern):
     try:
-        _extract_separator_tokens(sep_pattern)
+        _extract_separator_fragments(sep_pattern)
     except ValueError:
         return False
     return True
@@ -178,12 +178,12 @@ def parse_filename(filename, sep_pattern):
         else:
             base_name = filename.rsplit(".", 1)[0]
 
-    separator_tokens, match_whitespace = _extract_separator_tokens(sep_pattern)
+    separator_fragments, match_whitespace = _extract_separator_fragments(sep_pattern)
     parts = [
         p
-        for p in _split_on_separator_tokens(
+        for p in _split_on_separator_fragments(
             base_name,
-            separator_tokens,
+            separator_fragments,
             match_whitespace,
         )
         if p

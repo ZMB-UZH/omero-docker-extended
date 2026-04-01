@@ -62,7 +62,7 @@
                 var selectedType = selectedObjs.reduce(function(prev, s){
                     return s.split('-')[0] + (selectedObjs.length > 1 ? "s" : "");
                 }, "undefined");
-                var shareMode = {% if share %}true{% else %}false{% endif %};
+                var shareMode = "{{ share|yesno:'true,false' }}" === "true";
 
                 if (!shareMode) {
                   function getOpenwithHtml() {
