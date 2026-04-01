@@ -4,6 +4,7 @@ import inspect
 import json
 from types import SimpleNamespace
 
+import pytest
 from django.test import RequestFactory
 
 from omeroweb_omp_plugin.views import ai_credentials_view
@@ -517,3 +518,143 @@ def test_perform_connection_test_covers_success_http_error_and_exception(monkeyp
     ok, message = ai_credentials_view._perform_connection_test("", "")
     assert ok is False
     assert message == ai_credentials_view.errors.provider_and_key_required()
+
+
+def test_ai_credentials_helper_edges_cover_parser_and_transport_failures(
+    monkeypatch,
+):
+    assert (
+        ai_credentials_view._validated_provider_url("https://api.example.test/models#x")
+        == "https://api.example.test/models"
+    )
+    with pytest.raises(ValueError):
+        ai_credentials_view._validated_provider_url("http://")
+    with pytest.raises(ValueError):
+        ai_credentials_view._validated_provider_url("ftp://api.example.test/models")
+
+    assert ai_credentials_view._select_default_model("unknown", ["m2", "m1"]) == "m2"
+    assert ai_credentials_view._select_default_model("groq", []) is None
+    assert ai_credentials_view._parse_openai_style_models(
+        {"data": [{"context_length": 7}, {"id": "model-a", "context_length": 9}]}
+    ) == [{"id": "model-a", "context_length": 9}]
+    assert ai_credentials_view._parse_anthropic_models(
+        {"data": [{"foo": "bar"}, {"id": "claude-3"}]}
+    ) == [{"id": "claude-3"}]
+    assert ai_credentials_view._parse_gemini_models(
+        {
+            "models": [
+                {"displayName": "skip"},
+                {"name": "models/gemini-2.0", "displayName": "Gemini 2"},
+            ]
+        }
+    ) == [
+        {
+            "id": "gemini-2.0",
+            "display_name": "Gemini 2",
+            "input_token_limit": None,
+            "output_token_limit": None,
+        }
+    ]
+    assert ai_credentials_view._parse_cohere_models(
+        {
+            "models": [{"context_length": 1}, {"name": "command-r-plus"}],
+            "data": [{"foo": "bar"}, {"id": "command-r"}],
+        }
+    ) == [
+        {"id": "command-r-plus", "context_length": None},
+        {"id": "command-r"},
+    ]
+
+    ok, message = ai_credentials_view._perform_connection_test("unknown", "token")
+    assert ok is False
+    assert message == ai_credentials_view.errors.connection_test_not_supported("unknown")
+
+    ai_credentials_view._PROVIDER_TESTS["fixture-post"] = {
+        "url": "https://api.example.test/models",
+        "headers": lambda key: {"Authorization": f"Bearer {key}"},
+        "method": "POST",
+        "payload": {"hello": "world"},
+    }
+    captured = {}
+    monkeypatch.setattr(
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: (
+            captured.update(kwargs) or _Response({}, status=204)
+        ),
+    )
+    ok, message = ai_credentials_view._perform_connection_test("fixture-post", "token")
+    assert ok is True
+    assert message == ai_credentials_view.errors.connection_test_passed()
+    assert json.loads(captured["data"].decode("utf-8")) == {"hello": "world"}
+
+    ai_credentials_view._PROVIDER_TESTS["fixture-invalid"] = {
+        "url": "http://api.example.test/models",
+        "headers": lambda key: {},
+    }
+    ok, message = ai_credentials_view._perform_connection_test("fixture-invalid", "token")
+    assert ok is False
+    assert message == ai_credentials_view.errors.connection_test_failed()
+
+    monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "alice")
+    monkeypatch.setattr(
+        ai_credentials_view,
+        "get_ai_credential",
+        lambda username, provider: TEST_API_CREDENTIAL,
+    )
+
+    request = inspect.unwrap(ai_credentials_view.test_credentials)(
+        RequestFactory().get("/"),
+        conn=None,
+    )
+    assert request.status_code == 405
+
+    save_method = inspect.unwrap(ai_credentials_view.save_credentials)(
+        RequestFactory().get("/"),
+        conn=None,
+    )
+    assert save_method.status_code == 405
+
+    list_method = inspect.unwrap(ai_credentials_view.list_models)(
+        RequestFactory().post("/", data={"provider": "groq"}),
+        conn=None,
+    )
+    assert list_method.status_code == 405
+
+    request_exc = ai_credentials_view.requests.RequestException("too many requests")
+    request_exc.response = _Response("limited", status=429)
+    monkeypatch.setattr(
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: (_ for _ in ()).throw(request_exc),
+    )
+    rate_limited = inspect.unwrap(ai_credentials_view.list_models)(
+        RequestFactory().get("/", data={"provider": "groq"}),
+        conn=None,
+    )
+    assert rate_limited.status_code == 400
+    assert "429" in _json_payload(rate_limited)["error"]
+
+    monkeypatch.setattr(
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: (_ for _ in ()).throw(
+            ai_credentials_view.requests.RequestException("network down")
+        ),
+    )
+    request_error = inspect.unwrap(ai_credentials_view.list_models)(
+        RequestFactory().get("/", data={"provider": "groq"}),
+        conn=None,
+    )
+    assert request_error.status_code == 500
+
+    monkeypatch.setattr(
+        ai_credentials_view.requests,
+        "request",
+        lambda **kwargs: _Response("not-json", status=200),
+    )
+    invalid_json = inspect.unwrap(ai_credentials_view.list_models)(
+        RequestFactory().get("/", data={"provider": "groq"}),
+        conn=None,
+    )
+    assert invalid_json.status_code == 500
