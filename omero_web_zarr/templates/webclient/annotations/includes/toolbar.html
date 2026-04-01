@@ -7,7 +7,22 @@
 -->
 {% endcomment %}
 
-	    <script type="text/javascript">
+<script id="zarr-toolbar-selection-data" type="application/json">
+[
+{% for o in obj_labels %}
+  {"id": {{ o.id }}, "type": "{{ o.type|lower|escapejs }}", "name": "{{ o.name|escapejs }}"}{% if not forloop.last %},{% endif %}
+{% endfor %}
+]
+</script>
+<script id="zarr-toolbar-manager-selection-data" type="application/json">
+[
+{% if manager.obj_type %}
+  {"id": "{{ manager.obj_id|escapejs }}", "name": "{{ manager.obj_name|escapejs }}", "type": "{{ manager.obj_type|escapejs }}"}
+{% endif %}
+]
+</script>
+
+		    <script type="text/javascript">
 	        
 	        $(document).ready(function()
 	            {
@@ -30,15 +45,19 @@
                     $btn.prop('href', $btn.prop('href') + '?' + parent.replace('-', '='));
                 }
 
-                var selectedObjs = [{% for o in obj_labels %}{% if forloop.counter > 1 %},{% endif %}"{{ o.type|lower }}-{{ o.id}}"{% endfor %}];
-                var selJson = [{% for o in obj_labels %}{% if forloop.counter > 1 %}, {% endif %}{"id": {{ o.id }}, 'type': '{{ o.type|lower }}', 'name': '{{ o.name }}'  }{% endfor %}];
-
-              {% if manager.obj_type %}
-                selectedObjs = ["{{ manager.obj_type }}-{{ manager.obj_id }}"];
-                selJson = [{'id': '{{ manager.obj_id }}',
-                           'name': '{{ manager.obj_name }}',
-                           'type': '{{ manager.obj_type }}' }]
-              {% endif %}
+	                var selectionNode = document.getElementById("zarr-toolbar-selection-data");
+	                var selJson = selectionNode ? JSON.parse(selectionNode.textContent) : [];
+	                var selectedObjs = selJson.map(function(item) {
+	                    return item.type + "-" + item.id;
+	                });
+	                var managerSelectionNode = document.getElementById("zarr-toolbar-manager-selection-data");
+	                var managerSelJson = managerSelectionNode ? JSON.parse(managerSelectionNode.textContent) : [];
+	                if (managerSelJson.length) {
+	                    selJson = managerSelJson;
+	                    selectedObjs = managerSelJson.map(function(item) {
+	                        return item.type + "-" + item.id;
+	                    });
+	                }
 
                 var selectedType = selectedObjs.reduce(function(prev, s){
                     return s.split('-')[0] + (selectedObjs.length > 1 ? "s" : "");
