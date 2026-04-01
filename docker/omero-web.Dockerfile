@@ -461,3 +461,9 @@ USER root
 
 ENTRYPOINT ["/usr/local/bin/entrypoint-supervisord.sh"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
+
+# Mirror the compose healthcheck in the image so standalone runs also verify
+# that OMERO.web is serving the web gateway before the container is considered
+# healthy.
+HEALTHCHECK --interval=10s --timeout=10s --start-period=20s --retries=30 \
+    CMD curl -fsS http://127.0.0.1:4090/webgateway/ >/dev/null || exit 1

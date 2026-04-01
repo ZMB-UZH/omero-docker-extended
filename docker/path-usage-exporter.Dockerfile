@@ -13,4 +13,7 @@ RUN set -eu; \
 
 COPY monitoring/path-usage-exporter/path_usage_exporter.py /opt/path_usage_exporter.py
 
+HEALTHCHECK --interval=10s --timeout=10s --start-period=20s --retries=30 \
+    CMD test -f /textfile/omero_paths.prom || exit 1
+
 ENTRYPOINT ["python3", "/opt/path_usage_exporter.py"]

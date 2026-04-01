@@ -124,6 +124,8 @@ def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
     with pytest.raises(ValueError, match="Invalid separator regex"):
         filename_parser.parse_filename("sample.ome.tif", r"(?=_)")
 
+    assert core._normalize_annotation_ids([1, "2", "bad", None, 2, 1]) == [1, 2]
+
 
 def test_core_delete_existing_annotations_supports_runtime_positional_signature(
     monkeypatch,
