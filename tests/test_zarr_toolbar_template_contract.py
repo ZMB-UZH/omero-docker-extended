@@ -39,6 +39,15 @@ class ZarrToolbarTemplateContractTests(unittest.TestCase):
             "var selectedObjs = [{% for o in obj_labels %}",
             self.template_text,
         )
+        self.assertIn(
+            "var shareMode = {% if share %}true{% else %}false{% endif %};",
+            self.template_text,
+        )
+        self.assertIn("if (!shareMode) {", self.template_text)
+        self.assertNotIn(
+            "{% if not share %}\n                function getOpenwithHtml()",
+            self.template_text,
+        )
 
 
 if __name__ == "__main__":
