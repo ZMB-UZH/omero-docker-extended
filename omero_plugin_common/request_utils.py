@@ -38,13 +38,13 @@ def load_request_data(request):
         return request.POST
 
 
-def parse_json_body(request) -> Tuple[Optional[Any], Optional[Exception]]:
-    """Parse JSON from request body, returning data and error if parsing fails."""
+def parse_json_body(request) -> Tuple[Optional[Any], Optional[str]]:
+    """Parse JSON from request body, returning data and a safe error string."""
     try:
         raw_body = request.body.decode("utf-8")
-    except Exception as exc:
-        return None, exc
+    except Exception:
+        return None, "Request body is not valid UTF-8."
     try:
         return json.loads(raw_body), None
-    except json.JSONDecodeError as exc:
-        return None, exc
+    except json.JSONDecodeError:
+        return None, "Request body is not valid JSON."

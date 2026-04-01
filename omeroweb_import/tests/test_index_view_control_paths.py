@@ -15,7 +15,7 @@ from omeroweb_import.views import index_view
 
 def _test_job_id(suffix: str) -> str:
     """Build a fake job ID at runtime so static scanners do not flag it as a token."""
-    return "test" + "0" * 24 + suffix
+    return "dead" + "0" * 26 + suffix
 
 
 def _payload(response):
