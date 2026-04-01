@@ -8,11 +8,15 @@ import pty
 import select
 import signal
 import stat
+import subprocess
 import tempfile
 import textwrap
 import time
 import unittest
 from pathlib import Path
+
+
+BASH_BIN = "/bin/bash"
 
 
 class InstallationInteractivePromptRegressionTests(unittest.TestCase):
@@ -56,7 +60,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
         joined_blocks = "\n".join(blocks)
         return textwrap.dedent(
             f"""\
-            #!/usr/bin/env bash
+            #!/bin/bash
             set -euo pipefail
             install_transcript_record_line() {{
                 :
@@ -80,8 +84,12 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
     ) -> tuple[int, str]:
         pid, fd = pty.fork()
         if pid == 0:
-            os.chdir(harness_path.parent)
-            os.execv("/bin/bash", ["bash", str(harness_path)])
+            completed = subprocess.run(
+                [BASH_BIN, str(harness_path)],
+                cwd=harness_path.parent,
+                check=False,
+            )
+            os._exit(completed.returncode)
 
         output = bytearray()
         input_sent = False

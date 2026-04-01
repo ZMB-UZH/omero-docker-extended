@@ -13,6 +13,11 @@ New code should import directly from the specialized modules:
 - services.parsing.filename_parser: parse_filename
 """
 
+import inspect
+
+from omero.model import ImageAnnotationLinkI, MapAnnotationI
+from omero.rtypes import rlong
+
 # Job storage functions
 from .jobs.job_storage import (
     load_job,
@@ -78,15 +83,135 @@ def find_map_annotation_ids(conn, image_id):
     return _annotation_service.find_map_annotation_ids(conn, image_id)
 
 
-def delete_existing_annotations(
+def _supports_legacy_annotation_kwargs() -> bool:
+    try:
+        parameters = inspect.signature(
+            _annotation_service.delete_existing_annotations
+        ).parameters.values()
+    except (TypeError, ValueError):
+        return False
+
+    if any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters):
+        return True
+    parameter_names = {parameter.name for parameter in parameters}
+    return {"annotation_ids", "link_ids", "allow_legacy"} <= parameter_names
+
+
+def _normalize_annotation_ids(values):
+    normalized = []
+    seen = set()
+    for value in values or []:
+        try:
+            item_id = int(value)
+        except Exception:
+            continue
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        normalized.append(item_id)
+    return normalized
+
+
+def _delete_object_by_id(conn, update, object_type, stub_type, object_id):
+    try:
+        obj = conn.getObject(object_type, int(object_id))
+    except Exception:
+        obj = None
+    if obj is not None:
+        update.deleteObject(getattr(obj, "_obj", obj))
+        return True
+
+    stub = stub_type()
+    stub.setId(rlong(int(object_id)))
+    update.deleteObject(stub)
+    return True
+
+
+def _delete_existing_annotations_by_ids(
     conn, image_id, *, annotation_ids=None, link_ids=None, allow_legacy=True
 ):
+    resolved_annotation_ids = _normalize_annotation_ids(
+        annotation_ids
+        if annotation_ids is not None
+        else find_plugin_annotation_ids(conn, image_id, allow_legacy=allow_legacy)
+    )
+
+    if link_ids is None:
+        derived_link_ids = []
+        for annotation_id in resolved_annotation_ids:
+            derived_link_ids.extend(find_annotation_link_ids(conn, annotation_id))
+        resolved_link_ids = _normalize_annotation_ids(derived_link_ids)
+    else:
+        resolved_link_ids = _normalize_annotation_ids(link_ids)
+
+    update = conn.getUpdateService()
+    deleted_links = 0
+    for link_id in resolved_link_ids:
+        if _delete_object_by_id(
+            conn,
+            update,
+            "ImageAnnotationLink",
+            ImageAnnotationLinkI,
+            link_id,
+        ):
+            deleted_links += 1
+
+    deleted_annotations = 0
+    for annotation_id in resolved_annotation_ids:
+        if _delete_object_by_id(
+            conn,
+            update,
+            "MapAnnotation",
+            MapAnnotationI,
+            annotation_id,
+        ):
+            deleted_annotations += 1
+
+    return deleted_annotations, deleted_links, len(resolved_annotation_ids)
+
+
+def delete_existing_annotations(
+    conn, *args, annotation_ids=None, link_ids=None, allow_legacy=True
+):
+    uses_legacy_id_api = (
+        annotation_ids is not None or link_ids is not None or len(args) == 1
+    )
+    if uses_legacy_id_api:
+        if len(args) != 1:
+            raise TypeError(
+                "Legacy delete_existing_annotations calls require exactly one "
+                "image_id positional argument."
+            )
+        image_id = args[0]
+        if _supports_legacy_annotation_kwargs():
+            return _annotation_service.delete_existing_annotations(
+                conn,
+                image_id,
+                annotation_ids=annotation_ids,
+                link_ids=link_ids,
+                allow_legacy=allow_legacy,
+            )
+        return _delete_existing_annotations_by_ids(
+            conn,
+            image_id,
+            annotation_ids=annotation_ids,
+            link_ids=link_ids,
+            allow_legacy=allow_legacy,
+        )
+
+    if len(args) != 4:
+        raise TypeError(
+            "delete_existing_annotations expects either "
+            "(conn, image_id, *, annotation_ids=..., link_ids=..., allow_legacy=...) "
+            "or (conn, update, img, var_names, mode)."
+        )
+    update, img, var_names, mode = args
     return _annotation_service.delete_existing_annotations(
         conn,
-        image_id,
-        annotation_ids=annotation_ids,
-        link_ids=link_ids,
-        allow_legacy=allow_legacy,
+        update,
+        img,
+        var_names,
+        mode,
     )
 
 

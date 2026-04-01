@@ -162,8 +162,13 @@ def test_open_service_connection_reraises_unexpected_group_id_failures(
     monkeypatch, caplog
 ):
     class _BadGroupId:
+        def __init__(self, *, fail=True):
+            self.fail = fail
+
         def __int__(self):
-            raise TypeError("bad group id")
+            if self.fail:
+                raise TypeError("bad group id")
+            return 7
 
     class _Conn:
         def __init__(self):
@@ -186,7 +191,7 @@ def test_open_service_connection_reraises_unexpected_group_id_failures(
     with caplog.at_level(logging.DEBUG, logger=import_service.logger.name):
         with pytest.raises(TypeError, match="bad group id"):
             import_service._open_service_connection(
-                "omeroserver", 4064, group_id=_BadGroupId()
+                "omeroserver", 4064, group_id=_BadGroupId(fail=True)
             )
 
     assert "Suppressed non-fatal exception in import_service.py" in caplog.text

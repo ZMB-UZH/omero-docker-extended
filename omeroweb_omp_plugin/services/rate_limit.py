@@ -204,7 +204,7 @@ def _get_user_key(request, conn=None):
         key_type = "ip"
 
     # SINGLE SHARED KEY for all major actions
-    return f"{_CACHE_PREFIX}:{key_type}:{identifier}"
+    return ":".join((_CACHE_PREFIX, key_type, str(identifier)))
 
 
 def build_rate_limit_message(remaining_seconds):

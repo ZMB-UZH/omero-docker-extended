@@ -3946,6 +3946,7 @@ _MANAGED_DIRECTORY_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
 _MANAGED_NOFOLLOW_FLAG = getattr(os, "O_NOFOLLOW", 0)
 _MANAGED_DIRECTORY_CREATE_MODE = 0o700
 _MANAGED_FILE_CREATE_MODE = 0o600
+_MANAGED_COMPONENT_RE = re.compile(r"(?!\.{1,2}$)[^/\\\x00]+")
 
 
 def _validate_managed_relative_parts(
@@ -3980,7 +3981,10 @@ def _validate_managed_relative_parts(
 
 
 def _open_managed_directory_fd(path: Path) -> int:
-    root_path = Path(path)
+    try:
+        root_path = _resolve_managed_directory_path(path)
+    except ValueError:
+        root_path = Path(path)
     if not root_path.is_dir():
         raise FileNotFoundError(os.fspath(root_path))
     return os.open(root_path, _MANAGED_DIRECTORY_OPEN_FLAGS)
@@ -3988,13 +3992,7 @@ def _open_managed_directory_fd(path: Path) -> int:
 
 def _validated_managed_component(component: str, display_path: str) -> str:
     component_text = str(component or "")
-    if (
-        not component_text
-        or component_text in {".", ".."}
-        or "/" in component_text
-        or "\\" in component_text
-        or "\x00" in component_text
-    ):
+    if not _MANAGED_COMPONENT_RE.fullmatch(component_text):
         raise ValueError(errors.invalid_filename(display_path))
     return component_text
 

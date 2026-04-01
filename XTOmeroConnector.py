@@ -1482,6 +1482,9 @@ class OMEROBrowserDialog:
         self.load_btn.config(state=tk.DISABLED)
         threading.Thread(target=self._load_worker, args=(img,), daemon=True).start()
 
+    def _reenable_load_button(self):
+        self.load_btn.config(state=tk.NORMAL)
+
     def _load_worker(self, img):
         try:
             _xt_debug(f"Load worker starting image_id={img['id']} name={img['name']}")
@@ -1540,9 +1543,7 @@ class OMEROBrowserDialog:
             traceback.print_exc()
             _xt_debug(f"Load worker failed: {e}")
         finally:
-            self._invoke_on_ui_thread(
-                lambda: self.load_btn.config(state=tk.NORMAL), wait=False
-            )
+            self._invoke_on_ui_thread(self._reenable_load_button, wait=False)
 
     def show(self):
         self.root.mainloop()

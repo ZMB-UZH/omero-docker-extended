@@ -108,6 +108,33 @@ def _validated_http_url(url: str, *, allow_query: bool = False) -> str:
     )
 
 
+def _internal_service_base_url(
+    url_env_name: str,
+    *,
+    default_host: str,
+    default_port: int,
+    scheme_env_name: str = "ADMIN_TOOLS_INTERNAL_SERVICE_SCHEME",
+) -> str:
+    configured_url = os.environ.get(url_env_name, "").strip()
+    if configured_url:
+        return configured_url
+
+    scheme = str(os.environ.get(scheme_env_name, "http") or "http").strip().lower()
+    if scheme not in {"http", "https"}:
+        scheme = "http"
+
+    return urllib.parse.urlunparse(
+        (
+            scheme,
+            f"{default_host}:{int(default_port)}",
+            "",
+            "",
+            "",
+            "",
+        )
+    )
+
+
 def _probe_http_url(url: str, timeout_seconds: float = 2.5) -> Dict[str, object]:
     """Probe an HTTP endpoint and return availability diagnostics."""
     try:
@@ -1591,13 +1618,15 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     if root_error:
         return root_error
 
-    grafana_base_url = os.environ.get(
+    grafana_base_url = _internal_service_base_url(
         "ADMIN_TOOLS_GRAFANA_URL",
-        "http://grafana:3000",  # DevSkim: ignore DS137138
+        default_host="grafana",
+        default_port=3000,
     )
-    prometheus_base_url = os.environ.get(
+    prometheus_base_url = _internal_service_base_url(
         "ADMIN_TOOLS_PROMETHEUS_URL",
-        "http://prometheus:9090",  # DevSkim: ignore DS137138
+        default_host="prometheus",
+        default_port=9090,
     )
 
     grafana_public_url = os.environ.get("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "").strip()
@@ -1822,9 +1851,10 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     if request.method not in _PROXY_SAFE_METHODS:
         return _proxy_method_not_allowed_response()
 
-    grafana_base_url = os.environ.get(
+    grafana_base_url = _internal_service_base_url(
         "ADMIN_TOOLS_GRAFANA_URL",
-        "http://grafana:3000",  # DevSkim: ignore DS137138
+        default_host="grafana",
+        default_port=3000,
     )
     grafana_public_url = os.environ.get("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "")
     backend_urls = _build_proxy_backend_urls(grafana_base_url, grafana_public_url)
@@ -1883,9 +1913,10 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     if request.method not in _PROXY_SAFE_METHODS:
         return _proxy_method_not_allowed_response()
 
-    prometheus_base_url = os.environ.get(
+    prometheus_base_url = _internal_service_base_url(
         "ADMIN_TOOLS_PROMETHEUS_URL",
-        "http://prometheus:9090",  # DevSkim: ignore DS137138
+        default_host="prometheus",
+        default_port=9090,
     )
     prometheus_public_url = os.environ.get("ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL", "")
     backend_urls = _build_proxy_backend_urls(

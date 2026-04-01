@@ -24,16 +24,11 @@
 
                 OME.initToolbarDropdowns();
 
-
-            {% if image %}
                 var parent = OME.getParentId();
-                if (parent) {
-                    if (parent.split('-')[0] === 'dataset') {
-                        var $btn = $("#open_full_viewer");
-                        $btn.prop('href', $btn.prop('href') + '?' + parent.replace('-', '='));
-                    }
+                if (parent && parent.split('-')[0] === 'dataset') {
+                    var $btn = $("#open_full_viewer");
+                    $btn.prop('href', $btn.prop('href') + '?' + parent.replace('-', '='));
                 }
-            {% endif %}
 
                 var selectedObjs = [{% for o in obj_labels %}{% if forloop.counter > 1 %},{% endif %}"{{ o.type|lower }}-{{ o.id}}"{% endfor %}];
                 var selJson = [{% for o in obj_labels %}{% if forloop.counter > 1 %}, {% endif %}{"id": {{ o.id }}, 'type': '{{ o.type|lower }}', 'name': '{{ o.name }}'  }{% endfor %}];

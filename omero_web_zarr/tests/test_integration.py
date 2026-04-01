@@ -1436,7 +1436,7 @@ def test_render_regular_image_region_with_safe_tile_size_rejects_invalid_levels_
         conn=_FakeConnForTileSize(),
     )
     assert invalid_level.status_code == 400
-    assert invalid_level.content.decode("utf-8").startswith("Invalid resolution level")
+    assert invalid_level.content.decode("utf-8") == "invalid resolution level"
 
     request = RequestFactory().get(
         "/webclient/render_image_region/7/0/0/",

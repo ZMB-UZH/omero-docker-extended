@@ -137,6 +137,21 @@ def test_open_file_in_imaris_returns_false_without_handle():
     assert module.open_file_in_imaris("C:\\temp\\demo.ims", None) is False
 
 
+def test_browser_dialog_reenable_load_button_uses_normal_state():
+    module = _load_xt_module()
+    module.tk.NORMAL = "normal"
+    states = []
+    dialog = types.SimpleNamespace(
+        load_btn=types.SimpleNamespace(
+            config=lambda **kwargs: states.append(kwargs["state"])
+        )
+    )
+
+    module.OMEROBrowserDialog._reenable_load_button(dialog)
+
+    assert states == ["normal"]
+
+
 def test_find_imaris_executable_prefers_env_override(monkeypatch):
     module = _load_xt_module()
     monkeypatch.setattr(module.os, "name", "nt", raising=False)

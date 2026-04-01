@@ -19,7 +19,6 @@
 #   RUN_AUTOREMOVE=1           (opt-in; default 0)
 
 set -Eeuo pipefail
-IFS=$'\n\t'
 
 SCRIPT_NAME="$(basename "$0")"
 LOCK_FILE="/var/lock/${SCRIPT_NAME}.lock"
