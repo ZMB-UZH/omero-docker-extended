@@ -186,6 +186,24 @@ def test_path_and_sem_edx_helpers_normalize_and_validate_entries(monkeypatch, tm
     assert derived == {"group/image_a.tif": ["group/spec-1.txt", "group/spec-2.txt"]}
 
 
+def test_resolve_root_relative_path_hides_unexpected_value_errors(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        core_functions,
+        "_resolve_managed_child_path",
+        lambda root, relative_path, max_bytes=None: (_ for _ in ()).throw(
+            ValueError("internal path leak: /tmp/secret")
+        ),
+    )
+
+    resolved, error = core_functions._resolve_root_relative_path(
+        tmp_path, "nested/file.txt"
+    )
+
+    assert resolved is None
+    assert error == core_functions.errors.invalid_filename("nested/file.txt")
+    assert "secret" not in error
+
+
 def test_external_info_units_and_dataset_helpers_cover_aliases_and_fallbacks(
     monkeypatch,
 ):
