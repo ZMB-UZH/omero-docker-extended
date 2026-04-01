@@ -138,11 +138,13 @@ __all__ = [
     "_import_file",
     "_import_job_entry",
     "_initialize_directories",
+    "_is_managed_upload_internal_error",
     "_is_owned_by_user",
     "_iter_accessible_projects",
     "_job_path",
     "_link_dataset_to_project",
     "_load_job",
+    "_managed_upload_error_message",
     "_mark_failed_job_for_deferred_cleanup",
     "_normalize_job_batch_size",
     "_normalize_upload_relative_path",
@@ -180,6 +182,7 @@ __all__ = [
     "_start_compatibility_check_thread",
     "_start_import_thread",
     "_update_job",
+    "_validated_job_id",
     "_validate_session",
     "_validate_staged_target_path",
     "_verify_import",
@@ -852,6 +855,25 @@ def _normalize_upload_relative_path(raw_name: str):
     return rel_path, None
 
 
+@dataclass(frozen=True)
+class _ManagedUploadInternalError:
+    public_message: str
+
+
+def _managed_upload_internal_error(public_message: str) -> _ManagedUploadInternalError:
+    return _ManagedUploadInternalError(public_message)
+
+
+def _is_managed_upload_internal_error(error) -> bool:
+    return isinstance(error, _ManagedUploadInternalError)
+
+
+def _managed_upload_error_message(error) -> str:
+    if _is_managed_upload_internal_error(error):
+        return error.public_message
+    return str(error)
+
+
 def _resolve_root_relative_path(
     root: Path, relative_path: str, *, max_bytes: int = None
 ):
@@ -926,7 +948,18 @@ def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, up
     except ValueError:
         return None, None, errors.invalid_filename(normalized_path)
     except OSError as exc:
-        return None, None, exc
+        logger.warning(
+            "Failed to append staged upload chunks for %s: %s",
+            sanitize_log_value(normalized_path),
+            sanitize_log_value(exc),
+        )
+        return (
+            None,
+            None,
+            _managed_upload_internal_error(
+                errors.unexpected_server_error_uploading_files()
+            ),
+        )
     finally:
         if parent_fd is not None:
             os.close(parent_fd)
@@ -967,7 +1000,14 @@ def _reset_staged_upload_file(upload_root: Path, staged_path: str):
     except ValueError:
         return errors.invalid_filename(normalized_path)
     except OSError as exc:
-        return exc
+        logger.warning(
+            "Failed to reset staged upload file %s: %s",
+            sanitize_log_value(normalized_path),
+            sanitize_log_value(exc),
+        )
+        return _managed_upload_internal_error(
+            errors.unexpected_server_error_uploading_files()
+        )
     finally:
         if parent_fd is not None:
             os.close(parent_fd)
@@ -1003,7 +1043,17 @@ def _staged_upload_size(upload_root: Path, staged_path: str):
     except ValueError:
         return None, errors.invalid_filename(normalized_path)
     except OSError as exc:
-        return None, exc
+        logger.warning(
+            "Failed to inspect staged upload file %s: %s",
+            sanitize_log_value(normalized_path),
+            sanitize_log_value(exc),
+        )
+        return (
+            None,
+            _managed_upload_internal_error(
+                errors.unexpected_server_error_uploading_files()
+            ),
+        )
     finally:
         if parent_fd is not None:
             os.close(parent_fd)
@@ -1049,7 +1099,17 @@ def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
     except ValueError:
         return None, errors.invalid_filename(normalized_path)
     except OSError as exc:
-        return None, exc
+        logger.warning(
+            "Failed to replace staged upload file %s: %s",
+            sanitize_log_value(normalized_path),
+            sanitize_log_value(exc),
+        )
+        return (
+            None,
+            _managed_upload_internal_error(
+                errors.unexpected_server_error_uploading_files()
+            ),
+        )
     finally:
         if parent_fd is not None:
             os.close(parent_fd)
