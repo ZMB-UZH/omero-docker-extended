@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from http.client import HTTPMessage
-import subprocess
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
@@ -305,7 +304,7 @@ def test_docker_compose_and_api_helpers_cover_json_and_socket_errors(
         index_view.subprocess,
         "run",
         lambda *args, **kwargs: (_ for _ in ()).throw(
-            subprocess.CalledProcessError(1, ["docker"])
+            index_view.subprocess.CalledProcessError(1, ["docker"])
         ),
     )
     assert index_view._docker_compose_json(["docker", "compose", "ps"]) is None

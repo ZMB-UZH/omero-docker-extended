@@ -9,12 +9,12 @@ from omero.rtypes import rstring
 from omero import scripts
 import omero.rtypes
 import os
-import subprocess
 import shutil
 import re
 import hashlib
 from datetime import datetime
 
+from omero_plugin_common import process_utils
 from omero_plugin_common.env_utils import (
     ENV_FILE_OMERO_CELERY,
     ENV_FILE_OMEROSERVER,
@@ -28,6 +28,7 @@ BIOFORMATS_JAR_NAME = "bioformats_package.jar"
 BIOFORMATS_MIN_SIZE_BYTES = 10_000_000
 DEFAULT_TIMEOUT_SECONDS = 600
 _PRIVATE_FILE_MODE = 0o600
+subprocess = process_utils
 
 
 def _get_export_root():
@@ -333,10 +334,8 @@ def convert_to_ims(image, input_file, output_file):
         # "find files relative to executable" logic.
         converter_dir = os.path.dirname(converter_path)
 
-        result = subprocess.run(
+        result = process_utils.run(
             cmd,
-            capture_output=True,
-            text=True,
             timeout=DEFAULT_TIMEOUT_SECONDS,
             env=env,
             cwd=converter_dir,

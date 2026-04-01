@@ -4,7 +4,6 @@ import os
 import re
 import shutil
 import socket
-import subprocess
 import traceback
 import uuid
 from csv import Error as CsvError
@@ -29,6 +28,7 @@ from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from omeroweb.decorators import login_required
+from omero_plugin_common import process_utils
 from omero_plugin_common.logging_utils import (
     sanitize_log_value,
     sanitize_url_for_logging,
@@ -54,6 +54,7 @@ from ..services.storage_quotas import (
 from .utils import current_username, require_root_user
 
 logger = logging.getLogger(__name__)
+subprocess = process_utils
 LOG_TABLE_ROW_CAP = 5000
 _SAFE_REDIRECT_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -1181,13 +1182,11 @@ def _collect_recently_seen_services(prometheus_base_url: str) -> List[str]:
 def _docker_compose_json(command: List[str]) -> Optional[object]:
     """Run a docker compose JSON command and return decoded payload."""
     try:
-        process = subprocess.run(
+        process = process_utils.run(
             command,
             check=True,
-            capture_output=True,
-            text=True,
         )
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except (FileNotFoundError, process_utils.CalledProcessError):
         return None
 
     stdout = process.stdout.strip()

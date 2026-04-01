@@ -2149,7 +2149,7 @@ def test_preflight_scan_timeout_does_not_block_import(tmp_path: Path, monkeypatc
     (zarr_dir / ".zattrs").write_text("{}", encoding="utf-8")
 
     def timeout_scan(path, timeout=None):
-        raise subprocess.TimeoutExpired(cmd=["omero"], timeout=60)
+        raise core_functions.subprocess.TimeoutExpired(cmd=["omero"], timeout=60)
 
     monkeypatch.setattr(core_functions, "_run_local_import_scan", timeout_scan)
     monkeypatch.setattr(
@@ -2202,13 +2202,15 @@ def test_probe_import_path_returns_empty_result_on_scan_timeout(
     tmp_path: Path, monkeypatch
 ):
     """_probe_import_path must NOT crash the caller when _run_local_import_scan
-    raises (e.g. subprocess.TimeoutExpired).  It should return an empty result."""
+    raises (e.g. command timeout). It should return an empty result."""
     upload_root = tmp_path / "job-root"
     _, staged_members = _stage_relative_paths(upload_root, ["data.zarr/.zattrs"])
     staged_root = upload_root / "_staged"
 
     def timeout_scan(path: Path, timeout: int = 45):
-        raise subprocess.TimeoutExpired(cmd=["omero", "import"], timeout=timeout)
+        raise core_functions.subprocess.TimeoutExpired(
+            cmd=["omero", "import"], timeout=timeout
+        )
 
     monkeypatch.setattr(core_functions, "_run_local_import_scan", timeout_scan)
 
@@ -2271,7 +2273,9 @@ def test_build_import_units_groups_zarr_by_extension_when_scan_fails(
     )
 
     def failing_scan(path: Path, timeout: int = 45):
-        raise subprocess.TimeoutExpired(cmd=["omero", "import"], timeout=timeout)
+        raise core_functions.subprocess.TimeoutExpired(
+            cmd=["omero", "import"], timeout=timeout
+        )
 
     monkeypatch.setattr(core_functions, "_run_local_import_scan", failing_scan)
 
@@ -2352,7 +2356,9 @@ def test_build_import_units_groups_mixed_zarr_and_regular_files_when_scan_fails(
     )
 
     def failing_scan(path: Path, timeout: int = 45):
-        raise subprocess.TimeoutExpired(cmd=["omero", "import"], timeout=timeout)
+        raise core_functions.subprocess.TimeoutExpired(
+            cmd=["omero", "import"], timeout=timeout
+        )
 
     monkeypatch.setattr(core_functions, "_run_local_import_scan", failing_scan)
 
@@ -2385,7 +2391,9 @@ def test_build_import_units_groups_multiple_zarrs_when_scan_fails(
     )
 
     def failing_scan(path: Path, timeout: int = 45):
-        raise subprocess.TimeoutExpired(cmd=["omero", "import"], timeout=timeout)
+        raise core_functions.subprocess.TimeoutExpired(
+            cmd=["omero", "import"], timeout=timeout
+        )
 
     monkeypatch.setattr(core_functions, "_run_local_import_scan", failing_scan)
 

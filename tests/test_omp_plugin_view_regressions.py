@@ -125,7 +125,13 @@ def _install_import_stubs() -> None:
     omero_rtypes.rstring = lambda value: value
 
     if "omero_plugin_common" not in sys.modules:
-        sys.modules["omero_plugin_common"] = types.ModuleType("omero_plugin_common")
+        common_module = types.ModuleType("omero_plugin_common")
+        common_module.__path__ = [str(REPO_ROOT / "omero_plugin_common")]
+        sys.modules["omero_plugin_common"] = common_module
+    else:
+        common_module = sys.modules["omero_plugin_common"]
+        if not hasattr(common_module, "__path__"):
+            common_module.__path__ = [str(REPO_ROOT / "omero_plugin_common")]
 
     env_utils = sys.modules.setdefault(
         "omero_plugin_common.env_utils",
@@ -161,6 +167,9 @@ def _install_import_stubs() -> None:
     )
     logging_utils.sanitize_log_value = lambda value: value
     logging_utils.sanitized_exc_info = lambda exc: None
+    common_module.process_utils = importlib.import_module(
+        "omero_plugin_common.process_utils"
+    )
 
 
 def _install_omp_dependency_stubs() -> None:

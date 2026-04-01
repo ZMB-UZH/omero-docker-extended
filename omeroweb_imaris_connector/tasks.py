@@ -2,13 +2,13 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 import time
 from typing import Any
 
 import omero
 from celery import states
 from omero.gateway import BlitzGateway
+from omero_plugin_common import process_utils
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 from .celery_app import app
@@ -20,6 +20,7 @@ from .imaris_service import (
 )
 
 logger = logging.getLogger(__name__)
+subprocess = process_utils
 
 
 def _build_failure_meta(exc: Exception) -> dict[str, str]:
@@ -132,10 +133,8 @@ def _run_script_via_omero_cli(
     env["OMERO_SESSIONDIR"] = str(session_dir)
     env["OMERO_TMPDIR"] = str(tmp_dir)
 
-    result = subprocess.run(
+    result = process_utils.run(
         cmd,
-        capture_output=True,
-        text=True,
         timeout=EXPORT_TIMEOUT + 120,
         check=False,
         env=env,

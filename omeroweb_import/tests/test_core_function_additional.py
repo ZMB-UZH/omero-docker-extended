@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import subprocess
 import types
 from pathlib import Path
 
 import pytest
 
+from omero_plugin_common import process_utils
 from omeroweb_import.views import core_functions
 
 
@@ -371,7 +371,9 @@ def test_check_import_compatibility_covers_timeout_cli_errors_and_native_routes(
     monkeypatch.setattr(
         core_functions,
         "_run_local_import_scan",
-        lambda _path: (_ for _ in ()).throw(subprocess.TimeoutExpired(["omero"], 321)),
+        lambda _path: (_ for _ in ()).throw(
+            process_utils.TimeoutExpired(["omero"], 321)
+        ),
     )
     timeout_response = core_functions._check_import_compatibility(
         "session",
@@ -533,7 +535,7 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
         core_functions,
         "_run_omero_cli",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            subprocess.TimeoutExpired(["omero", "import"], 5)
+            process_utils.TimeoutExpired(["omero", "import"], 5)
         ),
     )
 
@@ -548,46 +550,10 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
     )
     assert timed_out == (False, "", "Import timed out after 5 seconds")
 
-    class _Pipe:
-        def __init__(self, lines):
-            self._lines = list(lines)
-            self.closed = False
-
-        def __iter__(self):
-            for line in self._lines:
-                yield line
-
-        def close(self):
-            self.closed = True
-            raise RuntimeError("close exploded")
-
-    class _Proc:
-        def __init__(self):
-            self.pid = 999
-            self.returncode = 3
-            self.stdout = _Pipe(["one\n"])
-            self.stderr = _Pipe(["warn\n"])
-            self._poll_calls = 0
-            self.killed = False
-
-        def poll(self):
-            self._poll_calls += 1
-            if self._poll_calls == 1:
-                return None
-            self.returncode = 3
-            return 3
-
-        def kill(self):
-            self.killed = True
-
-    proc = _Proc()
     monkeypatch.setattr(
         core_functions, "_build_cli_env", lambda: {"HOME": str(tmp_path)}
     )
     monkeypatch.setattr(core_functions, "_get_path_total_size", lambda _path: 9)
-    monkeypatch.setattr(
-        core_functions.subprocess, "Popen", lambda *args, **kwargs: proc
-    )
     rchar_values = iter((5, 12))
 
     def _fake_read_proc_rchar(pid):
@@ -616,7 +582,26 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
             return 10.0
 
     monkeypatch.setattr(core_functions.time, "time", _fake_time)
-    monkeypatch.setattr(core_functions.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        core_functions,
+        "_run_omero_cli_streaming",
+        lambda cmd, *, env, timeout, on_tick=None: (
+            on_tick(999, 0.0)
+            if on_tick is not None
+            else None
+        )
+        or (
+            on_tick(999, 10.0)
+            if on_tick is not None
+            else None
+        )
+        or process_utils.CompletedProcess(
+            args=tuple(cmd),
+            returncode=3,
+            stdout="one\n",
+            stderr="warn\n",
+        ),
+    )
 
     success, stdout, stderr = core_functions._import_file(
         None,
@@ -630,7 +615,6 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
     assert success is False
     assert stdout == "one\n"
     assert stderr == "warn\n"
-    assert proc.killed is False
     assert saved_jobs[0]["import_progress_bytes"] == 9
 
 
@@ -650,47 +634,13 @@ def test_import_file_progress_loop_covers_timeout_and_unexpected_cleanup_paths(
     monkeypatch.setattr(core_functions, "_get_path_total_size", lambda _path: 10)
     monkeypatch.setattr(core_functions, "_read_proc_rchar", lambda _pid: 0)
 
-    class _Pipe:
-        def __init__(self, *, fail_on_iter=False, fail_on_close=False):
-            self._fail_on_iter = fail_on_iter
-            self._fail_on_close = fail_on_close
-            self.closed = False
-
-        def __iter__(self):
-            if self._fail_on_iter:
-                raise RuntimeError("drain exploded")
-            yield from ()
-
-        def close(self):
-            self.closed = True
-            if self._fail_on_close:
-                raise RuntimeError("close exploded")
-
-    class _TimeoutProc:
-        def __init__(self):
-            self.pid = 111
-            self.returncode = None
-            self.stdout = _Pipe(fail_on_iter=True, fail_on_close=True)
-            self.stderr = _Pipe(fail_on_close=True)
-            self.killed = False
-
-        def poll(self):
-            return None
-
-        def kill(self):
-            self.killed = True
-
-    timeout_proc = _TimeoutProc()
-    monkeypatch.setattr(
-        core_functions.subprocess, "Popen", lambda *args, **kwargs: timeout_proc
-    )
     monkeypatch.setattr(core_functions, "_get_import_timeout_seconds", lambda: 1)
-    timeout_times = iter((0.0, 2.0))
-    monkeypatch.setattr(core_functions.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(
-        core_functions.time,
-        "time",
-        lambda: next(timeout_times, 2.0),
+        core_functions,
+        "_run_omero_cli_streaming",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            process_utils.TimeoutExpired(["omero", "import"], 1)
+        ),
     )
 
     timed_out = core_functions._import_file(
@@ -703,43 +653,15 @@ def test_import_file_progress_loop_covers_timeout_and_unexpected_cleanup_paths(
     )
 
     assert timed_out == (False, "", "Import timed out after 1 seconds")
-    assert timeout_proc.killed is True
-    assert timeout_proc.stdout.closed is True
-    assert timeout_proc.stderr.closed is True
-
-    class _FailingProc:
-        def __init__(self):
-            self.pid = 222
-            self.returncode = None
-            self.stdout = _Pipe()
-            self.stderr = _Pipe()
-            self.killed = False
-
-        def poll(self):
-            return None
-
-        def kill(self):
-            self.killed = True
-
-    failing_proc = _FailingProc()
-    monkeypatch.setattr(
-        core_functions.subprocess, "Popen", lambda *args, **kwargs: failing_proc
-    )
     monkeypatch.setattr(core_functions, "_get_path_total_size", lambda _path: 0)
     monkeypatch.setattr(core_functions, "_get_import_timeout_seconds", lambda: 30)
-    failure_times = iter((0.0, 0.0))
     monkeypatch.setattr(
-        core_functions.time,
-        "time",
-        lambda: next(failure_times, 0.0),
-    )
-    monkeypatch.setattr(
-        core_functions.time,
-        "sleep",
-        lambda _seconds: (_ for _ in ()).throw(RuntimeError("sleep exploded")),
+        core_functions,
+        "_run_omero_cli_streaming",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("stream exploded")),
     )
 
-    with pytest.raises(RuntimeError, match="sleep exploded"):
+    with pytest.raises(RuntimeError, match="stream exploded"):
         core_functions._import_file(
             None,
             "session",
@@ -748,10 +670,6 @@ def test_import_file_progress_loop_covers_timeout_and_unexpected_cleanup_paths(
             source,
             progress_job={"imported_bytes": 0},
         )
-
-    assert failing_proc.killed is True
-    assert failing_proc.stdout.closed is True
-    assert failing_proc.stderr.closed is True
 
 
 def test_start_compatibility_check_thread_marks_job_and_skips_when_already_active(

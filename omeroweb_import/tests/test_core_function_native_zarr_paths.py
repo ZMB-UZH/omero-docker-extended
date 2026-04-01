@@ -299,7 +299,9 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
         api_ids=[],
         finalize_result=(True, []),
         render_result=(True, []),
-        run_error=subprocess.TimeoutExpired(["omero", "zarr", "import"], 30),
+        run_error=core_functions.subprocess.TimeoutExpired(
+            ["omero", "zarr", "import"], 30
+        ),
     )
     assert timeout_failure["status"] == "error"
     assert cleanup_calls[-1] == ("managed", managed_zarr)
