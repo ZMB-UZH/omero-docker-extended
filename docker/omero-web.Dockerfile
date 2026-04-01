@@ -65,7 +65,7 @@ RUN set -euo pipefail; \
         echo "Skipping optional OS updates (APPLY_OMEROWEB_DNF_UPDATES=${APPLY_OMEROWEB_DNF_UPDATES}, APPLY_DNF_UPDATES=${APPLY_DNF_UPDATES})."; \
         exit 0; \
     fi; \
-    dnf -y update --security || dnf -y update; \
+    dnf -y upgrade --refresh --security || dnf -y upgrade --refresh; \
     dnf clean all || true; \
     rm -rf /var/cache/dnf /var/tmp/* || true
 
@@ -194,7 +194,7 @@ RUN set -euo pipefail; \
         psycopg2-binary \
         celery==5.3.6 \
         redis==5.0.8 \
-        django-redis>=5.4.0 \
+        "django-redis>=5.4.0" \
         omero-fpbioimage \
         omero-gallery \
         omero-parade \
@@ -357,15 +357,15 @@ RUN set -euo pipefail; \
     fi; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
         pip \
-        setuptools>=78.1.1 \
+        "setuptools>=78.1.1" \
         wheel \
-        cryptography>=42.0.0 \
-        urllib3>=2.6.3 \
+        "cryptography>=42.0.0" \
+        "urllib3>=2.6.3" \
         certifi \
-        idna>=3.7 \
-        requests>=2.32.0 \
-        jinja2>=3.1.6 \
-        pyopenssl>=24.0.0
+        "idna>=3.7" \
+        "requests>=2.32.0" \
+        "jinja2>=3.1.6" \
+        "pyopenssl>=24.0.0"
 
 # ---------------------------------------------------------------------------
 # Final security hardening pass (APPLY_SECURITY_HARDENING=1)
@@ -380,7 +380,7 @@ RUN set -euo pipefail; \
         exit 0; \
     fi; \
     echo "=== Final security hardening: OS packages (dnf) ==="; \
-    dnf -y update || echo "WARNING: dnf update failed (non-fatal for hardening)."; \
+    dnf -y upgrade --refresh || echo "WARNING: dnf upgrade failed (non-fatal for hardening)."; \
     dnf clean all || true; \
     rm -rf /var/cache/dnf /var/tmp/* || true; \
     echo "=== Final security hardening: removing unnecessary packages ==="; \
@@ -424,33 +424,33 @@ RUN set -euo pipefail; \
 # -----------------------------------------------------------------------
 RUN set -euo pipefail; \
     printf '%s\n' \
-        '#!/usr/local/bin/dumb-init /bin/bash' \
-        'set -e' \
-        'VENV_DIR="${OMERO_WEB_VENV:-}"' \
-        'if [ -n "${VENV_DIR}" ]; then' \
-        '    VENV_DIR="/opt/omero/web/${VENV_DIR}"' \
-        'else' \
-        '    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"' \
-        'fi' \
-        'if [ -z "${VENV_DIR}" ] || [ ! -f "${VENV_DIR}/bin/activate" ]; then' \
-        '    echo "ERROR: Could not find OMERO.web venv under /opt/omero/web (OMERO_WEB_VENV=${OMERO_WEB_VENV:-unset})" >&2' \
-        '    find /opt/omero/web -maxdepth 1 -ls >&2 || true' \
-        '    exit 1' \
-        'fi' \
-        'source "${VENV_DIR}/bin/activate"' \
-        'for f in /startup/*; do' \
-        '    if [ -f "$f" ] && [ -x "$f" ]; then' \
-        '        echo "Running $f $@"' \
-        '        if [ "$(basename "$f")" = "10-web-bootstrap.sh" ]; then' \
-        '            "$f" "$@"' \
-        '        else' \
-        '            # STRICT ENV: Preserve the PATH and OMERO_TMPDIR environment variables' \
-        '            runuser -p -u omero-web -- "$f" "$@"' \
-        '        fi' \
-        '    fi' \
-        'done' \
-        'echo "Startup scripts complete. Launching as omero-web: $@"' \
-        'exec runuser -p -m -u omero-web -- "$@"' \
+        "#!/usr/local/bin/dumb-init /bin/bash" \
+        "set -e" \
+        "VENV_DIR=\"\${OMERO_WEB_VENV:-}\"" \
+        "if [ -n \"\${VENV_DIR}\" ]; then" \
+        "    VENV_DIR=\"/opt/omero/web/\${VENV_DIR}\"" \
+        "else" \
+        "    VENV_DIR=\"\$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)\"" \
+        "fi" \
+        "if [ -z \"\${VENV_DIR}\" ] || [ ! -f \"\${VENV_DIR}/bin/activate\" ]; then" \
+        "    echo \"ERROR: Could not find OMERO.web venv under /opt/omero/web (OMERO_WEB_VENV=\${OMERO_WEB_VENV:-unset})\" >&2" \
+        "    find /opt/omero/web -maxdepth 1 -ls >&2 || true" \
+        "    exit 1" \
+        "fi" \
+        "source \"\${VENV_DIR}/bin/activate\"" \
+        "for f in /startup/*; do" \
+        "    if [ -f \"\$f\" ] && [ -x \"\$f\" ]; then" \
+        "        printf 'Running %s %s\n' \"\$f\" \"\$*\"" \
+        "        if [ \"\$(basename \"\$f\")\" = \"10-web-bootstrap.sh\" ]; then" \
+        "            \"\$f\" \"\$@\"" \
+        "        else" \
+        "            # STRICT ENV: Preserve the PATH and OMERO_TMPDIR environment variables" \
+        "            runuser -p -u omero-web -- \"\$f\" \"\$@\"" \
+        "        fi" \
+        "    fi" \
+        "done" \
+        "printf 'Startup scripts complete. Launching as omero-web: %s\n' \"\$*\"" \
+        "exec runuser -p -m -u omero-web -- \"\$@\"" \
         > /usr/local/bin/entrypoint-supervisord.sh; \
     chmod 0555 /usr/local/bin/entrypoint-supervisord.sh
 

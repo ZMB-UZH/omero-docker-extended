@@ -114,6 +114,11 @@ def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
         "sample",
         "A.ome",
     ]
+    assert filename_parser.parse_filename("sample_A-01.ome.tif", "[-_]+") == [
+        "sample",
+        "A",
+        "01.ome",
+    ]
 
     with pytest.raises(ValueError, match="Invalid separator regex"):
         filename_parser.parse_filename("sample.ome.tif", 7)
@@ -123,6 +128,9 @@ def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
 
     with pytest.raises(ValueError, match="Invalid separator regex"):
         filename_parser.parse_filename("sample.ome.tif", r"(?=_)")
+
+    with pytest.raises(ValueError, match="Invalid separator regex"):
+        filename_parser.parse_filename("sample.ome.tif", "a.*")
 
     assert core._normalize_annotation_ids([1, "2", "bad", None, 2, 1]) == [1, 2]
 

@@ -476,15 +476,15 @@ RUN set -euo pipefail; \
 RUN set -euo pipefail; \
     rm -f /startup/99-run.sh; \
     printf '%s\n' \
-        '#!/bin/bash' \
-        'set -eu' \
-        'omero=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero' \
-        'if [ ! -x "$omero" ]; then' \
-        '    echo "FATAL: OMERO CLI executable not found at $omero" >&2' \
-        '    exit 127' \
-        'fi' \
-        'echo "Starting OMERO.server as omero-server"' \
-        'exec runuser -p -m -u omero-server -- "$omero" admin start --foreground' \
+        "#!/bin/bash" \
+        "set -eu" \
+        "omero=\$(find /opt/omero/server -maxdepth 1 -type d -name \"venv*\" | sort -V | tail -n 1)/bin/omero" \
+        "if [ ! -x \"\$omero\" ]; then" \
+        "    echo \"FATAL: OMERO CLI executable not found at \$omero\" >&2" \
+        "    exit 127" \
+        "fi" \
+        "echo \"Starting OMERO.server as omero-server\"" \
+        "exec runuser -p -m -u omero-server -- \"\$omero\" admin start --foreground" \
         > /startup/99-run.sh; \
     chmod 0555 /startup/99-run.sh
 
@@ -493,24 +493,24 @@ RUN set -euo pipefail; \
 RUN set -euo pipefail; \
     mv /usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint-original.sh; \
     printf '%s\n' \
-        '#!/bin/bash' \
-        'set -e' \
-        'VENV_ACTIVATE=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/activate' \
-        'if [ ! -f "$VENV_ACTIVATE" ]; then' \
-        '    echo "FATAL: OMERO virtualenv activate script not found at $VENV_ACTIVATE" >&2' \
-        '    exit 127' \
-        'fi' \
-        'source "$VENV_ACTIVATE"' \
-        'for f in /startup/*; do' \
-        '    if [ -f "$f" -a -x "$f" ]; then' \
-        '        echo "Running $f $@"' \
-        '        if [[ "$f" == *.py ]] || [[ "$f" == *60-database.sh ]]; then' \
-        '            runuser -p -m -u omero-server -- "$f" "$@"' \
-        '        else' \
-        '            "$f" "$@"' \
-        '        fi' \
-        '    fi' \
-        'done' \
+        "#!/bin/bash" \
+        "set -e" \
+        "VENV_ACTIVATE=\$(find /opt/omero/server -maxdepth 1 -type d -name \"venv*\" | sort -V | tail -n 1)/bin/activate" \
+        "if [ ! -f \"\$VENV_ACTIVATE\" ]; then" \
+        "    echo \"FATAL: OMERO virtualenv activate script not found at \$VENV_ACTIVATE\" >&2" \
+        "    exit 127" \
+        "fi" \
+        "source \"\$VENV_ACTIVATE\"" \
+        "for f in /startup/*; do" \
+        "    if [ -f \"\$f\" ] && [ -x \"\$f\" ]; then" \
+        "        printf 'Running %s %s\n' \"\$f\" \"\$*\"" \
+        "        if [[ \"\$f\" == *.py ]] || [[ \"\$f\" == *60-database.sh ]]; then" \
+        "            runuser -p -m -u omero-server -- \"\$f\" \"\$@\"" \
+        "        else" \
+        "            \"\$f\" \"\$@\"" \
+        "        fi" \
+        "    fi" \
+        "done" \
         > /usr/local/bin/entrypoint.sh; \
     chmod 0755 /usr/local/bin/entrypoint.sh
 
@@ -543,7 +543,7 @@ RUN set -euo pipefail; \
             sleep 1; \
         done; \
     }; \
-    dnf_retry update || true; \
+    dnf_retry upgrade --refresh || true; \
     echo "=== Final security hardening: removing unnecessary packages ==="; \
     dnf -y remove --noautoremove \
         vim-minimal \
@@ -558,13 +558,13 @@ RUN set -euo pipefail; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
             pip \
             wheel \
-            cryptography>=42.0.0 \
-            urllib3>=2.2.2 \
+            "cryptography>=42.0.0" \
+            "urllib3>=2.2.2" \
             certifi \
-            idna>=3.7 \
-            requests>=2.32.0 \
-            jinja2>=3.1.6 \
-            pyopenssl>=24.0.0 || \
+            "idna>=3.7" \
+            "requests>=2.32.0" \
+            "jinja2>=3.1.6" \
+            "pyopenssl>=24.0.0" || \
             echo "WARNING: Some curated Python hardening updates failed (non-fatal)."; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "setuptools==${SETUPTOOLS_VERSION}" || true; \
         echo "Stripping test directories and bytecode caches from ${VENV_DIR}..."; \
@@ -575,7 +575,8 @@ RUN set -euo pipefail; \
         find "${VENV_DIR}" -type f -name "*.pyc" -delete 2>/dev/null || true; \
     done; \
     echo "=== Final security hardening: stripping shared libraries ==="; \
-    find /usr/lib64 /usr/lib -type f -name "*.so*" -exec strip --strip-unneeded {} 2>/dev/null \; || true
+    find /usr/lib64 /usr/lib -type f -name "*.so*" \
+        -exec sh -c 'strip --strip-unneeded "$1" 2>/dev/null || true' _ {} \; || true
 
 # Keep root as image user so bootstrap scripts can reconcile runtime permissions
 # before dropping to the application user in 99-run.sh and in entrypoint python scripts

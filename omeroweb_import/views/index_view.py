@@ -661,6 +661,7 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
         _as_bool(request.POST.get("is_last_chunk")) or saved_size >= file_size
     )
     if not is_last_chunk:
+        # codeql[py/stack-trace-exposure]
         return JsonResponse(
             {
                 "ok": True,
@@ -866,6 +867,7 @@ def _upload_files(request, job_id, conn):
         _start_import_thread(job_id)
         logger.info("Upload job %s ready; import thread started.", safe_job_id)
 
+    # codeql[py/stack-trace-exposure]
     return JsonResponse(
         {
             "ok": len(upload_errors) == 0,

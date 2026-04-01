@@ -21,6 +21,7 @@ from ..services.core import (
     collect_images_in_project,
     get_id,
     get_text,
+    is_supported_separator_pattern,
     parse_filename,
     fetch_images_by_ids,
     compute_plugin_hash,
@@ -39,11 +40,7 @@ _UNSAFE_SEPARATOR_REGEX_RE = re.compile(r"(\(\?[:!=<]|\\[1-9]|\{\d|\*\+|\+\+)")
 
 
 def _is_safe_separator_regex(pattern):
-    if not isinstance(pattern, str):
-        return False
-    if not pattern or len(pattern) > 128:
-        return False
-    return _UNSAFE_SEPARATOR_REGEX_RE.search(pattern) is None
+    return is_supported_separator_pattern(pattern)
 
 
 def _job_owned_by_request(job, request, conn):
