@@ -40,7 +40,7 @@ class ZarrToolbarTemplateContractTests(unittest.TestCase):
             self.template_text,
         )
         self.assertIn(
-            "var shareMode = {% if share %}true{% else %}false{% endif %};",
+            "var shareMode = \"{{ share|yesno:'true,false' }}\" === \"true\";",
             self.template_text,
         )
         self.assertIn("if (!shareMode) {", self.template_text)

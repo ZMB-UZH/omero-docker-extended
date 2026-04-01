@@ -862,7 +862,7 @@ def _resolve_root_relative_path(
     except OSError:
         return None, errors.invalid_filename(relative_path)
     except ValueError as exc:
-        return None, str(exc) or errors.invalid_filename(relative_path)
+        return None, _managed_path_error_message(exc, relative_path)
 
 
 def _resolve_staged_target_path(upload_root: Path, staged_path: str):
@@ -886,28 +886,35 @@ def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, up
     bytes_written = 0
     try:
         relative_parts = PurePosixPath(normalized_path).parts
-        with _managed_parent_directory_fd(
+        parent_path, file_name, root_real_path, display_path = _managed_parent_directory_path(
             Path(upload_root),
             relative_parts,
             max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
             create_parents=True,
-        ) as (dir_fd, file_name):
-            with os.fdopen(
-                _open_managed_upload_file_fd(
-                    dir_fd,
-                    file_name,
-                    os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-                    normalized_path,
-                ),
-                "ab",
-            ) as handle:
-                for chunk in upload.chunks():
-                    handle.write(chunk)
-                    bytes_written += len(chunk)
-            stat_result = _managed_child_lstat(dir_fd, file_name, normalized_path)
-            saved_size = stat_result.st_size if stat_result is not None else 0
+        )
+        with os.fdopen(
+            _open_managed_upload_file(
+                parent_path,
+                root_real_path,
+                file_name,
+                os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+                display_path,
+            ),
+            "ab",
+        ) as handle:
+            for chunk in upload.chunks():
+                handle.write(chunk)
+                bytes_written += len(chunk)
+        file_path = _managed_child_path(
+            parent_path,
+            root_real_path,
+            file_name,
+            display_path,
+        )
+        stat_result = _managed_path_lstat(file_path, display_path)
+        saved_size = stat_result.st_size if stat_result is not None else 0
     except ValueError as exc:
-        return None, None, str(exc) or normalize_error
+        return None, None, _managed_path_error_message(exc, normalized_path)
     except OSError as exc:
         return None, None, exc
     return bytes_written, saved_size, None
@@ -920,21 +927,27 @@ def _reset_staged_upload_file(upload_root: Path, staged_path: str):
 
     try:
         relative_parts = PurePosixPath(normalized_path).parts
-        with _managed_parent_directory_fd(
+        parent_path, file_name, root_real_path, display_path = _managed_parent_directory_path(
             Path(upload_root),
             relative_parts,
             max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
             create_parents=True,
-        ) as (dir_fd, file_name):
-            stat_result = _managed_child_lstat(dir_fd, file_name, normalized_path)
-            if stat_result is not None:
-                try:
-                    os.unlink(file_name, dir_fd=dir_fd)
-                except FileNotFoundError:
-                    # Another request may have already removed the staged leaf.
-                    pass
+        )
+        file_path = _managed_child_path(
+            parent_path,
+            root_real_path,
+            file_name,
+            display_path,
+        )
+        stat_result = _managed_path_lstat(file_path, display_path)
+        if stat_result is not None:
+            try:
+                os.unlink(file_path)
+            except FileNotFoundError:
+                # Another request may have already removed the staged leaf.
+                pass
     except ValueError as exc:
-        return str(exc) or normalize_error
+        return _managed_path_error_message(exc, normalized_path)
     except OSError as exc:
         return exc
     return None
@@ -947,16 +960,22 @@ def _staged_upload_size(upload_root: Path, staged_path: str):
 
     try:
         relative_parts = PurePosixPath(normalized_path).parts
-        with _managed_parent_directory_fd(
+        parent_path, file_name, root_real_path, display_path = _managed_parent_directory_path(
             Path(upload_root),
             relative_parts,
             max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
             create_parents=True,
-        ) as (dir_fd, file_name):
-            stat_result = _managed_child_lstat(dir_fd, file_name, normalized_path)
-            return (stat_result.st_size if stat_result is not None else 0), None
+        )
+        file_path = _managed_child_path(
+            parent_path,
+            root_real_path,
+            file_name,
+            display_path,
+        )
+        stat_result = _managed_path_lstat(file_path, display_path)
+        return (stat_result.st_size if stat_result is not None else 0), None
     except ValueError as exc:
-        return None, str(exc) or normalize_error
+        return None, _managed_path_error_message(exc, normalized_path)
     except OSError as exc:
         return None, exc
 
@@ -968,25 +987,26 @@ def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
 
     try:
         relative_parts = PurePosixPath(normalized_path).parts
-        with _managed_parent_directory_fd(
+        parent_path, file_name, root_real_path, display_path = _managed_parent_directory_path(
             Path(upload_root),
             relative_parts,
             max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
             create_parents=True,
-        ) as (dir_fd, file_name):
-            with os.fdopen(
-                _open_managed_upload_file_fd(
-                    dir_fd,
-                    file_name,
-                    os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-                    normalized_path,
-                ),
-                "wb",
-            ) as handle:
-                for chunk in upload.chunks():
-                    handle.write(chunk)
+        )
+        with os.fdopen(
+            _open_managed_upload_file(
+                parent_path,
+                root_real_path,
+                file_name,
+                os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+                display_path,
+            ),
+            "wb",
+        ) as handle:
+            for chunk in upload.chunks():
+                handle.write(chunk)
     except ValueError as exc:
-        return None, str(exc) or normalize_error
+        return None, _managed_path_error_message(exc, normalized_path)
     except OSError as exc:
         return None, exc
     size, size_error = _staged_upload_size(upload_root, normalized_path)
@@ -3942,18 +3962,41 @@ def _job_lock_path(job_id: str) -> Path:
     )
 
 
-_MANAGED_DIRECTORY_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
 _MANAGED_NOFOLLOW_FLAG = getattr(os, "O_NOFOLLOW", 0)
 _MANAGED_DIRECTORY_CREATE_MODE = 0o700
 _MANAGED_FILE_CREATE_MODE = 0o600
 _MANAGED_COMPONENT_RE = re.compile(r"(?!\.{1,2}$)[^/\\\x00]+")
 
 
+class _ManagedPathValidationError(ValueError):
+    def __init__(self, public_message: str):
+        super().__init__(public_message)
+        self.public_message = public_message
+
+
+def _invalid_managed_path(display_path: str) -> _ManagedPathValidationError:
+    return _ManagedPathValidationError(errors.invalid_filename(display_path))
+
+
+def _managed_path_error_message(exc: Exception, fallback_path: str) -> str:
+    message = getattr(exc, "public_message", "") or ""
+    if (
+        isinstance(exc, _ManagedPathValidationError)
+        and (
+            message.startswith("Invalid filename:")
+            or message.startswith("Filename is too long")
+            or message.startswith("File path is too long")
+        )
+    ):
+        return message
+    return errors.invalid_filename(fallback_path)
+
+
 def _validate_managed_relative_parts(
     root: Path, relative_parts: tuple[str, ...], *, max_bytes: int = None
 ) -> tuple[Path, tuple[str, ...]]:
     if not relative_parts:
-        raise ValueError(errors.invalid_filename(""))
+        raise _invalid_managed_path("")
 
     root_path = Path(root)
     current = root_path
@@ -3968,161 +4011,210 @@ def _validate_managed_relative_parts(
             or "/" in part_text
             or "\\" in part_text
         ):
-            raise ValueError(errors.invalid_filename("/".join(relative_parts)))
+            raise _invalid_managed_path("/".join(relative_parts))
         display_path.append(part_text)
         normalized_parts.append(part_text)
         current = current / part_text
         if max_bytes is not None and len(os.fsencode(str(current))) > max_bytes:
-            raise ValueError(
+            raise _ManagedPathValidationError(
                 errors.file_path_too_long("/".join(display_path), max_bytes)
             )
 
     return root_path, tuple(normalized_parts)
 
 
-def _open_managed_directory_fd(path: Path) -> int:
-    try:
-        root_path = _resolve_managed_directory_path(path)
-    except ValueError:
-        root_path = Path(path)
-    try:
-        # codeql[py/path-injection]
-        return os.open(root_path, _MANAGED_DIRECTORY_OPEN_FLAGS)
-    except NotADirectoryError:
-        raise FileNotFoundError(os.fspath(root_path))
+def _managed_root_relative_parts(path: Path) -> tuple[Path, tuple[str, ...]]:
+    candidate = Path(path)
+    for root in (_get_upload_root(), _get_jobs_root()):
+        root_path = Path(root)
+        try:
+            relative = candidate.relative_to(root_path)
+        except ValueError:
+            candidate_absolute = candidate.absolute()
+            root_absolute = root_path.absolute()
+            try:
+                relative = candidate_absolute.relative_to(root_absolute)
+            except ValueError:
+                continue
+        return root_path, relative.parts
+    raise _ManagedPathValidationError("Directory is outside managed upload roots.")
 
 
 def _validated_managed_component(component: str, display_path: str) -> str:
     component_text = str(component or "")
     if not _MANAGED_COMPONENT_RE.fullmatch(component_text):
-        raise ValueError(errors.invalid_filename(display_path))
+        raise _invalid_managed_path(display_path)
     return component_text
 
 
-def _open_managed_subdirectory_fd(
-    parent_fd: int, directory_name: str, display_path: str
-) -> int:
+def _managed_child_path(
+    parent_path: Path,
+    root_real_path: str,
+    directory_name: str,
+    display_path: str,
+) -> Path:
     safe_name = _validated_managed_component(directory_name, display_path)
-    # codeql[py/path-injection]
-    return os.open(
-        safe_name,
-        _MANAGED_DIRECTORY_OPEN_FLAGS | _MANAGED_NOFOLLOW_FLAG,
-        dir_fd=parent_fd,
-    )
+    candidate_path = os.path.realpath(os.path.join(os.fspath(parent_path), safe_name))
+    if (
+        candidate_path != root_real_path
+        and not candidate_path.startswith(root_real_path + os.sep)
+    ):
+        raise _invalid_managed_path(display_path)
+    return Path(candidate_path)
 
 
-def _managed_child_lstat(parent_fd: int, child_name: str, display_path: str):
-    safe_name = _validated_managed_component(child_name, display_path)
+def _managed_path_lstat(path: Path, display_path: str):
     try:
-        stat_result = os.stat(safe_name, dir_fd=parent_fd, follow_symlinks=False)
+        stat_result = os.lstat(path)
     except FileNotFoundError:
         return None
     except OSError as exc:
-        raise ValueError(errors.invalid_filename(display_path)) from exc
+        raise _invalid_managed_path(display_path) from exc
     if stat.S_ISLNK(stat_result.st_mode):
-        raise ValueError(errors.invalid_filename(display_path))
+        raise _invalid_managed_path(display_path)
     return stat_result
 
 
-def _open_managed_upload_file_fd(
-    parent_fd: int, child_name: str, flags: int, display_path: str
+def _managed_existing_directory_path(
+    parent_path: Path,
+    root_real_path: str,
+    directory_name: str,
+    display_path: str,
+) -> Path:
+    candidate_path = _managed_child_path(
+        parent_path,
+        root_real_path,
+        directory_name,
+        display_path,
+    )
+    stat_result = _managed_path_lstat(candidate_path, display_path)
+    if stat_result is None:
+        raise FileNotFoundError(os.fspath(candidate_path))
+    if not stat.S_ISDIR(stat_result.st_mode):
+        raise _invalid_managed_path(display_path)
+    return candidate_path
+
+
+def _create_managed_directory_path(
+    parent_path: Path,
+    root_real_path: str,
+    directory_name: str,
+    display_path: str,
+) -> Path:
+    safe_name = _validated_managed_component(directory_name, display_path)
+    candidate_path = os.path.realpath(os.path.join(os.fspath(parent_path), safe_name))
+    if (
+        candidate_path != root_real_path
+        and not candidate_path.startswith(root_real_path + os.sep)
+    ):
+        raise _invalid_managed_path(display_path)
+    os.mkdir(candidate_path, _MANAGED_DIRECTORY_CREATE_MODE)
+    created_path = Path(candidate_path)
+    stat_result = _managed_path_lstat(created_path, display_path)
+    if stat_result is None or not stat.S_ISDIR(stat_result.st_mode):
+        raise _invalid_managed_path(display_path)
+    return created_path
+
+
+def _open_managed_upload_file(
+    parent_path: Path,
+    root_real_path: str,
+    child_name: str,
+    flags: int,
+    display_path: str,
 ) -> int:
     safe_name = _validated_managed_component(child_name, display_path)
-    _managed_child_lstat(parent_fd, safe_name, display_path)
+    candidate_path = os.path.realpath(os.path.join(os.fspath(parent_path), safe_name))
+    if (
+        candidate_path != root_real_path
+        and not candidate_path.startswith(root_real_path + os.sep)
+    ):
+        raise _invalid_managed_path(display_path)
+    _managed_path_lstat(Path(candidate_path), display_path)
     try:
-        return os.open(
-            safe_name,
-            flags | _MANAGED_NOFOLLOW_FLAG,
-            _MANAGED_FILE_CREATE_MODE,
-            dir_fd=parent_fd,
-        )
+        return os.open(candidate_path, flags | _MANAGED_NOFOLLOW_FLAG, _MANAGED_FILE_CREATE_MODE)
     except OSError as exc:
         if exc.errno == errno.ELOOP:
-            raise ValueError(errors.invalid_filename(display_path)) from exc
+            raise _invalid_managed_path(display_path) from exc
         raise
 
 
 def _validate_existing_managed_path_segments(
     root_path: Path, normalized_parts: tuple[str, ...]
 ) -> None:
-    display_parts = []
-    try:
-        dir_fd = _open_managed_directory_fd(root_path)
-    except FileNotFoundError:
+    root_real_path = os.path.realpath(os.fspath(root_path))
+    current_path = Path(root_real_path)
+    if not current_path.exists():
         return
-    try:
-        for directory_name in normalized_parts[:-1]:
-            display_parts.append(directory_name)
-            try:
-                next_fd = _open_managed_subdirectory_fd(
-                    dir_fd,
-                    directory_name,
-                    "/".join(display_parts),
-                )
-            except FileNotFoundError:
-                return
-            except OSError as exc:
-                raise ValueError(
-                    errors.invalid_filename("/".join(display_parts))
-                ) from exc
-            os.close(dir_fd)
-            dir_fd = next_fd
-        _managed_child_lstat(dir_fd, normalized_parts[-1], "/".join(normalized_parts))
-    finally:
-        os.close(dir_fd)
+    if not current_path.is_dir():
+        raise FileNotFoundError(os.fspath(current_path))
+    display_parts = []
+    for directory_name in normalized_parts[:-1]:
+        display_parts.append(directory_name)
+        try:
+            current_path = _managed_existing_directory_path(
+                current_path,
+                root_real_path,
+                directory_name,
+                "/".join(display_parts),
+            )
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            raise _invalid_managed_path("/".join(display_parts)) from exc
+
+    leaf_path = _managed_child_path(
+        current_path,
+        root_real_path,
+        normalized_parts[-1],
+        "/".join(normalized_parts),
+    )
+    _managed_path_lstat(leaf_path, "/".join(normalized_parts))
 
 
-def _create_managed_subdirectory(
-    parent_fd: int, directory_name: str, display_path: str
-):
-    safe_name = _validated_managed_component(directory_name, display_path)
-    # codeql[py/path-injection]
-    os.mkdir(safe_name, _MANAGED_DIRECTORY_CREATE_MODE, dir_fd=parent_fd)
-    return _open_managed_subdirectory_fd(parent_fd, safe_name, display_path)
-
-
-@contextmanager
-def _managed_parent_directory_fd(
+def _managed_parent_directory_path(
     root: Path,
     relative_parts: tuple[str, ...],
     *,
     max_bytes: int = None,
     create_parents: bool = False,
-):
+) -> tuple[Path, str, str, str]:
     root_path, normalized_parts = _validate_managed_relative_parts(
         root,
         relative_parts,
         max_bytes=max_bytes,
     )
+
+    root_real_path = os.path.realpath(os.fspath(root_path))
+    current_path = Path(root_real_path)
+    if not current_path.is_dir():
+        raise _invalid_managed_path("")
     display_parts = []
-    dir_fd = _open_managed_directory_fd(root_path)
-    try:
-        for directory_name in normalized_parts[:-1]:
-            display_parts.append(directory_name)
-            display_path = "/".join(display_parts)
-            try:
-                next_fd = _open_managed_subdirectory_fd(
-                    dir_fd,
-                    directory_name,
-                    display_path,
-                )
-            except FileNotFoundError:
-                if not create_parents:
-                    raise
-                next_fd = _create_managed_subdirectory(
-                    dir_fd,
-                    directory_name,
-                    display_path,
-                )
-            except OSError as exc:
-                raise ValueError(errors.invalid_filename(display_path)) from exc
-            os.close(dir_fd)
-            dir_fd = next_fd
-        yield dir_fd, normalized_parts[-1]
-    except FileNotFoundError as exc:
-        raise ValueError(errors.invalid_filename("/".join(display_parts))) from exc
-    finally:
-        os.close(dir_fd)
+
+    for directory_name in normalized_parts[:-1]:
+        display_parts.append(directory_name)
+        display_path = "/".join(display_parts)
+        try:
+            current_path = _managed_existing_directory_path(
+                current_path,
+                root_real_path,
+                directory_name,
+                display_path,
+            )
+        except FileNotFoundError:
+            if not create_parents:
+                raise _invalid_managed_path(display_path)
+            current_path = _create_managed_directory_path(
+                current_path,
+                root_real_path,
+                directory_name,
+                display_path,
+            )
+        except OSError as exc:
+            raise _invalid_managed_path(display_path) from exc
+
+    file_display_path = "/".join(normalized_parts)
+    return current_path, normalized_parts[-1], root_real_path, file_display_path
 
 
 def _resolve_managed_child_parts(
@@ -4142,7 +4234,7 @@ def _resolve_managed_child_path(
 ) -> Path:
     normalized_path, normalize_error = _normalize_upload_relative_path(relative_path)
     if normalize_error:
-        raise ValueError(normalize_error)
+        raise _ManagedPathValidationError(normalize_error)
 
     return _resolve_managed_child_parts(
         root,
@@ -4152,24 +4244,12 @@ def _resolve_managed_child_path(
 
 
 def _resolve_managed_directory_path(path: Path) -> Path:
-    candidate = Path(path)
-    for root in (_get_upload_root(), _get_jobs_root()):
-        root_path = Path(root)
-        try:
-            relative = candidate.relative_to(root_path)
-        except ValueError:
-            candidate_absolute = candidate.absolute()
-            root_absolute = root_path.absolute()
-            try:
-                relative = candidate_absolute.relative_to(root_absolute)
-            except ValueError:
-                continue
-        if not relative.parts:
-            return root_path
-        if any(part in ("", ".", "..") for part in relative.parts):
-            raise ValueError("Invalid managed directory path.")
-        return _resolve_managed_child_parts(root_path, relative.parts)
-    raise ValueError("Directory is outside managed upload roots.")
+    root_path, relative = _managed_root_relative_parts(Path(path))
+    if not relative:
+        return root_path
+    if any(part in ("", ".", "..") for part in relative):
+        raise _ManagedPathValidationError("Invalid managed directory path.")
+    return _resolve_managed_child_parts(root_path, relative)
 
 
 def _fsync_directory(path: Path):

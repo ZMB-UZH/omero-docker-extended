@@ -396,8 +396,6 @@ def test_rewrite_problematic_native_image_arrays_recompresses_blosc_chunks(
 
 
 def test_detects_and_regenerates_xy_only_pyramid(tmp_path: Path) -> None:
-    import zarr
-
     store = tmp_path / "pyramid.ome.zarr"
     store.mkdir(parents=True, exist_ok=True)
     (store / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
