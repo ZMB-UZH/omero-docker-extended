@@ -40,10 +40,15 @@ class ZarrToolbarTemplateContractTests(unittest.TestCase):
             self.template_text,
         )
         self.assertIn(
-            "var shareMode = \"{{ share|yesno:'true,false' }}\" === \"true\";",
+            'var shareMode = "{{ share|yesno:\'true,false\' }}" === "true";',
             self.template_text,
         )
         self.assertIn("if (!shareMode) {", self.template_text)
+        self.assertIn("function buildOpenwithMenuItems()", self.template_text)
+        self.assertIn('var $link = $("<a/>")', self.template_text)
+        self.assertIn(".text(label);", self.template_text)
+        self.assertIn("$menu.empty();", self.template_text)
+        self.assertNotIn('$("#right_panel_openwith").html(', self.template_text)
         self.assertNotIn(
             "{% if not share %}\n                function getOpenwithHtml()",
             self.template_text,
