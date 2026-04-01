@@ -60,6 +60,12 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertIn(probe, dockerfile_text)
         self.assertIn(probe, self.compose_text)
 
+    def test_firewall_bouncer_runs_as_non_root_placeholder_image(self) -> None:
+        dockerfile_text = self.dockerfiles["firewall-bouncer"]
+        self.assertIn("addgroup -S firewallbouncer", dockerfile_text)
+        self.assertIn("adduser -S -D -H -G firewallbouncer", dockerfile_text)
+        self.assertIn("USER firewallbouncer", dockerfile_text)
+
 
 if __name__ == "__main__":
     unittest.main()

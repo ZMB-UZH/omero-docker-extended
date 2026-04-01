@@ -13,6 +13,7 @@ from ..services.core import (
     get_text,
     collect_images_by_selected_datasets,
     collect_dataset_summaries,
+    is_supported_separator_pattern,
     parse_filename,
 )
 from ..services.ai_assist import (
@@ -928,11 +929,9 @@ def index(request, conn=None, url=None, **kwargs):
             elif separator_mode in ("regex", "ai_regex"):
                 sep_pattern = raw_seps
 
-                try:
-                    re.compile(sep_pattern)
-                except re.error as e:
+                if not is_supported_separator_pattern(sep_pattern):
                     logger.warning(
-                        "Rejected invalid regex pattern: %s", sanitize_log_value(e)
+                        "Rejected invalid regex pattern.",
                     )
                     return render(
                         request,

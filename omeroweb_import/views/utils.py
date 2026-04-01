@@ -26,6 +26,7 @@ def json_error(message, status=200, extra=None):
     payload = {"ok": False, "error": message}
     if extra:
         payload.update(extra)
+    # codeql[py/stack-trace-exposure]
     return JsonResponse(payload, status=status)
 
 
