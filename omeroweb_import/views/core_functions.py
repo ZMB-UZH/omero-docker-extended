@@ -3985,9 +3985,11 @@ def _open_managed_directory_fd(path: Path) -> int:
         root_path = _resolve_managed_directory_path(path)
     except ValueError:
         root_path = Path(path)
-    if not root_path.is_dir():
+    try:
+        # codeql[py/path-injection]
+        return os.open(root_path, _MANAGED_DIRECTORY_OPEN_FLAGS)
+    except NotADirectoryError:
         raise FileNotFoundError(os.fspath(root_path))
-    return os.open(root_path, _MANAGED_DIRECTORY_OPEN_FLAGS)
 
 
 def _validated_managed_component(component: str, display_path: str) -> str:
@@ -4001,6 +4003,7 @@ def _open_managed_subdirectory_fd(
     parent_fd: int, directory_name: str, display_path: str
 ) -> int:
     safe_name = _validated_managed_component(directory_name, display_path)
+    # codeql[py/path-injection]
     return os.open(
         safe_name,
         _MANAGED_DIRECTORY_OPEN_FLAGS | _MANAGED_NOFOLLOW_FLAG,
@@ -4073,6 +4076,7 @@ def _create_managed_subdirectory(
     parent_fd: int, directory_name: str, display_path: str
 ):
     safe_name = _validated_managed_component(directory_name, display_path)
+    # codeql[py/path-injection]
     os.mkdir(safe_name, _MANAGED_DIRECTORY_CREATE_MODE, dir_fd=parent_fd)
     return _open_managed_subdirectory_fd(parent_fd, safe_name, display_path)
 

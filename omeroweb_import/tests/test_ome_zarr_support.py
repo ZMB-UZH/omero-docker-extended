@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 from pathlib import Path
 
 import numpy as np
@@ -39,6 +40,17 @@ def _write_chunk(path: Path) -> None:
 
 def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _open_zarr_v2_array(store: Path, **kwargs):
+    import zarr
+
+    open_array_signature = inspect.signature(zarr.open_array)
+    if "zarr_format" in open_array_signature.parameters:
+        return zarr.open_array(store, zarr_format=2, **kwargs)
+    if "zarr_version" in open_array_signature.parameters:
+        return zarr.open_array(store, zarr_version=2, **kwargs)
+    return zarr.open_array(store, **kwargs)
 
 
 def test_inspect_ome_zarr_image_reads_metadata_and_physical_sizes(
@@ -421,21 +433,19 @@ def test_detects_and_regenerates_xy_only_pyramid(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    zarr.open_array(
+    _open_zarr_v2_array(
         store / "s0",
         mode="w",
         shape=(4, 8, 8),
         chunks=(2, 4, 4),
         dtype=np.uint16,
-        zarr_format=2,
     )[:] = np.arange(4 * 8 * 8, dtype=np.uint16).reshape(4, 8, 8)
-    zarr.open_array(
+    _open_zarr_v2_array(
         store / "s1",
         mode="w",
         shape=(2, 4, 4),
         chunks=(2, 4, 4),
         dtype=np.uint16,
-        zarr_format=2,
     )[:] = np.zeros((2, 4, 4), dtype=np.uint16)
 
     detection = _has_3d_pyramid_downsampling(store)
