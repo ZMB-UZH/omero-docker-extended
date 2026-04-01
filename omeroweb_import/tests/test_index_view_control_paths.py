@@ -10,7 +10,7 @@ from django.http import HttpResponse
 from django.test import RequestFactory
 
 from omeroweb_import.strings import errors
-from omeroweb_import.views import index_view
+from omeroweb_import.views import core_functions as import_core_functions, index_view
 
 
 def _test_job_id(suffix: str) -> str:
@@ -1145,8 +1145,350 @@ def test_chunk_import_confirm_prune_and_status_control_paths(tmp_path, monkeypat
         "ok": False,
         "error": errors.unexpected_server_error_importing(),
     }
-    assert "prep failed" not in response.content.decode("utf-8")
 
+
+def test_index_view_wrapper_and_chunk_error_edges_cover_persisted_state_failures(
+    tmp_path, monkeypatch
+):
+    job_id = _test_job_id("d3")
+    upload_root = tmp_path / "upload-root"
+    job_root = upload_root / job_id
+    job_root.mkdir(parents=True)
+    job = {
+        "job_id": job_id,
+        "username": "alice",
+        "status": "uploading",
+        "uploaded_bytes": 0,
+        "total_bytes": 4,
+        "files": [
+            {
+                "upload_id": "u1",
+                "relative_path": "folder/file.bin",
+                "staged_path": "_staged/folder/file.bin",
+                "size": 4,
+                "status": "pending",
+                "errors": [],
+            }
+        ],
+    }
+
+    monkeypatch.setattr(import_core_functions, "_get_session_key", lambda conn: "session")
+    monkeypatch.setattr(
+        import_core_functions,
+        "_get_or_create_dataset",
+        lambda conn, name, dataset_map, project_id=None: {
+            "name": name,
+            "project_id": project_id,
+        },
+    )
+    assert index_view._get_session_key(object()) == "session"
+    assert index_view._get_or_create_dataset(
+        object(), "Dataset", {}, project_id=9
+    ) == {"name": "Dataset", "project_id": 9}
+    monkeypatch.setattr(
+        index_view,
+        "_prepare_uploaded_job_dataset_targets",
+        lambda current_job_id, current_job, conn: (
+            {"job_id": current_job_id, **current_job},
+            None,
+        ),
+    )
+    assert index_view._prepare_job_import_datasets(job_id, {"status": "ready"}, object()) == (
+        {"job_id": job_id, "status": "ready"},
+        None,
+    )
+    assert index_view._job_owned_by_request(None, object(), object()) is False
+
+    monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(index_view, "_ensure_dir", lambda path: True)
+    monkeypatch.setattr(
+        index_view,
+        "_load_owned_job",
+        lambda request, conn, current_job_id, missing_error: (
+            {**job, "job_id": "not-a-valid-job-id"},
+            None,
+        ),
+    )
+    invalid_job = index_view._upload_files(
+        RequestFactory().post(
+            f"/omeroweb_import/upload/{job_id}/",
+            data={"files": [SimpleUploadedFile("file.bin", b"abc")]},
+        ),
+        job_id,
+        conn=object(),
+    )
+    assert _payload(invalid_job) == {
+        "ok": False,
+        "error": errors.upload_job_not_found(),
+    }
+
+    monkeypatch.setattr(
+        index_view,
+        "_load_owned_job",
+        lambda request, conn, current_job_id, missing_error: ({**job}, None),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_normalize_upload_relative_path",
+        lambda raw_name: ("folder/file.bin", None),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_replace_staged_upload_file",
+        lambda job_root, staged_path, upload: (None, None),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_apply_upload_updates",
+        lambda current_job_id, updates, upload_errors: {
+            **job,
+            "uploaded_bytes": 0,
+            "total_bytes": 4,
+            "status": "uploading",
+        },
+    )
+    saved_size_missing = index_view._upload_files(
+        RequestFactory().post(
+            f"/omeroweb_import/upload/{job_id}/",
+            data={"files": [SimpleUploadedFile("file.bin", b"abc")]},
+        ),
+        job_id,
+        conn=object(),
+    )
+    assert _payload(saved_size_missing)["errors"] == [
+        errors.unexpected_server_error_uploading_files()
+    ]
+
+    monkeypatch.setattr(
+        index_view,
+        "_normalize_upload_relative_path",
+        lambda raw_value: ("folder/file.bin", None),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_find_job_upload_entry",
+        lambda current_job, rel_path: current_job["files"][0],
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_reset_staged_upload_file",
+        lambda *_args: OSError("disk reset failed"),
+    )
+    monkeypatch.setattr(index_view, "_apply_upload_updates", lambda *_args: None)
+    reset_failure = index_view._handle_chunk_upload(
+        RequestFactory().post(
+            f"/omeroweb_import/upload/{job_id}/",
+            data={
+                "relative_path": "folder/file.bin",
+                "chunk_start": "0",
+                "chunk_end": "2",
+                "file_size": "4",
+                "file": SimpleUploadedFile("file.bin", b"ab"),
+            },
+        ),
+        job_id,
+        object(),
+        job,
+        job_root,
+    )
+    assert _payload(reset_failure) == {
+        "ok": False,
+        "error": errors.unable_update_upload_job_state(),
+    }
+
+    monkeypatch.setattr(index_view, "_reset_staged_upload_file", lambda *_args: None)
+    monkeypatch.setattr(
+        index_view,
+        "_staged_upload_size",
+        lambda *_args: (0, OSError("stat failed")),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_apply_upload_updates",
+        lambda current_job_id, updates, upload_errors: {**job},
+    )
+    staged_failure = index_view._handle_chunk_upload(
+        RequestFactory().post(
+            f"/omeroweb_import/upload/{job_id}/",
+            data={
+                "relative_path": "folder/file.bin",
+                "chunk_start": "0",
+                "chunk_end": "2",
+                "file_size": "4",
+                "file": SimpleUploadedFile("file.bin", b"ab"),
+            },
+        ),
+        job_id,
+        object(),
+        job,
+        job_root,
+    )
+    assert staged_failure.status_code == 500
+    assert _payload(staged_failure) == {
+        "ok": False,
+        "error": errors.unexpected_server_error_uploading_files(),
+    }
+
+
+def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
+    tmp_path, monkeypatch
+):
+    upload_root = tmp_path / "upload-root"
+    job_id = _test_job_id("e4")
+    unlink_path = upload_root / job_id / "_staged" / "drop" / "file.bin"
+    unlink_path.parent.mkdir(parents=True, exist_ok=True)
+    unlink_path.write_bytes(b"drop")
+
+    base_job = {
+        "job_id": job_id,
+        "status": "checking",
+        "files": [
+            {
+                "relative_path": "drop/file.bin",
+                "staged_path": "_staged/drop/file.bin",
+                "size": 3,
+                "status": "uploaded",
+                "compatibility": "incompatible",
+            },
+            {
+                "relative_path": "pending/file.bin",
+                "staged_path": "",
+                "size": 2,
+                "status": "pending",
+                "compatibility": "pending",
+            },
+            {
+                "relative_path": "checking/file.bin",
+                "staged_path": "_staged/checking/file.bin",
+                "size": 4,
+                "status": "uploaded",
+            },
+            {
+                "relative_path": "error/file.bin",
+                "staged_path": "_staged/error/file.bin",
+                "size": 1,
+                "status": "uploaded",
+                "compatibility": "error",
+            },
+        ],
+        "incompatible_files": ["drop/file.bin"],
+        "compatibility_status": "incompatible",
+        "uploaded_bytes": 10,
+        "total_bytes": 10,
+    }
+    original_load_json_body = index_view.load_json_body
+    original_refresh_job_status = index_view._refresh_job_status
+
+    monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    missing_response = index_view.json_error(errors.upload_job_not_found())
+    monkeypatch.setattr(
+        index_view,
+        "_load_owned_job",
+        lambda request, conn, current_job_id, missing_error: (base_job, None),
+    )
+    monkeypatch.setattr(index_view, "load_json_body", lambda request: [])
+
+    def update_job_none(current_job_id, updater):
+        assert current_job_id == job_id
+        return None
+
+    monkeypatch.setattr(index_view, "_update_job", update_job_none)
+    missing_update = index_view.prune_upload(
+        RequestFactory().post("/", data=b"[]", content_type="application/json"),
+        job_id=job_id,
+        conn=object(),
+    )
+    assert _payload(missing_update) == {
+        "ok": False,
+        "error": errors.unable_update_upload_job_state(),
+    }
+
+    monkeypatch.setattr(index_view, "load_json_body", lambda request: {"keep_paths": "bad"})
+    normalized_keep_paths = []
+
+    def update_job_capture(current_job_id, updater):
+        job_copy = json.loads(json.dumps(base_job))
+        updated = updater(job_copy)
+        normalized_keep_paths.append(updated["compatibility_status"])
+        return updated
+
+    monkeypatch.setattr(index_view, "_update_job", update_job_capture)
+    normalized_payload = index_view.prune_upload(
+        RequestFactory().post("/", data=b"{}", content_type="application/json"),
+        job_id=job_id,
+        conn=object(),
+    )
+    assert _payload(normalized_payload) == {"ok": True, "status": "ready"}
+    assert normalized_keep_paths == ["compatible"]
+
+    statuses = []
+
+    def update_job_status(current_job_id, updater):
+        job_copy = json.loads(json.dumps(base_job))
+        updated = updater(job_copy)
+        statuses.append(updated["compatibility_status"])
+        return updated
+
+    monkeypatch.setattr(index_view, "_update_job", update_job_status)
+    monkeypatch.setattr(index_view, "_refresh_job_status", lambda job_dict: job_dict.update({"status": "checking"}))
+    unlink_original = Path.unlink
+    monkeypatch.setattr(
+        Path,
+        "unlink",
+        lambda path: (_ for _ in ()).throw(OSError("cannot unlink"))
+        if path == unlink_path
+        else unlink_original(path),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "load_json_body",
+        lambda request: {"keep_paths": ["drop/file.bin"]},
+    )
+    incompatible_status = index_view.prune_upload(
+        RequestFactory().post("/", data=b"{}", content_type="application/json"),
+        job_id=job_id,
+        conn=object(),
+    )
+    assert _payload(incompatible_status) == {"ok": True, "status": "checking"}
+
+    monkeypatch.setattr(
+        index_view,
+        "load_json_body",
+        lambda request: {"keep_paths": ["checking/file.bin"]},
+    )
+    pending_status = index_view.prune_upload(
+        RequestFactory().post("/", data=b"{}", content_type="application/json"),
+        job_id=job_id,
+        conn=object(),
+    )
+    assert _payload(pending_status) == {"ok": True, "status": "checking"}
+
+    monkeypatch.setattr(
+        index_view,
+        "load_json_body",
+        lambda request: {"keep_paths": ["error/file.bin"]},
+    )
+    error_status = index_view.prune_upload(
+        RequestFactory().post("/", data=b"{}", content_type="application/json"),
+        job_id=job_id,
+        conn=object(),
+    )
+    assert _payload(error_status) == {"ok": True, "status": "checking"}
+    assert statuses == ["incompatible", "checking", "error"]
+    monkeypatch.setattr(index_view, "load_json_body", original_load_json_body)
+    monkeypatch.setattr(index_view, "_refresh_job_status", original_refresh_job_status)
+
+    ready_job = {
+        "status": "ready",
+        "imported_bytes": 0,
+        "total_bytes": 1,
+        "messages": [],
+    }
+    monkeypatch.setattr(
+        index_view,
+        "_load_owned_job",
+        lambda request, conn, current_job_id, missing_error: (ready_job, None),
+    )
     started = []
     monkeypatch.setattr(
         index_view,

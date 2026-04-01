@@ -1275,3 +1275,158 @@ def test_imaris_file_and_output_helpers_cover_invalid_annotations_and_cleanup(
 
     assert "Content-Length" not in response
     assert response["Content-Disposition"] == 'attachment; filename="fallback.ims"'
+
+
+def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+
+    assert imaris_service._get_script_services(None) == []
+
+    direct_service = object()
+    raw_service = object()
+
+    class _Conn:
+        def getScriptService(self):
+            return direct_service
+
+        c = SimpleNamespace(sf=SimpleNamespace(getScriptService=lambda: raw_service))
+
+    assert imaris_service._get_script_services(_Conn()) == [direct_service, raw_service]
+
+    monkeypatch.setattr(imaris_service.time, "time", lambda: 5.0)
+    monkeypatch.setattr(imaris_service, "EXPORT_TIMEOUT", 10)
+    imaris_service._PROCESS_JOBS["proc-running"] = {
+        "handle": SimpleNamespace(
+            poll=lambda: (_ for _ in ()).throw(RuntimeError("poll exploded"))
+        ),
+        "created": 0.0,
+    }
+    assert imaris_service._poll_process_job("proc-running") == (None, None, None)
+
+    detached = []
+    persisted = {}
+    monkeypatch.setattr(
+        imaris_service,
+        "_detach_script_process",
+        lambda proc, reason="": detached.append((proc, reason)),
+    )
+    monkeypatch.setattr(
+        imaris_service,
+        "_write_process_job_file",
+        lambda job_id, payload: persisted.setdefault(job_id, payload),
+    )
+    handle = SimpleNamespace(
+        poll=lambda: "FINISHED",
+        getResults=lambda *_args: (_ for _ in ()).throw(RuntimeError("results exploded")),
+    )
+    imaris_service._PROCESS_JOBS["proc-finished"] = {
+        "handle": handle,
+        "created": 0.0,
+    }
+    assert imaris_service._poll_process_job("proc-finished") == (
+        "FINISHED",
+        None,
+        None,
+    )
+    assert detached[-1] == (handle, "process job completed")
+    assert persisted["proc-finished"]["outputs"] is None
+
+    class _ScriptId:
+        def __init__(self):
+            self.calls = 0
+
+        @property
+        def val(self):
+            self.calls += 1
+            return None if self.calls == 1 else 13
+
+    official_script = SimpleNamespace(
+        name=imaris_service.SCRIPT_NAME,
+        path="omero/export/IMS_Export.py",
+        id=_ScriptId(),
+    )
+    monkeypatch.setattr(
+        imaris_service,
+        "_get_script_services",
+        lambda conn: [SimpleNamespace(getScripts=lambda: [official_script])],
+    )
+    assert imaris_service._find_script_id(object()) == 13
+
+    class _BrokenAsyncResult:
+        def waitForCompleted(self):
+            return None
+
+        def getResponse(self):
+            raise RuntimeError("response exploded")
+
+        def getResult(self):
+            raise RuntimeError("result exploded")
+
+        def getResults(self):
+            raise RuntimeError("results exploded")
+
+        def get(self):
+            raise RuntimeError("get exploded")
+
+    async_result = _BrokenAsyncResult()
+    assert (
+        imaris_service._resolve_async_result(
+            SimpleNamespace(),
+            "runScript_async",
+            async_result,
+        )
+        is async_result
+    )
+
+    class _BrokenService:
+        def __getattr__(self, name):
+            raise RuntimeError("attribute exploded")
+
+        def __dir__(self):
+            raise RuntimeError("dir exploded")
+
+    assert list(imaris_service._iter_script_methods(_BrokenService())) == []
+    assert imaris_service._extract_job_id(None) is None
+    assert (
+        imaris_service._extract_job_id(
+            SimpleNamespace(
+                getId=lambda: "bad",
+                getValue=lambda: "also-bad",
+            )
+        )
+        is None
+    )
+
+    monkeypatch.setattr(imaris_service.os, "altsep", "\\", raising=False)
+    assert imaris_service._sanitize_filename("") == "export.ims"
+    assert (
+        imaris_service._sanitize_filename(r"..\\unsafe\name.ims")
+        == "__unsafe_name.ims"
+    )
+
+    raw_store = SimpleNamespace(
+        setFileId=lambda file_id: setattr(raw_store, "file_id", file_id),
+        read=lambda _offset, _size: b"",
+        close=lambda: None,
+    )
+
+    class _OriginalFile:
+        def getName(self):
+            return r"..\\unsafe\name.ims"
+
+        def getSize(self):
+            raise RuntimeError("size exploded")
+
+        def getId(self):
+            return SimpleNamespace(val=77)
+
+    conn = SimpleNamespace(
+        getObject=lambda kind, obj_id: SimpleNamespace(getFile=lambda: _OriginalFile()),
+        c=SimpleNamespace(sf=SimpleNamespace(createRawFileStore=lambda: raw_store)),
+    )
+    response = imaris_service._response_from_file_annotation(conn, "12")
+    assert "Content-Length" not in response
+    assert response["Content-Disposition"] == 'attachment; filename="__unsafe_name.ims"'

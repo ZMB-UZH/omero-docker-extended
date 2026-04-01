@@ -160,22 +160,36 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
     )
 
     def run_case(
-        *, returncode, stdout, stderr, api_ids, finalize_result, render_result
+        *,
+        returncode,
+        stdout,
+        stderr,
+        api_ids,
+        finalize_result,
+        render_result,
+        run_error=None,
     ):
         cleanup_calls.clear()
         imported_image_cleanup_calls.clear()
         verify_calls.clear()
 
-        monkeypatch.setattr(
-            core_functions.subprocess,
-            "run",
-            lambda *args, **kwargs: subprocess.CompletedProcess(
-                args=["omero", "zarr", "import"],
-                returncode=returncode,
-                stdout=stdout,
-                stderr=stderr,
-            ),
-        )
+        if run_error is None:
+            monkeypatch.setattr(
+                core_functions.subprocess,
+                "run",
+                lambda *args, **kwargs: subprocess.CompletedProcess(
+                    args=["omero", "zarr", "import"],
+                    returncode=returncode,
+                    stdout=stdout,
+                    stderr=stderr,
+                ),
+            )
+        else:
+            monkeypatch.setattr(
+                core_functions.subprocess,
+                "run",
+                lambda *args, **kwargs: (_ for _ in ()).throw(run_error),
+            )
         monkeypatch.setattr(
             core_functions,
             "_extract_imported_object_ids",
@@ -277,6 +291,30 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
     assert imported_image_cleanup_calls == []
     assert verify_calls[-1]["expected_lsid"] is None
     assert verify_calls[-1]["expected_lsid_prefix"] == str(managed_zarr)
+
+    timeout_failure = run_case(
+        returncode=0,
+        stdout="",
+        stderr="",
+        api_ids=[],
+        finalize_result=(True, []),
+        render_result=(True, []),
+        run_error=subprocess.TimeoutExpired(["omero", "zarr", "import"], 30),
+    )
+    assert timeout_failure["status"] == "error"
+    assert cleanup_calls[-1] == ("managed", managed_zarr)
+
+    execution_failure = run_case(
+        returncode=0,
+        stdout="",
+        stderr="",
+        api_ids=[],
+        finalize_result=(True, []),
+        render_result=(True, []),
+        run_error=RuntimeError("cli exploded"),
+    )
+    assert execution_failure["status"] == "error"
+    assert cleanup_calls[-1] == ("managed", managed_zarr)
 
 
 def test_finalize_imported_zarr_image_metadata_records_reload_failures(
@@ -1101,6 +1139,90 @@ def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions
         raising=False,
     )
     assert core_functions._reconnect_session("session", "omeroserver", 4064) is None
+
+    class _ExplodingOldConn:
+        def close(self):
+            raise RuntimeError("stale close exploded")
+
+    class _ExplodingInvalidConn(_NewConn):
+        def close(self):
+            self.closed = True
+            raise RuntimeError("invalid close exploded")
+
+    exploding_invalid_conn = _ExplodingInvalidConn()
+    monkeypatch.setattr(
+        core_functions.omero,
+        "client",
+        lambda host, port: types.SimpleNamespace(host=host, port=port),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "BlitzGateway",
+        lambda client_obj: exploding_invalid_conn,
+    )
+    monkeypatch.setattr(core_functions, "_validate_session", lambda conn: False)
+    assert (
+        core_functions._reconnect_session(
+            "session",
+            "omeroserver",
+            4064,
+            old_conn=_ExplodingOldConn(),
+        )
+        is None
+    )
+    assert exploding_invalid_conn.groups == ["-1"]
+    assert exploding_invalid_conn.closed is True
+
+
+def test_session_helpers_cover_validation_open_and_detached_join_paths(monkeypatch):
+    assert (
+        core_functions._validate_session(
+            types.SimpleNamespace(getEventContext=lambda: object())
+        )
+        is True
+    )
+    assert (
+        core_functions._validate_session(
+            types.SimpleNamespace(
+                getEventContext=lambda: (_ for _ in ()).throw(RuntimeError("expired"))
+            )
+        )
+        is False
+    )
+
+    detached_calls = []
+    joined_session = types.SimpleNamespace(
+        detachOnDestroy=lambda: detached_calls.append("detach")
+    )
+    client = types.SimpleNamespace(joinSession=lambda session_key: joined_session)
+    assert core_functions._join_detached_session(client, "session") is joined_session
+    assert detached_calls == ["detach"]
+
+    plain_session = object()
+    plain_client = types.SimpleNamespace(joinSession=lambda session_key: plain_session)
+    assert core_functions._join_detached_session(plain_client, "session") is plain_session
+
+    groups = []
+    session_client = types.SimpleNamespace(joinSession=lambda session_key: plain_session)
+    monkeypatch.setattr(
+        core_functions.omero,
+        "client",
+        lambda host, port: session_client,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "BlitzGateway",
+        lambda client_obj: types.SimpleNamespace(
+            SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=groups.append)
+        ),
+    )
+
+    opened = core_functions._open_session_connection("session", "omeroserver", 4064)
+
+    assert groups == ["-1"]
+    assert opened.SERVICE_OPTS is not None
 
 
 def test_prepare_job_import_datasets_handles_missing_upload_roots_and_save_failures(

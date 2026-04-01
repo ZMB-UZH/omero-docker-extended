@@ -114,6 +114,98 @@ def test_proxy_helpers_cover_request_failures_and_cookie_edge_cases(
     )
 
 
+def test_root_gated_views_cover_simple_render_and_guard_paths(monkeypatch) -> None:
+    factory = RequestFactory()
+    sentinel = JsonResponse({"error": "root required"}, status=403)
+
+    monkeypatch.setattr(
+        index_view,
+        "render",
+        lambda request, template, context: HttpResponse(
+            json.dumps({"template": template, "context": context}),
+            content_type="application/json",
+        ),
+    )
+
+    view_response = _unwrap_view(index_view.resource_monitoring_view)(
+        factory.get("/admin/resource-monitoring/"),
+        conn=None,
+    )
+    assert _payload(view_response)["template"] == (
+        "omeroweb_admin_tools/resource_monitoring.html"
+    )
+
+    storage_view_response = _unwrap_view(index_view.storage_view)(
+        factory.get("/admin/storage/"),
+        conn=None,
+    )
+    assert _payload(storage_view_response)["template"] == (
+        "omeroweb_admin_tools/storage.html"
+    )
+
+    monkeypatch.setattr(index_view, "serialize_scripts", lambda: [{"id": "disk"}])
+    diagnostics_view_response = _unwrap_view(index_view.server_database_testing_view)(
+        factory.get("/admin/diagnostics/"),
+        conn=None,
+    )
+    diagnostics_payload = _payload(diagnostics_view_response)
+    assert diagnostics_payload["template"] == (
+        "omeroweb_admin_tools/server_database_testing.html"
+    )
+    assert json.loads(diagnostics_payload["context"]["diagnostic_scripts"]) == [
+        {"id": "disk"}
+    ]
+
+    monkeypatch.setattr(index_view, "_require_root_user", lambda *_args: sentinel)
+    assert (
+        _unwrap_view(index_view.resource_monitoring_data)(
+            factory.get("/admin/resource-monitoring/data/"),
+            conn=None,
+        ).status_code
+        == 403
+    )
+    assert (
+        _unwrap_view(index_view.prometheus_proxy)(
+            factory.get("/admin/prometheus/api/v1/status/runtimeinfo"),
+            "api/v1/status/runtimeinfo",
+            conn=None,
+        ).status_code
+        == 403
+    )
+    assert (
+        _unwrap_view(index_view.storage_data)(
+            factory.get("/admin/storage/data/"),
+            conn=None,
+        ).status_code
+        == 403
+    )
+    assert (
+        _unwrap_view(index_view.storage_quota_update)(
+            factory.post("/admin/storage/quota/update/"),
+            conn=None,
+        ).status_code
+        == 403
+    )
+    assert (
+        _unwrap_view(index_view.storage_quota_import)(
+            factory.post("/admin/storage/quota/import/"),
+            conn=None,
+        ).status_code
+        == 403
+    )
+    assert (
+        _unwrap_view(index_view.server_database_testing_run)(
+            factory.post(
+                "/admin/diagnostics/run/",
+                data=json.dumps({"scripts": ["disk"]}).encode("utf-8"),
+                content_type="application/json",
+            ),
+            conn=None,
+        ).status_code
+        == 403
+    )
+
+
 def test_identity_group_and_permission_helpers_cover_attribute_fallbacks() -> None:
     attr_user = _AttrUser("Ada", "Lovelace", "ada")
     attr_group = _AttrGroup("scientists", _PermissionText("rwra--"))
