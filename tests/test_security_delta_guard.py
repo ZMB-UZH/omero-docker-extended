@@ -5,6 +5,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "tools" / "security_delta_guard.py"
 SPEC = importlib.util.spec_from_file_location("security_delta_guard", MODULE_PATH)
@@ -49,6 +51,56 @@ def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
 
     assert calls["count"] == 2
     assert [alert["number"] for alert in result] == [11]
+
+
+def test_github_api_get_json_uses_https_connection(monkeypatch) -> None:
+    calls = {}
+
+    class FakeResponse:
+        status = 200
+        reason = "OK"
+        headers = {"content-type": "application/json"}
+
+        def read(self) -> bytes:
+            return b'{"default_branch": "main"}'
+
+    class FakeConnection:
+        def __init__(self, host: str, *, timeout: int) -> None:
+            calls["host"] = host
+            calls["timeout"] = timeout
+
+        def request(self, method: str, path: str, *, headers: dict[str, str]) -> None:
+            calls["method"] = method
+            calls["path"] = path
+            calls["headers"] = headers
+
+        def getresponse(self) -> FakeResponse:
+            return FakeResponse()
+
+        def close(self) -> None:
+            calls["closed"] = True
+
+    monkeypatch.setattr(security_delta_guard, "HTTPSConnection", FakeConnection)
+
+    payload = security_delta_guard.github_api_get_json(
+        "/repos/ZMB-UZH/omero-docker-extended",
+        "example-token",
+    )
+
+    assert payload == {"default_branch": "main"}
+    assert calls["host"] == "api.github.com"
+    assert calls["timeout"] == 30
+    assert calls["method"] == "GET"
+    assert calls["path"] == "/repos/ZMB-UZH/omero-docker-extended"
+    assert calls["headers"]["Authorization"] == "Bearer example-token"
+    assert calls["closed"] is True
+
+
+def test_github_api_get_json_requires_absolute_api_path() -> None:
+    with pytest.raises(ValueError, match="must start with '/'"):
+        security_delta_guard.github_api_get_json(
+            "repos/ZMB-UZH/omero-docker-extended", "token"
+        )
 
 
 def test_select_push_delta_alerts_only_keeps_alerts_created_after_run_start() -> None:
