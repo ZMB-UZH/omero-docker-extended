@@ -11,10 +11,11 @@ import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from http.client import HTTPSConnection
+from io import BytesIO
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
 
 AlertFetcher = Callable[..., list[dict[str, Any]]]
@@ -389,21 +390,8 @@ def list_code_scanning_alerts(
     while True:
         page_query = dict(query)
         page_query["page"] = page
-        url = (
-            f"https://api.github.com/repos/{repository}/code-scanning/alerts?"
-            f"{urlencode(page_query)}"
-        )
-        request = Request(
-            url,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "User-Agent": "security-delta-guard",
-            },
-        )
-        with urlopen(request, timeout=30) as response:
-            batch = json.load(response)
+        api_path = f"/repos/{repository}/code-scanning/alerts?{urlencode(page_query)}"
+        batch = github_api_get_json(api_path, token)
         if not isinstance(batch, list):
             raise RuntimeError(f"Unexpected GitHub API payload type: {type(batch)!r}")
         alerts.extend(batch)
@@ -412,18 +400,46 @@ def list_code_scanning_alerts(
         page += 1
 
 
+def github_api_get_json(api_path: str, token: str) -> Any:
+    if not api_path.startswith("/"):
+        raise ValueError(f"GitHub API path must start with '/': {api_path!r}")
+
+    payload = b""
+    response = None
+    connection = HTTPSConnection("api.github.com", timeout=30)
+    try:
+        connection.request(
+            "GET",
+            api_path,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "security-delta-guard",
+            },
+        )
+        response = connection.getresponse()
+        payload = response.read()
+    except OSError as exc:
+        raise URLError(exc) from exc
+    finally:
+        connection.close()
+
+    if response is None:
+        raise RuntimeError("GitHub API request did not produce a response.")
+    if response.status >= 400:
+        raise HTTPError(
+            f"https://api.github.com{api_path}",
+            response.status,
+            response.reason,
+            response.headers,
+            BytesIO(payload),
+        )
+    return json.loads(payload.decode("utf-8"))
+
+
 def get_default_branch(repository: str, token: str) -> str | None:
-    request = Request(
-        f"https://api.github.com/repos/{repository}",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "security-delta-guard",
-        },
-    )
-    with urlopen(request, timeout=30) as response:
-        payload = json.load(response)
+    payload = github_api_get_json(f"/repos/{repository}", token)
     if not isinstance(payload, dict):
         raise RuntimeError(f"Unexpected GitHub API payload type: {type(payload)!r}")
     return _first_non_empty(payload.get("default_branch")) or None
