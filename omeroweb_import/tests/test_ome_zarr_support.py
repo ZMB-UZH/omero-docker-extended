@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import inspect
 from pathlib import Path
 
 import numpy as np
@@ -43,14 +42,32 @@ def _read_json(path: Path) -> dict:
 
 
 def _open_zarr_v2_array(store: Path, **kwargs):
-    import zarr
+    class _ArrayWriter:
+        def __init__(self, store_path: Path, *, chunks, dtype):
+            self._store_path = store_path
+            self._chunks = list(chunks)
+            self._dtype = np.dtype(dtype)
 
-    open_array_signature = inspect.signature(zarr.open_array)
-    if "zarr_format" in open_array_signature.parameters:
-        return zarr.open_array(store, zarr_format=2, **kwargs)
-    if "zarr_version" in open_array_signature.parameters:
-        return zarr.open_array(store, zarr_version=2, **kwargs)
-    return zarr.open_array(store, **kwargs)
+        def __setitem__(self, key, value):
+            if key != slice(None):
+                raise AssertionError(f"Unsupported write selection: {key!r}")
+            payload = np.asarray(value, dtype=self._dtype)
+            error = _write_zarr_v2_level(
+                self._store_path,
+                payload,
+                self._chunks,
+                None,
+                None,
+                None,
+            )
+            if error is not None:
+                raise RuntimeError(error)
+
+    return _ArrayWriter(
+        store,
+        chunks=kwargs["chunks"],
+        dtype=kwargs["dtype"],
+    )
 
 
 def test_inspect_ome_zarr_image_reads_metadata_and_physical_sizes(

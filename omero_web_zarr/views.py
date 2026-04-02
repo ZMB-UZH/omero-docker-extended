@@ -69,6 +69,20 @@ PIXEL_TYPES = {
 }
 
 
+def _runtime_generated_zarray_metadata(shape, chunks, dtype) -> dict[str, object]:
+    return {
+        "zarr_format": 2,
+        "shape": list(shape),
+        "chunks": list(chunks),
+        "dtype": np.dtype(dtype).str,
+        "compressor": None,
+        "fill_value": 0,
+        "filters": None,
+        "order": "C",
+        "dimension_separator": "/",
+    }
+
+
 def _store_backed_response(image, version, *parts):
     if version != "0.4":
         return None
@@ -242,22 +256,7 @@ def image_zarray(request, iid, level, conn=None, **kwargs):
 
     ptype = image.getPrimaryPixels().getPixelsType().getValue()
     np_type = PIXEL_TYPES[ptype]
-
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        open_compat_array(
-            tmpdirname,
-            mode="w",
-            shape=shape,
-            chunks=chunks,
-            dtype=np_type,
-        )
-
-        zarray_path = os.path.join(tmpdirname, ".zarray")
-        with open(zarray_path, "r", encoding="utf-8") as reader:
-            rsp = json.load(reader)
-
-    rsp["dimension_separator"] = "/"
-    return JsonResponse(rsp)
+    return JsonResponse(_runtime_generated_zarray_metadata(shape, chunks, np_type))
 
 
 @login_required()

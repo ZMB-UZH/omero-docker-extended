@@ -28,3 +28,9 @@ def test_logging_utils_cover_empty_url_parse_failures_and_exception_fallbacks(
     assert "_UnconstructableError" in str(sanitized_exc)
     assert "original" in str(sanitized_exc)
     assert tb is not None
+
+
+def test_summarize_process_output_reports_only_counts() -> None:
+    summary = logging_utils.summarize_process_output("line1\nline2", "error")
+
+    assert summary == ("stdout_lines=2 stderr_lines=1 stdout_chars=11 stderr_chars=5")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from tools import update_readme_badges
@@ -81,6 +82,30 @@ class ReadmeBadgeGenerationTests(unittest.TestCase):
                 self.assertEqual(
                     expected, update_readme_badges._parse_remote_url(remote_url)
                 )
+
+    def test_run_git_marks_repo_root_as_safe_directory(self) -> None:
+        with mock.patch(
+            "tools.update_readme_badges.subprocess.run",
+            return_value=mock.Mock(stdout="main\n"),
+        ) as mocked_run:
+            self.assertEqual(
+                update_readme_badges._run_git(self.repo_root, "rev-parse", "HEAD"),
+                "main",
+            )
+
+        mocked_run.assert_called_once_with(
+            [
+                "git",
+                "-c",
+                f"safe.directory={self.repo_root.resolve()}",
+                "rev-parse",
+                "HEAD",
+            ],
+            cwd=self.repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 if __name__ == "__main__":

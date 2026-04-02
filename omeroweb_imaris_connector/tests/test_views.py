@@ -454,7 +454,9 @@ def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
         "env-host",
         4064,
     )
-    assert views._resolve_omero_host_port(SimpleNamespace(host="direct", port="   ")) == (
+    assert views._resolve_omero_host_port(
+        SimpleNamespace(host="direct", port="   ")
+    ) == (
         "direct",
         None,
     )

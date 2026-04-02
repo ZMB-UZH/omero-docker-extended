@@ -54,14 +54,17 @@ def test_identity_owner_and_permission_helpers_cover_edge_failures(monkeypatch) 
     )
 
     assert core_functions._is_owned_by_user(None, 5) is False
-    assert core_functions._is_owned_by_user(
-        SimpleNamespace(
-            getDetails=lambda: SimpleNamespace(
-                getOwner=lambda: SimpleNamespace(getId=lambda: "owner-5")
-            )
-        ),
-        5,
-    ) is False
+    assert (
+        core_functions._is_owned_by_user(
+            SimpleNamespace(
+                getDetails=lambda: SimpleNamespace(
+                    getOwner=lambda: SimpleNamespace(getId=lambda: "owner-5")
+                )
+            ),
+            5,
+        )
+        is False
+    )
 
     assert core_functions._get_owner_username(None) == ""
     assert (
@@ -194,9 +197,9 @@ def test_dataset_and_native_zarr_helpers_cover_unhappy_paths(monkeypatch) -> Non
         def getValue(self):
             raise RuntimeError("value exploded")
 
-    assert (
-        core_functions._native_zarr_length_signature(_LengthWithRawFallback())
-        == (2.5, "")
+    assert core_functions._native_zarr_length_signature(_LengthWithRawFallback()) == (
+        2.5,
+        "",
     )
     assert core_functions._native_zarr_length_signature(_BadLength()) is None
 
@@ -313,7 +316,9 @@ def test_background_import_session_covers_missing_error_and_cleanup_paths(
     closed = []
 
     class _SessionService:
-        def createSessionWithTimeouts(self, principal, user_timeout_ms, group_timeout_ms):
+        def createSessionWithTimeouts(
+            self, principal, user_timeout_ms, group_timeout_ms
+        ):
             created.append((principal, user_timeout_ms, group_timeout_ms))
             return SimpleNamespace(getUuid=lambda: _Value("background-session"))
 
@@ -348,7 +353,9 @@ def test_background_import_session_covers_missing_error_and_cleanup_paths(
         createSessionWithTimeouts=lambda *args: _raise(RuntimeError("session exploded"))
     )
     failing_admin = SimpleNamespace(
-        c=SimpleNamespace(sf=SimpleNamespace(getSessionService=lambda: failing_service)),
+        c=SimpleNamespace(
+            sf=SimpleNamespace(getSessionService=lambda: failing_service)
+        ),
         close=lambda: None,
     )
     monkeypatch.setattr(
@@ -400,7 +407,9 @@ def test_shared_transfer_helpers_cover_symlink_and_cleanup_error_paths(
     )
 
     missing_source, missing_parent, missing_error = (
-        core_functions._prepare_server_readable_zarr_source(tmp_path / "absent.ome.zarr")
+        core_functions._prepare_server_readable_zarr_source(
+            tmp_path / "absent.ome.zarr"
+        )
     )
     assert missing_source is None
     assert missing_parent is None
@@ -429,7 +438,9 @@ def test_shared_transfer_helpers_cover_symlink_and_cleanup_error_paths(
         "rmtree",
         lambda path: _raise(RuntimeError("cleanup exploded")),
     )
-    _, _, failed_error = core_functions._prepare_server_readable_zarr_source(valid_source)
+    _, _, failed_error = core_functions._prepare_server_readable_zarr_source(
+        valid_source
+    )
     assert "Failed to prepare server-readable Zarr staging copy" in (failed_error or "")
 
     core_functions._cleanup_shared_zarr_transfer(None)
@@ -449,7 +460,9 @@ def test_script_service_helpers_cover_deduping_and_selection() -> None:
         getScriptService=lambda: shared_service,
         c=SimpleNamespace(sf=SimpleNamespace(getScriptService=lambda: shared_service)),
     )
-    assert list(core_functions._iter_script_services(duplicate_conn)) == [shared_service]
+    assert list(core_functions._iter_script_services(duplicate_conn)) == [
+        shared_service
+    ]
 
     preferred_scripts = [
         SimpleNamespace(id=SimpleNamespace(val="bad-id")),
@@ -511,7 +524,9 @@ def test_script_service_helpers_cover_deduping_and_selection() -> None:
             getScripts=lambda: _raise(RuntimeError("script listing exploded"))
         ),
         c=SimpleNamespace(
-            sf=SimpleNamespace(getScriptService=lambda: SimpleNamespace(getScripts=lambda: []))
+            sf=SimpleNamespace(
+                getScriptService=lambda: SimpleNamespace(getScripts=lambda: [])
+            )
         ),
     )
     assert (
@@ -543,7 +558,9 @@ def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_p
         "_open_admin_connection",
         lambda host, port: SimpleNamespace(close=lambda: None),
     )
-    monkeypatch.setattr(core_functions, "_find_script_id_by_name", lambda *args, **kwargs: 17)
+    monkeypatch.setattr(
+        core_functions, "_find_script_id_by_name", lambda *args, **kwargs: 17
+    )
     monkeypatch.setattr(core_functions, "_get_root_password", lambda: "root-secret")
     monkeypatch.setattr(core_functions, "_build_cli_env", lambda: {"BASE": "1"})
     monkeypatch.setattr(core_functions, "_get_import_timeout_seconds", lambda: 45)
@@ -553,7 +570,9 @@ def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_p
     now_values = iter([100.0, 100.0, 100.0, 100.0])
     monkeypatch.setattr(core_functions.time, "time", lambda: next(now_values))
     sleeps = []
-    monkeypatch.setattr(core_functions.time, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(
+        core_functions.time, "sleep", lambda seconds: sleeps.append(seconds)
+    )
 
     attempted_cmds = []
     attempted_envs = []

@@ -1751,7 +1751,9 @@ def test_install_webgateway_overrides_cover_regular_fallback_and_error_paths(
     monkeypatch.setattr(
         webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: []
     )
-    monkeypatch.setattr(webgateway_views, "_render_thumbnail", original_render_thumbnail)
+    monkeypatch.setattr(
+        webgateway_views, "_render_thumbnail", original_render_thumbnail
+    )
     monkeypatch.setattr(
         webgateway_views, "get_thumbnails_json", original_get_thumbnails_json
     )
@@ -1793,7 +1795,9 @@ def test_install_webgateway_overrides_cover_regular_fallback_and_error_paths(
 
     integration.install_webgateway_overrides()
 
-    regular_conn = _Conn({1: regular_image, 3: regular_image, 4: regular_image, 9: None})
+    regular_conn = _Conn(
+        {1: regular_image, 3: regular_image, 4: regular_image, 9: None}
+    )
     store_conn = _Conn({2: store_backed_image})
 
     regular_thumb_request = RequestFactory().get("/webgateway/render_thumbnail/1/")

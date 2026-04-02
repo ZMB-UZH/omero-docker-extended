@@ -567,7 +567,9 @@ def test_ai_credentials_helper_edges_cover_parser_and_transport_failures(
 
     ok, message = ai_credentials_view._perform_connection_test("unknown", "token")
     assert ok is False
-    assert message == ai_credentials_view.errors.connection_test_not_supported("unknown")
+    assert message == ai_credentials_view.errors.connection_test_not_supported(
+        "unknown"
+    )
 
     ai_credentials_view._PROVIDER_TESTS["fixture-post"] = {
         "url": "https://api.example.test/models",
@@ -579,9 +581,7 @@ def test_ai_credentials_helper_edges_cover_parser_and_transport_failures(
     monkeypatch.setattr(
         ai_credentials_view.requests,
         "request",
-        lambda **kwargs: (
-            captured.update(kwargs) or _Response({}, status=204)
-        ),
+        lambda **kwargs: captured.update(kwargs) or _Response({}, status=204),
     )
     ok, message = ai_credentials_view._perform_connection_test("fixture-post", "token")
     assert ok is True
@@ -592,7 +592,9 @@ def test_ai_credentials_helper_edges_cover_parser_and_transport_failures(
         "url": "http://api.example.test/models",
         "headers": lambda key: {},
     }
-    ok, message = ai_credentials_view._perform_connection_test("fixture-invalid", "token")
+    ok, message = ai_credentials_view._perform_connection_test(
+        "fixture-invalid", "token"
+    )
     assert ok is False
     assert message == ai_credentials_view.errors.connection_test_failed()
 

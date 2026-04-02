@@ -10,6 +10,7 @@ import shutil
 from dataclasses import dataclass, field
 from functools import lru_cache
 from importlib import metadata as importlib_metadata
+from itertools import product
 from pathlib import Path
 from typing import Optional
 
@@ -676,6 +677,103 @@ def _has_3d_pyramid_downsampling(store_root: Path) -> Optional[dict]:
     }
 
 
+def _downscale_local_mean_fallback(data, factors):
+    import numpy as np
+
+    result = np.asarray(data, dtype=np.float64)
+    if result.ndim != len(factors):
+        raise ValueError("Downscale factor count must match the data rank.")
+
+    for axis, raw_factor in enumerate(factors):
+        factor = int(raw_factor)
+        if factor <= 1:
+            continue
+        axis_length = result.shape[axis]
+        block_count = math.ceil(axis_length / factor)
+        pad = block_count * factor - axis_length
+        if pad:
+            pad_width = [(0, 0)] * result.ndim
+            pad_width[axis] = (0, pad)
+            result = np.pad(
+                result,
+                pad_width,
+                mode="constant",
+                constant_values=np.nan,
+            )
+        new_shape = (
+            result.shape[:axis] + (block_count, factor) + result.shape[axis + 1 :]
+        )
+        result = np.nanmean(result.reshape(new_shape), axis=axis + 1)
+    return result
+
+
+def _downscale_local_mean(data, factors):
+    try:
+        from skimage.transform import (
+            downscale_local_mean as _skimage_downscale_local_mean,
+        )
+    except Exception:
+        return _downscale_local_mean_fallback(data, factors)
+    return _skimage_downscale_local_mean(data, factors=factors)
+
+
+def _read_zarr_v2_array(array_dir: Path, metadata: dict):
+    import numpy as np
+
+    try:
+        shape = tuple(int(value) for value in metadata["shape"])
+        chunks = tuple(int(value) for value in metadata["chunks"])
+        dtype = np.dtype(metadata["dtype"])
+    except Exception as exc:
+        raise RuntimeError(f"invalid zarr array metadata: {exc}") from exc
+
+    fill_value = metadata.get("fill_value", 0)
+    filters_spec = metadata.get("filters")
+    if filters_spec not in (None, []):
+        raise RuntimeError("filters are not supported for pyramid regeneration input")
+
+    codec = None
+    compressor_spec = metadata.get("compressor")
+    if compressor_spec:
+        try:
+            import numcodecs
+
+            codec = numcodecs.get_codec(compressor_spec)
+        except Exception as exc:
+            raise RuntimeError(
+                f"failed to load source compressor for pyramid regeneration: {exc}"
+            ) from exc
+
+    data = np.full(shape, fill_value, dtype=dtype)
+    chunk_grid = [math.ceil(size / chunk) for size, chunk in zip(shape, chunks)]
+    dimension_separator = str(metadata.get("dimension_separator") or ".")
+
+    for coords in product(*(range(size) for size in chunk_grid)):
+        relative_path = (
+            "/".join(str(coord) for coord in coords)
+            if dimension_separator == "/"
+            else ".".join(str(coord) for coord in coords)
+        )
+        chunk_path = array_dir / relative_path
+        if not chunk_path.is_file():
+            continue
+        raw_bytes = chunk_path.read_bytes()
+        if codec is not None:
+            raw_bytes = codec.decode(raw_bytes)
+        chunk_array = np.frombuffer(raw_bytes, dtype=dtype).reshape(chunks)
+
+        chunk_slices = []
+        chunk_crop = []
+        for axis, coord in enumerate(coords):
+            start = coord * chunks[axis]
+            stop = min(start + chunks[axis], shape[axis])
+            chunk_slices.append(slice(start, stop))
+            chunk_crop.append(slice(0, stop - start))
+        data[tuple(chunk_slices)] = chunk_array[tuple(chunk_crop)]
+
+    return data
+
+
 def _regenerate_xy_only_pyramid(
     store_root: Path, downscale_factor: int = 2
 ) -> Optional[str]:
@@ -689,16 +787,14 @@ def _regenerate_xy_only_pyramid(
 
     Returns ``None`` on success or an error string on failure.
     """
-    try:
-        import numcodecs
-        import numpy as np
-        from skimage.transform import downscale_local_mean
-    except Exception as exc:
-        return f"Missing dependency for pyramid regeneration: {exc}"
-
     detection = _has_3d_pyramid_downsampling(store_root)
     if detection is None:
         return None
+
+    try:
+        import numpy as np
+    except Exception as exc:
+        return f"Missing dependency for pyramid regeneration: {exc}"
 
     ms = detection["multiscale"]
     axes = detection["axes"]
@@ -738,10 +834,7 @@ def _regenerate_xy_only_pyramid(
         return "Cannot regenerate pyramid: s0 scale transform is missing or malformed."
 
     try:
-        import zarr as _zarr
-
-        s0_array = _zarr.open_array(str(store_root / s0_path), mode="r")
-        s0_data = np.asarray(s0_array)
+        s0_data = _read_zarr_v2_array(store_root / s0_path, s0_meta)
     except Exception as exc:
         return f"Failed to read full-resolution data: {exc}"
 
@@ -757,6 +850,8 @@ def _regenerate_xy_only_pyramid(
     codec = None
     if s0_compressor:
         try:
+            import numcodecs
+
             codec = numcodecs.get_codec(s0_compressor)
         except Exception as exc:
             return f"Failed to load compressor for pyramid regeneration: {exc}"
@@ -771,9 +866,7 @@ def _regenerate_xy_only_pyramid(
         if any(s < 2 for s in next_yx):
             break
 
-        downsampled = downscale_local_mean(current_data, factors=base_factors).astype(
-            s0_dtype
-        )
+        downsampled = _downscale_local_mean(current_data, base_factors).astype(s0_dtype)
         new_scale = list(current_scale)
         new_translation = list(current_translation)
         for ax_i in yx_indices:

@@ -1,7 +1,11 @@
 from django.http import JsonResponse
 from omeroweb.decorators import login_required
 from omero_plugin_common import process_utils
-from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
+from omero_plugin_common.logging_utils import (
+    sanitize_log_value,
+    sanitized_exc_info,
+    summarize_process_output,
+)
 import logging
 
 from ..services.core import collect_images_in_project, find_map_annotation_ids, get_id
@@ -116,11 +120,10 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
             if result.returncode != 0:
                 logger.warning(
-                    "Failed to delete map annotations for image chunk %s: rc=%s stdout=%r stderr=%r",
+                    "Failed to delete map annotations for image chunk %s: rc=%s %s",
                     chunk_ids,
                     result.returncode,
-                    result.stdout,
-                    result.stderr,
+                    summarize_process_output(result.stdout, result.stderr),
                 )
                 deletion_errors.append(
                     {

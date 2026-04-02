@@ -1172,7 +1172,9 @@ def test_index_view_wrapper_and_chunk_error_edges_cover_persisted_state_failures
         ],
     }
 
-    monkeypatch.setattr(import_core_functions, "_get_session_key", lambda conn: "session")
+    monkeypatch.setattr(
+        import_core_functions, "_get_session_key", lambda conn: "session"
+    )
     monkeypatch.setattr(
         import_core_functions,
         "_get_or_create_dataset",
@@ -1182,9 +1184,10 @@ def test_index_view_wrapper_and_chunk_error_edges_cover_persisted_state_failures
         },
     )
     assert index_view._get_session_key(object()) == "session"
-    assert index_view._get_or_create_dataset(
-        object(), "Dataset", {}, project_id=9
-    ) == {"name": "Dataset", "project_id": 9}
+    assert index_view._get_or_create_dataset(object(), "Dataset", {}, project_id=9) == {
+        "name": "Dataset",
+        "project_id": 9,
+    }
     monkeypatch.setattr(
         index_view,
         "_prepare_uploaded_job_dataset_targets",
@@ -1193,7 +1196,9 @@ def test_index_view_wrapper_and_chunk_error_edges_cover_persisted_state_failures
             None,
         ),
     )
-    assert index_view._prepare_job_import_datasets(job_id, {"status": "ready"}, object()) == (
+    assert index_view._prepare_job_import_datasets(
+        job_id, {"status": "ready"}, object()
+    ) == (
         {"job_id": job_id, "status": "ready"},
         None,
     )
@@ -1403,7 +1408,9 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
         "error": errors.unable_update_upload_job_state(),
     }
 
-    monkeypatch.setattr(index_view, "load_json_body", lambda request: {"keep_paths": "bad"})
+    monkeypatch.setattr(
+        index_view, "load_json_body", lambda request: {"keep_paths": "bad"}
+    )
     normalized_keep_paths = []
 
     def update_job_capture(current_job_id, updater):
@@ -1430,14 +1437,20 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
         return updated
 
     monkeypatch.setattr(index_view, "_update_job", update_job_status)
-    monkeypatch.setattr(index_view, "_refresh_job_status", lambda job_dict: job_dict.update({"status": "checking"}))
+    monkeypatch.setattr(
+        index_view,
+        "_refresh_job_status",
+        lambda job_dict: job_dict.update({"status": "checking"}),
+    )
     unlink_original = Path.unlink
     monkeypatch.setattr(
         Path,
         "unlink",
-        lambda path: (_ for _ in ()).throw(OSError("cannot unlink"))
-        if path == unlink_path
-        else unlink_original(path),
+        lambda path: (
+            (_ for _ in ()).throw(OSError("cannot unlink"))
+            if path == unlink_path
+            else unlink_original(path)
+        ),
     )
     monkeypatch.setattr(
         index_view,
