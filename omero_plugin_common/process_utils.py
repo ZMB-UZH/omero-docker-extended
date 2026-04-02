@@ -239,13 +239,13 @@ def _run_coro_sync(coro):
         return asyncio.run(coro)
 
     result: dict[str, object] = {}
-    error: dict[str, BaseException] = {}
+    error: dict[str, Exception] = {}
     done = threading.Event()
 
     def _runner() -> None:
         try:
             result["value"] = asyncio.run(coro)
-        except BaseException as exc:  # pragma: no cover - mirrored into caller
+        except Exception as exc:  # pragma: no cover - mirrored into caller
             error["exc"] = exc
         finally:
             done.set()

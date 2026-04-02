@@ -12,4 +12,7 @@ RUN set -eu; \
 COPY docker/redis-sysctl-init.sh /usr/local/bin/redis-sysctl-init
 RUN chmod 0555 /usr/local/bin/redis-sysctl-init
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=1 \
+    CMD test -x /usr/local/bin/redis-sysctl-init || exit 1
+
 ENTRYPOINT ["/usr/local/bin/redis-sysctl-init"]
