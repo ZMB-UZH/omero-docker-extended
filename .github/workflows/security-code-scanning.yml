@@ -36,16 +36,16 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@38697555549f1db7851b81482ff19f1fa5c4fedc # v4
+        uses: github/codeql-action/init@c10b806ce29884a0e0bb36ab269f104f4b72540b # v4.35.1
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@38697555549f1db7851b81482ff19f1fa5c4fedc # v4
+        uses: github/codeql-action/autobuild@c10b806ce29884a0e0bb36ab269f104f4b72540b # v4.35.1
 
       - name: Analyze
-        uses: github/codeql-action/analyze@38697555549f1db7851b81482ff19f1fa5c4fedc # v4
+        uses: github/codeql-action/analyze@c10b806ce29884a0e0bb36ab269f104f4b72540b # v4.35.1
         with:
           category: /language:${{ matrix.language }}
 
@@ -87,7 +87,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc # v4
+        uses: github/codeql-action/upload-sarif@c10b806ce29884a0e0bb36ab269f104f4b72540b # v4.35.1
         with:
           sarif_file: trivy-results.sarif
           category: trivy-fs
@@ -126,7 +126,7 @@ jobs:
         run: semgrep scan --sarif --config auto . > semgrep-results.sarif
 
       - name: Upload Semgrep results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc # v4
+        uses: github/codeql-action/upload-sarif@c10b806ce29884a0e0bb36ab269f104f4b72540b # v4.35.1
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
@@ -144,7 +144,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@a309ff8f4b9c577548266b94c60d5375dc0d1b55 # v6.2.0
         with:
           python-version: '3.12'
 
@@ -284,21 +284,21 @@ jobs:
           PY
 
       - name: Upload Bandit production results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc # v4
+        uses: github/codeql-action/upload-sarif@c10b806ce29884a0e0bb36ab269f104f4b72540b # v4.35.1
         with:
           sarif_file: bandit-prod.sarif
           category: bandit-prod
         if: always() && steps.discover.outputs.scan_dirs != ''
 
       - name: Upload Bandit test results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc # v4
+        uses: github/codeql-action/upload-sarif@c10b806ce29884a0e0bb36ab269f104f4b72540b # v4.35.1
         with:
           sarif_file: bandit-test.sarif
           category: bandit-test
         if: always() && steps.discover.outputs.test_dirs != ''
 
       - name: Upload Bandit legacy cleanup results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc # v4
+        uses: github/codeql-action/upload-sarif@c10b806ce29884a0e0bb36ab269f104f4b72540b # v4.35.1
         with:
           sarif_file: bandit-legacy-cleanup.sarif
           # Keep the legacy category alive with zero results so stale pre-split alerts can close.
@@ -348,7 +348,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Run Hadolint
-        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+        uses: hadolint/hadolint-action@2332a7bf1579373d74de7b84f78b8e520c2e9b81 # v3.3.0
         with:
           dockerfile: ${{ matrix.dockerfile }}
           format: sarif
@@ -356,7 +356,7 @@ jobs:
           no-fail: true
 
       - name: Upload Hadolint results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc # v4
+        uses: github/codeql-action/upload-sarif@c10b806ce29884a0e0bb36ab269f104f4b72540b # v4.35.1
         with:
           sarif_file: hadolint-results.sarif
           category: hadolint-${{ matrix.dockerfile }}
@@ -400,7 +400,7 @@ jobs:
           exclude-rules: DS162092
 
       - name: Upload DevSkim results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc # v4
+        uses: github/codeql-action/upload-sarif@c10b806ce29884a0e0bb36ab269f104f4b72540b # v4.35.1
         with:
           sarif_file: devskim-results.sarif
           category: devskim
@@ -433,7 +433,7 @@ jobs:
       contents: read
       security-events: write
       actions: read
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@98b584ee2ed2da3935ccce10e06739d54cdcd20b # v2.0.0
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@c51854700beec7fdcb4fc9151dd719816a1507dc # v2.3.5
     with:
       scan-args: |-
         --recursive
@@ -473,8 +473,49 @@ jobs:
           publish_results: true
 
       - name: Upload Scorecard results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc # v4
+        uses: github/codeql-action/upload-sarif@c10b806ce29884a0e0bb36ab269f104f4b72540b # v4.35.1
         with:
           sarif_file: scorecard-results.sarif
           category: scorecard
         if: always()
+
+  security-delta:
+    name: Zero added alerts gate
+    needs:
+      - codeql
+      - trivy-filesystem
+      - semgrep
+      - bandit
+      - hadolint-discover
+      - hadolint
+      - devskim
+      - osv-scanner-audit
+      - osv-scanner
+      - scorecard
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      security-events: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8f4b9c577548266b94c60d5375dc0d1b55 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Enforce zero added code scanning alerts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python3 tools/security_delta_guard.py
+          --event-name "$GITHUB_EVENT_NAME"
+          --event-path "$GITHUB_EVENT_PATH"
+          --ref "$GITHUB_REF"
+          --repository "$GITHUB_REPOSITORY"
+          --run-id "$GITHUB_RUN_ID"

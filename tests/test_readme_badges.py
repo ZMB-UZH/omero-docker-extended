@@ -31,7 +31,7 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![Tests]("),
-            badge_block.index("[![Code coverage]("),
+            badge_block.index("[![Security]("),
         )
         self.assertLess(
             badge_block.index("[![Code coverage]("),
@@ -59,6 +59,10 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertIn(
             "https://github.com/example-owner/example-repo/commits/main",
+            badge_block,
+        )
+        self.assertIn(
+            "https://github.com/example-owner/example-repo/actions/workflows/security-code-scanning.yml",
             badge_block,
         )
 
