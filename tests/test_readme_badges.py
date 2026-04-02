@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import unittest
-from unittest import mock
+from unittest import TestCase, main, mock
 from pathlib import Path
 
 from tools import update_readme_badges
 
 
-class ReadmeBadgeGenerationTests(unittest.TestCase):
+class ReadmeBadgeGenerationTests(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.repo_root = Path(__file__).resolve().parents[1]
@@ -109,4 +108,4 @@ class ReadmeBadgeGenerationTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()

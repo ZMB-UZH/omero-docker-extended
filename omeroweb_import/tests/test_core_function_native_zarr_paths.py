@@ -1187,17 +1187,21 @@ def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions
 
 
 def test_session_helpers_cover_validation_open_and_detached_join_paths(monkeypatch):
+    def _event_context():
+        return object()
+
+    def _expired_event_context():
+        raise RuntimeError("expired")
+
     assert (
         core_functions._validate_session(
-            types.SimpleNamespace(getEventContext=lambda: object())
+            types.SimpleNamespace(getEventContext=_event_context)
         )
         is True
     )
     assert (
         core_functions._validate_session(
-            types.SimpleNamespace(
-                getEventContext=lambda: (_ for _ in ()).throw(RuntimeError("expired"))
-            )
+            types.SimpleNamespace(getEventContext=_expired_event_context)
         )
         is False
     )
