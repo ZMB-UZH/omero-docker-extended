@@ -1,0 +1,18 @@
+# Direct test and coverage dependencies for the split-suite CI job.
+# Compile with:
+#   pip-compile --allow-unsafe --generate-hashes \
+#     --no-emit-index-url --strip-extras \
+#     --output-file .github/requirements/tests-ci.txt \
+#     .github/requirements/tests-ci.in
+pytest==9.0.2
+coverage==7.13.5
+django==6.0.3
+pyyaml==6.0.3
+portalocker==3.2.0
+psycopg2-binary==2.9.11
+numpy==2.4.4
+numcodecs==0.16.5
+matplotlib==3.10.8
+ome-zarr==0.14.0
+zarr==3.1.6
+tifffile==2026.3.3
