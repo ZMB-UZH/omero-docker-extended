@@ -20,6 +20,7 @@ from omero_plugin_common.env_utils import (
     ENV_FILE_OMEROSERVER,
     get_env,
 )
+from omero_plugin_common.logging_utils import summarize_process_output
 
 IMARISCONVERT_INSTALL_DIR = "/opt/omero/imarisconvert"
 BIOFORMATS_SUBDIR = "bioformats"
@@ -343,8 +344,10 @@ def convert_to_ims(image, input_file, output_file):
 
         if result.returncode != 0:
             print("Conversion failed!")
-            print(f"STDOUT: {result.stdout}")
-            print(f"STDERR: {result.stderr}")
+            print(
+                "Command output summary: "
+                f"{summarize_process_output(result.stdout, result.stderr)}"
+            )
             return False
 
         print("Conversion successful!")

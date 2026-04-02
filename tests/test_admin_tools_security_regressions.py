@@ -89,8 +89,6 @@ def _install_import_stubs():
         sys.modules["omeroweb.decorators"] = omeroweb_decorators
 
 
-_install_import_stubs()
-
 from omeroweb_admin_tools.services import storage_quotas
 from omeroweb_admin_tools.views import index_view
 from omeroweb_admin_tools.views import utils as admin_utils

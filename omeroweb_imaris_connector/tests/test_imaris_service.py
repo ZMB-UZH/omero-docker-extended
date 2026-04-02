@@ -1320,7 +1320,9 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
     )
     handle = SimpleNamespace(
         poll=lambda: "FINISHED",
-        getResults=lambda *_args: (_ for _ in ()).throw(RuntimeError("results exploded")),
+        getResults=lambda *_args: (_ for _ in ()).throw(
+            RuntimeError("results exploded")
+        ),
     )
     imaris_service._PROCESS_JOBS["proc-finished"] = {
         "handle": handle,
@@ -1403,8 +1405,7 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
     monkeypatch.setattr(imaris_service.os, "altsep", "\\", raising=False)
     assert imaris_service._sanitize_filename("") == "export.ims"
     assert (
-        imaris_service._sanitize_filename(r"..\\unsafe\name.ims")
-        == "__unsafe_name.ims"
+        imaris_service._sanitize_filename(r"..\\unsafe\name.ims") == "__unsafe_name.ims"
     )
 
     raw_store = SimpleNamespace(

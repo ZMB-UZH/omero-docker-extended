@@ -18,6 +18,18 @@ def sanitize_log_value(value: Any) -> str:
     return text.replace("\r", r"\\r").replace("\n", r"\\n")
 
 
+def summarize_process_output(stdout: Any, stderr: Any) -> str:
+    """Return a low-sensitivity summary of command output for logs."""
+    stdout_text = str(stdout or "")
+    stderr_text = str(stderr or "")
+    return (
+        f"stdout_lines={len(stdout_text.splitlines())} "
+        f"stderr_lines={len(stderr_text.splitlines())} "
+        f"stdout_chars={len(stdout_text)} "
+        f"stderr_chars={len(stderr_text)}"
+    )
+
+
 _SENSITIVE_QUERY_KEYS = {
     "api_key",
     "apikey",

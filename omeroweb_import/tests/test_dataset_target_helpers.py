@@ -385,7 +385,9 @@ def test_dataset_creation_helpers_cover_cache_link_and_failure_paths(
     monkeypatch.setattr(
         core_functions,
         "_link_dataset_to_project",
-        lambda conn, dataset_id, project_id: link_calls.append((dataset_id, project_id)),
+        lambda conn, dataset_id, project_id: link_calls.append(
+            (dataset_id, project_id)
+        ),
     )
 
     dataset_map = {"Cached": 11}
@@ -406,7 +408,9 @@ def test_dataset_creation_helpers_cover_cache_link_and_failure_paths(
             RuntimeError("lookup exploded")
         ),
         getUpdateService=lambda: SimpleNamespace(
-            saveAndReturnObject=lambda dataset: SimpleNamespace(getId=lambda: _Value(88))
+            saveAndReturnObject=lambda dataset: SimpleNamespace(
+                getId=lambda: _Value(88)
+            )
         ),
     )
     assert core_functions._get_or_create_dataset(create_conn, "Fresh", {}, 9) == 88
@@ -574,14 +578,16 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
     assert plan_job["job_id"] == "b" * 32
     assert plan_error is None
 
-    paused_job, paused_error = core_functions._prepare_uploaded_job_for_request_path_import(
-        "c" * 32,
-        {
-            "job_id": "c" * 32,
-            "status": "queued",
-            "files": [{"relative_path": "demo.ome.tif"}],
-        },
-        conn=_Conn(),
+    paused_job, paused_error = (
+        core_functions._prepare_uploaded_job_for_request_path_import(
+            "c" * 32,
+            {
+                "job_id": "c" * 32,
+                "status": "queued",
+                "files": [{"relative_path": "demo.ome.tif"}],
+            },
+            conn=_Conn(),
+        )
     )
     assert paused_job["job_id"] == "c" * 32
     assert paused_error is None
@@ -619,23 +625,25 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
         "_prepare_request_job_import_datasets",
         lambda job_id, job_dict, conn=None: (job_dict, None),
     )
-    prepared_job, prepared_error = core_functions._prepare_uploaded_job_for_request_path_import(
-        "e" * 32,
-        {
-            "job_id": "e" * 32,
-            "status": "ready",
-            "compatibility_enabled": False,
-            "compatibility_thread_active": False,
-            "planned_import_units": [
-                {
-                    "relative_path": "bundle/data.bin",
-                    "dataset_relative_path": "bundle/data.bin",
-                    "covered_relative_paths": ["bundle/data.bin"],
-                }
-            ],
-            "files": [{"relative_path": "bundle/data.bin"}],
-        },
-        conn=_Conn(),
+    prepared_job, prepared_error = (
+        core_functions._prepare_uploaded_job_for_request_path_import(
+            "e" * 32,
+            {
+                "job_id": "e" * 32,
+                "status": "ready",
+                "compatibility_enabled": False,
+                "compatibility_thread_active": False,
+                "planned_import_units": [
+                    {
+                        "relative_path": "bundle/data.bin",
+                        "dataset_relative_path": "bundle/data.bin",
+                        "covered_relative_paths": ["bundle/data.bin"],
+                    }
+                ],
+                "files": [{"relative_path": "bundle/data.bin"}],
+            },
+            conn=_Conn(),
+        )
     )
     assert prepared_job["job_id"] == "e" * 32
     assert prepared_error is None

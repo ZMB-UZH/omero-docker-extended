@@ -4,6 +4,8 @@ This project enables automated security scanning via `.github/workflows/security
 
 GitHub-native code scanning is the supported repository scanning surface here. Retired third-party scanning integrations and badge-only status surfaces are intentionally not part of the tracked workflow set.
 
+The repository also includes `.github/workflows/security-delta.yml`, which runs after `security-code-scanning` and fails when a pull request introduces any open code-scanning alert or when a default-branch push creates new open alerts.
+
 ## Active scanners
 
 | Scanner | Type | Scope | Free |
@@ -219,7 +221,7 @@ These categories may contain genuine issues that should be reviewed:
 ## Hardening roadmap
 
 1. Add branch protection requiring all security scanning checks to pass on pull requests.
-2. Add CI policy to fail builds when new `CRITICAL` or `HIGH` alerts are introduced.
+2. ~~Add CI policy to fail builds when new `CRITICAL` or `HIGH` alerts are introduced.~~ **Done**: `.github/workflows/security-delta.yml` now enforces a zero-added-alert policy for pull requests and flags newly created default-branch alerts after push scans.
 3. Pin all GitHub Actions to full commit SHAs (addresses 32 Scorecard `PinnedDependenciesID` findings).
 4. ~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**: the repository root now includes `SECURITY.md`, which points GitHub-native security surfaces at the canonical `docs/SECURITY.md` guidance. The Scorecard `SecurityPolicyID` finding should clear on the next workflow refresh.
 5. ~~Add image-level vulnerability scans for each built Docker image.~~ **Done**: Docker Scout two-phase scanning (pre-build baseline + post-build report) covers all images in `docker-compose.yml` — both custom-built and third-party. Interactive installs default security hardening to enabled, vulnerability scanning remains opt-in, and the hardening pass preserves locale data while applying OS and Python package upgrades. See `docs/SECURITY.md`.

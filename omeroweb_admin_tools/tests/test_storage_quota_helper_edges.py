@@ -27,8 +27,12 @@ def test_storage_quota_env_and_root_helpers_cover_validation_edges(
     with pytest.raises(storage_quotas.QuotaError, match="greater than 0"):
         storage_quotas.min_quota_gb()
 
-    monkeypatch.setattr(storage_quotas, "getpwuid", lambda uid: (_ for _ in ()).throw(KeyError(uid)))
-    monkeypatch.setattr(storage_quotas, "getgrgid", lambda gid: (_ for _ in ()).throw(KeyError(gid)))
+    monkeypatch.setattr(
+        storage_quotas, "getpwuid", lambda uid: (_ for _ in ()).throw(KeyError(uid))
+    )
+    monkeypatch.setattr(
+        storage_quotas, "getgrgid", lambda gid: (_ for _ in ()).throw(KeyError(gid))
+    )
     assert storage_quotas._safe_username(7) == "7"
     assert storage_quotas._safe_groupname(8) == "8"
 
@@ -205,9 +209,15 @@ def test_reconcile_quotas_covers_invalid_state_entries_and_persist_warnings(
             "is_compatible": True,
         },
     )
-    monkeypatch.setattr(storage_quotas, "_path_access_summary", lambda path: {"mode_octal": "0770"})
+    monkeypatch.setattr(
+        storage_quotas, "_path_access_summary", lambda path: {"mode_octal": "0770"}
+    )
     monkeypatch.setattr(storage_quotas, "is_quota_enforcement_available", lambda: True)
-    monkeypatch.setattr(storage_quotas, "_write_state", lambda path, state: (_ for _ in ()).throw(OSError("readonly")))
+    monkeypatch.setattr(
+        storage_quotas,
+        "_write_state",
+        lambda path, state: (_ for _ in ()).throw(OSError("readonly")),
+    )
 
     result = storage_quotas.reconcile_quotas([])
 

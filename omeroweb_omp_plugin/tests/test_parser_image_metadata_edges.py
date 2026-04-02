@@ -119,7 +119,9 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
     monkeypatch.setattr(
         image_service,
         "is_owned_by_user",
-        lambda obj, owner_id: owner_id is None or getattr(obj, "owner_id", None) == owner_id,
+        lambda obj, owner_id: (
+            owner_id is None or getattr(obj, "owner_id", None) == owner_id
+        ),
     )
 
     external_image = _Image("external-id", "external.tif")
@@ -172,18 +174,24 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
         == []
     )
 
-    assert image_service.collect_images_by_selected_datasets(
-        SimpleNamespace(getObject=lambda *_args: None),
-        7,
-        [],
-        owner_id=7,
-    ) == []
-    assert image_service.collect_images_by_selected_datasets(
-        SimpleNamespace(getObject=lambda *_args: None),
-        7,
-        ["not-a-number"],
-        owner_id=7,
-    ) == []
+    assert (
+        image_service.collect_images_by_selected_datasets(
+            SimpleNamespace(getObject=lambda *_args: None),
+            7,
+            [],
+            owner_id=7,
+        )
+        == []
+    )
+    assert (
+        image_service.collect_images_by_selected_datasets(
+            SimpleNamespace(getObject=lambda *_args: None),
+            7,
+            ["not-a-number"],
+            owner_id=7,
+        )
+        == []
+    )
 
     selected_project = _Project(
         [
@@ -246,7 +254,11 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
         21,
         "ignored.bin",
         fileset=_Fileset(
-            [_UsedFile(_OriginalFile(format_value="text/plain", name=_Value("sample.lif")))]
+            [
+                _UsedFile(
+                    _OriginalFile(format_value="text/plain", name=_Value("sample.lif"))
+                )
+            ]
         ),
     )
     image_from_name_fallback = _Image(
@@ -308,18 +320,26 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
         == []
     )
 
-    assert image_service.collect_images_in_project(
-        SimpleNamespace(getObject=lambda *_args: None),
-        7,
-        limit=1,
-    ) == []
-    assert image_service.collect_images_in_project(
-        SimpleNamespace(
-            getObject=lambda *_args: (_ for _ in ()).throw(RuntimeError("project boom"))
-        ),
-        7,
-        limit=1,
-    ) == []
+    assert (
+        image_service.collect_images_in_project(
+            SimpleNamespace(getObject=lambda *_args: None),
+            7,
+            limit=1,
+        )
+        == []
+    )
+    assert (
+        image_service.collect_images_in_project(
+            SimpleNamespace(
+                getObject=lambda *_args: (_ for _ in ()).throw(
+                    RuntimeError("project boom")
+                )
+            ),
+            7,
+            limit=1,
+        )
+        == []
+    )
 
 
 def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_logging():
@@ -402,7 +422,9 @@ def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_log
         def loadOriginalMetadata(self):
             raise RuntimeError("no metadata")
 
-    assert metadata_service.extract_acquisition_metadata(_ImageWithOuterFailures()) == {}
+    assert (
+        metadata_service.extract_acquisition_metadata(_ImageWithOuterFailures()) == {}
+    )
 
 
 def test_extract_acquisition_metadata_persists_long_values_despite_store_close_failure(
@@ -484,9 +506,7 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
         _obj = "image-object"
         _conn = SimpleNamespace(
             getUpdateService=lambda: update_service,
-            c=SimpleNamespace(
-                sf=SimpleNamespace(createRawFileStore=lambda: raw_store)
-            ),
+            c=SimpleNamespace(sf=SimpleNamespace(createRawFileStore=lambda: raw_store)),
         )
 
         def getId(self):

@@ -140,9 +140,7 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(monkey
     monkeypatch.setattr(
         system_diagnostics,
         "_UnixSocketHTTPConnection",
-        lambda *args, **kwargs: _FakeDockerConnection(
-            _FakeDockerResponse(200, b"   ")
-        ),
+        lambda *args, **kwargs: _FakeDockerConnection(_FakeDockerResponse(200, b"   ")),
     )
     ok, payload, error = system_diagnostics._docker_api_json("/containers/json")
     assert ok is False
@@ -221,7 +219,9 @@ def test_log_query_helpers_cover_validation_inference_and_job_execution(monkeypa
     assert log_query_module._estimate_log_entries_size("invalid") == 0
     assert log_query_module._estimate_log_entries_size((object(),)) == 0
     assert log_query_module._estimate_label_cache_size(("only-one-item",)) == 0
-    assert log_query_module._estimate_label_cache_size((["not-a-tuple"], "filepath")) == 0
+    assert (
+        log_query_module._estimate_label_cache_size((["not-a-tuple"], "filepath")) == 0
+    )
 
     assert log_query_module._infer_level_from_message("") == "info"
     assert log_query_module._infer_level_from_message("panic in worker") == "fatal"
@@ -285,7 +285,9 @@ def test_log_query_helpers_cover_validation_inference_and_job_execution(monkeypa
     assert any(job.source_name == "omeroserver" for job in jobs)
     assert all("|~" in job.query for job in jobs)
 
-    monkeypatch.setattr(log_query_module, "_execute_loki_query", lambda *args, **kwargs: payload)
+    monkeypatch.setattr(
+        log_query_module, "_execute_loki_query", lambda *args, **kwargs: payload
+    )
     docker_job = log_query_module._QueryJob(
         query='{compose_service="omeroserver"}',
         source_type="docker",
@@ -323,10 +325,13 @@ def test_log_query_helpers_cover_validation_inference_and_job_execution(monkeypa
     )
     assert [entry.message for entry in filtered] == ["internal"]
 
-    assert log_query_module._fetch_loki_logs_uncached(
-        _log_config(),
-        [],
-        60,
-        20,
-    ) == []
+    assert (
+        log_query_module._fetch_loki_logs_uncached(
+            _log_config(),
+            [],
+            60,
+            20,
+        )
+        == []
+    )
     assert log_query_module._strip_message_prefix("") == ""

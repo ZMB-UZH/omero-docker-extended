@@ -34,8 +34,9 @@ class RepoMetadata:
 
 
 def _run_git(repo_root: Path, *args: str) -> str:
+    safe_repo_root = str(repo_root.resolve())
     completed = subprocess.run(
-        ["git", *args],
+        ["git", "-c", f"safe.directory={safe_repo_root}", *args],
         cwd=repo_root,
         check=True,
         capture_output=True,

@@ -160,14 +160,22 @@ def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
     jobs_root.mkdir()
     monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: jobs_root)
 
-    assert core_functions._robust_update_job("../bad", lambda job: job, retries=1) is None
+    assert (
+        core_functions._robust_update_job("../bad", lambda job: job, retries=1) is None
+    )
 
     valid_job_id = "a" * 32
-    assert core_functions._robust_update_job(valid_job_id, lambda job: job, retries=1) is None
+    assert (
+        core_functions._robust_update_job(valid_job_id, lambda job: job, retries=1)
+        is None
+    )
 
     job_path = jobs_root / f"{valid_job_id}.json"
     job_path.write_text("{not-json", encoding="utf-8")
-    assert core_functions._robust_update_job(valid_job_id, lambda job: job, retries=1) is None
+    assert (
+        core_functions._robust_update_job(valid_job_id, lambda job: job, retries=1)
+        is None
+    )
 
     monkeypatch.setattr(
         core_functions.omero,
@@ -176,7 +184,9 @@ def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
         raising=False,
     )
     generic_calls = {}
-    params = SimpleNamespace(add=lambda key, value: generic_calls.setdefault(key, value))
+    params = SimpleNamespace(
+        add=lambda key, value: generic_calls.setdefault(key, value)
+    )
     core_functions._params_add_string(params, "name", "value")
     assert generic_calls == {"name": "wrapped:value"}
 
@@ -191,12 +201,16 @@ def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
     }
 
     generic_calls.clear()
-    long_params = SimpleNamespace(add=lambda key, value: generic_calls.setdefault(key, value))
+    long_params = SimpleNamespace(
+        add=lambda key, value: generic_calls.setdefault(key, value)
+    )
     core_functions._params_add_long(long_params, "count", 7)
     assert generic_calls == {"count": 7}
 
     generic_calls.clear()
-    list_params = SimpleNamespace(add=lambda key, value: generic_calls.setdefault(key, value))
+    list_params = SimpleNamespace(
+        add=lambda key, value: generic_calls.setdefault(key, value)
+    )
     core_functions._params_add_string_list(list_params, "names", ["a", 2])
     assert generic_calls == {"names": ["a", "2"]}
 

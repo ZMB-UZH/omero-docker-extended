@@ -9,6 +9,7 @@ import omero
 from celery import states
 from omero.gateway import BlitzGateway
 from omero_plugin_common import process_utils
+from omero_plugin_common.logging_utils import summarize_process_output
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 from .celery_app import app
@@ -148,25 +149,23 @@ def _run_script_via_omero_cli(
     outputs = _extract_cli_outputs(combined)
 
     if result.returncode != 0:
-        snippet = combined[-2000:] if combined else ""
         logger.error(
-            "OMERO CLI launch failed script_id=%s image_id=%s exit_code=%s output_tail=%s",
+            "OMERO CLI launch failed script_id=%s image_id=%s exit_code=%s %s",
             script_id,
             image_id,
             result.returncode,
-            snippet,
+            summarize_process_output(result.stdout, result.stderr),
         )
         raise RuntimeError("IMS export CLI launch failed.")
 
     if outputs.get("Export_Path"):
         return outputs
 
-    snippet = combined[-2000:] if combined else ""
     logger.error(
-        "OMERO CLI launch returned no export path script_id=%s image_id=%s output_tail=%s",
+        "OMERO CLI launch returned no export path script_id=%s image_id=%s %s",
         script_id,
         image_id,
-        snippet,
+        summarize_process_output(result.stdout, result.stderr),
     )
     raise RuntimeError("IMS export CLI launch returned no export path.")
 

@@ -1322,7 +1322,10 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     monkeypatch.setattr(
         core_functions,
         "_build_sem_edx_associations_from_entries",
-        lambda entries: {first_image: list(first_txts), second_image: list(second_txts)},
+        lambda entries: {
+            first_image: list(first_txts),
+            second_image: list(second_txts),
+        },
     )
 
     class _ImportedImage:
@@ -1481,15 +1484,9 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
         "Txt attachment failure: image-missing.txt into missing.ome.tif" in message
         for message in state["job"]["messages"]
     )
-    assert any(
-        "plot import failed" in message for message in state["job"]["messages"]
-    )
-    assert any(
-        "Rejected staged text path" in error for error in state["job"]["errors"]
-    )
-    assert any(
-        "Rejected staged plot path" in error for error in state["job"]["errors"]
-    )
+    assert any("plot import failed" in message for message in state["job"]["messages"])
+    assert any("Rejected staged text path" in error for error in state["job"]["errors"])
+    assert any("Rejected staged plot path" in error for error in state["job"]["errors"])
     assert any(
         "Failed to stage SEM-EDX plot PNG for import: plot-copy-error.png" in error
         for error in state["job"]["errors"]

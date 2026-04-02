@@ -9,6 +9,7 @@ one OMERO Table containing the spectrum X,Y data.
 """
 import logging
 import re
+import warnings
 from bisect import bisect_left
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
@@ -17,9 +18,37 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-from matplotlib import pyplot as plt
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        message="Unable to import Axes3D.*",
+        category=UserWarning,
+        module="matplotlib.projections",
+    )
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
 
 logger = logging.getLogger(__name__)
+
+
+class _PyplotCompat:
+    """Minimal pyplot-compatible surface used by this module and its tests."""
+
+    @staticmethod
+    def subplots(*, figsize=(6.4, 4.8), dpi=None):
+        fig = Figure(figsize=figsize, dpi=dpi)
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot(1, 1, 1)
+        return fig, ax
+
+    @staticmethod
+    def close(fig=None):
+        if fig is None:
+            return
+        fig.clear()
+
+
+plt = _PyplotCompat()
 
 
 def parse_emsa_file(txt_path: Path) -> Dict[str, Any]:

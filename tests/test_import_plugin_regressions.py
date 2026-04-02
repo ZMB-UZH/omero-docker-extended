@@ -29,7 +29,7 @@ def _install_import_stubs():
         django_module = types.ModuleType("django")
         django_module.__path__ = []
         django_conf = types.ModuleType("django.conf")
-        django_conf.settings = types.SimpleNamespace()
+        django_conf.settings = types.SimpleNamespace(USE_I18N=False)
         django_http = types.ModuleType("django.http")
         django_http.JsonResponse = lambda payload=None, status=200, **kwargs: {
             "payload": payload,
@@ -58,7 +58,8 @@ def _install_import_stubs():
         django_conf = sys.modules.setdefault(
             "django.conf", types.ModuleType("django.conf")
         )
-        django_conf.settings = types.SimpleNamespace()
+        if not hasattr(django_conf, "settings"):
+            django_conf.settings = types.SimpleNamespace(USE_I18N=False)
 
     if "omero" not in sys.modules:
         omero_module = types.ModuleType("omero")
@@ -80,6 +81,51 @@ def _install_import_stubs():
         sys.modules["omero.model"] = omero_model
         sys.modules["omero.rtypes"] = omero_rtypes
         sys.modules["omero.scripts"] = omero_scripts
+        omero_module.scripts = omero_scripts
+    else:
+        omero_module = sys.modules.setdefault("omero", types.ModuleType("omero"))
+        if not hasattr(omero_module, "__path__"):
+            omero_module.__path__ = []
+
+        omero_gateway = sys.modules.setdefault(
+            "omero.gateway", types.ModuleType("omero.gateway")
+        )
+        omero_gateway.BlitzGateway = getattr(
+            omero_gateway, "BlitzGateway", type("BlitzGateway", (), {})
+        )
+
+        omero_model = sys.modules.setdefault(
+            "omero.model", types.ModuleType("omero.model")
+        )
+        omero_model.DatasetI = getattr(
+            omero_model, "DatasetI", type("DatasetI", (), {})
+        )
+        omero_model.ProjectDatasetLinkI = getattr(
+            omero_model, "ProjectDatasetLinkI", type("ProjectDatasetLinkI", (), {})
+        )
+        omero_model.ProjectI = getattr(
+            omero_model, "ProjectI", type("ProjectI", (), {})
+        )
+
+        omero_rtypes = sys.modules.setdefault(
+            "omero.rtypes", types.ModuleType("omero.rtypes")
+        )
+        omero_rtypes.rint = getattr(omero_rtypes, "rint", lambda value: value)
+        omero_rtypes.rstring = getattr(omero_rtypes, "rstring", lambda value: value)
+
+        omero_scripts = sys.modules.setdefault(
+            "omero.scripts", types.ModuleType("omero.scripts")
+        )
+        omero_scripts.String = getattr(
+            omero_scripts, "String", lambda *args, **kwargs: ("String", args, kwargs)
+        )
+        omero_scripts.client = getattr(
+            omero_scripts, "client", lambda *args, **kwargs: None
+        )
+
+        omero_module.gateway = omero_gateway
+        omero_module.model = omero_model
+        omero_module.rtypes = omero_rtypes
         omero_module.scripts = omero_scripts
 
     if "omeroweb.decorators" not in sys.modules:
@@ -172,13 +218,12 @@ def _install_import_stubs():
         sys.modules["omeroweb_import.services.data_store"] = data_store
 
 
-_install_import_stubs()
-
 from omeroweb_import.views import core_functions
 from omeroweb_import.views import index_view
 
 
 def _load_manage_zarr_script_module():
+    _install_import_stubs()
     module_path = (
         REPO_ROOT
         / "omeroweb_import"

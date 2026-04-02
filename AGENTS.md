@@ -201,6 +201,7 @@ omeroweb_<name>/
 - Suppression is permitted only when all evidence confirms the finding is a verified false positive (e.g. `psycopg2.sql.SQL().format(sql.Identifier())` is safe parameterized SQL; internal Docker network services legitimately use HTTP) **and** the root cause cannot be fixed without breaking functionality.
 - Every suppression must include a clear explanation of why it is a false positive and link to the verifying evidence.
 - Refresh the exact open-alert total from the GitHub API before each remediation batch and after each remediation push. Do not rely on stale counts in docs, comments, or prior agent messages.
+- The repository now enforces a `security-delta` workflow after `security-code-scanning`. Do not weaken or bypass it. New pull-request alerts and newly created default-branch alerts are treated as regressions.
 - Do not modify security scan workflow files unless explicitly instructed to do so.
 - For the canonical coding patterns that prevent new findings, see `docs/reference/ai-agent-security-prevention-playbook.md`. For live counts, SLAs, and remediation workflow, see `docs/operations/code-scanning.md`.
 

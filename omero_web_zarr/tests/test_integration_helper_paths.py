@@ -309,7 +309,9 @@ def test_store_backed_render_helpers_cover_metadata_ranges_and_downloads(monkeyp
     assert wrapper.getWindowStart() == 3.0
     assert wrapper.getWindowEnd() == 9.0
 
-    passthrough_wrapper = integration._StoreBackedChannelWrapper(_Channel(active=True), {})
+    passthrough_wrapper = integration._StoreBackedChannelWrapper(
+        _Channel(active=True), {}
+    )
     assert passthrough_wrapper.isActive() is True
     assert passthrough_wrapper.getWindowStart() == 1.0
     assert passthrough_wrapper.getWindowEnd() == 5.0
@@ -436,7 +438,9 @@ def test_store_backed_image_data_covers_projection_tile_and_objective_fallbacks(
         "_decorate_store_backed_channels",
         lambda image, channels: channels,
     )
-    monkeypatch.setattr(integration, "channelMarshal", lambda channel: channel.getLabel())
+    monkeypatch.setattr(
+        integration, "channelMarshal", lambda channel: channel.getLabel()
+    )
     monkeypatch.setattr(
         integration,
         "_store_backed_metadata",
@@ -446,7 +450,9 @@ def test_store_backed_image_data_covers_projection_tile_and_objective_fallbacks(
     request = SimpleNamespace(
         session={"server_settings": {"viewer": {"initial_zoom_level": -1}}}
     )
-    fallback_payload = integration._store_backed_image_data(_SingleLevelImage(), request)
+    fallback_payload = integration._store_backed_image_data(
+        _SingleLevelImage(), request
+    )
 
     assert fallback_payload["tiles"] is False
     assert fallback_payload["pixel_size"] == {"z": 1.5}
@@ -469,7 +475,9 @@ def test_load_metadata_preview_with_safe_rendering_covers_share_well_and_reraise
 
     preview_image = SimpleNamespace(
         id=17,
-        getAllRenderingDefs=lambda: (_ for _ in ()).throw(RuntimeError("renderer busy")),
+        getAllRenderingDefs=lambda: (_ for _ in ()).throw(
+            RuntimeError("renderer busy")
+        ),
         getRenderingDefId=lambda: 3,
         getSizeX=lambda: 256,
         getSizeY=lambda: 128,
@@ -580,7 +588,9 @@ def test_region_helpers_cover_remaining_error_paths(monkeypatch):
     )
     assert invalid_level.status_code == 400
 
-    missing_args_request = RequestFactory().get("/webgateway/render_image_region/7/0/0/")
+    missing_args_request = RequestFactory().get(
+        "/webgateway/render_image_region/7/0/0/"
+    )
     missing_args_request.session = {"connector": {"server_id": 1}}
     monkeypatch.setattr(
         webgateway_views,

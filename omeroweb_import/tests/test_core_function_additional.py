@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import types
 from pathlib import Path
 
@@ -521,7 +522,7 @@ def test_check_import_compatibility_covers_timeout_cli_errors_and_native_routes(
 
 
 def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     source = tmp_path / "image.ome.tif"
     source.write_text("payload", encoding="utf-8")
@@ -586,36 +587,35 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
         core_functions,
         "_run_omero_cli_streaming",
         lambda cmd, *, env, timeout, on_tick=None: (
-            on_tick(999, 0.0)
-            if on_tick is not None
-            else None
-        )
-        or (
-            on_tick(999, 10.0)
-            if on_tick is not None
-            else None
-        )
-        or process_utils.CompletedProcess(
-            args=tuple(cmd),
-            returncode=3,
-            stdout="one\n",
-            stderr="warn\n",
+            (on_tick(999, 0.0) if on_tick is not None else None)
+            or (on_tick(999, 10.0) if on_tick is not None else None)
+            or process_utils.CompletedProcess(
+                args=tuple(cmd),
+                returncode=3,
+                stdout="secret stdout line\n",
+                stderr="secret stderr line\n",
+            )
         ),
     )
 
-    success, stdout, stderr = core_functions._import_file(
-        None,
-        "session",
-        "omeroserver",
-        4064,
-        source,
-        progress_job={"imported_bytes": 2},
-    )
+    with caplog.at_level(logging.WARNING, logger=core_functions.logger.name):
+        success, stdout, stderr = core_functions._import_file(
+            None,
+            "session",
+            "omeroserver",
+            4064,
+            source,
+            progress_job={"imported_bytes": 2},
+        )
 
     assert success is False
-    assert stdout == "one\n"
-    assert stderr == "warn\n"
+    assert stdout == "secret stdout line\n"
+    assert stderr == "secret stderr line\n"
     assert saved_jobs[0]["import_progress_bytes"] == 9
+    assert "Import CLI failed for image.ome.tif" in caplog.text
+    assert "stdout_lines=1 stderr_lines=1" in caplog.text
+    assert "secret stdout line" not in caplog.text
+    assert "secret stderr line" not in caplog.text
 
 
 def test_import_file_progress_loop_covers_timeout_and_unexpected_cleanup_paths(
