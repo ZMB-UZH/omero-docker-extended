@@ -60,7 +60,7 @@ The current workflows cover docs validation and security scanning, but quality w
 | `shell-and-workflow-lint.yml` | run `shellcheck`, `actionlint`, and YAML validation | The repo has many shell and workflow files but no dedicated enforcement lane. | Now |
 | `docker-smoke.yml` | build changed Dockerfiles and run targeted smoke/contract tests | Dockerfiles and startup wrappers are central to repo correctness. | Now |
 | `docs-drift.yml` | catch stale plugin names, stale service counts, and missing index entries | Current repo state already shows this class of drift. | Now |
-| `security-delta.yml` | fail or warn when new critical/high findings are introduced | The security runbook already defines severity SLAs and merge expectations. | Next |
+| `security-code-scanning.yml` `security-delta` job | fail when new code-scanning alerts are introduced by the current security workflow run | The security runbook already defines severity SLAs and merge expectations. | Done |
 | `action-pin-policy.yml` | verify GitHub Actions are pinned to approved SHAs and least-privilege permissions | Scorecard findings and tag-pinned actions already point to this gap. | Next |
 | `release-hygiene.yml` | require release-note/docs updates when startup, env, or operator behavior changes | The repo says docs must change when behavior changes, but the rule is not automated. | Next |
 | `dependency-hygiene.yml` | validate Dependabot coverage and optionally inventory dependency surfaces | Dependabot exists but only covers a narrow subset of the repo. | Later |

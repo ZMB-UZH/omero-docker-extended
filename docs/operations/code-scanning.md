@@ -4,7 +4,7 @@ This project enables automated security scanning via `.github/workflows/security
 
 GitHub-native code scanning is the supported repository scanning surface here. Retired third-party scanning integrations and badge-only status surfaces are intentionally not part of the tracked workflow set.
 
-The repository also includes `.github/workflows/security-delta.yml`, which runs after `security-code-scanning` and fails when a pull request introduces any open code-scanning alert or when a default-branch push creates new open alerts.
+The repository also includes a `security-delta` job inside `.github/workflows/security-code-scanning.yml`. That job fails when a pull request introduces any open code-scanning alert or when a default-branch security scan creates new open alerts.
 
 ## Active scanners
 
@@ -21,8 +21,8 @@ The repository also includes `.github/workflows/security-delta.yml`, which runs 
 
 ## Trigger model
 
-- **Push** to `main` or `alpha`: full scan.
-- **Pull requests** targeting `main` or `alpha`: full scan.
+- **Push** to `main`: full scan.
+- **Pull requests** targeting `main`: full scan.
 - **Weekly schedule** (Monday 03:23 UTC): catches newly disclosed CVEs.
 - **Manual dispatch**: incident response or post-remediation verification.
 
@@ -221,7 +221,7 @@ These categories may contain genuine issues that should be reviewed:
 ## Hardening roadmap
 
 1. Add branch protection requiring all security scanning checks to pass on pull requests.
-2. ~~Add CI policy to fail builds when new `CRITICAL` or `HIGH` alerts are introduced.~~ **Done**: `.github/workflows/security-delta.yml` now enforces a zero-added-alert policy for pull requests and flags newly created default-branch alerts after push scans.
+2. ~~Add CI policy to fail builds when new `CRITICAL` or `HIGH` alerts are introduced.~~ **Done**: the `security-delta` job in `.github/workflows/security-code-scanning.yml` now enforces a zero-added-alert policy for pull requests and flags newly created default-branch alerts after default-branch security scans.
 3. Pin all GitHub Actions to full commit SHAs (addresses 32 Scorecard `PinnedDependenciesID` findings).
 4. ~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**: the repository root now includes `SECURITY.md`, which points GitHub-native security surfaces at the canonical `docs/SECURITY.md` guidance. The Scorecard `SecurityPolicyID` finding should clear on the next workflow refresh.
 5. ~~Add image-level vulnerability scans for each built Docker image.~~ **Done**: Docker Scout two-phase scanning (pre-build baseline + post-build report) covers all images in `docker-compose.yml` — both custom-built and third-party. Interactive installs default security hardening to enabled, vulnerability scanning remains opt-in, and the hardening pass preserves locale data while applying OS and Python package upgrades. See `docs/SECURITY.md`.
@@ -235,9 +235,11 @@ These categories may contain genuine issues that should be reviewed:
 
 2. **After removing or deleting code**: If the removed code was associated with findings listed here, update the counts and tables accordingly. Re-run the security workflow to verify closure.
 
-3. **After adding new code**: If new code introduces patterns flagged by any scanner, document the finding here with its triage status (fix planned, acceptable risk, or false positive).
+3. **After editing GitHub Actions workflows**: Re-verify every touched GitHub Action or reusable workflow against its official GitHub Releases/Tags page, update to the latest published version available at edit time, and pin by full commit SHA. Treat stale action pins as maintenance defects, not optional follow-up.
 
-4. **Periodic refresh**: When running a full security scan, compare the live alert count from the GitHub API against this file. Update all tables to match current state. Use:
+4. **After adding new code**: If new code introduces patterns flagged by any scanner, document the finding here with its triage status (fix planned, acceptable risk, or false positive).
+
+5. **Periodic refresh**: When running a full security scan, compare the live alert count from the GitHub API against this file. Update all tables to match current state. Use:
    ```bash
    curl -sL -H "Authorization: Bearer $GITHUB_TOKEN" \
      "https://api.github.com/repos/ZMB-UZH/omero-docker-extended/code-scanning/alerts?per_page=100&state=open&page=1"

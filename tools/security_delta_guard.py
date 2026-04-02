@@ -20,6 +20,7 @@ AlertFetcher = Callable[..., list[dict[str, Any]]]
 SleepFn = Callable[[float], None]
 ClockFn = Callable[[], float]
 DefaultBranchResolver = Callable[[str], str | None]
+RunStartResolver = Callable[[str, str], datetime | None]
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,11 @@ def parse_args() -> argparse.Namespace:
         description="Block workflow runs that add new GitHub code scanning alerts."
     )
     parser.add_argument(
+        "--event-name",
+        default=os.environ.get("GITHUB_EVENT_NAME", ""),
+        help="GitHub Actions event name.",
+    )
+    parser.add_argument(
         "--event-path",
         default=os.environ.get("GITHUB_EVENT_PATH", ""),
         help="Path to the GitHub Actions event payload JSON.",
@@ -42,6 +48,16 @@ def parse_args() -> argparse.Namespace:
         "--repository",
         default=os.environ.get("GITHUB_REPOSITORY", ""),
         help="Repository in OWNER/REPO format.",
+    )
+    parser.add_argument(
+        "--ref",
+        default=os.environ.get("GITHUB_REF", ""),
+        help="Git ref for the current workflow run.",
+    )
+    parser.add_argument(
+        "--run-id",
+        default=os.environ.get("GITHUB_RUN_ID", ""),
+        help="GitHub Actions run identifier for the current workflow run.",
     )
     parser.add_argument(
         "--token-env",
@@ -108,6 +124,17 @@ def payload_default_branch(event_payload: dict[str, Any]) -> str:
             if default_branch:
                 return default_branch
     return ""
+
+
+def payload_pull_request_number(event_payload: dict[str, Any]) -> int | None:
+    pull_request = event_payload.get("pull_request") or {}
+    if isinstance(pull_request, dict) and pull_request.get("number") is not None:
+        return int(pull_request["number"])
+    return None
+
+
+def payload_ref(event_payload: dict[str, Any]) -> str:
+    return _first_non_empty(event_payload.get("ref"))
 
 
 def normalize_severity(alert: dict[str, Any]) -> str:
@@ -207,6 +234,49 @@ def select_push_delta_alerts(
     return delta_alerts
 
 
+def evaluate_default_branch_alerts(
+    ref: str,
+    workflow_started_at: datetime | None,
+    fetch_alerts: AlertFetcher,
+    *,
+    failure_prefix: str,
+    success_prefix: str,
+    settle_timeout_seconds: int,
+    poll_interval_seconds: int,
+    monotonic: ClockFn = time.monotonic,
+    sleep: SleepFn = time.sleep,
+) -> EvaluationResult:
+    if workflow_started_at is None:
+        return EvaluationResult(
+            status="fail",
+            message=(
+                f"{failure_prefix} could not be evaluated because the workflow "
+                f"start timestamp for {ref} was unavailable."
+            ),
+        )
+
+    alerts = wait_for_stable_snapshot(
+        lambda: fetch_alerts(ref=ref),
+        settle_timeout_seconds=settle_timeout_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+        monotonic=monotonic,
+        sleep=sleep,
+    )
+    delta_alerts = select_push_delta_alerts(alerts, workflow_started_at)
+    if delta_alerts:
+        return EvaluationResult(
+            status="fail",
+            message=render_failure_message(failure_prefix, delta_alerts),
+            alerts=tuple(delta_alerts),
+        )
+    return EvaluationResult(
+        status="pass",
+        message=(
+            f"{success_prefix} ({len(alerts)} open total on the branch snapshot)."
+        ),
+    )
+
+
 def evaluate_pull_request_alerts(
     pr_number: int,
     fetch_alerts: AlertFetcher,
@@ -248,29 +318,16 @@ def evaluate_push_alerts(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> EvaluationResult:
-    alerts = wait_for_stable_snapshot(
-        lambda: fetch_alerts(ref=ref),
+    return evaluate_default_branch_alerts(
+        ref,
+        workflow_started_at,
+        fetch_alerts,
+        failure_prefix=f"Push scan created new default-branch alerts on {ref}",
+        success_prefix=f"No new default-branch alerts were created on {ref}",
         settle_timeout_seconds=settle_timeout_seconds,
         poll_interval_seconds=poll_interval_seconds,
         monotonic=monotonic,
         sleep=sleep,
-    )
-    delta_alerts = select_push_delta_alerts(alerts, workflow_started_at)
-    if delta_alerts:
-        return EvaluationResult(
-            status="fail",
-            message=render_failure_message(
-                f"Push scan created new default-branch alerts on {ref}",
-                delta_alerts,
-            ),
-            alerts=tuple(delta_alerts),
-        )
-    return EvaluationResult(
-        status="pass",
-        message=(
-            f"No new default-branch alerts were created on {ref} "
-            f"({len(alerts)} open total on the branch snapshot)."
-        ),
     )
 
 
@@ -365,6 +422,106 @@ def evaluate_workflow_run(
     )
 
 
+def event_scan_label(event_name: str) -> str:
+    normalized_event = str(event_name or "").strip().lower()
+    labels = {
+        "push": "Push scan",
+        "schedule": "Scheduled scan",
+        "workflow_dispatch": "Manual scan",
+    }
+    return labels.get(normalized_event, "Security scan")
+
+
+def evaluate_direct_event(
+    event_name: str,
+    event_payload: dict[str, Any],
+    *,
+    repository: str,
+    ref: str,
+    run_id: str,
+    fetch_alerts: AlertFetcher,
+    settle_timeout_seconds: int,
+    poll_interval_seconds: int,
+    resolve_default_branch: DefaultBranchResolver | None = None,
+    resolve_run_started_at: RunStartResolver | None = None,
+    monotonic: ClockFn = time.monotonic,
+    sleep: SleepFn = time.sleep,
+) -> EvaluationResult:
+    normalized_event = _first_non_empty(event_name).lower()
+    if normalized_event == "pull_request":
+        pr_number = payload_pull_request_number(event_payload)
+        if pr_number is None:
+            return EvaluationResult(
+                status="fail",
+                message=(
+                    "security-code-scanning pull_request payload did not include "
+                    "a pull request number."
+                ),
+            )
+        return evaluate_pull_request_alerts(
+            pr_number,
+            fetch_alerts,
+            settle_timeout_seconds=settle_timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            monotonic=monotonic,
+            sleep=sleep,
+        )
+
+    if normalized_event in {"push", "schedule", "workflow_dispatch"}:
+        default_branch = payload_default_branch(event_payload)
+        if not default_branch and resolve_default_branch is not None:
+            default_branch = _first_non_empty(resolve_default_branch(repository))
+
+        current_ref = _first_non_empty(ref, payload_ref(event_payload))
+        if not default_branch or not current_ref:
+            return EvaluationResult(
+                status="fail",
+                message=(
+                    "security-code-scanning is missing default-branch or ref "
+                    "information for the current run."
+                ),
+            )
+
+        default_ref = f"refs/heads/{default_branch}"
+        if current_ref != default_ref:
+            return EvaluationResult(
+                status="skip",
+                message=(
+                    "Skipping zero-delta code-scanning gate for non-default "
+                    f"branch ref {current_ref!r}."
+                ),
+            )
+
+        workflow_started_at = None
+        if resolve_run_started_at is not None:
+            workflow_started_at = resolve_run_started_at(repository, run_id)
+
+        scan_label = event_scan_label(normalized_event)
+        return evaluate_default_branch_alerts(
+            current_ref,
+            workflow_started_at,
+            fetch_alerts,
+            failure_prefix=(
+                f"{scan_label} created new default-branch alerts on {current_ref}"
+            ),
+            success_prefix=(
+                f"{scan_label} created no new default-branch alerts on {current_ref}"
+            ),
+            settle_timeout_seconds=settle_timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            monotonic=monotonic,
+            sleep=sleep,
+        )
+
+    return EvaluationResult(
+        status="skip",
+        message=(
+            "Skipping zero-delta code-scanning gate for unsupported event "
+            f"{normalized_event!r}."
+        ),
+    )
+
+
 def list_code_scanning_alerts(
     repository: str,
     token: str,
@@ -440,6 +597,32 @@ def get_default_branch(repository: str, token: str) -> str | None:
     return _first_non_empty(payload.get("default_branch")) or None
 
 
+def get_workflow_run_started_at(
+    repository: str, token: str, run_id: str
+) -> datetime | None:
+    normalized_run_id = _first_non_empty(run_id)
+    if not normalized_run_id:
+        raise RuntimeError(
+            "GitHub Actions run ID is required to evaluate default-branch alert deltas."
+        )
+    try:
+        normalized_run_id = str(int(normalized_run_id))
+    except ValueError as exc:
+        raise RuntimeError(
+            f"GitHub Actions run ID must be numeric, got {run_id!r}."
+        ) from exc
+
+    payload = github_api_get_json(
+        f"/repos/{repository}/actions/runs/{normalized_run_id}",
+        token,
+    )
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Unexpected GitHub API payload type: {type(payload)!r}")
+    return parse_iso8601(
+        _first_non_empty(payload.get("run_started_at"), payload.get("created_at"))
+    )
+
+
 def load_event_payload(path: str) -> dict[str, Any]:
     with open(path, encoding="utf-8") as handle:
         payload = json.load(handle)
@@ -467,19 +650,45 @@ def main() -> int:
 
     try:
         event_payload = load_event_payload(args.event_path)
-        result = evaluate_workflow_run(
-            event_payload,
-            lambda **kwargs: list_code_scanning_alerts(
+
+        def fetch_alerts(**kwargs: Any) -> list[dict[str, Any]]:
+            return list_code_scanning_alerts(
                 args.repository,
                 token,
                 **kwargs,
-            ),
-            settle_timeout_seconds=args.settle_timeout_seconds,
-            poll_interval_seconds=args.poll_interval_seconds,
-            resolve_default_branch=lambda repository: get_default_branch(
-                repository, token
-            ),
-        )
+            )
+
+        def resolve_default_branch(repository: str) -> str | None:
+            return get_default_branch(repository, token)
+
+        def resolve_run_started_at(repository: str, run_id: str) -> datetime | None:
+            return get_workflow_run_started_at(
+                repository,
+                token,
+                run_id,
+            )
+
+        if _first_non_empty(args.event_name).lower() == "workflow_run":
+            result = evaluate_workflow_run(
+                event_payload,
+                fetch_alerts,
+                settle_timeout_seconds=args.settle_timeout_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+                resolve_default_branch=resolve_default_branch,
+            )
+        else:
+            result = evaluate_direct_event(
+                args.event_name,
+                event_payload,
+                repository=args.repository,
+                ref=args.ref,
+                run_id=args.run_id,
+                fetch_alerts=fetch_alerts,
+                settle_timeout_seconds=args.settle_timeout_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+                resolve_default_branch=resolve_default_branch,
+                resolve_run_started_at=resolve_run_started_at,
+            )
     except Exception as exc:
         print(f"ERROR: security delta guard failed: {exc}", file=sys.stderr)
         return 2

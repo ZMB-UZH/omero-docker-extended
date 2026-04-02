@@ -148,6 +148,7 @@ def render_badge_block(metadata: RepoMetadata) -> str:
         BADGE_BLOCK_BEGIN,
         f"[![License](https://img.shields.io/github/license/{github_path})](LICENSE)",
         f"[![Tests](https://github.com/{github_path}/actions/workflows/tests.yml/badge.svg)](https://github.com/{github_path}/actions/workflows/tests.yml)",
+        f"[![Security](https://github.com/{github_path}/actions/workflows/security-code-scanning.yml/badge.svg)](https://github.com/{github_path}/actions/workflows/security-code-scanning.yml)",
         f"[![Code coverage](https://codecov.io/gh/{github_path}/graph/badge.svg)](https://codecov.io/gh/{github_path})",
         f"[![Ruff](https://img.shields.io/github/actions/workflow/status/{github_path}/ruff.yml?branch={branch}&logo=ruff&label=Ruff)](https://github.com/{github_path}/actions/workflows/ruff.yml)",
         f"[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/{github_path})](https://github.com/{github_path}/commits/{branch})",

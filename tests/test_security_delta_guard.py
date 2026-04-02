@@ -117,6 +117,21 @@ def test_select_push_delta_alerts_only_keeps_alerts_created_after_run_start() ->
     assert [alert["number"] for alert in result] == [2, 3]
 
 
+def test_evaluate_push_alerts_fails_without_workflow_start_timestamp() -> None:
+    result = security_delta_guard.evaluate_push_alerts(
+        "refs/heads/main",
+        None,
+        lambda **kwargs: [],
+        settle_timeout_seconds=0,
+        poll_interval_seconds=0,
+        monotonic=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result.status == "fail"
+    assert "start timestamp" in result.message
+
+
 def test_evaluate_pull_request_alerts_fails_on_any_open_alerts() -> None:
     result = security_delta_guard.evaluate_pull_request_alerts(
         17,
@@ -145,6 +160,121 @@ def test_evaluate_push_alerts_passes_when_only_old_backlog_remains() -> None:
 
     assert result.status == "pass"
     assert "No new default-branch alerts were created" in result.message
+
+
+def test_get_workflow_run_started_at_prefers_run_started_at(monkeypatch) -> None:
+    def fake_github_api_get_json(api_path: str, token: str) -> dict:
+        assert api_path == "/repos/ZMB-UZH/omero-docker-extended/actions/runs/1234"
+        assert token == "example-token"
+        return {
+            "run_started_at": "2026-04-02T12:34:56Z",
+            "created_at": "2026-04-02T12:30:00Z",
+        }
+
+    monkeypatch.setattr(
+        security_delta_guard,
+        "github_api_get_json",
+        fake_github_api_get_json,
+    )
+
+    result = security_delta_guard.get_workflow_run_started_at(
+        "ZMB-UZH/omero-docker-extended",
+        "example-token",
+        "1234",
+    )
+
+    assert result == datetime(2026, 4, 2, 12, 34, 56, tzinfo=UTC)
+
+
+def test_evaluate_direct_event_pull_request_uses_payload_pr_number() -> None:
+    result = security_delta_guard.evaluate_direct_event(
+        "pull_request",
+        {"pull_request": {"number": 17}},
+        repository="ZMB-UZH/omero-docker-extended",
+        ref="refs/pull/17/merge",
+        run_id="123",
+        fetch_alerts=lambda **kwargs: [_alert(91, created_at="2026-04-02T12:30:00Z")],
+        settle_timeout_seconds=0,
+        poll_interval_seconds=0,
+        monotonic=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result.status == "fail"
+    assert "Pull request #17 introduced code scanning alerts" in result.message
+
+
+def test_evaluate_direct_event_push_uses_run_start_resolver() -> None:
+    calls = {"alerts": None, "run_started_at": None}
+
+    def fetch_alerts(**kwargs):
+        calls["alerts"] = kwargs
+        return [_alert(44, created_at="2026-04-01T09:00:00Z")]
+
+    def resolve_run_started_at(repository: str, run_id: str) -> datetime:
+        calls["run_started_at"] = (repository, run_id)
+        return datetime(2026, 4, 2, 12, 0, tzinfo=UTC)
+
+    result = security_delta_guard.evaluate_direct_event(
+        "push",
+        {"repository": {"default_branch": "main"}, "ref": "refs/heads/main"},
+        repository="ZMB-UZH/omero-docker-extended",
+        ref="refs/heads/main",
+        run_id="456",
+        fetch_alerts=fetch_alerts,
+        settle_timeout_seconds=0,
+        poll_interval_seconds=0,
+        resolve_run_started_at=resolve_run_started_at,
+        monotonic=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result.status == "pass"
+    assert "Push scan created no new default-branch alerts" in result.message
+    assert calls["alerts"] == {"ref": "refs/heads/main"}
+    assert calls["run_started_at"] == ("ZMB-UZH/omero-docker-extended", "456")
+
+
+def test_evaluate_direct_event_skips_non_default_branch_schedule() -> None:
+    called = {"value": False}
+
+    def fetch_alerts(**kwargs):
+        called["value"] = True
+        return []
+
+    result = security_delta_guard.evaluate_direct_event(
+        "schedule",
+        {"repository": {"default_branch": "main"}},
+        repository="ZMB-UZH/omero-docker-extended",
+        ref="refs/heads/release-candidate",
+        run_id="789",
+        fetch_alerts=fetch_alerts,
+        settle_timeout_seconds=0,
+        poll_interval_seconds=0,
+        monotonic=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result.status == "skip"
+    assert called["value"] is False
+
+
+def test_evaluate_direct_event_fails_without_pull_request_number() -> None:
+    result = security_delta_guard.evaluate_direct_event(
+        "pull_request",
+        {"pull_request": {}},
+        repository="ZMB-UZH/omero-docker-extended",
+        ref="refs/pull/17/merge",
+        run_id="123",
+        fetch_alerts=lambda **kwargs: [],
+        settle_timeout_seconds=0,
+        poll_interval_seconds=0,
+        monotonic=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result.status == "fail"
+    assert "did not include a pull request number" in result.message
 
 
 def test_evaluate_workflow_run_skips_non_default_branch_push() -> None:
