@@ -121,6 +121,73 @@ def test_evaluate_workflow_run_skips_non_default_branch_push() -> None:
     assert called["value"] is False
 
 
+def test_evaluate_workflow_run_uses_head_repository_default_branch_when_present() -> (
+    None
+):
+    calls = {"count": 0, "kwargs": None}
+
+    def fetch_alerts(**kwargs):
+        calls["count"] += 1
+        calls["kwargs"] = kwargs
+        return []
+
+    result = security_delta_guard.evaluate_workflow_run(
+        {
+            "workflow_run": {
+                "conclusion": "success",
+                "event": "push",
+                "head_branch": "main",
+                "head_repository": {"default_branch": "main"},
+                "created_at": "2026-04-02T12:00:00Z",
+            }
+        },
+        fetch_alerts,
+        settle_timeout_seconds=0,
+        poll_interval_seconds=0,
+        monotonic=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result.status == "pass"
+    assert calls == {"count": 1, "kwargs": {"ref": "refs/heads/main"}}
+
+
+def test_evaluate_workflow_run_resolves_default_branch_when_payload_omits_it() -> None:
+    calls = {"count": 0, "kwargs": None}
+    resolved = {"repository": None}
+
+    def fetch_alerts(**kwargs):
+        calls["count"] += 1
+        calls["kwargs"] = kwargs
+        return []
+
+    def resolve_default_branch(repository: str) -> str:
+        resolved["repository"] = repository
+        return "main"
+
+    result = security_delta_guard.evaluate_workflow_run(
+        {
+            "workflow_run": {
+                "conclusion": "success",
+                "event": "push",
+                "head_branch": "main",
+                "repository": {"full_name": "ZMB-UZH/omero-docker-extended"},
+                "created_at": "2026-04-02T12:00:00Z",
+            }
+        },
+        fetch_alerts,
+        settle_timeout_seconds=0,
+        poll_interval_seconds=0,
+        resolve_default_branch=resolve_default_branch,
+        monotonic=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result.status == "pass"
+    assert resolved == {"repository": "ZMB-UZH/omero-docker-extended"}
+    assert calls == {"count": 1, "kwargs": {"ref": "refs/heads/main"}}
+
+
 def test_evaluate_workflow_run_fails_when_upstream_security_scan_failed() -> None:
     result = security_delta_guard.evaluate_workflow_run(
         {
