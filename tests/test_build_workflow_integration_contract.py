@@ -639,7 +639,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
         security_delta_job = workflow["jobs"]["security-delta"]
 
-        self.assertEqual("security-code-scanning", workflow["name"])
+        self.assertEqual("Security", workflow["name"])
         self.assertEqual("always()", security_delta_job["if"])
         self.assertEqual("read", security_delta_job["permissions"]["actions"])
         self.assertEqual("read", security_delta_job["permissions"]["contents"])

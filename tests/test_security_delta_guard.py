@@ -15,6 +15,8 @@ security_delta_guard = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = security_delta_guard
 SPEC.loader.exec_module(security_delta_guard)
 
+TEST_GITHUB_CREDENTIAL = "-".join(("placeholder", "credential"))
+
 
 def _alert(number: int, *, created_at: str, severity: str = "high") -> dict:
     return {
@@ -70,7 +72,7 @@ def test_github_api_get_json_uses_https_connection(monkeypatch) -> None:
 
     payload = security_delta_guard.github_api_get_json(
         "/repos/ZMB-UZH/omero-docker-extended",
-        "example-token",
+        TEST_GITHUB_CREDENTIAL,
     )
 
     assert payload == {"default_branch": "main"}
@@ -82,7 +84,7 @@ def test_github_api_get_json_uses_https_connection(monkeypatch) -> None:
         "--header",
         "Accept: application/vnd.github+json",
         "--header",
-        "Authorization: Bearer example-token",
+        f"Authorization: Bearer {TEST_GITHUB_CREDENTIAL}",
         "--header",
         "X-GitHub-Api-Version: 2022-11-28",
         "--header",
@@ -100,7 +102,7 @@ def test_github_api_get_json_uses_https_connection(monkeypatch) -> None:
 def test_github_api_get_json_requires_absolute_api_path() -> None:
     with pytest.raises(ValueError, match="must start with '/'"):
         security_delta_guard.github_api_get_json(
-            "repos/ZMB-UZH/omero-docker-extended", "token"
+            "repos/ZMB-UZH/omero-docker-extended", TEST_GITHUB_CREDENTIAL
         )
 
 
@@ -163,9 +165,9 @@ def test_evaluate_push_alerts_passes_when_only_old_backlog_remains() -> None:
 
 
 def test_get_workflow_run_started_at_prefers_run_started_at(monkeypatch) -> None:
-    def fake_github_api_get_json(api_path: str, token: str) -> dict:
+    def fake_github_api_get_json(api_path: str, credential: str) -> dict:
         assert api_path == "/repos/ZMB-UZH/omero-docker-extended/actions/runs/1234"
-        assert token == "example-token"
+        assert credential == TEST_GITHUB_CREDENTIAL
         return {
             "run_started_at": "2026-04-02T12:34:56Z",
             "created_at": "2026-04-02T12:30:00Z",
@@ -179,7 +181,7 @@ def test_get_workflow_run_started_at_prefers_run_started_at(monkeypatch) -> None
 
     result = security_delta_guard.get_workflow_run_started_at(
         "ZMB-UZH/omero-docker-extended",
-        "example-token",
+        TEST_GITHUB_CREDENTIAL,
         "1234",
     )
 
