@@ -22,7 +22,12 @@ RUN set -eu; \
         apk upgrade --no-cache; \
     fi
 
+RUN addgroup -S omero-path-exporter && \
+    adduser -S -D -H -G omero-path-exporter omero-path-exporter
+
 COPY monitoring/path-usage-exporter/path_usage_exporter.py /opt/path_usage_exporter.py
+
+USER omero-path-exporter
 
 HEALTHCHECK --interval=10s --timeout=10s --start-period=20s --retries=30 \
     CMD test -f /textfile/omero_paths.prom || exit 1
