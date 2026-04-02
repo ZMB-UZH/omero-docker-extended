@@ -8,7 +8,8 @@ RUN set -eu; \
     apk update; \
     require_apk_version() { \
         package_name="$1"; \
-        package_version="$(apk policy "${package_name}" | awk '/^[[:space:]]*[0-9][^:]*:$/ { gsub(":", "", $1); print $1; exit }')"; \
+        apk policy "${package_name}" >/tmp/apk-policy.txt; \
+        package_version="$(awk '/^[[:space:]]*[0-9][^:]*:$/ { gsub(":", "", $1); print $1; exit }' /tmp/apk-policy.txt)"; \
         if [ -z "${package_version}" ]; then \
             echo "ERROR: Failed to resolve apk version for ${package_name}" >&2; \
             exit 1; \
