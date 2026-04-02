@@ -1,0 +1,7 @@
+# Direct Bandit dependency for reproducible SARIF generation in GitHub code
+# scanning. Compile with:
+#   pip-compile --allow-unsafe --generate-hashes \
+#     --no-emit-index-url --strip-extras \
+#     --output-file .github/requirements/security-code-scanning.txt \
+#     .github/requirements/security-code-scanning.in
+bandit[sarif]==1.9.4

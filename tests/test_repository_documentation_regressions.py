@@ -22,11 +22,21 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
 
     def test_root_security_policy_exists_and_points_to_canonical_docs(self) -> None:
         root_security = self.repo_root / "SECURITY.md"
+        github_security = self.repo_root / ".github" / "SECURITY.md"
         self.assertTrue(
             root_security.exists(), "Repository root SECURITY.md is missing"
         )
+        self.assertTrue(github_security.exists(), ".github/SECURITY.md is missing")
         root_text = root_security.read_text(encoding="utf-8")
         self.assertIn("docs/SECURITY.md", root_text)
+        self.assertIn(
+            "https://github.com/ZMB-UZH/omero-docker-extended/security/advisories/new",
+            root_text,
+        )
+        self.assertIn(
+            "https://github.com/ZMB-UZH/omero-docker-extended/blob/main/docs/SECURITY.md",
+            github_security.read_text(encoding="utf-8"),
+        )
         self.assertTrue((self.repo_root / "docs" / "SECURITY.md").exists())
 
     def test_code_scanning_runbook_records_root_security_fix_as_pending_refresh(

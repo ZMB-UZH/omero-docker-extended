@@ -1,8 +1,9 @@
-"""Generate the README badge row from repository Git metadata."""
+"""Generate the README badge row from canonical repository metadata."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from urllib.parse import quote, urlparse
 BADGE_BLOCK_BEGIN = "<!-- BEGIN GENERATED BADGES -->"
 BADGE_BLOCK_END = "<!-- END GENERATED BADGES -->"
 README_PATH = Path("README.md")
+CANONICAL_METADATA_PATH = Path(".github/readme_badges.json")
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,32 @@ class RepoMetadata:
     @property
     def branch_query_value(self) -> str:
         return quote(self.branch_name, safe="")
+
+
+def _load_canonical_repo_metadata(repo_root: Path) -> RepoMetadata | None:
+    metadata_path = repo_root / CANONICAL_METADATA_PATH
+    if not metadata_path.exists():
+        return None
+
+    payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    required_fields = ("host", "owner", "repo", "branch_name")
+    missing_fields = [
+        field for field in required_fields if not str(payload.get(field, "")).strip()
+    ]
+    if missing_fields:
+        missing = ", ".join(sorted(missing_fields))
+        raise RuntimeError(
+            f"{CANONICAL_METADATA_PATH} is missing required field(s): {missing}"
+        )
+
+    remote_name = str(payload.get("remote_name", "canonical")).strip() or "canonical"
+    return RepoMetadata(
+        host=str(payload["host"]).strip(),
+        owner=str(payload["owner"]).strip(),
+        repo=str(payload["repo"]).strip(),
+        remote_name=remote_name,
+        branch_name=str(payload["branch_name"]).strip(),
+    )
 
 
 def _run_git(repo_root: Path, *args: str) -> str:
@@ -128,6 +156,10 @@ def _parse_remote_url(remote_url: str) -> tuple[str, str, str]:
 
 
 def resolve_repo_metadata(repo_root: Path) -> RepoMetadata:
+    canonical_metadata = _load_canonical_repo_metadata(repo_root)
+    if canonical_metadata is not None:
+        return canonical_metadata
+
     remote_name = _resolve_remote_name(repo_root)
     remote_url = _run_git(repo_root, "remote", "get-url", remote_name)
     host, owner, repo = _parse_remote_url(remote_url)
@@ -198,7 +230,7 @@ def update_readme(repo_root: Path, write: bool) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Render the README badge row from Git metadata."
+        description="Render the README badge row from canonical repository metadata."
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
