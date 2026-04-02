@@ -147,9 +147,9 @@ def render_badge_block(metadata: RepoMetadata) -> str:
     lines = [
         BADGE_BLOCK_BEGIN,
         f"[![License](https://img.shields.io/github/license/{github_path})](LICENSE)",
-        f"[![Tests](https://img.shields.io/github/actions/workflow/status/{github_path}/tests.yml?branch={branch}&label=Tests)](https://github.com/{github_path}/actions/workflows/tests.yml)",
-        f"[![security](https://img.shields.io/github/actions/workflow/status/{github_path}/security-code-scanning.yml?branch={branch}&label=security)](https://github.com/{github_path}/actions/workflows/security-code-scanning.yml)",
-        f"[![Code coverage](https://codecov.io/gh/{github_path}/graph/badge.svg)](https://codecov.io/gh/{github_path})",
+        f"[![tests](https://img.shields.io/github/actions/workflow/status/{github_path}/tests.yml?branch={branch}&label=tests)](https://github.com/{github_path}/actions/workflows/tests.yml)",
+        f"[![Security](https://img.shields.io/github/actions/workflow/status/{github_path}/security-code-scanning.yml?branch={branch}&label=security)](https://github.com/{github_path}/actions/workflows/security-code-scanning.yml)",
+        f"[![Codecov](https://img.shields.io/codecov/c/github/{github_path}?label=Codecov&logo=codecov)](https://codecov.io/gh/{github_path})",
         f"[![Ruff](https://img.shields.io/github/actions/workflow/status/{github_path}/ruff.yml?branch={branch}&logo=ruff&label=Ruff)](https://github.com/{github_path}/actions/workflows/ruff.yml)",
         f"[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/{github_path})](https://github.com/{github_path}/commits/{branch})",
         BADGE_BLOCK_END,
