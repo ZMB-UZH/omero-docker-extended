@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest import TestCase, main, mock
 from pathlib import Path
 
@@ -12,6 +13,7 @@ class ReadmeBadgeGenerationTests(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.repo_root = Path(__file__).resolve().parents[1]
+        cls.metadata_path = cls.repo_root / ".github" / "readme_badges.json"
 
     def test_readme_badges_match_generated_block(self) -> None:
         readme_text = (self.repo_root / "README.md").read_text(encoding="utf-8")
@@ -89,6 +91,37 @@ class ReadmeBadgeGenerationTests(TestCase):
             "https://github.com/example-owner/example-repo/actions/workflows/security-code-scanning.yml/badge.svg",
             badge_block,
         )
+
+    def test_canonical_badge_metadata_file_exists_and_is_complete(self) -> None:
+        payload = json.loads(self.metadata_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            {
+                "host",
+                "owner",
+                "repo",
+                "branch_name",
+                "remote_name",
+            },
+            set(payload),
+        )
+        for key in ("host", "owner", "repo", "branch_name"):
+            self.assertTrue(str(payload[key]).strip(), f"{key} must not be empty")
+
+    def test_resolve_repo_metadata_prefers_canonical_metadata_file(self) -> None:
+        with mock.patch("tools.update_readme_badges._run_git") as mocked_run_git:
+            metadata = update_readme_badges.resolve_repo_metadata(self.repo_root)
+
+        self.assertEqual(
+            update_readme_badges.RepoMetadata(
+                host="github.com",
+                owner="ZMB-UZH",
+                repo="omero-docker-extended",
+                remote_name="canonical",
+                branch_name="main",
+            ),
+            metadata,
+        )
+        mocked_run_git.assert_not_called()
 
     def test_remote_url_parsing_supports_public_and_private_clone_styles(self) -> None:
         cases = {

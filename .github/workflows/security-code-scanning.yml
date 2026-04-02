@@ -149,7 +149,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install Bandit
-        run: python3 -m pip install --requirement .github/requirements/security-code-scanning.txt
+        run: python3 -m pip install --require-hashes --requirement .github/requirements/security-code-scanning.txt
 
       - name: Discover scan targets and test directories
         id: discover

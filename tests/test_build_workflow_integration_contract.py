@@ -718,13 +718,12 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.repo_root / ".github" / "workflows" / "security-code-scanning.yml"
         ).read_text(encoding="utf-8")
 
-        self.assertIn('python3 -m pip install --upgrade "pip==26.0.1"', tests_workflow)
         self.assertIn(
-            "python3 -m pip install --requirement .github/requirements/tests-ci.txt",
+            "python3 -m pip install --require-hashes --requirement .github/requirements/tests-ci.txt",
             tests_workflow,
         )
         self.assertIn(
-            "python3 -m pip install --requirement .github/requirements/security-code-scanning.txt",
+            "python3 -m pip install --require-hashes --requirement .github/requirements/security-code-scanning.txt",
             security_workflow,
         )
 
@@ -733,21 +732,64 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.repo_root / ".github" / "requirements" / "tests-ci.txt",
             self.repo_root / ".github" / "requirements" / "security-code-scanning.txt",
         ]
-        pinned_requirement = re.compile(
-            r"^[A-Za-z0-9_.-]+(?:\[[A-Za-z0-9_,.-]+\])?==[^=].+$"
-        )
+        pinned_requirement = re.compile(r"^[A-Za-z0-9_.-]+==[^=].*(?:\s+\\)?$")
+        hash_line = re.compile(r"^--hash=sha256:[0-9a-f]{64}(?:\s+\\)?$")
 
         for requirement_path in requirement_paths:
             requirement_text = requirement_path.read_text(encoding="utf-8")
+            current_block: list[str] = []
             for line in requirement_text.splitlines():
                 stripped = line.strip()
                 if not stripped or stripped.startswith("#"):
                     continue
+                if stripped.startswith("--hash="):
+                    current_block.append(stripped)
+                    continue
+
+                if current_block:
+                    self.assertRegex(
+                        current_block[0],
+                        pinned_requirement,
+                        f"{requirement_path.name} contains an unpinned dependency: {current_block[0]!r}",
+                    )
+                    self.assertGreaterEqual(
+                        len(current_block),
+                        2,
+                        f"{requirement_path.name} is missing hashes for {current_block[0]!r}",
+                    )
+                    for hash_entry in current_block[1:]:
+                        self.assertRegex(
+                            hash_entry,
+                            hash_line,
+                            f"{requirement_path.name} contains an invalid hash line: {hash_entry!r}",
+                        )
+                current_block = [stripped]
+
+            if current_block:
                 self.assertRegex(
-                    stripped,
+                    current_block[0],
                     pinned_requirement,
-                    f"{requirement_path.name} contains an unpinned dependency: {stripped!r}",
+                    f"{requirement_path.name} contains an unpinned dependency: {current_block[0]!r}",
                 )
+                self.assertGreaterEqual(
+                    len(current_block),
+                    2,
+                    f"{requirement_path.name} is missing hashes for {current_block[0]!r}",
+                )
+                for hash_entry in current_block[1:]:
+                    self.assertRegex(
+                        hash_entry,
+                        hash_line,
+                        f"{requirement_path.name} contains an invalid hash line: {hash_entry!r}",
+                    )
+
+    def test_ci_requirement_source_manifests_exist(self) -> None:
+        source_paths = [
+            self.repo_root / ".github" / "requirements" / "tests-ci.in",
+            self.repo_root / ".github" / "requirements" / "security-code-scanning.in",
+        ]
+        for source_path in source_paths:
+            self.assertTrue(source_path.exists(), f"{source_path.name} is missing")
 
     def test_shell_helpers_avoid_global_ifs_mutation(self) -> None:
         extra_packages_script = (

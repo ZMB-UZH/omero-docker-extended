@@ -31,6 +31,8 @@ DATABASE_UID="${DATABASE_UID:-}"
 DATABASE_GID="${DATABASE_GID:-}"
 DATABASE_PLUGIN_UID="${DATABASE_PLUGIN_UID:-}"
 DATABASE_PLUGIN_GID="${DATABASE_PLUGIN_GID:-}"
+PATH_USAGE_EXPORTER_UID="${PATH_USAGE_EXPORTER_UID:-}"
+PATH_USAGE_EXPORTER_GID="${PATH_USAGE_EXPORTER_GID:-}"
 CROWDSEC_UID="${CROWDSEC_UID:-}"
 CROWDSEC_GID="${CROWDSEC_GID:-}"
 OMERO_SERVER_ENV_FILE="${REPO_ROOT_DIR}/env/omeroserver.env"
@@ -43,6 +45,7 @@ GRAFANA_IMAGE="${GRAFANA_IMAGE:-}"
 LOKI_IMAGE="${LOKI_IMAGE:-}"
 DATABASE_IMAGE="${DATABASE_IMAGE:-}"
 DATABASE_PLUGIN_IMAGE="${DATABASE_PLUGIN_IMAGE:-}"
+PATH_USAGE_EXPORTER_IMAGE="${PATH_USAGE_EXPORTER_IMAGE:-path-usage-exporter:custom}"
 CROWDSEC_IMAGE="${CROWDSEC_IMAGE:-crowdsec:custom}"
 CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS="${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS:-600}"
 CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS="${CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS:-900}"
@@ -3468,6 +3471,8 @@ if [ -z "${DATABASE_UID}" ]; then DATABASE_UID="$(discover_container_default_id_
 if [ -z "${DATABASE_GID}" ]; then DATABASE_GID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-g")"; fi
 if [ -z "${DATABASE_PLUGIN_UID}" ]; then DATABASE_PLUGIN_UID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-u")"; fi
 if [ -z "${DATABASE_PLUGIN_GID}" ]; then DATABASE_PLUGIN_GID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-g")"; fi
+if [ -z "${PATH_USAGE_EXPORTER_UID}" ]; then PATH_USAGE_EXPORTER_UID="$(discover_container_default_id_or_die "${PATH_USAGE_EXPORTER_IMAGE}" "-u")"; fi
+if [ -z "${PATH_USAGE_EXPORTER_GID}" ]; then PATH_USAGE_EXPORTER_GID="$(discover_container_default_id_or_die "${PATH_USAGE_EXPORTER_IMAGE}" "-g")"; fi
 if is_crowdsec_enabled; then
     if [ -z "${CROWDSEC_UID}" ]; then CROWDSEC_UID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-u")"; fi
     if [ -z "${CROWDSEC_GID}" ]; then CROWDSEC_GID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-g")"; fi
@@ -3484,6 +3489,7 @@ echo "Grafana      UID:GID = ${GRAFANA_UID}:${GRAFANA_GID} (image=${GRAFANA_IMAG
 echo "Loki         UID:GID = ${LOKI_UID}:${LOKI_GID} (image=${LOKI_IMAGE})"
 echo "Database     UID:GID = ${DATABASE_UID}:${DATABASE_GID} (image=${DATABASE_IMAGE})"
 echo "DB Plugin    UID:GID = ${DATABASE_PLUGIN_UID}:${DATABASE_PLUGIN_GID} (image=${DATABASE_PLUGIN_IMAGE})"
+echo "Path export  UID:GID = ${PATH_USAGE_EXPORTER_UID}:${PATH_USAGE_EXPORTER_GID} (image=${PATH_USAGE_EXPORTER_IMAGE})"
 if is_crowdsec_enabled; then
     echo "CrowdSec     UID:GID = ${CROWDSEC_UID}:${CROWDSEC_GID} (image=${CROWDSEC_IMAGE})"
 else
@@ -3591,6 +3597,7 @@ if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database di
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${LOKI_DATA_PATH}" "Loki data directory" "${LOKI_UID}" "${LOKI_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${NODE_EXPORTER_TEXTFILE_PATH}" "Node exporter textfile directory" "${PATH_USAGE_EXPORTER_UID}" "${PATH_USAGE_EXPORTER_GID}"; then exit 1; fi
 if is_crowdsec_enabled; then
     if ! chown_tree_or_die "${CROWDSEC_DB_PATH}" "CrowdSec data directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
     if ! chown_tree_or_die "${CROWDSEC_CONFIG_PATH}" "CrowdSec config directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
