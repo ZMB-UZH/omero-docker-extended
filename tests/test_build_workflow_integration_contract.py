@@ -628,6 +628,36 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 f"{workflow_path.name} has an unexpected checkout pin",
             )
 
+    def test_security_delta_workflow_guards_against_new_code_scanning_alerts(
+        self,
+    ) -> None:
+        import yaml  # noqa: F811  — available in CI
+
+        workflow = yaml.safe_load(
+            (self.repo_root / ".github" / "workflows" / "security-delta.yml").read_text(
+                encoding="utf-8"
+            )
+        )
+        triggers = workflow[True]
+
+        self.assertEqual("security-delta", workflow["name"])
+        self.assertEqual(
+            ["security-code-scanning"],
+            triggers["workflow_run"]["workflows"],
+        )
+        self.assertEqual(["completed"], triggers["workflow_run"]["types"])
+        self.assertEqual("read", workflow["permissions"]["actions"])
+        self.assertEqual("read", workflow["permissions"]["security-events"])
+        self.assertEqual("read", workflow["permissions"]["pull-requests"])
+        self.assertEqual("ubuntu-24.04", workflow["jobs"]["security-delta"]["runs-on"])
+
+        workflow_text = (
+            self.repo_root / ".github" / "workflows" / "security-delta.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("python3 tools/security_delta_guard.py", workflow_text)
+        self.assertIn("GITHUB_TOKEN: ${{ github.token }}", workflow_text)
+        self.assertIn("cancel-in-progress: true", workflow_text)
+
     def test_codecov_yml_has_component_for_each_source_directory(self) -> None:
         """Each plugin/library tracked in .coveragerc must have a matching
         Codecov project component so per-module coverage is reported."""

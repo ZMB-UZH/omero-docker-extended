@@ -462,7 +462,9 @@ def test_normalization_and_pyramid_helpers_cover_additional_runtime_failures(
         "normalized copy is unsupported"
     )
 
-    inspection = support.OMEZarrImageInspection(recognized=True, image_relative_paths=())
+    inspection = support.OMEZarrImageInspection(
+        recognized=True, image_relative_paths=()
+    )
     monkeypatch.setattr(
         support,
         "_rewrite_problematic_native_image_arrays",
@@ -579,6 +581,7 @@ def test_pyramid_and_runtime_helpers_cover_more_regeneration_error_paths(
     _write_json(
         pyramid_store / "s0" / ".zarray",
         {
+            "shape": [1, 1, 1],
             "chunks": [1, 2, 2],
             "dtype": "|u1",
             "compressor": None,
@@ -587,7 +590,10 @@ def test_pyramid_and_runtime_helpers_cover_more_regeneration_error_paths(
     )
     detection = {
         "metadata_payload": {"multiscales": [{"coordinateTransformations": []}]},
-        "multiscale": {"datasets": [{"path": "s0"}, {"path": "s1"}], "coordinateTransformations": []},
+        "multiscale": {
+            "datasets": [{"path": "s0"}, {"path": "s1"}],
+            "coordinateTransformations": [],
+        },
         "axes": [{"name": "z"}, {"name": "y"}, {"name": "x"}],
         "datasets": [
             {
@@ -627,6 +633,7 @@ def test_pyramid_and_runtime_helpers_cover_more_regeneration_error_paths(
     _write_json(
         codec_store / "s0" / ".zarray",
         {
+            "shape": [1, 4, 4],
             "chunks": [1, 2, 2],
             "dtype": "|u1",
             "compressor": {"id": "blosc"},
@@ -647,7 +654,7 @@ def test_pyramid_and_runtime_helpers_cover_more_regeneration_error_paths(
         "get_codec",
         lambda spec: (_ for _ in ()).throw(RuntimeError("codec exploded")),
     )
-    assert "Failed to load compressor for pyramid regeneration" in (
+    assert "failed to load source compressor for pyramid regeneration" in (
         support._regenerate_xy_only_pyramid(codec_store) or ""
     )
 
@@ -686,9 +693,9 @@ def test_write_level_and_runtime_helpers_cover_additional_error_paths(
             compressor_spec=None,
             filters_spec=None,
             codec=None,
-            )
-            or ""
         )
+        or ""
+    )
 
     monkeypatch.setattr(Path, "write_text", original_write_text)
 

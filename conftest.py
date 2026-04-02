@@ -5,6 +5,8 @@ import sys
 from types import ModuleType
 from unittest.mock import MagicMock
 
+import pytest
+
 os.environ.setdefault("OMERO_WEB_ROOT", "/tmp")
 os.environ.setdefault("OMERO_WEB_VENV", "venv")
 os.environ.setdefault("OMERO_TMP_PATH", "/tmp")
@@ -138,6 +140,7 @@ for _mod in [
     "omero.model",
     "omero.model.enums",
     "omero.api",
+    "omero.scripts",
     "omero_figure",
     "omero_figure.views",
     "omero_iviewer",
@@ -153,6 +156,37 @@ sys.modules.setdefault("celery.states", _celery_states)
 # Inject ColorHolder into the omero.gateway mock so integration tests that
 # use omero.gateway.ColorHolder.fromRGBA() get real string output.
 sys.modules["omero.gateway"].ColorHolder = _ColorHolder
+sys.modules["omero.rtypes"].rstring = lambda value: value
+sys.modules["omero.rtypes"].rint = lambda value: value
+_webgateway_views = sys.modules["omeroweb.webgateway.views"]
+_webgateway_views._get_prepared_image = getattr(
+    _webgateway_views, "_get_prepared_image", lambda *args, **kwargs: None
+)
+_webgateway_views._render_thumbnail = getattr(
+    _webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None
+)
+_webgateway_views.get_thumbnails_json = getattr(
+    _webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {}
+)
+_webgateway_views.render_image = getattr(
+    _webgateway_views, "render_image", lambda *args, **kwargs: None
+)
+_webgateway_views.render_image_region = getattr(
+    _webgateway_views, "render_image_region", lambda *args, **kwargs: None
+)
+_webgateway_views.imageData_json = getattr(
+    _webgateway_views, "imageData_json", lambda *args, **kwargs: {}
+)
+_webgateway_views.imageMarshal = getattr(
+    _webgateway_views, "imageMarshal", lambda *args, **kwargs: {}
+)
+_webgateway_views.jsonp = getattr(_webgateway_views, "jsonp", lambda func: func)
+_webgateway_views.get_longs = getattr(
+    _webgateway_views, "get_longs", lambda *args, **kwargs: []
+)
+_webgateway_views.getIntOrDefault = getattr(
+    _webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None
+)
 
 # Wire parent-mock attributes to their explicit sys.modules child mocks so
 # ``from parent import child`` resolves the same object as
@@ -163,7 +197,7 @@ _submodule_wiring = {
     "omeroweb": ["connector", "http", "httprsp"],
     "omeroweb.webgateway": ["marshal", "urls", "views"],
     "omeroweb.webclient": ["urls", "views", "webclient_gateway"],
-    "omero": ["gateway", "rtypes", "sys", "clients", "model", "api"],
+    "omero": ["gateway", "rtypes", "sys", "clients", "model", "api", "scripts"],
     "omero.model": ["enums"],
     "omero_figure": ["views"],
     "omero_iviewer": ["views"],
@@ -190,6 +224,70 @@ if not settings.configured:
         ALLOWED_HOSTS=["*"],
         DEFAULT_CHARSET="utf-8",
         SECRET_KEY="test",
+        USE_I18N=False,
         USE_TZ=True,
     )
     django.setup()
+
+
+_ISOLATED_MODULE_PREFIXES = (
+    "celery",
+    "django",
+    "omero",
+    "omero_plugin_common",
+    "omeroweb",
+    "omeroweb_imaris_connector",
+    "omeroweb_import",
+    "omeroweb_omp_plugin",
+    "portalocker",
+)
+
+_MODULE_STATE_BASELINE: dict[str, tuple[object, dict[str, object]]] = {}
+
+
+def _matches_isolated_prefix(module_name: str) -> bool:
+    return any(
+        module_name == prefix or module_name.startswith(f"{prefix}.")
+        for prefix in _ISOLATED_MODULE_PREFIXES
+    )
+
+
+def _snapshot_module_state() -> dict[str, tuple[object, dict[str, object]]]:
+    snapshot = {}
+    for module_name, module in list(sys.modules.items()):
+        if _matches_isolated_prefix(module_name):
+            snapshot[module_name] = (module, dict(getattr(module, "__dict__", {})))
+    return snapshot
+
+
+def _restore_module_state(
+    snapshot: dict[str, tuple[object, dict[str, object]]],
+) -> None:
+    if not snapshot:
+        return
+
+    for module_name in list(sys.modules):
+        if _matches_isolated_prefix(module_name) and module_name not in snapshot:
+            sys.modules.pop(module_name, None)
+
+    for module_name, (module, saved_dict) in snapshot.items():
+        sys.modules[module_name] = module
+        current_dict = getattr(module, "__dict__", None)
+        if current_dict is None:
+            continue
+        for key in list(current_dict):
+            if key not in saved_dict:
+                current_dict.pop(key, None)
+        current_dict.update(saved_dict)
+
+
+def pytest_collection_finish(session) -> None:
+    global _MODULE_STATE_BASELINE
+    _MODULE_STATE_BASELINE = _snapshot_module_state()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_module_state():
+    _restore_module_state(_MODULE_STATE_BASELINE)
+    yield
+    _restore_module_state(_MODULE_STATE_BASELINE)

@@ -347,7 +347,9 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
     unnamed_group = SimpleNamespace(
         getId=lambda: _Value(22),
         getName=lambda: _Value(""),
-        getDetails=lambda: SimpleNamespace(getPermissions=lambda: _Permissions("rw----")),
+        getDetails=lambda: SimpleNamespace(
+            getPermissions=lambda: _Permissions("rw----")
+        ),
     )
     valid_group = _Group(23, "team", _Permissions("private", group_read=False))
     username_less_user = SimpleNamespace(

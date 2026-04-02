@@ -52,7 +52,11 @@ from ..utils.file_helpers import resolve_upload_root, resolve_jobs_root
 from omero_plugin_common import process_utils
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 from omero_plugin_common.env_utils import get_bool_env, ENV_FILE_OMEROWEB
-from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
+from omero_plugin_common.logging_utils import (
+    sanitize_log_value,
+    sanitized_exc_info,
+    summarize_process_output,
+)
 from omero_plugin_common.tmp_cleanup import (
     safe_mark_path_for_deferred_cleanup,
     safe_remove_job_data,
@@ -2992,9 +2996,9 @@ def _import_file(
         )
         if not success:
             logger.warning(
-                "Import CLI stderr for %s: %s",
+                "Import CLI failed for %s: %s",
                 path.name,
-                _sanitize_cli_output_for_logging((result.stderr or "").strip()[:500]),
+                summarize_process_output(result.stdout, result.stderr),
             )
         return success, result.stdout, result.stderr
 
@@ -3069,9 +3073,9 @@ def _import_file(
     )
     if not success:
         logger.warning(
-            "Import CLI stderr for %s: %s",
+            "Import CLI failed for %s: %s",
             path.name,
-            _sanitize_cli_output_for_logging(stderr.strip()[:500]),
+            summarize_process_output(stdout, stderr),
         )
     return success, stdout, stderr
 
@@ -6059,11 +6063,10 @@ def _import_zarr_via_cli(
         success = result.returncode == 0
 
         logger.info(
-            "omero zarr import for %s: returncode=%d stdout=%r stderr=%r",
+            "omero zarr import for %s: returncode=%d %s",
             sanitize_log_value(rel_path),
             result.returncode,
-            _sanitize_cli_output_for_logging(stdout.strip()[:500]),
-            _sanitize_cli_output_for_logging(stderr.strip()[:500]),
+            summarize_process_output(stdout, stderr),
         )
     except process_utils.TimeoutExpired:
         logger.error("omero zarr import timed out for %s", sanitize_log_value(rel_path))
@@ -6898,17 +6901,16 @@ def _import_job_entry(
             if imported_objects:
                 logger.warning(
                     "Import CLI returned non-zero for %s but %d objects "
-                    "confirmed; treating as success.  stderr=%r",
+                    "confirmed; treating as success. %s",
                     sanitize_log_value(rel_path),
                     len(imported_objects),
-                    _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
+                    summarize_process_output(stdout, stderr),
                 )
             else:
                 logger.warning(
-                    "Import failed for %s (stdout=%r, stderr=%r).",
+                    "Import failed for %s: %s",
                     sanitize_log_value(rel_path),
-                    _sanitize_cli_output_for_logging(str(stdout).strip()[:500]),
-                    _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
+                    summarize_process_output(stdout, stderr),
                 )
                 error_msg = _classify_import_failure(
                     str(stdout).strip(), str(stderr).strip()
@@ -6928,10 +6930,9 @@ def _import_job_entry(
         if not imported_objects:
             logger.error(
                 "Import CLI returned success for %s but no objects found in "
-                "output or via API.  stdout=%r stderr=%r",
+                "output or via API. %s",
                 sanitize_log_value(rel_path),
-                _sanitize_cli_output_for_logging(str(stdout).strip()[:500]),
-                _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
+                summarize_process_output(stdout, stderr),
             )
             error_msg = errors.import_no_objects_created()
             job_error = messages.job_error_with_path(rel_path, error_msg)

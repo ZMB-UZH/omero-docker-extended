@@ -105,10 +105,14 @@ def test_run_rejects_invalid_command_arguments() -> None:
 
 
 def test_run_rejects_invalid_environment_and_workdir_inputs() -> None:
-    with pytest.raises(ValueError, match="Environment variables must not contain NUL bytes"):
+    with pytest.raises(
+        ValueError, match="Environment variables must not contain NUL bytes"
+    ):
         process_utils.run([sys.executable, "-c", "pass"], env={"BAD\0KEY": "value"})
 
-    with pytest.raises(ValueError, match="Working directory must not contain NUL bytes"):
+    with pytest.raises(
+        ValueError, match="Working directory must not contain NUL bytes"
+    ):
         process_utils.run([sys.executable, "-c", "pass"], cwd="bad\0cwd")
 
 

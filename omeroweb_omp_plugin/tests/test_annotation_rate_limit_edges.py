@@ -69,10 +69,13 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
         getId=lambda: (_ for _ in ()).throw(RuntimeError("missing id wrapper")),
         id=5,
     )
-    assert annotation_service.is_plugin_annotation(
-        qs_backed_ann,
-        qs=_LookupFailureQS(),
-    ) is False
+    assert (
+        annotation_service.is_plugin_annotation(
+            qs_backed_ann,
+            qs=_LookupFailureQS(),
+        )
+        is False
+    )
 
     class _UnreadableMapValue:
         def getValue(self):
@@ -100,7 +103,9 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
                 raise RuntimeError("verification failed")
             raise AssertionError(f"Unexpected HQL: {hql}")
 
-    conn = SimpleNamespace(SERVICE_OPTS=object(), getQueryService=lambda: _QueryService())
+    conn = SimpleNamespace(
+        SERVICE_OPTS=object(), getQueryService=lambda: _QueryService()
+    )
     assert annotation_service.find_plugin_annotation_ids(
         conn,
         7,
@@ -187,7 +192,9 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     monkeypatch.setattr(
         annotation_service,
         "find_map_annotation_ids",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("map lookup failed")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("map lookup failed")
+        ),
     )
 
     class _LinkStub:
@@ -221,7 +228,9 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     update = SimpleNamespace(deleteObject=lambda obj: deleted_objects.append(obj))
 
     annotations = {
-        11: SimpleNamespace(id=11, _obj=("annotation", 11), getMapValue=lambda: _BrokenLenMapValue()),
+        11: SimpleNamespace(
+            id=11, _obj=("annotation", 11), getMapValue=lambda: _BrokenLenMapValue()
+        ),
         13: SimpleNamespace(id=13, _obj=("annotation", 13), getMapValue=lambda: [1]),
         14: SimpleNamespace(id=14, _obj=("annotation", 14), getMapValue=lambda: []),
     }
@@ -249,12 +258,14 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
         ],
     )
 
-    deleted_sets, deleted_pairs, attempted = annotation_service.delete_existing_annotations(
-        _Conn(),
-        update,
-        image,
-        var_names=[],
-        mode="all",
+    deleted_sets, deleted_pairs, attempted = (
+        annotation_service.delete_existing_annotations(
+            _Conn(),
+            update,
+            image,
+            var_names=[],
+            mode="all",
+        )
     )
 
     assert (deleted_sets, deleted_pairs, attempted) == (2, 0, 4)
@@ -281,7 +292,9 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
             return {"actions": "bad", "blocked_until": "bad"}
 
         def set(self, key, value, timeout=None):
-            raise AssertionError("django dummy cache backend should not be used directly")
+            raise AssertionError(
+                "django dummy cache backend should not be used directly"
+            )
 
         def delete(self, key):
             self.deleted.append(key)
@@ -294,7 +307,9 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
     monkeypatch.setattr(
         rate_limit._memory_cache,
         "set",
-        lambda key, value, timeout=None: memory_calls.append((key, value, timeout)) or True,
+        lambda key, value, timeout=None: (
+            memory_calls.append((key, value, timeout)) or True
+        ),
     )
     monkeypatch.setattr(
         rate_limit._memory_cache,

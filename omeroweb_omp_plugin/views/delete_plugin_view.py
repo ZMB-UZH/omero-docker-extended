@@ -1,7 +1,11 @@
 from django.http import JsonResponse
 from omeroweb.decorators import login_required
 from omero_plugin_common import process_utils
-from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
+from omero_plugin_common.logging_utils import (
+    sanitize_log_value,
+    sanitized_exc_info,
+    summarize_process_output,
+)
 import logging
 from ..services.core import (
     collect_images_in_project,
@@ -150,13 +154,14 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                         )
                         if link_result.returncode != 0:
                             logger.warning(
-                                "Failed to delete annotation link %s for image %s annotation %s: rc=%s stdout=%r stderr=%r",
+                                "Failed to delete annotation link %s for image %s annotation %s: rc=%s %s",
                                 lid,
                                 iid,
                                 aid,
                                 link_result.returncode,
-                                link_result.stdout,
-                                link_result.stderr,
+                                summarize_process_output(
+                                    link_result.stdout, link_result.stderr
+                                ),
                             )
                             deletion_errors.append(
                                 {
@@ -183,12 +188,11 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
                     if result.returncode != 0:
                         logger.warning(
-                            "Failed to delete plugin annotation %s for image %s: rc=%s stdout=%r stderr=%r",
+                            "Failed to delete plugin annotation %s for image %s: rc=%s %s",
                             aid,
                             iid,
                             result.returncode,
-                            result.stdout,
-                            result.stderr,
+                            summarize_process_output(result.stdout, result.stderr),
                         )
                         deletion_errors.append(
                             {

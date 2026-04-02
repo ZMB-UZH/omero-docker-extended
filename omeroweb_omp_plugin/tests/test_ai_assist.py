@@ -282,13 +282,16 @@ def test_ai_assist_helper_edges_cover_empty_inputs_and_provider_shape_failures(
     monkeypatch.setattr(
         ai_assist,
         "extract_base_name",
-        lambda name: (_ for _ in ()).throw(RuntimeError("bad name"))
-        if name == "sample_A-01.tif"
-        else "sample_B-02",
+        lambda name: (
+            (_ for _ in ()).throw(RuntimeError("bad name"))
+            if name == "sample_A-01.tif"
+            else "sample_B-02"
+        ),
     )
-    assert ai_assist._parse_ai_value_rows(
-        "alpha\nbeta", 2, filenames=filenames
-    ) == [["alpha"], ["beta"]]
+    assert ai_assist._parse_ai_value_rows("alpha\nbeta", 2, filenames=filenames) == [
+        ["alpha"],
+        ["beta"],
+    ]
     monkeypatch.setattr(ai_assist, "extract_base_name", original_extract_base_name)
     with pytest.raises(ai_assist.AiAssistError):
         ai_assist._parse_ai_value_rows(",\nvalue", 2)
@@ -314,6 +317,8 @@ def test_ai_assist_helper_edges_cover_empty_inputs_and_provider_shape_failures(
     with pytest.raises(ai_assist.AiAssistError):
         ai_assist.generate_ai_regex("", "token", filenames)
 
-    monkeypatch.setattr(ai_assist, "_call_ai_provider_raw", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(
+        ai_assist, "_call_ai_provider_raw", lambda *_args, **_kwargs: ""
+    )
     with pytest.raises(ai_assist.AiAssistError):
         ai_assist.generate_ai_regex("groq", "token", filenames)
