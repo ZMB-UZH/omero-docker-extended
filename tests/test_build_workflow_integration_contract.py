@@ -628,35 +628,53 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 f"{workflow_path.name} has an unexpected checkout pin",
             )
 
-    def test_security_delta_workflow_guards_against_new_code_scanning_alerts(
+    def test_security_code_scanning_workflow_includes_zero_delta_alert_gate(
         self,
     ) -> None:
         import yaml  # noqa: F811  — available in CI
 
-        workflow = yaml.safe_load(
-            (self.repo_root / ".github" / "workflows" / "security-delta.yml").read_text(
-                encoding="utf-8"
-            )
+        workflow_path = (
+            self.repo_root / ".github" / "workflows" / "security-code-scanning.yml"
         )
-        triggers = workflow[True]
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        security_delta_job = workflow["jobs"]["security-delta"]
 
-        self.assertEqual("security-delta", workflow["name"])
+        self.assertEqual("security-code-scanning", workflow["name"])
+        self.assertEqual("always()", security_delta_job["if"])
+        self.assertEqual("read", security_delta_job["permissions"]["actions"])
+        self.assertEqual("read", security_delta_job["permissions"]["contents"])
+        self.assertEqual("read", security_delta_job["permissions"]["security-events"])
+        self.assertEqual("read", security_delta_job["permissions"]["pull-requests"])
+        self.assertEqual("ubuntu-24.04", security_delta_job["runs-on"])
         self.assertEqual(
-            ["security-code-scanning"],
-            triggers["workflow_run"]["workflows"],
+            [
+                "codeql",
+                "trivy-filesystem",
+                "semgrep",
+                "bandit",
+                "hadolint-discover",
+                "hadolint",
+                "devskim",
+                "osv-scanner-audit",
+                "osv-scanner",
+                "scorecard",
+            ],
+            security_delta_job["needs"],
         )
-        self.assertEqual(["completed"], triggers["workflow_run"]["types"])
-        self.assertEqual("read", workflow["permissions"]["actions"])
-        self.assertEqual("read", workflow["permissions"]["security-events"])
-        self.assertEqual("read", workflow["permissions"]["pull-requests"])
-        self.assertEqual("ubuntu-24.04", workflow["jobs"]["security-delta"]["runs-on"])
 
-        workflow_text = (
-            self.repo_root / ".github" / "workflows" / "security-delta.yml"
-        ).read_text(encoding="utf-8")
+        workflow_text = workflow_path.read_text(encoding="utf-8")
         self.assertIn("python3 tools/security_delta_guard.py", workflow_text)
+        self.assertIn('--event-name "$GITHUB_EVENT_NAME"', workflow_text)
+        self.assertIn('--event-path "$GITHUB_EVENT_PATH"', workflow_text)
+        self.assertIn('--ref "$GITHUB_REF"', workflow_text)
+        self.assertIn('--repository "$GITHUB_REPOSITORY"', workflow_text)
+        self.assertIn('--run-id "$GITHUB_RUN_ID"', workflow_text)
         self.assertIn("GITHUB_TOKEN: ${{ github.token }}", workflow_text)
-        self.assertIn("cancel-in-progress: true", workflow_text)
+
+    def test_standalone_security_delta_workflow_is_not_present(self) -> None:
+        self.assertFalse(
+            (self.repo_root / ".github" / "workflows" / "security-delta.yml").exists()
+        )
 
     def test_codecov_yml_has_component_for_each_source_directory(self) -> None:
         """Each plugin/library tracked in .coveragerc must have a matching
