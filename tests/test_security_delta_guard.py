@@ -56,31 +56,17 @@ def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
 def test_github_api_get_json_uses_https_connection(monkeypatch) -> None:
     calls = {}
 
-    class FakeResponse:
-        status = 200
-        reason = "OK"
-        headers = {"content-type": "application/json"}
+    def fake_run(command: list[str], **kwargs):
+        calls["command"] = command
+        calls["kwargs"] = kwargs
+        return security_delta_guard.subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout='{"default_branch": "main"}',
+            stderr="",
+        )
 
-        def read(self) -> bytes:
-            return b'{"default_branch": "main"}'
-
-    class FakeConnection:
-        def __init__(self, host: str, *, timeout: int) -> None:
-            calls["host"] = host
-            calls["timeout"] = timeout
-
-        def request(self, method: str, path: str, *, headers: dict[str, str]) -> None:
-            calls["method"] = method
-            calls["path"] = path
-            calls["headers"] = headers
-
-        def getresponse(self) -> FakeResponse:
-            return FakeResponse()
-
-        def close(self) -> None:
-            calls["closed"] = True
-
-    monkeypatch.setattr(security_delta_guard, "HTTPSConnection", FakeConnection)
+    monkeypatch.setattr(security_delta_guard.subprocess, "run", fake_run)
 
     payload = security_delta_guard.github_api_get_json(
         "/repos/ZMB-UZH/omero-docker-extended",
@@ -88,12 +74,27 @@ def test_github_api_get_json_uses_https_connection(monkeypatch) -> None:
     )
 
     assert payload == {"default_branch": "main"}
-    assert calls["host"] == "api.github.com"
-    assert calls["timeout"] == 30
-    assert calls["method"] == "GET"
-    assert calls["path"] == "/repos/ZMB-UZH/omero-docker-extended"
-    assert calls["headers"]["Authorization"] == "Bearer example-token"
-    assert calls["closed"] is True
+    assert calls["command"] == [
+        "curl",
+        "--silent",
+        "--show-error",
+        "--location",
+        "--header",
+        "Accept: application/vnd.github+json",
+        "--header",
+        "Authorization: Bearer example-token",
+        "--header",
+        "X-GitHub-Api-Version: 2022-11-28",
+        "--header",
+        "User-Agent: security-delta-guard",
+        "https://api.github.com/repos/ZMB-UZH/omero-docker-extended",
+    ]
+    assert calls["kwargs"] == {
+        "check": False,
+        "capture_output": True,
+        "text": True,
+        "timeout": 30,
+    }
 
 
 def test_github_api_get_json_requires_absolute_api_path() -> None:
