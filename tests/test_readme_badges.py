@@ -27,14 +27,14 @@ class ReadmeBadgeGenerationTests(TestCase):
         badge_block = update_readme_badges.render_badge_block(metadata)
         self.assertLess(
             badge_block.index("[![License]("),
-            badge_block.index("[![Tests]("),
+            badge_block.index("[![tests]("),
         )
         self.assertLess(
-            badge_block.index("[![Tests]("),
+            badge_block.index("[![tests]("),
             badge_block.index("[![security]("),
         )
         self.assertLess(
-            badge_block.index("[![Code coverage]("),
+            badge_block.index("[![Codecov]("),
             badge_block.index("[![Ruff]("),
         )
         self.assertLess(
@@ -66,15 +66,23 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block,
         )
         self.assertIn(
-            "https://img.shields.io/github/actions/workflow/status/example-owner/example-repo/tests.yml?branch=main&label=Tests",
+            "https://img.shields.io/github/actions/workflow/status/example-owner/example-repo/tests.yml?branch=main&label=tests",
             badge_block,
         )
         self.assertIn(
             "https://img.shields.io/github/actions/workflow/status/example-owner/example-repo/security-code-scanning.yml?branch=main&label=security",
             badge_block,
         )
+        self.assertIn(
+            "https://img.shields.io/codecov/c/github/example-owner/example-repo?label=Codecov&logo=codecov",
+            badge_block,
+        )
         self.assertNotIn(
             "https://github.com/example-owner/example-repo/actions/workflows/tests.yml/badge.svg",
+            badge_block,
+        )
+        self.assertNotIn(
+            "https://codecov.io/gh/example-owner/example-repo/graph/badge.svg",
             badge_block,
         )
         self.assertNotIn(

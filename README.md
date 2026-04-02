@@ -2,9 +2,9 @@
 
 <!-- BEGIN GENERATED BADGES -->
 [![License](https://img.shields.io/github/license/ZMB-UZH/omero-docker-extended)](LICENSE)
-[![Tests](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/tests.yml?branch=main&label=Tests)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/tests.yml)
+[![tests](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/tests.yml?branch=main&label=tests)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/tests.yml)
 [![security](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/security-code-scanning.yml?branch=main&label=security)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/security-code-scanning.yml)
-[![Code coverage](https://codecov.io/gh/ZMB-UZH/omero-docker-extended/graph/badge.svg)](https://codecov.io/gh/ZMB-UZH/omero-docker-extended)
+[![Codecov](https://img.shields.io/codecov/c/github/ZMB-UZH/omero-docker-extended?label=Codecov&logo=codecov)](https://codecov.io/gh/ZMB-UZH/omero-docker-extended)
 [![Ruff](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/ruff.yml?branch=main&logo=ruff&label=Ruff)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/ruff.yml)
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ZMB-UZH/omero-docker-extended)](https://github.com/ZMB-UZH/omero-docker-extended/commits/main)
 <!-- END GENERATED BADGES -->
