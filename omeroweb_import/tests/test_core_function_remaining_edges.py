@@ -394,7 +394,9 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
     )
 
 
-def test_import_candidate_and_probe_helpers_cover_remaining_path_edges(monkeypatch):
+def test_import_candidate_and_probe_helpers_cover_remaining_path_edges(
+    monkeypatch, tmp_path
+):
     expected_path = SimpleNamespace(
         resolve=lambda: (_ for _ in ()).throw(OSError("resolve failed")),
         is_dir=lambda: False,
@@ -459,9 +461,11 @@ def test_import_candidate_and_probe_helpers_cover_remaining_path_edges(monkeypat
         "_run_local_import_scan",
         lambda path: SimpleNamespace(returncode=0, stderr="", stdout=""),
     )
+    import_root = tmp_path / "demo"
+    staged_root = tmp_path / "staged"
     assert core_functions._probe_import_path(
-        Path("/tmp/demo"),
-        Path("/tmp/staged"),
+        import_root,
+        staged_root,
         [],
         {},
     ) == {

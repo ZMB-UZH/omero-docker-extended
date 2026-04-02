@@ -4,6 +4,7 @@ import inspect
 import json
 from http.client import HTTPMessage
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
@@ -266,14 +267,14 @@ def test_validation_and_identity_helpers_cover_remaining_guard_paths(monkeypatch
     )
 
     monkeypatch.setenv("ADMIN_TOOLS_INTERNAL_SERVICE_SCHEME", "ftp")
-    assert (
-        index_view._internal_service_base_url(
-            "ADMIN_TOOLS_FAKE_URL",
-            default_host="grafana",
-            default_port=3000,
-        )
-        == "http://grafana:3000"
+    internal_service_base_url = index_view._internal_service_base_url(
+        "ADMIN_TOOLS_FAKE_URL",
+        default_host="grafana",
+        default_port=3000,
     )
+    parsed_internal_service = urlsplit(internal_service_base_url)
+    assert parsed_internal_service.scheme == "http"
+    assert parsed_internal_service.netloc == "grafana:3000"
 
     assert index_view._safe_redirect_segment("", "fallback") == "fallback"
     assert (

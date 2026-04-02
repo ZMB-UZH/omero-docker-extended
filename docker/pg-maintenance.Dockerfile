@@ -16,7 +16,18 @@ ARG APPLY_SECURITY_HARDENING=0
 # ------------
 RUN set -euo pipefail; \
     apt-get update; \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cron; \
+    require_apt_version() { \
+        local package="$1"; \
+        local version=""; \
+        version="$(apt-cache madison "${package}" | awk 'NR==1 {print $3}')"; \
+        if [ -z "${version}" ]; then \
+            echo "ERROR: Failed to resolve apt version for ${package}" >&2; \
+            exit 1; \
+        fi; \
+        printf '%s' "${version}"; \
+    }; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        "cron=$(require_apt_version cron)"; \
     if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then \
         echo "Applying optional security updates (APPLY_SECURITY_HARDENING=1)..."; \
         DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends; \

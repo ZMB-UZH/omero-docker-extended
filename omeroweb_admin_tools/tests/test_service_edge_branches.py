@@ -49,7 +49,9 @@ def _log_config(url: str = "https://loki:3100") -> LogConfig:
     )
 
 
-def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(monkeypatch):
+def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
+    monkeypatch, tmp_path
+):
     monkeypatch.setenv("FLOAT_ENV", "not-a-number")
     assert system_diagnostics._to_float_env("FLOAT_ENV", 2.5) == 2.5
 
@@ -116,13 +118,14 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(monkey
         "socket",
         lambda *args, **kwargs: fake_socket,
     )
+    docker_socket_path = tmp_path / "docker.sock"
     connection = system_diagnostics._UnixSocketHTTPConnection(
-        "/tmp/docker.sock",
+        str(docker_socket_path),
         timeout=2.0,
     )
     connection.connect()
     assert fake_socket.timeout == 2.0
-    assert fake_socket.connected_path == "/tmp/docker.sock"
+    assert fake_socket.connected_path == str(docker_socket_path)
 
     monkeypatch.setattr(system_diagnostics.os.path, "exists", lambda path: True)
     monkeypatch.setattr(

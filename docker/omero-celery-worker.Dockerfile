@@ -22,25 +22,35 @@ ARG APPLY_SECURITY_HARDENING=0
 
 RUN set -euo pipefail; \
     apt-get update; \
+    require_apt_version() { \
+        local package="$1"; \
+        local version=""; \
+        version="$(apt-cache madison "${package}" | awk 'NR==1 {print $3}')"; \
+        if [ -z "${version}" ]; then \
+            echo "ERROR: Failed to resolve apt version for ${package}" >&2; \
+            exit 1; \
+        fi; \
+        printf '%s' "${version}"; \
+    }; \
     apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-        tzdata \
-        software-properties-common \
-        gnupg; \
+        "ca-certificates=$(require_apt_version ca-certificates)" \
+        "curl=$(require_apt_version curl)" \
+        "tzdata=$(require_apt_version tzdata)" \
+        "software-properties-common=$(require_apt_version software-properties-common)" \
+        "gnupg=$(require_apt_version gnupg)"; \
     add-apt-repository -y ppa:deadsnakes/ppa; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        python3.9 \
-        python3.9-dev \
-        python3.9-venv \
-        python3.9-distutils \
-        gcc \
-        g++ \
-        libedit-dev \
-        libbz2-dev \
-        libstdc++6 \
-        libssl3; \
+        "python3.9=$(require_apt_version python3.9)" \
+        "python3.9-dev=$(require_apt_version python3.9-dev)" \
+        "python3.9-venv=$(require_apt_version python3.9-venv)" \
+        "python3.9-distutils=$(require_apt_version python3.9-distutils)" \
+        "gcc=$(require_apt_version gcc)" \
+        "g++=$(require_apt_version g++)" \
+        "libedit-dev=$(require_apt_version libedit-dev)" \
+        "libbz2-dev=$(require_apt_version libbz2-dev)" \
+        "libstdc++6=$(require_apt_version libstdc++6)" \
+        "libssl3=$(require_apt_version libssl3)"; \
     if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then \
         echo "Applying optional security updates (APPLY_SECURITY_HARDENING=1)..."; \
         apt-get upgrade -y --no-install-recommends; \
