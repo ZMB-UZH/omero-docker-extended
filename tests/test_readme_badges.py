@@ -31,7 +31,7 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![Tests]("),
-            badge_block.index("[![Security]("),
+            badge_block.index("[![security]("),
         )
         self.assertLess(
             badge_block.index("[![Code coverage]("),
@@ -63,6 +63,22 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertIn(
             "https://github.com/example-owner/example-repo/actions/workflows/security-code-scanning.yml",
+            badge_block,
+        )
+        self.assertIn(
+            "https://img.shields.io/github/actions/workflow/status/example-owner/example-repo/tests.yml?branch=main&label=Tests",
+            badge_block,
+        )
+        self.assertIn(
+            "https://img.shields.io/github/actions/workflow/status/example-owner/example-repo/security-code-scanning.yml?branch=main&label=security",
+            badge_block,
+        )
+        self.assertNotIn(
+            "https://github.com/example-owner/example-repo/actions/workflows/tests.yml/badge.svg",
+            badge_block,
+        )
+        self.assertNotIn(
+            "https://github.com/example-owner/example-repo/actions/workflows/security-code-scanning.yml/badge.svg",
             badge_block,
         )
 
