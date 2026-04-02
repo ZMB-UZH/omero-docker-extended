@@ -23,7 +23,8 @@ def _install_import_stubs() -> None:
         sys.modules["django"].__path__ = []
 
     django_conf = sys.modules.setdefault("django.conf", types.ModuleType("django.conf"))
-    django_conf.settings = types.SimpleNamespace()
+    if not hasattr(django_conf, "settings"):
+        django_conf.settings = types.SimpleNamespace(USE_I18N=False)
 
     django_http = sys.modules.setdefault("django.http", types.ModuleType("django.http"))
 
@@ -167,6 +168,10 @@ def _install_import_stubs() -> None:
     )
     logging_utils.sanitize_log_value = lambda value: value
     logging_utils.sanitized_exc_info = lambda exc: None
+    logging_utils.summarize_process_output = lambda stdout, stderr: (
+        f"stdout_lines={len(str(stdout or '').splitlines())} "
+        f"stderr_lines={len(str(stderr or '').splitlines())}"
+    )
     common_module.process_utils = importlib.import_module(
         "omero_plugin_common.process_utils"
     )
@@ -289,6 +294,49 @@ def _clear_omp_modules() -> None:
             sys.modules.pop(module_name, None)
 
 
+_STUBBED_MODULE_PREFIXES = (
+    "django",
+    "omero",
+    "omeroweb",
+    "omero_plugin_common",
+    "portalocker",
+    "omeroweb_omp_plugin",
+)
+
+
+def _matches_stubbed_prefix(module_name: str) -> bool:
+    return any(
+        module_name == prefix or module_name.startswith(f"{prefix}.")
+        for prefix in _STUBBED_MODULE_PREFIXES
+    )
+
+
+def _snapshot_module_state() -> dict[str, tuple[object, dict[str, object]]]:
+    snapshot = {}
+    for module_name, module in list(sys.modules.items()):
+        if _matches_stubbed_prefix(module_name):
+            snapshot[module_name] = (module, dict(getattr(module, "__dict__", {})))
+    return snapshot
+
+
+def _restore_module_state(
+    snapshot: dict[str, tuple[object, dict[str, object]]],
+) -> None:
+    for module_name in list(sys.modules):
+        if _matches_stubbed_prefix(module_name) and module_name not in snapshot:
+            sys.modules.pop(module_name, None)
+
+    for module_name, (module, saved_dict) in snapshot.items():
+        sys.modules[module_name] = module
+        current_dict = getattr(module, "__dict__", None)
+        if current_dict is None:
+            continue
+        for key in list(current_dict):
+            if key not in saved_dict:
+                current_dict.pop(key, None)
+        current_dict.update(saved_dict)
+
+
 TEST_AUTH_FIXTURE = "test-fixture-auth"
 TEST_AUTH_HMAC_FIXTURE = "test-fixture-hmac"
 
@@ -296,11 +344,16 @@ TEST_AUTH_HMAC_FIXTURE = "test-fixture-hmac"
 class OmpPluginViewRegressionTests(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        _install_import_stubs()
+        cls._module_snapshot = _snapshot_module_state()
 
     def setUp(self) -> None:
+        _restore_module_state(self._module_snapshot)
+        _install_import_stubs()
         _clear_omp_modules()
         _install_omp_dependency_stubs()
+
+    def tearDown(self) -> None:
+        _restore_module_state(self._module_snapshot)
 
     def _make_request(self, method: str = "POST", payload: dict | None = None):
         body = json.dumps(payload or {}).encode("utf-8")
@@ -540,6 +593,52 @@ class OmpPluginViewRegressionTests(TestCase):
             recorded_commands[0],
         )
         self.assertNotIn(TEST_AUTH_HMAC_FIXTURE, recorded_commands[0])
+
+    def test_delete_all_view_logs_only_output_summary_on_cli_failure(self) -> None:
+        view_module = importlib.import_module(
+            "omeroweb_omp_plugin.views.delete_all_view"
+        )
+        conn = mock.Mock()
+        conn.getUser.return_value.getName.return_value = "alice"
+
+        with (
+            mock.patch.object(
+                view_module, "validate_user_password", return_value=(True, None)
+            ),
+            mock.patch.object(
+                view_module,
+                "build_omero_cli_base_command",
+                return_value=[TEST_OMERO_CLI, "-k", "session-123"],
+            ),
+            mock.patch.object(
+                view_module,
+                "collect_images_in_project",
+                return_value=[types.SimpleNamespace(id=12)],
+            ),
+            mock.patch.object(
+                view_module.subprocess,
+                "run",
+                return_value=types.SimpleNamespace(
+                    returncode=1,
+                    stdout="secret-session\nline-two",
+                    stderr="secret-token\nline-four",
+                ),
+            ),
+            mock.patch.object(view_module.logger, "warning") as warning_mock,
+        ):
+            response = view_module.delete_all_keyvaluepairs(
+                self._make_request(
+                    payload={"project_id": 1, "password": TEST_AUTH_HMAC_FIXTURE}
+                ),
+                conn=conn,
+            )
+
+        self.assertEqual(200, response["status"])
+        logged = repr(warning_mock.call_args_list)
+        self.assertIn("stdout_lines=2", logged)
+        self.assertIn("stderr_lines=2", logged)
+        self.assertNotIn("secret-session", logged)
+        self.assertNotIn("secret-token", logged)
 
     def test_job_view_invalid_regex_message_is_sanitized(self) -> None:
         job_view = importlib.import_module("omeroweb_omp_plugin.views.job_view")

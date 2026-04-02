@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sys
 import types
 from pathlib import Path
@@ -145,7 +146,7 @@ def test_cli_resolution_output_parsing_and_connection_session_key(
 
 
 def test_run_script_via_omero_cli_covers_success_and_failure_paths(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, caplog
 ):
     tasks = _import_tasks(monkeypatch)
     cli_path = tmp_path / "omero"
@@ -198,8 +199,11 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
             stderr="backend failed",
         ),
     )
-    with pytest.raises(RuntimeError, match="CLI launch failed"):
-        tasks._run_script_via_omero_cli(7, 11, "omeroserver", 4064, "session-key")
+    with caplog.at_level(logging.ERROR, logger=tasks.logger.name):
+        with pytest.raises(RuntimeError, match="CLI launch failed"):
+            tasks._run_script_via_omero_cli(7, 11, "omeroserver", 4064, "session-key")
+    assert "backend failed" not in caplog.text
+    assert "stderr_lines=1" in caplog.text
 
     monkeypatch.setattr(
         tasks.subprocess,

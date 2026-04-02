@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import subprocess
 import types
 from contextlib import nullcontext
@@ -104,7 +105,7 @@ def test_import_zarr_via_cli_handles_stage_exception_without_unbound_local(
 
 
 def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, caplog
 ):
     source_path = tmp_path / "image.zarr"
     source_path.mkdir()
@@ -237,20 +238,24 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
             ),
         )
 
-    no_objects = run_case(
-        returncode=0,
-        stdout="",
-        stderr="",
-        api_ids=[],
-        finalize_result=(True, []),
-        render_result=(True, []),
-    )
+    with caplog.at_level(logging.INFO, logger=core_functions.logger.name):
+        no_objects = run_case(
+            returncode=0,
+            stdout="secret zarr stdout",
+            stderr="secret zarr stderr",
+            api_ids=[],
+            finalize_result=(True, []),
+            render_result=(True, []),
+        )
     assert no_objects["status"] == "error"
     assert (
         no_objects["entry_error"] == core_functions.errors.import_no_objects_created()
     )
     assert cleanup_calls[-1] == ("managed", managed_zarr)
     assert imported_image_cleanup_calls == []
+    assert "stdout_lines=1 stderr_lines=1" in caplog.text
+    assert "secret zarr stdout" not in caplog.text
+    assert "secret zarr stderr" not in caplog.text
 
     metadata_failure = run_case(
         returncode=0,
@@ -278,19 +283,23 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
     assert imported_image_cleanup_calls == [["101"]]
     assert cleanup_calls[-1] == ("managed", managed_zarr)
 
-    salvaged_success = run_case(
-        returncode=1,
-        stdout="",
-        stderr="thumbnail generation failed after commit",
-        api_ids=["201"],
-        finalize_result=(True, []),
-        render_result=(True, []),
-    )
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger=core_functions.logger.name):
+        salvaged_success = run_case(
+            returncode=1,
+            stdout="",
+            stderr="secret salvage stderr",
+            api_ids=["201"],
+            finalize_result=(True, []),
+            render_result=(True, []),
+        )
     assert salvaged_success["status"] == "imported"
     assert salvaged_success["file_path"] == managed_zarr
     assert imported_image_cleanup_calls == []
     assert verify_calls[-1]["expected_lsid"] is None
     assert verify_calls[-1]["expected_lsid_prefix"] == str(managed_zarr)
+    assert "stdout_lines=0 stderr_lines=1" in caplog.text
+    assert "secret salvage stderr" not in caplog.text
 
     timeout_failure = run_case(
         returncode=0,
@@ -1203,10 +1212,14 @@ def test_session_helpers_cover_validation_open_and_detached_join_paths(monkeypat
 
     plain_session = object()
     plain_client = types.SimpleNamespace(joinSession=lambda session_key: plain_session)
-    assert core_functions._join_detached_session(plain_client, "session") is plain_session
+    assert (
+        core_functions._join_detached_session(plain_client, "session") is plain_session
+    )
 
     groups = []
-    session_client = types.SimpleNamespace(joinSession=lambda session_key: plain_session)
+    session_client = types.SimpleNamespace(
+        joinSession=lambda session_key: plain_session
+    )
     monkeypatch.setattr(
         core_functions.omero,
         "client",
