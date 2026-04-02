@@ -20,6 +20,7 @@ from urllib.request import Request, urlopen
 AlertFetcher = Callable[..., list[dict[str, Any]]]
 SleepFn = Callable[[float], None]
 ClockFn = Callable[[], float]
+DefaultBranchResolver = Callable[[str], str | None]
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,42 @@ def parse_iso8601(timestamp: str | None) -> datetime | None:
     if normalized.endswith("Z"):
         normalized = normalized[:-1] + "+00:00"
     return datetime.fromisoformat(normalized).astimezone(UTC)
+
+
+def _first_non_empty(*values: Any) -> str:
+    for value in values:
+        normalized = str(value or "").strip()
+        if normalized:
+            return normalized
+    return ""
+
+
+def payload_repository_full_name(event_payload: dict[str, Any]) -> str:
+    workflow_run = event_payload.get("workflow_run") or {}
+    for candidate in (
+        workflow_run.get("head_repository"),
+        workflow_run.get("repository"),
+        event_payload.get("repository"),
+    ):
+        if isinstance(candidate, dict):
+            full_name = _first_non_empty(candidate.get("full_name"))
+            if full_name:
+                return full_name
+    return ""
+
+
+def payload_default_branch(event_payload: dict[str, Any]) -> str:
+    workflow_run = event_payload.get("workflow_run") or {}
+    for candidate in (
+        workflow_run.get("repository"),
+        workflow_run.get("head_repository"),
+        event_payload.get("repository"),
+    ):
+        if isinstance(candidate, dict):
+            default_branch = _first_non_empty(candidate.get("default_branch"))
+            if default_branch:
+                return default_branch
+    return ""
 
 
 def normalize_severity(alert: dict[str, Any]) -> str:
@@ -244,6 +281,7 @@ def evaluate_workflow_run(
     *,
     settle_timeout_seconds: int,
     poll_interval_seconds: int,
+    resolve_default_branch: DefaultBranchResolver | None = None,
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> EvaluationResult:
@@ -280,11 +318,14 @@ def evaluate_workflow_run(
         )
 
     if trigger_event == "push":
-        repository = (
-            workflow_run.get("repository") or event_payload.get("repository") or {}
-        )
-        default_branch = str(repository.get("default_branch") or "").strip()
-        head_branch = str(workflow_run.get("head_branch") or "").strip()
+        default_branch = payload_default_branch(event_payload)
+        head_branch = _first_non_empty(workflow_run.get("head_branch"))
+        if not default_branch and resolve_default_branch is not None:
+            repository_full_name = payload_repository_full_name(event_payload)
+            if repository_full_name:
+                default_branch = _first_non_empty(
+                    resolve_default_branch(repository_full_name)
+                )
         if not default_branch or not head_branch:
             return EvaluationResult(
                 status="fail",
@@ -371,6 +412,23 @@ def list_code_scanning_alerts(
         page += 1
 
 
+def get_default_branch(repository: str, token: str) -> str | None:
+    request = Request(
+        f"https://api.github.com/repos/{repository}",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "security-delta-guard",
+        },
+    )
+    with urlopen(request, timeout=30) as response:
+        payload = json.load(response)
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Unexpected GitHub API payload type: {type(payload)!r}")
+    return _first_non_empty(payload.get("default_branch")) or None
+
+
 def load_event_payload(path: str) -> dict[str, Any]:
     with open(path, encoding="utf-8") as handle:
         payload = json.load(handle)
@@ -407,6 +465,9 @@ def main() -> int:
             ),
             settle_timeout_seconds=args.settle_timeout_seconds,
             poll_interval_seconds=args.poll_interval_seconds,
+            resolve_default_branch=lambda repository: get_default_branch(
+                repository, token
+            ),
         )
     except HTTPError as exc:
         print(
