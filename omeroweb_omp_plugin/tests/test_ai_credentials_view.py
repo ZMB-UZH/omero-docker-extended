@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import json
 from types import SimpleNamespace
+from urllib.parse import urlunsplit
 
 import pytest
 from django.test import RequestFactory
@@ -540,21 +541,19 @@ def test_ai_credentials_helper_edges_cover_parser_and_transport_failures(
     assert ai_credentials_view._parse_anthropic_models(
         {"data": [{"foo": "bar"}, {"id": "claude-3"}]}
     ) == [{"id": "claude-3"}]
-    assert ai_credentials_view._parse_gemini_models(
+    parsed_gemini_models = ai_credentials_view._parse_gemini_models(
         {
             "models": [
                 {"displayName": "skip"},
                 {"name": "models/gemini-2.0", "displayName": "Gemini 2"},
             ]
         }
-    ) == [
-        {
-            "id": "gemini-2.0",
-            "display_name": "Gemini 2",
-            "input_token_limit": None,
-            "output_token_limit": None,
-        }
-    ]
+    )
+    assert len(parsed_gemini_models) == 1
+    assert parsed_gemini_models[0]["id"] == "gemini-2.0"
+    assert parsed_gemini_models[0]["display_name"] == "Gemini 2"
+    assert parsed_gemini_models[0]["input_token_limit"] is None
+    assert parsed_gemini_models[0]["output_token_limit"] is None
     assert ai_credentials_view._parse_cohere_models(
         {
             "models": [{"context_length": 1}, {"name": "command-r-plus"}],
@@ -589,7 +588,7 @@ def test_ai_credentials_helper_edges_cover_parser_and_transport_failures(
     assert json.loads(captured["data"].decode("utf-8")) == {"hello": "world"}
 
     ai_credentials_view._PROVIDER_TESTS["fixture-invalid"] = {
-        "url": "http://api.example.test/models",
+        "url": urlunsplit(("http", "api.example.test", "/models", "", "")),
         "headers": lambda key: {},
     }
     ok, message = ai_credentials_view._perform_connection_test(

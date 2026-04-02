@@ -32,6 +32,9 @@ class DockerHealthcheckContractTests(unittest.TestCase):
             "path-usage-exporter": (
                 REPO_ROOT / "docker" / "path-usage-exporter.Dockerfile"
             ).read_text(encoding="utf-8"),
+            "redis-sysctl-init": (
+                REPO_ROOT / "docker" / "redis-sysctl-init.Dockerfile"
+            ).read_text(encoding="utf-8"),
         }
 
     def test_image_level_healthchecks_exist_for_hardened_auxiliary_images(self) -> None:
@@ -42,6 +45,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
             "crowdsec": "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1",
             "firewall-bouncer": "test -x /usr/local/bin/custom-entrypoint.sh || exit 1",
             "path-usage-exporter": "test -f /textfile/omero_paths.prom || exit 1",
+            "redis-sysctl-init": "test -x /usr/local/bin/redis-sysctl-init || exit 1",
         }
         for image_name, snippet in expected_checks.items():
             dockerfile_text = self.dockerfiles[image_name]

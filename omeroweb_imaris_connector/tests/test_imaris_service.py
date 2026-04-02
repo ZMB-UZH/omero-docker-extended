@@ -1385,7 +1385,7 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
 
     class _BrokenService:
         def __getattr__(self, name):
-            raise RuntimeError("attribute exploded")
+            raise AttributeError("attribute exploded")
 
         def __dir__(self):
             raise RuntimeError("dir exploded")

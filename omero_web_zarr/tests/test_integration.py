@@ -1658,7 +1658,7 @@ def test_install_webgateway_overrides_cover_regular_fallback_and_error_paths(
             if image_id == 3:
                 raise KeyError(image_id)
             if image_id == 4:
-                raise RuntimeError("thumbnail lookup failed")
+                raise IndexError("thumbnail lookup failed")
             return b"thumb"
 
     class _Conn:

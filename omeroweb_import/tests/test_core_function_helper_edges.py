@@ -181,7 +181,9 @@ def test_project_listing_and_payload_helpers_cover_restore_and_failure_paths(
     }
 
 
-def test_dataset_and_native_zarr_helpers_cover_unhappy_paths(monkeypatch) -> None:
+def test_dataset_and_native_zarr_helpers_cover_unhappy_paths(
+    monkeypatch, tmp_path
+) -> None:
     class _LengthWithRawFallback:
         val = "2.5"
 
@@ -213,8 +215,9 @@ def test_dataset_and_native_zarr_helpers_cover_unhappy_paths(monkeypatch) -> Non
         "inspect_ome_zarr_image",
         lambda target_path: inspection,
     )
+    zarr_store_path = tmp_path / "store"
     normalized_sizes, error = core_functions._runtime_native_zarr_physical_sizes(
-        Path("/tmp/store"),
+        zarr_store_path,
         None,
     )
     assert normalized_sizes == {}
@@ -223,7 +226,7 @@ def test_dataset_and_native_zarr_helpers_cover_unhappy_paths(monkeypatch) -> Non
     inspection.recognized = True
     inspection.support_error = "unsupported layout"
     normalized_sizes, error = core_functions._runtime_native_zarr_physical_sizes(
-        Path("/tmp/store"),
+        zarr_store_path,
         "0",
     )
     assert normalized_sizes == {}
@@ -237,7 +240,7 @@ def test_dataset_and_native_zarr_helpers_cover_unhappy_paths(monkeypatch) -> Non
         lambda raw_value: _raise(RuntimeError("normalization exploded")),
     )
     normalized_sizes, error = core_functions._runtime_native_zarr_physical_sizes(
-        Path("/tmp/store"),
+        zarr_store_path,
         "0",
     )
     assert normalized_sizes == {}
@@ -538,7 +541,7 @@ def test_script_service_helpers_cover_deduping_and_selection() -> None:
 
 
 def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_paths(
-    monkeypatch,
+    monkeypatch, tmp_path
 ) -> None:
     assert core_functions._extract_script_outputs(
         "\n".join(
@@ -598,13 +601,14 @@ def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_p
 
     monkeypatch.setattr(core_functions.subprocess, "run", _run)
 
+    source_path = tmp_path / "source.ome.zarr"
     ok, outputs, message = core_functions._run_zarr_managed_repo_script(
         "stage",
         "omeroserver",
         4064,
         username="alice",
         group_name="users_private",
-        source_path=Path("/tmp/source.ome.zarr"),
+        source_path=source_path,
         managed_path=Path("/OMERO/Managed/demo.ome.zarr"),
     )
 
@@ -614,7 +618,7 @@ def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_p
         "Managed_Path": "/managed/demo.zarr",
     }
     assert message == "staged successfully"
-    assert any(arg == "Source_Path=/tmp/source.ome.zarr" for arg in attempted_cmds[0])
+    assert any(arg == f"Source_Path={source_path}" for arg in attempted_cmds[0])
     assert any(
         arg == "Managed_Path=/OMERO/Managed/demo.ome.zarr" for arg in attempted_cmds[0]
     )

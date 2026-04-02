@@ -5,7 +5,17 @@ FROM alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f
 ARG APPLY_SECURITY_HARDENING=0
 
 RUN set -eu; \
-    apk add --no-cache python3; \
+    apk update; \
+    require_apk_version() { \
+        package_name="$1"; \
+        package_version="$(apk policy "${package_name}" | awk '/^[[:space:]]*[0-9][^:]*:$/ { gsub(":", "", $1); print $1; exit }')"; \
+        if [ -z "${package_version}" ]; then \
+            echo "ERROR: Failed to resolve apk version for ${package_name}" >&2; \
+            exit 1; \
+        fi; \
+        printf '%s' "${package_version}"; \
+    }; \
+    apk add --no-cache "python3=$(require_apk_version python3)"; \
     if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then \
         echo "Applying optional security updates (APPLY_SECURITY_HARDENING=1)..."; \
         apk upgrade --no-cache; \
