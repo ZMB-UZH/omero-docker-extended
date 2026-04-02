@@ -6,15 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from http.client import HTTPSConnection
-from io import BytesIO
 from typing import Any, Callable
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 
 
@@ -404,38 +402,35 @@ def github_api_get_json(api_path: str, token: str) -> Any:
     if not api_path.startswith("/"):
         raise ValueError(f"GitHub API path must start with '/': {api_path!r}")
 
-    payload = b""
-    response = None
-    connection = HTTPSConnection("api.github.com", timeout=30)
     try:
-        connection.request(
-            "GET",
-            api_path,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "User-Agent": "security-delta-guard",
-            },
+        result = subprocess.run(
+            [
+                "curl",
+                "--silent",
+                "--show-error",
+                "--location",
+                "--header",
+                "Accept: application/vnd.github+json",
+                "--header",
+                f"Authorization: Bearer {token}",
+                "--header",
+                "X-GitHub-Api-Version: 2022-11-28",
+                "--header",
+                "User-Agent: security-delta-guard",
+                f"https://api.github.com{api_path}",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
-        response = connection.getresponse()
-        payload = response.read()
-    except OSError as exc:
-        raise URLError(exc) from exc
-    finally:
-        connection.close()
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"GitHub API request failed: {exc}") from exc
 
-    if response is None:
-        raise RuntimeError("GitHub API request did not produce a response.")
-    if response.status >= 400:
-        raise HTTPError(
-            f"https://api.github.com{api_path}",
-            response.status,
-            response.reason,
-            response.headers,
-            BytesIO(payload),
-        )
-    return json.loads(payload.decode("utf-8"))
+    if result.returncode != 0:
+        stderr = result.stderr.strip() or "curl exited with a non-zero status."
+        raise RuntimeError(f"GitHub API request failed: {stderr}")
+    return json.loads(result.stdout)
 
 
 def get_default_branch(repository: str, token: str) -> str | None:
@@ -485,14 +480,6 @@ def main() -> int:
                 repository, token
             ),
         )
-    except HTTPError as exc:
-        print(
-            f"ERROR: GitHub API request failed with HTTP {exc.code}.", file=sys.stderr
-        )
-        return 2
-    except URLError as exc:
-        print(f"ERROR: GitHub API request failed: {exc.reason}.", file=sys.stderr)
-        return 2
     except Exception as exc:
         print(f"ERROR: security delta guard failed: {exc}", file=sys.stderr)
         return 2
