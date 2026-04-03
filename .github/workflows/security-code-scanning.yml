@@ -239,7 +239,7 @@ jobs:
           if [ -n "${EXCLUDE_CSV}" ]; then
             bandit_cmd+=(--exclude "${EXCLUDE_CSV}")
           fi
-          bandit_cmd+=(--skip B603,B404 -f sarif -o bandit-prod.sarif --exit-zero)
+          bandit_cmd+=(--skip "B603,B404" -f sarif -o bandit-prod.sarif --exit-zero)
           "${bandit_cmd[@]}"
 
       - name: Run Bandit scan (test code — skips assert and test-credential rules)
@@ -250,7 +250,7 @@ jobs:
           IFS=' ' read -r -a test_dirs <<< "${TEST_DIRS}"
           bandit -r \
             "${test_dirs[@]}" \
-            --skip B101,B106,B603,B404 \
+            --skip "B101,B106,B603,B404" \
             -f sarif \
             -o bandit-test.sarif \
             --exit-zero
