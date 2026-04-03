@@ -51,6 +51,7 @@ docker compose --env-file installation_paths.env --env-file env/omero_secrets.en
 ### 4. Verify plugin availability
 
 Open OMERO.web at `http://localhost:4090` and confirm:
+
 - Login works with valid OMERO credentials.
 - Plugin menu entries are visible in the top navigation (OMP Plugin, Upload, Admin Tools).
 - Each plugin page loads without errors.

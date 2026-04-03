@@ -1,6 +1,7 @@
 # PostgreSQL Maintenance
 
 ## Overview
+
 The repository includes a dedicated PostgreSQL maintenance workflow under `maintenance/postgres/` to run safe online maintenance for both:
 
 - OMERO primary database,

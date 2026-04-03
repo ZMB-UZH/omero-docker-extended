@@ -30,7 +30,7 @@ This plugin provides OMERO image export to Imaris-compatible (.ims) format throu
 
 ## Architecture
 
-```
+```text
 Client request
     │
     ▼
@@ -85,6 +85,7 @@ Defined in `env/omeroserver.env`:
 | `OMERO_IMS_EXPORT_DIR` | IMS export output directory | `/OMERO/ImarisExports` |
 
 Job-service account variables (in `env/omero-celery.env` or `env/omeroserver.env`):
+
 - `OMERO_WEB_JOB_SERVICE_USERNAME` / `OMERO_JOB_SERVICE_USERNAME`
 - `OMERO_WEB_JOB_SERVICE_PASS` / `OMERO_JOB_SERVICE_PASS`
 

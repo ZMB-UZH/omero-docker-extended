@@ -6,7 +6,7 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 
 ## Layer model
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │  4. Operations layer                                            │
 │     docs/operations/, maintenance/postgres/, monitoring/        │
@@ -26,7 +26,7 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 │     docker-compose.yml  docker/  env/  installation_paths.env  │
 │     Image builds, service wiring, networking, health checks    │
 └─────────────────────────────────────────────────────────────────┘
-```
+```text
 
 ### 1. Infrastructure layer
 
@@ -35,6 +35,7 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 Defines the complete topology: 20 Compose services on a single `omero` bridge network. In steady state, the stack runs 18 long-running runtime containers by default or 19 when the profile-gated `crowdsec` service is enabled. The one-shot `redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the installation script persists the required sysctl on the host. Every service has explicit health checks, pinned image versions, `no-new-privileges` security, and environment-driven configuration.
 
 Key design decisions:
+
 - Two PostgreSQL instances: `database` (OMERO core, port 5432) and `database_plugin` (OMERO plugin data, port 5433) for isolation.
 - Redis as pure cache (no persistence: `--save "" --appendonly no`, tmpfs-backed, 512MB LRU).
 - `redis-sysctl-init` one-shot sidecar sets `vm.overcommit_memory=1` (profile-gated; the installation script persists this on the host via `/etc/sysctl.d/`).
@@ -46,6 +47,7 @@ Key design decisions:
 **Files:** `startup/`, `supervisord.conf`, `omero-web.config`
 
 Bootstrap scripts run at container start to configure services that cannot be fully set up at build time:
+
 - `10-server-bootstrap.sh`: configures `omero.scripts.python`, generates TLS certificates with SANs, creates job-service user, clones OMERO.Figure scripts, registers official scripts.
 - `10-web-bootstrap.sh`: validates log directory write access, auto-discovers and configures Docker socket GID for the omeroweb container.
 - `40-start-imaris-celery-worker.sh`: dynamically discovers the venv path, tests task import, starts celery worker.
@@ -53,6 +55,7 @@ Bootstrap scripts run at container start to configure services that cannot be fu
 - `51-install-imarisconvert.sh`: compiles ImarisConvertBioformats from source with CMake, downloads Bio-Formats JAR.
 
 The `omeroweb` container runs two processes via supervisord:
+
 1. OMERO.web (Django application server)
 2. Imaris Celery worker (async export tasks)
 
@@ -62,7 +65,7 @@ The `omeroweb` container runs two processes via supervisord:
 
 Four Django app plugins register in OMERO.web via `CONFIG_omero_web_apps`:
 
-```
+```text
 omeroweb_omp_plugin ──────┐
 omeroweb_import ──────────┤
 omeroweb_admin_tools ─────┼──> omero_plugin_common
@@ -72,7 +75,7 @@ omeroweb_imaris_connector ┘         │
                                     ├── omero_helpers (object data extraction)
                                     ├── request_utils (JSON/POST parsing)
                                     └── string_utils (case conversion)
-```
+```text
 
 Each plugin follows a standard layout: `apps.py` (AppConfig), `config.py` (env-driven settings), `urls.py` (routing), `views/` (request handlers), `services/` (business logic), `strings/` (error/message functions), `templates/`, `static/`, `tests/`.
 
@@ -90,18 +93,20 @@ Each plugin follows a standard layout: `apps.py` (AppConfig), `config.py` (env-d
 **Files:** `monitoring/`, `maintenance/postgres/`, `docs/operations/`
 
 Monitoring stack:
+
 - Prometheus scrapes node-exporter, cadvisor, postgres-exporter (x2), redis-exporter, loki, alloy, grafana, plus blackbox HTTP probes for 12 endpoints and TCP probes for 4 ports.
 - Alloy collects Docker container stdout/stderr logs plus OMERO server and web internal log files (`.log`, `.out`, `.err`), pushes to Loki.
 - Grafana: 4 dashboards auto-provisioned (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
 
 Database maintenance:
+
 - `pg-maintenance` sidecar runs cron: VACUUM ANALYZE weekly (Sunday 03:00), REINDEX CONCURRENTLY monthly (first Sunday 04:00), against both databases.
 - Waits for database readiness before executing (30 retries x 5s).
 - `VACUUM FULL` intentionally excluded (requires exclusive locks).
 
 ## Dependency boundaries
 
-```
+```text
                     ┌─────────────────────┐
                     │  omero_plugin_common │
                     └──────────┬──────────┘
@@ -114,6 +119,7 @@ Database maintenance:
 ```
 
 Rules:
+
 - Plugin packages depend on `omero_plugin_common`, never the reverse.
 - Plugins do not depend on each other.
 - Startup scripts consume only environment variables; they never import Python code.

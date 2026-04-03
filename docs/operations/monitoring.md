@@ -79,6 +79,7 @@ Quick operator check after any change:
 ## Blackbox probes
 
 **HTTP probes** (verify 2xx response):
+
 - Loki, Prometheus, Grafana, cAdvisor
 - All exporters (node, postgres x2, redis, blackbox)
 - Portainer (`/api/system/status`)
@@ -96,6 +97,7 @@ The checked-in `monitoring/prometheus/prometheus.yml` does **not** include a har
 This means operators never need to manually edit `prometheus.yml` for CrowdSec — the installation script handles it automatically based on credentials.
 
 **TCP probes** (verify connectivity):
+
 - `database:5432` (OMERO PostgreSQL)
 - `database-plugin:5433` (plugin PostgreSQL)
 - `redis:6379` (Redis)
@@ -141,6 +143,7 @@ At startup the entrypoint auto-detects the host firewall backend:
 For nftables mode the entrypoint adds supplementary FORWARD-hook chains referencing the bouncer's banned-IP sets so that Docker-bridged containers are also protected — the bouncer's built-in nftables mode only creates INPUT-hook chains.
 
 Expected startup log lines:
+
 - `Detected host firewall backend: nftables` (or `iptables`)
 - `Validated: nftables kernel access OK (NET_ADMIN + host network)`
 - `Added IPv4 FORWARD chain in table 'ip crowdsec' (set=...)`

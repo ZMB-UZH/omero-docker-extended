@@ -55,6 +55,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 ## Domain map
 
 ### Infrastructure (Docker + runtime)
+
 - Service orchestration: `docker-compose.yml` (20 Compose services total: 18 long-running runtime containers by default, 19 when the profile-gated `crowdsec` service is enabled; the `redis-sysctl-init` one-shot helper is also profile-gated; single `omero` network)
 - Image builds: `docker/omero-server.Dockerfile`, `docker/omero-web.Dockerfile`, `docker/omero-celery-worker.Dockerfile`, `docker/pg-maintenance.Dockerfile`, `docker/redis-sysctl-init.Dockerfile`
 - Bootstrap scripts: `startup/10-server-bootstrap.sh`, `startup/10-web-bootstrap.sh`, `startup/40-start-imaris-celery-worker.sh`, `startup/50-install-omero-downloader.sh`, `startup/51-install-imarisconvert.sh`
@@ -63,6 +64,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Path definitions: `installation_paths.env` (15 host filesystem paths)
 
 ### Web plugins (Django apps in omeroweb container)
+
 - **`omeroweb_omp_plugin/`** -- filename parsing, metadata annotation, AI-assisted regex, variable sets, job execution
 - **`omeroweb_import/`** -- staged upload, OMERO CLI import, SEM-EDX spectrum parsing, file attachment
 - **`omeroweb_admin_tools/`** -- log query (Loki), resource monitoring, Grafana/Prometheus proxy, storage analytics
@@ -70,15 +72,18 @@ Do not start coding until you can name the helper boundary you will harden and t
 - **`omero_plugin_common/`** -- shared env_utils, logging_utils, omero_helpers, request_utils, string_utils
 
 ### Databases
+
 - `database` (port 5432): primary OMERO database (`omero` user, `omero` db)
 - `database_plugin` (port 5433): OMERO plugin storage (`omero-plugin` user, `omero-plugin` db) -- used by OMERO.web plugins (including OMP and Upload) for user settings, variable sets, AI credentials
 
 ### Monitoring and observability
+
 - Stack: Prometheus, Grafana (4 dashboards), Loki, Alloy, blackbox-exporter, node-exporter, cadvisor, postgres-exporter (x2), redis-exporter
 - Config files: `monitoring/prometheus/prometheus.yml`, `monitoring/alloy/alloy-config.alloy`, `monitoring/loki/loki-config.yml`, `monitoring/grafana/`
 - Operations docs: `docs/operations/monitoring.md`
 
 ### Maintenance
+
 - PostgreSQL: `maintenance/postgres/pg-maintenance.sh` (VACUUM ANALYZE weekly, REINDEX monthly)
 - Deployment: `installation/installation_script.sh`, `github_pull_project_bash_example`
 - Container package/version inspection: `helper_scripts_debian/docker_image_analysis.sh` (use this first when debugging stripped images or missing runtime packages)
@@ -87,7 +92,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 
 Each `omeroweb_*` plugin follows a consistent Django app layout:
 
-```
+```text
 omeroweb_<name>/
 ├── __init__.py          # default_app_config
 ├── apps.py              # AppConfig.ready() -> configure_omero_gateway_logging()
@@ -121,17 +126,20 @@ omeroweb_<name>/
 ## Operational pitfalls for AI agents
 
 ### File ownership
+
 - `/opt/omero` is typically owned by `root`. Git operations (fetch, checkout, stash, push) will fail with `Permission denied` unless the agent's user has write access. Request `sudo chown -R <user>:<user> /opt/omero/.git` for git-only access, or `sudo chown -R <user>:<user> /opt/omero` for full file operations.
 - In these root-owned deployment clones, read-only `git` commands can also fail with `fatal: detected dubious ownership in repository at '/opt/omero'`. For one-off inspection commands, use `git -c safe.directory=/opt/omero ...` instead of retrying the plain command.
 - **Do not** `chown` bind-mounted data directories (`postgresdb/`, `omero_data/`, `omero_temp/`) to a non-service user — this breaks container runtime permissions. If you must `chown` the repo root, restore data directory ownership afterward via `installation/installation_script.sh` or targeted `chown` commands matching the UIDs in `docker-compose.yml`.
 
 ### Git worktrees and finding commits
+
 - The repo uses git worktrees. Active and prunable worktrees live under `/tmp/omero-*`. Standalone clones may also exist there (e.g. `/tmp/omero-alpha-publish`).
 - If a commit hash is not found in the main repo (`git cat-file -t <hash>` fails), search worktrees and standalone clones: `find /tmp -maxdepth 2 -name ".git" 2>/dev/null` then `git -C <path> log --all --oneline | grep <hash>`.
 - To bring a commit from another local repo: `git fetch <path> <hash>` then `git cherry-pick FETCH_HEAD`.
 - Always `git fetch origin <branch>:refs/remotes/origin/<branch> --force` before rebasing to avoid stale tracking refs.
 
 ### Cross-repo sync and branch-history safety
+
 - When copying changes between related repositories, treat the task as a **tree-content sync**, not a history integration. The destination repository must keep its own branch ancestry unless a human explicitly asks for a history merge.
 - Before pushing to a remote repository, resolve that remote's default branch explicitly (for example with `git remote show <remote>`) and push to that default branch unless the human explicitly names a different target branch. Never infer the remote target branch from the current local branch name.
 - Never `merge`, `pull`, `rebase`, or `cherry-pick` directly from another repository's branch into a long-lived branch here just to copy files. Use a disposable clone/worktree of the destination branch, replace the tree contents from the source tree there, restore any explicitly excluded paths, and create a normal destination-repo commit.
@@ -140,60 +148,74 @@ omeroweb_<name>/
 - Keep backup refs under a dated `backup/<date>-<reason>/...` namespace while repairing branch-history issues. Delete those backups only after the human confirms the repaired refs look correct.
 
 ### Docker compose requires secrets
+
 - In this repo, `docker compose build`, `up`, and `config` commands should normally include both `--env-file installation_paths.env` and `--env-file env/omero_secrets.env`. Using only `installation_paths.env` can fail during variable interpolation for secrets-backed settings such as database exporter credentials.
 - `docker compose --env-file installation_paths.env ps` will fail if `env/omero_secrets.env` is missing (it is gitignored). Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as a fallback to check container health.
 
 ### Sandboxed Docker socket access
+
 - In this environment, agent-shell Docker commands may fail with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock` even when Docker itself is healthy.
 - Treat that exact error as a sandbox/privilege issue, not as evidence that the Docker daemon, container, or mounted socket is down.
 - If the Docker command is important to the task, rerun the same command immediately with escalated permissions (`sandbox_permissions=require_escalated`). Do not keep retrying the unprivileged form.
 - Apply the same rule to `docker run`, `docker logs`, `docker exec`, `docker inspect`, `docker compose ...`, and similar commands that need daemon access.
 
 ### Sandboxed localhost vs container network
+
 - Do not assume host-shell `localhost` or published ports are reachable from the coding-agent sandbox. A host-side `curl http://localhost:3100/...` failure is often a path/isolation issue, not evidence that Loki or the target service is down.
 - If a host-side probe to `localhost`, `127.0.0.1`, or a published port fails once, stop repeating it. Switch immediately to the Docker network path by running the probe inside a running container with `docker exec` and the compose service DNS name (for example `http://loki:3100`, `http://omeroserver:4064`, `database:5432`).
 - Prefer `omeroweb` for in-network HTTP/Python diagnostics because it already has `curl` and the OMERO.web virtualenv. Use the active runtime interpreter, for example `/opt/omero/web/venv-3.12/bin/python3`.
 - In agent commentary, do not keep repeating that a host endpoint "isn't reachable from the sandbox". State the procedural switch once and continue with the container-network probe.
 
 ### Dockerfile hardening vs pinned stacks
+
 - Security-hardening passes in Dockerfiles must never blanket-upgrade entire Python virtualenvs after OMERO/plugin packages are installed. Curated allowlists only.
 - Treat compatibility-pinned packages as protected runtime state. Examples in this repo include OMERO/ZeroC packages and `omero-web-zarr` with its Zarr compatibility pin.
 - If a hardening change upgrades arbitrary outdated packages in a venv, assume it can silently break the image even when the base build succeeds. Fix the Dockerfile, do not normalize the breakage as expected.
 
 ### OMERO CLI inside containers
+
 - Never run OMERO CLI as `root` inside `omeroserver` or `omeroweb`. OMERO emits `FATAL: Running ... as root can corrupt your directory permissions.` and the agent must treat that as a procedure error, not as noise to repeat.
 - If that root-warning appears once, stop repeating the same command and switch immediately to the container service account.
 - Correct wrappers:
+
   ```bash
   docker exec omero-omeroserver-1 bash -lc 'su omero-server -s /bin/bash -c "HOME=/tmp /opt/omero/server/venv-3.11/bin/omero ..."'
   docker exec omero-omeroweb-1 bash -lc 'su omero-web -s /bin/bash -c "HOME=/tmp /opt/omero/web/venv-3.12/bin/python3 -m pytest ..."'
   ```
+
 - For OMERO CLI, keep connection/auth flags before the subcommand. Example: `omero -s localhost -p 4064 -u root -w "$ROOTPASS" delete Image:123 --wait 120`. Do not place `-s/-p/-u/-w` after `delete`, `import`, or other subcommands.
 - When the exact virtualenv path is uncertain, resolve it first as the service user and then run the command as that same service user. Do not probe by executing OMERO CLI as `root`.
 - For live OMERO.web import tests, authenticate as a regular OMERO user. The Import plugin intentionally blocks `root`, so using `root` for `/omeroweb_import/` validation is an invalid test procedure.
 
 ### Nested shell / heredoc procedure
+
 - Do not nest multiline heredocs inside `docker exec ... bash -lc "..."` when the payload contains Python, regexes, JSON, or mixed quotes. That pattern is fragile and wastes time on shell-escaping failures.
 - Preferred pattern for multiline container probes:
+
   ```bash
   docker exec -i omero-omeroweb-1 python3 - <<'PY'
   ...
   PY
   ```
+
 - For multiline shell payloads, prefer:
+
   ```bash
   docker exec -i <container> bash -s <<'SH'
   ...
   SH
   ```
+
 - Use `docker exec ... bash -lc '...'` only for short single-line commands. If a command needs substantial escaping, stop and convert it to the `docker exec -i ... <interpreter> - <<'EOF'` form instead of fighting the wrapper.
 
 ### Container Python imports
+
 - Do not assume repository modules are importable from `/opt/omero` inside containers. In this deployment they are typically available from the active virtualenv site-packages, for example `/opt/omero/web/venv-*/lib/python*/site-packages`.
 - Before running container-local Python that imports `omeroweb_import`, `omeroweb_admin_tools`, or `omero_plugin_common`, first resolve the runtime interpreter/module location with `python -c 'import module; print(module.__file__)'` or inspect the active `venv*/site-packages`.
 - If a container Python command fails with `ModuleNotFoundError` for repository modules, do not retry the same command. Switch to the runtime virtualenv interpreter or fix the import path first.
 
 ### Security scanning policy
+
 - **Before writing any new code or tests in security-relevant areas**, consult `docs/reference/ai-agent-security-prevention-playbook.md`. It is the canonical source for current best practices, concrete bad/good patterns, stop-sign rules, and document ownership boundaries.
 - **Before remediating or extending scanner-touched code**, consult `docs/reference/code-scanning-resolved-findings.md` for historical rule IDs and `docs/operations/code-scanning.md` for the live inventory. Reintroducing a previously fixed pattern is a regression and must be treated as a defect.
 - When addressing code scanning findings, always fix the root cause. Do not add inline suppression comments (`# nosemgrep`, `# DevSkim: ignore`, `# nosec`, etc.) as a first resort.
@@ -207,6 +229,7 @@ omeroweb_<name>/
 - For the canonical coding patterns that prevent new findings, see `docs/reference/ai-agent-security-prevention-playbook.md`. For live counts, SLAs, and remediation workflow, see `docs/operations/code-scanning.md`.
 
 ### Testing
+
 - When tests fail, fix the actual production code using best practices. Do not weaken, loosen, or remove tests to make them pass unless the tests themselves are fundamentally incorrect (e.g. relying on mock-specific behavior that does not match real runtime semantics). If a test must be changed, the change must make the test *more* correct, not less.
 - When writing or rewriting committed tests, model runtime behavior without baking in installation-specific absolute paths. Prefer temporary directories, fixture-generated filenames, symbolic command names, and values derived from the repository tree or environment. If an absolute path appears in a committed test, it must represent a real supported runtime contract and the test should make that intent obvious.
 - Run each test directory as a separate `pytest` invocation to avoid cross-contamination from `conftest.py` mock stubs. Running all suites in a single `pytest` call causes false failures in log-sanitization and multipart-upload tests.
@@ -219,6 +242,7 @@ omeroweb_<name>/
   3. If dependency-complete execution is unavailable, use `python3 -m py_compile <changed python files>` for syntax validation and report that full `pytest` verification was blocked by missing Django in the active interpreter.
 - Agent responses must explicitly state which of the three verification levels above was used; do not imply that host-side `pytest` passed when only direct-module or syntax validation was possible.
 - Correct pattern:
+
   ```bash
   python3 -m pytest tests/ -v -p no:cacheprovider -W error
   python3 -m pytest omero_plugin_common/tests/ -v -p no:cacheprovider -W error
@@ -228,15 +252,18 @@ omeroweb_<name>/
   python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
   python3 -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
   ```
+
 - Always also run: `python3 -m ruff check .`
 - Always also run: `python3 -m ruff format --check .`
 - Always also run: `python3 tools/lint_docs_structure.py`
 
 ### Log checking
+
 - Follow AGENTS.md log triage order: Loki first, then container logs.
 - For install/update failures, check `${OMERO_DATA_PATH}/installation_logs/<script>_<UTC timestamp>.log` before container logs. These transcripts capture the full visible terminal session and often surface path, prompt, or bootstrap failures faster than service logs.
 - When the agent shell cannot reach host `localhost`, query Loki from inside `omeroweb` over the Docker network instead of retrying the host probe.
 - Preferred Loki pattern:
+
   ```bash
   docker exec -i omero-omeroweb-1 /opt/omero/web/venv-3.12/bin/python3 - <<'PY'
   import json, urllib.parse, urllib.request
@@ -251,6 +278,7 @@ omeroweb_<name>/
       print(json.loads(response.read().decode("utf-8", errors="replace")))
   PY
   ```
+
 - Replace `START_NS` and `END_NS` with UTC nanosecond timestamps for the window being investigated.
 - Container logs fallback: `docker logs <container> --since 1h --tail 30`
 
@@ -262,7 +290,9 @@ omeroweb_<name>/
 - CI enforces structure via `.github/workflows/docs-knowledge-base.yml`.
 - Capture architectural decisions under `docs/design-docs/`.
 - Track technical debt in `docs/exec-plans/tech-debt-tracker.md`.
+
 ### Joined OMERO sessions
+
 - When request-scoped helper code opens a second Blitz/ICE client against an end-user's existing OMERO session via `client.joinSession(session_key)`, call `detachOnDestroy()` on the returned session before wrapping it in `BlitzGateway` or closing that helper client.
 - Do **not** reopen the importing user's live OMERO.web session inside background threads or subprocess-driven follow-up work. Between HTTP requests OMERO.web may hold no active Blitz reference; if a background helper rejoins that session and then closes, OMERO can destroy the login session and log the user out.
 - Do not assume the `job-service` OMERO account can impersonate users. In this repository the bootstrap sync adds `job-service` to groups, but it does not grant OMERO administrator privileges, so `suConn()` can legitimately fail.

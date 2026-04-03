@@ -63,6 +63,7 @@ The OMP plugin uses HMAC-based hash tags (`omp_hash` key with `omphash_v1:` pref
 ## Rate limiting
 
 The OMP plugin enforces per-user rate limits on major actions (job starts, bulk deletes):
+
 - 6 major actions per 60-second window per user.
 - 60-second block period when exceeded.
 - Parameters configured in `omeroweb_omp_plugin/constants.py`.

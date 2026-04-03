@@ -160,7 +160,6 @@ Expected compose/runtime configuration:
 - `cadvisor` uses the standard compose `tmpfs:` section: `/dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555`.
 - Installer probe-container cleanup uses `docker rm -fv` so anonymous probe volumes are deleted together with probe containers.
 
-
 ## 10. cAdvisor exits immediately and prints command-line help
 
 Symptom:
@@ -224,7 +223,6 @@ Expected result:
 
 - `database` no longer logs repeated auth failures for user `omero`.
 
-
 ## 12. LDAP users are placed into `default` group instead of `users_ldap`
 
 Symptom:
@@ -241,10 +239,10 @@ Fix:
 
 1. Set a deterministic LDAP group mapping in `env/omeroserver.env` (runtime file, not the example), for example:
 
-```bash
-CONFIG_omero_ldap_config=true
-CONFIG_omero_ldap_new__user__group=users_ldap
-```
+   ```bash
+   CONFIG_omero_ldap_config=true
+   CONFIG_omero_ldap_new__user__group=users_ldap
+   ```
 
 2. Restart OMERO.server and OMERO.web to apply LDAP config.
 3. Confirm persisted server value is correct (command below).
@@ -262,7 +260,6 @@ Expected result:
 - Output is your configured target (for example `users_ldap`) or a deliberate dynamic expression (for example `:dn_attribute:memberOf`), not implicit `default`.
 - If output is still `default` and this is intentional, startup will continue (no failure) and explicit LDAP group bootstrap is skipped.
 - If output is still `default` but you expect another group, inspect OMERO.server bootstrap logs for LDAP config apply/validation failures.
-
 
 ## 13. OMERO.web fails with `PermissionError` under `/opt/omero/web/OMERO.web/var/omero`
 

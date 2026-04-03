@@ -18,6 +18,7 @@ Active plans live in `docs/exec-plans/active/`. Each plan includes:
 4. **Decision log**: key choices made during implementation with rationale.
 
 When a plan is complete, move it to `docs/exec-plans/completed/` with:
+
 - Final outcomes and metrics.
 - Follow-up items (captured in `docs/exec-plans/tech-debt-tracker.md` if needed).
 - Links to related pull requests.

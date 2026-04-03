@@ -82,7 +82,7 @@ Each plugin automatically receives its own subfolder (detected from the Python p
 
 Example runtime layout:
 
-```
+```text
 ${OMERO_TMP_PATH}/
 ├── omeroweb-import/
 │   ├── data/         # staged upload files

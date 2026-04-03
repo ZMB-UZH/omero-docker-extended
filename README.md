@@ -5,6 +5,7 @@
 [![tests](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/tests.yml?branch=main&label=tests)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/tests.yml)
 [![security-code-scanning](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/security-code-scanning.yml?branch=main&label=security-code-scanning)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/security-code-scanning.yml)
 [![Codecov](https://img.shields.io/codecov/c/github/ZMB-UZH/omero-docker-extended?label=Codecov&logo=codecov)](https://codecov.io/gh/ZMB-UZH/omero-docker-extended)
+[![super-linter](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/super-linter.yml?branch=main&label=super-linter)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/super-linter.yml)
 [![Ruff](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/ruff.yml?branch=main&logo=ruff&label=Ruff)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/ruff.yml)
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ZMB-UZH/omero-docker-extended)](https://github.com/ZMB-UZH/omero-docker-extended/commits/main)
 <!-- END GENERATED BADGES -->
@@ -25,21 +26,21 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <details open>
 <summary><h2>Current development state</h2></summary>
 
-### ✅ Works great
+## ✅ Works great
 
 - All official OMERO software components
 - All base installation and orchestration layers
 - Official and third-party scripts included in this repository
 - Admin tools (`omeroweb_admin_tools`)
 
-### 🛠️ Works partially / under active development
+## 🛠️ Works partially / under active development
 
 - OMP plugin (`omeroweb_omp_plugin`)
 - Import plugin (`omeroweb_import`)
 - Direct Imaris 11 integration
 - Unofficial and helper scripts specific to this repository
 
-### 🐢 Not working yet / progressing slowly / planned
+## 🐢 Not working yet / progressing slowly / planned
 
 - Acquisition metadata search
 
@@ -48,7 +49,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <details>
 <summary><h2>Repository layout</h2></summary>
 
-```
+```text
 .
 ├── AGENTS.md                          # Agent navigation map (start here for AI agents)
 ├── ARCHITECTURE.md                    # Architectural overview and dependency boundaries

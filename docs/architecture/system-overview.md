@@ -67,6 +67,7 @@ Cache backend and Celery message broker:
 ### Maintenance sidecar (`pg-maintenance`)
 
 Custom image based on postgres:16.12 with cron:
+
 - VACUUM ANALYZE: weekly (Sunday 03:00).
 - REINDEX CONCURRENTLY: monthly (first Sunday 04:00).
 - Targets both OMERO and plugin databases.
@@ -83,6 +84,7 @@ All plugin packages are standard Django app modules registered via `CONFIG_omero
 ### OMP Plugin (`omeroweb_omp_plugin`)
 
 Filename parsing and metadata annotation workflow:
+
 - Parses scientific filenames using configurable regex or AI-assisted suggestions.
 - AI providers: OpenAI, Anthropic, Google, Mistral (credentials stored per-user in plugin database).
 - Writes OMERO MapAnnotations with HMAC-based hash ownership tracking.
@@ -94,6 +96,7 @@ Filename parsing and metadata annotation workflow:
 ### Import Plugin (`omeroweb_import`)
 
 Staged file upload and OMERO import:
+
 - Job lifecycle: start session, transfer files, CLI import with batching, confirm, prune.
 - Uses Bio-Formats dry-run grouping as the universal logical import planner across formats.
 - Routes supported OME-Zarr image stores through a native `ome-zarr` + `omero-cli-zarr` branch only when Bio-Formats reports the staged store as incompatible.
@@ -106,6 +109,7 @@ Staged file upload and OMERO import:
 ### OMERO.web Zarr Plugin (`omero_web_zarr`)
 
 Authenticated OME-Zarr browsing and store-backed rendering:
+
 - Exposes managed-repository OME-Zarr stores through authenticated OMERO.web endpoints under `/zarr/`.
 - Distinguishes between a raw NGFF endpoint contract and a preview-safe endpoint contract for browser viewing.
 - Uses store-backed rendering overrides for thumbnails, image-data payloads, and tile-region responses so external Zarr-backed images do not rely on classic OMERO RenderingEngine pyramid files.
@@ -115,6 +119,7 @@ Authenticated OME-Zarr browsing and store-backed rendering:
 ### Admin Tools Plugin (`omeroweb_admin_tools`)
 
 Operational observability for platform administrators:
+
 - Log exploration: Loki LogQL queries with container filtering, internal log file browsing.
 - Resource monitoring: Docker container stats via Docker socket, Grafana/Prometheus embedded via proxy.
 - Storage analytics: per-user and per-group disk usage computed from OMERO API.
@@ -124,6 +129,7 @@ Operational observability for platform administrators:
 ### Imaris Connector Plugin (`omeroweb_imaris_connector`)
 
 Asynchronous OMERO-to-Imaris export:
+
 - Dispatches Celery tasks to Redis queue for processing by the co-located worker.
 - Supports sync mode (wait for result) and async mode (return job ID for polling).
 - Launches `IMS_Export.py` through the OMERO CLI inside `omeroweb` after locating the registered script ID.
@@ -133,6 +139,7 @@ Asynchronous OMERO-to-Imaris export:
 ### Shared Library (`omero_plugin_common`)
 
 Five utility modules shared across all plugins:
+
 - `env_utils.py`: typed environment variable loading (string, int, float, bool, sanitized+bounded) with validation errors that reference the correct env file.
 - `logging_utils.py`: reduces OMERO gateway debug noise by raising `omero.gateway.utils` to INFO.
 - `omero_helpers.py`: extracts text, IDs, owners, and permissions from OMERO objects.
