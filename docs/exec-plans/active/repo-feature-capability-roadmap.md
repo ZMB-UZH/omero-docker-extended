@@ -1,9 +1,11 @@
 # Execution Plan: Repo Feature and Capability Roadmap
 
 ## Goal
+
 Define a pragmatic, repo-grounded roadmap of new product and platform capabilities for this OMERO distribution. The focus is on high-value features that fit the existing architecture, use the current plugin and operations surface, and avoid speculative work that is not supported by the codebase.
 
 ## Survey Basis
+
 This roadmap is based only on repository evidence already present in the workspace, including:
 
 - `README.md` and `ARCHITECTURE.md` for scope, topology, and dependency boundaries.
@@ -17,6 +19,7 @@ This roadmap is based only on repository evidence already present in the workspa
 No external product research is assumed beyond what is already captured in the repository.
 
 ## Current Platform Baseline
+
 The current platform is already strong in a few specific areas:
 
 - OMERO is deployed as a multi-container stack with pinned images, environment-driven configuration, health checks, and separate core and plugin databases.
@@ -31,6 +34,7 @@ The roadmap below builds on those foundations rather than replacing them.
 ## Recommended Features
 
 ### 1. Acquisition metadata search inside OMERO.web
+
 Why it fits: the repo already has an acquisition-mode OMP job, metadata extraction code, and a prior design study in `docs/design-docs/acquisition-metadata-search-options.md`.
 
 Enabling building blocks already present: `omeroweb_omp_plugin/services/omero/metadata_service.py`, `omeroweb_omp_plugin/views/job_view.py`, `omero_mapr` in `CONFIG_omero_web_apps`, and the Mapr top link in `env/omeroweb_example.env`.
@@ -38,6 +42,7 @@ Enabling building blocks already present: `omeroweb_omp_plugin/services/omero/me
 Main dependency or risk: schema curation. The search schema must stay small, stable, and permission-aware or it will become noisy and hard to maintain.
 
 ### 2. Saveable and shareable import profiles
+
 Why it fits: the Import plugin already persists user settings and special-method settings, and the repo repeatedly emphasizes environment-driven, reproducible behavior.
 
 Enabling building blocks already present: `omeroweb_import/services/data_store.py`, `omeroweb_import/views/user_settings_view.py`, `omeroweb_import/views/special_method_settings_view.py`, and the grouped import planning logic.
@@ -45,6 +50,7 @@ Enabling building blocks already present: `omeroweb_import/services/data_store.p
 Main dependency or risk: profile versioning. Import profiles need schema evolution rules so future upload changes do not break old saved settings.
 
 ### 3. Import preflight report before upload commit
+
 Why it fits: large imports are already a first-class concern, and the current codebase spends significant effort on compatibility scanning, format detection, and timeout control.
 
 Enabling building blocks already present: `omeroweb_import/views/core_functions.py`, `omeroweb_import/services/import_management/workflow_service.py`, `_build_import_units`, and the long-running scan timeout controls in `env/omeroweb_example.env`.
@@ -52,6 +58,7 @@ Enabling building blocks already present: `omeroweb_import/views/core_functions.
 Main dependency or risk: response time. The preflight report must stay asynchronous or narrowly bounded so it does not reintroduce Gunicorn timeout failures.
 
 ### 4. Import job replay and retry controls
+
 Why it fits: the Import plugin already stores job state, staged files, and terminal status, which is a good base for controlled retries after transient failures.
 
 Enabling building blocks already present: `omero_plugin_common/tmp_cleanup.py`, `omeroweb_import/services/jobs/job_storage.py`, `omeroweb_import/views/index_view.py`, and the job lifecycle endpoints.
@@ -59,6 +66,7 @@ Enabling building blocks already present: `omero_plugin_common/tmp_cleanup.py`, 
 Main dependency or risk: idempotency. A retry path must not duplicate uploads, annotations, or datasets.
 
 ### 5. Import history and audit timeline
+
 Why it fits: operators and scientists both need to understand what was imported, when, and why a job failed or succeeded.
 
 Enabling building blocks already present: job JSON state, status polling, OMERO object lookup after CLI import, and the monitoring/logging stack.
@@ -66,6 +74,7 @@ Enabling building blocks already present: job JSON state, status polling, OMERO 
 Main dependency or risk: retention policy. Audit data needs a clear lifetime and storage location so it does not become another unbounded temp store.
 
 ### 6. Plugin-wide structured metrics
+
 Why it fits: `docs/QUALITY_SCORE.md` explicitly calls out the absence of plugin-specific application metrics.
 
 Enabling building blocks already present: Prometheus, Grafana, Loki, the Admin Tools observability surface, and the plugin request/job code paths.
@@ -73,6 +82,7 @@ Enabling building blocks already present: Prometheus, Grafana, Loki, the Admin T
 Main dependency or risk: cardinality. Metrics must be low-cardinality and intentionally designed or they will overload Prometheus and Grafana queries.
 
 ### 7. End-to-end import outcome verification dashboard
+
 Why it fits: the Import plugin already has rich job outcomes, and the repo already has Prometheus/Grafana dashboards and a root-only admin UI.
 
 Enabling building blocks already present: `omeroweb_admin_tools/views/index_view.py`, `docs/operations/monitoring.md`, and the import job/result plumbing.
@@ -80,6 +90,7 @@ Enabling building blocks already present: `omeroweb_admin_tools/views/index_view
 Main dependency or risk: signal quality. The dashboard must distinguish successful object creation from partial failures and late thumbnail or cleanup errors.
 
 ### 8. OMP annotation lifecycle and provenance view
+
 Why it fits: the OMP plugin already tracks plugin-owned annotations via hashing, and users need a clearer way to inspect what was added and by which job.
 
 Enabling building blocks already present: `omeroweb_omp_plugin/services/core.py`, `omeroweb_omp_plugin/views/delete_plugin_view.py`, `omeroweb_omp_plugin/views/job_view.py`, and hash-based ownership markers.
@@ -87,6 +98,7 @@ Enabling building blocks already present: `omeroweb_omp_plugin/services/core.py`
 Main dependency or risk: provenance correctness. The UI must never overstate ownership or deleteability for annotations the plugin did not create.
 
 ### 9. AI-assisted parsing review workflow
+
 Why it fits: the OMP plugin already offers AI-assisted regex help and provider credential storage, but the workflow can be made more reviewable and safer.
 
 Enabling building blocks already present: `omeroweb_omp_plugin/services/ai_assist.py`, `omeroweb_omp_plugin/services/ai_providers.py`, `omeroweb_omp_plugin/views/ai_credentials_view.py`, and rate limiting.
@@ -94,6 +106,7 @@ Enabling building blocks already present: `omeroweb_omp_plugin/services/ai_assis
 Main dependency or risk: provider drift. The workflow should avoid coupling to one vendor or model naming scheme.
 
 ### 10. Acquisition and filename taxonomy templates
+
 Why it fits: both OMP and Import depend on consistent user interpretation of file naming and metadata fields, and the repo already centers scientific nomenclature.
 
 Enabling building blocks already present: REMBI-aligned defaults, variable-set storage, filename parsing utilities, and the documentation system.
@@ -101,6 +114,7 @@ Enabling building blocks already present: REMBI-aligned defaults, variable-set s
 Main dependency or risk: scope creep. Taxonomy templates should remain a starter kit, not a rigid ontology project.
 
 ### 11. Group-aware storage and quota policy recommendations
+
 Why it fits: Admin Tools already calculates storage usage and manages quotas, but the current system still leaves operators to infer policy by hand.
 
 Enabling building blocks already present: `omeroweb_admin_tools/services/storage_quotas.py`, quota reconciliation, `docs/operations/monitoring.md`, and storage analytics.
@@ -108,6 +122,7 @@ Enabling building blocks already present: `omeroweb_admin_tools/services/storage
 Main dependency or risk: false confidence. Any recommendation engine must be explicit about whether it is advisory or enforceable.
 
 ### 12. Better service health explanation for operators
+
 Why it fits: the repo already has health checks, Docker inspection logic, and troubleshooting docs, but operators still need clearer failure classification.
 
 Enabling building blocks already present: `docs/RELIABILITY.md`, `omeroweb_admin_tools/services/system_diagnostics.py`, blackbox probes, and compose health data.
@@ -115,6 +130,7 @@ Enabling building blocks already present: `docs/RELIABILITY.md`, `omeroweb_admin
 Main dependency or risk: overfitting. Explanations should stay generic enough to survive environment differences.
 
 ### 13. CI quality gate expansion
+
 Why it fits: the repo already has docs linting and security scanning, but there is no general quality gate covering unit tests, formatting, and repository policy checks in one consistent place.
 
 Enabling building blocks already present: `.github/workflows/docs-knowledge-base.yml`, `.github/workflows/security-code-scanning.yml`, and the existing regression suite.
@@ -122,6 +138,7 @@ Enabling building blocks already present: `.github/workflows/docs-knowledge-base
 Main dependency or risk: workflow sprawl. New checks should be composed carefully so CI stays understandable and fast enough to use regularly.
 
 ### 14. Pinned-dependency and action hygiene hardening
+
 Why it fits: `docs/operations/code-scanning.md` and `.github/dependabot.yml` already show supply-chain awareness, but there is room for tighter GitHub hygiene.
 
 Enabling building blocks already present: Dependabot, Scorecard, workflow files, and the existing pinning policy in docs.
@@ -129,6 +146,7 @@ Enabling building blocks already present: Dependabot, Scorecard, workflow files,
 Main dependency or risk: maintenance burden. Commit-SHA pinning and update automation need a clear ownership model or they will drift.
 
 ### 15. Guided onboarding and recovery flows
+
 Why it fits: the repo already has onboarding docs, troubleshooting docs, and installation scripts. The next step is to turn those into more guided operator flows.
 
 Enabling building blocks already present: `docs/product-specs/new-user-onboarding.md`, `docs/troubleshooting/common.md`, installation transcripts, and startup/bootstrap scripts.

@@ -1,9 +1,11 @@
 # Execution Plan: Repo Improvements and Fixes Backlog
 
 ## Goal
+
 Create a prioritized, evidence-based backlog for the next tranche of repository and platform work. This plan is meant to be a decision aid, not an implementation log: each item should be concrete, tied to observed code or documentation, and ranked by operational or quality impact.
 
 ## Evidence Basis
+
 This backlog is grounded in the current repository state and documentation:
 
 - `docs/QUALITY_SCORE.md` already records missing plugin test coverage, missing SLOs, missing alert rules, and missing integration validation.

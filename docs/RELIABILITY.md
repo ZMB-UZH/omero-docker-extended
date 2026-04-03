@@ -14,11 +14,13 @@ Practices and invariants that keep the platform running predictably.
 ## Health checks
 
 Every service in `docker-compose.yml` has a health check with consistent parameters:
+
 - Interval: 10s, timeout: 10s, retries: 30.
 - Start periods vary by service (10s for fast services, 30-60s for OMERO server/web).
 - Services with `depends_on:` use `condition: service_healthy` to enforce startup order.
 
 Health check methods by service type:
+
 - PostgreSQL: `pg_isready` against the configured user and database.
 - Redis: `redis-cli ping`.
 - OMERO.server: admin login attempt via CLI.
@@ -31,6 +33,7 @@ See `docs/reference/service-endpoints.md` for the complete endpoint map.
 ## Process management
 
 The `omeroweb` container runs two processes via supervisord:
+
 1. **omero-web**: the Django application server (autorestart on failure).
 2. **imaris-celery-worker**: the Celery worker for Imaris export tasks (autorestart on unexpected exit).
 
@@ -56,5 +59,6 @@ Both processes have dedicated log files with rotation (20MB max, 3 backups).
 ## Incident documentation
 
 Capture recurring incident classes in `docs/troubleshooting/` and link mitigation steps. Current troubleshooting guides:
+
 - `troubleshooting/common.md` -- service health, plugin routes, uploads, admin tools, database, Docker socket
 - `troubleshooting/imaris-export.md` -- auth regressions, `waiting_for_processor`, processor startup failures, CLI validation, recovery actions

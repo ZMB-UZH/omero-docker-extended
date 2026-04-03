@@ -182,6 +182,7 @@ def render_badge_block(metadata: RepoMetadata) -> str:
         f"[![tests](https://img.shields.io/github/actions/workflow/status/{github_path}/tests.yml?branch={branch}&label=tests)](https://github.com/{github_path}/actions/workflows/tests.yml)",
         f"[![security-code-scanning](https://img.shields.io/github/actions/workflow/status/{github_path}/security-code-scanning.yml?branch={branch}&label=security-code-scanning)](https://github.com/{github_path}/actions/workflows/security-code-scanning.yml)",
         f"[![Codecov](https://img.shields.io/codecov/c/github/{github_path}?label=Codecov&logo=codecov)](https://codecov.io/gh/{github_path})",
+        f"[![super-linter](https://img.shields.io/github/actions/workflow/status/{github_path}/super-linter.yml?branch={branch}&label=super-linter)](https://github.com/{github_path}/actions/workflows/super-linter.yml)",
         f"[![Ruff](https://img.shields.io/github/actions/workflow/status/{github_path}/ruff.yml?branch={branch}&logo=ruff&label=Ruff)](https://github.com/{github_path}/actions/workflows/ruff.yml)",
         f"[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/{github_path})](https://github.com/{github_path}/commits/{branch})",
         BADGE_BLOCK_END,

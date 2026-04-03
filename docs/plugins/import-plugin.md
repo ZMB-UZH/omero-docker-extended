@@ -95,7 +95,7 @@ Useful commands (host):
 
 ## Code structure
 
-```
+```text
 omeroweb_import/
 ├── views/
 │   ├── index_view.py                  # Main page, project listing, job lifecycle endpoints

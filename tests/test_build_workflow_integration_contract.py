@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+import json
 import re
 
 
@@ -726,6 +727,74 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "python3 -m pip install --require-hashes --requirement .github/requirements/security-code-scanning.txt",
             security_workflow,
         )
+
+    def test_super_linter_workflow_is_pinned_and_covers_repo_hygiene_surfaces(
+        self,
+    ) -> None:
+        import yaml  # noqa: F811  — available in CI
+
+        workflow_path = self.repo_root / ".github" / "workflows" / "super-linter.yml"
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        triggers = workflow[True]
+
+        self.assertEqual("super-linter", workflow["name"])
+        self.assertEqual(["main"], triggers["pull_request"]["branches"])
+        self.assertEqual(["main"], triggers["push"]["branches"])
+        self.assertIn("workflow_dispatch", triggers)
+        self.assertEqual("read", workflow["permissions"]["contents"])
+        self.assertEqual("ubuntu-24.04", workflow["jobs"]["super-linter"]["runs-on"])
+
+        job_permissions = workflow["jobs"]["super-linter"]["permissions"]
+        self.assertEqual("read", job_permissions["contents"])
+        self.assertEqual("read", job_permissions["packages"])
+        self.assertEqual("write", job_permissions["statuses"])
+
+        steps = workflow["jobs"]["super-linter"]["steps"]
+        checkout_step = next(step for step in steps if step.get("name") == "Checkout")
+        self.assertEqual(
+            "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+            checkout_step["uses"],
+        )
+        self.assertEqual(0, checkout_step["with"]["fetch-depth"])
+        self.assertFalse(checkout_step["with"]["persist-credentials"])
+
+        lint_step = next(step for step in steps if step.get("name") == "Super-Linter")
+        self.assertEqual(
+            "super-linter/super-linter@9e863354e3ff62e0727d37183162c4a88873df41",
+            lint_step["uses"],
+        )
+        self.assertEqual(
+            "${{ secrets.GITHUB_TOKEN }}", lint_step["env"]["GITHUB_TOKEN"]
+        )
+        self.assertEqual("true", lint_step["env"]["VALIDATE_ALL_CODEBASE"])
+        self.assertEqual(
+            "true", lint_step["env"]["VALIDATE_GIT_MERGE_CONFLICT_MARKERS"]
+        )
+        self.assertEqual("true", lint_step["env"]["VALIDATE_GITHUB_ACTIONS"])
+        self.assertEqual("true", lint_step["env"]["VALIDATE_GITHUB_ACTIONS_ZIZMOR"])
+        self.assertEqual("true", lint_step["env"]["VALIDATE_MARKDOWN"])
+        self.assertEqual("true", lint_step["env"]["VALIDATE_YAML"])
+
+        markdown_config = json.loads(
+            (self.repo_root / ".markdownlint-cli2.jsonc").read_text(encoding="utf-8")
+        )
+        self.assertFalse(markdown_config["config"]["MD013"])
+        self.assertEqual(
+            {"siblings_only": True},
+            markdown_config["config"]["MD024"],
+        )
+        self.assertFalse(markdown_config["config"]["MD033"])
+
+        yamllint_config = yaml.safe_load(
+            (self.repo_root / ".yamllint").read_text(encoding="utf-8")
+        )
+        self.assertEqual("default", yamllint_config["extends"])
+        self.assertEqual(
+            1, yamllint_config["rules"]["comments"]["min-spaces-from-content"]
+        )
+        self.assertEqual("disable", yamllint_config["rules"]["document-start"])
+        self.assertEqual("disable", yamllint_config["rules"]["line-length"])
+        self.assertEqual("disable", yamllint_config["rules"]["truthy"])
 
     def test_ci_requirement_manifests_pin_every_dependency(self) -> None:
         requirement_paths = [
