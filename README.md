@@ -56,6 +56,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 
 ```text
 .
+├── .agents/skills/                    # Harness-neutral reusable agent skills (optional, additive)
 ├── AGENTS.md                          # Agent navigation map (start here for AI agents)
 ├── ARCHITECTURE.md                    # Architectural overview and dependency boundaries
 ├── CLAUDE.md                          # Claude Code working instructions
@@ -368,6 +369,7 @@ Both operations are designed for online use. They may briefly acquire locks; the
 | [`AGENTS.md`](AGENTS.md) | Agent/AI navigation map and working contract |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Architectural overview, layer model, dependency rules |
 | [`CLAUDE.md`](CLAUDE.md) | Claude Code specific working instructions |
+| [`docs/reference/ai-agent-skills.md`](docs/reference/ai-agent-skills.md) | Harness-neutral skill catalog for recurring AI-agent workflows |
 | [`docs/index.md`](docs/index.md) | Full documentation index with cross-links |
 | [`docs/deployment/quickstart.md`](docs/deployment/quickstart.md) | Step-by-step deployment guide |
 | [`docs/deployment/configuration.md`](docs/deployment/configuration.md) | Configuration reference |

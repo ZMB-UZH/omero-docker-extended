@@ -1,0 +1,7 @@
+interface:
+  display_name: "OMERO Runtime Verifier"
+  short_description: "Follow the safe runtime-debugging procedure for this OMERO stack"
+  brand_color: "#B91C1C"
+  default_prompt: "Verify runtime behavior using the repo's Loki-first and service-user-safe procedure"
+policy:
+  allow_implicit_invocation: true
