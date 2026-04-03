@@ -35,6 +35,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Keep agent commentary terse and action-first. Prefer short progress updates over long explanations.
 - Prefer interactive terminals and avoid long `sleep` commands unless absolutely necessary for the command set or workflow. Poll for results or use background execution with notification instead of blind waits.
 - When a general command fails for a reusable environment-specific reason, update `AGENTS.md` or the relevant doc in the same change so later agents do not repeat it.
+- If the current harness supports `.agents/skills/`, prefer the repo-local skills there before falling back to generic workflows. If the harness does not support them, read the matching `SKILL.md` manually.
 - Never create, edit, overwrite, or delete `env/omero_secrets.env` as an AI agent. Treat it as operator-managed secret material.
 - For OMERO configuration property names, defaults, and semantics, use the official OMERO config glossary as the single source of truth: `https://omero.readthedocs.io/en/stable/sysadmins/config.html`.
 - When expressing OMERO properties in tracked env files, follow the existing repository naming pattern already used in `env/omeroserver*.env` and `env/omeroweb*.env` (for example `omero.pixeldata.threads` -> `CONFIG_omero_pixeldata_threads`).
@@ -57,6 +58,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 7. **`docs/reference/ai-agent-security-prevention-playbook.md`** -- **MANDATORY READING** before writing security-relevant code. Canonical best-practice guide for agents, with concrete examples and anti-drift ownership rules.
 8. **`docs/reference/code-scanning-resolved-findings.md`** -- full resolved scanner history with rule-level prevention lessons. Every pattern there has been fixed at least once — reintroducing the same pattern is a regression.
 9. **`docs/operations/code-scanning.md`** -- live alert inventory, triage SLAs, and remediation workflow for new scanning batches.
+10. **`docs/reference/ai-agent-skills.md`** and **`.agents/skills/`** -- harness-neutral skill catalog for recurring repo workflows such as research, verification, env-contract review, runtime debugging, and security triage.
 
 ## Domain map
 

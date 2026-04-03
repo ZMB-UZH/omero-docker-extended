@@ -18,6 +18,7 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 - Image builds: `docker/*.Dockerfile`
 - Monitoring config: `monitoring/`
 - Documentation: `docs/index.md` (full index)
+- Shared agent skills: `.agents/skills/` and `docs/reference/ai-agent-skills.md`
 
 ## Development rules
 
@@ -75,6 +76,7 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 - Required files and cross-links are enforced by CI (`.github/workflows/docs-knowledge-base.yml`).
 - Add cross-links in `docs/index.md` when introducing new documents.
 - Keep `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, and `CLAUDE.md` at repository root; everything else under `docs/`.
+- Repo-local reusable agent workflows live under `.agents/skills/`. Use them only as an additive layer; `AGENTS.md` remains the primary contract.
 
 ## Common tasks
 
