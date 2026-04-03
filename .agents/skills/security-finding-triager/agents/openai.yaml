@@ -1,0 +1,7 @@
+interface:
+  display_name: "Security Finding Triager"
+  short_description: "Use the repo's live and historical security docs before fixing findings"
+  brand_color: "#991B1B"
+  default_prompt: "Triage a security finding using the repo's runbook and prevention playbook"
+policy:
+  allow_implicit_invocation: true

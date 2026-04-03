@@ -1,0 +1,7 @@
+interface:
+  display_name: "Documentation Lookup"
+  short_description: "Use official, current docs and releases instead of memory"
+  brand_color: "#1D4ED8"
+  default_prompt: "Look up current official docs before answering"
+policy:
+  allow_implicit_invocation: true
