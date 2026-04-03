@@ -57,9 +57,13 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ```text
 .
 ├── .agents/skills/                    # Harness-neutral reusable agent skills (optional, additive)
+├── .cursor/rules/                     # Cursor-specific rule adapters pointing back to AGENTS/skills
+├── .github/copilot-instructions.md    # GitHub Copilot repo-wide instructions
+├── .github/instructions/              # GitHub Copilot path-specific instructions
 ├── AGENTS.md                          # Agent navigation map (start here for AI agents)
 ├── ARCHITECTURE.md                    # Architectural overview and dependency boundaries
 ├── CLAUDE.md                          # Claude Code working instructions
+├── GEMINI.md                          # Gemini CLI project context
 ├── README.md                          # This file
 ├── docker-compose.yml                 # Full service orchestration (20 Compose services total: 18 default long-running containers, 19 with crowdsec; redis-sysctl-init is profile-gated)
 ├── docker/                            # Dockerfiles
@@ -109,9 +113,10 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── installation_paths_example.env     # Template: all filesystem path definitions
 ├── github_pull_project_bash_example   # Safe self-updating pull script (public upstream)
 ├── docs/                              # Full documentation set (see docs/index.md)
+├── third_party/ecc-v1.9.0/            # Pinned selected ECC v1.9.0 skill snapshot (MIT)
 ├── tools/                             # Development tooling (docs linter)
 ├── tests/                             # Test suite
-└── .github/                           # CI workflows + Dependabot
+└── .github/                           # CI workflows, Dependabot, and Copilot adapters
 ```
 
 </details>
@@ -369,7 +374,10 @@ Both operations are designed for online use. They may briefly acquire locks; the
 | [`AGENTS.md`](AGENTS.md) | Agent/AI navigation map and working contract |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Architectural overview, layer model, dependency rules |
 | [`CLAUDE.md`](CLAUDE.md) | Claude Code specific working instructions |
+| [`GEMINI.md`](GEMINI.md) | Gemini CLI project context |
 | [`docs/reference/ai-agent-skills.md`](docs/reference/ai-agent-skills.md) | Harness-neutral skill catalog for recurring AI-agent workflows |
+| [`docs/reference/ai-agent-integrations.md`](docs/reference/ai-agent-integrations.md) | Native adapter map for Copilot, Cursor, Claude, Gemini, and shared skills |
+| [`docs/reference/ai-agent-upstream-sources.md`](docs/reference/ai-agent-upstream-sources.md) | Pinned ECC v1.9.0 upstream provenance for ECC-derived local skills |
 | [`docs/index.md`](docs/index.md) | Full documentation index with cross-links |
 | [`docs/deployment/quickstart.md`](docs/deployment/quickstart.md) | Step-by-step deployment guide |
 | [`docs/deployment/configuration.md`](docs/deployment/configuration.md) | Configuration reference |
@@ -383,7 +391,7 @@ Both operations are designed for online use. They may briefly acquire locks; the
 <details>
 <summary><h2>Documentation rules</h2></summary>
 
-- Keep `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, and `CLAUDE.md` at repository root.
+- Keep `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, `CLAUDE.md`, and `GEMINI.md` at repository root.
 - Keep all other project documentation under `docs/`.
 - Documentation structure is enforced by CI via `tools/lint_docs_structure.py`.
 - Update `docs/index.md` cross-links when introducing new documents.

@@ -1,0 +1,14 @@
+---
+description: Docker, Compose, shell, and env-contract rules
+globs:
+  - "**/*.sh"
+  - "docker-compose.yml"
+  - "docker/**/*.Dockerfile"
+  - "env/*.env*"
+  - "installation_paths*.env"
+---
+
+- Use `.agents/skills/docker-patterns/`, `.agents/skills/deployment-patterns/`, `.agents/skills/env-contract-reviewer/`, and `.agents/skills/omero-runtime-verifier/` when relevant.
+- Keep runtime changes environment-driven.
+- Do not introduce `:latest`, inline secret defaults, or compose-level version sprawl.
+- Preserve health checks and `security_opt: no-new-privileges:true`.

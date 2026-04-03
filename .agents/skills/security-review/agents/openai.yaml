@@ -1,0 +1,7 @@
+interface:
+  display_name: "Security Review"
+  short_description: "Review security-sensitive code using the repo's boundary-focused rules"
+  brand_color: "#0F766E"
+  default_prompt: "Apply the repository's security review rules before or during sensitive changes"
+policy:
+  allow_implicit_invocation: true

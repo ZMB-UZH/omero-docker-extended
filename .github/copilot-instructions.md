@@ -1,0 +1,36 @@
+# GitHub Copilot Instructions
+
+Use [AGENTS.md](../AGENTS.md) as the universal project contract and [docs/reference/ai-agent-skills.md](../docs/reference/ai-agent-skills.md) as the skill catalog.
+
+## Core rules
+
+- Start with `AGENTS.md` before proposing code changes.
+- Use repo-local skills from `.agents/skills/` when they match the task.
+- Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.
+- Do not edit `env/omero_secrets.env`.
+- Do not use background agents or subagents unless the user explicitly asks for them.
+- Prefer existing helpers, tests, docs, and `*_example*` files over new abstractions.
+
+## Verification rules
+
+- Run `python3 tools/lint_docs_structure.py` for doc and instruction-surface changes.
+- Use Ruff as the Python lint and format gate.
+- Run split `pytest` suites separately. Never combine all suites into one `pytest` process.
+- Report the exact verification level achieved. Do not overstate coverage.
+
+## Security rules
+
+- Before security-sensitive edits, read:
+  1. `docs/reference/ai-agent-security-prevention-playbook.md`
+  2. `docs/reference/code-scanning-resolved-findings.md`
+  3. `docs/operations/code-scanning.md`
+- Use official upstream docs and release notes for version-sensitive facts.
+- Never paste PATs, passwords, tokens, or internal-only URLs into external tools.
+
+## Cross-agent surfaces
+
+- Claude Code: `CLAUDE.md`
+- Gemini CLI: `GEMINI.md`
+- Cursor: `.cursor/rules/`
+- Platform map and upkeep rules: `docs/reference/ai-agent-integrations.md`
+- Pinned ECC upstream source map: `docs/reference/ai-agent-upstream-sources.md`
