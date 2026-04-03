@@ -22,13 +22,13 @@ This skill ensures all code follows security best practices and identifies poten
 
 ### 1. Secrets Management
 
-#### FAIL: NEVER Do This
+#### ❌ NEVER Do This
 ```typescript
 const apiKey = "sk-proj-xxxxx"  // Hardcoded secret
 const dbPassword = "password123" // In source code
 ```
 
-#### PASS: ALWAYS Do This
+#### ✅ ALWAYS Do This
 ```typescript
 const apiKey = process.env.OPENAI_API_KEY
 const dbUrl = process.env.DATABASE_URL
@@ -108,14 +108,14 @@ function validateFileUpload(file: File) {
 
 ### 3. SQL Injection Prevention
 
-#### FAIL: NEVER Concatenate SQL
+#### ❌ NEVER Concatenate SQL
 ```typescript
 // DANGEROUS - SQL Injection vulnerability
 const query = `SELECT * FROM users WHERE email = '${userEmail}'`
 await db.query(query)
 ```
 
-#### PASS: ALWAYS Use Parameterized Queries
+#### ✅ ALWAYS Use Parameterized Queries
 ```typescript
 // Safe - parameterized query
 const { data } = await supabase
@@ -140,10 +140,10 @@ await db.query(
 
 #### JWT Token Handling
 ```typescript
-// FAIL: WRONG: localStorage (vulnerable to XSS)
+// ❌ WRONG: localStorage (vulnerable to XSS)
 localStorage.setItem('token', token)
 
-// PASS: CORRECT: httpOnly cookies
+// ✅ CORRECT: httpOnly cookies
 res.setHeader('Set-Cookie',
   `token=${token}; HttpOnly; Secure; SameSite=Strict; Max-Age=3600`)
 ```
@@ -300,18 +300,18 @@ app.use('/api/search', searchLimiter)
 
 #### Logging
 ```typescript
-// FAIL: WRONG: Logging sensitive data
+// ❌ WRONG: Logging sensitive data
 console.log('User login:', { email, password })
 console.log('Payment:', { cardNumber, cvv })
 
-// PASS: CORRECT: Redact sensitive data
+// ✅ CORRECT: Redact sensitive data
 console.log('User login:', { email, userId })
 console.log('Payment:', { last4: card.last4, userId })
 ```
 
 #### Error Messages
 ```typescript
-// FAIL: WRONG: Exposing internal details
+// ❌ WRONG: Exposing internal details
 catch (error) {
   return NextResponse.json(
     { error: error.message, stack: error.stack },
@@ -319,7 +319,7 @@ catch (error) {
   )
 }
 
-// PASS: CORRECT: Generic error messages
+// ✅ CORRECT: Generic error messages
 catch (error) {
   console.error('Internal error:', error)
   return NextResponse.json(
