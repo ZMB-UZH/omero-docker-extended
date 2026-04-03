@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,10 @@ class AgentSkillUpstreamSources:
         return Path(self.vendor_path.rstrip("/")).name
 
     @property
+    def repo_name(self) -> str:
+        return self.repo_slug.rsplit("/", 1)[-1]
+
+    @property
     def vendor_root_path(self) -> Path:
         return Path(self.vendor_path.rstrip("/"))
 
@@ -65,6 +70,10 @@ class AgentSkillUpstreamSources:
         return f"{snapshot_name} skills"
 
     @property
+    def badge_title(self) -> str:
+        return self.repo_name
+
+    @property
     def skills_tree_url(self) -> str:
         return (
             f"https://github.com/{self.repo_slug}/tree/"
@@ -73,7 +82,7 @@ class AgentSkillUpstreamSources:
 
     @property
     def badge_image_url(self) -> str:
-        subject = quote("upstream", safe="")
+        subject = quote(self.badge_title, safe="")
         message = quote(self.badge_label, safe="")
         return f"https://img.shields.io/badge/{subject}-{message}-0F766E?logo=github"
 
@@ -127,12 +136,21 @@ def load_upstream_sources(repo_root: Path) -> AgentSkillUpstreamSources:
     )
 
 
+def resolve_required_executable(name: str) -> str:
+    """Resolve an executable to an absolute path."""
+
+    resolved = shutil.which(name)
+    if not resolved:
+        raise RuntimeError(f"Required executable `{name}` is not available in PATH.")
+    return resolved
+
+
 def resolve_remote_tag_commit(repo_slug: str, tag: str, *, cwd: Path) -> str:
     """Resolve the exact commit currently referenced by a remote Git tag."""
 
     completed = subprocess.run(
         [
-            "git",
+            resolve_required_executable("git"),
             "ls-remote",
             f"https://github.com/{repo_slug}.git",
             f"refs/tags/{tag}",
@@ -166,7 +184,7 @@ def fetch_text(url: str, *, timeout: int = 20) -> str:
     try:
         result = subprocess.run(
             [
-                "curl",
+                resolve_required_executable("curl"),
                 "--silent",
                 "--show-error",
                 "--location",

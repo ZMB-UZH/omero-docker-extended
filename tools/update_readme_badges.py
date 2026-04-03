@@ -69,7 +69,12 @@ def _load_canonical_repo_metadata(repo_root: Path) -> RepoMetadata | None:
 def _run_git(repo_root: Path, *args: str) -> str:
     safe_repo_root = str(repo_root.resolve())
     completed = subprocess.run(
-        ["git", "-c", f"safe.directory={safe_repo_root}", *args],
+        [
+            agent_skill_provenance.resolve_required_executable("git"),
+            "-c",
+            f"safe.directory={safe_repo_root}",
+            *args,
+        ],
         cwd=repo_root,
         check=True,
         capture_output=True,
@@ -192,7 +197,7 @@ def render_badge_block(
         f"[![Codecov](https://img.shields.io/codecov/c/github/{github_path}?label=Codecov&logo=codecov)](https://codecov.io/gh/{github_path})",
         f"[![super-linter](https://img.shields.io/github/actions/workflow/status/{github_path}/super-linter.yml?branch={branch}&label=super-linter)](https://github.com/{github_path}/actions/workflows/super-linter.yml)",
         f"[![Ruff](https://img.shields.io/github/actions/workflow/status/{github_path}/ruff.yml?branch={branch}&logo=ruff&label=Ruff)](https://github.com/{github_path}/actions/workflows/ruff.yml)",
-        f"[![{upstream_sources.badge_label}]({upstream_sources.badge_image_url})]({upstream_sources.skills_tree_url})",
+        f"[![{upstream_sources.badge_title}]({upstream_sources.badge_image_url})]({upstream_sources.skills_tree_url})",
         f"[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/{github_path})](https://github.com/{github_path}/commits/{branch})",
         BADGE_BLOCK_END,
     ]
