@@ -807,7 +807,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual("disable", yamllint_config["rules"]["line-length"])
         self.assertEqual("disable", yamllint_config["rules"]["truthy"])
 
-    def test_tests_workflow_uploads_codecov_without_github_environment(self) -> None:
+    def test_tests_workflow_uploads_codecov_via_oidc_without_environment_or_secret(
+        self,
+    ) -> None:
         import yaml  # noqa: F811  — available in CI
 
         workflow_path = self.repo_root / ".github" / "workflows" / "tests.yml"
@@ -815,12 +817,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         job = workflow["jobs"]["test-with-coverage"]
 
         self.assertNotIn("environment", job)
-
-        validate_step = next(
-            step
-            for step in job["steps"]
-            if step.get("name") == "Validate Codecov token"
+        self.assertEqual(
+            {"contents": "read", "id-token": "write"},
+            job["permissions"],
         )
+
         upload_step = next(
             step
             for step in job["steps"]
@@ -828,9 +829,14 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "${{ secrets.CODECOV_TOKEN }}", validate_step["env"]["CODECOV_TOKEN"]
+            "codecov/codecov-action@3f20e214133d0983f9a10f3d63b0faf9241a3daa",
+            upload_step["uses"],
         )
-        self.assertEqual("${{ secrets.CODECOV_TOKEN }}", upload_step["with"]["token"])
+        self.assertEqual("true", str(upload_step["with"]["use_oidc"]).lower())
+        self.assertNotIn("token", upload_step["with"])
+        self.assertFalse(
+            any(step.get("name") == "Validate Codecov token" for step in job["steps"])
+        )
 
     def test_security_workflow_avoids_unpinned_container_and_template_injection(
         self,

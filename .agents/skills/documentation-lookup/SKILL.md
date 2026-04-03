@@ -9,6 +9,10 @@ upstream: third_party/ecc-v1.9.0/skills/documentation-lookup/SKILL.md
 
 Use this skill whenever the answer depends on current library, framework, image, workflow, or harness behavior.
 
+## Upstream baseline
+
+Start from `third_party/ecc-v1.9.0/skills/documentation-lookup/SKILL.md` for the generic documentation-first workflow.
+
 ## When to activate
 
 - OMERO configuration, CLI, or plugin behavior
