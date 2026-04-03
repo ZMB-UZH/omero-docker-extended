@@ -1,0 +1,7 @@
+interface:
+  display_name: "Env Contract Reviewer"
+  short_description: "Keep env-driven config changes template-backed and documented"
+  brand_color: "#0F766E"
+  default_prompt: "Review env, config, and compose changes against the repo's env contract"
+policy:
+  allow_implicit_invocation: true

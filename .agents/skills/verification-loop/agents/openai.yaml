@@ -1,0 +1,7 @@
+interface:
+  display_name: "Verification Loop"
+  short_description: "Run repo-specific docs, Ruff, and split-test verification"
+  brand_color: "#16A34A"
+  default_prompt: "Verify changes with the repo-specific split-test and docs workflow"
+policy:
+  allow_implicit_invocation: true

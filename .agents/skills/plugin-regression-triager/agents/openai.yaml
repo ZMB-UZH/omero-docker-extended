@@ -1,0 +1,7 @@
+interface:
+  display_name: "Plugin Regression Triager"
+  short_description: "Pick the correct split pytest suites for changed files"
+  brand_color: "#7C3AED"
+  default_prompt: "Map the changed paths to the right repo-specific test suites"
+policy:
+  allow_implicit_invocation: true
