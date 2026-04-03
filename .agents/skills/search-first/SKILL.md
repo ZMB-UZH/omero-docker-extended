@@ -9,6 +9,10 @@ upstream: third_party/ecc-v1.9.0/skills/search-first/SKILL.md
 
 Use this skill before introducing new code, dependencies, wrappers, or automation.
 
+## Upstream baseline
+
+Start from `third_party/ecc-v1.9.0/skills/search-first/SKILL.md` for the generic research-before-coding workflow.
+
 ## When to activate
 
 - Adding a new integration, helper, or dependency

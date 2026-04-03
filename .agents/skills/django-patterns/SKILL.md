@@ -1,6 +1,6 @@
 ---
 name: django-patterns
-description: Django patterns for OMERO.web plugins: app boundaries, views, services, templates, and shared helper usage.
+description: "Django patterns for OMERO.web plugins: app boundaries, views, services, templates, and shared helper usage."
 origin: ECC v1.9.0 adapted for OMERO Docker Extended
 upstream: third_party/ecc-v1.9.0/skills/django-patterns/SKILL.md
 ---
