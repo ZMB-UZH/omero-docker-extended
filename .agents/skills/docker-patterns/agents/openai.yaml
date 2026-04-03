@@ -1,0 +1,7 @@
+interface:
+  display_name: "Docker Patterns"
+  short_description: "Use the repo's pinned Docker, Compose, and startup-script conventions"
+  brand_color: "#0F766E"
+  default_prompt: "Apply Docker and Compose patterns that match this repository's runtime contracts"
+policy:
+  allow_implicit_invocation: true

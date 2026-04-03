@@ -1,0 +1,7 @@
+interface:
+  display_name: "TDD Workflow"
+  short_description: "Use narrow red-green-refactor loops that match this repo's split-suite model"
+  brand_color: "#0F766E"
+  default_prompt: "Apply a TDD workflow that fits this repository's test and documentation contracts"
+policy:
+  allow_implicit_invocation: true

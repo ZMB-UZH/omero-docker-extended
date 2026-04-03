@@ -19,6 +19,8 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 - Monitoring config: `monitoring/`
 - Documentation: `docs/index.md` (full index)
 - Shared agent skills: `.agents/skills/` and `docs/reference/ai-agent-skills.md`
+- Cross-agent adapter map: `docs/reference/ai-agent-integrations.md`
+- Pinned ECC upstream snapshot: `docs/reference/ai-agent-upstream-sources.md` and `third_party/ecc-v1.9.0/`
 
 ## Development rules
 
@@ -75,7 +77,7 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 - Run `python3 tools/lint_docs_structure.py` to validate docs structure before committing.
 - Required files and cross-links are enforced by CI (`.github/workflows/docs-knowledge-base.yml`).
 - Add cross-links in `docs/index.md` when introducing new documents.
-- Keep `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, and `CLAUDE.md` at repository root; everything else under `docs/`.
+- Keep `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, `CLAUDE.md`, and `GEMINI.md` at repository root; everything else under `docs/` unless it is a platform-native instruction surface such as `.github/`, `.cursor/`, `.agents/`, or `third_party/`.
 - Repo-local reusable agent workflows live under `.agents/skills/`. Use them only as an additive layer; `AGENTS.md` remains the primary contract.
 
 ## Common tasks
