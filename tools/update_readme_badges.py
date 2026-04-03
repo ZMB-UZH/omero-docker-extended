@@ -10,6 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
+try:
+    from tools import agent_skill_provenance
+except ImportError:  # pragma: no cover - supports direct script execution
+    import agent_skill_provenance
+
 BADGE_BLOCK_BEGIN = "<!-- BEGIN GENERATED BADGES -->"
 BADGE_BLOCK_END = "<!-- END GENERATED BADGES -->"
 README_PATH = Path("README.md")
@@ -173,7 +178,10 @@ def resolve_repo_metadata(repo_root: Path) -> RepoMetadata:
     )
 
 
-def render_badge_block(metadata: RepoMetadata) -> str:
+def render_badge_block(
+    metadata: RepoMetadata,
+    upstream_sources: agent_skill_provenance.AgentSkillUpstreamSources,
+) -> str:
     github_path = metadata.github_path
     branch = metadata.branch_query_value
     lines = [
@@ -184,6 +192,7 @@ def render_badge_block(metadata: RepoMetadata) -> str:
         f"[![Codecov](https://img.shields.io/codecov/c/github/{github_path}?label=Codecov&logo=codecov)](https://codecov.io/gh/{github_path})",
         f"[![super-linter](https://img.shields.io/github/actions/workflow/status/{github_path}/super-linter.yml?branch={branch}&label=super-linter)](https://github.com/{github_path}/actions/workflows/super-linter.yml)",
         f"[![Ruff](https://img.shields.io/github/actions/workflow/status/{github_path}/ruff.yml?branch={branch}&logo=ruff&label=Ruff)](https://github.com/{github_path}/actions/workflows/ruff.yml)",
+        f"[![{upstream_sources.badge_label}]({upstream_sources.badge_image_url})]({upstream_sources.skills_tree_url})",
         f"[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/{github_path})](https://github.com/{github_path}/commits/{branch})",
         BADGE_BLOCK_END,
     ]
@@ -210,7 +219,10 @@ def update_readme_text(readme_text: str, badge_block: str) -> str:
 def update_readme(repo_root: Path, write: bool) -> int:
     readme_path = repo_root / README_PATH
     original_text = readme_path.read_text(encoding="utf-8")
-    badge_block = render_badge_block(resolve_repo_metadata(repo_root))
+    badge_block = render_badge_block(
+        resolve_repo_metadata(repo_root),
+        agent_skill_provenance.load_upstream_sources(repo_root),
+    )
     updated_text = update_readme_text(original_text, badge_block)
 
     if updated_text == original_text:

@@ -6,6 +6,7 @@ import json
 from unittest import TestCase, main, mock
 from pathlib import Path
 
+from tools import agent_skill_provenance
 from tools import update_readme_badges
 
 
@@ -14,11 +15,16 @@ class ReadmeBadgeGenerationTests(TestCase):
     def setUpClass(cls) -> None:
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.metadata_path = cls.repo_root / ".github" / "readme_badges.json"
+        cls.upstream_sources = agent_skill_provenance.load_upstream_sources(
+            cls.repo_root
+        )
 
     def test_readme_badges_match_generated_block(self) -> None:
         readme_text = (self.repo_root / "README.md").read_text(encoding="utf-8")
         metadata = update_readme_badges.resolve_repo_metadata(self.repo_root)
-        expected_block = update_readme_badges.render_badge_block(metadata)
+        expected_block = update_readme_badges.render_badge_block(
+            metadata, self.upstream_sources
+        )
         self.assertEqual(
             expected_block,
             update_readme_badges.extract_badge_block(readme_text),
@@ -26,7 +32,9 @@ class ReadmeBadgeGenerationTests(TestCase):
 
     def test_generated_badges_follow_expected_order(self) -> None:
         metadata = update_readme_badges.resolve_repo_metadata(self.repo_root)
-        badge_block = update_readme_badges.render_badge_block(metadata)
+        badge_block = update_readme_badges.render_badge_block(
+            metadata, self.upstream_sources
+        )
         self.assertLess(
             badge_block.index("[![License]("),
             badge_block.index("[![tests]("),
@@ -45,6 +53,10 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![Ruff]("),
+            badge_block.index(f"[![{self.upstream_sources.badge_label}]("),
+        )
+        self.assertLess(
+            badge_block.index(f"[![{self.upstream_sources.badge_label}]("),
             badge_block.index("[![GitHub commit activity]("),
         )
 
@@ -58,7 +70,9 @@ class ReadmeBadgeGenerationTests(TestCase):
             remote_name="origin",
             branch_name="main",
         )
-        badge_block = update_readme_badges.render_badge_block(metadata)
+        badge_block = update_readme_badges.render_badge_block(
+            metadata, self.upstream_sources
+        )
         self.assertIn(
             "https://img.shields.io/github/commit-activity/m/example-owner/example-repo",
             badge_block,
@@ -89,6 +103,14 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertIn(
             "https://img.shields.io/github/actions/workflow/status/example-owner/example-repo/super-linter.yml?branch=main&label=super-linter",
+            badge_block,
+        )
+        self.assertIn(
+            self.upstream_sources.skills_tree_url,
+            badge_block,
+        )
+        self.assertIn(
+            self.upstream_sources.badge_image_url,
             badge_block,
         )
         self.assertNotIn(

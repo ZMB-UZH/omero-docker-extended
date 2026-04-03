@@ -16,13 +16,13 @@ Use this skill to choose the narrowest correct verification set after a change.
 - `omeroweb_imaris_connector/` -> `omeroweb_imaris_connector/tests/`
 - `omero_web_zarr/` -> `omero_web_zarr/tests/`
 - `omero_plugin_common/` -> `omero_plugin_common/tests/`
-- `tests/` or root docs/workflows/tools/startup/docker/installation changes -> `tests/`
+- `tests/`, root `README.md`, `AGENTS.md`, `.github/workflows/`, `tools/`, `startup/`, `docker/`, or `installation/` changes -> `tests/`
 
 ## Combination rules
 
 - Shared-library plus plugin change: run both suites
 - Root docs plus plugin change: run `tests/` plus the affected plugin suite
-- Dockerfile/startup/install change: run `tests/`, syntax checks, and any affected package suites
+- `docker/`, `startup/`, or `installation/` change: run `tests/`, syntax checks, and any affected package suites
 - Multi-plugin refactor: run every touched package suite separately
 
 ## Fast fallback checks
