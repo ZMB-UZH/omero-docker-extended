@@ -145,21 +145,21 @@ Useful commands (host):
 
 ## Key routes
 
-| Route | Method | Purpose |
-|---|---|---|
-| `/omeroweb_import/` | GET | Main upload page |
-| `/omeroweb_import/projects/` | GET | List accessible projects |
-| `/omeroweb_import/root-status/` | GET | Check if current user is OMERO root |
-| `/omeroweb_import/help/` | GET | Serve plugin help documentation (Markdown) |
-| `/omeroweb_import/start/` | POST | Create a new upload session (job) |
-| `/omeroweb_import/upload/<job_id>/` | POST | Transfer files to the job directory |
-| `/omeroweb_import/import/<job_id>/` | POST | Trigger OMERO CLI import for uploaded files |
-| `/omeroweb_import/confirm/<job_id>/` | POST | Confirm import completion |
-| `/omeroweb_import/prune/<job_id>/` | POST | Remove temporary upload files |
-| `/omeroweb_import/status/<job_id>/` | GET | Poll job status |
-| `/omeroweb_import/user-settings/save/` | POST | Save user upload preferences |
-| `/omeroweb_import/special-method-settings/save/` | POST | Save SEM-EDX method settings |
-| `/omeroweb_import/special-method-settings/load/` | POST | Load SEM-EDX method settings |
+| Route                                            | Method | Purpose                                     |
+| ------------------------------------------------ | ------ | ------------------------------------------- |
+| `/omeroweb_import/`                              | GET    | Main upload page                            |
+| `/omeroweb_import/projects/`                     | GET    | List accessible projects                    |
+| `/omeroweb_import/root-status/`                  | GET    | Check if current user is OMERO root         |
+| `/omeroweb_import/help/`                         | GET    | Serve plugin help documentation (Markdown)  |
+| `/omeroweb_import/start/`                        | POST   | Create a new upload session (job)           |
+| `/omeroweb_import/upload/<job_id>/`              | POST   | Transfer files to the job directory         |
+| `/omeroweb_import/import/<job_id>/`              | POST   | Trigger OMERO CLI import for uploaded files |
+| `/omeroweb_import/confirm/<job_id>/`             | POST   | Confirm import completion                   |
+| `/omeroweb_import/prune/<job_id>/`               | POST   | Remove temporary upload files               |
+| `/omeroweb_import/status/<job_id>/`              | GET    | Poll job status                             |
+| `/omeroweb_import/user-settings/save/`           | POST   | Save user upload preferences                |
+| `/omeroweb_import/special-method-settings/save/` | POST   | Save SEM-EDX method settings                |
+| `/omeroweb_import/special-method-settings/load/` | POST   | Load SEM-EDX method settings                |
 
 ## Typical user workflow
 
@@ -212,39 +212,39 @@ The Import plugin includes specialized support for SEM-EDX (Scanning Electron Mi
 
 Configuration values in `env/omeroweb.env`:
 
-| Variable | Purpose |
-|---|---|
-| `UPLOAD_CONCURRENT_LIMIT` | Maximum simultaneous upload jobs |
-| `UPLOAD_BATCH_SIZE` | Files per import batch |
-| `OMERO_IMPORT_PATH` | Host path for temporary upload storage |
-| `OMERO_WEB_WSGI_ARGS` | Gunicorn arguments for OMERO.web; include a long `--timeout` for slow upload requests (default example: `--timeout 7200`) |
-| `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS` | OMERO CLI keepalive interval for long-running imports (default `30`) |
-| `OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS` | Timeout for OMERO CLI dry-run compatibility/grouping scans (default `7200`) |
-| `OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS` | Per-import subprocess timeout in seconds (default `86400`) |
-| `OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS` | Total retry window when the server-side Zarr helper reports `NoProcessorAvailable` |
-| `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS` | Sleep interval between managed-repository helper launch retries |
-| `OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT` | Enable the alternative native zarr import method for Bio-Formats-incompatible `.zarr` files (default `false`). When `false`, only the standard Bio-Formats import path is used and incompatible zarr files are skipped. |
-| `OMERO_WEB_UPLOAD_NATIVE_ZARR_GZIP_LEVEL` | Gzip level used when the disposable native-import copy must rewrite Blosc-backed image arrays for render-safe import |
-| `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` | Failed-job deferred cleanup window (default `172800`) |
+| Variable                                           | Purpose                                                                                                                                                                                                                 |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UPLOAD_CONCURRENT_LIMIT`                          | Maximum simultaneous upload jobs                                                                                                                                                                                        |
+| `UPLOAD_BATCH_SIZE`                                | Files per import batch                                                                                                                                                                                                  |
+| `OMERO_IMPORT_PATH`                                | Host path for temporary upload storage                                                                                                                                                                                  |
+| `OMERO_WEB_WSGI_ARGS`                              | Gunicorn arguments for OMERO.web; include a long `--timeout` for slow upload requests (default example: `--timeout 7200`)                                                                                               |
+| `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS`           | OMERO CLI keepalive interval for long-running imports (default `30`)                                                                                                                                                    |
+| `OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS`      | Timeout for OMERO CLI dry-run compatibility/grouping scans (default `7200`)                                                                                                                                             |
+| `OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS`          | Per-import subprocess timeout in seconds (default `86400`)                                                                                                                                                              |
+| `OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS`    | Total retry window when the server-side Zarr helper reports `NoProcessorAvailable`                                                                                                                                      |
+| `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS`      | Sleep interval between managed-repository helper launch retries                                                                                                                                                         |
+| `OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT`         | Enable the alternative native zarr import method for Bio-Formats-incompatible `.zarr` files (default `false`). When `false`, only the standard Bio-Formats import path is used and incompatible zarr files are skipped. |
+| `OMERO_WEB_UPLOAD_NATIVE_ZARR_GZIP_LEVEL`          | Gzip level used when the disposable native-import copy must rewrite Blosc-backed image arrays for render-safe import                                                                                                    |
+| `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` | Failed-job deferred cleanup window (default `172800`)                                                                                                                                                                   |
 
 The import step runs OMERO CLI with `HOME` and `XDG_CACHE_HOME` set to `${OMERO_IMPORT_PATH}/.omero-cli-home` to guarantee writable cache space for OMERO.java downloads in non-root containers.
 The managed-repository helper launch also requires `ROOTPASS` from `env/omero_secrets.env`, because OMERO.web starts that helper through an independent OMERO CLI login instead of reusing any browser session.
 
 Build-time native Zarr version pins live in `env/omeroserver.env` / `env/omeroserver_example.env`:
 
-| Variable | Purpose |
-|---|---|
-| `OMERO_CLI_ZARR_VERSION` | `omero-cli-zarr` runtime version baked into the `omeroweb` image |
-| `BIOFORMATS2RAW_VERSION` | `bioformats2raw` runtime version baked into the `omeroweb` image |
-| `OME_ZARR_PY_VERSION` | `ome-zarr` (`ome-zarr-py`) parser/runtime version baked into the `omeroweb` image |
+| Variable                 | Purpose                                                                           |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `OMERO_CLI_ZARR_VERSION` | `omero-cli-zarr` runtime version baked into the `omeroweb` image                  |
+| `BIOFORMATS2RAW_VERSION` | `bioformats2raw` runtime version baked into the `omeroweb` image                  |
+| `OME_ZARR_PY_VERSION`    | `ome-zarr` (`ome-zarr-py`) parser/runtime version baked into the `omeroweb` image |
 
 Zarr managed-repository staging also depends on shared server-side configuration from `installation_paths.env` and `env/omeroserver.env`:
 
-| Variable | Purpose |
-|---|---|
-| `OMERO_DATA_DIR` | In-container OMERO data root that contains the managed repository mount |
-| `CONFIG_omero_managed_dir` | Absolute managed-repository root path inside `OMERO_DATA_DIR` |
-| `CONFIG_omero_fs_repo_path` | OMERO-managed repository path template used for per-user staging |
+| Variable                    | Purpose                                                                 |
+| --------------------------- | ----------------------------------------------------------------------- |
+| `OMERO_DATA_DIR`            | In-container OMERO data root that contains the managed repository mount |
+| `CONFIG_omero_managed_dir`  | Absolute managed-repository root path inside `OMERO_DATA_DIR`           |
+| `CONFIG_omero_fs_repo_path` | OMERO-managed repository path template used for per-user staging        |
 
 ## Large-file behavior
 

@@ -19,26 +19,26 @@ The admin tools plugin exposes operational interfaces for log exploration, syste
 
 ## Key routes
 
-| Route | Method | Purpose |
-|---|---|---|
-| `/omeroweb_admin_tools/` | GET | Main admin dashboard |
-| `/omeroweb_admin_tools/root-status/` | GET | Check root user status |
-| `/omeroweb_admin_tools/logs/` | GET | Log exploration UI |
-| `/omeroweb_admin_tools/logs/data/` | GET | Fetch log entries from Loki |
-| `/omeroweb_admin_tools/logs/internal-labels/` | GET | List internal log file labels |
-| `/omeroweb_admin_tools/resource-monitoring/` | GET | Resource monitoring UI |
-| `/omeroweb_admin_tools/resource-monitoring/data/` | GET | Fetch container stats and system info |
-| `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/<subpath>` | GET/POST | Proxy to Grafana API |
-| `/omeroweb_admin_tools/resource-monitoring/prometheus-proxy/<subpath>` | GET/POST | Proxy to Prometheus API |
-| `/omeroweb_admin_tools/storage/` | GET | Storage analytics UI |
-| `/omeroweb_admin_tools/storage/data/` | GET | Fetch storage usage data plus quota reconciliation state |
-| `/omeroweb_admin_tools/storage/quota/data/` | GET | Fetch persisted group quota state and reconciliation logs |
-| `/omeroweb_admin_tools/storage/quota/update/` | POST | Update quota values from Quotas tab edits |
-| `/omeroweb_admin_tools/storage/quota/import/` | POST | Import quota values from CSV (`Group`, `Quota [GB]`) |
-| `/omeroweb_admin_tools/storage/quota/template/` | GET | Download CSV template for quota import |
-| `/omeroweb_admin_tools/server-database-testing/` | GET | Server diagnostics UI |
-| `/omeroweb_admin_tools/server-database-testing/run/` | POST | Execute diagnostic scripts |
-| `/omeroweb_admin_tools/help/` | GET | Serve plugin help documentation (Markdown) |
+| Route                                                                  | Method   | Purpose                                                   |
+| ---------------------------------------------------------------------- | -------- | --------------------------------------------------------- |
+| `/omeroweb_admin_tools/`                                               | GET      | Main admin dashboard                                      |
+| `/omeroweb_admin_tools/root-status/`                                   | GET      | Check root user status                                    |
+| `/omeroweb_admin_tools/logs/`                                          | GET      | Log exploration UI                                        |
+| `/omeroweb_admin_tools/logs/data/`                                     | GET      | Fetch log entries from Loki                               |
+| `/omeroweb_admin_tools/logs/internal-labels/`                          | GET      | List internal log file labels                             |
+| `/omeroweb_admin_tools/resource-monitoring/`                           | GET      | Resource monitoring UI                                    |
+| `/omeroweb_admin_tools/resource-monitoring/data/`                      | GET      | Fetch container stats and system info                     |
+| `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/<subpath>`    | GET/POST | Proxy to Grafana API                                      |
+| `/omeroweb_admin_tools/resource-monitoring/prometheus-proxy/<subpath>` | GET/POST | Proxy to Prometheus API                                   |
+| `/omeroweb_admin_tools/storage/`                                       | GET      | Storage analytics UI                                      |
+| `/omeroweb_admin_tools/storage/data/`                                  | GET      | Fetch storage usage data plus quota reconciliation state  |
+| `/omeroweb_admin_tools/storage/quota/data/`                            | GET      | Fetch persisted group quota state and reconciliation logs |
+| `/omeroweb_admin_tools/storage/quota/update/`                          | POST     | Update quota values from Quotas tab edits                 |
+| `/omeroweb_admin_tools/storage/quota/import/`                          | POST     | Import quota values from CSV (`Group`, `Quota [GB]`)      |
+| `/omeroweb_admin_tools/storage/quota/template/`                        | GET      | Download CSV template for quota import                    |
+| `/omeroweb_admin_tools/server-database-testing/`                       | GET      | Server diagnostics UI                                     |
+| `/omeroweb_admin_tools/server-database-testing/run/`                   | POST     | Execute diagnostic scripts                                |
+| `/omeroweb_admin_tools/help/`                                          | GET      | Serve plugin help documentation (Markdown)                |
 
 ## Code structure
 
@@ -64,24 +64,24 @@ omeroweb_admin_tools/
 
 This plugin requires reachable monitoring service endpoints configured in `env/omeroweb.env`:
 
-| Variable | Purpose | Example |
-|---|---|---|
-| `ADMIN_TOOLS_LOKI_URL` | Loki base URL for log queries | `http://loki:3100` |
-| `ADMIN_TOOLS_GRAFANA_URL` | Grafana base URL for dashboard embedding | `http://grafana:3000` |
-| `ADMIN_TOOLS_PROMETHEUS_URL` | Prometheus base URL for metric queries | `http://prometheus:9090` |
-| `ADMIN_TOOLS_LOG_LOOKBACK_SECONDS` | Default log query time range | `3600` |
-| `ADMIN_TOOLS_LOG_MAX_ENTRIES` | Maximum log entries per query | `5000` |
-| `ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS` | HTTP timeout for Loki requests | `30` |
-| `ADMIN_TOOLS_LOG_CACHE_MAX_MB` | Process-local RAM budget for cached log query results | `512` |
-| `ADMIN_TOOLS_QUOTA_STATE_PATH` | JSON state file for persisted quotas and logs | `/tmp/omero-admin-tools/group-quotas.json` |
-| `ADMIN_TOOLS_MIN_QUOTA_GB` | Minimum accepted quota value (GB) used by UI validation, backend validation, and ext4 enforcer script | `0.10` |
-| `ADMIN_TOOLS_DEFAULT_GROUP_QUOTA_GB` | Default quota value (GB) auto-assigned to newly created OMERO groups when auto mode is enabled | `0.10` |
-| `ADMIN_TOOLS_AUTO_SET_DEFAULT_GROUP_QUOTA` | Boolean flag (`true`/`false`) enabling automatic default quota creation for new OMERO groups | `false` |
-| `ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE` | Optional command template used to enforce quotas. If unset on ext4 (when mounted with `prjquota` and the `project` feature enabled), a built-in project-quota enforcer script is used. | `/opt/omero/web/bin/enforce-ext4-project-quota.sh --group {group} --group-path {group_path} --quota-gb {quota_gb} --mount-point {mount_point}` |
-| `ADMIN_TOOLS_QUOTA_RECONCILE_INTERVAL_SECONDS` | Background reconciliation interval for quota enforcement loop | `60` |
-| `ADMIN_TOOLS_QUOTA_PROJECTS_FILE` | ext4 project-quota mapping file updated by the enforcer | `/tmp/omero-admin-tools/quota/projects` |
-| `ADMIN_TOOLS_QUOTA_PROJID_FILE` | ext4 project-name mapping file updated by the enforcer | `/tmp/omero-admin-tools/quota/projid` |
-| `ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN` | Minimum project ID used when assigning new group IDs | `200000` |
+| Variable                                       | Purpose                                                                                                                                                                                | Example                                                                                                                                        |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ADMIN_TOOLS_LOKI_URL`                         | Loki base URL for log queries                                                                                                                                                          | `http://loki:3100`                                                                                                                             |
+| `ADMIN_TOOLS_GRAFANA_URL`                      | Grafana base URL for dashboard embedding                                                                                                                                               | `http://grafana:3000`                                                                                                                          |
+| `ADMIN_TOOLS_PROMETHEUS_URL`                   | Prometheus base URL for metric queries                                                                                                                                                 | `http://prometheus:9090`                                                                                                                       |
+| `ADMIN_TOOLS_LOG_LOOKBACK_SECONDS`             | Default log query time range                                                                                                                                                           | `3600`                                                                                                                                         |
+| `ADMIN_TOOLS_LOG_MAX_ENTRIES`                  | Maximum log entries per query                                                                                                                                                          | `5000`                                                                                                                                         |
+| `ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS`      | HTTP timeout for Loki requests                                                                                                                                                         | `30`                                                                                                                                           |
+| `ADMIN_TOOLS_LOG_CACHE_MAX_MB`                 | Process-local RAM budget for cached log query results                                                                                                                                  | `512`                                                                                                                                          |
+| `ADMIN_TOOLS_QUOTA_STATE_PATH`                 | JSON state file for persisted quotas and logs                                                                                                                                          | `/tmp/omero-admin-tools/group-quotas.json`                                                                                                     |
+| `ADMIN_TOOLS_MIN_QUOTA_GB`                     | Minimum accepted quota value (GB) used by UI validation, backend validation, and ext4 enforcer script                                                                                  | `0.10`                                                                                                                                         |
+| `ADMIN_TOOLS_DEFAULT_GROUP_QUOTA_GB`           | Default quota value (GB) auto-assigned to newly created OMERO groups when auto mode is enabled                                                                                         | `0.10`                                                                                                                                         |
+| `ADMIN_TOOLS_AUTO_SET_DEFAULT_GROUP_QUOTA`     | Boolean flag (`true`/`false`) enabling automatic default quota creation for new OMERO groups                                                                                           | `false`                                                                                                                                        |
+| `ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE`     | Optional command template used to enforce quotas. If unset on ext4 (when mounted with `prjquota` and the `project` feature enabled), a built-in project-quota enforcer script is used. | `/opt/omero/web/bin/enforce-ext4-project-quota.sh --group {group} --group-path {group_path} --quota-gb {quota_gb} --mount-point {mount_point}` |
+| `ADMIN_TOOLS_QUOTA_RECONCILE_INTERVAL_SECONDS` | Background reconciliation interval for quota enforcement loop                                                                                                                          | `60`                                                                                                                                           |
+| `ADMIN_TOOLS_QUOTA_PROJECTS_FILE`              | ext4 project-quota mapping file updated by the enforcer                                                                                                                                | `/tmp/omero-admin-tools/quota/projects`                                                                                                        |
+| `ADMIN_TOOLS_QUOTA_PROJID_FILE`                | ext4 project-name mapping file updated by the enforcer                                                                                                                                 | `/tmp/omero-admin-tools/quota/projid`                                                                                                          |
+| `ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN`             | Minimum project ID used when assigning new group IDs                                                                                                                                   | `200000`                                                                                                                                       |
 
 The Docker socket (`/var/run/docker.sock`) must be mounted read-only for container stats and diagnostics compose-state inspection.
 
