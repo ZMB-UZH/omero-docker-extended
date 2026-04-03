@@ -19,8 +19,8 @@ This plugin provides OMERO image export to Imaris-compatible (.ims) format throu
 
 ## Key route
 
-| Route | Method | Purpose |
-|---|---|---|
+| Route             | Method   | Purpose                                       |
+| ----------------- | -------- | --------------------------------------------- |
 | `/imaris-export/` | GET/POST | Start export, poll status, or download result |
 
 ## Request modes
@@ -69,27 +69,27 @@ The Celery worker runs inside the `omeroweb` container, managed by supervisord a
 
 Defined in `env/omero-celery.env`:
 
-| Variable | Purpose | Example |
-|---|---|---|
-| `OMERO_IMS_USE_CELERY` | Enable Celery-backed exports | `true` |
-| `OMERO_IMS_USE_JOB_SERVICE_SESSION` | Use job-service account instead of user session | `false` |
-| `OMERO_IMS_CELERY_BROKER_URL` | Redis broker URL | `redis://redis:6379/2` |
-| `OMERO_IMS_CELERY_BACKEND_URL` | Redis result backend URL | `redis://redis:6379/2` |
-| `OMERO_IMS_CELERY_QUEUE` | Queue name (must match producer and worker) | `imaris_export` |
-| `OMERO_IMS_CELERY_RESULT_EXPIRES` | Result expiry in seconds | `7200` |
-| `OMERO_IMS_CELERY_TIME_LIMIT` | Task time limit in seconds | `7200` |
-| `OMERO_IMS_CELERY_MAX_RETRIES` | Broker connection retry count | `20` |
-| `OMERO_IMS_CELERY_PREFETCH` | Worker prefetch multiplier | `1` |
-| `OMERO_IMS_EXPORT_TIMEOUT` | Sync mode timeout in seconds | `3600` |
-| `OMERO_IMS_EXPORT_POLL_INTERVAL` | Status poll interval in seconds | `2.0` |
-| `OMERO_IMS_SCRIPT_NAME` | Export script name | `IMS_Export.py` |
+| Variable                            | Purpose                                         | Example                |
+| ----------------------------------- | ----------------------------------------------- | ---------------------- |
+| `OMERO_IMS_USE_CELERY`              | Enable Celery-backed exports                    | `true`                 |
+| `OMERO_IMS_USE_JOB_SERVICE_SESSION` | Use job-service account instead of user session | `false`                |
+| `OMERO_IMS_CELERY_BROKER_URL`       | Redis broker URL                                | `redis://redis:6379/2` |
+| `OMERO_IMS_CELERY_BACKEND_URL`      | Redis result backend URL                        | `redis://redis:6379/2` |
+| `OMERO_IMS_CELERY_QUEUE`            | Queue name (must match producer and worker)     | `imaris_export`        |
+| `OMERO_IMS_CELERY_RESULT_EXPIRES`   | Result expiry in seconds                        | `7200`                 |
+| `OMERO_IMS_CELERY_TIME_LIMIT`       | Task time limit in seconds                      | `7200`                 |
+| `OMERO_IMS_CELERY_MAX_RETRIES`      | Broker connection retry count                   | `20`                   |
+| `OMERO_IMS_CELERY_PREFETCH`         | Worker prefetch multiplier                      | `1`                    |
+| `OMERO_IMS_EXPORT_TIMEOUT`          | Sync mode timeout in seconds                    | `3600`                 |
+| `OMERO_IMS_EXPORT_POLL_INTERVAL`    | Status poll interval in seconds                 | `2.0`                  |
+| `OMERO_IMS_SCRIPT_NAME`             | Export script name                              | `IMS_Export.py`        |
 
 Defined in `env/omeroserver.env`:
 
-| Variable | Purpose | Example |
-|---|---|---|
-| `BIOFORMATS_VERSION` | Bio-Formats release version for `bioformats_package.jar` | `8.5.0` |
-| `OMERO_IMS_EXPORT_DIR` | IMS export output directory | `/OMERO/ImarisExports` |
+| Variable               | Purpose                                                  | Example                |
+| ---------------------- | -------------------------------------------------------- | ---------------------- |
+| `BIOFORMATS_VERSION`   | Bio-Formats release version for `bioformats_package.jar` | `8.5.0`                |
+| `OMERO_IMS_EXPORT_DIR` | IMS export output directory                              | `/OMERO/ImarisExports` |
 
 Job-service account variables (in `env/omero-celery.env` or `env/omeroserver.env`):
 

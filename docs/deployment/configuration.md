@@ -321,10 +321,10 @@ ephemeral handoff copy, never to the browser-staged source tree.
 
 Two feature flags control the alternative zarr import and rendering mechanisms:
 
-| Variable | Purpose |
-|---|---|
-| `OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT` | Enable the alternative native zarr import method for Bio-Formats-incompatible `.zarr` files (default `false`). When `false`, only the standard Bio-Formats import path is used and incompatible zarr files are skipped. |
-| `OMERO_WEB_ZARR_ALTERNATIVE_RENDERING` | Enable alternative zarr rendering overrides that patch OMERO's built-in rendering, preview, and pyramid handling for zarr images (default `false`). When `false`, OMERO's default built-in rendering pipeline applies without zarr-specific patches. |
+| Variable                                   | Purpose                                                                                                                                                                                                                                              |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT` | Enable the alternative native zarr import method for Bio-Formats-incompatible `.zarr` files (default `false`). When `false`, only the standard Bio-Formats import path is used and incompatible zarr files are skipped.                              |
+| `OMERO_WEB_ZARR_ALTERNATIVE_RENDERING`     | Enable alternative zarr rendering overrides that patch OMERO's built-in rendering, preview, and pyramid handling for zarr images (default `false`). When `false`, OMERO's default built-in rendering pipeline applies without zarr-specific patches. |
 
 > **Recommendation:** When disabling either alternative zarr flag after it has
 > been active, set `OMERO_RENDERING_CACHE_CLEANUP_ON_START=1` in
