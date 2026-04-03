@@ -1,0 +1,7 @@
+interface:
+  display_name: "Python Patterns"
+  short_description: "Use repo-safe Python helper, config, and boundary patterns"
+  brand_color: "#0F766E"
+  default_prompt: "Apply Python patterns that fit this repository's architecture and env contracts"
+policy:
+  allow_implicit_invocation: true

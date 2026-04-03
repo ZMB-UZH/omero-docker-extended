@@ -1,0 +1,7 @@
+interface:
+  display_name: "Deployment Patterns"
+  short_description: "Use safe rollout and update patterns for this Dockerized OMERO platform"
+  brand_color: "#0F766E"
+  default_prompt: "Apply deployment and update guidance that matches this repository's installation model"
+policy:
+  allow_implicit_invocation: true

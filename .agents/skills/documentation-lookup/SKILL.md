@@ -2,6 +2,7 @@
 name: documentation-lookup
 description: Use current official documentation and release notes for OMERO, Django, Docker, Python, PostgreSQL, monitoring tools, and AI harnesses instead of memory.
 origin: ECC v1.9.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v1.9.0/skills/documentation-lookup/SKILL.md
 ---
 
 # Documentation Lookup

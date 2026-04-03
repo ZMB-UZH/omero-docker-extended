@@ -2,6 +2,7 @@
 name: verification-loop
 description: Repository-specific verification flow for OMERO Docker Extended. Runs docs validation, Ruff, split pytest suites, and targeted fallback checks without overstating coverage.
 origin: ECC v1.9.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v1.9.0/skills/verification-loop/SKILL.md
 ---
 
 # Verification Loop

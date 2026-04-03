@@ -1,0 +1,7 @@
+interface:
+  display_name: "Django Security"
+  short_description: "Harden OMERO.web views, uploads, and responses without breaking plugin contracts"
+  brand_color: "#0F766E"
+  default_prompt: "Apply Django security rules that match this repository's helper and permission boundaries"
+policy:
+  allow_implicit_invocation: true

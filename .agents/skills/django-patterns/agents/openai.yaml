@@ -1,0 +1,7 @@
+interface:
+  display_name: "Django Patterns"
+  short_description: "Use the established OMERO.web plugin structure and helper boundaries"
+  brand_color: "#0F766E"
+  default_prompt: "Apply Django patterns that match this repository's plugin architecture"
+policy:
+  allow_implicit_invocation: true

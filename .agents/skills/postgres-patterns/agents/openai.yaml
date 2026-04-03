@@ -1,0 +1,7 @@
+interface:
+  display_name: "Postgres Patterns"
+  short_description: "Use safe SQL and maintenance-aware patterns for the repo's two PostgreSQL services"
+  brand_color: "#0F766E"
+  default_prompt: "Apply PostgreSQL patterns that respect the OMERO and plugin database boundaries"
+policy:
+  allow_implicit_invocation: true

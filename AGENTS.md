@@ -36,6 +36,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Prefer interactive terminals and avoid long `sleep` commands unless absolutely necessary for the command set or workflow. Poll for results or use background execution with notification instead of blind waits.
 - When a general command fails for a reusable environment-specific reason, update `AGENTS.md` or the relevant doc in the same change so later agents do not repeat it.
 - If the current harness supports `.agents/skills/`, prefer the repo-local skills there before falling back to generic workflows. If the harness does not support them, read the matching `SKILL.md` manually.
+- Native adapter files exist for GitHub Copilot (`.github/copilot-instructions.md`, `.github/instructions/`), Cursor (`.cursor/rules/`), Claude (`CLAUDE.md`), and Gemini (`GEMINI.md`). Treat `AGENTS.md` as the universal baseline; adapter files are additive only.
 - Never create, edit, overwrite, or delete `env/omero_secrets.env` as an AI agent. Treat it as operator-managed secret material.
 - For OMERO configuration property names, defaults, and semantics, use the official OMERO config glossary as the single source of truth: `https://omero.readthedocs.io/en/stable/sysadmins/config.html`.
 - When expressing OMERO properties in tracked env files, follow the existing repository naming pattern already used in `env/omeroserver*.env` and `env/omeroweb*.env` (for example `omero.pixeldata.threads` -> `CONFIG_omero_pixeldata_threads`).
@@ -59,6 +60,8 @@ Do not start coding until you can name the helper boundary you will harden and t
 8. **`docs/reference/code-scanning-resolved-findings.md`** -- full resolved scanner history with rule-level prevention lessons. Every pattern there has been fixed at least once — reintroducing the same pattern is a regression.
 9. **`docs/operations/code-scanning.md`** -- live alert inventory, triage SLAs, and remediation workflow for new scanning batches.
 10. **`docs/reference/ai-agent-skills.md`** and **`.agents/skills/`** -- harness-neutral skill catalog for recurring repo workflows such as research, verification, env-contract review, runtime debugging, and security triage.
+11. **`docs/reference/ai-agent-integrations.md`** -- cross-agent adapter map for Copilot, Cursor, Claude, Gemini, and generic skill loaders.
+12. **`docs/reference/ai-agent-upstream-sources.md`** and **`third_party/ecc-v1.9.0/`** -- pinned ECC v1.9.0 provenance for ECC-derived local skills.
 
 ## Domain map
 
@@ -239,6 +242,7 @@ omeroweb_<name>/
 - The repository now enforces a `security-delta` job inside `security-code-scanning`. Do not weaken or bypass it. New pull-request alerts and newly created default-branch alerts are treated as regressions.
 - Do not modify security scan workflow files unless explicitly instructed to do so.
 - When you do modify any GitHub Actions workflow, refresh every touched action or reusable-workflow pin from the official GitHub Releases/Tags page first. Use the latest published version available at that time, pin it by full commit SHA, and update the inline version comment in the workflow. Do not trust stale in-repo comments or memory for action versions.
+- This repository's `tests.yml` uses the GitHub Actions environment `ci-coverage`, so pushes to `main` create GitHub deployment records for that CI environment even when no runtime deployment has taken place.
 - For the canonical coding patterns that prevent new findings, see `docs/reference/ai-agent-security-prevention-playbook.md`. For live counts, SLAs, and remediation workflow, see `docs/operations/code-scanning.md`.
 
 ### Testing
