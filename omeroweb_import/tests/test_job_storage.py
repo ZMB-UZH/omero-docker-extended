@@ -163,3 +163,58 @@ def test_job_storage_append_helpers_store_timestamped_messages(monkeypatch):
 
     assert job["messages"] == [{"timestamp": 123.5, "text": "hello"}]
     assert job["errors"] == [{"timestamp": 123.5, "text": "boom"}]
+
+
+def test_job_storage_remaining_edges_cover_empty_paths_and_failed_update_retries(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("EDGE_BATCH_SIZE", "not-a-number")
+    assert job_storage.get_env_int("EDGE_BATCH_SIZE", 4, 1, 10) == 4
+    assert job_storage.should_start_compatibility_check({"files": []}) is False
+    assert job_storage.load_job(_job_id(), tmp_path) is None
+
+    path = tmp_path / f"{_job_id()}.json"
+    path.write_text(json.dumps({"job_id": _job_id(), "status": "checking"}))
+
+    class _AlwaysFailLock:
+        def __init__(self, *_args, **_kwargs):
+            raise job_storage.portalocker.exceptions.LockException("busy")
+
+    monkeypatch.setattr(job_storage.portalocker, "Lock", _AlwaysFailLock)
+    monkeypatch.setattr(job_storage.time, "sleep", lambda _value: None)
+    monkeypatch.setattr(job_storage.random, "uniform", lambda _start, _end: 0.0)
+
+    assert (
+        job_storage.robust_update_job(
+            _job_id(),
+            lambda job: {**job, "status": "ready"},
+            tmp_path,
+            retries=2,
+            timeout=0.1,
+        )
+        is None
+    )
+
+
+def test_job_storage_load_job_covers_locked_success_and_failed_fallback_reads(
+    tmp_path,
+    monkeypatch,
+):
+    payload = {"job_id": _job_id(), "status": "ready"}
+    path = tmp_path / f"{_job_id()}.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert job_storage.load_job(_job_id(), tmp_path) == payload
+
+    class _FailingLock:
+        def __init__(self, *_args, **_kwargs):
+            raise job_storage.portalocker.exceptions.LockException("busy")
+
+    monkeypatch.setattr(job_storage.portalocker, "Lock", _FailingLock)
+    monkeypatch.setattr(
+        job_storage.Path,
+        "open",
+        lambda self, *args, **kwargs: (_ for _ in ()).throw(OSError("open failed")),
+    )
+    assert job_storage.load_job(_job_id(), tmp_path) is None

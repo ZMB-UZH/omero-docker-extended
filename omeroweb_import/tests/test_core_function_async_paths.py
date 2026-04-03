@@ -127,6 +127,78 @@ def test_find_image_by_name_prefers_dataset_search_and_global_fallback(monkeypat
     assert core_functions._find_image_by_name(conn, "", dataset_id=7) is None
 
 
+def test_run_compatibility_check_inner_covers_remaining_idle_state_transitions(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(core_functions, "_load_job", lambda job_id: None)
+    core_functions._run_compatibility_check_inner("0" * 32)
+
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: tmp_path / "uploads")
+    monkeypatch.setattr(core_functions.time, "time", lambda: 7100.0)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_units",
+        lambda current_job, current_root, for_compatibility=False: [],
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_refresh_job_status",
+        lambda current_job: current_job,
+    )
+
+    cases = [
+        (
+            {
+                "files": [{"status": "uploaded"}],
+                "incompatible_files": ["blocked.ome.tif"],
+                "compatibility_status": "checking",
+            },
+            "incompatible",
+        ),
+        (
+            {
+                "files": [{"status": "uploaded", "compatibility": "error"}],
+                "compatibility_status": "checking",
+            },
+            "error",
+        ),
+        (
+            {
+                "files": [{"status": "uploaded", "compatibility": "compatible"}],
+                "compatibility_status": "checking",
+            },
+            "compatible",
+        ),
+        (
+            {
+                "files": [{"status": "pending"}],
+                "compatibility_status": "checking",
+            },
+            "pending",
+        ),
+    ]
+
+    for index, (payload, expected_status) in enumerate(cases):
+        job_id = f"{index + 1:032x}"
+        job = {
+            "job_id": job_id,
+            "host": "omeroserver",
+            "port": 4064,
+            "session_key": "session",
+            "compatibility_enabled": True,
+            "compatibility_thread_active": True,
+        }
+        job.update(payload)
+        state = _job_state(monkeypatch, job)
+
+        core_functions._run_compatibility_check_inner(job_id)
+
+        assert state["job"]["planned_import_units"] == []
+        assert state["job"]["compatibility_thread_active"] is False
+        assert state["job"]["compatibility_status"] == expected_status
+
+
 def test_verify_import_helpers_and_dataset_creation(monkeypatch):
     class _Params:
         def __init__(self):

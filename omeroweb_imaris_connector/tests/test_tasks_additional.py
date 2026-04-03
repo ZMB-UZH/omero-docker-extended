@@ -433,3 +433,101 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
         "error": None,
     }
     assert closed == [True]
+
+
+def test_task_helpers_cover_security_validation_and_close_warning_paths(
+    monkeypatch,
+):
+    tasks = _import_tasks(monkeypatch)
+
+    assert tasks._get_connection_session_key(None) is None
+    assert (
+        tasks._get_connection_session_key(
+            types.SimpleNamespace(
+                c=types.SimpleNamespace(
+                    getSessionId=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+                )
+            )
+        )
+        is None
+    )
+
+    class _ClientError(Exception):
+        pass
+
+    class _SecurityViolation(Exception):
+        pass
+
+    omero_stub = types.SimpleNamespace(
+        ClientError=_ClientError,
+        SecurityViolation=_SecurityViolation,
+    )
+    monkeypatch.setattr(tasks, "omero", omero_stub)
+
+    monkeypatch.setattr(
+        omero_stub,
+        "client",
+        lambda host, port: types.SimpleNamespace(joinSession=lambda session_key: None),
+        raising=False,
+    )
+    with pytest.raises(RuntimeError, match="Failed to open OMERO session"):
+        tasks._open_session_connection("session", "omeroserver", 4064)
+
+    monkeypatch.setattr(
+        omero_stub,
+        "client",
+        lambda host, port: types.SimpleNamespace(
+            joinSession=lambda session_key: (_ for _ in ()).throw(
+                _SecurityViolation("denied")
+            )
+        ),
+        raising=False,
+    )
+    with pytest.raises(RuntimeError, match="Access denied"):
+        tasks._open_session_connection("session", "omeroserver", 4064)
+
+    monkeypatch.setattr(
+        tasks, "get_job_service_credentials", lambda: ("job-service", "secret")
+    )
+    with pytest.raises(RuntimeError, match="OMERO host is required"):
+        tasks._open_job_service_connection("", 4064)
+    with pytest.raises(RuntimeError, match="OMERO port is required"):
+        tasks._open_job_service_connection("omeroserver", None)
+    with pytest.raises(RuntimeError, match="Invalid port value"):
+        tasks._open_job_service_connection("omeroserver", "bad-port")
+
+    monkeypatch.setattr(tasks, "use_job_service_session", lambda: False)
+    conn = types.SimpleNamespace(
+        close=lambda: (_ for _ in ()).throw(RuntimeError("close failed")),
+        SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda value: None),
+    )
+    updates = []
+    warnings = []
+    monkeypatch.setattr(
+        tasks,
+        "_open_session_connection",
+        lambda session_key, host, port, secure=None: conn,
+    )
+    monkeypatch.setattr(tasks, "_find_script_id", lambda current_conn: None)
+    monkeypatch.setattr(
+        tasks.logger,
+        "warning",
+        lambda message, *args, **kwargs: warnings.append(message % args),
+    )
+
+    task_self = types.SimpleNamespace(
+        request=types.SimpleNamespace(id="task-3"),
+        update_state=lambda state, meta: updates.append((state, meta)),
+    )
+
+    with pytest.raises(RuntimeError, match="script not found"):
+        tasks.run_ims_export_task(
+            task_self,
+            image_id=8,
+            session_key="session-key",
+            host="omeroserver",
+            port=4064,
+        )
+
+    assert updates[-1][0] == tasks.states.FAILURE
+    assert warnings == ["Error closing OMERO connection: close failed"]

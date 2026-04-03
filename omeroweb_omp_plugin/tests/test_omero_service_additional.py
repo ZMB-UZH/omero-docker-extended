@@ -122,6 +122,29 @@ def test_image_service_fetch_and_collectors_cover_bulk_and_fallback_paths(monkey
         == []
     )
 
+    ds_owned = _Dataset(13, "Owned", [_Image(9, "owned.tif")], owned=True)
+    ds_skipped = _Dataset(14, "Skipped", [_Image(10, "skip.tif")], owned=False)
+    non_owned_rows = image_service.collect_images_by_dataset_sorted(
+        SimpleNamespace(getObject=lambda *_args: _Project([ds_owned, ds_skipped])),
+        "5",
+        owner_id=77,
+    )
+    assert [dataset.getId().getValue() for dataset, _images in non_owned_rows] == [13]
+
+    class _BrokenSelectedProject:
+        def listChildren(self):
+            raise RuntimeError("selected datasets unavailable")
+
+    assert (
+        image_service.collect_images_by_selected_datasets(
+            SimpleNamespace(getObject=lambda *_args: _BrokenSelectedProject()),
+            7,
+            ["13"],
+            owner_id=77,
+        )
+        == []
+    )
+
 
 def test_collect_dataset_summaries_detects_formats_across_metadata_fallbacks(
     monkeypatch,
@@ -253,3 +276,40 @@ def test_extract_acquisition_metadata_handles_partial_failures_without_long_valu
         "BF_Title": "short note",
         "BF_Series": "A",
     }
+
+
+def test_image_and_metadata_services_cover_remaining_runtime_failure_paths(monkeypatch):
+    class _BrokenMetadataTuple:
+        def __len__(self):
+            return 3
+
+        def __getitem__(self, index):
+            raise RuntimeError(f"bad index {index}")
+
+        def __bool__(self):
+            return True
+
+    class _BrokenMetadataImage:
+        def getId(self):
+            raise RuntimeError("missing id")
+
+        def getAcquisitionDate(self):
+            return None
+
+        def getObjectiveSettings(self):
+            return None
+
+        def getChannels(self):
+            return []
+
+        def getDetectorSettings(self):
+            class _BrokenDetectorList:
+                def __bool__(self):
+                    raise RuntimeError("detectors unavailable")
+
+            return _BrokenDetectorList()
+
+        def loadOriginalMetadata(self):
+            return _BrokenMetadataTuple()
+
+    assert metadata_service.extract_acquisition_metadata(_BrokenMetadataImage()) == {}

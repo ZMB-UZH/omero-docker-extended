@@ -3,10 +3,12 @@ import json
 import warnings
 import zipfile
 from io import BytesIO
+from types import SimpleNamespace
 
 import django
 import numpy as np
-from django.http import HttpResponse
+import pytest
+from django.http import Http404, HttpResponse
 from django.test import RequestFactory
 import tifffile
 
@@ -380,6 +382,64 @@ def test_download_store_ome_tiff_returns_ome_tiff_file(tmp_path, monkeypatch):
         response.close()
 
 
+def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
+    tmp_path,
+    monkeypatch,
+):
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()), image_id=10, name="broken.zarr")
+    request = RequestFactory().get("/zarr/download/image/10/ome-tiff/")
+    fake_node = type(
+        "FakeNode",
+        (),
+        {
+            "data": [np.arange(4, dtype=np.uint16).reshape(1, 1, 2, 2)],
+            "metadata": {
+                "axes": [
+                    {"name": "c", "type": "channel"},
+                    {"name": "z", "type": "space"},
+                    {"name": "y", "type": "space"},
+                    {"name": "x", "type": "space"},
+                ],
+            },
+        },
+    )()
+    target_path = tmp_path / "broken-output.ome.tif"
+
+    class _NamedTempFile:
+        def __init__(self, path):
+            self.name = str(path)
+            path.write_bytes(b"temp")
+
+        def close(self):
+            return None
+
+    class _FailingWriter:
+        def __init__(self, *_args, **_kwargs):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def write(self, *_args, **_kwargs):
+            raise RuntimeError("writer failed")
+
+    monkeypatch.setattr(views, "load_store_backed_image_node", lambda current: fake_node)
+    monkeypatch.setattr(
+        views.tempfile,
+        "NamedTemporaryFile",
+        lambda *args, **kwargs: _NamedTempFile(target_path),
+    )
+    monkeypatch.setattr(views.tifffile, "TiffWriter", _FailingWriter)
+
+    with pytest.raises(RuntimeError, match="writer failed"):
+        views.download_store_ome_tiff(request, 10, conn=_FakeConn(image))
+    assert target_path.exists() is False
+
+
 def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
     class _FakeResponse:
         text = "<html><head></head><body>vizarr</body></html>"
@@ -435,3 +495,139 @@ def test_build_app_launch_url_quotes_root_relative_source(monkeypatch):
     url = views._build_app_launch_url("validator", "/zarr/v0.4/image/1101.zarr")
 
     assert url == "/zarr/validator/?source=/zarr/v0.4/image/1101.zarr"
+
+
+def test_store_backed_views_cover_missing_paths_and_preview_routes(
+    tmp_path, monkeypatch
+):
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()), image_id=13, name="demo.zarr")
+
+    monkeypatch.setattr(views, "resolve_image_backing_zarr_store", lambda current: None)
+    assert views._store_backed_response(image, "0.4", ".zattrs") is None
+    assert views._store_backed_chunk_response(image, "0.4", 0, "0/0/0/0") is None
+
+    monkeypatch.setattr(
+        views,
+        "resolve_image_backing_zarr_store",
+        lambda current: tmp_path.resolve(),
+    )
+    with pytest.raises(Http404):
+        views._store_backed_json_response(image, "0.4", "0", "0", "0", "0", "0")
+
+    zgroup = views.image_zgroup(
+        RequestFactory().get("/zarr/v0.4/image/13.zarr/.zgroup"),
+        iid=13,
+        version="0.4",
+        conn=_FakeConn(image),
+    )
+    assert json.loads(zgroup.content) == {"zarr_format": 2}
+
+    sentinel = HttpResponse('{"zarr_format": 2}', content_type="application/json")
+    monkeypatch.setattr(views, "image_zgroup", lambda *args, **kwargs: sentinel)
+    assert (
+        views.preview_image_zgroup.__wrapped__(
+            RequestFactory().get("/zarr/v0.4/preview/image/13.zarr/.zgroup"),
+            13,
+            conn=_FakeConn(image),
+        )
+        is sentinel
+    )
+
+    monkeypatch.setattr(views, "_store_backed_response", lambda *args, **kwargs: None)
+    with pytest.raises(Http404):
+        views.image_store_path.__wrapped__(
+            RequestFactory().get("/zarr/v0.4/image/13.zarr/missing"),
+            13,
+            "0.4",
+            "missing",
+            conn=_FakeConn(image),
+        )
+
+
+def test_image_preview_and_download_views_cover_missing_store_backed_images(
+    tmp_path, monkeypatch
+):
+    request = RequestFactory().get("/zarr/preview/image/14/")
+    missing_conn = SimpleNamespace(getObject=lambda object_type, iid: None)
+    with pytest.raises(Http404):
+        views.image_preview.__wrapped__(request, 14, conn=missing_conn)
+
+    image = _FakeImage(str(tmp_path.resolve()), image_id=14, name="demo.zarr")
+    monkeypatch.setattr(views, "resolve_image_backing_zarr_store", lambda current: None)
+    monkeypatch.setattr(
+        views,
+        "reverse",
+        lambda name, kwargs=None, args=None: (
+            f"/webclient/preview/{kwargs['c_id']}/"
+            if name == "load_metadata_preview"
+            else "/zarr/"
+        ),
+    )
+    redirect_response = views.image_preview.__wrapped__(request, 14, conn=_FakeConn(image))
+    assert redirect_response.status_code == 302
+    assert redirect_response["Location"] == "/webclient/preview/14/"
+
+    monkeypatch.setattr(
+        views,
+        "_build_store_backed_preview_context",
+        lambda current_request, current_image: {"image_name": current_image.getName()},
+    )
+    monkeypatch.setattr(
+        views,
+        "render",
+        lambda current_request, template, context: HttpResponse(
+            json.dumps(context),
+            content_type="application/json",
+        ),
+    )
+    monkeypatch.setattr(
+        views,
+        "resolve_image_backing_zarr_store",
+        lambda current: tmp_path.resolve(),
+    )
+    rendered = views.image_preview.__wrapped__(request, 14, conn=_FakeConn(image))
+    assert json.loads(rendered.content) == {"image_name": "demo.zarr"}
+
+    with pytest.raises(Http404):
+        views.download_store_original(request, 14, conn=missing_conn)
+    with pytest.raises(Http404):
+        views.download_store_metadata(request, 14, conn=missing_conn)
+    with pytest.raises(Http404):
+        views.download_store_ome_tiff(request, 14, conn=missing_conn)
+
+    monkeypatch.setattr(views, "load_store_backed_image_node", lambda current: None)
+    with pytest.raises(Http404):
+        views.download_store_ome_tiff(request, 14, conn=_FakeConn(image))
+
+
+def test_app_shell_helpers_cover_empty_paths_cache_fetch_and_invalid_apps(monkeypatch):
+    assert views._sanitize_app_asset_path("") == ""
+    injected = views._inject_launcher_head(
+        "validator",
+        "https://ome.github.io/ome-ngff-validator/",
+    )
+    assert injected.startswith('<base href="https://ome.github.io/ome-ngff-validator/">')
+
+    events = []
+
+    class _FakeShellResponse:
+        text = "<html>validator</html>"
+
+        def raise_for_status(self):
+            events.append("raise_for_status")
+
+    views._fetch_remote_app_shell.cache_clear()
+    monkeypatch.setattr(
+        views.requests,
+        "get",
+        lambda url, timeout=20: _FakeShellResponse(),
+    )
+    assert (
+        views._fetch_remote_app_shell("https://ome.github.io/ome-ngff-validator/", 1)
+        == "<html>validator</html>"
+    )
+    assert events == ["raise_for_status"]
+
+    with pytest.raises(Http404):
+        views.apps(RequestFactory().get("/zarr/unknown/"), "unknown", "")

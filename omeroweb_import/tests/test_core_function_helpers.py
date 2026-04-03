@@ -206,6 +206,7 @@ def test_write_read_job_file_and_apply_upload_updates(monkeypatch, tmp_path) -> 
         updates=[
             {"upload_id": "u1", "status": "uploaded"},
             {"upload_id": "u2", "status": "error", "errors": ["broken"]},
+            {"upload_id": "missing", "status": "uploaded"},
         ],
         errors=["job-level"],
     )

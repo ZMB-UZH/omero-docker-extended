@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 from unittest import TestCase, main, mock
 
 from tools import agent_skill_provenance
@@ -16,8 +17,19 @@ class AgentSkillProvenanceTests(TestCase):
         cls.sources = agent_skill_provenance.load_upstream_sources(cls.repo_root)
 
     def test_badge_image_url_uses_stable_static_components(self) -> None:
-        self.assertIn("/badge/everything-claude-code-", self.sources.badge_image_url)
-        self.assertIn("ECC%20v1.9.0%20skills", self.sources.badge_image_url)
+        parsed = urlsplit(self.sources.badge_image_url)
+        self.assertEqual("https", parsed.scheme)
+        self.assertEqual("img.shields.io", parsed.netloc)
+        self.assertEqual("/static/v1", parsed.path)
+        self.assertEqual(
+            {
+                "label": ["everything-claude-code"],
+                "message": ["ECC v1.9.0 skills"],
+                "color": ["0F766E"],
+                "logo": ["github"],
+            },
+            parse_qs(parsed.query),
+        )
         self.assertNotIn(self.sources.repo_slug, self.sources.badge_image_url)
         self.assertEqual("everything-claude-code", self.sources.badge_title)
 

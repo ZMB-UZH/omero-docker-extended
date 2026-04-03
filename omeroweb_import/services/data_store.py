@@ -98,9 +98,6 @@ def _db_params():
         if port not in port_candidates:
             port_candidates.append(port)
 
-    if not port_candidates:
-        port_candidates.append(5432)
-
     base_params = {
         "user": user,
         "password": password,
