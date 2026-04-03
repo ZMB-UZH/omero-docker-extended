@@ -8,7 +8,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from posixpath import commonpath
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlencode, urlsplit
 
 
 UPSTREAM_SOURCES_DOC_PATH = Path("docs/reference/ai-agent-upstream-sources.md")
@@ -82,9 +82,15 @@ class AgentSkillUpstreamSources:
 
     @property
     def badge_image_url(self) -> str:
-        subject = quote(self.badge_title, safe="")
-        message = quote(self.badge_label, safe="")
-        return f"https://img.shields.io/badge/{subject}-{message}-0F766E?logo=github"
+        query = urlencode(
+            {
+                "label": self.badge_title,
+                "message": self.badge_label,
+                "color": "0F766E",
+                "logo": "github",
+            }
+        )
+        return f"https://img.shields.io/static/v1?{query}"
 
     def raw_skill_url(self, skill_name: str) -> str:
         relative_path = self.upstream_relative_paths[skill_name]

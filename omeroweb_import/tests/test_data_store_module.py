@@ -3,6 +3,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 from types import SimpleNamespace
 
+import pytest
+
 from omeroweb_import.services import data_store as import_data_store
 
 
@@ -238,3 +240,97 @@ def test_import_data_store_persistence_and_load_failures_are_sanitized(monkeypat
         assert str(exc) == import_data_store.errors.db_connection_failed()
     else:
         raise AssertionError("Expected wrapped load failure")
+
+
+def test_import_data_store_loaders_and_connect_cover_cache_and_empty_option_edges(
+    monkeypatch,
+):
+    sentinel_mod = object()
+    sentinel_extras = object()
+    sentinel_sql = object()
+    monkeypatch.setattr(import_data_store, "_psycopg2_mod", sentinel_mod)
+    monkeypatch.setattr(import_data_store, "_psycopg2_extras", sentinel_extras)
+    monkeypatch.setattr(import_data_store, "_psycopg2_sql", sentinel_sql)
+
+    assert import_data_store._load_psycopg2() == (sentinel_mod, sentinel_extras)
+    assert import_data_store._load_psycopg2_sql() is sentinel_sql
+
+    monkeypatch.setenv(import_data_store.ENV_USER, "import-user")
+    monkeypatch.setenv(import_data_store.ENV_AUTH, "import-pass")
+    monkeypatch.setenv(import_data_store.ENV_HOST, "database-plugin")
+    monkeypatch.setenv(import_data_store.ENV_DB, "import-db")
+    monkeypatch.setenv(import_data_store.ENV_PORT, " ")
+    monkeypatch.setenv("PGPORT", "5436")
+    assert [entry["port"] for entry in import_data_store._db_params()] == [
+        5436,
+        5433,
+        5432,
+    ]
+
+    monkeypatch.setattr(import_data_store, "_db_params", lambda: [])
+    monkeypatch.setattr(
+        import_data_store,
+        "_load_psycopg2",
+        lambda: (SimpleNamespace(connect=lambda **kwargs: None), _FakeExtras),
+    )
+    with pytest.raises(
+        import_data_store.UserSettingsStoreError,
+        match=import_data_store.errors.db_connection_failed(),
+    ):
+        with import_data_store._connect():
+            pass
+
+    monkeypatch.setattr(
+        import_data_store,
+        "_db_params",
+        lambda: [{"host": "database-plugin", "port": 5432}],
+    )
+    monkeypatch.setattr(
+        import_data_store,
+        "_load_psycopg2",
+        lambda: (
+            SimpleNamespace(
+                connect=lambda **kwargs: (_ for _ in ()).throw(
+                    import_data_store.UserSettingsStoreError("boom")
+                )
+            ),
+            _FakeExtras,
+        ),
+    )
+    with pytest.raises(import_data_store.UserSettingsStoreError, match="boom"):
+        with import_data_store._connect():
+            pass
+
+    monkeypatch.setattr(import_data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
+    monkeypatch.setattr(
+        import_data_store, "_ensure_special_method_settings_schema", lambda conn: None
+    )
+
+    @contextmanager
+    def _missing_special_row():
+        yield _FakeConnection([_FakeCursor(fetchone=None)])
+
+    monkeypatch.setattr(import_data_store, "_connect", _missing_special_row)
+    assert import_data_store.load_special_method_settings("alice", "grouped") is None
+
+    @contextmanager
+    def _store_error():
+        raise import_data_store.UserSettingsStoreError("wrapped")
+        yield
+
+    monkeypatch.setattr(import_data_store, "_connect", _store_error)
+    with pytest.raises(import_data_store.UserSettingsStoreError, match="wrapped"):
+        import_data_store.load_special_method_settings("alice", "grouped")
+
+
+def test_import_data_store_real_loader_success_paths_cache_imports(monkeypatch):
+    monkeypatch.setattr(import_data_store, "_psycopg2_mod", None)
+    monkeypatch.setattr(import_data_store, "_psycopg2_extras", None)
+    monkeypatch.setattr(import_data_store, "_psycopg2_sql", None)
+
+    psycopg2_mod, extras_mod = import_data_store._load_psycopg2()
+    sql_mod = import_data_store._load_psycopg2_sql()
+
+    assert psycopg2_mod.__name__ == "psycopg2"
+    assert extras_mod.__name__.endswith(".extras")
+    assert sql_mod.__name__.endswith(".sql")

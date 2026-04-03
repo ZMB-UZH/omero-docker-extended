@@ -472,9 +472,8 @@ def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
         except ValueError as exc:
             last_type_error = exc
             continue
-    if last_type_error is not None:
-        raise last_type_error
-    raise RuntimeError("No callable argument combinations were available.")
+    assert last_type_error is not None
+    raise last_type_error
 
 
 def _run_script(

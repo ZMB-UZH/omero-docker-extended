@@ -526,3 +526,176 @@ def test_sem_edx_plot_and_table_helpers_cover_png_generation_table_persistence_a
         sem_edx_parser.attach_sem_edx_tables(failing_conn, 7, tmp_path / "sample.txt")
         is None
     )
+
+
+def test_sem_edx_parser_remaining_edges_cover_empty_layouts_and_default_plot_path(
+    monkeypatch,
+    tmp_path: Path,
+):
+    sem_edx_parser.plt.close(None)
+    assert sem_edx_parser.genetic_label_placement(
+        [],
+        sem_edx_parser.BBox(0, 0, 10, 10),
+        None,
+        None,
+        None,
+    ) == []
+
+    txt_path = tmp_path / "spectrum.txt"
+    monkeypatch.setattr(
+        sem_edx_parser,
+        "parse_emsa_file",
+        lambda _path: {
+            "spectrum": [(0.5, 10.0), (1.0, 20.0)],
+            "elements": [
+                {"energy_kev": "bad", "symbol": "Cu"},
+                {"energy_kev": 0.2, "symbol": ""},
+                {"energy_kev": 9.0, "symbol": "Zn"},
+                {"energy_kev": 1.0, "symbol": "Cu"},
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        sem_edx_parser,
+        "genetic_label_placement",
+        lambda *args, **kwargs: [],
+    )
+
+    output_path = sem_edx_parser.create_edx_spectrum_plot(txt_path)
+    assert output_path == tmp_path / "spectrum_edx.png"
+    assert output_path.exists()
+
+
+def test_sem_edx_table_creation_covers_cleanup_and_attach_failure_logging(
+    monkeypatch,
+    tmp_path: Path,
+):
+    class _ClosingFailTable(_FakeTable):
+        def close(self):
+            raise RuntimeError("close failed")
+
+    failing_table = _ClosingFailTable(fail_add=True)
+    failing_conn, _ = _install_fake_omero_table_modules(
+        monkeypatch,
+        table=failing_table,
+    )
+    assert (
+        sem_edx_parser.create_spectrum_table(
+            failing_conn,
+            image_id=7,
+            spectrum=[(1.0, 10.0)],
+            txt_filename="sample.txt",
+        )
+        is None
+    )
+
+    broken_conn = SimpleNamespace(
+        getObject=lambda *_args, **_kwargs: _FakeImage([_FakeDatasetParent()]),
+        getUpdateService=SimpleNamespace,
+        c=SimpleNamespace(
+            sf=SimpleNamespace(
+                sharedResources=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+            )
+        ),
+    )
+    assert (
+        sem_edx_parser.create_spectrum_table(
+            broken_conn,
+            image_id=7,
+            spectrum=[(1.0, 10.0)],
+            txt_filename="sample.txt",
+        )
+        is None
+    )
+
+    monkeypatch.setattr(
+        sem_edx_parser,
+        "parse_emsa_file",
+        lambda _path: {"spectrum": [(1.0, 10.0)], "elements": [], "metadata": {}, "title": ""},
+    )
+    monkeypatch.setattr(sem_edx_parser, "create_spectrum_table", lambda *args, **kwargs: None)
+    assert sem_edx_parser.attach_sem_edx_tables(failing_conn, 7, tmp_path / "sample.txt") is None
+
+
+def test_sem_edx_parser_covers_remaining_parse_and_fitness_edges(tmp_path: Path):
+    txt_path = tmp_path / "demo.txt"
+    txt_path.write_text(
+        "\n#TITLE: demo\n##OXINSTLABEL: bad, 8.0, Cu\n#SPECTRUM : yes\n"
+        "#ignored inside spectrum\n0.10 bad\nENDOFDATA\n",
+        encoding="utf-8",
+    )
+    parsed = sem_edx_parser.parse_emsa_file(txt_path)
+    assert parsed["title"] == "demo"
+    assert parsed["spectrum"] == []
+    assert parsed["elements"] == []
+
+    placer = sem_edx_parser.GeneticLabelPlacer(
+        [
+            {
+                "id": 0,
+                "peak_energies": [1.0],
+                "spectrum_y": 0.0,
+                "width": 40.0,
+                "height": 20.0,
+                "x_peak": 10.0,
+                "y_peak": 10.0,
+            },
+            {
+                "id": 1,
+                "peak_energies": [9.0],
+                "spectrum_y": 0.0,
+                "width": 40.0,
+                "height": 20.0,
+                "x_peak": 90.0,
+                "y_peak": 10.0,
+            },
+        ],
+        sem_edx_parser.BBox(0.0, 0.0, 100.0, 100.0),
+        SimpleNamespace(transData=SimpleNamespace(transform=lambda point: point)),
+        population_size=2,
+        generations=1,
+        mutation_rate=0.0,
+        elite_size=1,
+    )
+
+    tight_placer = sem_edx_parser.GeneticLabelPlacer(
+        [
+            {
+                "id": 0,
+                "peak_energies": [1.0],
+                "spectrum_y": 0.0,
+                "width": 200.0,
+                "height": 200.0,
+                "x_peak": 10.0,
+                "y_peak": 10.0,
+            }
+        ],
+        sem_edx_parser.BBox(0.0, 0.0, 50.0, 50.0),
+        SimpleNamespace(transData=SimpleNamespace(transform=lambda point: point)),
+        population_size=1,
+        generations=1,
+        mutation_rate=0.0,
+        elite_size=1,
+    )
+    gene = tight_placer.generate_random_chromosome().genes[0]
+    assert (gene.x, gene.y) == (10.0, 140.0)
+
+    fitness = placer.calculate_fitness(
+        sem_edx_parser.Chromosome(
+            [
+                sem_edx_parser.LabelGene(0, 80.0, 0.0),
+                sem_edx_parser.LabelGene(1, 20.0, 0.0),
+            ]
+        )
+    )
+    assert fitness > 0
+
+    crossing_and_bounds_fitness = placer.calculate_fitness(
+        sem_edx_parser.Chromosome(
+            [
+                sem_edx_parser.LabelGene(0, 320.0, 340.0),
+                sem_edx_parser.LabelGene(1, -40.0, 340.0),
+            ]
+        )
+    )
+    assert crossing_and_bounds_fitness > fitness

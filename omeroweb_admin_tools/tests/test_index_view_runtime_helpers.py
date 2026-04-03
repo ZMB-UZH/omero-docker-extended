@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import inspect
 import json
+import socket
 from http.client import HTTPMessage
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
+import pytest
 import requests
 from django.http import HttpResponse
 from django.test import RequestFactory
@@ -425,3 +428,270 @@ def test_docker_diagnostics_and_compose_health_helpers_cover_inspection_paths(
         {"grafana": True},
         {"grafana": {"state": "running", "health": "healthy"}},
     )
+
+
+def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges(
+    monkeypatch,
+) -> None:
+    events = {}
+
+    class _SocketStub:
+        def __init__(self, family, sock_type):
+            events["created"] = (family, sock_type)
+
+        def settimeout(self, timeout):
+            events["timeout"] = timeout
+
+        def connect(self, path):
+            events["path"] = path
+
+    monkeypatch.setattr(index_view.socket, "socket", _SocketStub)
+    connection = index_view._UnixSocketHTTPConnection("/tmp/docker.sock", timeout=4.5)
+    connection.connect()
+    assert events == {
+        "created": (socket.AF_UNIX, socket.SOCK_STREAM),
+        "timeout": 4.5,
+        "path": "/tmp/docker.sock",
+    }
+
+    monkeypatch.setenv("ADMIN_TOOLS_DOCKER_SOCKET", "/var/run/docker.sock")
+    monkeypatch.setattr(index_view.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(index_view.os, "access", lambda path, mode: True)
+    monkeypatch.setattr(
+        index_view.os,
+        "getuid",
+        lambda: (_ for _ in ()).throw(RuntimeError("uid failed")),
+    )
+    monkeypatch.setattr(
+        index_view.os,
+        "stat",
+        lambda path: (_ for _ in ()).throw(OSError("stat failed")),
+    )
+    monkeypatch.setattr(index_view, "_docker_api_json", lambda *args, **kwargs: {"ok": True})
+    diagnostics = index_view._diagnose_docker_health()
+    assert diagnostics["current_user"] == "error"
+    assert diagnostics["socket_stat"] == "stat unavailable"
+    assert diagnostics["api_error"] == "unexpected type: dict"
+
+    monkeypatch.setattr(index_view, "_docker_api_json", lambda *args, **kwargs: [42])
+    diagnostics = index_view._diagnose_docker_health()
+    assert diagnostics["api_reachable"] is True
+    assert diagnostics["sample_statuses"] == []
+
+    monkeypatch.setattr(
+        index_view,
+        "_docker_api_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    diagnostics = index_view._diagnose_docker_health()
+    assert diagnostics["api_error"] == "Docker API request failed"
+
+    def docker_api(path, timeout_seconds=3.0):
+        if path == "/containers/json?all=1":
+            return [
+                42,
+                {"Labels": "bad"},
+                {"Labels": {}, "State": "running", "Status": "Up"},
+                {
+                    "Labels": {"com.docker.compose.service": "worker"},
+                    "State": "running",
+                    "Status": "Up",
+                },
+                {
+                    "Id": "db1",
+                    "Labels": {"com.docker.compose.service": "db"},
+                    "State": "running",
+                    "Status": "Up",
+                },
+            ]
+        if path == "/containers/db1/json":
+            return []
+        raise AssertionError(path)
+
+    monkeypatch.setattr(index_view, "_docker_api_json", docker_api)
+    health_config, runtime = index_view._load_compose_health_data()
+    assert health_config == {"worker": False, "db": False}
+    assert runtime == {
+        "worker": {"state": "running", "health": ""},
+        "db": {"state": "running", "health": ""},
+    }
+
+    monkeypatch.setattr(index_view, "_docker_compose_json", lambda command: [])
+    assert index_view._load_compose_healthcheck_config() == {}
+    monkeypatch.setattr(
+        index_view,
+        "_docker_compose_json",
+        lambda command: {"services": []},
+    )
+    assert index_view._load_compose_healthcheck_config() == {}
+
+    monkeypatch.setattr(index_view, "_docker_compose_json", lambda command: {})
+    assert index_view._load_compose_runtime_health() == {}
+    monkeypatch.setattr(
+        index_view,
+        "_docker_compose_json",
+        lambda command: [
+            "bad",
+            {"Service": "", "State": "running", "Health": "healthy"},
+            {"Service": "db", "State": "running", "Health": "healthy"},
+        ],
+    )
+    assert index_view._load_compose_runtime_health() == {
+        "db": {"state": "running", "health": "healthy"}
+    }
+
+
+def test_index_helper_functions_cover_render_permissions_and_time_parsing(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        index_view,
+        "render",
+        lambda request, template, context: HttpResponse(template),
+    )
+    response = index_view.index(RequestFactory().get("/admin/"), conn=None)
+    assert response.content.decode("utf-8") == "omeroweb_admin_tools/index.html"
+
+    assert index_view._call_admin_listing(SimpleNamespace(), "missing") == []
+    assert (
+        index_view._build_public_service_url(
+            "http://grafana:3000",
+            "https",
+            "[2001:db8::1]",
+            3000,
+        )
+        == "http://[2001:db8::1]:3000"
+    )
+
+    class _Permissions:
+        def isGroupRead(self):
+            return True
+
+        def isGroupWrite(self):
+            return True
+
+        def isGroupAnnotate(self):
+            return False
+
+    read_write_group = SimpleNamespace(
+        getDetails=lambda: SimpleNamespace(getPermissions=lambda: _Permissions())
+    )
+    assert index_view._safe_group_permission_label(read_write_group) == "Read-write"
+
+    broken_group = SimpleNamespace(
+        getDetails=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+    )
+    assert index_view._safe_group_permission_label(broken_group) == "Private"
+
+    with pytest.raises(ValueError, match="empty since value"):
+        index_view._parse_since_ns(" ")
+    assert index_view._parse_since_ns("2026-03-30T06:56:57") > 0
+
+
+def test_logs_compose_prometheus_and_proxy_helpers_cover_remaining_runtime_guards(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    root_error = HttpResponse("root-only", status=403)
+    monkeypatch.setattr(index_view, "_require_root_user", lambda request, conn: root_error)
+    assert (
+        inspect.unwrap(index_view.logs_data)(
+            RequestFactory().get("/admin/logs/"),
+            conn=None,
+        )
+        is root_error
+    )
+    assert (
+        inspect.unwrap(index_view.internal_log_labels)(
+            RequestFactory().get("/admin/internal/", data={"service": "omeroweb_internal"}),
+            conn=None,
+        )
+        is root_error
+    )
+
+    monkeypatch.setattr(index_view, "_require_root_user", lambda request, conn: None)
+    monkeypatch.setattr(index_view, "optional_log_config", lambda: None)
+    assert (
+        inspect.unwrap(index_view.logs_data)(
+            RequestFactory().get("/admin/logs/"),
+            conn=None,
+        ).status_code
+        == 503
+    )
+
+    compose_path = tmp_path / "compose.yml"
+    compose_path.write_text(
+        "name: demo\nservices:\n  omeroweb:\n    image: web\nnetworks:\n  default:\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(index_view, "_REPO_ROOT", str(tmp_path))
+    assert index_view._load_compose_service_names("compose.yml") == ["omeroweb"]
+
+    monkeypatch.setattr(
+        index_view.process_utils,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("missing")),
+    )
+    assert index_view._docker_compose_json(["docker", "compose", "ps"]) is None
+    monkeypatch.setattr(
+        index_view.process_utils,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(stdout="   "),
+    )
+    assert index_view._docker_compose_json(["docker", "compose", "ps"]) is None
+
+    monkeypatch.setenv("ADMIN_TOOLS_DOCKER_SOCKET", str(tmp_path / "docker.sock"))
+    monkeypatch.setattr(index_view.os.path, "exists", lambda path: True)
+    empty_payload_connection = _DockerConnection(_HttpResponseStub(200, b""))
+    monkeypatch.setattr(
+        index_view,
+        "_UnixSocketHTTPConnection",
+        lambda socket_path, timeout=3.0: empty_payload_connection,
+    )
+    assert index_view._docker_api_json("/containers/json") is None
+
+    monkeypatch.setattr(
+        index_view.requests,
+        "get",
+        lambda url, timeout=5.0, allow_redirects=True, params=None: _RequestsResponseStub(
+            200,
+            payload=json.dumps({"data": {"result": []}}).encode("utf-8"),
+        ),
+    )
+    assert index_view._prometheus_instant_query(PROMETHEUS_URL, "up") is None
+    monkeypatch.setattr(
+        index_view.requests,
+        "get",
+        lambda url, timeout=5.0, allow_redirects=True, params=None: _RequestsResponseStub(
+            200,
+            payload=json.dumps({"data": {"result": [{"value": [1711843200]}]}}).encode("utf-8"),
+        ),
+    )
+    assert index_view._prometheus_instant_query(PROMETHEUS_URL, "up") is None
+    monkeypatch.setattr(
+        index_view.requests,
+        "get",
+        lambda url, timeout=5.0, allow_redirects=True, params=None: _RequestsResponseStub(
+            200,
+            payload=json.dumps({"status": "error", "data": {"result": []}}).encode("utf-8"),
+        ),
+    )
+    assert index_view._collect_recently_seen_services(PROMETHEUS_URL) == []
+
+    monkeypatch.setattr(index_view, "_internal_service_base_url", lambda *args, **kwargs: "http://service")
+    monkeypatch.setattr(index_view, "_build_proxy_backend_urls", lambda *args, **kwargs: [])
+    monkeypatch.setattr(index_view, "_normalize_proxy_request_target", lambda subpath: ("dash", ""))
+
+    with pytest.raises(RuntimeError, match="No Grafana backend URLs configured"):
+        inspect.unwrap(index_view.grafana_proxy)(
+            RequestFactory().get("/admin/grafana/dash"),
+            "dash",
+            conn=None,
+        )
+
+    with pytest.raises(RuntimeError, match="No Prometheus backend URLs configured"):
+        inspect.unwrap(index_view.prometheus_proxy)(
+            RequestFactory().get("/admin/prometheus/dash"),
+            "dash",
+            conn=None,
+        )
