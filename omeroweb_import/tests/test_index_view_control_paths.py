@@ -1603,11 +1603,207 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
         "error": errors.unexpected_server_error_importing(),
     }
 
+
+def test_index_view_additional_chunk_and_prune_error_paths_cover_remaining_returns(
+    tmp_path,
+    monkeypatch,
+):
+    upload_root = tmp_path / "upload-root"
+    job_id = _test_job_id("f5")
+    job_root = upload_root / job_id
+    job_root.mkdir(parents=True)
+    job = {
+        "job_id": job_id,
+        "username": "alice",
+        "status": "uploading",
+        "uploaded_bytes": 0,
+        "total_bytes": 4,
+        "files": [
+            {
+                "upload_id": "u1",
+                "relative_path": "folder/file.bin",
+                "staged_path": "_staged/folder/file.bin",
+                "size": 4,
+                "status": "pending",
+                "errors": [],
+            }
+        ],
+    }
+    monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(
+        index_view,
+        "_normalize_upload_relative_path",
+        lambda raw_value: ("folder/file.bin", None),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_find_job_upload_entry",
+        lambda current_job, rel_path: current_job["files"][0],
+    )
+
+    def _chunk_request():
+        return RequestFactory().post(
+            f"/omeroweb_import/upload/{job_id}/",
+            data={
+                "relative_path": "folder/file.bin",
+                "chunk_start": "0",
+                "chunk_end": "2",
+                "file_size": "4",
+                "file": SimpleUploadedFile("file.bin", b"ab"),
+            },
+        )
+
+    monkeypatch.setattr(
+        index_view, "_reset_staged_upload_file", lambda *_args: OSError("reset failed")
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_apply_upload_updates",
+        lambda current_job_id, updates, upload_errors: {**job},
+    )
+    reset_error = index_view._handle_chunk_upload(
+        _chunk_request(),
+        job_id,
+        object(),
+        job,
+        job_root,
+    )
+    assert _payload(reset_error) == {
+        "ok": False,
+        "error": errors.unexpected_server_error_uploading_files(),
+    }
+
+    monkeypatch.setattr(
+        index_view, "_reset_staged_upload_file", lambda *_args: "bad staged reset"
+    )
+    staged_reset = index_view._handle_chunk_upload(
+        _chunk_request(),
+        job_id,
+        object(),
+        job,
+        job_root,
+    )
+    assert _payload(staged_reset) == {"ok": False, "error": "bad staged reset"}
+
+    monkeypatch.setattr(index_view, "_reset_staged_upload_file", lambda *_args: None)
+    monkeypatch.setattr(
+        index_view, "_staged_upload_size", lambda *_args: (0, "bad staged size")
+    )
+    staged_size = index_view._handle_chunk_upload(
+        _chunk_request(),
+        job_id,
+        object(),
+        job,
+        job_root,
+    )
+    assert _payload(staged_size) == {"ok": False, "error": "bad staged size"}
+
+    monkeypatch.setattr(
+        index_view, "_staged_upload_size", lambda *_args: (0, OSError("stat failed"))
+    )
+    monkeypatch.setattr(index_view, "_apply_upload_updates", lambda *_args: None)
+    staged_update_failure = index_view._handle_chunk_upload(
+        _chunk_request(),
+        job_id,
+        object(),
+        job,
+        job_root,
+    )
+    assert _payload(staged_update_failure) == {
+        "ok": False,
+        "error": errors.unable_update_upload_job_state(),
+    }
+
+    monkeypatch.setattr(index_view, "_staged_upload_size", lambda *_args: (0, None))
+    monkeypatch.setattr(
+        index_view,
+        "_append_upload_chunks_to_staged_path",
+        lambda *_args: (0, 0, "bad chunk"),
+    )
+    write_error = index_view._handle_chunk_upload(
+        _chunk_request(),
+        job_id,
+        object(),
+        job,
+        job_root,
+    )
+    assert _payload(write_error) == {"ok": False, "error": "bad chunk"}
+
+    monkeypatch.setattr(
+        index_view,
+        "_append_upload_chunks_to_staged_path",
+        lambda *_args: (0, 0, OSError("write failed")),
+    )
+    monkeypatch.setattr(index_view, "_apply_upload_updates", lambda *_args: None)
+    write_update_failure = index_view._handle_chunk_upload(
+        _chunk_request(),
+        job_id,
+        object(),
+        job,
+        job_root,
+    )
+    assert _payload(write_update_failure) == {
+        "ok": False,
+        "error": errors.unable_update_upload_job_state(),
+    }
+
+    base_job = {
+        "job_id": job_id,
+        "status": "checking",
+        "files": [
+            {"relative_path": "", "staged_path": "", "size": 1, "status": "uploaded"},
+            {
+                "relative_path": "drop/file.bin",
+                "staged_path": "_staged/drop/file.bin",
+                "size": 1,
+                "status": "uploaded",
+            },
+        ],
+        "uploaded_bytes": 2,
+        "total_bytes": 2,
+    }
+    stale_path = upload_root / job_id / "_staged" / "drop" / "file.bin"
+    stale_path.parent.mkdir(parents=True, exist_ok=True)
+    stale_path.write_bytes(b"x")
+    monkeypatch.setattr(
+        index_view,
+        "_load_owned_job",
+        lambda request, conn, current_job_id, missing_error: (base_job, None),
+    )
+    monkeypatch.setattr(index_view, "load_json_body", lambda request: {"keep_paths": []})
+    monkeypatch.setattr(
+        index_view,
+        "_update_job",
+        lambda current_job_id, updater: updater(json.loads(json.dumps(base_job))),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_refresh_job_status",
+        lambda job_dict: job_dict.update({"status": "checking"}),
+    )
+    original_unlink = Path.unlink
+    monkeypatch.setattr(
+        Path,
+        "unlink",
+        lambda path, *args, **kwargs: (
+            (_ for _ in ()).throw(OSError("cannot unlink"))
+            if path == stale_path
+            else original_unlink(path, *args, **kwargs)
+        ),
+    )
+    pruned = index_view.prune_upload(
+        RequestFactory().post("/", data=b"[]", content_type="application/json"),
+        job_id=job_id,
+        conn=object(),
+    )
+    assert _payload(pruned) == {"ok": True, "status": "checking"}
+
     response = index_view.prune_upload(
         RequestFactory().get("/"), job_id=job_id, conn=object()
     )
     assert _payload(response) == {"ok": False, "error": errors.method_post_required()}
 
+    missing_response = index_view.json_error(errors.upload_job_not_found())
     monkeypatch.setattr(
         index_view,
         "_load_owned_job",
@@ -1618,6 +1814,16 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     )
     assert _payload(response) == {"ok": False, "error": errors.upload_job_not_found()}
 
+    monkeypatch.setattr(
+        index_view,
+        "_refresh_job_status",
+        lambda job_dict: job_dict.update({"status": "ready"}),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "load_json_body",
+        lambda request: {"keep_paths": ["keep/file1.tif", "../escape"]},
+    )
     keep_job = {
         "job_id": job_id,
         "status": "checking",
@@ -1699,6 +1905,11 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
         index_view,
         "_prepare_ready_job_for_import_start",
         lambda current_job_id, current_job, conn: (current_job, "prep failed"),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "load_json_body",
+        lambda request: {"keep_paths": ["keep/file1.tif"]},
     )
     response = index_view.prune_upload(
         RequestFactory().post(

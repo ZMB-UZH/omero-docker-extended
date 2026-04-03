@@ -182,12 +182,14 @@ def test_omero_helpers_cover_none_and_exception_fallback_paths() -> None:
         canWrite=lambda: (_ for _ in ()).throw(RuntimeError("no write")),
         getDetails=lambda: (_ for _ in ()).throw(RuntimeError("no permissions")),
     )
+    permission_unknown = SimpleNamespace(getDetails=lambda: None)
 
     assert omero_helpers.get_owner_id(None) is None
     assert omero_helpers.is_owned_by_user(invalid_owner, "alice") is False
     assert omero_helpers._current_user_id(conn_without_user) is None
     assert omero_helpers._get_owner_username(no_owner) == ""
     assert omero_helpers._has_read_write_permissions(permission_failures) is False
+    assert omero_helpers._has_read_write_permissions(permission_unknown) is False
 
 
 def test_tmp_cleanup_handles_missing_paths_and_walk_failures(

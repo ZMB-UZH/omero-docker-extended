@@ -39,10 +39,7 @@ def get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> i
     raw = os.environ.get(env_key, "")
     if raw:
         raw = INT_SANITIZER.sub("", str(raw))
-    try:
-        value = int(raw) if raw else default
-    except (TypeError, ValueError):
-        value = default
+    value = int(raw) if raw else default
     return max(min_value, min(max_value, value))
 
 

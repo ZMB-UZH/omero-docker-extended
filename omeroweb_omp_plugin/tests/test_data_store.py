@@ -348,3 +348,194 @@ def test_crud_operations_wrap_unexpected_backend_failures(
 
     with pytest.raises(error_type):
         operation(*args)
+
+
+def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
+    monkeypatch,
+):
+    sentinel_mod = object()
+    sentinel_extras = object()
+    sentinel_sql = object()
+    monkeypatch.setattr(data_store, "_psycopg2_mod", sentinel_mod)
+    monkeypatch.setattr(data_store, "_psycopg2_extras", sentinel_extras)
+    monkeypatch.setattr(data_store, "_psycopg2_sql", sentinel_sql)
+
+    assert data_store._load_psycopg2() == (sentinel_mod, sentinel_extras)
+    assert data_store._load_psycopg2_sql() is sentinel_sql
+
+    monkeypatch.setattr(data_store, "_psycopg2_mod", None)
+    monkeypatch.setattr(data_store, "_psycopg2_extras", None)
+    monkeypatch.setattr(
+        data_store,
+        "get_env",
+        lambda key, env_file=None: {
+            data_store.ENV_USER: "",
+            data_store.ENV_AUTH: "",
+            data_store.ENV_HOST: "db",
+            data_store.ENV_DB: "omp",
+            data_store.ENV_PORT: "5432",
+        }.get(key, ""),
+    )
+    with pytest.raises(data_store.VariableStoreError):
+        data_store._db_params()
+
+    monkeypatch.setattr(
+        data_store,
+        "_load_psycopg2",
+        lambda: (
+            SimpleNamespace(connect=lambda **kwargs: (_ for _ in ()).throw(AssertionError)),
+            _FakeExtras,
+        ),
+    )
+    monkeypatch.setattr(data_store, "_db_params", lambda: [])
+    with pytest.raises(data_store.VariableStoreError):
+        with data_store._connect():
+            pass
+
+    class _ClosingConnection(_FakeConnection):
+        def close(self):
+            raise RuntimeError("close exploded")
+
+    closing_conn = _ClosingConnection([_FakeCursor()])
+    monkeypatch.setattr(
+        data_store,
+        "_load_psycopg2",
+        lambda: (SimpleNamespace(connect=lambda **kwargs: closing_conn), _FakeExtras),
+    )
+    monkeypatch.setattr(
+        data_store,
+        "_db_params",
+        lambda: [
+            {
+                "user": "plugin-user",
+                "password": TEST_DB_AUTH_VALUE,
+                "host": "database-plugin",
+                "dbname": "plugin-db",
+                "port": 5433,
+            }
+        ],
+    )
+    with data_store._connect() as opened:
+        assert opened is closing_conn
+
+
+def test_specific_store_error_paths_and_confirmation_failures_are_propagated(
+    monkeypatch,
+):
+    monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
+    monkeypatch.setattr(
+        data_store,
+        "_load_psycopg2",
+        lambda: (SimpleNamespace(), _FakeExtras),
+    )
+
+    @contextmanager
+    def variable_error_connect():
+        raise data_store.VariableStoreError("typed")
+        yield
+
+    monkeypatch.setattr(data_store, "_connect", variable_error_connect)
+    with pytest.raises(data_store.VariableStoreError, match="typed"):
+        data_store.list_variable_sets("alice")
+    with pytest.raises(data_store.VariableStoreError, match="typed"):
+        data_store.load_variable_set("alice", "set-a")
+    with pytest.raises(data_store.VariableStoreError, match="typed"):
+        data_store.delete_all_variable_sets("alice")
+
+    save_missing_conn = _FakeConnection([_FakeCursor(), _FakeCursor(fetchone=None)])
+    _patch_connection_queue(monkeypatch, [save_missing_conn])
+    monkeypatch.setattr(data_store, "_ensure_schema", lambda conn: None)
+    with pytest.raises(data_store.VariableStoreError, match="persisted"):
+        data_store.save_variable_set("alice", "set-a", ["alpha"])
+
+    delete_unconfirmed_conn = _FakeConnection(
+        [_FakeCursor(rowcount=1), _FakeCursor(fetchone=(1,))]
+    )
+    _patch_connection_queue(monkeypatch, [delete_unconfirmed_conn])
+    monkeypatch.setattr(data_store, "_ensure_schema", lambda conn: None)
+    with pytest.raises(data_store.VariableStoreError, match="confirmed"):
+        data_store.delete_variable_set("alice", "set-a")
+
+    @contextmanager
+    def ai_error_connect():
+        raise data_store.AiCredentialStoreError("typed-ai")
+        yield
+
+    monkeypatch.setattr(data_store, "_connect", ai_error_connect)
+    with pytest.raises(data_store.AiCredentialStoreError, match="typed-ai"):
+        data_store.list_ai_credentials("alice")
+    with pytest.raises(data_store.AiCredentialStoreError, match="typed-ai"):
+        data_store.get_ai_credential("alice", "openai")
+    with pytest.raises(data_store.AiCredentialStoreError, match="typed-ai"):
+        data_store.save_ai_credentials("alice", "openai", "secret")
+    with pytest.raises(data_store.AiCredentialStoreError, match="typed-ai"):
+        data_store.delete_all_ai_credentials("alice")
+
+    @contextmanager
+    def settings_error_connect():
+        raise data_store.UserSettingsStoreError("typed-settings")
+        yield
+
+    monkeypatch.setattr(data_store, "_connect", settings_error_connect)
+    with pytest.raises(data_store.UserSettingsStoreError, match="typed-settings"):
+        data_store.delete_all_user_settings("alice")
+
+    settings_missing_conn = _FakeConnection([_FakeCursor(), _FakeCursor(fetchone=None)])
+    _patch_connection_queue(monkeypatch, [settings_missing_conn])
+    monkeypatch.setattr(data_store, "_ensure_user_settings_schema", lambda conn: None)
+    with pytest.raises(data_store.UserSettingsStoreError, match="persisted"):
+        data_store.save_user_settings("alice", {"theme": "dark"})
+
+    @contextmanager
+    def user_data_error_connect():
+        raise data_store.VariableStoreError("typed-user-data")
+        yield
+
+    monkeypatch.setattr(data_store, "_connect", user_data_error_connect)
+    with pytest.raises(data_store.UserDataStoreError, match="user data"):
+        data_store.delete_all_user_data("alice")
+
+
+def test_real_psycopg2_loader_paths_cover_success_imports(monkeypatch):
+    monkeypatch.setattr(data_store, "_psycopg2_mod", None)
+    monkeypatch.setattr(data_store, "_psycopg2_extras", None)
+    monkeypatch.setattr(data_store, "_psycopg2_sql", None)
+
+    psycopg2_mod, extras_mod = data_store._load_psycopg2()
+    sql_mod = data_store._load_psycopg2_sql()
+
+    assert psycopg2_mod.__name__ == "psycopg2"
+    assert extras_mod.__name__.endswith(".extras")
+    assert sql_mod.__name__.endswith(".sql")
+
+
+def test_connect_re_raises_variable_store_errors_from_backend(monkeypatch):
+    monkeypatch.setattr(
+        data_store,
+        "_load_psycopg2",
+        lambda: (
+            SimpleNamespace(
+                connect=lambda **kwargs: (_ for _ in ()).throw(
+                    data_store.VariableStoreError("typed connect failure")
+                )
+            ),
+            _FakeExtras,
+        ),
+    )
+    monkeypatch.setattr(
+        data_store,
+        "_db_params",
+        lambda: [
+            {
+                "user": "plugin-user",
+                "password": TEST_DB_AUTH_VALUE,
+                "host": "database-plugin",
+                "dbname": "plugin-db",
+                "port": 5433,
+            }
+        ],
+    )
+
+    with pytest.raises(data_store.VariableStoreError, match="typed connect failure"):
+        with data_store._connect():
+            pass

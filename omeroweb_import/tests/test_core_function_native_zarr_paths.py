@@ -104,6 +104,71 @@ def test_import_zarr_via_cli_handles_stage_exception_without_unbound_local(
     assert "stage boom" in result["entry_error"]
 
 
+def test_import_zarr_via_cli_rejects_missing_context_invalid_plans_and_prepare_failures(
+    tmp_path: Path,
+    monkeypatch,
+):
+    source_path = tmp_path / "image.zarr"
+    source_path.mkdir()
+    common_kwargs = dict(
+        file_path=source_path,
+        session_key="session",
+        host="omeroserver",
+        port=4064,
+        dataset_id=11,
+        import_name="image.zarr",
+        rel_path="image.zarr",
+        entry={"index": 0},
+        cleanup_staged_paths=["_staged/image.zarr"],
+        covered_indexes=[0],
+        covered_relative_paths=["image.zarr"],
+    )
+
+    missing_context = core_functions._import_zarr_via_cli(
+        username="",
+        group_name="",
+        native_plan=core_functions._NativeZarrImportPlan(kind="ome-zarr"),
+        **common_kwargs,
+    )
+    assert missing_context["status"] == "error"
+    assert "Missing username or group name" in missing_context["entry_error"]
+
+    unsupported = core_functions._import_zarr_via_cli(
+        username="alice",
+        group_name="users_private",
+        native_plan=core_functions._NativeZarrImportPlan(),
+        **common_kwargs,
+    )
+    assert unsupported["status"] == "error"
+    assert "installed omero-cli-zarr runtime" in unsupported["entry_error"]
+
+    invalid_plan = core_functions._import_zarr_via_cli(
+        username="alice",
+        group_name="users_private",
+        native_plan=core_functions._NativeZarrImportPlan(
+            kind="ome-zarr",
+            validation_error="invalid native zarr",
+        ),
+        **common_kwargs,
+    )
+    assert invalid_plan["status"] == "error"
+    assert invalid_plan["entry_error"] == "invalid native zarr"
+
+    monkeypatch.setattr(
+        core_functions,
+        "_prepare_server_readable_zarr_source",
+        lambda path: (None, None, "prep failed"),
+    )
+    prepare_failed = core_functions._import_zarr_via_cli(
+        username="alice",
+        group_name="users_private",
+        native_plan=core_functions._NativeZarrImportPlan(kind="ome-zarr"),
+        **common_kwargs,
+    )
+    assert prepare_failed["status"] == "error"
+    assert prepare_failed["entry_error"] == "prep failed"
+
+
 def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
     tmp_path: Path, monkeypatch, caplog
 ):
@@ -616,6 +681,25 @@ def test_import_job_entry_covers_staged_background_and_native_routing_failures(
     )
     assert validation_error["status"] == "error"
     assert validation_error["entry_error"] == "invalid native zarr"
+
+
+def test_mark_failed_job_for_deferred_cleanup_reports_partial_failures(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        core_functions, "_get_failed_import_retention_seconds", lambda: 3600
+    )
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: tmp_path / "uploads")
+    monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: tmp_path / "jobs")
+    results = iter([True, False])
+    monkeypatch.setattr(
+        core_functions,
+        "safe_mark_path_for_deferred_cleanup",
+        lambda *args, **kwargs: next(results),
+    )
+
+    assert core_functions._mark_failed_job_for_deferred_cleanup("f" * 32) is False
 
 
 def test_open_service_connection_handles_group_override_and_connect_failures(

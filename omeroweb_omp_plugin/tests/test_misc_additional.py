@@ -293,3 +293,51 @@ def test_help_page_and_user_settings_views_cover_success_and_error_paths(
         _json_payload(unexpected)["error"]
         == user_settings_view.errors.unexpected_error()
     )
+
+
+def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
+    monkeypatch,
+):
+    monkeypatch.setattr(core.inspect, "signature", lambda fn: (_ for _ in ()).throw(TypeError("bad signature")))
+    assert core._supports_legacy_annotation_kwargs() is False
+
+    with pytest.raises(TypeError, match="exactly one image_id"):
+        core.delete_existing_annotations(object(), 1, 2, annotation_ids=[1])
+
+    with pytest.raises(TypeError, match="delete_existing_annotations expects either"):
+        core.delete_existing_annotations(object(), "update", "img", "names")
+
+    deleted = []
+
+    class _Stub:
+        def setId(self, value):
+            self.id = value
+
+    class _Update:
+        def deleteObject(self, obj):
+            deleted.append(obj)
+
+    class _Conn:
+        def getObject(self, object_type, object_id):
+            if object_type == "ImageAnnotationLink":
+                raise RuntimeError("lookup failed")
+            return SimpleNamespace(_obj=("annotation", object_id))
+
+        def getUpdateService(self):
+            return _Update()
+
+    monkeypatch.setattr(core, "MapAnnotationI", _Stub)
+    monkeypatch.setattr(core, "ImageAnnotationLinkI", _Stub)
+    monkeypatch.setattr(core, "rlong", lambda value: value)
+
+    result = core._delete_existing_annotations_by_ids(
+        _Conn(),
+        11,
+        annotation_ids=[7],
+        link_ids=[101],
+    )
+
+    assert result == (1, 1, 1)
+    assert isinstance(deleted[0], _Stub)
+    assert deleted[0].id == 101
+    assert deleted[1] == ("annotation", 7)

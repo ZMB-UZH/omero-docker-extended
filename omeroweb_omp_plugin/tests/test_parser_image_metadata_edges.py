@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from omeroweb_omp_plugin.services.omero import image_service, metadata_service
 from omeroweb_omp_plugin.services.parsing import filename_parser
 
@@ -60,6 +62,11 @@ class _Project:
 def test_filename_parser_covers_group_class_whitespace_and_validation_edges():
     assert filename_parser._parse_separator_fragment(r"\s") == ("", True)
     assert filename_parser._parse_separator_fragment(r"\.") == (".", False)
+    assert filename_parser._extract_separator_fragments(r"[\.-]+") == ((".", "-"), False)
+    assert filename_parser._extract_separator_fragments(r"(?:_|\s|_)+") == (
+        ("_",),
+        True,
+    )
 
     grouped, grouped_whitespace = filename_parser._extract_separator_fragments(
         r"(?:-|_|\s)+"
@@ -97,6 +104,11 @@ def test_filename_parser_covers_group_class_whitespace_and_validation_edges():
             assert "Invalid separator regex" in str(exc)
         else:
             raise AssertionError(f"Expected invalid separator regex: {invalid_pattern}")
+
+    with pytest.raises(ValueError, match="Invalid separator regex"):
+        filename_parser._extract_separator_fragments(r"(?:")
+    with pytest.raises(ValueError, match="Invalid separator regex"):
+        filename_parser._extract_separator_fragments(r"(?:)")
 
 
 def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(

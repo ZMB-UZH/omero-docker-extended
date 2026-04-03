@@ -880,3 +880,248 @@ def test_job_progress_covers_error_logs_and_save_failures(monkeypatch):
     current_job["value"] = jobs["parse_error"]
     parse_error = inspect.unwrap(job_view.job_progress)(request, "5" * 32, conn=conn)
     assert "Image 55: ERROR processing image." in _json_payload(parse_error)["last_log"]
+
+
+def test_job_view_start_helpers_cover_method_chunk_size_and_rate_limit_edges(
+    monkeypatch,
+):
+    conn = _Conn()
+    factory = RequestFactory()
+    saved_jobs = []
+    monkeypatch.setattr(job_view, "_resolve_image_ids", lambda *_args: [7, 8])
+    monkeypatch.setattr(job_view, "_validate_user_password", lambda *_args: (True, None))
+    monkeypatch.setattr(
+        job_view, "check_major_action_rate_limit", lambda *_args: (False, 12)
+    )
+    monkeypatch.setattr(
+        job_view, "save_job", lambda payload: saved_jobs.append(dict(payload)) or True
+    )
+
+    get_delete_all = inspect.unwrap(job_view.start_delete_all_job)(
+        factory.get("/"),
+        conn=conn,
+    )
+    get_delete_plugin = inspect.unwrap(job_view.start_delete_plugin_job)(
+        factory.get("/"),
+        conn=conn,
+    )
+    assert get_delete_all.status_code == 400
+    assert get_delete_plugin.status_code == 400
+
+    missing_project_delete_all = inspect.unwrap(job_view.start_delete_all_job)(
+        _json_request({"chunk_size": "bad", "password": TEST_AUTH_INPUT}),
+        conn=conn,
+    )
+    missing_project_delete_plugin = inspect.unwrap(job_view.start_delete_plugin_job)(
+        _json_request({"chunk_size": "bad", "password": TEST_AUTH_INPUT}),
+        conn=conn,
+    )
+    assert missing_project_delete_all.status_code == 400
+    assert missing_project_delete_plugin.status_code == 400
+
+    rate_limited_acq = inspect.unwrap(job_view.start_acq_job)(
+        _json_request({"project_id": 5, "chunk_size": 999}),
+        conn=conn,
+    )
+    rate_limited_delete_all = inspect.unwrap(job_view.start_delete_all_job)(
+        _json_request(
+            {"project_id": 5, "password": TEST_AUTH_INPUT, "chunk_size": 999}
+        ),
+        conn=conn,
+    )
+    rate_limited_delete_plugin = inspect.unwrap(job_view.start_delete_plugin_job)(
+        _json_request(
+            {"project_id": 5, "password": TEST_AUTH_INPUT, "chunk_size": "bad"}
+        ),
+        conn=conn,
+    )
+    assert rate_limited_acq.status_code == 429
+    assert rate_limited_delete_all.status_code == 429
+    assert rate_limited_delete_plugin.status_code == 429
+
+    monkeypatch.setattr(
+        job_view, "check_major_action_rate_limit", lambda *_args: (True, None)
+    )
+    chunk_capped = inspect.unwrap(job_view.start_delete_plugin_job)(
+        _json_request({"project_id": 5, "password": TEST_AUTH_INPUT, "chunk_size": 999}),
+        conn=conn,
+    )
+    assert chunk_capped.status_code == 200
+    assert saved_jobs[-1]["chunk_size"] == job_view.CHUNK_SIZE
+
+
+def test_validate_user_password_and_job_progress_cover_remaining_logging_and_regex_edges(
+    monkeypatch,
+):
+    conn = _Conn()
+
+    class _Client:
+        def createSession(self, username, password):
+            return None
+
+        def closeSession(self):
+            raise RuntimeError("close exploded")
+
+    monkeypatch.setattr(job_view.omero, "client", lambda host, port: _Client())
+    monkeypatch.setattr(settings, "OMERO_HOST", "omeroserver", raising=False)
+    monkeypatch.setattr(settings, "OMERO_PORT", 4064, raising=False)
+    assert job_view._validate_user_password(conn, TEST_AUTH_INPUT) == (True, None)
+
+    request = RequestFactory().get("/")
+    request.user = SimpleNamespace(username="alice")
+    saved_jobs = []
+
+    class Lock:
+        def __init__(self, *_args, **_kwargs):
+            return None
+
+        def acquire(self):
+            return None
+
+        def release(self):
+            return None
+
+    jobs = {
+        "regex_parse": {
+            "job_id": "6" * 32,
+            "username": "alice",
+            "type": "parse",
+            "index": 0,
+            "total": 1,
+            "var_names": ["", "Var1", "Var1"],
+            "delete_mode": "keep",
+            "separator": r"[_-]+",
+            "separator_mode": "regex",
+            "image_ids": [61],
+            "started": 10.0,
+            "chunk_size": 5,
+        },
+        "delete_all_warn": {
+            "job_id": "7" * 32,
+            "username": "alice",
+            "type": "del_all",
+            "index": 0,
+            "total": 1,
+            "var_names": [],
+            "delete_mode": "all",
+            "separator": "_",
+            "image_ids": [62],
+            "started": 10.0,
+            "chunk_size": 5,
+        },
+        "delete_plugin_empty": {
+            "job_id": "8" * 32,
+            "username": "alice",
+            "type": "del_plugin",
+            "index": 0,
+            "total": 1,
+            "var_names": [],
+            "delete_mode": "plugin",
+            "separator": "_",
+            "image_ids": [63],
+            "started": 10.0,
+            "chunk_size": 5,
+        },
+        "delete_plugin_error": {
+            "job_id": "9" * 32,
+            "username": "alice",
+            "type": "del_plugin",
+            "index": 0,
+            "total": 1,
+            "var_names": [],
+            "delete_mode": "plugin",
+            "separator": "_",
+            "image_ids": [64],
+            "started": 10.0,
+            "chunk_size": 5,
+        },
+    }
+    current_job = {"value": jobs["regex_parse"]}
+
+    monkeypatch.setattr(job_view.portalocker, "Lock", Lock)
+    monkeypatch.setattr(job_view, "load_job", lambda *_args: current_job["value"])
+    monkeypatch.setattr(
+        job_view, "save_job", lambda payload: saved_jobs.append(dict(payload)) or True
+    )
+    monkeypatch.setattr(
+        job_view,
+        "fetch_images_by_ids",
+        lambda *_args: {
+            61: _Image(61, "regex-A_01_02.tif"),
+            62: _Image(62, "delete-all.ome.tif"),
+            63: _Image(63, "delete-plugin-empty.ome.tif"),
+            64: _Image(64, "delete-plugin-error.ome.tif"),
+        },
+    )
+    monkeypatch.setattr(job_view, "parse_filename", lambda *_args: ["a", "01", "02"])
+    monkeypatch.setattr(job_view, "MapAnnotationI", _FakeMapAnnotation)
+    monkeypatch.setattr(job_view, "ImageAnnotationLinkI", _FakeLink)
+    monkeypatch.setattr(job_view, "NamedValue", lambda key, value: (key, value))
+    monkeypatch.setattr(job_view, "rstring", lambda value: value)
+    monkeypatch.setattr(job_view, "compute_plugin_hash", lambda mapping: "hash")
+    monkeypatch.setattr(job_view, "_save_annotation_link", lambda update, link: True)
+    monkeypatch.setattr(job_view.time, "time", lambda: 14.0)
+
+    def _delete_annotations(*args):
+        image_id = args[2].id
+        if image_id == 62:
+            return (1, 3, 2)
+        if image_id == 63:
+            return (0, 0, 0)
+        if image_id == 64:
+            raise RuntimeError("plugin delete exploded")
+        return (0, 0, 0)
+
+    monkeypatch.setattr(job_view, "delete_existing_annotations", _delete_annotations)
+
+    regex_response = inspect.unwrap(job_view.job_progress)(
+        request,
+        "6" * 32,
+        conn=conn,
+    )
+    regex_payload = _json_payload(regex_response)
+    assert regex_payload["finished"] is True
+    assert "saved 3+1 variables" in regex_payload["last_log"]
+
+    current_job["value"] = jobs["delete_all_warn"]
+    delete_all = inspect.unwrap(job_view.job_progress)(request, "7" * 32, conn=conn)
+    assert "warning - only confirmed 1 of 2 deletions" in _json_payload(delete_all)[
+        "last_log"
+    ]
+
+    current_job["value"] = {
+        **jobs["delete_all_warn"],
+        "job_id": "a" * 32,
+        "index": 0,
+        "image_ids": [62],
+    }
+    monkeypatch.setattr(job_view, "delete_existing_annotations", lambda *_args: (0, 0, 1))
+    delete_all_unconfirmed = inspect.unwrap(job_view.job_progress)(
+        request,
+        "a" * 32,
+        conn=conn,
+    )
+    assert "deletions could not be confirmed" in _json_payload(delete_all_unconfirmed)[
+        "last_log"
+    ]
+    monkeypatch.setattr(job_view, "delete_existing_annotations", _delete_annotations)
+
+    current_job["value"] = jobs["delete_plugin_empty"]
+    delete_plugin_empty = inspect.unwrap(job_view.job_progress)(
+        request,
+        "8" * 32,
+        conn=conn,
+    )
+    assert "no key-value pairs to delete found" in _json_payload(delete_plugin_empty)[
+        "last_log"
+    ]
+
+    current_job["value"] = jobs["delete_plugin_error"]
+    delete_plugin_error = inspect.unwrap(job_view.job_progress)(
+        request,
+        "9" * 32,
+        conn=conn,
+    )
+    assert "ERROR deleting plugin key-value pairs" in _json_payload(
+        delete_plugin_error
+    )["last_log"]

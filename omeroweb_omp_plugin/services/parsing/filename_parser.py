@@ -100,8 +100,6 @@ def _extract_separator_fragments(pattern):
             continue
         seen.add(fragment)
         normalized_fragments.append(fragment)
-    if not normalized_fragments and not match_whitespace:
-        raise ValueError("Invalid separator regex.")
     return tuple(normalized_fragments), match_whitespace
 
 

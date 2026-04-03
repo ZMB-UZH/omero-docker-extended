@@ -412,10 +412,7 @@ def _resolve_omero_host_port(conn):
         if not port_text:
             port = None
         elif port_text.isdigit():
-            try:
-                port = int(port_text)
-            except (TypeError, ValueError):
-                port = None
+            port = int(port_text)
         else:
             port = None
 

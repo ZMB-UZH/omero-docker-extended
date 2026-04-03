@@ -348,3 +348,52 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
     assert remaining == 30.0
     assert state["value"] == {"actions": [], "blocked_until": 150.0}
     assert state["timeout"] == rate_limit._cache_timeout_seconds()
+
+
+def test_rate_limit_non_dummy_cache_and_delete_miss_paths(monkeypatch):
+    current_time = [10.0]
+    monkeypatch.setattr(rate_limit.time, "time", lambda: current_time[0])
+
+    cache = rate_limit.InMemoryCache()
+    assert cache.delete("missing") is False
+
+    backend_calls = []
+
+    class _CacheBackend:
+        def get(self, key):
+            backend_calls.append(("get", key))
+            return {"cached": key}
+
+        def set(self, key, value, timeout=None):
+            backend_calls.append(("set", key, value, timeout))
+
+        def delete(self, key):
+            backend_calls.append(("delete", key))
+
+    monkeypatch.setattr(rate_limit, "DummyCache", type("_OtherDummyCache", (), {}))
+    monkeypatch.setattr(rate_limit, "cache", _CacheBackend())
+
+    assert rate_limit._is_dummy_cache() is False
+    assert rate_limit._cache_get("beta") == {"cached": "beta"}
+    assert rate_limit._cache_set("beta", {"value": 2}, timeout=7) is True
+    assert rate_limit._cache_delete("beta") is True
+
+    monkeypatch.setattr(
+        rate_limit,
+        "_cache_get",
+        lambda _key: {"actions": [], "blocked_until": "bad"},
+    )
+    monkeypatch.setattr(rate_limit, "_cache_set", lambda *args, **kwargs: True)
+    request = SimpleNamespace(
+        META={"REMOTE_ADDR": "127.0.0.1"},
+        user=SimpleNamespace(is_authenticated=False),
+    )
+    allowed, remaining = rate_limit.check_major_action_rate_limit(request)
+    assert allowed is True
+    assert remaining is None
+
+    assert backend_calls == [
+        ("get", "beta"),
+        ("set", "beta", {"value": 2}, 7),
+        ("delete", "beta"),
+    ]

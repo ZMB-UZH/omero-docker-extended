@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import builtins
 import json
+import sys
 from pathlib import Path
 
 import numcodecs
 import numpy as np
+import pytest
 import zarr
 
 from omeroweb_import.services import ome_zarr_support as support
@@ -730,3 +732,372 @@ def test_write_level_and_runtime_helpers_cover_additional_error_paths(
     runtime, error = support._ome_zarr_runtime()
     assert runtime is None
     assert "ome-zarr missing" in (error or "")
+
+
+def test_ome_zarr_support_helper_guards_cover_remaining_metadata_and_axis_edges(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    support.ome_zarr_package_version.cache_clear()
+    monkeypatch.setattr(
+        support.importlib_metadata,
+        "version",
+        lambda _name: (_ for _ in ()).throw(
+            support.importlib_metadata.PackageNotFoundError()
+        ),
+    )
+    assert support.ome_zarr_package_version() == ""
+    support.ome_zarr_package_version.cache_clear()
+
+    monkeypatch.setattr(
+        support,
+        "_extract_axes",
+        lambda _axes: ([], {}, "axes are broken"),
+    )
+    inspection = support._inspect_single_ome_zarr_image(
+        tmp_path,
+        {"multiscales": [{"axes": [{"name": "x"}], "datasets": [{"path": "0"}]}]},
+    )
+    assert inspection.support_error == "axes are broken"
+
+    bf2raw = tmp_path / "fallback.ome.zarr"
+    bf2raw.mkdir()
+    (bf2raw / "0").mkdir()
+    monkeypatch.setattr(
+        support,
+        "_inspect_single_ome_zarr_image",
+        lambda _path, _metadata: support.OMEZarrImageInspection(
+            recognized=True,
+            kind=support.OME_ZARR_IMPORT_KIND_IMAGE,
+            image_relative_paths=(),
+        ),
+    )
+    monkeypatch.setattr(
+        support,
+        "_load_root_ome_zarr_metadata",
+        lambda _path: (
+            {"multiscales": [{"axes": [{"name": "y"}, {"name": "x"}], "datasets": [{"path": "0"}]}]},
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        support,
+        "ome_zarr_package_version",
+        lambda: "1.0",
+    )
+    inspection = support._inspect_bioformats2raw_layout(bf2raw)
+    assert inspection.image_relative_paths == ("0",)
+
+    monkeypatch.setattr(
+        support,
+        "_load_root_ome_zarr_metadata",
+        lambda _path: (
+            None,
+            support.OMEZarrImageInspection(
+                recognized=True,
+                kind=support.OME_ZARR_IMPORT_KIND_IMAGE,
+                image_relative_paths=(),
+            ),
+        ),
+    )
+
+    format_store = tmp_path / "format-store"
+    format_store.mkdir()
+    (format_store / ".zgroup").write_text("{broken", encoding="utf-8")
+    _write_json(format_store / "zarr.json", {"zarr_format": 3})
+    assert support._read_zarr_format_metadata(format_store, {}) == 3
+
+    broken_array_dir = tmp_path / "array-store" / "0"
+    broken_array_dir.mkdir(parents=True)
+    (broken_array_dir / ".zarray").write_text("{broken", encoding="utf-8")
+    payload, error = support._read_array_metadata_payload(
+        tmp_path / "array-store",
+        "0",
+    )
+    assert payload is None
+    assert "Failed to read OME-Zarr array metadata" in (error or "")
+
+    sizes, error = support._extract_physical_sizes(
+        ["y", "x"],
+        {},
+        ["bad-transform"],
+    )
+    assert sizes == {}
+    assert "malformed" in (error or "")
+
+    sizes, error = support._extract_physical_sizes(
+        ["y", "x"],
+        {},
+        [[{"type": "translation", "translation": [1, 2]}]],
+    )
+    assert sizes == {}
+    assert "does not match the image axes" in (error or "")
+
+
+def test_ome_zarr_support_downscale_and_codec_edges_cover_remaining_branches(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    inspection = support.OMEZarrImageInspection(
+        recognized=True,
+        kind=support.OME_ZARR_IMPORT_KIND_IMAGE,
+        image_relative_paths=("0",),
+    )
+    store = tmp_path / "normalize.ome.zarr"
+    (store / "0").mkdir(parents=True)
+    _write_json(
+        store / "0" / ".zarray",
+        {
+            "zarr_format": 2,
+            "shape": [1],
+            "chunks": [1],
+            "dtype": "|u1",
+            "compressor": {"id": "blosc"},
+            "fill_value": 0,
+            "filters": None,
+            "order": "C",
+        },
+    )
+    (store / "0" / "0").write_bytes(b"abc")
+
+    original_import = builtins.__import__
+
+    def _failing_numcodecs_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "numcodecs":
+            raise ImportError("numcodecs missing")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _failing_numcodecs_import)
+    assert "Failed to load numcodecs" in (
+        support._rewrite_problematic_native_image_arrays(store, inspection) or ""
+    )
+    monkeypatch.setattr(builtins, "__import__", original_import)
+
+    original_get_codec = numcodecs.get_codec
+    monkeypatch.setattr(
+        numcodecs,
+        "get_codec",
+        lambda _spec: type(
+            "_Codec",
+            (),
+            {
+                "decode": staticmethod(
+                    lambda _payload: (_ for _ in ()).throw(RuntimeError("decode failed"))
+                )
+            },
+        )(),
+    )
+    assert "Failed to normalize OME-Zarr chunk" in (
+        support._rewrite_problematic_native_image_arrays(store, inspection) or ""
+    )
+    monkeypatch.setattr(numcodecs, "get_codec", original_get_codec)
+
+    pyramid = tmp_path / "pyramid.ome.zarr"
+    (pyramid / "s0").mkdir(parents=True)
+    (pyramid / "s1").mkdir(parents=True)
+    assert support._has_3d_pyramid_downsampling(pyramid) is None
+
+    monkeypatch.setattr(
+        support,
+        "_load_root_ome_zarr_metadata",
+        lambda _root: (
+            {
+                "multiscales": [
+                    {
+                        "axes": [{"name": "z"}, {"name": "y"}, {"name": "x"}],
+                        "datasets": [{"path": "s0"}, {"path": "s1"}],
+                    }
+                ]
+            },
+            None,
+        ),
+    )
+    (pyramid / "s0" / ".zarray").write_text("{broken", encoding="utf-8")
+    _write_json(pyramid / "s1" / ".zarray", {"shape": [1, 1, 1]})
+    assert support._has_3d_pyramid_downsampling(pyramid) is None
+
+    _write_json(pyramid / "s0" / ".zarray", {"shape": [2, 4]})
+    _write_json(pyramid / "s1" / ".zarray", {"shape": [1, 2, 2]})
+    assert support._has_3d_pyramid_downsampling(pyramid) is None
+
+    with pytest.raises(ValueError, match="data rank"):
+        support._downscale_local_mean_fallback(np.ones((2, 2)), (2,))
+
+    reduced = support._downscale_local_mean_fallback(
+        np.array([[1.0, 2.0, 3.0]]),
+        (1, 2),
+    )
+    assert reduced.shape == (1, 2)
+    assert np.allclose(reduced, np.array([[1.5, 3.0]]))
+
+    fake_transform = type(sys)("skimage.transform")
+    fake_transform.downscale_local_mean = lambda data, factors: np.asarray(data) + sum(
+        factors
+    )
+    monkeypatch.setitem(sys.modules, "skimage.transform", fake_transform)
+    assert np.array_equal(
+        support._downscale_local_mean(np.array([[1]]), (2, 3)),
+        np.array([[6]]),
+    )
+
+    codec_store = tmp_path / "codec-array"
+    codec_store.mkdir()
+    metadata = {
+        "shape": [1],
+        "chunks": [1],
+        "dtype": "|u1",
+        "compressor": {"id": "gzip", "level": 1},
+        "filters": None,
+        "dimension_separator": "/",
+    }
+    codec = numcodecs.GZip(level=1)
+    (codec_store / "0").write_bytes(
+        codec.encode(np.array([9], dtype=np.uint8).tobytes())
+    )
+    loaded = support._read_zarr_v2_array(codec_store, metadata)
+    assert loaded.tolist() == [9]
+
+    with pytest.raises(RuntimeError, match="filters are not supported"):
+        support._read_zarr_v2_array(
+            codec_store,
+            {
+                "shape": [1],
+                "chunks": [1],
+                "dtype": "|u1",
+                "filters": [{"id": "delta"}],
+            },
+        )
+
+
+def test_ome_zarr_support_covers_invalid_shape_and_native_pyramid_guard_paths(
+    tmp_path: Path,
+) -> None:
+    store = tmp_path / "invalid-shape.ome.zarr"
+    metadata_payload = {
+        "multiscales": [
+            {
+                "axes": [{"name": "z"}, {"name": "y"}, {"name": "x"}],
+                "datasets": [{"path": "0"}],
+            }
+        ]
+    }
+    _write_json(store / ".zattrs", metadata_payload)
+    _write_json(store / "0" / ".zarray", {"shape": ["bad", None], "dtype": "|u1"})
+    inspection = support._inspect_single_ome_zarr_image(store, metadata_payload)
+    assert inspection.shape == ()
+
+    pyramid_store = tmp_path / "pyramid.ome.zarr"
+    _write_json(
+        pyramid_store / ".zattrs",
+        {
+            "multiscales": [
+                {
+                    "axes": [{"name": "z"}, {"name": "y"}, {"name": "x"}],
+                    "datasets": [{"path": "0"}, {"path": "1"}],
+                }
+            ]
+        },
+    )
+    assert support._has_3d_pyramid_downsampling(pyramid_store) is None
+
+    _write_json(pyramid_store / "0" / ".zarray", {"shape": [4, 16, 16]})
+    (pyramid_store / "1").mkdir(parents=True)
+    (pyramid_store / "1" / ".zarray").write_text("{broken", encoding="utf-8")
+    assert support._has_3d_pyramid_downsampling(pyramid_store) is None
+
+    _write_json(pyramid_store / "1" / ".zarray", {"shape": [4, 8]})
+    assert support._has_3d_pyramid_downsampling(pyramid_store) is None
+
+
+def test_regenerate_xy_only_pyramid_handles_numpy_dependency_and_translation_edges(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    store = tmp_path / "translation.ome.zarr"
+    store.mkdir()
+    detection = {
+        "metadata_payload": {
+            "multiscales": [{"datasets": [{"path": "s0"}, {"path": "s1"}]}]
+        },
+        "multiscale": {"datasets": [{"path": "s0"}, {"path": "s1"}]},
+        "axes": [{"name": "z"}, {"name": "y"}, {"name": "x"}],
+        "datasets": [
+            {
+                "path": "s0",
+                "coordinateTransformations": [
+                    {"type": "scale", "scale": [1.0, 1.0, 1.0]},
+                    {"type": "translation", "translation": [0.0, 0.0, 0.0]},
+                ],
+            },
+            {"path": "s1"},
+        ],
+        "yx_indices": [1, 2],
+        "s0_path": "s0",
+    }
+    monkeypatch.setattr(
+        support,
+        "_has_3d_pyramid_downsampling",
+        lambda _root: detection,
+    )
+
+    original_import = builtins.__import__
+
+    def _failing_numpy_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "numpy":
+            raise ImportError("numpy missing")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _failing_numpy_import)
+    assert "Missing dependency for pyramid regeneration" in (
+        support._regenerate_xy_only_pyramid(store) or ""
+    )
+    monkeypatch.setattr(builtins, "__import__", original_import)
+
+    _write_json(
+        store / "s0" / ".zarray",
+        {
+            "chunks": [1, 2, 2],
+            "dtype": "|u1",
+            "compressor": {"id": "blosc"},
+            "filters": None,
+        },
+    )
+    monkeypatch.setattr(
+        support,
+        "_read_zarr_v2_array",
+        lambda *_args, **_kwargs: np.ones((2, 4, 4), dtype=np.uint8),
+    )
+    monkeypatch.setattr(
+        numcodecs,
+        "get_codec",
+        lambda _spec: (_ for _ in ()).throw(RuntimeError("codec missing")),
+    )
+    assert "Failed to load compressor for pyramid regeneration" in (
+        support._regenerate_xy_only_pyramid(store) or ""
+    )
+
+    written = {}
+    monkeypatch.setattr(numcodecs, "get_codec", lambda _spec: object())
+    monkeypatch.setattr(
+        support,
+        "_downscale_local_mean",
+        lambda data, factors: data[:, ::2, ::2],
+    )
+    monkeypatch.setattr(
+        support,
+        "_write_zarr_v2_level",
+        lambda level_dir, data, chunks, compressor, filters, codec: written.setdefault(
+            "call",
+            {
+                "level_dir": level_dir,
+                "data_shape": tuple(data.shape),
+                "compressor": compressor,
+                "codec_is_present": codec is not None,
+            },
+        )
+        and None,
+    )
+    assert support._regenerate_xy_only_pyramid(store) is None
+    updated = json.loads((store / ".zattrs").read_text(encoding="utf-8"))
+    transforms = updated["multiscales"][0]["datasets"][1]["coordinateTransformations"]
+    assert transforms[1]["type"] == "translation"

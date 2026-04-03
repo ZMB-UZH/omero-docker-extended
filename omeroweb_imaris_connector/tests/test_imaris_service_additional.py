@@ -462,3 +462,261 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
         imaris_service._infer_finished_from_outputs({"Export_Name": "demo.ims"}) is True
     )
     assert imaris_service._infer_finished_from_outputs(["not", "a", "dict"]) is False
+
+
+def test_imaris_service_additional_helper_edges_cover_remaining_type_and_config_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+
+    class _BadValue:
+        def getValue(self):
+            raise RuntimeError("getter exploded")
+
+        def __str__(self):
+            return "fallback"
+
+    bad_value = _BadValue()
+    assert imaris_service._unwrap_rtype(bad_value) is bad_value
+
+    bad_script = SimpleNamespace(
+        name="IMS_Export.py",
+        path="/tmp/IMS_Export.py",
+        id=SimpleNamespace(val=None),
+    )
+    monkeypatch.setattr(
+        imaris_service,
+        "_get_script_services",
+        lambda conn: [SimpleNamespace(getScripts=lambda: [bad_script])],
+    )
+    assert imaris_service._find_script_id(object()) is None
+    assert imaris_service._is_process_handle(
+        SimpleNamespace(poll=lambda: None, getResults=lambda *_args: {})
+    )
+    assert imaris_service._is_async_result(None) is False
+
+    class _BrokenService:
+        @property
+        def runScript(self):
+            raise RuntimeError("broken preferred method")
+
+        def executeScript(self):
+            return "ok"
+
+        def __dir__(self):
+            return ["executeScript", "brokenExecScript"]
+
+        @property
+        def brokenExecScript(self):
+            raise RuntimeError("broken discovered method")
+
+    yielded = list(imaris_service._iter_script_methods(_BrokenService()))
+    assert [name for name, _ in yielded] == ["executeScript"]
+
+    noisy_config_conn = SimpleNamespace(
+        c=SimpleNamespace(sf=SimpleNamespace(getConfigService=lambda: None))
+    )
+    assert imaris_service._get_script_processor_config(noisy_config_conn) is None
+    assert imaris_service._can_read_script_config(None) is False
+    assert (
+        imaris_service._can_read_script_config(
+            SimpleNamespace(
+                isAdmin=lambda: (_ for _ in ()).throw(RuntimeError("admin exploded"))
+            )
+        )
+        is False
+    )
+    assert imaris_service._get_node_descriptors_config(noisy_config_conn) is None
+    assert imaris_service._get_node_descriptors_config(
+        SimpleNamespace(
+            isAdmin=lambda: True,
+            c=SimpleNamespace(
+                sf=SimpleNamespace(
+                    getConfigService=lambda: types.SimpleNamespace(
+                        getConfigValue=lambda _key: None
+                    )
+                )
+            ),
+        )
+    ) is None
+    assert imaris_service._get_node_descriptors_config(
+        SimpleNamespace(
+            isAdmin=lambda: True,
+            c=SimpleNamespace(
+                sf=SimpleNamespace(
+                    getConfigService=lambda: types.SimpleNamespace(
+                        getConfigValue=lambda _key: "   "
+                    )
+                )
+            ),
+        )
+    ) is None
+    assert imaris_service._format_script_exception(RuntimeError("plain failure")) == (
+        "plain failure"
+    )
+    assert imaris_service._is_security_violation(
+        RuntimeError("wrapped SecurityViolation response")
+    )
+    monkeypatch.setattr(
+        imaris_service.omero,
+        "NoProcessorAvailable",
+        (NoProcessorAvailable,),
+    )
+    assert imaris_service._is_no_processor_available(RuntimeError("No processor available"))
+
+
+def test_imaris_service_remaining_job_state_and_output_paths_are_exercised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+
+    original_import = builtins.__import__
+
+    def _failing_rlong_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "omero.rtypes" and tuple(fromlist or ()) == ("rlong",):
+            raise ImportError("rlong missing")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _failing_rlong_import)
+    monkeypatch.setattr(
+        imaris_service,
+        "_get_script_services",
+        lambda conn: [SimpleNamespace(runScript=lambda *args: {"args": args})],
+    )
+    result = imaris_service._run_script(object(), 7, 9, wait_secs=0)
+    monkeypatch.setattr(builtins, "__import__", original_import)
+    assert result["args"][1] == {"Image_ID": 9}
+
+    get_jobs_fail_service = SimpleNamespace(
+        getJobs=lambda: (_ for _ in ()).throw(RuntimeError("jobs exploded"))
+    )
+    monkeypatch.setattr(
+        imaris_service,
+        "_get_script_services",
+        lambda conn: [get_jobs_fail_service],
+    )
+    assert imaris_service._get_job_state_and_outputs(object(), 12) == (None, None)
+
+    class _BadInt:
+        def __int__(self):
+            raise ValueError("bad integer")
+
+    assert imaris_service._extract_job_id({"job_id": _BadInt()}) is None
+    assert imaris_service._extract_output_value(None, "Export_Name") is None
+    assert imaris_service._infer_finished_from_outputs({"Other": "value"}) is False
+
+
+def test_imaris_service_covers_remaining_descriptor_and_job_iteration_edges(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+
+    class _BrokenId:
+        def __init__(self):
+            self._reads = 0
+
+        @property
+        def val(self):
+            self._reads += 1
+            if self._reads < 3:
+                return None
+            raise RuntimeError("bad id")
+
+    broken_id_script = SimpleNamespace(
+        name="IMS_Export.py",
+        path="/tmp/IMS_Export.py",
+        id=_BrokenId(),
+    )
+    monkeypatch.setattr(
+        imaris_service,
+        "_get_script_services",
+        lambda conn: [SimpleNamespace(getScripts=lambda: [broken_id_script])],
+    )
+    assert imaris_service._find_script_id(object()) is None
+
+    weird_service = SimpleNamespace(
+        runScript=lambda *_args: None,
+        helperScript=lambda *_args: None,
+    )
+    assert list(imaris_service._iter_script_methods(weird_service)) == [
+        ("runScript", weird_service.runScript)
+    ]
+
+    class _TypeOnlyMethod:
+        def __call__(self, *args):
+            raise TypeError("bad signature")
+
+    with pytest.raises(TypeError, match="bad signature"):
+        imaris_service._call_script_method(_TypeOnlyMethod(), "runScript", 1, {}, 0)
+
+    assert (
+        imaris_service._get_script_processor_config(
+            SimpleNamespace(
+                isAdmin=lambda: True,
+                c=SimpleNamespace(
+                    sf=SimpleNamespace(
+                        getConfigService=lambda: SimpleNamespace(
+                            getConfigValue=lambda _key: None
+                        )
+                    )
+                ),
+            )
+        )
+        is None
+    )
+    assert imaris_service._is_no_processor_available(
+        RuntimeError("backend said NoProcessorAvailable")
+    ) is True
+
+    class _BadValue:
+        def __int__(self):
+            raise ValueError("bad value")
+
+    class _BadJobId:
+        def getValue(self):
+            return _BadValue()
+
+    assert imaris_service._extract_job_id(_BadJobId()) is None
+
+    class _BadAccessorJob:
+        job_id = 19
+
+        def getJobId(self):
+            return _BadValue()
+
+    assert imaris_service._extract_job_id(_BadAccessorJob()) == 19
+
+    running_job = SimpleNamespace(
+        id=SimpleNamespace(val=7),
+        status=SimpleNamespace(val="RUNNING"),
+    )
+    monkeypatch.setattr(
+        imaris_service,
+        "_get_script_services",
+        lambda conn: [
+            SimpleNamespace(
+                getJobs=lambda: [running_job],
+                getJobOutputs=lambda _job_id: {},
+            )
+        ],
+    )
+    assert imaris_service._get_job_state_and_outputs(object(), 7) == ("RUNNING", {})
+
+    class _BrokenStatus:
+        @property
+        def val(self):
+            raise RuntimeError("bad status")
+
+    broken_status_job = SimpleNamespace(
+        id=SimpleNamespace(val=8),
+        status=_BrokenStatus(),
+    )
+    monkeypatch.setattr(
+        imaris_service,
+        "_get_script_services",
+        lambda conn: [SimpleNamespace(getJobs=lambda: [broken_status_job])],
+    )
+    assert imaris_service._get_job_state_and_outputs(object(), 8) == (None, None)

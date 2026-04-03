@@ -264,6 +264,7 @@ def test_ai_assist_helper_edges_cover_empty_inputs_and_provider_shape_failures(
     assert ai_assist._summarize_separators(["plain"]) == ""
     assert ai_assist._separator_candidates(["plain"]) == []
     assert ai_assist._clean_regex("") == ""
+    assert ai_assist._clean_regex("  \n  ") == ""
     assert ai_assist._clean_regex("Regex: (?:_|-)+") == "(?:_|-)+"
     assert ai_assist._clean_regex("pattern regex: (?:_)+") == "(?:_)+"
     assert ai_assist._is_regex_reasonable("", filenames) is False
@@ -274,6 +275,13 @@ def test_ai_assist_helper_edges_cover_empty_inputs_and_provider_shape_failures(
     assert ai_assist._is_regex_too_generic("(", filenames) is True
     assert ai_assist._is_regex_too_generic(".*", filenames) is True
     assert ai_assist._is_regex_too_generic("_", ["plain"]) is False
+    assert (
+        ai_assist._is_regex_too_generic(
+            "-",
+            ["a-b-c-d-e-f-g-h-i", "j-k-l-m-n-o-p-q-r"],
+        )
+        is True
+    )
 
     with pytest.raises(ai_assist.AiAssistError):
         ai_assist._parse_ai_value_rows("", 1)

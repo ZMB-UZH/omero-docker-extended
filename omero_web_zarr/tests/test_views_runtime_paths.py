@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 import requests
 from django.http import Http404
+from django.http import HttpResponse
 from django.http import HttpResponseRedirect
 from django.test import RequestFactory
 
@@ -427,6 +428,49 @@ def test_image_chunk_uses_raw_pixels_store_for_lower_pyramid_levels(monkeypatch)
     assert raw_store.closed is True
 
 
+def test_image_chunk_builds_runtime_chunk_indices_for_tcz_axes(monkeypatch):
+    class _RichFakeChunkWriter:
+        def __init__(self, root):
+            self.root = Path(root)
+
+        def __setitem__(self, _key, value):
+            (self.root / "0.0.0.0.0").write_bytes(value.tobytes())
+
+    image = _FakeImage(
+        image_id=44,
+        size_z=1,
+        size_c=1,
+        size_t=1,
+        size_y=2,
+        size_x=2,
+        primary_pixels=_FakePrimaryPixels(next(iter(views.PIXEL_TYPES)), tile_value=5),
+    )
+    monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
+    monkeypatch.setattr(
+        views,
+        "marshal_axes_v3",
+        lambda current_image: ["t", "c", "z", "y", "x"],
+    )
+    monkeypatch.setattr(views, "get_image_shape", lambda image, level: (1, 1, 1, 2, 2))
+    monkeypatch.setattr(views, "get_chunk_shape", lambda image: (1, 1, 1, 2, 2))
+    monkeypatch.setattr(
+        views,
+        "open_compat_array",
+        lambda path, **_kwargs: _RichFakeChunkWriter(path),
+    )
+
+    response = views.image_chunk.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/image/44.zarr/0/0/0/0/0/0"),
+        44,
+        0,
+        "0/0/0/0/0",
+        conn=_FakeConn(image),
+    )
+
+    assert response.status_code == 200
+    assert response["Content-Disposition"] == "attachment; filename=0.0.0.0.0"
+
+
 def test_image_chunk_rejects_wrong_dimension_count(monkeypatch):
     image = _FakeImage(image_id=43, size_y=4, size_x=4)
     monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
@@ -574,3 +618,50 @@ def test_app_helpers_reject_invalid_asset_paths_and_surface_fetch_failures(
     assert (
         redirect["Location"] == "https://ome.github.io/ome-ngff-validator/assets/app.js"
     )
+
+
+def test_runtime_view_helpers_cover_store_shortcuts_and_single_plane_iterators(
+    monkeypatch,
+):
+    multi_dim_image = _FakeImage(image_id=71, size_t=2, size_z=3, size_y=4, size_x=5)
+    assert views.get_chunk_shape(multi_dim_image) == [1, 1, 4, 5]
+
+    image = _FakeImage(image_id=72, size_y=4, size_x=5)
+    store_json_response = HttpResponse('{"store": true}', content_type="application/json")
+    store_chunk_response = HttpResponse(
+        b"store-chunk",
+        content_type="application/octet-stream",
+    )
+    store_path_response = HttpResponse('{"ok": 1}', content_type="application/json")
+    monkeypatch.setattr(views, "_store_backed_json_response", lambda *_args: store_json_response)
+    monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: store_chunk_response)
+    monkeypatch.setattr(views, "_store_backed_response", lambda *_args: store_path_response)
+
+    zarray_response = views.image_zarray.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/image/72.zarr/0/.zarray"),
+        72,
+        0,
+        conn=_FakeConn(image),
+    )
+    chunk_response = views.image_chunk.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/image/72.zarr/0/0/0"),
+        72,
+        0,
+        "0/0",
+        conn=_FakeConn(image),
+    )
+    store_response = views.image_store_path.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/image/72.zarr/0/.zarray"),
+        72,
+        "0.4",
+        "0/.zarray",
+        conn=_FakeConn(image),
+    )
+
+    assert zarray_response is store_json_response
+    assert chunk_response is store_chunk_response
+    assert store_response is store_path_response
+
+    planes = list(views._iter_store_backed_ome_tiff_planes(np.arange(6).reshape(2, 3)))
+    assert len(planes) == 1
+    assert planes[0].shape == (2, 3)
