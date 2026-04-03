@@ -765,7 +765,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual(
             "${{ secrets.GITHUB_TOKEN }}", lint_step["env"]["GITHUB_TOKEN"]
         )
+        self.assertEqual(".", lint_step["env"]["LINTER_RULES_PATH"])
         self.assertEqual(".markdownlint.yaml", lint_step["env"]["MARKDOWN_CONFIG_FILE"])
+        self.assertEqual(".yamllint", lint_step["env"]["YAML_CONFIG_FILE"])
+        self.assertEqual("true", lint_step["env"]["SAVE_SUPER_LINTER_SUMMARY"])
         self.assertEqual("true", lint_step["env"]["VALIDATE_ALL_CODEBASE"])
         self.assertEqual(
             "true", lint_step["env"]["VALIDATE_GIT_MERGE_CONFLICT_MARKERS"]
@@ -808,7 +811,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertEqual({"contents": "read"}, workflow["permissions"])
         self.assertEqual(
-            "semgrep/semgrep:1.156.0@sha256:646f8dc40aa7ac8393e88e6cd845d7fd07a591ac07c1f15972bc4203a2298177",
+            "semgrep/semgrep:1.156.0@sha256:a3d49dc967b8534a6a76628e50c51cbfe33eb7195dc2feab1fdc0f100852c8ef",
             workflow["jobs"]["semgrep"]["container"]["image"],
         )
 
