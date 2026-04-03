@@ -22,6 +22,7 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 ## Development rules
 
 ### Configuration
+
 - All configuration is environment-driven via `env/*.env` files.
 - Treat repository-tracked `*_example*` files as canonical templates for expected runtime shape and keys.
 - Assume corresponding non-example files are provisioned by the sysadmin and match template structure unless explicitly documented otherwise.
@@ -31,6 +32,7 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 - Reference the correct `env_file` constant (`ENV_FILE_OMEROWEB`, `ENV_FILE_OMERO_CELERY`, etc.) in error messages.
 
 ### Plugin architecture
+
 - Plugins depend on `omero_plugin_common`, never the reverse.
 - Plugins do not depend on each other.
 - Follow the existing layout: `apps.py`, `config.py`, `urls.py`, `views/`, `services/`, `strings/`, `templates/`, `static/`, `tests/`.
@@ -39,10 +41,12 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 - Views import from `omero_plugin_common.request_utils` for JSON parsing and username resolution.
 
 ### OMERO connections
+
 - Never use `BlitzGateway.suConn()` for user impersonation. The `job-service` account is intentionally non-admin, so `suConn` always returns `None`. Use the service connection directly with the correct group context (`SERVICE_OPTS.setOmeroGroup`) instead. The import CLI runs under the real user's session, so dataset ownership is resolved at import time.
 - When the user's request connection (`conn`) is available, prefer it for dataset creation and OMERO API calls. Fall back to the service connection only when `conn` is `None` (background threads).
 
 ### Docker and infrastructure
+
 - Pin all image tags in `docker-compose.yml` and Dockerfiles. Never use `:latest`.
 - Do not add build `args:`, environment variables, or version pins to `docker-compose.yml`. Keep it minimal — configuration belongs in `env/*_example.env` files and Dockerfile `ARG` defaults.
 - Every service must have a `healthcheck:` block and `security_opt: no-new-privileges:true`.
@@ -50,6 +54,7 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 - The `omeroweb` container runs two processes via supervisord (OMERO.web + Celery worker).
 
 ### Security
+
 - Keep secrets out of source control. The `env/` directory is gitignored except for `*_example.env` templates.
 - Treat plugin input as untrusted; validate at system boundaries.
 - Use OMERO permissions checks for data access.
@@ -58,6 +63,7 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 - Locale data is preserved across the hardened images; package and dependency updates are the intended security control.
 
 ### Documentation
+
 - Update docs when behavior or operating assumptions change.
 - Run `python3 tools/lint_docs_structure.py` to validate docs structure before committing.
 - Required files and cross-links are enforced by CI (`.github/workflows/docs-knowledge-base.yml`).
@@ -67,21 +73,25 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 ## Common tasks
 
 ### Adding a new environment variable
+
 1. Add it to the relevant `env/*_example.env` template with a descriptive comment.
 2. Load it in the plugin's `config.py` using the appropriate `omero_plugin_common.env_utils` function (`get_env`, `get_int_env`, `get_bool_env`, etc.).
 3. Document it in `docs/deployment/configuration.md`.
 
 ### Adding a new plugin route
+
 1. Add the URL pattern in the plugin's `urls.py`.
 2. Create the view function in `views/`.
 3. Update `docs/plugins/<plugin-name>.md` and `docs/reference/service-endpoints.md`.
 
 ### Modifying Docker services
+
 1. Edit `docker-compose.yml` or the relevant Dockerfile in `docker/`.
 2. Ensure health checks are present and correct.
 3. Update `docs/architecture/system-overview.md` if the service topology changes.
 
 ### Modifying monitoring
+
 1. Edit the relevant config in `monitoring/`.
 2. Update `docs/operations/monitoring.md`.
 3. If adding new Prometheus targets, update `monitoring/prometheus/prometheus.yml`.
