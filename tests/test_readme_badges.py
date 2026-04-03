@@ -53,10 +53,10 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![Ruff]("),
-            badge_block.index(f"[![{self.upstream_sources.badge_label}]("),
+            badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
         )
         self.assertLess(
-            badge_block.index(f"[![{self.upstream_sources.badge_label}]("),
+            badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
             badge_block.index("[![GitHub commit activity]("),
         )
 
@@ -178,10 +178,16 @@ class ReadmeBadgeGenerationTests(TestCase):
                 )
 
     def test_run_git_marks_repo_root_as_safe_directory(self) -> None:
-        with mock.patch(
-            "tools.update_readme_badges.subprocess.run",
-            return_value=mock.Mock(stdout="main\n"),
-        ) as mocked_run:
+        with (
+            mock.patch(
+                "tools.update_readme_badges.agent_skill_provenance.resolve_required_executable",
+                return_value="/usr/bin/git",
+            ),
+            mock.patch(
+                "tools.update_readme_badges.subprocess.run",
+                return_value=mock.Mock(stdout="main\n"),
+            ) as mocked_run,
+        ):
             self.assertEqual(
                 update_readme_badges._run_git(self.repo_root, "rev-parse", "HEAD"),
                 "main",
@@ -189,7 +195,7 @@ class ReadmeBadgeGenerationTests(TestCase):
 
         mocked_run.assert_called_once_with(
             [
-                "git",
+                "/usr/bin/git",
                 "-c",
                 f"safe.directory={self.repo_root.resolve()}",
                 "rev-parse",
