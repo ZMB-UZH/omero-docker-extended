@@ -100,7 +100,14 @@ These downloads are independent of the classic OMERO pyramid TIFF path and there
 - **Missing managed store**: fall back to stock behavior only for non-store-backed images; store-backed routes return explicit failure.
 - **Known classic-viewer tile-size regression on non-store-backed images**: `omero_web_zarr` now catches the specific OMERO failure signatures around `ZarrReader.getOptimalTileWidth()` and uses a safe generic tile-size fallback so classic OMERO.web image metadata and region requests do not 500 just because the server-side reader stack misreports tile size.
 - **Known classic metadata-preview rendering-engine regression on non-store-backed images**: when OMERO.web cannot load rendering definitions because OMERO.server fails while instantiating the pixel buffer through `ZarrPixelsService.getPixelBuffer`, the metadata preview now returns a degraded but working preview context instead of crashing the whole panel.
-- **3D-downsampled pyramids**: EM volume converters commonly downsample all three spatial axes (z, y, x) across pyramid levels. Vizarr and other 2D-slice viewers select resolution level based on XY viewport zoom, so downsampled z-slices appear blurry. The import plugin's ephemeral normalization step detects this and regenerates pyramid levels with XY-only downsampling before the managed-repository handoff, so imported stores always have sharp z-slices at every resolution level. Full-resolution data (level 0) is never modified.
+- **3D-downsampled pyramids**: EM volume converters commonly downsample all
+  three spatial axes (z, y, x) across pyramid levels. Vizarr and other
+  2D-slice viewers select resolution level based on XY viewport zoom, so
+  downsampled z-slices appear blurry. The import plugin's ephemeral
+  normalization step detects this and regenerates pyramid levels with XY-only
+  downsampling before the managed-repository handoff, so imported stores always
+  have sharp z-slices at every resolution level. Full-resolution data (level 0)
+  is never modified.
 - **Server-side Zarr reader failure**: if OMERO.server fails inside `loci.formats.in.ZarrReader` while reading raw bytes for a non-store-backed image, that is an upstream reader-stack failure. `omero_web_zarr` can keep the launcher and synthetic metadata routes correct, but it cannot make Vizarr browse data that OMERO.server itself cannot read through the standard path.
 - **Unsupported export axes**: OME-TIFF export rejects non-image-axis layouts explicitly instead of silently inventing output structure.
 

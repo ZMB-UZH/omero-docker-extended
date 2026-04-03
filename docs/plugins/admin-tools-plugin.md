@@ -85,7 +85,13 @@ This plugin requires reachable monitoring service endpoints configured in `env/o
 
 The Docker socket (`/var/run/docker.sock`) must be mounted read-only for container stats and diagnostics compose-state inspection.
 
-Server/database diagnostics resolve PostgreSQL connection settings from the live `omeroweb` runtime environment. OMERO database checks use `ADMIN_TOOLS_OMERO_DB_*` when set, otherwise the shared OMERO.server values (`CONFIG_omero_db_host`, `CONFIG_omero_db_user`, `CONFIG_omero_db_name`, `OMERO_DB_PASS`). Plugin database checks use `ADMIN_TOOLS_PLUGIN_DB_*` when set, otherwise the plugin runtime values (`OMP_DATA_HOST`, `OMP_DATA_PORT`, `OMP_DATA_USER`, `OMP_DATA_DB`, `OMP_DATA_PASS`).
+Server/database diagnostics resolve PostgreSQL connection settings from the
+live `omeroweb` runtime environment. OMERO database checks use
+`ADMIN_TOOLS_OMERO_DB_*` when set, otherwise the shared OMERO.server values
+(`CONFIG_omero_db_host`, `CONFIG_omero_db_user`, `CONFIG_omero_db_name`,
+`OMERO_DB_PASS`). Plugin database checks use `ADMIN_TOOLS_PLUGIN_DB_*` when
+set, otherwise the plugin runtime values (`OMP_DATA_HOST`, `OMP_DATA_PORT`,
+`OMP_DATA_USER`, `OMP_DATA_DB`, `OMP_DATA_PASS`).
 
 The quota compatibility check reads `CONFIG_omero_fs_repo_path` from the shared OMERO.server environment (`env/omeroserver.env`), which is also loaded into the `omeroweb` service in `docker-compose.yml` to keep a single source of truth for the repository template.
 
@@ -97,7 +103,13 @@ Quota reconciliation responses include explicit path-access diagnostics for the 
 
 Quota reconciliation and the host enforcer intentionally do **not** create missing ManagedRepository group directories. OMERO.server must create/register those directories first; creating them externally can trigger import failures such as `Directory exists but is not registered`.
 
-Grafana proxy authentication depends on passing session and auth headers through OMERO.web. The proxy forwards `Authorization` and `Cookie` request headers, rewrites `Origin` and `Referer` to match the Grafana backend origin, and preserves `Set-Cookie` responses. Cookie `Path` attributes are rewritten to `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/` so Grafana login sessions continue to work when Grafana is accessed through the plugin proxy route.
+Grafana proxy authentication depends on passing session and auth headers
+through OMERO.web. The proxy forwards `Authorization` and `Cookie` request
+headers, rewrites `Origin` and `Referer` to match the Grafana backend origin,
+and preserves `Set-Cookie` responses. Cookie `Path` attributes are rewritten to
+`/omeroweb_admin_tools/resource-monitoring/grafana-proxy/` so Grafana login
+sessions continue to work when Grafana is accessed through the plugin proxy
+route.
 The proxy also rewrites Grafana boot settings (`appSubUrl` and `appUrl`) to the proxy prefix, preventing top-right **Sign in** redirects from escaping to an unmapped root route. Grafana root requests (`/`) through the proxy now redirect users directly to the configured default OMERO dashboard route under the proxy prefix (for example when users click **Home** or complete **Sign in**).
 Prometheus requests are proxied as standard request/response traffic only. The live notifications SSE endpoint (`/api/v1/notifications/live`) is intentionally short-circuited with `204 No Content` because the Django proxy does not stream chunked event responses; slow upstream reads return `504 Gateway Timeout` instead of surfacing a Django `500`.
 

@@ -30,17 +30,96 @@ Related docs:
 - OMERO.web should run Gunicorn with a long request timeout (for example `OMERO_WEB_WSGI_ARGS=... --timeout 7200`) so slow chunk uploads are not killed by the WSGI worker before the browser-side 2-hour upload timeout expires.
 - OMERO CLI dry-run scan timeouts are controlled by `OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS` (default example `7200`) instead of a short hardcoded deadline, so large `.zarr` compatibility/planning scans can finish in the background.
 - Automatic detection and skipping of non-importable files is limited to operating-system and filesystem junk (for example `Thumbs.db`, `.DS_Store`, recycle-bin metadata); all other files are handed to OMERO/Bio-Formats unchanged.
-- **Native Zarr routing and validation**: the plugin parses candidate `.zarr` stores with the upstream `ome-zarr` Python runtime first and only routes to the native branch when Bio-Formats reports the staged `.zarr` as incompatible and `ome-zarr` recognizes a layout that the installed `omero-cli-zarr` runtime can actually import. Today that means pure OME-NGFF image stores and `bioformats2raw.layout=3` image stores. Unsupported recognized layouts such as OME-Zarr plates, wells, sparse `bioformats2raw` series sets, or stores that the current render stack cannot address safely are rejected explicitly instead of being guessed from filenames or hand-parsed metadata.
-- **Pinned native Zarr toolchain**: the `omeroweb` image installs `omero-cli-zarr`, `bioformats2raw`, and `ome-zarr` from explicit compose-driven build args (`OMERO_CLI_ZARR_VERSION`, `BIOFORMATS2RAW_VERSION`, `OME_ZARR_PY_VERSION`) so native Zarr behavior stays reproducible and upgrades remain deliberate. The tracked example env pins `ome-zarr` to `0.14.0`, and changing that runtime is an environment/build decision rather than an in-code constant.
-- **Zarr pre-flight scan and routing persistence**: the Bio-Formats dry-run (`omero import -f`) is still used for all non-zarr imports and for `.zarr` compatibility planning. When that dry-run says the staged `.zarr` is compatible, the import stays on the standard Bio-Formats path. When it is incompatible but `ome-zarr` recognizes a supported image layout, the plugin persists that native-routing decision into the logical import unit so the background import worker does not need to rescan the same store before importing it.
-- **Native OME-NGFF pass-through with ephemeral normalization**: supported native OME-Zarr layouts keep their logical image structure intact for `omero zarr import`; the plugin does not flatten multiscales or hardcode layout rewrites. The only mutations happen on the disposable server-readable copy used for managed-repository handoff: if the referenced image arrays are Blosc-compressed, the plugin rewrites those image-array chunks to gzip on that copy only, chunk-by-chunk, so the current OMERO render stack can generate thumbnails reliably without changing the user's staged source tree or touching non-image groups such as tables. Additionally, if the store's multiscale pyramid downsamples the z-axis between levels (common in EM volume converters), the normalization step regenerates pyramid levels with XY-only downsampling using ``local_mean`` — matching the approach used by ``ome-zarr-py``'s ``Scaler.local_mean`` and napari's dimension-aware multiscale level selection. This prevents blurry z-slices in 2D viewers like Vizarr that select resolution level based on XY viewport zoom. Full-resolution data (level 0) is never modified.
+- **Native Zarr routing and validation**: the plugin parses candidate `.zarr`
+  stores with the upstream `ome-zarr` Python runtime first and only routes to
+  the native branch when Bio-Formats reports the staged `.zarr` as
+  incompatible and `ome-zarr` recognizes a layout that the installed
+  `omero-cli-zarr` runtime can actually import. Today that means pure OME-NGFF
+  image stores and `bioformats2raw.layout=3` image stores. Unsupported
+  recognized layouts such as OME-Zarr plates, wells, sparse
+  `bioformats2raw` series sets, or stores that the current render stack cannot
+  address safely are rejected explicitly instead of being guessed from
+  filenames or hand-parsed metadata.
+- **Pinned native Zarr toolchain**: the `omeroweb` image installs
+  `omero-cli-zarr`, `bioformats2raw`, and `ome-zarr` from explicit
+  compose-driven build args (`OMERO_CLI_ZARR_VERSION`,
+  `BIOFORMATS2RAW_VERSION`, `OME_ZARR_PY_VERSION`) so native Zarr behavior
+  stays reproducible and upgrades remain deliberate. The tracked example env
+  pins `ome-zarr` to `0.14.0`, and changing that runtime is an environment/build
+  decision rather than an in-code constant.
+- **Zarr pre-flight scan and routing persistence**: the Bio-Formats dry-run
+  (`omero import -f`) is still used for all non-zarr imports and for `.zarr`
+  compatibility planning. When that dry-run says the staged `.zarr` is
+  compatible, the import stays on the standard Bio-Formats path. When it is
+  incompatible but `ome-zarr` recognizes a supported image layout, the plugin
+  persists that native-routing decision into the logical import unit so the
+  background import worker does not need to rescan the same store before
+  importing it.
+- **Native OME-NGFF pass-through with ephemeral normalization**: supported
+  native OME-Zarr layouts keep their logical image structure intact for
+  `omero zarr import`; the plugin does not flatten multiscales or hardcode
+  layout rewrites. The only mutations happen on the disposable server-readable
+  copy used for managed-repository handoff: if the referenced image arrays are
+  Blosc-compressed, the plugin rewrites those image-array chunks to gzip on
+  that copy only, chunk-by-chunk, so the current OMERO render stack can
+  generate thumbnails reliably without changing the user's staged source tree
+  or touching non-image groups such as tables. Additionally, if the store's
+  multiscale pyramid downsamples the z-axis between levels, which is common in
+  EM volume converters, the normalization step regenerates pyramid levels with
+  XY-only downsampling using ``local_mean``. That matches the approach used by
+  ``ome-zarr-py``'s ``Scaler.local_mean`` and napari's dimension-aware
+  multiscale level selection. This prevents blurry z-slices in 2D viewers like
+  Vizarr that select resolution level based on XY viewport zoom. Full-resolution
+  data (level 0) is never modified.
 - **Zarr directory import naming**: when importing a `.zarr` directory, the plugin always passes the directory name to OMERO CLI via `-n` so Bio-Formats does not fall back to an internal chunk coordinate as the image name.
-- **Zarr managed-repository staging**: before `omero zarr import`, the plugin stages the directory into the standard OMERO managed repository at `${CONFIG_omero_managed_dir}` using the server-side `CONFIG_omero_fs_repo_path` template. The deployment contract requires `CONFIG_omero_managed_dir` to be an absolute path inside `${OMERO_DATA_DIR}`; relative values are rejected so staging cannot drift into the image filesystem. The staging step runs through an OMERO script on OMERO.server and is launched with an independent admin-backed helper session, so OMERO.web does not need direct write permission to the managed repository and Zarr imports land in the same repository namespace model as normal imports. The script reads OMERO's persisted server config (`omero.data.dir`, `omero.managed.dir`, `omero.fs.repo.path`) plus a bootstrap-written runtime state file under `OMERO.server/var/managed-zarr-runtime.env` for the env-derived shared temp root, instead of relying on hardcoded paths or browser session state. OMERO.web first creates a transient server-readable copy under `${OMERO_TMP_PATH}/omeroweb-import/managed-zarr-transfer`; that handoff tree is the only cross-service bridge, and the original `_staged/` upload tree remains private to `omero-web`. The OMERO.server helper now creates a missing per-user managed-repository prefix on first native Zarr import instead of requiring a prior non-Zarr managed import.
+- **Zarr managed-repository staging**: before `omero zarr import`, the plugin
+  stages the directory into the standard OMERO managed repository at
+  `${CONFIG_omero_managed_dir}` using the server-side
+  `CONFIG_omero_fs_repo_path` template. The deployment contract requires
+  `CONFIG_omero_managed_dir` to be an absolute path inside `${OMERO_DATA_DIR}`;
+  relative values are rejected so staging cannot drift into the image
+  filesystem. The staging step runs through an OMERO script on OMERO.server and
+  is launched with an independent admin-backed helper session, so OMERO.web
+  does not need direct write permission to the managed repository and Zarr
+  imports land in the same repository namespace model as normal imports. The
+  script reads OMERO's persisted server config (`omero.data.dir`,
+  `omero.managed.dir`, `omero.fs.repo.path`) plus a bootstrap-written runtime
+  state file under `OMERO.server/var/managed-zarr-runtime.env` for the
+  env-derived shared temp root, instead of relying on hardcoded paths or
+  browser session state. OMERO.web first creates a transient server-readable
+  copy under `${OMERO_TMP_PATH}/omeroweb-import/managed-zarr-transfer`; that
+  handoff tree is the only cross-service bridge, and the original `_staged/`
+  upload tree remains private to `omero-web`. The OMERO.server helper now
+  creates a missing per-user managed-repository prefix on first native Zarr
+  import instead of requiring a prior non-Zarr managed import.
 - **Zarr helper startup retries**: if OMERO script processors are temporarily not ready, the managed-repository helper launch retries for `OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS` with a sleep interval of `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS` before the import is failed.
-- **Native Zarr metadata finalization**: after `omero zarr import`, the plugin reopens each created Image through `externalInfo.lsid`, parses the source metadata with the installed `omero-cli-zarr` runtime, and persists canonical pixel sizes onto OMERO's `Pixels` object. This closes a real gap in the runtime's API-created image path, where renderable NGFF imports can still arrive without persisted `PhysicalSizeX/Y/Z`. The plugin also normalizes shorthand NGFF length units such as `nm` and `µm` before saving, because the installed runtime only resolves full OMERO enum names on that path.
-- **Import success validation**: after every `omero import` or `omero zarr import` call, the plugin searches both stdout and stderr for imported OMERO object IDs (Image, Fileset, Plate, etc.), including `Created Image 123` style output from `omero zarr import`. For native Zarr imports it then verifies the created images against `Image.details.externalInfo.lsid` using the managed store path (exact match for pure NGFF image stores, path-prefix match for `bioformats2raw.layout` series imports), finalizes source-derived pixel metadata, and finally exercises thumbnail generation before reporting success.
+- **Native Zarr metadata finalization**: after `omero zarr import`, the plugin
+  reopens each created Image through `externalInfo.lsid`, parses the source
+  metadata with the installed `omero-cli-zarr` runtime, and persists canonical
+  pixel sizes onto OMERO's `Pixels` object. This closes a real gap in the
+  runtime's API-created image path, where renderable NGFF imports can still
+  arrive without persisted `PhysicalSizeX/Y/Z`. The plugin also normalizes
+  shorthand NGFF length units such as `nm` and `µm` before saving, because the
+  installed runtime only resolves full OMERO enum names on that path.
+- **Import success validation**: after every `omero import` or
+  `omero zarr import` call, the plugin searches both stdout and stderr for
+  imported OMERO object IDs (Image, Fileset, Plate, etc.), including
+  `Created Image 123` style output from `omero zarr import`. For native Zarr
+  imports it then verifies the created images against
+  `Image.details.externalInfo.lsid` using the managed store path, exact match
+  for pure NGFF image stores and path-prefix match for
+  `bioformats2raw.layout` series imports, finalizes source-derived pixel
+  metadata, and finally exercises thumbnail generation before reporting
+  success.
 - **Post-import web contract**: once a native store-backed image is imported successfully, OMERO.web access to the managed store is handled by `omero_web_zarr`. Raw NGFF routes remain available for validation, while browser-facing preview and Vizarr launch use the preview-safe endpoint contract so slice browsing does not accidentally traverse multiscale levels that downsample non-display axes.
-- **Progress bar accuracy**: the orange import progress bar uses the higher of two signals (real `/proc/{pid}/io` monitoring and time-based asymptotic estimate) and enforces a high-water mark so the bar never goes backwards — not on refresh, not when new files are added, not under any circumstance. On browser refresh, progress state is restored from localStorage and bars jump instantly to their previous position. The blue bar uses `Math.floor` and caps at 99% while any import is still active, only reaching 100% when all jobs have completed.
+- **Progress bar accuracy**: the orange import progress bar uses the higher of
+  two signals, real `/proc/{pid}/io` monitoring and a time-based asymptotic
+  estimate, and enforces a high-water mark so the bar never goes backwards: not
+  on refresh, not when new files are added, not under any circumstance. On
+  browser refresh, progress state is restored from localStorage and bars jump
+  instantly to their previous position. The blue bar uses `Math.floor` and caps
+  at 99% while any import is still active, only reaching 100% when all jobs
+  have completed.
 - Job lifecycle: start, upload, import, confirm, prune.
 - Job status polling for progress tracking.
 - SEM-EDX spectrum parsing (EMSA format) with matplotlib visualization and genetic algorithm label placement.

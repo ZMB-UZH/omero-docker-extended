@@ -2,7 +2,12 @@
 
 ## Goal
 
-Define a practical quality-improvement stack for this repository that makes agent work, local development, and GitHub automation more consistent and less error-prone. The plan is intentionally grounded in the current repo state: there is already a docs linter, security scanning workflow, Dependabot, and extensive plugin/runtime code, but there is not yet a broad quality gate that covers formatting, linting, tests, and workflow hygiene together.
+Define a practical quality-improvement stack for this repository that makes
+agent work, local development, and GitHub automation more consistent and less
+error-prone. The plan is intentionally grounded in the current repo state:
+there is already a docs linter, security scanning workflow, Dependabot, and
+extensive plugin/runtime code, but there is not yet a broad quality gate that
+covers formatting, linting, tests, and workflow hygiene together.
 
 ## Observed Baseline
 

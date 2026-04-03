@@ -17,7 +17,18 @@
 | Path usage exporter | custom (Python 3.12) | OMERO volume disk usage via textfile collector | writes to node-exporter textfile directory |
 | CrowdSec | v1.7.6 | Host-wide cybersecurity engine (host syslog/auth + Docker log analysis) | `http://crowdsec:8080` |
 
-Monitoring data-directory ownership is auto-detected by `installation/installation_script.sh` before each install/update. For images that set `Config.User`, the installer resolves IDs from image metadata (with `/etc/passwd` fallback where needed, such as Loki). For images that leave `Config.User` empty but still run non-root by default (for example Prometheus), the installer first probes runtime IDs via `id` inside the image and then falls back to reading UID/GID from `/proc/1/status` in a started probe container. If both probes fail, installation now exits with a clear error (instead of silently defaulting to root ownership), and operators must set explicit overrides such as `PROMETHEUS_UID` / `PROMETHEUS_GID`. `LOKI_UID` / `LOKI_GID` and other `*_UID` / `*_GID` variables remain optional explicit overrides when required by host policy.
+Monitoring data-directory ownership is auto-detected by
+`installation/installation_script.sh` before each install/update. For images
+that set `Config.User`, the installer resolves IDs from image metadata (with
+`/etc/passwd` fallback where needed, such as Loki). For images that leave
+`Config.User` empty but still run non-root by default (for example Prometheus),
+the installer first probes runtime IDs via `id` inside the image and then
+falls back to reading UID/GID from `/proc/1/status` in a started probe
+container. If both probes fail, installation now exits with a clear error
+instead of silently defaulting to root ownership, and operators must set
+explicit overrides such as `PROMETHEUS_UID` / `PROMETHEUS_GID`. `LOKI_UID` /
+`LOKI_GID` and other `*_UID` / `*_GID` variables remain optional explicit
+overrides when required by host policy.
 
 ## Configuration sources
 
@@ -108,7 +119,14 @@ This means operators never need to manually edit `prometheus.yml` for CrowdSec â
 
 Four dashboards auto-provisioned in the `OMERO` folder:
 
-1. **OMERO Infrastructure** (`omero-infrastructure.json`) -- service health overview, blackbox probe results, container stats. Set as Grafana home dashboard. Top summary stats include host CPU/memory, root and swap usage, and dynamic filesystem utilization for OMERO data and database paths from `installation_paths.env`, collected by the path-usage exporter via host `df -P -B1`. The database-path stat renders one percentage when both database paths are on the same filesystem mountpoint, or two percentages when they are on different mountpoints.
+1. **OMERO Infrastructure** (`omero-infrastructure.json`) -- service health
+   overview, blackbox probe results, container stats. Set as Grafana home
+   dashboard. Top summary stats include host CPU/memory, root and swap usage,
+   and dynamic filesystem utilization for OMERO data and database paths from
+   `installation_paths.env`, collected by the path-usage exporter via host
+   `df -P -B1`. The database-path stat renders one percentage when both
+   database paths are on the same filesystem mountpoint, or two percentages
+   when they are on different mountpoints.
 2. **Database Metrics** (`database-metrics.json`) -- OMERO core database: connections, transactions, index usage, table sizes.
 3. **Plugin Database Metrics** (`plugin-database-metrics.json`) -- OMERO plugin database: same metrics for the omero-plugin database.
 4. **Redis Metrics** (`redis-metrics.json`) -- memory usage, connected clients, commands/sec, keyspace stats.

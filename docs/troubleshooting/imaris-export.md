@@ -6,7 +6,7 @@ repository. Use it before attempting speculative code changes.
 ## Quick Triage Matrix
 
 | Symptom | Likely class of failure | First check |
-|---|---|---|
+| --- | --- | --- |
 | Imaris login loops back to `/webclient/login/` after POST | OMERO.web auth/session handling bug in the standalone connector | Inspect [`XTOmeroConnector.py`](../../XTOmeroConnector.py) and verify the client is not overriding the `Cookie` header |
 | Export job stays in `RUNNING` with `status=waiting_for_processor` | OMERO.server `Processor-0` missing, failed, or blocked | Run `omero admin diagnostics` in the server container |
 | Export job starts but no file ever appears | OMERO CLI launch path or ImarisConvert failure | Launch `IMS_Export.py` directly with `omero script launch` |

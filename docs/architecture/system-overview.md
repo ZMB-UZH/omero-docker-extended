@@ -62,7 +62,20 @@ Cache backend and Celery message broker:
 - **Postgres exporters** (v0.19.0, x2): one per PostgreSQL instance.
 - **Redis exporter** (v1.81.0): Redis metrics.
 - **Path usage exporter** (custom Python 3.12 image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs host `df -P -B1` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
-- **CrowdSec** (v1.7.6): host-wide cybersecurity engine analyzing host syslog, SSH auth logs, and Docker container logs. The firewall bouncer auto-detects the host's firewall backend at startup: on Ubuntu 24.04+ and Debian 13+ (Trixie) it uses `mode: nftables` with dedicated `crowdsec`/`crowdsec6` tables, INPUT-hook chains (host protection) and supplementary FORWARD-hook chains (Docker bridge traffic protection) at priority -10. On older hosts it falls back to `mode: iptables` with `INPUT` and `DOCKER-USER` chains. The bouncer binary and both firewall backends (nftables, iptables, ipset) are pre-installed at image build time. Runs with `network_mode: host` and `NET_ADMIN`+`NET_RAW` capabilities so firewall commands operate directly on the host's network stack — without Docker `privileged` mode. Integrated into the UID/GID auto-detection mechanism for host directory ownership. Acquisition sources configured via `monitoring/crowdsec/acquis.yaml`. Console enrollment via `CROWDSEC_ENROLL_KEY` in `env/omero_secrets.env`.
+- **CrowdSec** (v1.7.6): host-wide cybersecurity engine analyzing host syslog,
+  SSH auth logs, and Docker container logs. The firewall bouncer auto-detects
+  the host's firewall backend at startup: on Ubuntu 24.04+ and Debian 13+
+  (Trixie) it uses `mode: nftables` with dedicated `crowdsec`/`crowdsec6`
+  tables, INPUT-hook chains (host protection) and supplementary FORWARD-hook
+  chains (Docker bridge traffic protection) at priority -10. On older hosts it
+  falls back to `mode: iptables` with `INPUT` and `DOCKER-USER` chains. The
+  bouncer binary and both firewall backends (nftables, iptables, ipset) are
+  pre-installed at image build time. Runs with `network_mode: host` and
+  `NET_ADMIN`+`NET_RAW` capabilities so firewall commands operate directly on
+  the host's network stack without Docker `privileged` mode. Integrated into
+  the UID/GID auto-detection mechanism for host directory ownership.
+  Acquisition sources configured via `monitoring/crowdsec/acquis.yaml`.
+  Console enrollment via `CROWDSEC_ENROLL_KEY` in `env/omero_secrets.env`.
 
 ### Maintenance sidecar (`pg-maintenance`)
 

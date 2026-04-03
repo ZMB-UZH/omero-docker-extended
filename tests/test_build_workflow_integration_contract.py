@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
-import json
 import re
 
 
@@ -766,6 +765,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual(
             "${{ secrets.GITHUB_TOKEN }}", lint_step["env"]["GITHUB_TOKEN"]
         )
+        self.assertEqual(".markdownlint.yaml", lint_step["env"]["MARKDOWN_CONFIG_FILE"])
         self.assertEqual("true", lint_step["env"]["VALIDATE_ALL_CODEBASE"])
         self.assertEqual(
             "true", lint_step["env"]["VALIDATE_GIT_MERGE_CONFLICT_MARKERS"]
@@ -775,15 +775,15 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual("true", lint_step["env"]["VALIDATE_MARKDOWN"])
         self.assertEqual("true", lint_step["env"]["VALIDATE_YAML"])
 
-        markdown_config = json.loads(
-            (self.repo_root / ".markdownlint-cli2.jsonc").read_text(encoding="utf-8")
+        markdown_config = yaml.safe_load(
+            (self.repo_root / ".markdownlint.yaml").read_text(encoding="utf-8")
         )
-        self.assertFalse(markdown_config["config"]["MD013"])
+        self.assertEqual(400, markdown_config["MD013"]["line_length"])
         self.assertEqual(
             {"siblings_only": True},
-            markdown_config["config"]["MD024"],
+            markdown_config["MD024"],
         )
-        self.assertFalse(markdown_config["config"]["MD033"])
+        self.assertFalse(markdown_config["MD033"])
 
         yamllint_config = yaml.safe_load(
             (self.repo_root / ".yamllint").read_text(encoding="utf-8")
@@ -795,6 +795,61 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual("disable", yamllint_config["rules"]["document-start"])
         self.assertEqual("disable", yamllint_config["rules"]["line-length"])
         self.assertEqual("disable", yamllint_config["rules"]["truthy"])
+
+    def test_security_workflow_avoids_unpinned_container_and_template_injection(
+        self,
+    ) -> None:
+        import yaml  # noqa: F811  — available in CI
+
+        workflow_path = (
+            self.repo_root / ".github" / "workflows" / "security-code-scanning.yml"
+        )
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+
+        self.assertEqual({"contents": "read"}, workflow["permissions"])
+        self.assertEqual(
+            "semgrep/semgrep:1.156.0@sha256:646f8dc40aa7ac8393e88e6cd845d7fd07a591ac07c1f15972bc4203a2298177",
+            workflow["jobs"]["semgrep"]["container"]["image"],
+        )
+
+        hadolint_audit_step = next(
+            step
+            for step in workflow["jobs"]["hadolint"]["steps"]
+            if step.get("name") == "Audit — show file being scanned"
+        )
+        self.assertEqual(
+            "${{ matrix.dockerfile }}", hadolint_audit_step["env"]["DOCKERFILE_PATH"]
+        )
+        self.assertIn(
+            "printf 'Scanning Dockerfile: %s\\n' \"${DOCKERFILE_PATH}\"",
+            hadolint_audit_step["run"],
+        )
+        self.assertIn('wc -l -- "${DOCKERFILE_PATH}"', hadolint_audit_step["run"])
+
+    def test_all_workflow_checkouts_disable_persisted_credentials(self) -> None:
+        import yaml  # noqa: F811  — available in CI
+
+        workflows_dir = self.repo_root / ".github" / "workflows"
+        for workflow_path in sorted(workflows_dir.glob("*.yml")):
+            workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+            for job in workflow.get("jobs", {}).values():
+                for step in job.get("steps", []):
+                    uses = step.get("uses", "")
+                    if uses.startswith("actions/checkout@"):
+                        self.assertFalse(
+                            step.get("with", {}).get("persist-credentials", True),
+                            f"{workflow_path.name} persists checkout credentials",
+                        )
+
+    def test_dependabot_updates_define_cooldown_windows(self) -> None:
+        import yaml  # noqa: F811  — available in CI
+
+        dependabot_path = self.repo_root / ".github" / "dependabot.yml"
+        config = yaml.safe_load(dependabot_path.read_text(encoding="utf-8"))
+
+        for update in config["updates"]:
+            self.assertIn("cooldown", update)
+            self.assertGreaterEqual(update["cooldown"]["default-days"], 7)
 
     def test_ci_requirement_manifests_pin_every_dependency(self) -> None:
         requirement_paths = [

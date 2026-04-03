@@ -75,13 +75,33 @@ Notes:
 - Override `DOCKER_BUILD_TARGETS` only if you explicitly want a subset of services.
 - `DOCKER_REGISTRY_PREFIX` is only required when push mode is enabled.
 - Transient Buildx export failures are retried automatically, including layer-lock contention (`(*service).Write failed ... ref layer-sha256:... locked ... unavailable`) and cache-export transport failures (`failed to receive status ... Unavailable ... EOF`).
-- OMERO.web and OMERO.server image builds now harden Rocky package retrieval by default: retry transient `dnf` metadata/package fetch failures (for example mirror `500/504` responses), prefer Rocky `mirrorlist` as a fallback only after the first `dnf` failure, then clean metadata/cache before retrying so transient mirror errors can recover without changing first-attempt behavior. The default profile is intentionally strict: 3 attempts, no inter-attempt sleep, `--setopt=timeout=20`, and `--setopt=retries=2`.
+- OMERO.web and OMERO.server image builds now harden Rocky package retrieval by
+  default: retry transient `dnf` metadata/package fetch failures (for example
+  mirror `500/504` responses), prefer Rocky `mirrorlist` as a fallback only
+  after the first `dnf` failure, then clean metadata/cache before retrying so
+  transient mirror errors can recover without changing first-attempt behavior.
+  The default profile is intentionally strict: 3 attempts, no inter-attempt
+  sleep, `--setopt=timeout=20`, and `--setopt=retries=2`.
 - Advanced override: Docker builds can tune these safeguards with `--build-arg DNF_MAX_ATTEMPTS=...`, `--build-arg DNF_RETRY_SLEEP_SECONDS=...`, and `--build-arg DNF_USE_ROCKY_MIRRORLIST=0|1`.
 - During `pg-maintenance` image builds on Debian-based images, `invoke-rc.d`/`policy-rc.d` and `sysctl: permission denied on key ...` messages can appear while package post-install scripts run in an unprivileged build container; these are expected build-time warnings when the layer still completes successfully.
 - Retry behavior is configurable via `DOCKER_BUILD_BAKE_RETRY_COUNT` (default: `3`) and `DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS` (default: `2`).
 - `DOCKER_BUILD_BAKE_SERIAL_MODE` controls execution strategy: `auto` (default), `always`, or `never`.
 - `DOCKER_BUILD_PROVENANCE` defaults to `0`, so compose, Buildx, and flatten-rebuild steps all pass `--provenance=false` by default. Set `DOCKER_BUILD_PROVENANCE=1` only if you explicitly need BuildKit provenance attestations and accept the extra metadata export time.
-- `DOCKER_BUILD_FLATTEN_FINAL_IMAGE` now defaults to `0`, so flattening is opt-in for both build workflows. When enabled, Buildx builds flatten their temporary source images after `buildx bake`; plain `docker compose build` runs the same flatten helper immediately afterward against the compose-built local images. In both cases, each target is rebuilt from `scratch` with a single filesystem `COPY --from=source / /`, then metadata is restored (`ENV`, `ENTRYPOINT`, `CMD`, `EXPOSE`, `VOLUME`, `WORKDIR`, `USER`, `STOPSIGNAL`, `HEALTHCHECK`, `LABEL`, `ONBUILD`) via `docker image import --change ...`. This produces a true single-layer final image for the local Docker daemon, but it is intentionally slower because every selected image is exported and re-imported. Set `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` to enable it. Temporary source tags/build contexts are cleaned automatically, and flatten metadata generation now fails fast if source-image inspection or metadata restoration cannot be completed.
+- `DOCKER_BUILD_FLATTEN_FINAL_IMAGE` now defaults to `0`, so flattening is
+  opt-in for both build workflows. When enabled, Buildx builds flatten their
+  temporary source images after `buildx bake`; plain `docker compose build`
+  runs the same flatten helper immediately afterward against the compose-built
+  local images. In both cases, each target is rebuilt from `scratch` with a
+  single filesystem `COPY --from=source / /`, then metadata is restored
+  (`ENV`, `ENTRYPOINT`, `CMD`, `EXPOSE`, `VOLUME`, `WORKDIR`, `USER`,
+  `STOPSIGNAL`, `HEALTHCHECK`, `LABEL`, `ONBUILD`) via
+  `docker image import --change ...`. This produces a true single-layer final
+  image for the local Docker daemon, but it is intentionally slower because
+  every selected image is exported and re-imported. Set
+  `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` to enable it. Temporary source
+  tags/build contexts are cleaned automatically, and flatten metadata
+  generation now fails fast if source-image inspection or metadata restoration
+  cannot be completed.
 - The helper enforces `DOCKER_BUILDX_DRIVER=docker-container` and will fail fast if another driver is requested (local cache export requires the containerized BuildKit driver).
 - Optional `DOCKER_BUILDX_DRIVER_OPTS` (comma-separated `key=value` values) are passed through to `docker buildx create --driver-opt` for deterministic BuildKit sizing/tuning.
 - Set `DOCKER_BUILDX_FORCE_RECREATE_BUILDER=1` to force builder recreation when testing driver/driver-opt changes.
@@ -128,7 +148,13 @@ bash github_pull_project_bash
 
 ### Post-build vulnerability report
 
-Vulnerability scanning is disabled by default (it adds several minutes). To enable it, answer "yes" to the interactive prompt or set `ENABLE_VULNERABILITY_SCAN=1`. When enabled, Docker Scout reports known CVEs in all images referenced by `docker-compose.yml` — both custom-built and third-party. When the build ran without cache (fresh pull), the report includes a before/after baseline comparison. The output is a compact table with one line per image.
+Vulnerability scanning is disabled by default (it adds several minutes). To
+enable it, answer "yes" to the interactive prompt or set
+`ENABLE_VULNERABILITY_SCAN=1`. When enabled, Docker Scout reports known CVEs in
+all images referenced by `docker-compose.yml`, both custom-built and
+third-party. When the build ran without cache (fresh pull), the report includes
+a before/after baseline comparison. The output is a compact table with one line
+per image.
 
 Interactive installation defaults security hardening to `yes`, and the hardening pass keeps locale data intact while still applying OS updates plus curated compatibility-safe Python updates. It does not blanket-upgrade OMERO/plugin virtual environments after OMERO/plugin packages are installed. To force hardening explicitly in automation, use:
 

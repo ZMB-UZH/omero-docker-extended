@@ -15,7 +15,12 @@ Production-grade (see [LICENSE](LICENSE) for details), security-hardened, docker
 <details open>
 <summary><h2>What this repository delivers</h2></summary>
 
-This repository packages the complete runtime for the OMERO microscopy data storage & management platform, extending it with four purpose-built OMERO.web plugins (with several subroutines each), a shared utility library, an observability stack, automated database maintenance, and deployment/update tooling. Every service runs in separate Docker containers with explicit health checks, pinned image versions, and environment variable driven configuration.
+This repository packages the complete runtime for the OMERO microscopy data
+storage & management platform, extending it with four purpose-built OMERO.web
+plugins (with several subroutines each), a shared utility library, an
+observability stack, automated database maintenance, and deployment/update
+tooling. Every service runs in separate Docker containers with explicit health
+checks, pinned image versions, and environment variable driven configuration.
 
 > This project is delivered as an integrated container platform rather than a single-service image. In environments that already run other Docker containers, validate port mappings, network/volume naming, and installation/update automation behavior in a test host first; coexistence possibility or behavior must be verified by the user/administrator.
 
@@ -113,12 +118,17 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <details>
 <summary><h2>Service topology</h2></summary>
 
-`docker-compose.yml` declares **20 Compose services total** on a single Docker bridge network (`omero`): **18 long-running runtime containers by default**, **19 when the profile-gated `crowdsec` service is enabled**. The one-shot `redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the installation script persists `vm.overcommit_memory=1` on the host so it is not needed during normal `docker compose up` cycles.
+`docker-compose.yml` declares **20 Compose services total** on a single Docker
+bridge network (`omero`): **18 long-running runtime containers by default**,
+**19 when the profile-gated `crowdsec` service is enabled**. The one-shot
+`redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the
+installation script persists `vm.overcommit_memory=1` on the host so it is not
+needed during normal `docker compose up` cycles.
 
 The table below lists the long-running services available in the full profile set:
 
 | Service | Image | Purpose | Port |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `omeroserver` | Custom (CentOS) | OMERO.server: image storage, metadata API, script execution | 4064 |
 | `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery worker (supervisord) | 4090 |
 | `database` | postgres:16.12 | Primary OMERO PostgreSQL database | 5432 (internal) |
@@ -283,7 +293,7 @@ Log in to OMERO.web using the root credentials configured in `env/omero_secrets.
 ### Configuration files
 
 | File | Scope |
-|---|---|
+| --- | --- |
 | `installation_paths_example.env` | Template for all host filesystem paths (15 variables) |
 | `env/omeroserver_example.env` | Template for server DB, Java heap, script processors, security |
 | `env/omeroweb_example.env` | Template for web app registration, plugin config, admin tool endpoints, upload settings |
@@ -354,7 +364,7 @@ Both operations are designed for online use. They may briefly acquire locks; the
 <summary><h2>Documentation</h2></summary>
 
 | Entry point | Purpose |
-|---|---|
+| --- | --- |
 | [`AGENTS.md`](AGENTS.md) | Agent/AI navigation map and working contract |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Architectural overview, layer model, dependency rules |
 | [`CLAUDE.md`](CLAUDE.md) | Claude Code specific working instructions |

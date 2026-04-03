@@ -225,7 +225,13 @@ These categories may contain genuine issues that should be reviewed:
 2. ~~Add CI policy to fail builds when new `CRITICAL` or `HIGH` alerts are introduced.~~ **Done**: the `security-delta` job in `.github/workflows/security-code-scanning.yml` now enforces a zero-added-alert policy for pull requests and flags newly created default-branch alerts after default-branch security scans.
 3. Pin all GitHub Actions to full commit SHAs (addresses 32 Scorecard `PinnedDependenciesID` findings).
 4. ~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**: the repository root now includes `SECURITY.md`, which points GitHub-native security surfaces at the canonical `docs/SECURITY.md` guidance. The Scorecard `SecurityPolicyID` finding should clear on the next workflow refresh.
-5. ~~Add image-level vulnerability scans for each built Docker image.~~ **Done**: Docker Scout two-phase scanning (pre-build baseline + post-build report) covers all images in `docker-compose.yml` — both custom-built and third-party. Interactive installs default security hardening to enabled, vulnerability scanning remains opt-in, and the hardening pass preserves locale data while applying OS and Python package upgrades. See `docs/SECURITY.md`.
+5. ~~Add image-level vulnerability scans for each built Docker image.~~
+   **Done**: Docker Scout two-phase scanning (pre-build baseline + post-build
+   report) covers all images in `docker-compose.yml`, both custom-built and
+   third-party. Interactive installs default security hardening to enabled,
+   vulnerability scanning remains opt-in, and the hardening pass preserves
+   locale data while applying OS and Python package upgrades. See
+   `docs/SECURITY.md`.
 6. Evaluate adding fuzz testing for parser code (`filename_parser.py`, `sem_edx_parser.py`).
 
 ## AI agent maintenance instructions
@@ -249,7 +255,15 @@ These categories may contain genuine issues that should be reviewed:
 
 6. **Never include exploitation details**: Document what the vulnerability is and where it is located. Do not include proof-of-concept code, payload examples, or step-by-step exploitation instructions.
 
-7. **Adding new plugins or test directories**: The Bandit workflow auto-discovers both scan targets and test directories at runtime. Any directory at the repo root matching `omero_*` or `omeroweb_*` that contains `__init__.py` is automatically included in the scan. Test directories named `tests/` or `test/` within those packages are auto-discovered and excluded from the production scan (and scanned separately with B101/B106 skipped). The repo-root `tests/` directory is also included in the test-only scan. **You do NOT need to update the workflow file** — discovery is fully dynamic. Just follow the naming convention.
+7. **Adding new plugins or test directories**: The Bandit workflow
+   auto-discovers both scan targets and test directories at runtime. Any
+   directory at the repo root matching `omero_*` or `omeroweb_*` that contains
+   `__init__.py` is automatically included in the scan. Test directories named
+   `tests/` or `test/` within those packages are auto-discovered and excluded
+   from the production scan, and scanned separately with B101/B106 skipped. The
+   repo-root `tests/` directory is also included in the test-only scan. **You
+   do NOT need to update the workflow file** because discovery is fully
+   dynamic. Just follow the naming convention.
 
 8. **Commit message convention**: When fixing a security finding, use the commit message format:
 
