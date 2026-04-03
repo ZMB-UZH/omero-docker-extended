@@ -3,7 +3,7 @@
 ## Infrastructure endpoints (host-exposed)
 
 | Service | URL | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | OMERO.server | `localhost:4064` (TCP) | OMERO API (Ice protocol) |
 | OMERO.web | `http://localhost:4090` | Web frontend and plugin UIs |
 | Portainer | `https://localhost:9443` / `http://localhost:9000` | Container management |
@@ -14,7 +14,7 @@
 ## Internal-only endpoints (Docker network)
 
 | Service | Internal URL | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | OMERO database | `database:5432` | PostgreSQL (OMERO core) |
 | Plugin database | `database-plugin:5433` | PostgreSQL (plugin data) |
 | Redis | `redis:6379` | Cache (db 1) + Celery broker (db 2) |
@@ -35,7 +35,7 @@
 Base: `/omeroweb_omp_plugin/`
 
 | Route | Purpose |
-|---|---|
+| --- | --- |
 | `/` | Main plugin page |
 | `/projects/` | Project and dataset listing |
 | `/root-status/` | Check if current user is OMERO root |
@@ -57,7 +57,7 @@ Base: `/omeroweb_omp_plugin/`
 Base: `/omeroweb_import/`
 
 | Route | Purpose |
-|---|---|
+| --- | --- |
 | `/` | Main upload page |
 | `/start/` | Create upload session |
 | `/upload/<job_id>/` | Transfer files |
@@ -76,7 +76,7 @@ Base: `/omeroweb_import/`
 Base: `/zarr/`
 
 | Route | Purpose |
-|---|---|
+| --- | --- |
 | `/` | Landing page |
 | `/preview/image/<image_id>/` | Zarr-aware right-panel preview page for store-backed images |
 | `/download/image/<image_id>/original/` | Download original managed-repository Zarr store as a zip archive |
@@ -100,7 +100,7 @@ Notes:
 Base: `/omeroweb_admin_tools/`
 
 | Route | Purpose |
-|---|---|
+| --- | --- |
 | `/` | Main admin dashboard |
 | `/root-status/` | Check if current user is OMERO root |
 | `/logs/`, `/logs/data/`, `/logs/internal-labels/` | Log exploration and data |
@@ -120,13 +120,13 @@ Base: `/omeroweb_admin_tools/`
 Base: `/omeroweb_imaris_connector/`
 
 | Route | Purpose |
-|---|---|
+| --- | --- |
 | `/imaris-export/` | Start export, poll status, download result |
 
 ## Health check endpoints (used by Docker)
 
 | Service | Health check method |
-|---|---|
+| --- | --- |
 | `omeroserver` | OMERO CLI admin login |
 | `omeroweb` | `curl http://127.0.0.1:4090/webgateway/` |
 | `database` | `pg_isready -U omero -d omero -p 5432` |

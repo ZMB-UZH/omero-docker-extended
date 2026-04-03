@@ -20,14 +20,14 @@ This document catalogs the **2 040 closed code scanning alerts** that have been 
 GitHub reported the following branch-level totals when this ledger was refreshed:
 
 | State | Alerts |
-|---|---:|
+| --- | ---: |
 | Open on `main` | 116 |
 | Closed on `main` | 2 040 |
 
 ### Closed alerts by scanner
 
 | Scanner | Closed alerts | Share |
-|---|---:|---:|
+| --- | ---: | ---: |
 | Bandit | 795 | 39.0 % |
 | CodeQL | 583 | 28.6 % |
 | Semgrep OSS | 273 | 13.4 % |
@@ -40,7 +40,7 @@ GitHub reported the following branch-level totals when this ledger was refreshed
 ### Highest-recurrence rule families from the 2 040-alert closed history
 
 | Rule family | Closed alerts | What the repeated fixes taught us |
-|---|---:|---|
+| --- | ---: | --- |
 | `B101` | 492 | Production code must not rely on `assert`; test code may. |
 | `python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query` | 165 | Raw SQL keeps regressing unless composition and parameterization are separated deliberately. |
 | `DS137138` | 147 | Internal Docker-network HTTP is common here; accepted false positives must be documented instead of guessed. |
@@ -57,7 +57,7 @@ GitHub reported the following branch-level totals when this ledger was refreshed
 ### Closed-alert themes derived from the full-history review
 
 | Theme | Representative rules | Closed alerts | What the fixes taught us |
-|---|---|---:|---|
+| --- | --- | ---: | --- |
 | Assertions and swallowed exceptions | `B101`, `py/empty-except`, `B110`, `B112` | 659 | Production code must not rely on `assert`, and silent `except` blocks are treated as defects, not style issues. |
 | SQL and query construction | `sqlalchemy-execute-raw-query`, `B608` | 178 | Query text and user data must be separated consistently, even in tests and helper layers. |
 | Logging and user-data exposure | `py/log-injection`, `py/clear-text-logging-sensitive-data`, `py/stack-trace-exposure`, `logger-credential-leak` | 256 | Log every failure usefully, but never echo credentials, session keys, raw URLs, or exception text back to users. |
@@ -70,7 +70,7 @@ GitHub reported the following branch-level totals when this ledger was refreshed
 ### Hotspot files from the full closed-alert history
 
 | File | Closed alerts | Why future edits need extra care |
-|---|---:|---|
+| --- | ---: | --- |
 | `omeroweb_admin_tools/tests/test_resource_monitoring.py` | 195 | Historical scanner-noise hotspot; test-only patterns must stay intentional and documented. |
 | `omeroweb_import/views/core_functions.py` | 120 | Highest-risk application hotspot for path handling, logging, job storage, and import orchestration. |
 | `omeroweb_omp_plugin/services/data_store.py` | 116 | Dense SQL/data-store logic with many prior raw-query and logging fixes. |
@@ -94,7 +94,7 @@ Use the playbook when you need the current normative coding pattern. Use this le
 ### Python — assertions and control flow
 
 | Rule ID | Count | Root cause | Fix applied | Prevention rule |
-|---|---:|---|---|---|
+| --- | ---: | --- | --- | --- |
 | `B101` | 492 | `assert` used in production code where it can be stripped by `python -O` | Replaced with `if not condition: raise ValueError(...)` in production code. In test code, left as-is (scanner configured to skip B101 in test dirs). | **Never use `assert` for runtime validation in production code.** Use `if/raise`. `assert` is only acceptable in test files. |
 | `py/empty-except` | 107 | Empty `except` blocks (bare `pass` or `continue`) swallowing errors silently | Added `logger.debug("...", exc_info=True)` before `continue`/`pass` | **Every except block must either log, re-raise, or explicitly handle.** No silent swallowing. |
 | `B112` | 22 | `try/except/continue` without logging | Added debug logging before `continue` | Same as above. |
@@ -107,7 +107,7 @@ Use the playbook when you need the current normative coding pattern. Use this le
 ### Python — dead code and imports
 
 | Rule ID | Count | Root cause | Fix applied | Prevention rule |
-|---|---:|---|---|---|
+| --- | ---: | --- | --- | --- |
 | `py/unused-import` | 32 | Import statements referencing symbols not used in the module | Removed unused imports; added to `__all__` for intentional re-exports | **Remove imports immediately when unused.** For re-exports, add to `__all__`. |
 | `py/unused-global-variable` | 15 | Module-level variables assigned but never read | Removed dead assignments or added to `__all__` | **No dead assignments at module scope.** |
 | `py/unused-local-variable` | 12 | Local variables assigned then never referenced | Used `_` for discarded tuple positions; removed unused assignments | **Use `_` for discarded values.** Remove write-only variables. |
@@ -117,11 +117,11 @@ Use the playbook when you need the current normative coding pattern. Use this le
 ### Python — security: injection and data exposure
 
 | Rule ID | Count | Root cause | Fix applied | Prevention rule |
-|---|---:|---|---|---|
+| --- | ---: | --- | --- | --- |
 | `py/log-injection` | 120 | User-controlled data interpolated into log messages without sanitization | Wrapped all user values with `sanitize_log_value()` | **Always pass user input through `sanitize_log_value()` before logging.** Newlines and control characters in logs enable log injection. |
 | `py/clear-text-logging-sensitive-data` | 53 | Passwords, tokens, or session keys appearing in log output | Redacted sensitive fields before logging; used `sanitize_url_for_logging()` for URLs | **Never log credentials.** Redact passwords, API keys, and session tokens before any log call. |
 | `py/stack-trace-exposure` | 52 | Exception tracebacks returned in HTTP error responses | Returned generic error messages to clients; logged full traces server-side only | **Return generic error strings to users.** Log server-side details only. Never expose `str(exc)`, tracebacks, internal paths, or service topology in HTTP responses. |
-| `py/path-injection` | 39 | User-supplied filenames/paths used in `open()`, `os.path.join()` without containment | Added managed-path helpers, component validation, and sink-level re-anchoring | **Validate every user-supplied path before every filesystem sink.** Check each component, reject `..`/embedded separators/symlinked segments, enforce length limits, and keep the final path under an allowlisted root. |
+| `py/path-injection` | 39 | User-supplied filenames/paths used in `open()`, `os.path.join()` without containment | Added managed-path helpers, component validation, and sink-level re-anchoring | **Validate every user-supplied path at each filesystem sink.** Reject `..`, embedded separators, and symlink escapes, and keep the resolved path under an allowlisted root. |
 | `py/partial-ssrf` | 4 | URL construction with partially user-controlled components | Validated `scheme in {"http","https"}` and `netloc` against allowlists | **Validate URL scheme and host** before any outbound HTTP request. |
 | `py/regex-injection` | 1 | User input compiled as regex pattern | Added length limit, unsafe-pattern blocklist, and try/except around `re.compile` | **Validate user-supplied regex** with length limits and pattern blocklists before compilation. |
 | `py/overly-permissive-file` | 10 | `os.chmod` with 0o777, 0o666, 0o644 on sensitive files | Tightened to 0o640/0o750; documented cases where group/world read is architecturally required | **Use minimum required permissions.** 0o640 for files, 0o750 for directories. Document exceptions. |
@@ -131,7 +131,7 @@ Use the playbook when you need the current normative coding pattern. Use this le
 ### Python — subprocess and randomness
 
 | Rule ID | Count | Root cause | Fix applied | Prevention rule |
-|---|---:|---|---|---|
+| --- | ---: | --- | --- | --- |
 | `B108` | 64 | Hardcoded `/tmp` paths | Replaced with `tempfile.mkdtemp()`, config-driven paths, or environment variables | **Use `tempfile` or configured paths**, not bare `/tmp`. Temporary files that become durable state must still be finalized with atomic replace semantics. |
 | `B105` | 40 | Variable names matching password patterns (e.g., `PASSWORD_ENV = "OMERO_DB_PASS"`) | Documented as false positives — these hold env-var names, not credentials | **Acceptable when holding env-var names.** Do not rename to avoid the pattern. |
 | `B311` | 37 | `random.uniform()` / `random.choice()` for non-security purposes | Left as-is — used for jitter and display randomization, not cryptography | **`random` is fine for non-security use.** Use `secrets` only for tokens/nonces. |
@@ -142,7 +142,7 @@ Use the playbook when you need the current normative coding pattern. Use this le
 ### Semgrep — Django and web security
 
 | Rule ID | Count | Root cause | Fix applied | Prevention rule |
-|---|---:|---|---|---|
+| --- | ---: | --- | --- | --- |
 | `sqlalchemy-execute-raw-query` | 165 | Direct `execute("SELECT ...")` with string SQL | Extracted `_safe_query()` helpers; separated SQL composition from execution | **Separate SQL composition from execution.** Build SQL with `sql.SQL()` in a distinct function; call `execute()` only with the composed object. |
 | `csrf-exempt` | 29 (open) | `@csrf_exempt` on Django views because JS doesn't send CSRF tokens | 29 remain open — requires coordinated template + view changes | **When adding new views**: add `X-CSRFToken` header in template JS and omit `@csrf_exempt`. |
 | `direct-use-of-httpresponse` | 9 | `HttpResponse(string)` without escaping | Used `JsonResponse` for JSON; `format_html()` for HTML; explicit `content_type` | **Use `JsonResponse` for JSON data.** Use `format_html()` or `render()` for HTML. Set `content_type` explicitly. |
@@ -155,12 +155,12 @@ Use the playbook when you need the current normative coding pattern. Use this le
 ### Dockerfile and infrastructure
 
 | Rule ID | Count | Root cause | Fix applied | Prevention rule |
-|---|---:|---|---|---|
+| --- | ---: | --- | --- | --- |
 | `DS137138` | 129 | HTTP URLs without TLS in Docker configs | Internal Docker-network traffic — TLS at reverse proxy. Accepted. | **Expected for container-internal traffic.** TLS terminates at the reverse proxy. |
 | `PinnedDependenciesID` | 89 | Unpinned GitHub Actions or Docker base images | Pinned actions to full commit SHAs; base images to exact tags | **Pin all actions to SHA; base images to exact tags.** Never use `:latest`. |
 | `DS162092` | 46 | Localhost references in Docker healthchecks and networking | Excluded in DevSkim config — expected for Docker infrastructure | **Expected in Docker infrastructure.** No action needed. |
 | `DS173237` | 33 | Token-like strings in test files | Documented as dummy credentials for unit tests | **Use obviously fake values** (`"test_password"`, `"dummy_token"`) in test fixtures, and never paste real credentials, PATs, or session keys into commands, remotes, repo files, or long-lived local config. |
-| `DS026` / `DS002` | 30 | Missing HEALTHCHECK / root user in Dockerfiles | Added image-level HEALTHCHECK instructions where reusable images have a real runtime contract; root-required images document why they still need privilege transitions | **Add HEALTHCHECK in compose and in reusable Docker images when a standalone health contract exists.** Document containers that must retain root with inline comments and explicit privilege drop paths. |
+| `DS026` / `DS002` | 30 | Missing HEALTHCHECK / root user in Dockerfiles | Added image-level HEALTHCHECK instructions where reusable images have a real runtime contract; root-required images document why they still need privilege transitions | **Add HEALTHCHECK where a reusable image has a real runtime contract.** Containers that must retain root should document why and how they drop privilege. |
 | `SC2012` | 9 | `ls` in Dockerfile RUN commands | Replaced with `find` | **Use `find` instead of `ls`** in Dockerfile RUN commands. |
 | `DL3003` / `DL3008` / `DL3018` | 7 | WORKDIR/package pinning in Dockerfiles | Used WORKDIR; pinned where practical | **Use WORKDIR instead of cd.** Pin system packages where feasible. |
 
@@ -171,7 +171,7 @@ Use the playbook when you need the current normative coding pattern. Use this le
 These files have historically generated the most scanning alerts. Extra review attention is warranted when modifying them.
 
 | File | Closed alerts | Primary issues |
-|---|---:|---|
+| --- | ---: | --- |
 | `omeroweb_admin_tools/tests/test_resource_monitoring.py` | 195 | B101 (assert in tests — now scanner-excluded) |
 | `omeroweb_omp_plugin/services/data_store.py` | 116 | Raw SQL (sqlalchemy-execute), credential logging |
 | `omeroweb_import/views/core_functions.py` | 114 | Path injection, log injection, cleartext logging |
@@ -183,7 +183,7 @@ These files have historically generated the most scanning alerts. Extra review a
 ## Resolution timeline
 
 | Date | Open before | Fixed | Method | Key changes |
-|---|---:|---:|---|---|
+| --- | ---: | ---: | --- | --- |
 | 2026-03-15 | ~940 | ~570 | Scanner config | B101 test split, DS162092 exclusion, B603/B404 skip |
 | 2026-03-16 | ~370 | ~170 | Code fixes | Log sanitization, empty-except logging, unused code removal |
 | 2026-03-25 | ~200 | ~2 | Code fixes | SQL refactoring (_safe_query helper) |
