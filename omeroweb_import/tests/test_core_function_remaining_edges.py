@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -151,6 +152,140 @@ def test_staged_upload_helpers_cover_runtime_and_oserror_fallbacks(
         _Upload(b"chunk"),
     )
     assert core_functions._is_managed_upload_internal_error(replace_error) is True
+
+
+def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(
+    tmp_path, monkeypatch
+):
+    original_os_open = core_functions.os.open
+    original_os_close = core_functions.os.close
+    upload_root = tmp_path / "uploads"
+    jobs_root = tmp_path / "jobs"
+    upload_root.mkdir()
+    jobs_root.mkdir()
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: jobs_root)
+    monkeypatch.setattr(core_functions, "_fsync_jobs_directory", lambda: None)
+
+    monkeypatch.setattr(
+        core_functions,
+        "_managed_safe_component_name",
+        lambda child_name, display_path: child_name,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_managed_child_lstat",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        core_functions.os,
+        "open",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            OSError(errno.ELOOP, "symlink loop")
+        ),
+    )
+    with pytest.raises(core_functions._ManagedPathValidationError):
+        core_functions._open_managed_upload_file_fd(3, "file.bin", 0, "file.bin")
+
+    monkeypatch.setattr(
+        core_functions,
+        "_managed_relative_path_validation_error",
+        lambda *args, **kwargs: "validation failed",
+    )
+    assert (
+        core_functions._managed_runtime_validation_error(upload_root, ("bad",))
+        == "validation failed"
+    )
+    assert (
+        core_functions._managed_parent_runtime_error(upload_root, ("bad",))
+        == "validation failed"
+    )
+
+    monkeypatch.setattr(
+        core_functions,
+        "_managed_relative_path_validation_error",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_validate_existing_managed_path_segments",
+        lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError()),
+    )
+    assert (
+        core_functions._managed_runtime_validation_error(
+            upload_root, ("dir", "file.txt")
+        )
+        is None
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_validate_existing_managed_path_segments",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("bad path")),
+    )
+    assert "Invalid filename" in core_functions._managed_runtime_validation_error(
+        upload_root, ("dir", "file.txt")
+    )
+
+    monkeypatch.setattr(
+        core_functions,
+        "_managed_parent_directory_fd",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("bad parent")),
+    )
+    assert "Invalid filename" in core_functions._managed_parent_runtime_error(
+        upload_root, ("dir", "file.txt")
+    )
+
+    closed = []
+    monkeypatch.setattr(
+        core_functions,
+        "_managed_parent_directory_fd",
+        lambda *args, **kwargs: (91, ""),
+    )
+    monkeypatch.setattr(core_functions.os, "close", lambda fd: closed.append(fd))
+    assert "Invalid filename" in core_functions._managed_parent_runtime_error(
+        upload_root, ("dir", "file.txt")
+    )
+    assert closed == [91]
+    monkeypatch.setattr(core_functions.os, "close", original_os_close)
+
+    monkeypatch.setattr(
+        core_functions,
+        "_managed_root_relative_parts",
+        lambda path: (upload_root, ()),
+    )
+    assert core_functions._resolve_managed_directory_path(upload_root) == upload_root
+    monkeypatch.setattr(
+        core_functions,
+        "_managed_root_relative_parts",
+        lambda path: (upload_root, ("..",)),
+    )
+    with pytest.raises(core_functions._ManagedPathValidationError):
+        core_functions._resolve_managed_directory_path(upload_root / "invalid")
+    monkeypatch.setattr(
+        core_functions,
+        "_validate_existing_managed_path_segments",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(core_functions.os, "open", original_os_open)
+
+    monkeypatch.setattr(
+        core_functions.os,
+        "replace",
+        lambda src, dst: (_ for _ in ()).throw(RuntimeError("replace failed")),
+    )
+    original_unlink = Path.unlink
+
+    def failing_unlink(self, *args, **kwargs):
+        if self.parent == jobs_root and self.suffix == ".tmp":
+            raise OSError("unlink failed")
+        return original_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", failing_unlink)
+    with pytest.raises(RuntimeError, match="replace failed"):
+        core_functions._write_job_file("a" * 32, {"job_id": "a" * 32})
+
+    for temp_path in jobs_root.glob(f".{'a' * 32}.json.*.tmp"):
+        original_unlink(temp_path)
 
 
 def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(

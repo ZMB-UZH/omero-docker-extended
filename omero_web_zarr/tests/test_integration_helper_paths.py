@@ -759,5 +759,142 @@ def test_marshal_regular_image_data_with_safe_tile_size_handles_engine_fallbacks
         "defaultT": 0,
         "invertAxis": False,
     }
-    assert integration._select_marshaled_key(payload, "tile_size.width") == 128
+
+
+def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single_level_tiles(
+    monkeypatch,
+):
+    class _BrokenRequest:
+        @property
+        def session(self):
+            raise RuntimeError("session unavailable")
+
+    monkeypatch.setattr(
+        integration, "_store_backed_metadata", lambda image: {"imageName": image.name}
+    )
+    monkeypatch.setattr(
+        integration, "get_safe_image_tile_size", lambda image, conn=None: (64, 32)
+    )
+    monkeypatch.setattr(
+        integration, "channelMarshal", lambda channel: {"label": channel.getLabel()}
+    )
+
+    payload = integration._marshal_regular_image_data_with_safe_tile_size(
+        _MarshalImage(),
+        _BrokenRequest(),
+    )
+    assert payload["init_zoom"] == 0
+
+    bad_image = SimpleNamespace(
+        id=99,
+        name="bad.zarr",
+        _conn=object(),
+        _re=_RenderingEngine(),
+        _prepareRenderingEngine=lambda: True,
+        getName=lambda: "bad.zarr",
+        canAnnotate=lambda: True,
+        canEdit=lambda: True,
+        canDelete=lambda: False,
+        canLink=lambda: False,
+        getObjectiveSettings=lambda: None,
+        getSizeY=lambda: 32,
+        getSizeZ=lambda: 1,
+        getSizeT=lambda: 1,
+        getSizeC=lambda: 1,
+        getPixelSizeX=lambda units=None: None,
+        getPixelSizeY=lambda units=None: None,
+        getPixelSizeZ=lambda units=None: None,
+        getProjection=lambda: "normal",
+        isInvertedAxis=lambda: False,
+        getPixelRange=lambda: (0, 1),
+        getChannels=lambda: [],
+        splitChannelDims=lambda: {},
+        isGreyscaleRenderingModel=lambda: True,
+    )
+    with pytest.raises(AttributeError):
+        integration._marshal_regular_image_data_with_safe_tile_size(
+            bad_image,
+            SimpleNamespace(session={"server_settings": {"viewer": {}}}),
+        )
+
+    monkeypatch.setattr(integration, "is_known_tile_size_failure", lambda exc: False)
+    with pytest.raises(RuntimeError, match="not-safe"):
+        integration._safe_regular_image_marshal(
+            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("not-safe")),
+            object(),
+        )
+
+    def original_marshal(image, key=None, request=None):
+        return "original"
+    marshal_module = SimpleNamespace(
+        imageMarshal=original_marshal,
+        _omero_web_zarr_safe_image_marshal_installed=True,
+    )
+    assert integration._install_safe_image_marshal_overrides(marshal_module) is original_marshal
+
+    from omeroweb.webgateway import views as webgateway_views
+
+    class _SingleLevelRegularImage:
+        def __init__(self):
+            self._re = SimpleNamespace(getResolutionLevels=lambda: 1)
+            self.level = "unset"
+
+        def _prepareRenderingEngine(self):
+            return None
+
+        def renderJpegRegion(self, *args, **kwargs):
+            self.level = kwargs.get("level")
+            return b"jpeg"
+
+    image = _SingleLevelRegularImage()
+    monkeypatch.setattr(
+        integration,
+        "get_safe_image_tile_size",
+        lambda current_image, conn=None: (32, 16),
+    )
+    monkeypatch.setattr(
+        webgateway_views,
+        "_get_prepared_image",
+        lambda *args, **kwargs: (image, 0.9),
+    )
+    request = RequestFactory().get(
+        "/webgateway/render_image_region/7/0/0/",
+        {"tile": "0,1,2"},
+    )
+    request.session = {"connector": {"server_id": 1}}
+    response = integration._render_regular_image_region_with_safe_tile_size(
+        request,
+        7,
+        0,
+        0,
+    )
+    assert response.status_code == 200
+    assert image.level is None
+
+    monkeypatch.setattr(integration, "load_store_backed_image_node", lambda current_image: None)
+    monkeypatch.setattr(
+        integration,
+        "_decorate_store_backed_channels",
+        lambda current_image, channels: channels,
+    )
+    monkeypatch.setattr(
+        integration,
+        "channelMarshal",
+        lambda channel: channel.getLabel(),
+    )
+    monkeypatch.setattr(
+        integration,
+        "_store_backed_metadata",
+        lambda current_image: {"imageName": current_image.name},
+    )
+    threshold_image = _SingleLevelImage(objective_mode="value", projection_mode="value")
+    threshold_image._conn = SimpleNamespace(getMaxPlaneSize=lambda: (8, 8))
+    threshold_payload = integration._store_backed_image_data(
+        threshold_image,
+        SimpleNamespace(session={"server_settings": {"viewer": {}}}),
+    )
+    assert threshold_payload["tiles"] is True
+
+    integration._patch_urlpatterns([object()], {})
+    assert integration._select_marshaled_key(payload, "tile_size.width") == 64
     assert integration._select_marshaled_key(payload, "tile_size.missing") is None

@@ -658,3 +658,35 @@ def test_imaris_export_rejects_missing_image_invalid_image_no_celery_and_timeout
     assert (
         views.imaris_export(timeout_request, conn=SimpleNamespace()).status_code == 504
     )
+
+
+def test_imaris_view_failure_paths_cover_meta_errors_missing_host_port_and_port_validation(
+    monkeypatch,
+) -> None:
+    views = _import_views()
+
+    monkeypatch.setattr(
+        views.celery_app,
+        "AsyncResult",
+        lambda task_id: SimpleNamespace(
+            state=views.celery_states.FAILURE,
+            result=RuntimeError("ignored"),
+            info={"error": "meta boom"},
+        ),
+        raising=False,
+    )
+    assert views._poll_celery_job("celery-job-14") == (
+        "FAILED",
+        None,
+        "meta boom",
+        {"error": "meta boom"},
+    )
+
+    with pytest.raises(ValueError, match="out of range"):
+        views._parse_port_param("70000")
+
+    monkeypatch.setattr(views, "_get_session_key", lambda conn: "session-key")
+    monkeypatch.setattr(views, "_resolve_omero_host_port", lambda conn: (None, None))
+    monkeypatch.setattr(views, "_resolve_omero_secure", lambda conn: True)
+    with pytest.raises(RuntimeError, match="host/port unavailable"):
+        views._start_celery_job(SimpleNamespace(), 19)

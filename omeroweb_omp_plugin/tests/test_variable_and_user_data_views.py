@@ -182,6 +182,11 @@ def test_user_data_views_cover_success_and_request_guards(monkeypatch) -> None:
     )
     assert wrong_method.status_code == 405
     assert _payload(wrong_method)["error"] == omp_errors.method_post_required()
+    wrong_method_sets = user_data_view.delete_variable_sets(
+        RequestFactory().get("/omp/user-data/delete-variable-sets/"), conn=None
+    )
+    assert wrong_method_sets.status_code == 405
+    assert _payload(wrong_method_sets)["error"] == omp_errors.method_post_required()
 
     monkeypatch.setattr(user_data_view, "current_username", lambda request, conn: "")
     missing_user = user_data_view.delete_all_data(
@@ -466,3 +471,62 @@ def test_variable_and_user_data_views_cover_store_failures_and_guard_edges(
     )
     assert delete_all_unexpected.status_code == 500
     assert _payload(delete_all_unexpected)["error"] == omp_errors.unexpected_error()
+
+
+def test_variable_and_user_data_views_cover_remaining_method_and_username_guards(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        variable_set_view, "current_username", lambda request, conn: ""
+    )
+    save_missing_user_request = RequestFactory().post("/omp/varsets/save/")
+    save_missing_user_request._decoded_payload = {"set_name": "demo", "var_names": ["a"]}
+    monkeypatch.setattr(
+        variable_set_view,
+        "load_request_data",
+        lambda request: request._decoded_payload,
+    )
+    save_missing_user = variable_set_view.save_set(save_missing_user_request, conn=None)
+    assert save_missing_user.status_code == 400
+    assert _payload(save_missing_user)["error"] == omp_errors.unable_to_determine_username()
+
+    save_wrong_method = variable_set_view.save_set(
+        RequestFactory().get("/omp/varsets/save/"),
+        conn=None,
+    )
+    assert save_wrong_method.status_code == 405
+
+    load_wrong_method = variable_set_view.load_set(
+        RequestFactory().post("/omp/varsets/load/"),
+        conn=None,
+    )
+    assert load_wrong_method.status_code == 405
+
+    monkeypatch.setattr(
+        variable_set_view, "current_username", lambda request, conn: "alice"
+    )
+    monkeypatch.setattr(variable_set_view, "list_variable_sets", lambda username: [])
+    empty_db = variable_set_view.load_set(
+        RequestFactory().get("/omp/varsets/load/", data={"set_name": "demo"}),
+        conn=None,
+    )
+    assert empty_db.status_code == 400
+    assert _payload(empty_db)["error"] == omp_errors.variable_set_empty_db()
+
+    monkeypatch.setattr(user_data_view, "current_username", lambda request, conn: "")
+    missing_user_keys = user_data_view.delete_api_keys(
+        RequestFactory().post("/omp/user-data/delete-api-keys/"),
+        conn=None,
+    )
+    missing_user_sets = user_data_view.delete_variable_sets(
+        RequestFactory().post("/omp/user-data/delete-variable-sets/"),
+        conn=None,
+    )
+    wrong_method_all = user_data_view.delete_all_data(
+        RequestFactory().get("/omp/user-data/delete-all/"),
+        conn=None,
+    )
+
+    assert missing_user_keys.status_code == 400
+    assert missing_user_sets.status_code == 400
+    assert wrong_method_all.status_code == 405
