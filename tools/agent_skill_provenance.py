@@ -1,0 +1,161 @@
+"""Helpers for repo-local agent skill provenance metadata."""
+
+from __future__ import annotations
+
+import re
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+from posixpath import commonpath
+from urllib.parse import quote
+from urllib.request import Request, urlopen
+
+
+UPSTREAM_SOURCES_DOC_PATH = Path("docs/reference/ai-agent-upstream-sources.md")
+UPSTREAM_REPOSITORY_RE = re.compile(r"^- Upstream repository: `([^`]+)`$", re.MULTILINE)
+UPSTREAM_TAG_RE = re.compile(r"^- Release tag: `([^`]+)`$", re.MULTILINE)
+UPSTREAM_COMMIT_RE = re.compile(r"^- Release commit: `([^`]+)`$", re.MULTILINE)
+VENDOR_PATH_RE = re.compile(r"^- Local vendor path: `([^`]+)`$", re.MULTILINE)
+SKILL_TABLE_ROW_RE = re.compile(
+    r"^\| `(?P<skill>[^`]+)` \| `(?P<path>third_party/[^`]+/SKILL\.md)` \|$",
+    re.MULTILINE,
+)
+
+
+@dataclass(frozen=True)
+class AgentSkillUpstreamSources:
+    """Pinned upstream source metadata for the repo-local skill overlays."""
+
+    repo_slug: str
+    tag: str
+    commit: str
+    vendor_path: str
+    skill_vendor_paths: dict[str, str]
+
+    @property
+    def snapshot_dir_name(self) -> str:
+        return Path(self.vendor_path.rstrip("/")).name
+
+    @property
+    def vendor_root_path(self) -> Path:
+        return Path(self.vendor_path.rstrip("/"))
+
+    @property
+    def upstream_relative_paths(self) -> dict[str, str]:
+        relative_paths: dict[str, str] = {}
+        for skill_name, vendor_path in self.skill_vendor_paths.items():
+            relative_paths[skill_name] = str(
+                Path(vendor_path).relative_to(self.vendor_root_path)
+            )
+        return relative_paths
+
+    @property
+    def upstream_skill_root(self) -> str:
+        relative_paths = tuple(self.upstream_relative_paths.values())
+        if not relative_paths:
+            raise RuntimeError("No upstream skill paths were loaded.")
+        return commonpath(relative_paths).rstrip("/")
+
+    @property
+    def badge_label(self) -> str:
+        snapshot_name = self.snapshot_dir_name
+        if snapshot_name.startswith("ecc-"):
+            return f"ECC {snapshot_name.removeprefix('ecc-')} skills"
+        return f"{snapshot_name} skills"
+
+    @property
+    def skills_tree_url(self) -> str:
+        return (
+            f"https://github.com/{self.repo_slug}/tree/"
+            f"{self.tag}/{self.upstream_skill_root}"
+        )
+
+    @property
+    def badge_image_url(self) -> str:
+        subject = quote(self.badge_label, safe="")
+        message = quote(self.repo_slug, safe="")
+        return f"https://img.shields.io/badge/{subject}-{message}-0F766E?logo=github"
+
+    def raw_skill_url(self, skill_name: str) -> str:
+        relative_path = self.upstream_relative_paths[skill_name]
+        return (
+            "https://raw.githubusercontent.com/"
+            f"{self.repo_slug}/{self.tag}/{relative_path}"
+        )
+
+
+def _extract_required_match(pattern: re.Pattern[str], text: str, label: str) -> str:
+    match = pattern.search(text)
+    if match is None:
+        raise RuntimeError(
+            f"{UPSTREAM_SOURCES_DOC_PATH} is missing the required `{label}` field."
+        )
+    value = match.group(1).strip()
+    if not value:
+        raise RuntimeError(
+            f"{UPSTREAM_SOURCES_DOC_PATH} contains an empty `{label}` field."
+        )
+    return value
+
+
+def load_upstream_sources(repo_root: Path) -> AgentSkillUpstreamSources:
+    """Parse the pinned upstream skill provenance document."""
+
+    doc_text = (repo_root / UPSTREAM_SOURCES_DOC_PATH).read_text(encoding="utf-8")
+    repo_slug = _extract_required_match(
+        UPSTREAM_REPOSITORY_RE, doc_text, "Upstream repository"
+    )
+    tag = _extract_required_match(UPSTREAM_TAG_RE, doc_text, "Release tag")
+    commit = _extract_required_match(UPSTREAM_COMMIT_RE, doc_text, "Release commit")
+    vendor_path = _extract_required_match(VENDOR_PATH_RE, doc_text, "Local vendor path")
+    skill_vendor_paths = {
+        match.group("skill"): match.group("path")
+        for match in SKILL_TABLE_ROW_RE.finditer(doc_text)
+    }
+    if not skill_vendor_paths:
+        raise RuntimeError(
+            f"{UPSTREAM_SOURCES_DOC_PATH} does not list any selected upstream skills."
+        )
+
+    return AgentSkillUpstreamSources(
+        repo_slug=repo_slug,
+        tag=tag,
+        commit=commit,
+        vendor_path=vendor_path,
+        skill_vendor_paths=skill_vendor_paths,
+    )
+
+
+def resolve_remote_tag_commit(repo_slug: str, tag: str, *, cwd: Path) -> str:
+    """Resolve the exact commit currently referenced by a remote Git tag."""
+
+    completed = subprocess.run(
+        [
+            "git",
+            "ls-remote",
+            f"https://github.com/{repo_slug}.git",
+            f"refs/tags/{tag}",
+            f"refs/tags/{tag}^{{}}",
+        ],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    refs: dict[str, str] = {}
+    for line in completed.stdout.splitlines():
+        sha, ref = line.split(maxsplit=1)
+        refs[ref] = sha
+
+    resolved = refs.get(f"refs/tags/{tag}^{{}}") or refs.get(f"refs/tags/{tag}")
+    if not resolved:
+        raise RuntimeError(f"Could not resolve remote tag `{tag}` for {repo_slug}.")
+    return resolved
+
+
+def fetch_text(url: str, *, timeout: int = 20) -> str:
+    """Fetch UTF-8 text from a URL."""
+
+    request = Request(url, headers={"User-Agent": "omero-agent-skill-audit"})
+    with urlopen(request, timeout=timeout) as response:
+        return response.read().decode("utf-8")

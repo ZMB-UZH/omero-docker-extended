@@ -89,7 +89,7 @@ Component Breakdown:
 │ CLAUDE.md       │ N      │ ~X,XXX    │
 └─────────────────┴────────┴───────────┘
 
-WARNING: Issues Found (N):
+⚠ Issues Found (N):
 [ranked by token savings]
 
 Top 3 Optimizations:
