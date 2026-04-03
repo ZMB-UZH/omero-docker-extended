@@ -87,6 +87,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
             "unittest",
             "-v",
             "tests.test_agent_skill_catalog",
+            "tests.test_agent_skill_provenance",
             "tests.test_readme_badges",
             "tests.test_lint_docs_structure",
         ),
