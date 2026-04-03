@@ -32,9 +32,7 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 
 **Files:** `docker-compose.yml`, `docker/`, `env/`, `installation_paths.env`
 
-Defines the complete topology: 20 Compose services on a single `omero` bridge
-network. In steady state, the stack runs 18 long-running runtime containers by
-default or 19 when the profile-gated `crowdsec` service is enabled. The
+Defines the complete topology: 20 Compose services on a single `omero` bridge network. In steady state, the stack runs 18 long-running runtime containers by default or 19 when the profile-gated `crowdsec` service is enabled. The
 one-shot `redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the
 installation script persists the required sysctl on the host. Every service has
 explicit health checks, pinned image versions, `no-new-privileges` security,
