@@ -22,7 +22,14 @@ Security practices and controls for this deployment.
 
 ## Post-build vulnerability scanning
 
-Vulnerability scanning is **disabled by default** and can be enabled during installation by answering "yes" to the interactive prompt or by setting `ENABLE_VULNERABILITY_SCAN=1`. When enabled, the installation script runs [Docker Scout](https://docs.docker.com/scout/) to report known CVEs in all images referenced by `docker-compose.yml` — both custom-built images (omero-server, omero-web, crowdsec, pg-maintenance, path-usage-exporter, redis-sysctl-init) and third-party images (Prometheus, Grafana, Loki, Redis, PostgreSQL, etc.).
+Vulnerability scanning is **disabled by default** and can be enabled during
+installation by answering "yes" to the interactive prompt or by setting
+`ENABLE_VULNERABILITY_SCAN=1`. When enabled, the installation script runs
+[Docker Scout](https://docs.docker.com/scout/) to report known CVEs in all
+images referenced by `docker-compose.yml` — both custom-built images
+(omero-server, omero-web, crowdsec, pg-maintenance, path-usage-exporter,
+redis-sysctl-init) and third-party images (Prometheus, Grafana, Loki, Redis,
+PostgreSQL, etc.).
 
 The scan operates in two phases:
 

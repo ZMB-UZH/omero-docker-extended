@@ -38,7 +38,13 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Never create, edit, overwrite, or delete `env/omero_secrets.env` as an AI agent. Treat it as operator-managed secret material.
 - For OMERO configuration property names, defaults, and semantics, use the official OMERO config glossary as the single source of truth: `https://omero.readthedocs.io/en/stable/sysadmins/config.html`.
 - When expressing OMERO properties in tracked env files, follow the existing repository naming pattern already used in `env/omeroserver*.env` and `env/omeroweb*.env` (for example `omero.pixeldata.threads` -> `CONFIG_omero_pixeldata_threads`).
-- For log triage, use the Admin Tools logging path first: prefer the Loki-backed backend used by `omeroweb_admin_tools/logs/` (for example `omeroweb_admin_tools/services/log_query.py`) over ad-hoc `docker logs` sweeps. Fall back to direct container logs, internal log files, or Docker inspection only when the Admin Tools/Loki mechanism returns no data, appears stale/inconsistent with service state, or is itself suspected to be unhealthy.
+- For log triage, use the Admin Tools logging path first: prefer the
+  Loki-backed backend used by `omeroweb_admin_tools/logs/` (for example
+  `omeroweb_admin_tools/services/log_query.py`) over ad-hoc `docker logs`
+  sweeps. Fall back to direct container logs, internal log files, or Docker
+  inspection only when the Admin Tools/Loki mechanism returns no data, appears
+  stale/inconsistent with service state, or is itself suspected to be
+  unhealthy.
 
 ## Where to look first
 
@@ -144,7 +150,12 @@ omeroweb_<name>/
 - Before pushing to a remote repository, resolve that remote's default branch explicitly (for example with `git remote show <remote>`) and push to that default branch unless the human explicitly names a different target branch. Never infer the remote target branch from the current local branch name.
 - Never `merge`, `pull`, `rebase`, or `cherry-pick` directly from another repository's branch into a long-lived branch here just to copy files. Use a disposable clone/worktree of the destination branch, replace the tree contents from the source tree there, restore any explicitly excluded paths, and create a normal destination-repo commit.
 - Before any cross-repo sync, inspect `git merge-base <destination-branch> <source-ref>` and the root commits of both histories. If there is no merge base, or the merge base unexpectedly jumps to a different lineage, stop and follow the recovery procedure in `docs/operations/repository-sync-safety.md` instead of pushing.
-- If one recent rewrite suddenly makes many older branches appear thousands of commits ahead/behind, assume branch-root contamination. Do not "fix" hundreds of branches individually. Back up the current live refs, identify the last stable destination-repo tip before the rewrite, replay only the intended recent commits onto that stable line in a temporary clone, and then move only the small rewritten branch family with `--force-with-lease`.
+- If one recent rewrite suddenly makes many older branches appear thousands of
+  commits ahead/behind, assume branch-root contamination. Do not "fix" hundreds
+  of branches individually. Back up the current live refs, identify the last
+  stable destination-repo tip before the rewrite, replay only the intended
+  recent commits onto that stable line in a temporary clone, and then move only
+  the small rewritten branch family with `--force-with-lease`.
 - Keep backup refs under a dated `backup/<date>-<reason>/...` namespace while repairing branch-history issues. Delete those backups only after the human confirms the repaired refs look correct.
 
 ### Docker compose requires secrets
@@ -231,7 +242,12 @@ omeroweb_<name>/
 ### Testing
 
 - When tests fail, fix the actual production code using best practices. Do not weaken, loosen, or remove tests to make them pass unless the tests themselves are fundamentally incorrect (e.g. relying on mock-specific behavior that does not match real runtime semantics). If a test must be changed, the change must make the test *more* correct, not less.
-- When writing or rewriting committed tests, model runtime behavior without baking in installation-specific absolute paths. Prefer temporary directories, fixture-generated filenames, symbolic command names, and values derived from the repository tree or environment. If an absolute path appears in a committed test, it must represent a real supported runtime contract and the test should make that intent obvious.
+- When writing or rewriting committed tests, model runtime behavior without
+  baking in installation-specific absolute paths. Prefer temporary directories,
+  fixture-generated filenames, symbolic command names, and values derived from
+  the repository tree or environment. If an absolute path appears in a
+  committed test, it must represent a real supported runtime contract and the
+  test should make that intent obvious.
 - Run each test directory as a separate `pytest` invocation to avoid cross-contamination from `conftest.py` mock stubs. Running all suites in a single `pytest` call causes false failures in log-sanitization and multipart-upload tests.
 - In root-owned deployment clones, disable the pytest cache provider so verification stays warning-free even when the repo root is not writable.
 - Before rerunning `pytest`, confirm the selected Python environment can import Django. If `python3 -m pytest ...` fails while loading `/opt/omero/conftest.py` with `ModuleNotFoundError: django`, do **not** keep retrying the same host-interpreter command.
@@ -297,7 +313,13 @@ omeroweb_<name>/
 - Do **not** reopen the importing user's live OMERO.web session inside background threads or subprocess-driven follow-up work. Between HTTP requests OMERO.web may hold no active Blitz reference; if a background helper rejoins that session and then closes, OMERO can destroy the login session and log the user out.
 - Do not assume the `job-service` OMERO account can impersonate users. In this repository the bootstrap sync adds `job-service` to groups, but it does not grant OMERO administrator privileges, so `suConn()` can legitimately fail.
 - For the Import plugin, keep heavy grouped-import planning in background threads, but do any required user-owned dataset-target preparation on the request path with the live request connection. Do not push that step into background session-rejoin helpers.
-- For the Import plugin, keep request-path dataset-target preparation format-agnostic whenever a generic path is feasible. Prefer persisted logical import-unit plans over format-specific or extension-specific heuristics so grouped, packaged, directory-based, and cross-version Zarr imports keep working through the same mechanism. Only bypass this with a narrowly scoped format-specific rule when it is absolutely necessary, and document that reason in the same change.
+- For the Import plugin, keep request-path dataset-target preparation
+  format-agnostic whenever a generic path is feasible. Prefer persisted logical
+  import-unit plans over format-specific or extension-specific heuristics so
+  grouped, packaged, directory-based, and cross-version Zarr imports keep
+  working through the same mechanism. Only bypass this with a narrowly scoped
+  format-specific rule when it is absolutely necessary, and document that
+  reason in the same change.
 - For grouped-package naming, prefer OMERO CLI `-n` so the final logical name is set during import instead of requiring a post-import OMERO API rename against the browser session.
 - For long-running upload compatibility or post-import work, do not add short browser-side deadlines around status polling. Large structured imports can legitimately spend more than a few minutes in compatibility planning before import begins.
 - Do not run `_prepare_job_import_datasets()`, `_build_import_units()`, or OMERO CLI dry-run scans synchronously inside upload HTTP handlers (`upload_files`, `import_step`, `confirm_import`, `prune_upload`). Large `.zarr` uploads can spend long enough in that planning step to trip Gunicorn worker timeouts and surface raw 500s on the final upload request.
@@ -316,8 +338,22 @@ omeroweb_<name>/
 - The OMERO.server managed-repository helper is allowed to create the missing per-user prefix for a first native Zarr import. Do not reintroduce a hidden dependency on a prior non-Zarr managed import just to bootstrap that directory.
 - For NGFF-backed images, thumbnail/render failures usually surface in `master.err` from `com.glencoesoftware.omero.zarr.ZarrPixelsService` or `com.bc.zarr.ZarrArray.open(...)` (for example `'.zarray' expected but is not readable or missing in store.`). A successful import transaction does not prove thumbnail generation succeeded.
 - Do not attribute nearby Blitz/Bio-Formats warnings to a specific image by timestamp alone. First correlate the image creation time and the `externalInfo.Lsid` managed-store path.
-- Do not mutate supported OME-NGFF image stores before native import unless a current live runtime validation proves it is necessary. In this stack, staged raw multiscale OME-NGFF renders correctly, while flattening the same store before managed-repository registration can break thumbnail generation with `ThumbnailStore.getThumbnailDirect` `NullPointerException`s. Keep supported native Zarr layouts on the upstream `omero zarr import` contract.
-- When `Blitz-*.log` shows `loci.formats.in.ZarrReader.openBytes(...)` `NullPointerException`s during `RawPixelsStore.getTile()` or `getPlane()` for a Zarr-backed image, treat that as a server-side reader-stack failure, not a web-plugin metadata failure. In this deployment the `ZarrReader` class is supplied by `/opt/omero/server/OMERO.server/lib/{server,client}/OMEZarrReader.jar` (currently `Implementation-Version: 0.6.0`), while `BIOFORMATS_VERSION` in `env/omeroserver.env` only controls the separate `bioformats_package.jar` installed by `startup/51-install-imarisconvert.sh` for ImarisConvert/IMS export. Do not assume changing `BIOFORMATS_VERSION` will change OMERO.server raw Zarr pixel reads.
+- Do not mutate supported OME-NGFF image stores before native import unless a
+  current live runtime validation proves it is necessary. In this stack, staged
+  raw multiscale OME-NGFF renders correctly, while flattening the same store
+  before managed-repository registration can break thumbnail generation with
+  `ThumbnailStore.getThumbnailDirect` `NullPointerException`s. Keep supported
+  native Zarr layouts on the upstream `omero zarr import` contract.
+- When `Blitz-*.log` shows `loci.formats.in.ZarrReader.openBytes(...)`
+  `NullPointerException`s during `RawPixelsStore.getTile()` or `getPlane()` for
+  a Zarr-backed image, treat that as a server-side reader-stack failure, not a
+  web-plugin metadata failure. In this deployment the `ZarrReader` class is
+  supplied by `/opt/omero/server/OMERO.server/lib/{server,client}/OMEZarrReader.jar`
+  (currently `Implementation-Version: 0.6.0`), while `BIOFORMATS_VERSION` in
+  `env/omeroserver.env` only controls the separate `bioformats_package.jar`
+  installed by `startup/51-install-imarisconvert.sh` for ImarisConvert/IMS
+  export. Do not assume changing `BIOFORMATS_VERSION` will change OMERO.server
+  raw Zarr pixel reads.
 - OMERO.iviewer and OMERO.figure import `omeroweb.webgateway.marshal.imageMarshal` by value at module import time. If you harden `imageMarshal` for a shared rendering failure mode, patch both the marshal module and any already-imported viewer modules (`omeroweb.webgateway.views`, `omero_iviewer.views`, `omero_figure.views`) or the fix will appear to work in one viewer and still fail in another.
 
 - In the rebuilt `omeroweb` runtime, split pytest with `-W error` can fail during collection if the container still exports deprecated `OMERO_TEMPDIR`. For in-container pytest, explicitly unset `OMERO_TEMPDIR` and set `OMERO_TMPDIR` (and preferably `TMPDIR`) to a writable temp directory before running the suite.
