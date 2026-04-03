@@ -1,0 +1,7 @@
+interface:
+  display_name: "Django Verification"
+  short_description: "Verify OMERO.web and Django changes with split pytest and targeted checks"
+  brand_color: "#0F766E"
+  default_prompt: "Choose the correct verification flow for Django or OMERO.web changes in this repo"
+policy:
+  allow_implicit_invocation: true

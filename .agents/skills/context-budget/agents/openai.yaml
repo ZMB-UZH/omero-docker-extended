@@ -1,0 +1,7 @@
+interface:
+  display_name: "Context Budget"
+  short_description: "Reduce wasted context, token use, and repeated repo rediscovery"
+  brand_color: "#0F766E"
+  default_prompt: "Route this task through the smallest correct set of docs, files, and tests"
+policy:
+  allow_implicit_invocation: true
