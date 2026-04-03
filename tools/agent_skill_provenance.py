@@ -7,8 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from posixpath import commonpath
-from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.parse import quote, urlsplit
 
 
 UPSTREAM_SOURCES_DOC_PATH = Path("docs/reference/ai-agent-upstream-sources.md")
@@ -20,6 +19,8 @@ SKILL_TABLE_ROW_RE = re.compile(
     r"^\| `(?P<skill>[^`]+)` \| `(?P<path>third_party/[^`]+/SKILL\.md)` \|$",
     re.MULTILINE,
 )
+ALLOWED_FETCH_SCHEMES: frozenset[str] = frozenset({"https"})
+ALLOWED_FETCH_HOSTS: frozenset[str] = frozenset({"raw.githubusercontent.com"})
 
 
 @dataclass(frozen=True)
@@ -72,8 +73,8 @@ class AgentSkillUpstreamSources:
 
     @property
     def badge_image_url(self) -> str:
-        subject = quote(self.badge_label, safe="")
-        message = quote(self.repo_slug, safe="")
+        subject = quote("upstream", safe="")
+        message = quote(self.badge_label, safe="")
         return f"https://img.shields.io/badge/{subject}-{message}-0F766E?logo=github"
 
     def raw_skill_url(self, skill_name: str) -> str:
@@ -156,6 +157,35 @@ def resolve_remote_tag_commit(repo_slug: str, tag: str, *, cwd: Path) -> str:
 def fetch_text(url: str, *, timeout: int = 20) -> str:
     """Fetch UTF-8 text from a URL."""
 
-    request = Request(url, headers={"User-Agent": "omero-agent-skill-audit"})
-    with urlopen(request, timeout=timeout) as response:
-        return response.read().decode("utf-8")
+    parsed = urlsplit(url)
+    if parsed.scheme not in ALLOWED_FETCH_SCHEMES:
+        raise ValueError(f"Unsupported fetch scheme: {parsed.scheme!r}")
+    if parsed.hostname not in ALLOWED_FETCH_HOSTS:
+        raise ValueError(f"Unsupported fetch host: {parsed.hostname!r}")
+
+    try:
+        result = subprocess.run(
+            [
+                "curl",
+                "--silent",
+                "--show-error",
+                "--location",
+                "--fail",
+                "--header",
+                "User-Agent: omero-agent-skill-audit",
+                "--max-time",
+                str(timeout),
+                url,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout + 5,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"Upstream fetch failed: {exc}") from exc
+
+    if result.returncode != 0:
+        stderr = result.stderr.strip() or "curl exited with a non-zero status."
+        raise RuntimeError(f"Upstream fetch failed: {stderr}")
+    return result.stdout
