@@ -18,31 +18,31 @@ The OMP plugin provides a workflow for parsing scientific image filenames into s
 
 ## Key routes
 
-| Route | Method | Purpose |
-|---|---|---|
-| `/omeroweb_omp_plugin/` | GET | Main plugin page |
-| `/omeroweb_omp_plugin/projects/` | GET | List accessible projects and datasets |
-| `/omeroweb_omp_plugin/root-status/` | GET | Check if current user is OMERO root |
-| `/omeroweb_omp_plugin/start_job/` | POST | Start metadata write job |
-| `/omeroweb_omp_plugin/start_acq_job/` | POST | Start acquisition metadata job |
-| `/omeroweb_omp_plugin/start_delete_all_job/` | POST | Start delete-all annotations job |
-| `/omeroweb_omp_plugin/start_delete_plugin_job/` | POST | Start delete plugin-owned annotations job |
-| `/omeroweb_omp_plugin/delete_all/` | POST | Delete all MapAnnotations from selected images (direct, non-job) |
-| `/omeroweb_omp_plugin/delete_plugin/` | POST | Delete plugin-owned MapAnnotations from selected images (direct, non-job) |
-| `/omeroweb_omp_plugin/progress/<job_id>/` | GET | Poll job progress |
-| `/omeroweb_omp_plugin/varsets/` | GET | List saved variable sets |
-| `/omeroweb_omp_plugin/varsets/save/` | POST | Save a variable set |
-| `/omeroweb_omp_plugin/varsets/load/` | POST | Load a variable set |
-| `/omeroweb_omp_plugin/varsets/delete/` | POST | Delete a variable set |
-| `/omeroweb_omp_plugin/ai-credentials/` | GET | List AI provider credentials |
-| `/omeroweb_omp_plugin/ai-credentials/save/` | POST | Save AI credentials |
-| `/omeroweb_omp_plugin/ai-credentials/test/` | POST | Test AI provider connectivity |
-| `/omeroweb_omp_plugin/ai-credentials/models/` | GET | List available AI models |
-| `/omeroweb_omp_plugin/user-settings/save/` | POST | Save user preferences |
-| `/omeroweb_omp_plugin/user-data/delete-api-keys/` | POST | Delete stored API keys |
-| `/omeroweb_omp_plugin/user-data/delete-variable-sets/` | POST | Delete all variable sets |
-| `/omeroweb_omp_plugin/user-data/delete-all/` | POST | Delete all user data |
-| `/omeroweb_omp_plugin/help/` | GET | Serve plugin help documentation (Markdown) |
+| Route                                                  | Method | Purpose                                                                   |
+| ------------------------------------------------------ | ------ | ------------------------------------------------------------------------- |
+| `/omeroweb_omp_plugin/`                                | GET    | Main plugin page                                                          |
+| `/omeroweb_omp_plugin/projects/`                       | GET    | List accessible projects and datasets                                     |
+| `/omeroweb_omp_plugin/root-status/`                    | GET    | Check if current user is OMERO root                                       |
+| `/omeroweb_omp_plugin/start_job/`                      | POST   | Start metadata write job                                                  |
+| `/omeroweb_omp_plugin/start_acq_job/`                  | POST   | Start acquisition metadata job                                            |
+| `/omeroweb_omp_plugin/start_delete_all_job/`           | POST   | Start delete-all annotations job                                          |
+| `/omeroweb_omp_plugin/start_delete_plugin_job/`        | POST   | Start delete plugin-owned annotations job                                 |
+| `/omeroweb_omp_plugin/delete_all/`                     | POST   | Delete all MapAnnotations from selected images (direct, non-job)          |
+| `/omeroweb_omp_plugin/delete_plugin/`                  | POST   | Delete plugin-owned MapAnnotations from selected images (direct, non-job) |
+| `/omeroweb_omp_plugin/progress/<job_id>/`              | GET    | Poll job progress                                                         |
+| `/omeroweb_omp_plugin/varsets/`                        | GET    | List saved variable sets                                                  |
+| `/omeroweb_omp_plugin/varsets/save/`                   | POST   | Save a variable set                                                       |
+| `/omeroweb_omp_plugin/varsets/load/`                   | POST   | Load a variable set                                                       |
+| `/omeroweb_omp_plugin/varsets/delete/`                 | POST   | Delete a variable set                                                     |
+| `/omeroweb_omp_plugin/ai-credentials/`                 | GET    | List AI provider credentials                                              |
+| `/omeroweb_omp_plugin/ai-credentials/save/`            | POST   | Save AI credentials                                                       |
+| `/omeroweb_omp_plugin/ai-credentials/test/`            | POST   | Test AI provider connectivity                                             |
+| `/omeroweb_omp_plugin/ai-credentials/models/`          | GET    | List available AI models                                                  |
+| `/omeroweb_omp_plugin/user-settings/save/`             | POST   | Save user preferences                                                     |
+| `/omeroweb_omp_plugin/user-data/delete-api-keys/`      | POST   | Delete stored API keys                                                    |
+| `/omeroweb_omp_plugin/user-data/delete-variable-sets/` | POST   | Delete all variable sets                                                  |
+| `/omeroweb_omp_plugin/user-data/delete-all/`           | POST   | Delete all user data                                                      |
+| `/omeroweb_omp_plugin/help/`                           | GET    | Serve plugin help documentation (Markdown)                                |
 
 ## Typical user workflow
 

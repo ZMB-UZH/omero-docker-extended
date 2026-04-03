@@ -26,51 +26,51 @@ covers formatting, linting, tests, and workflow hygiene together.
 
 These are repo-local or agent-facing capabilities that would improve the quality of future changes.
 
-| Skill | Why this repo needs it | Typical trigger | Priority |
-|---|---|---|---|
-| `docs-knowledge-maintainer` | The repo treats docs as operational contract material, not optional prose. Cross-links, plan files, and operator guidance must stay current. | Any change to behavior, topology, env vars, or troubleshooting | Now |
-| `plugin-regression-triager` | Tests are split across package-local suites and top-level regression tests. Choosing the wrong lane wastes time or produces false failures. | Any plugin code change | Now |
-| `omero-runtime-verifier` | This repo has strict procedure around service users, container venvs, Loki-first log triage, and session-safe diagnostics. | Docker, OMERO CLI, or runtime debugging work | Now |
-| `security-finding-triager` | The repo already carries an explicit code-scanning backlog. Someone needs to map scanner language back to real code and real risk. | CodeQL/Semgrep/Bandit/Scorecard findings | Now |
-| `env-contract-reviewer` | Configuration is intentionally environment-driven. Drift toward hard-coded paths, ports, or defaults is one of the main failure modes. | Env file, startup, or compose changes | Now |
-| `session-lifecycle-reviewer` | The Import and Imaris paths both rely on joined sessions, background work, and CLI launches that can accidentally kill live sessions. | Joined session, background connection, or Celery work | Now |
-| `import-pipeline-refactor-guide` | The import code is mid-transition between giant legacy modules and service-layer extraction. Refactors need a stable playbook. | `omeroweb_import` refactor or cleanup PRs | Next |
-| `workflow-supply-chain-reviewer` | GitHub Actions, Dependabot, and security policy changes affect the repo's integrity even when app code is unchanged. | Workflow or Dependabot edits | Next |
-| `incident-to-regression-test` | The repo already values regression tests strongly. Every production fix should become a durable test rather than a one-off patch. | Bugfixes after incidents or operator reports | Next |
-| `release-readiness-reviewer` | Startup, Dockerfile, env-template, and docs changes need coordinated validation and release-note discipline. | Alpha/main release prep | Later |
+| Skill                            | Why this repo needs it                                                                                                                       | Typical trigger                                                | Priority |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------- |
+| `docs-knowledge-maintainer`      | The repo treats docs as operational contract material, not optional prose. Cross-links, plan files, and operator guidance must stay current. | Any change to behavior, topology, env vars, or troubleshooting | Now      |
+| `plugin-regression-triager`      | Tests are split across package-local suites and top-level regression tests. Choosing the wrong lane wastes time or produces false failures.  | Any plugin code change                                         | Now      |
+| `omero-runtime-verifier`         | This repo has strict procedure around service users, container venvs, Loki-first log triage, and session-safe diagnostics.                   | Docker, OMERO CLI, or runtime debugging work                   | Now      |
+| `security-finding-triager`       | The repo already carries an explicit code-scanning backlog. Someone needs to map scanner language back to real code and real risk.           | CodeQL/Semgrep/Bandit/Scorecard findings                       | Now      |
+| `env-contract-reviewer`          | Configuration is intentionally environment-driven. Drift toward hard-coded paths, ports, or defaults is one of the main failure modes.       | Env file, startup, or compose changes                          | Now      |
+| `session-lifecycle-reviewer`     | The Import and Imaris paths both rely on joined sessions, background work, and CLI launches that can accidentally kill live sessions.        | Joined session, background connection, or Celery work          | Now      |
+| `import-pipeline-refactor-guide` | The import code is mid-transition between giant legacy modules and service-layer extraction. Refactors need a stable playbook.               | `omeroweb_import` refactor or cleanup PRs                      | Next     |
+| `workflow-supply-chain-reviewer` | GitHub Actions, Dependabot, and security policy changes affect the repo's integrity even when app code is unchanged.                         | Workflow or Dependabot edits                                   | Next     |
+| `incident-to-regression-test`    | The repo already values regression tests strongly. Every production fix should become a durable test rather than a one-off patch.            | Bugfixes after incidents or operator reports                   | Next     |
+| `release-readiness-reviewer`     | Startup, Dockerfile, env-template, and docs changes need coordinated validation and release-note discipline.                                 | Alpha/main release prep                                        | Later    |
 
 ## Recommended Hooks
 
 These should be local, fast, and deterministic. They are meant to fail early before a pull request is opened.
 
-| Hook | What it should run | Why it matters here | Priority |
-|---|---|---|---|
-| `pre-commit:docs-structure` | `python3 tools/lint_docs_structure.py` | The repo already enforces docs structure; this is the obvious first local guardrail. | Now |
-| `pre-commit:python-compile` | `python3 -m py_compile` on changed Python files | Useful fallback when the full Django/OMERO runtime is not available locally. | Now |
-| `pre-commit:shell-lint` | `bash -n` plus `shellcheck` for changed `.sh` files | Startup and install scripts are critical-path logic, not helper scripts. | Now |
-| `pre-commit:workflow-lint` | `actionlint` and YAML validation for `.github/workflows/*.yml` | Workflow breakage is costly and currently only caught after push. | Now |
-| `pre-commit:dockerfile-lint` | `hadolint` on changed Dockerfiles | The repo already treats Dockerfiles as security-sensitive infrastructure code. | Now |
-| `pre-commit:secret-surface` | block edits/commits of operator-managed secrets and runtime-only env files | The repo explicitly forbids AI edits to `env/omero_secrets.env` and relies on example files as canonical templates. | Now |
-| `pre-push:split-pytest` | run only the relevant test directory, one suite at a time | `AGENTS.md` explicitly requires split pytest execution to avoid conftest cross-contamination. | Next |
-| `pre-push:docs-drift` | grep for stale plugin names, stale service counts, and missing env-file guidance | The repo already shows drift around `omeroweb_upload`, service counts, and compose command examples. | Next |
-| `pre-push:compose-contract` | lightweight compose/workflow sanity checks when Docker or env templates change | Compose failures in this repo often come from env interpolation and runtime permissions, not syntax alone. | Next |
+| Hook                         | What it should run                                                               | Why it matters here                                                                                                 | Priority |
+| ---------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------- |
+| `pre-commit:docs-structure`  | `python3 tools/lint_docs_structure.py`                                           | The repo already enforces docs structure; this is the obvious first local guardrail.                                | Now      |
+| `pre-commit:python-compile`  | `python3 -m py_compile` on changed Python files                                  | Useful fallback when the full Django/OMERO runtime is not available locally.                                        | Now      |
+| `pre-commit:shell-lint`      | `bash -n` plus `shellcheck` for changed `.sh` files                              | Startup and install scripts are critical-path logic, not helper scripts.                                            | Now      |
+| `pre-commit:workflow-lint`   | `actionlint` and YAML validation for `.github/workflows/*.yml`                   | Workflow breakage is costly and currently only caught after push.                                                   | Now      |
+| `pre-commit:dockerfile-lint` | `hadolint` on changed Dockerfiles                                                | The repo already treats Dockerfiles as security-sensitive infrastructure code.                                      | Now      |
+| `pre-commit:secret-surface`  | block edits/commits of operator-managed secrets and runtime-only env files       | The repo explicitly forbids AI edits to `env/omero_secrets.env` and relies on example files as canonical templates. | Now      |
+| `pre-push:split-pytest`      | run only the relevant test directory, one suite at a time                        | `AGENTS.md` explicitly requires split pytest execution to avoid conftest cross-contamination.                       | Next     |
+| `pre-push:docs-drift`        | grep for stale plugin names, stale service counts, and missing env-file guidance | The repo already shows drift around `omeroweb_upload`, service counts, and compose command examples.                | Next     |
+| `pre-push:compose-contract`  | lightweight compose/workflow sanity checks when Docker or env templates change   | Compose failures in this repo often come from env interpolation and runtime permissions, not syntax alone.          | Next     |
 
 ## Recommended GitHub Actions
 
 The current workflows cover docs validation and security scanning, but quality would improve if the repository added a broader CI layer.
 
-| Workflow | What it should do | Why it is grounded in this repo | Priority |
-|---|---|---|---|
-| `ci-fast.yml` | run split tests for `tests/`, `omero_plugin_common/tests/`, `omeroweb_imaris_connector/tests/`, `omeroweb_admin_tools/tests/`, `omeroweb_omp_plugin/tests/`, and `omeroweb_import/tests/` | These exact suites are already prescribed in `AGENTS.md`. | Now |
-| `lint-fast.yml` | run `python3 -m py_compile`, docs lint, and lightweight static checks on changed files | The repo lacks a normal fast feedback loop outside docs/security workflows. | Now |
-| `shell-and-workflow-lint.yml` | run `shellcheck`, `actionlint`, and YAML validation | The repo has many shell and workflow files but no dedicated enforcement lane. | Now |
-| `docker-smoke.yml` | build changed Dockerfiles and run targeted smoke/contract tests | Dockerfiles and startup wrappers are central to repo correctness. | Now |
-| `docs-drift.yml` | catch stale plugin names, stale service counts, and missing index entries | Current repo state already shows this class of drift. | Now |
-| `security-code-scanning.yml` `security-delta` job | fail when new code-scanning alerts are introduced by the current security workflow run | The security runbook already defines severity SLAs and merge expectations. | Done |
-| `action-pin-policy.yml` | verify GitHub Actions are pinned to approved SHAs and least-privilege permissions | Scorecard findings and tag-pinned actions already point to this gap. | Next |
-| `release-hygiene.yml` | require release-note/docs updates when startup, env, or operator behavior changes | The repo says docs must change when behavior changes, but the rule is not automated. | Next |
-| `dependency-hygiene.yml` | validate Dependabot coverage and optionally inventory dependency surfaces | Dependabot exists but only covers a narrow subset of the repo. | Later |
-| `nightly-stack-validation.yml` | run a slower compose-level validation path on a schedule or manual dispatch | The repo already notes the absence of a full deployment validation suite. | Later |
+| Workflow                                          | What it should do                                                                                                                                                                         | Why it is grounded in this repo                                                      | Priority |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | -------- |
+| `ci-fast.yml`                                     | run split tests for `tests/`, `omero_plugin_common/tests/`, `omeroweb_imaris_connector/tests/`, `omeroweb_admin_tools/tests/`, `omeroweb_omp_plugin/tests/`, and `omeroweb_import/tests/` | These exact suites are already prescribed in `AGENTS.md`.                            | Now      |
+| `lint-fast.yml`                                   | run `python3 -m py_compile`, docs lint, and lightweight static checks on changed files                                                                                                    | The repo lacks a normal fast feedback loop outside docs/security workflows.          | Now      |
+| `shell-and-workflow-lint.yml`                     | run `shellcheck`, `actionlint`, and YAML validation                                                                                                                                       | The repo has many shell and workflow files but no dedicated enforcement lane.        | Now      |
+| `docker-smoke.yml`                                | build changed Dockerfiles and run targeted smoke/contract tests                                                                                                                           | Dockerfiles and startup wrappers are central to repo correctness.                    | Now      |
+| `docs-drift.yml`                                  | catch stale plugin names, stale service counts, and missing index entries                                                                                                                 | Current repo state already shows this class of drift.                                | Now      |
+| `security-code-scanning.yml` `security-delta` job | fail when new code-scanning alerts are introduced by the current security workflow run                                                                                                    | The security runbook already defines severity SLAs and merge expectations.           | Done     |
+| `action-pin-policy.yml`                           | verify GitHub Actions are pinned to approved SHAs and least-privilege permissions                                                                                                         | Scorecard findings and tag-pinned actions already point to this gap.                 | Next     |
+| `release-hygiene.yml`                             | require release-note/docs updates when startup, env, or operator behavior changes                                                                                                         | The repo says docs must change when behavior changes, but the rule is not automated. | Next     |
+| `dependency-hygiene.yml`                          | validate Dependabot coverage and optionally inventory dependency surfaces                                                                                                                 | Dependabot exists but only covers a narrow subset of the repo.                       | Later    |
+| `nightly-stack-validation.yml`                    | run a slower compose-level validation path on a schedule or manual dispatch                                                                                                               | The repo already notes the absence of a full deployment validation suite.            | Later    |
 
 ## Related Repo Settings
 

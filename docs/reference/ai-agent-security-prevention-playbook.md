@@ -50,17 +50,17 @@ These sources were used to shape the rules below:
 
 The latest full closed-history API refresh, summarized in `docs/reference/code-scanning-resolved-findings.md`, shows that the highest-recurrence families are not random noise; they identify the exact places where AI agents tend to drift:
 
-| Rule family | Closed alerts | What future agents must assume |
-|---|---:|---|
-| `B101` | 492 | Production/runtime validation must not rely on `assert`; tests may. |
-| `sqlalchemy-execute-raw-query` / `B608` | 178 total | Raw SQL is a repeat hotspot. Treat every query boundary as hostile until parameterized. |
-| `DS137138` | 147 | Internal Docker-network HTTP is common here; document accepted false positives instead of weakening architecture blindly. |
-| `py/log-injection` | 123 | Any unsanitized user string in logs will eventually regress. |
-| `py/empty-except` / `B110` / `B112` | 167 total | Silent exception handling is recurrent, not incidental. |
-| `PinnedDependenciesID` | 99 | Workflow and supply-chain drift is persistent unless pinning is mandatory. |
-| `B108` / `py/path-injection` | 145 total | File and path handling must go through hardened helpers, not local one-offs. |
-| `py/stack-trace-exposure` / `py/clear-text-logging-sensitive-data` | 113 total | Internal error detail and secret leakage recur together. |
-| `csrf-exempt` / direct `HttpResponse` issues | 48 total | Browser-facing shortcuts become security debt quickly. |
+| Rule family                                                        | Closed alerts | What future agents must assume                                                                                            |
+| ------------------------------------------------------------------ | ------------: | ------------------------------------------------------------------------------------------------------------------------- |
+| `B101`                                                             | 492           | Production/runtime validation must not rely on `assert`; tests may.                                                       |
+| `sqlalchemy-execute-raw-query` / `B608`                            | 178 total     | Raw SQL is a repeat hotspot. Treat every query boundary as hostile until parameterized.                                   |
+| `DS137138`                                                         | 147           | Internal Docker-network HTTP is common here; document accepted false positives instead of weakening architecture blindly. |
+| `py/log-injection`                                                 | 123           | Any unsanitized user string in logs will eventually regress.                                                              |
+| `py/empty-except` / `B110` / `B112`                                | 167 total     | Silent exception handling is recurrent, not incidental.                                                                   |
+| `PinnedDependenciesID`                                             | 99            | Workflow and supply-chain drift is persistent unless pinning is mandatory.                                                |
+| `B108` / `py/path-injection`                                       | 145 total     | File and path handling must go through hardened helpers, not local one-offs.                                              |
+| `py/stack-trace-exposure` / `py/clear-text-logging-sensitive-data` | 113 total     | Internal error detail and secret leakage recur together.                                                                  |
+| `csrf-exempt` / direct `HttpResponse` issues                       | 48 total      | Browser-facing shortcuts become security debt quickly.                                                                    |
 
 ## Mandatory pre-edit workflow
 

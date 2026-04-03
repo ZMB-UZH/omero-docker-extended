@@ -799,6 +799,31 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual("disable", yamllint_config["rules"]["line-length"])
         self.assertEqual("disable", yamllint_config["rules"]["truthy"])
 
+    def test_tests_workflow_uses_dedicated_environment_for_codecov(self) -> None:
+        import yaml  # noqa: F811  — available in CI
+
+        workflow_path = self.repo_root / ".github" / "workflows" / "tests.yml"
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        job = workflow["jobs"]["test-with-coverage"]
+
+        self.assertEqual("ci-coverage", job["environment"])
+
+        validate_step = next(
+            step
+            for step in job["steps"]
+            if step.get("name") == "Validate Codecov token"
+        )
+        upload_step = next(
+            step
+            for step in job["steps"]
+            if step.get("name") == "Upload coverage to Codecov"
+        )
+
+        self.assertEqual(
+            "${{ secrets.CODECOV_TOKEN }}", validate_step["env"]["CODECOV_TOKEN"]
+        )
+        self.assertEqual("${{ secrets.CODECOV_TOKEN }}", upload_step["with"]["token"])
+
     def test_security_workflow_avoids_unpinned_container_and_template_injection(
         self,
     ) -> None:
@@ -813,6 +838,66 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual(
             "semgrep/semgrep:1.156.0@sha256:a3d49dc967b8534a6a76628e50c51cbfe33eb7195dc2feab1fdc0f100852c8ef",
             workflow["jobs"]["semgrep"]["container"]["image"],
+        )
+
+        bandit_scope_step = next(
+            step
+            for step in workflow["jobs"]["bandit"]["steps"]
+            if step.get("name") == "Audit — list files in scan scope"
+        )
+        self.assertEqual(
+            "${{ steps.discover.outputs.scan_dirs }}",
+            bandit_scope_step["env"]["SCAN_DIRS"],
+        )
+        self.assertEqual(
+            "${{ steps.discover.outputs.test_dirs }}",
+            bandit_scope_step["env"]["TEST_DIRS"],
+        )
+        self.assertIn('find "${scan_dirs[@]}"', bandit_scope_step["run"])
+        self.assertNotIn(
+            "${{ steps.discover.outputs.scan_dirs }}", bandit_scope_step["run"]
+        )
+        self.assertNotIn(
+            "${{ steps.discover.outputs.test_dirs }}", bandit_scope_step["run"]
+        )
+
+        bandit_prod_step = next(
+            step
+            for step in workflow["jobs"]["bandit"]["steps"]
+            if step.get("name")
+            == "Run Bandit scan (production code — excludes test directories)"
+        )
+        self.assertEqual(
+            "${{ steps.discover.outputs.scan_dirs }}",
+            bandit_prod_step["env"]["SCAN_DIRS"],
+        )
+        self.assertEqual(
+            "${{ steps.discover.outputs.exclude_csv }}",
+            bandit_prod_step["env"]["EXCLUDE_CSV"],
+        )
+        self.assertIn(
+            'bandit_cmd=(bandit -r "${scan_dirs[@]}")', bandit_prod_step["run"]
+        )
+        self.assertNotIn(
+            "${{ steps.discover.outputs.scan_dirs }}", bandit_prod_step["run"]
+        )
+        self.assertNotIn(
+            "${{ steps.discover.outputs.exclude_csv }}", bandit_prod_step["run"]
+        )
+
+        bandit_test_step = next(
+            step
+            for step in workflow["jobs"]["bandit"]["steps"]
+            if step.get("name")
+            == "Run Bandit scan (test code — skips assert and test-credential rules)"
+        )
+        self.assertEqual(
+            "${{ steps.discover.outputs.test_dirs }}",
+            bandit_test_step["env"]["TEST_DIRS"],
+        )
+        self.assertIn('"${test_dirs[@]}"', bandit_test_step["run"])
+        self.assertNotIn(
+            "${{ steps.discover.outputs.test_dirs }}", bandit_test_step["run"]
         )
 
         hadolint_audit_step = next(
