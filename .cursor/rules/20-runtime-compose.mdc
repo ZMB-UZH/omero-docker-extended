@@ -8,6 +8,8 @@ globs:
   - "installation_paths*.env"
 ---
 
+# Runtime and Compose Rules
+
 - Use `.agents/skills/docker-patterns/`, `.agents/skills/deployment-patterns/`, `.agents/skills/env-contract-reviewer/`, and `.agents/skills/omero-runtime-verifier/` when relevant.
 - Keep runtime changes environment-driven.
 - Do not introduce `:latest`, inline secret defaults, or compose-level version sprawl.
