@@ -65,7 +65,14 @@ For store-backed images, the plugin can render directly from the managed Zarr st
 
 This avoids the fragile dependency on classic OMERO RenderingEngine pyramid files for external Zarr-backed images.
 
-For non-store-backed images, the plugin does not replace OMERO.web rendering unless the alternative rendering overrides are enabled via `OMERO_WEB_ZARR_ALTERNATIVE_RENDERING=true` in `env/omeroweb.env`. When enabled, the plugin patches OMERO's built-in `imageMarshal`, `render_image_region`, `imageData_json`, and `load_metadata_preview` to catch known zarr rendering engine failures (tile-size, pixel-buffer) and fall back to safe generic responses. When disabled (the default), OMERO's standard built-in rendering pipeline applies without any zarr-specific patches.
+For non-store-backed images, the plugin does not replace OMERO.web rendering
+unless the alternative rendering overrides are enabled via
+`OMERO_WEB_ZARR_ALTERNATIVE_RENDERING=true` in `env/omeroweb.env`. When
+enabled, the plugin patches OMERO's built-in `imageMarshal`,
+`render_image_region`, `imageData_json`, and `load_metadata_preview` to catch
+known zarr rendering engine failures (tile-size, pixel-buffer) and fall back
+to safe generic responses. When disabled, which is the default, OMERO's
+standard built-in rendering pipeline applies without any zarr-specific patches.
 
 ## Launcher behavior
 

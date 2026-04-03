@@ -13,23 +13,154 @@ For OMERO configuration property names, defaults, and semantics, use the officia
 This repository expresses those OMERO properties in env files with the existing `CONFIG_omero_...` naming pattern already present in the tracked examples. Example: the official `omero.pixeldata.threads` property maps to `CONFIG_omero_pixeldata_threads`.
 
 - `installation_paths_example.env` -> `installation_paths.env`: filesystem path definitions, including `OMERO_DATA_DIR` for the in-container OMERO data root.
-- **CRITICAL:** The `omeroserver` service in `docker-compose.yml` **must** pass `OMERO_DATA_DIR` and `OMERO_DIR` into its container environment block. These variables tell the OMERO server where the bind-mounted data volume (`/OMERO`) is. Without them, the server resolves relative paths (including `CONFIG_omero_managed_dir`) against its install directory instead of `/OMERO`, causing imported files to land inside the container's ephemeral filesystem and be **lost on restart**. **Never remove these two environment entries from the omeroserver service.**
+- **CRITICAL:** The `omeroserver` service in `docker-compose.yml` **must** pass
+  `OMERO_DATA_DIR` and `OMERO_DIR` into its container environment block. These
+  variables tell the OMERO server where the bind-mounted data volume (`/OMERO`)
+  is. Without them, the server resolves relative paths (including
+  `CONFIG_omero_managed_dir`) against its install directory instead of
+  `/OMERO`, causing imported files to land inside the container's ephemeral
+  filesystem and be **lost on restart**. **Never remove these two environment
+  entries from the omeroserver service.**
 - `env/omeroserver_example.env` -> `env/omeroserver.env`: OMERO.server runtime, DB, script processor options, and managed-repository settings such as `CONFIG_omero_managed_dir` and `CONFIG_omero_fs_repo_path`.
-- `env/omeroweb_example.env` -> `env/omeroweb.env`: OMERO.web apps, UI links, Open With registrations, right-panel plugin entries, plugin settings, admin tool endpoints, the default login-logo setting (`CONFIG_omero_web_login__logo=/static/branding/logo.png`), and Gunicorn startup overrides such as `OMERO_WEB_WSGI_ARGS`. When a deployment-local `logo/logo.png` exists at build time, the `omeroweb` image build copies it into that static path, and OMERO.web startup re-synchronizes the mounted `var/static/` tree from the image so existing installations also receive updated branding and plugin static assets. `logo/logo.png` is a site-local asset and is intentionally gitignored.
+- `env/omeroweb_example.env` -> `env/omeroweb.env`: OMERO.web apps, UI links,
+  Open With registrations, right-panel plugin entries, plugin settings, admin
+  tool endpoints, the default login-logo setting
+  (`CONFIG_omero_web_login__logo=/static/branding/logo.png`), and Gunicorn
+  startup overrides such as `OMERO_WEB_WSGI_ARGS`. When a deployment-local
+  `logo/logo.png` exists at build time, the `omeroweb` image build copies it
+  into that static path, and OMERO.web startup re-synchronizes the mounted
+  `var/static/` tree from the image so existing installations also receive
+  updated branding and plugin static assets. `logo/logo.png` is a site-local
+  asset and is intentionally gitignored.
 - `env/omeroserver.env` is also loaded by `omeroweb` for shared server-derived settings (for example `CONFIG_omero_fs_repo_path` consumed by admin-tools quota compatibility checks).
 - `env/omero-celery_example.env` -> `env/omero-celery.env`: Celery and Imaris connector processing controls.
 - `env/grafana_example.env` -> `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
 - `env/omero_secrets_example.env` -> `env/omero_secrets.env`: credentials and secrets (deployment-local only; never commit runtime secrets). This now includes the local `supervisord` socket credentials used by the `omeroweb` container's `supervisorctl` interface.
 - `CONFIG_omero_pixeldata_threads` (in `env/omeroserver*.env`) sets OMERO's `omero.pixeldata.threads` property. The official OMERO docs list a default of `2`; this repository tracks `4` to increase concurrent pixel-pyramid work via the same env-driven server configuration path.
-- CrowdSec pre-installs the `cs-firewall-bouncer` binary plus both `nftables` and `iptables`/`ipset` backends at image build time (`docker/crowdsec.Dockerfile`). At container startup the entrypoint auto-detects the host's firewall backend: on Ubuntu 24.04+ and Debian 13+ (Trixie) — which use nftables natively — the bouncer starts in `mode: nftables`, creating its own nftables tables (`crowdsec` / `crowdsec6`) with INPUT-hook chains at priority -10 and supplementary FORWARD-hook chains for Docker bridge traffic protection. On older hosts with iptables-legacy the bouncer falls back to `mode: iptables` with `INPUT` and `DOCKER-USER` chains. Set `CROWDSEC_REQUIRE_BOUNCERS=true` to enforce fail-fast behavior when bouncers are mandatory. CrowdSec installs the `crowdsecurity/linux` and `crowdsecurity/sshd` collections plus `crowdsecurity/docker-logs` and `crowdsecurity/cri-logs` parsers for Docker log analysis. Log acquisition sources are defined in `monitoring/crowdsec/acquis.yaml`. CrowdSec UID/GID is auto-detected from the built image and used to chown `CROWDSEC_DB_PATH` and `CROWDSEC_CONFIG_PATH` during installation. The CrowdSec service healthcheck uses `GET http://localhost:8080/health` to avoid repeated authenticated watcher-login noise from `cscli lapi status` polling. Set `CROWDSEC_ENGINE_NAME` in `env/omero_secrets.env` to a fixed name (e.g. the hostname) if you want installation-time enrollment requests to use a predictable engine name. CrowdSec console enrollment is armed only by `installation/installation_script.sh`, and every install run with a real `CROWDSEC_ENROLL_KEY` removes the dedicated `.console-enrollment-install.done` marker before container startup so CrowdSec creates a fresh dashboard approval request for that installation. The marker is still used inside the container to suppress duplicate enroll attempts within the same install-armed startup, and it remains separate from `online_api_credentials.yaml` because CrowdSec writes Central API credentials there even before Console approval exists. Ordinary `docker compose up -d crowdsec`, `docker restart crowdsec`, and other regular lifecycle commands do not arm enrollment and therefore do not create fresh approval requests. During each install-armed CrowdSec start, OMERO prints a dedicated approval banner before container startup begins and schedules one non-blocking `docker restart crowdsec` about 10 minutes after CrowdSec first boots in that install run; that one-shot restart is not installed for normal compose lifecycle commands.
+- CrowdSec pre-installs the `cs-firewall-bouncer` binary plus both `nftables`
+  and `iptables`/`ipset` backends at image build time
+  (`docker/crowdsec.Dockerfile`). At container startup the entrypoint
+  auto-detects the host's firewall backend: on Ubuntu 24.04+ and Debian 13+
+  (Trixie), which use nftables natively, the bouncer starts in
+  `mode: nftables`, creating its own nftables tables (`crowdsec` / `crowdsec6`)
+  with INPUT-hook chains at priority -10 and supplementary FORWARD-hook chains
+  for Docker bridge traffic protection. On older hosts with iptables-legacy the
+  bouncer falls back to `mode: iptables` with `INPUT` and `DOCKER-USER`
+  chains. Set `CROWDSEC_REQUIRE_BOUNCERS=true` to enforce fail-fast behavior
+  when bouncers are mandatory. CrowdSec installs the `crowdsecurity/linux` and
+  `crowdsecurity/sshd` collections plus `crowdsecurity/docker-logs` and
+  `crowdsecurity/cri-logs` parsers for Docker log analysis. Log acquisition
+  sources are defined in `monitoring/crowdsec/acquis.yaml`. CrowdSec UID/GID is
+  auto-detected from the built image and used to chown `CROWDSEC_DB_PATH` and
+  `CROWDSEC_CONFIG_PATH` during installation. The CrowdSec service healthcheck
+  uses `GET http://localhost:8080/health` to avoid repeated authenticated
+  watcher-login noise from `cscli lapi status` polling. Set
+  `CROWDSEC_ENGINE_NAME` in `env/omero_secrets.env` to a fixed name (for
+  example the hostname) if you want installation-time enrollment requests to
+  use a predictable engine name. CrowdSec console enrollment is armed only by
+  `installation/installation_script.sh`, and every install run with a real
+  `CROWDSEC_ENROLL_KEY` removes the dedicated
+  `.console-enrollment-install.done` marker before container startup so
+  CrowdSec creates a fresh dashboard approval request for that installation.
+  The marker is still used inside the container to suppress duplicate enroll
+  attempts within the same install-armed startup, and it remains separate from
+  `online_api_credentials.yaml` because CrowdSec writes Central API credentials
+  there even before Console approval exists. Ordinary
+  `docker compose up -d crowdsec`, `docker restart crowdsec`, and other regular
+  lifecycle commands do not arm enrollment and therefore do not create fresh
+  approval requests. During each install-armed CrowdSec start, OMERO prints a
+  dedicated approval banner before container startup begins and schedules one
+  non-blocking `docker restart crowdsec` about 10 minutes after CrowdSec first
+  boots in that install run; that one-shot restart is not installed for normal
+  compose lifecycle commands.
 - LDAP bind and directory settings (`CONFIG_omero_ldap_urls`, `CONFIG_omero_ldap_username`, `CONFIG_omero_ldap_password`, and `CONFIG_omero_ldap_base`) must be set in `env/omero_secrets.env` when `CONFIG_omero_ldap_config=true`. `CONFIG_omero_ldap_user__filter` is optional and is applied only when declared.
-- `CONFIG_omero_ldap_new__user__group` (in `env/omeroserver.env`) should be set when LDAP is enabled to avoid fallback to OMERO's built-in `omero.ldap.new_user_group=default` behavior, which can auto-create/use a `default` OMERO group for LDAP-created users. Static non-default values (for example `users_ldap`) are validated at startup and bootstrapped automatically if missing. If unset/commented or explicitly set to `default`, bootstrap does not fail and explicit group creation is skipped. At startup, `startup/10-server-bootstrap.sh` also applies LDAP properties explicitly via `omero config set` and verifies persisted `omero.ldap.new_user_group` to avoid underscore-translation ambiguity in environment-driven config loading. Dynamic LDAP expressions beginning with `:` are passed through unchanged and are not auto-created because they resolve memberships at login time.
-- `OMERO_INSTALL_GROUP_LIST` (in `env/omeroserver.env`) controls installation-time OMERO group bootstrap as `group:permission` entries (comma-separated). Supported permissions: `private`, `read-only`, `read-annotate`, `read-write`. Empty values and comment-only values (for example `OMERO_INSTALL_GROUP_LIST=# disabled`) are treated as disabled bootstrap, so fresh installations can run with zero custom groups. The installation script creates each configured group only if it does not already exist. Bootstrap resolves a valid OMERO CLI path inside the running `omeroserver` container (`/opt/omero/server/venv*/bin/omero` preferred, with `/opt/omero/server/OMERO.server/bin/omero` fallback), then executes login and group-creation commands as user `omero-server` with explicit `HOME`/`TMPDIR`/`OMERO_TMPDIR`/`OMERO_TEMPDIR` to match the runtime temp-directory model and avoid root-owned temp artifacts. The same list is also the authoritative source for managed-repository shared-prefix normalization when `CONFIG_omero_fs_repo_path` contains `%group%`, so every non-default group prefix that should be normalized by startup must appear here (or come from the static LDAP new-user group setting).
+- `CONFIG_omero_ldap_new__user__group` (in `env/omeroserver.env`) should be
+  set when LDAP is enabled to avoid fallback to OMERO's built-in
+  `omero.ldap.new_user_group=default` behavior, which can auto-create/use a
+  `default` OMERO group for LDAP-created users. Static non-default values (for
+  example `users_ldap`) are validated at startup and bootstrapped
+  automatically if missing. If unset/commented or explicitly set to `default`,
+  bootstrap does not fail and explicit group creation is skipped. At startup,
+  `startup/10-server-bootstrap.sh` also applies LDAP properties explicitly via
+  `omero config set` and verifies persisted `omero.ldap.new_user_group` to
+  avoid underscore-translation ambiguity in environment-driven config loading.
+  Dynamic LDAP expressions beginning with `:` are passed through unchanged and
+  are not auto-created because they resolve memberships at login time.
+- `OMERO_INSTALL_GROUP_LIST` (in `env/omeroserver.env`) controls
+  installation-time OMERO group bootstrap as `group:permission` entries
+  (comma-separated). Supported permissions: `private`, `read-only`,
+  `read-annotate`, `read-write`. Empty values and comment-only values (for
+  example `OMERO_INSTALL_GROUP_LIST=# disabled`) are treated as disabled
+  bootstrap, so fresh installations can run with zero custom groups. The
+  installation script creates each configured group only if it does not already
+  exist. Bootstrap resolves a valid OMERO CLI path inside the running
+  `omeroserver` container (`/opt/omero/server/venv*/bin/omero` preferred, with
+  `/opt/omero/server/OMERO.server/bin/omero` fallback), then executes login
+  and group-creation commands as user `omero-server` with explicit
+  `HOME`/`TMPDIR`/`OMERO_TMPDIR`/`OMERO_TEMPDIR` to match the runtime
+  temp-directory model and avoid root-owned temp artifacts. The same list is
+  also the authoritative source for managed-repository shared-prefix
+  normalization when `CONFIG_omero_fs_repo_path` contains `%group%`, so every
+  non-default group prefix that should be normalized by startup must appear
+  here, or come from the static LDAP new-user group setting.
 - Runtime startup wrappers and healthchecks resolve the active OMERO virtualenv from `/opt/omero/server/venv*` at execution time, then fail fast with explicit errors when expected executables (`bin/omero`, `bin/activate`) are missing.
-- When `OMERO_JOB_SERVICE_JOIN_ALL_GROUPS=1` (in `env/omeroserver.env`) and both `OMERO_JOB_SERVICE_PASS` and `ROOTPASS` are set, the installation script automatically adds the job-service account (`OMERO_JOB_SERVICE_USERNAME`, default `job-service`) to every discovered OMERO group immediately after startup, including groups created later in the same installation flow. The job-service user is created if it does not already exist (default group: `user`). This ensures background plugin operations (uploads, Imaris exports) can access data in all groups from the moment installation completes. Exceptions: the `root`, `system`, and `user` groups are excluded. Group membership sync does not grant OMERO administrator privileges, and background workers must not reopen a browser user's live OMERO.web `session_key` as a fallback because closing that helper connection can destroy the login session. At runtime, `startup/10-server-bootstrap.sh` continues to synchronize the job-service account into any newly created groups on a configurable interval (`OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS`, default 3600 seconds). Runtime sync now targets configurable OMERO endpoint settings (`OMERO_JOB_SERVICE_HOST`, default `localhost`; `OMERO_JOB_SERVICE_PORT`, default `4064`) to match installation-time behavior in non-default deployments. The sync uses jitter (`OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS`, default 20) and exponential backoff to avoid thundering-herd effects and does not affect active user sessions. To reduce false startup errors during initial database/schema migrations, only the first sync attempt in the first cycle uses the long readiness window (`OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS`); retries in the same cycle and all later cycles use a short readiness probe window (`12 * OMERO_JOB_SERVICE_READINESS_POLL_SECONDS`) so the loop actually executes all configured retries (`OMERO_JOB_SERVICE_SYNC_MAX_RETRIES`, default 3). User creation also retries with `OMERO_JOB_SERVICE_USER_ENSURE_RETRIES`. All sync-loop variables (`OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS`, `OMERO_JOB_SERVICE_SYNC_MAX_RETRIES`, `OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS`) are defined in `env/omeroserver.env` and are the single source of truth. `startup/10-server-bootstrap.sh` validates the readiness and sync variables at startup and fails fast if any of them is missing, empty, non-numeric, or less than 1 (jitter allows zero).
-- `OMERO_BINARY_REPO_CLEANSE_ON_START=1` (in `env/omeroserver.env`) enables a background `omero admin cleanse` run on every `omeroserver` container start, including fresh installs, `docker start`, `docker restart`, and update-driven recreates. The startup hook waits for OMERO login readiness, runs against `OMERO_BINARY_REPO_CLEANSE_DATA_DIR` (default `/OMERO`), and applies a task-local `omero.keep_alive` setting from `OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS` (default `30`) through a temporary `ICE_CONFIG` file so long repository scans do not depend on a separate keepalive shell. `OMERO_BINARY_REPO_CLEANSE_STARTUP_WAIT_SECONDS` and `OMERO_BINARY_REPO_CLEANSE_READINESS_POLL_SECONDS` control the readiness window. The task is non-blocking for server startup and logs to `OMERO.server/var/log/binary-repository-cleanse.log`.
+- When `OMERO_JOB_SERVICE_JOIN_ALL_GROUPS=1` (in `env/omeroserver.env`) and
+  both `OMERO_JOB_SERVICE_PASS` and `ROOTPASS` are set, the installation script
+  automatically adds the job-service account
+  (`OMERO_JOB_SERVICE_USERNAME`, default `job-service`) to every discovered
+  OMERO group immediately after startup, including groups created later in the
+  same installation flow. The job-service user is created if it does not
+  already exist (default group: `user`). This ensures background plugin
+  operations (uploads, Imaris exports) can access data in all groups from the
+  moment installation completes. Exceptions: the `root`, `system`, and `user`
+  groups are excluded. Group membership sync does not grant OMERO
+  administrator privileges, and background workers must not reopen a browser
+  user's live OMERO.web `session_key` as a fallback because closing that helper
+  connection can destroy the login session. At runtime,
+  `startup/10-server-bootstrap.sh` continues to synchronize the job-service
+  account into any newly created groups on a configurable interval
+  (`OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS`, default 3600 seconds). Runtime
+  sync now targets configurable OMERO endpoint settings
+  (`OMERO_JOB_SERVICE_HOST`, default `localhost`; `OMERO_JOB_SERVICE_PORT`,
+  default `4064`) to match installation-time behavior in non-default
+  deployments. The sync uses jitter (`OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS`,
+  default 20) and exponential backoff to avoid thundering-herd effects and
+  does not affect active user sessions. To reduce false startup errors during
+  initial database/schema migrations, only the first sync attempt in the first
+  cycle uses the long readiness window
+  (`OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS`); retries in the same cycle and all
+  later cycles use a short readiness probe window
+  (`12 * OMERO_JOB_SERVICE_READINESS_POLL_SECONDS`) so the loop actually
+  executes all configured retries (`OMERO_JOB_SERVICE_SYNC_MAX_RETRIES`,
+  default 3). User creation also retries with
+  `OMERO_JOB_SERVICE_USER_ENSURE_RETRIES`. All sync-loop variables
+  (`OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS`,
+  `OMERO_JOB_SERVICE_SYNC_MAX_RETRIES`,
+  `OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS`) are defined in
+  `env/omeroserver.env` and are the single source of truth.
+  `startup/10-server-bootstrap.sh` validates the readiness and sync variables
+  at startup and fails fast if any of them is missing, empty, non-numeric, or
+  less than 1 (jitter allows zero).
+- `OMERO_BINARY_REPO_CLEANSE_ON_START=1` (in `env/omeroserver.env`) enables a
+  background `omero admin cleanse` run on every `omeroserver` container start,
+  including fresh installs, `docker start`, `docker restart`, and
+  update-driven recreates. The startup hook waits for OMERO login readiness,
+  runs against `OMERO_BINARY_REPO_CLEANSE_DATA_DIR` (default `/OMERO`), and
+  applies a task-local `omero.keep_alive` setting from
+  `OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS` (default `30`) through a
+  temporary `ICE_CONFIG` file so long repository scans do not depend on a
+  separate keepalive shell. `OMERO_BINARY_REPO_CLEANSE_STARTUP_WAIT_SECONDS`
+  and `OMERO_BINARY_REPO_CLEANSE_READINESS_POLL_SECONDS` control the readiness
+  window. The task is non-blocking for server startup and logs to
+  `OMERO.server/var/log/binary-repository-cleanse.log`.
 - `OMERO_REPOSITORY_LOCK_CLEANUP_ON_START=1` (in `env/omeroserver.env`) removes stale repository lock files from `${OMERO_DIR}/.omero/repository/*/.lock` on every `omeroserver` container start before `omero admin start --foreground` runs. Disable it only if you intentionally share the same OMERO repository with another independently running server process.
-- `OMERO_RENDERING_CACHE_CLEANUP_ON_START=0` (in `env/omeroserver.env`) purges pyramid files, Bio-Formats memo cache, and thumbnail cache on container start. All regenerate automatically on first user access. No original data is deleted. Safe only when `OMERO_ZARR_PIXEL_BUFFER_ENABLED=false` (the default), because the standard `PixelsService` handles pyramid regeneration. Reset to `0` after one successful cleanup cycle.
+- `OMERO_RENDERING_CACHE_CLEANUP_ON_START=0` (in `env/omeroserver.env`)
+  purges pyramid files, Bio-Formats memo cache, and thumbnail cache on
+  container start. All regenerate automatically on first user access. No
+  original data is deleted. Safe only when
+  `OMERO_ZARR_PIXEL_BUFFER_ENABLED=false` (the default), because the standard
+  `PixelsService` handles pyramid regeneration. Reset to `0` after one
+  successful cleanup cycle.
 - `OMERO_ZARR_PIXEL_BUFFER_ENABLED=false` (in `env/omeroserver.env`) controls whether the `omero-zarr-pixel-buffer` server-side plugin is active. When `false`, the plugin JAR is moved out of the classpath so the standard OMERO `PixelsService` handles all pixel buffer requests (including automatic pyramid regeneration). Must be `true` when alternative zarr import or rendering mechanisms are in use.
 
 ## Required Hardening Before Deployment
@@ -100,7 +231,14 @@ ${OMERO_CLI_USER}/
 
 All plugin paths are controlled exclusively by `OMERO_TMP_PATH`. There are no per-plugin env var overrides.
 
-`OMERO_TMP_PATH` is also used by `startup/10-server-bootstrap.sh` for OMERO CLI bootstrap operations, but the bootstrap script uses a dedicated server-only subpath `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` as `TMPDIR` to avoid collisions with plugin folders and permission churn on the shared root. During installation, `installation/installation_script.sh` pre-creates this namespace and sets ownership to the OMERO.server runtime UID/GID with `0700` permissions while preserving root traversal (`x`) so OMERO.web-owned temp roots remain accessible for server namespace creation.
+`OMERO_TMP_PATH` is also used by `startup/10-server-bootstrap.sh` for OMERO CLI
+bootstrap operations, but the bootstrap script uses a dedicated server-only
+subpath `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` as `TMPDIR` to avoid
+collisions with plugin folders and permission churn on the shared root. During
+installation, `installation/installation_script.sh` pre-creates this namespace
+and sets ownership to the OMERO.server runtime UID/GID with `0700` permissions
+while preserving root traversal (`x`) so OMERO.web-owned temp roots remain
+accessible for server namespace creation.
 
 The bootstrap script also derives the OMERO internal lock-file temp path from the OMERO.server installation root (`$(dirname "${SERVER_HOME}")/omero/tmp`) and attempts to prepare it for OMERO lock-file compatibility. If this legacy path cannot be created or is not writable, bootstrap logs a warning and continues using the dedicated `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` namespace as `TMPDIR`.
 

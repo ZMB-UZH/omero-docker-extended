@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -39,57 +41,29 @@ jobs:
       - name: Run all test suites with coverage
         id: tests
         run: |
-          set +e
           EXIT_FINAL=0
 
-          echo "::group::tests/"
-          COVERAGE_FILE=.coverage.root \
-            python3 -m coverage run --rcfile=.coveragerc \
-            -m pytest tests/ -v -p no:cacheprovider -W error
-          [ $? -ne 0 ] && EXIT_FINAL=1
-          echo "::endgroup::"
+          run_suite() {
+            local coverage_file="$1"
+            local suite_label="$2"
+            local suite_path="$3"
 
-          echo "::group::omero_plugin_common/tests/"
-          COVERAGE_FILE=.coverage.common \
-            python3 -m coverage run --rcfile=.coveragerc \
-            -m pytest omero_plugin_common/tests/ -v -p no:cacheprovider -W error
-          [ $? -ne 0 ] && EXIT_FINAL=1
-          echo "::endgroup::"
+            echo "::group::${suite_label}"
+            if ! COVERAGE_FILE="${coverage_file}" \
+              python3 -m coverage run --rcfile=.coveragerc \
+              -m pytest "${suite_path}" -v -p no:cacheprovider -W error; then
+              EXIT_FINAL=1
+            fi
+            echo "::endgroup::"
+          }
 
-          echo "::group::omeroweb_imaris_connector/tests/"
-          COVERAGE_FILE=.coverage.imaris \
-            python3 -m coverage run --rcfile=.coveragerc \
-            -m pytest omeroweb_imaris_connector/tests/ -v -p no:cacheprovider -W error
-          [ $? -ne 0 ] && EXIT_FINAL=1
-          echo "::endgroup::"
-
-          echo "::group::omeroweb_admin_tools/tests/"
-          COVERAGE_FILE=.coverage.admin \
-            python3 -m coverage run --rcfile=.coveragerc \
-            -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
-          [ $? -ne 0 ] && EXIT_FINAL=1
-          echo "::endgroup::"
-
-          echo "::group::omeroweb_omp_plugin/tests/"
-          COVERAGE_FILE=.coverage.omp \
-            python3 -m coverage run --rcfile=.coveragerc \
-            -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
-          [ $? -ne 0 ] && EXIT_FINAL=1
-          echo "::endgroup::"
-
-          echo "::group::omeroweb_import/tests/"
-          COVERAGE_FILE=.coverage.import \
-            python3 -m coverage run --rcfile=.coveragerc \
-            -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
-          [ $? -ne 0 ] && EXIT_FINAL=1
-          echo "::endgroup::"
-
-          echo "::group::omero_web_zarr/tests/"
-          COVERAGE_FILE=.coverage.zarr \
-            python3 -m coverage run --rcfile=.coveragerc \
-            -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
-          [ $? -ne 0 ] && EXIT_FINAL=1
-          echo "::endgroup::"
+          run_suite .coverage.root tests/ tests/
+          run_suite .coverage.common omero_plugin_common/tests/ omero_plugin_common/tests/
+          run_suite .coverage.imaris omeroweb_imaris_connector/tests/ omeroweb_imaris_connector/tests/
+          run_suite .coverage.admin omeroweb_admin_tools/tests/ omeroweb_admin_tools/tests/
+          run_suite .coverage.omp omeroweb_omp_plugin/tests/ omeroweb_omp_plugin/tests/
+          run_suite .coverage.import omeroweb_import/tests/ omeroweb_import/tests/
+          run_suite .coverage.zarr omero_web_zarr/tests/ omero_web_zarr/tests/
 
           exit $EXIT_FINAL
 
