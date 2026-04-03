@@ -421,6 +421,6 @@ See [LICENSE](LICENSE) for details.
 
 If this project helps your work, you can show your support here:
 
-[☕ Buy me a coffee](https://buymeacoffee.com/strmt7)
+☕ [Buy me a coffee](https://buymeacoffee.com/strmt7)
 
 </details>
