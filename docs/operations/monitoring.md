@@ -2,20 +2,20 @@
 
 ## Stack components
 
-| Service | Version | Purpose | Internal endpoint |
-|---|---|---|---|
-| Prometheus | v3.10.0 | Metrics scraping and storage | `http://prometheus:9090` |
-| Grafana | 12.4.1 | Dashboards and visualization | `http://grafana:3000` |
-| Loki | 3.6.7 | Log aggregation backend | `http://loki:3100` |
-| Alloy | v1.13.2 | Log collection pipeline (Docker + files) | `http://alloy:12345` |
-| Blackbox exporter | v0.28.0 | HTTP/TCP endpoint probing | `http://blackbox-exporter:9115` |
-| Node exporter | v1.10.2 | Host-level metrics | `http://node-exporter:9100` |
-| cAdvisor | v0.55.1 | Container resource metrics | `http://cadvisor:8080` |
-| Postgres exporter | v0.19.1 | OMERO database metrics | `http://postgres-exporter:9187` |
-| Postgres exporter (plugin) | v0.19.1 | Plugin database metrics | `http://postgres-exporter-plugin:9187` |
-| Redis exporter | v1.81.0 | Redis metrics | `http://redis-exporter:9121` |
-| Path usage exporter | custom (Python 3.12) | OMERO volume disk usage via textfile collector | writes to node-exporter textfile directory |
-| CrowdSec | v1.7.6 | Host-wide cybersecurity engine (host syslog/auth + Docker log analysis) | `http://crowdsec:8080` |
+| Service                    | Version              | Purpose                                                                 | Internal endpoint                          |
+| -------------------------- | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------ |
+| Prometheus                 | v3.10.0              | Metrics scraping and storage                                            | `http://prometheus:9090`                   |
+| Grafana                    | 12.4.1               | Dashboards and visualization                                            | `http://grafana:3000`                      |
+| Loki                       | 3.6.7                | Log aggregation backend                                                 | `http://loki:3100`                         |
+| Alloy                      | v1.13.2              | Log collection pipeline (Docker + files)                                | `http://alloy:12345`                       |
+| Blackbox exporter          | v0.28.0              | HTTP/TCP endpoint probing                                               | `http://blackbox-exporter:9115`            |
+| Node exporter              | v1.10.2              | Host-level metrics                                                      | `http://node-exporter:9100`                |
+| cAdvisor                   | v0.55.1              | Container resource metrics                                              | `http://cadvisor:8080`                     |
+| Postgres exporter          | v0.19.1              | OMERO database metrics                                                  | `http://postgres-exporter:9187`            |
+| Postgres exporter (plugin) | v0.19.1              | Plugin database metrics                                                 | `http://postgres-exporter-plugin:9187`     |
+| Redis exporter             | v1.81.0              | Redis metrics                                                           | `http://redis-exporter:9121`               |
+| Path usage exporter        | custom (Python 3.12) | OMERO volume disk usage via textfile collector                          | writes to node-exporter textfile directory |
+| CrowdSec                   | v1.7.6               | Host-wide cybersecurity engine (host syslog/auth + Docker log analysis) | `http://crowdsec:8080`                     |
 
 Monitoring data-directory ownership is auto-detected by
 `installation/installation_script.sh` before each install/update. For images
@@ -32,18 +32,18 @@ overrides when required by host policy.
 
 ## Configuration sources
 
-| File | Content |
-|---|---|
-| `monitoring/prometheus/prometheus.yml` | Scrape targets, blackbox probe definitions |
-| `monitoring/loki/loki-config.yml` | TSDB storage, ingestion rates, retention, single-node burst tuning |
-| `monitoring/alloy/alloy-config.alloy` | Docker log discovery, file log discovery, Loki push |
-| `monitoring/grafana/provisioning/datasources/prometheus.yml` | Prometheus data source |
-| `monitoring/grafana/provisioning/dashboards/dashboard-provider.yml` | Dashboard auto-provisioning |
-| `monitoring/grafana/dashboards/*.json` | Dashboard definitions |
-| `monitoring/blackbox/config.yml` | HTTP and TCP probe modules |
-| `monitoring/postgres-exporter/postgres_exporter.yml` | Explicit Postgres exporter config file (keeps startup deterministic, no implicit defaults) |
-| `monitoring/crowdsec/acquis.yaml` | CrowdSec log acquisition sources (host syslog, Docker containers) |
-| `monitoring/path-usage-exporter/path_usage_exporter.py` | Path usage exporter script for OMERO volume metrics |
+| File                                                                | Content                                                                                    |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `monitoring/prometheus/prometheus.yml`                              | Scrape targets, blackbox probe definitions                                                 |
+| `monitoring/loki/loki-config.yml`                                   | TSDB storage, ingestion rates, retention, single-node burst tuning                         |
+| `monitoring/alloy/alloy-config.alloy`                               | Docker log discovery, file log discovery, Loki push                                        |
+| `monitoring/grafana/provisioning/datasources/prometheus.yml`        | Prometheus data source                                                                     |
+| `monitoring/grafana/provisioning/dashboards/dashboard-provider.yml` | Dashboard auto-provisioning                                                                |
+| `monitoring/grafana/dashboards/*.json`                              | Dashboard definitions                                                                      |
+| `monitoring/blackbox/config.yml`                                    | HTTP and TCP probe modules                                                                 |
+| `monitoring/postgres-exporter/postgres_exporter.yml`                | Explicit Postgres exporter config file (keeps startup deterministic, no implicit defaults) |
+| `monitoring/crowdsec/acquis.yaml`                                   | CrowdSec log acquisition sources (host syslog, Docker containers)                          |
+| `monitoring/path-usage-exporter/path_usage_exporter.py`             | Path usage exporter script for OMERO volume metrics                                        |
 
 ## Prometheus scrape targets
 
@@ -72,14 +72,14 @@ What this means operationally:
 
 ### Do you need to change Prometheus after a deployment change?
 
-| Change type | Update `monitoring/prometheus/prometheus.yml`? | Why |
-|---|---|---|
-| Restarting containers, host reboot, normal redeploy with same service names/ports | No | Targets remain the same (`service:port`), so existing scrape config still matches. |
-| Updating image tags/versions only | No (usually) | Scrape discovery is name/port/path based, not image-tag based. |
-| Adding a new exporter/service that should be monitored | Yes | Prometheus only scrapes configured jobs/targets in this stack. |
-| Renaming a Docker Compose service | Yes | Target hostname changes (for example `redis-exporter` -> new service name). |
-| Changing metrics port or metrics path | Yes | Scrape endpoint changed; Prometheus must point to the new address/path. |
-| Adding/removing blackbox probe endpoints | Yes | Probe target lists are explicitly declared under blackbox jobs. |
+| Change type                                                                       | Update `monitoring/prometheus/prometheus.yml`? | Why                                                                                |
+| --------------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Restarting containers, host reboot, normal redeploy with same service names/ports | No                                             | Targets remain the same (`service:port`), so existing scrape config still matches. |
+| Updating image tags/versions only                                                 | No (usually)                                   | Scrape discovery is name/port/path based, not image-tag based.                     |
+| Adding a new exporter/service that should be monitored                            | Yes                                            | Prometheus only scrapes configured jobs/targets in this stack.                     |
+| Renaming a Docker Compose service                                                 | Yes                                            | Target hostname changes (for example `redis-exporter` -> new service name).        |
+| Changing metrics port or metrics path                                             | Yes                                            | Scrape endpoint changed; Prometheus must point to the new address/path.            |
+| Adding/removing blackbox probe endpoints                                          | Yes                                            | Probe target lists are explicitly declared under blackbox jobs.                    |
 
 Quick operator check after any change:
 
@@ -153,10 +153,10 @@ The firewall bouncer runs inside the CrowdSec container (not as a separate host 
 
 At startup the entrypoint auto-detects the host firewall backend:
 
-| Host OS | Backend detected | Bouncer mode | Protection scope |
-|---|---|---|---|
-| Ubuntu 24.04+, Debian 13+ (Trixie) | nftables | `mode: nftables` | INPUT-hook (host) + FORWARD-hook (Docker bridge) via dedicated `crowdsec`/`crowdsec6` tables at priority -10 |
-| Older distributions with iptables-legacy | iptables | `mode: iptables` | `INPUT` + `DOCKER-USER` chains |
+| Host OS                                  | Backend detected | Bouncer mode     | Protection scope                                                                                             |
+| ---------------------------------------- | ---------------- | ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Ubuntu 24.04+, Debian 13+ (Trixie)       | nftables         | `mode: nftables` | INPUT-hook (host) + FORWARD-hook (Docker bridge) via dedicated `crowdsec`/`crowdsec6` tables at priority -10 |
+| Older distributions with iptables-legacy | iptables         | `mode: iptables` | `INPUT` + `DOCKER-USER` chains                                                                               |
 
 For nftables mode the entrypoint adds supplementary FORWARD-hook chains referencing the bouncer's banned-IP sets so that Docker-bridged containers are also protected — the bouncer's built-in nftables mode only creates INPUT-hook chains.
 

@@ -202,21 +202,26 @@ jobs:
 
       - name: Audit — list files in scan scope
         if: steps.discover.outputs.scan_dirs != ''
+        env:
+          SCAN_DIRS: ${{ steps.discover.outputs.scan_dirs }}
+          TEST_DIRS: ${{ steps.discover.outputs.test_dirs }}
         run: |
+          IFS=' ' read -r -a scan_dirs <<< "${SCAN_DIRS}"
+
           echo "::group::Bandit scan scope"
           echo "Scanning Python source files for security issues."
-          echo "Discovered scan directories: ${{ steps.discover.outputs.scan_dirs }}"
-          echo "Discovered test directories: ${{ steps.discover.outputs.test_dirs }}"
+          echo "Discovered scan directories: ${SCAN_DIRS}"
+          echo "Discovered test directories: ${TEST_DIRS}"
           echo "--- Production Python files ---"
-          find ${{ steps.discover.outputs.scan_dirs }} \
+          find "${scan_dirs[@]}" \
             -name '*.py' -not -path '*/tests/*' -not -path '*/test/*' | sort
           echo "--- Test Python files ---"
-          find ${{ steps.discover.outputs.scan_dirs }} \
+          find "${scan_dirs[@]}" \
             -name '*.py' \( -path '*/tests/*' -o -path '*/test/*' \) | sort
           echo "--- File counts ---"
-          echo "Production: $(find ${{ steps.discover.outputs.scan_dirs }} \
+          echo "Production: $(find "${scan_dirs[@]}" \
             -name '*.py' -not -path '*/tests/*' -not -path '*/test/*' | wc -l)"
-          echo "Test: $(find ${{ steps.discover.outputs.scan_dirs }} \
+          echo "Test: $(find "${scan_dirs[@]}" \
             -name '*.py' \( -path '*/tests/*' -o -path '*/test/*' \) | wc -l)"
           if [ -d tests ]; then
             echo "Top-level test: $(find tests -name '*.py' | wc -l)"
@@ -225,29 +230,30 @@ jobs:
 
       - name: Run Bandit scan (production code — excludes test directories)
         if: steps.discover.outputs.scan_dirs != ''
+        env:
+          SCAN_DIRS: ${{ steps.discover.outputs.scan_dirs }}
+          EXCLUDE_CSV: ${{ steps.discover.outputs.exclude_csv }}
         run: |
-          EXCLUDE_ARG=""
-          if [ -n "${{ steps.discover.outputs.exclude_csv }}" ]; then
-            EXCLUDE_ARG="--exclude ${{ steps.discover.outputs.exclude_csv }}"
+          IFS=' ' read -r -a scan_dirs <<< "${SCAN_DIRS}"
+          bandit_cmd=(bandit -r "${scan_dirs[@]}")
+          if [ -n "${EXCLUDE_CSV}" ]; then
+            bandit_cmd+=(--exclude "${EXCLUDE_CSV}")
           fi
-          # shellcheck disable=SC2086
-          bandit -r \
-            ${{ steps.discover.outputs.scan_dirs }} \
-            $EXCLUDE_ARG \
-            --skip B603,B404 \
-            -f sarif \
-            -o bandit-prod.sarif \
-            --exit-zero
+          bandit_cmd+=(--skip B603,B404 -f sarif -o bandit-prod.sarif --exit-zero)
+          "${bandit_cmd[@]}"
 
       - name: Run Bandit scan (test code — skips assert and test-credential rules)
         if: steps.discover.outputs.test_dirs != ''
-        run: >-
-          bandit -r
-          ${{ steps.discover.outputs.test_dirs }}
-          --skip B101,B106,B603,B404
-          -f sarif
-          -o bandit-test.sarif
-          --exit-zero
+        env:
+          TEST_DIRS: ${{ steps.discover.outputs.test_dirs }}
+        run: |
+          IFS=' ' read -r -a test_dirs <<< "${TEST_DIRS}"
+          bandit -r \
+            "${test_dirs[@]}" \
+            --skip B101,B106,B603,B404 \
+            -f sarif \
+            -o bandit-test.sarif \
+            --exit-zero
 
       - name: Build legacy Bandit cleanup SARIF
         if: always() && (steps.discover.outputs.scan_dirs != '' || steps.discover.outputs.test_dirs != '')
