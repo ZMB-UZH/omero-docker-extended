@@ -371,6 +371,11 @@ class AgentSkillCatalogTests(unittest.TestCase):
     def normalize_text(self, value: str) -> str:
         return re.sub(r"\s+", " ", value.lower().replace("`", "")).strip()
 
+    def assertNonEmptyString(self, value: object, msg: str) -> str:
+        self.assertIsInstance(value, str, msg)
+        self.assertNotEqual("", value.strip(), msg)
+        return value
+
     def assertContainsAll(
         self, haystack: str, phrases: tuple[Concept, ...], msg: str
     ) -> None:
@@ -414,29 +419,57 @@ class AgentSkillCatalogTests(unittest.TestCase):
                 )
 
                 frontmatter, skill_text, adapter = self.load_skill(skill_name)
-                self.assertEqual(skill_name, frontmatter.get("name"))
-                self.assertTrue(frontmatter.get("description"))
-                self.assertTrue(frontmatter.get("origin"))
-                self.assertTrue(skill_text.count("\n# ") >= 1)
+                name = self.assertNonEmptyString(
+                    frontmatter.get("name"),
+                    f"Skill frontmatter name must be a non-empty string: {skill_name}",
+                )
+                self.assertEqual(skill_name, name)
+                self.assertNonEmptyString(
+                    frontmatter.get("description"),
+                    f"Skill description must be a non-empty string: {skill_name}",
+                )
+                self.assertNonEmptyString(
+                    frontmatter.get("origin"),
+                    f"Skill origin must be a non-empty string: {skill_name}",
+                )
+                self.assertGreaterEqual(skill_text.count("\n# "), 1)
 
                 if skill_name in REPO_NATIVE_SKILLS:
                     self.assertNotIn("upstream", frontmatter)
                 else:
-                    upstream = frontmatter.get("upstream")
-                    self.assertIsInstance(upstream, str)
-                    self.assertTrue(upstream)
-                    self.assertTrue((self.repo_root / upstream).is_file())
+                    upstream = self.assertNonEmptyString(
+                        frontmatter.get("upstream"),
+                        f"Adapted skill must declare a non-empty upstream path: {skill_name}",
+                    )
+                    self.assertTrue(
+                        (self.repo_root / upstream).is_file(),
+                        f"Missing upstream skill file for {skill_name}: {upstream}",
+                    )
                     self.assertIn("## Upstream baseline", skill_text)
 
+                self.assertIsInstance(adapter, dict)
                 self.assertEqual(
                     True,
                     adapter.get("policy", {}).get("allow_implicit_invocation"),
                 )
                 interface = adapter.get("interface", {})
-                self.assertTrue(interface.get("display_name"))
-                self.assertTrue(interface.get("short_description"))
-                self.assertTrue(interface.get("default_prompt"))
-                self.assertTrue(interface.get("brand_color"))
+                self.assertIsInstance(interface, dict)
+                self.assertNonEmptyString(
+                    interface.get("display_name"),
+                    f"Adapter display_name must be set: {skill_name}",
+                )
+                self.assertNonEmptyString(
+                    interface.get("short_description"),
+                    f"Adapter short_description must be set: {skill_name}",
+                )
+                self.assertNonEmptyString(
+                    interface.get("default_prompt"),
+                    f"Adapter default_prompt must be set: {skill_name}",
+                )
+                self.assertNonEmptyString(
+                    interface.get("brand_color"),
+                    f"Adapter brand_color must be set: {skill_name}",
+                )
 
                 self.assertIn(f"`{skill_name}`", self.catalog_text)
                 self.assertIn(
