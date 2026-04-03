@@ -765,6 +765,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual(
             "${{ secrets.GITHUB_TOKEN }}", lint_step["env"]["GITHUB_TOKEN"]
         )
+        self.assertEqual(
+            "(^|/)third_party/ecc-v1\\.9\\.0/",
+            lint_step["env"]["FILTER_REGEX_EXCLUDE"],
+        )
         self.assertEqual(".", lint_step["env"]["LINTER_RULES_PATH"])
         self.assertEqual(".markdownlint.yaml", lint_step["env"]["MARKDOWN_CONFIG_FILE"])
         self.assertEqual(".yamllint", lint_step["env"]["YAML_CONFIG_FILE"])
@@ -787,6 +791,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             markdown_config["MD024"],
         )
         self.assertFalse(markdown_config["MD033"])
+        self.assertEqual(
+            "third_party/ecc-v1.9.0/**\n",
+            (self.repo_root / ".markdownlintignore").read_text(encoding="utf-8"),
+        )
 
         yamllint_config = yaml.safe_load(
             (self.repo_root / ".yamllint").read_text(encoding="utf-8")
@@ -799,14 +807,14 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual("disable", yamllint_config["rules"]["line-length"])
         self.assertEqual("disable", yamllint_config["rules"]["truthy"])
 
-    def test_tests_workflow_uses_dedicated_environment_for_codecov(self) -> None:
+    def test_tests_workflow_uploads_codecov_without_github_environment(self) -> None:
         import yaml  # noqa: F811  — available in CI
 
         workflow_path = self.repo_root / ".github" / "workflows" / "tests.yml"
         workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
         job = workflow["jobs"]["test-with-coverage"]
 
-        self.assertEqual("ci-coverage", job["environment"])
+        self.assertNotIn("environment", job)
 
         validate_step = next(
             step

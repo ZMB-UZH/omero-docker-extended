@@ -4,7 +4,9 @@ globs:
   - ".github/workflows/*.yml"
 ---
 
+# Workflow and Security Rules
+
 - Do not modify workflows unless the task explicitly requires it.
 - Refresh action versions from official GitHub releases or tags before changing pins, and pin by full commit SHA.
 - Use the security docs and code-scanning runbooks before changing scanner or workflow logic.
-- `tests.yml` uses the GitHub Actions environment `ci-coverage`, so pushes to `main` create GitHub deployment records for that CI environment.
+- Do not bind pure CI jobs to GitHub Actions environments unless you intentionally want deployment records for that workflow.
