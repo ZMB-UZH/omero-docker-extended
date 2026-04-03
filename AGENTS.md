@@ -242,7 +242,7 @@ omeroweb_<name>/
 - The repository now enforces a `security-delta` job inside `security-code-scanning`. Do not weaken or bypass it. New pull-request alerts and newly created default-branch alerts are treated as regressions.
 - Do not modify security scan workflow files unless explicitly instructed to do so.
 - When you do modify any GitHub Actions workflow, refresh every touched action or reusable-workflow pin from the official GitHub Releases/Tags page first. Use the latest published version available at that time, pin it by full commit SHA, and update the inline version comment in the workflow. Do not trust stale in-repo comments or memory for action versions.
-- This repository's `tests.yml` uses the GitHub Actions environment `ci-coverage`, so pushes to `main` create GitHub deployment records for that CI environment even when no runtime deployment has taken place.
+- Do not bind pure CI jobs to GitHub Actions environments unless you intentionally want deployment records. This repository's `tests.yml` deliberately avoids GitHub environments so pushes to `main` do not create deployment records.
 - For the canonical coding patterns that prevent new findings, see `docs/reference/ai-agent-security-prevention-playbook.md`. For live counts, SLAs, and remediation workflow, see `docs/operations/code-scanning.md`.
 
 ### Testing

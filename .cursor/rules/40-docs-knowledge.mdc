@@ -4,6 +4,8 @@ globs:
   - "**/*.md"
 ---
 
+# Documentation and Knowledge Rules
+
 - Keep `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, `CLAUDE.md`, and `GEMINI.md` at repository root.
 - Keep all other docs under `docs/`.
 - Update `docs/index.md` for new docs and keep the AI adapter files aligned with `docs/reference/ai-agent-integrations.md`.
