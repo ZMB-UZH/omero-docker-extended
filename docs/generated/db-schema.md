@@ -9,11 +9,13 @@ The OMERO plugin database (`omero-plugin` on port 5433) stores per-user data for
 ### Known table patterns
 
 **OMP Plugin (`omeroweb_omp_plugin/services/data_store.py`):**
+
 - Variable sets: per-user named sets of variable configurations (name, regex, separator, variable names).
 - AI credentials: per-user, per-provider API key storage.
 - User settings: per-user plugin preferences.
 
 **Import Plugin (`omeroweb_import/services/data_store.py`):**
+
 - User settings: per-user upload preferences.
 - Special method settings: per-user SEM-EDX method configurations.
 

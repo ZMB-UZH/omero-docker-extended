@@ -56,7 +56,7 @@ The OMP plugin provides a workflow for parsing scientific image filenames into s
 
 ## Code structure
 
-```
+```text
 omeroweb_omp_plugin/
 ├── views/
 │   ├── index_view.py          # Main page, project listing, root status

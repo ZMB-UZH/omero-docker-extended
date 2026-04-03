@@ -37,6 +37,10 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![Codecov]("),
+            badge_block.index("[![super-linter]("),
+        )
+        self.assertLess(
+            badge_block.index("[![super-linter]("),
             badge_block.index("[![Ruff]("),
         )
         self.assertLess(
@@ -77,6 +81,14 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertIn(
             "https://img.shields.io/codecov/c/github/example-owner/example-repo?label=Codecov&logo=codecov",
+            badge_block,
+        )
+        self.assertIn(
+            "https://github.com/example-owner/example-repo/actions/workflows/super-linter.yml",
+            badge_block,
+        )
+        self.assertIn(
+            "https://img.shields.io/github/actions/workflow/status/example-owner/example-repo/super-linter.yml?branch=main&label=super-linter",
             badge_block,
         )
         self.assertNotIn(
