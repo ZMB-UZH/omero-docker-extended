@@ -41,7 +41,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - For OMERO configuration property names, defaults, and semantics, use the official OMERO config glossary as the single source of truth: `https://omero.readthedocs.io/en/stable/sysadmins/config.html`.
 - When expressing OMERO properties in tracked env files, follow the existing repository naming pattern already used in `env/omeroserver*.env` and `env/omeroweb*.env` (for example `omero.pixeldata.threads` -> `CONFIG_omero_pixeldata_threads`).
 - For log triage, use the Admin Tools logging path first: prefer the
-  Loki-backed backend used by `omeroweb_admin_tools/logs/` (for example
+  Loki-backed backend behind the Admin Tools Logs surface (implemented in
   `omeroweb_admin_tools/services/log_query.py`) over ad-hoc `docker logs`
   sweeps. Fall back to direct container logs, internal log files, or Docker
   inspection only when the Admin Tools/Loki mechanism returns no data, appears
@@ -71,8 +71,8 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Image builds: `docker/omero-server.Dockerfile`, `docker/omero-web.Dockerfile`, `docker/omero-celery-worker.Dockerfile`, `docker/pg-maintenance.Dockerfile`, `docker/redis-sysctl-init.Dockerfile`
 - Bootstrap scripts: `startup/10-server-bootstrap.sh`, `startup/10-web-bootstrap.sh`, `startup/40-start-imaris-celery-worker.sh`, `startup/50-install-omero-downloader.sh`, `startup/51-install-imarisconvert.sh`
 - Process manager: `supervisord.conf` (OMERO.web + Celery worker in omeroweb container)
-- Environment config: `env/omeroserver.env`, `env/omeroweb.env`, `env/omero-celery.env`, `env/grafana.env`
-- Path definitions: `installation_paths.env` (15 host filesystem paths)
+- Environment config contracts: `env/omeroserver_example.env`, `env/omeroweb_example.env`, `env/omero-celery_example.env`, `env/grafana_example.env`
+- Path definition contract: `installation_paths_example.env` (15 host filesystem paths)
 
 ### Web plugins (Django apps in omeroweb container)
 
@@ -356,7 +356,8 @@ omeroweb_<name>/
   web-plugin metadata failure. In this deployment the `ZarrReader` class is
   supplied by `/opt/omero/server/OMERO.server/lib/{server,client}/OMEZarrReader.jar`
   (currently `Implementation-Version: 0.6.0`), while `BIOFORMATS_VERSION` in
-  `env/omeroserver.env` only controls the separate `bioformats_package.jar`
+  `BIOFORMATS_VERSION` contract documented in `env/omeroserver_example.env`
+  only controls the separate `bioformats_package.jar`
   installed by `startup/51-install-imarisconvert.sh` for ImarisConvert/IMS
   export. Do not assume changing `BIOFORMATS_VERSION` will change OMERO.server
   raw Zarr pixel reads.

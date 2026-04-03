@@ -7,6 +7,7 @@
 [![Codecov](https://img.shields.io/codecov/c/github/ZMB-UZH/omero-docker-extended?label=Codecov&logo=codecov)](https://codecov.io/gh/ZMB-UZH/omero-docker-extended)
 [![super-linter](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/super-linter.yml?branch=main&label=super-linter)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/super-linter.yml)
 [![Ruff](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/ruff.yml?branch=main&logo=ruff&label=Ruff)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/ruff.yml)
+[![ECC v1.9.0 skills](https://img.shields.io/badge/ECC%20v1.9.0%20skills-affaan-m%2Feverything-claude-code-0F766E?logo=github)](https://github.com/affaan-m/everything-claude-code/tree/v1.9.0/skills)
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ZMB-UZH/omero-docker-extended)](https://github.com/ZMB-UZH/omero-docker-extended/commits/main)
 <!-- END GENERATED BADGES -->
 
