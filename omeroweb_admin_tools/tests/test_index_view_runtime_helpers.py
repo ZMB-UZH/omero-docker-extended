@@ -432,8 +432,10 @@ def test_docker_diagnostics_and_compose_health_helpers_cover_inspection_paths(
 
 def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges(
     monkeypatch,
+    tmp_path,
 ) -> None:
     events = {}
+    socket_path = tmp_path / "docker.sock"
 
     class _SocketStub:
         def __init__(self, family, sock_type):
@@ -446,12 +448,12 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
             events["path"] = path
 
     monkeypatch.setattr(index_view.socket, "socket", _SocketStub)
-    connection = index_view._UnixSocketHTTPConnection("/tmp/docker.sock", timeout=4.5)
+    connection = index_view._UnixSocketHTTPConnection(str(socket_path), timeout=4.5)
     connection.connect()
     assert events == {
         "created": (socket.AF_UNIX, socket.SOCK_STREAM),
         "timeout": 4.5,
-        "path": "/tmp/docker.sock",
+        "path": str(socket_path),
     }
 
     monkeypatch.setenv("ADMIN_TOOLS_DOCKER_SOCKET", "/var/run/docker.sock")
@@ -467,7 +469,9 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
         "stat",
         lambda path: (_ for _ in ()).throw(OSError("stat failed")),
     )
-    monkeypatch.setattr(index_view, "_docker_api_json", lambda *args, **kwargs: {"ok": True})
+    monkeypatch.setattr(
+        index_view, "_docker_api_json", lambda *args, **kwargs: {"ok": True}
+    )
     diagnostics = index_view._diagnose_docker_health()
     assert diagnostics["current_user"] == "error"
     assert diagnostics["socket_stat"] == "stat unavailable"
@@ -547,7 +551,9 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
     monkeypatch.setattr(
         index_view,
         "render",
-        lambda request, template, context: HttpResponse(template),
+        lambda request, template, context: SimpleNamespace(
+            content=template.encode("utf-8")
+        ),
     )
     response = index_view.index(RequestFactory().get("/admin/"), conn=None)
     assert response.content.decode("utf-8") == "omeroweb_admin_tools/index.html"
@@ -555,12 +561,12 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
     assert index_view._call_admin_listing(SimpleNamespace(), "missing") == []
     assert (
         index_view._build_public_service_url(
-            "http://grafana:3000",
+            "https://grafana:3000",
             "https",
             "[2001:db8::1]",
             3000,
         )
-        == "http://[2001:db8::1]:3000"
+        == "https://[2001:db8::1]:3000"
     )
 
     class _Permissions:
@@ -593,7 +599,9 @@ def test_logs_compose_prometheus_and_proxy_helpers_cover_remaining_runtime_guard
     tmp_path,
 ) -> None:
     root_error = HttpResponse("root-only", status=403)
-    monkeypatch.setattr(index_view, "_require_root_user", lambda request, conn: root_error)
+    monkeypatch.setattr(
+        index_view, "_require_root_user", lambda request, conn: root_error
+    )
     assert (
         inspect.unwrap(index_view.logs_data)(
             RequestFactory().get("/admin/logs/"),
@@ -603,7 +611,9 @@ def test_logs_compose_prometheus_and_proxy_helpers_cover_remaining_runtime_guard
     )
     assert (
         inspect.unwrap(index_view.internal_log_labels)(
-            RequestFactory().get("/admin/internal/", data={"service": "omeroweb_internal"}),
+            RequestFactory().get(
+                "/admin/internal/", data={"service": "omeroweb_internal"}
+            ),
             conn=None,
         )
         is root_error
@@ -653,34 +663,52 @@ def test_logs_compose_prometheus_and_proxy_helpers_cover_remaining_runtime_guard
     monkeypatch.setattr(
         index_view.requests,
         "get",
-        lambda url, timeout=5.0, allow_redirects=True, params=None: _RequestsResponseStub(
-            200,
-            payload=json.dumps({"data": {"result": []}}).encode("utf-8"),
+        lambda url, timeout=5.0, allow_redirects=True, params=None: (
+            _RequestsResponseStub(
+                200,
+                payload=json.dumps({"data": {"result": []}}).encode("utf-8"),
+            )
         ),
     )
     assert index_view._prometheus_instant_query(PROMETHEUS_URL, "up") is None
     monkeypatch.setattr(
         index_view.requests,
         "get",
-        lambda url, timeout=5.0, allow_redirects=True, params=None: _RequestsResponseStub(
-            200,
-            payload=json.dumps({"data": {"result": [{"value": [1711843200]}]}}).encode("utf-8"),
+        lambda url, timeout=5.0, allow_redirects=True, params=None: (
+            _RequestsResponseStub(
+                200,
+                payload=json.dumps(
+                    {"data": {"result": [{"value": [1711843200]}]}}
+                ).encode("utf-8"),
+            )
         ),
     )
     assert index_view._prometheus_instant_query(PROMETHEUS_URL, "up") is None
     monkeypatch.setattr(
         index_view.requests,
         "get",
-        lambda url, timeout=5.0, allow_redirects=True, params=None: _RequestsResponseStub(
-            200,
-            payload=json.dumps({"status": "error", "data": {"result": []}}).encode("utf-8"),
+        lambda url, timeout=5.0, allow_redirects=True, params=None: (
+            _RequestsResponseStub(
+                200,
+                payload=json.dumps({"status": "error", "data": {"result": []}}).encode(
+                    "utf-8"
+                ),
+            )
         ),
     )
     assert index_view._collect_recently_seen_services(PROMETHEUS_URL) == []
 
-    monkeypatch.setattr(index_view, "_internal_service_base_url", lambda *args, **kwargs: "http://service")
-    monkeypatch.setattr(index_view, "_build_proxy_backend_urls", lambda *args, **kwargs: [])
-    monkeypatch.setattr(index_view, "_normalize_proxy_request_target", lambda subpath: ("dash", ""))
+    monkeypatch.setattr(
+        index_view,
+        "_internal_service_base_url",
+        lambda *args, **kwargs: "https://service",
+    )
+    monkeypatch.setattr(
+        index_view, "_build_proxy_backend_urls", lambda *args, **kwargs: []
+    )
+    monkeypatch.setattr(
+        index_view, "_normalize_proxy_request_target", lambda subpath: ("dash", "")
+    )
 
     with pytest.raises(RuntimeError, match="No Grafana backend URLs configured"):
         inspect.unwrap(index_view.grafana_proxy)(
