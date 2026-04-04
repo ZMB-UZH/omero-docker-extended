@@ -472,8 +472,9 @@ def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
         except ValueError as exc:
             last_type_error = exc
             continue
-    assert last_type_error is not None
-    raise last_type_error
+    raise last_type_error or RuntimeError(
+        "No compatible ScriptService signature was found for the requested call."
+    )
 
 
 def _run_script(

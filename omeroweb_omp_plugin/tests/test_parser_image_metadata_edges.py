@@ -62,7 +62,10 @@ class _Project:
 def test_filename_parser_covers_group_class_whitespace_and_validation_edges():
     assert filename_parser._parse_separator_fragment(r"\s") == ("", True)
     assert filename_parser._parse_separator_fragment(r"\.") == (".", False)
-    assert filename_parser._extract_separator_fragments(r"[\.-]+") == ((".", "-"), False)
+    assert filename_parser._extract_separator_fragments(r"[\.-]+") == (
+        (".", "-"),
+        False,
+    )
     assert filename_parser._extract_separator_fragments(r"(?:_|\s|_)+") == (
         ("_",),
         True,

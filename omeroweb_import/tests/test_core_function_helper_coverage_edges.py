@@ -15,30 +15,39 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
     monkeypatch.setenv("EDGE_INT_VALUE", "bad")
     assert core_functions._get_env_int("EDGE_INT_VALUE", 7, 1, 10) == 7
 
-    assert core_functions._should_start_import_plan_build(
-        {"compatibility_enabled": False, "status": "done", "files": []}
-    ) is False
-    assert core_functions._should_start_import_plan_build(
-        {
-            "compatibility_enabled": False,
-            "status": "ready",
-            "files": [{"status": "pending"}],
-        }
-    ) is False
-    assert core_functions._should_start_import_plan_build(
-        {
-            "compatibility_enabled": False,
-            "status": "ready",
-            "planned_import_units": [
-                {
-                    "relative_path": "sample",
-                    "dataset_relative_path": "sample",
-                    "covered_relative_paths": ["sample"],
-                }
-            ],
-            "files": [{"status": "uploaded", "relative_path": "sample"}],
-        }
-    ) is False
+    assert (
+        core_functions._should_start_import_plan_build(
+            {"compatibility_enabled": False, "status": "done", "files": []}
+        )
+        is False
+    )
+    assert (
+        core_functions._should_start_import_plan_build(
+            {
+                "compatibility_enabled": False,
+                "status": "ready",
+                "files": [{"status": "pending"}],
+            }
+        )
+        is False
+    )
+    assert (
+        core_functions._should_start_import_plan_build(
+            {
+                "compatibility_enabled": False,
+                "status": "ready",
+                "planned_import_units": [
+                    {
+                        "relative_path": "sample",
+                        "dataset_relative_path": "sample",
+                        "covered_relative_paths": ["sample"],
+                    }
+                ],
+                "files": [{"status": "uploaded", "relative_path": "sample"}],
+            }
+        )
+        is False
+    )
 
     job = {"compatibility_thread_active": True, "status": "uploading"}
     assert core_functions._refresh_job_status(job)["status"] == "checking"
@@ -46,7 +55,9 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
     assert core_functions._safe_relative_path("") is None
     internal_error = core_functions._managed_upload_internal_error("public")
     assert core_functions._managed_upload_error_message(internal_error) == "public"
-    assert core_functions._managed_upload_error_message(RuntimeError("plain")) == "plain"
+    assert (
+        core_functions._managed_upload_error_message(RuntimeError("plain")) == "plain"
+    )
 
     upload_root = tmp_path / "upload-root"
     upload_root.mkdir()
@@ -131,29 +142,29 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
         lsid=SimpleNamespace(val=""),
         getLsid=lambda: (_ for _ in ()).throw(RuntimeError("bad getter")),
     )
-    assert core_functions._external_info_text(
-        broken_external,
-        "lsid",
-        "getLsid",
-    ) == ""
+    assert (
+        core_functions._external_info_text(
+            broken_external,
+            "lsid",
+            "getLsid",
+        )
+        == ""
+    )
 
     assert core_functions._query_image_external_info(None, 1) == ("", "")
     failing_conn = SimpleNamespace(
         getQueryService=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
     )
     assert core_functions._query_image_external_info(failing_conn, 1) == ("", "")
-    assert (
-        core_functions._query_image_external_info(
-            SimpleNamespace(
-                getQueryService=lambda: SimpleNamespace(
-                    projection=lambda *args, **kwargs: []
-                ),
-                SERVICE_OPTS=object(),
+    assert core_functions._query_image_external_info(
+        SimpleNamespace(
+            getQueryService=lambda: SimpleNamespace(
+                projection=lambda *args, **kwargs: []
             ),
-            1,
-        )
-        == ("", "")
-    )
+            SERVICE_OPTS=object(),
+        ),
+        1,
+    ) == ("", "")
 
     assert core_functions._native_zarr_length_from_value_unit([]) is None
 
@@ -177,7 +188,7 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
     monkeypatch.delenv(core_functions.JOB_SERVICE_GROUP_ENV_FALLBACK, raising=False)
     user, passwd, group_override, secure = core_functions._get_job_service_credentials()
     assert user == core_functions.JOB_SERVICE_USERNAME_DEFAULT
-    assert passwd == ""
+    assert not passwd
     assert group_override == ""
     assert secure is True
 
@@ -189,13 +200,18 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
         close=lambda: (_ for _ in ()).throw(RuntimeError("close exploded")),
         SERVICE_OPTS=service_opts,
     )
-    monkeypatch.setattr(core_functions, "BlitzGateway", lambda *args, **kwargs: exploding_conn)
+    monkeypatch.setattr(
+        core_functions, "BlitzGateway", lambda *args, **kwargs: exploding_conn
+    )
     monkeypatch.setattr(
         core_functions,
         "_get_job_service_credentials",
-        lambda: ("svc", "secret", "not-an-int", True),
+        lambda: ("svc", "opaque-auth-value", "not-an-int", True),
     )
-    assert core_functions._open_service_connection("host", 4064, group_id=7) is exploding_conn
+    assert (
+        core_functions._open_service_connection("host", 4064, group_id=7)
+        is exploding_conn
+    )
 
     def _raising_connect():
         raise RuntimeError("connect exploded")
@@ -207,11 +223,13 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
         SERVICE_OPTS=SimpleNamespace(setOmeroGroup=lambda value: None),
         getLastError=lambda: (_ for _ in ()).throw(RuntimeError("last error exploded")),
     )
-    monkeypatch.setattr(core_functions, "BlitzGateway", lambda *args, **kwargs: failing_conn)
+    monkeypatch.setattr(
+        core_functions, "BlitzGateway", lambda *args, **kwargs: failing_conn
+    )
     monkeypatch.setattr(
         core_functions,
         "_get_job_service_credentials",
-        lambda: ("svc", "secret", "", True),
+        lambda: ("svc", "opaque-auth-value", "", True),
     )
     assert core_functions._open_service_connection("host", 4064, group_id=7) is None
     assert cleanup_events == ["closed"]
@@ -219,7 +237,9 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
 
     opened_conn = SimpleNamespace(
         SERVICE_OPTS=SimpleNamespace(
-            setOmeroGroup=lambda _value: (_ for _ in ()).throw(RuntimeError("group exploded"))
+            setOmeroGroup=lambda _value: (_ for _ in ()).throw(
+                RuntimeError("group exploded")
+            )
         ),
         close=lambda: (_ for _ in ()).throw(RuntimeError("close exploded")),
     )
@@ -255,7 +275,9 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
         core_functions._open_user_owned_background_connection(
             "alice",
             service_conn=SimpleNamespace(
-                suConn=lambda username: (_ for _ in ()).throw(RuntimeError("su exploded"))
+                suConn=lambda username: (_ for _ in ()).throw(
+                    RuntimeError("su exploded")
+                )
             ),
             purpose="imports",
         )
@@ -271,7 +293,9 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
     )
     switched_conn = SimpleNamespace(
         SERVICE_OPTS=SimpleNamespace(
-            setOmeroGroup=lambda _value: (_ for _ in ()).throw(RuntimeError("set exploded"))
+            setOmeroGroup=lambda _value: (_ for _ in ()).throw(
+                RuntimeError("set exploded")
+            )
         )
     )
     assert (
@@ -299,15 +323,18 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
     }
     assert core_functions._extract_imported_image_ids("") == []
     assert core_functions._image_name_requires_normalization("", "group-header") is True
-    assert core_functions._apply_import_name_normalization_context(
-        entry,
-        context,
-        [],
-        "session-key",
-        "omeroserver",
-        4064,
-        4,
-    ) == []
+    assert (
+        core_functions._apply_import_name_normalization_context(
+            entry,
+            context,
+            [],
+            "session-key",
+            "omeroserver",
+            4064,
+            4,
+        )
+        == []
+    )
 
 
 def test_core_function_message_and_import_verification_helpers_cover_remaining_paths():
@@ -319,7 +346,9 @@ def test_core_function_message_and_import_verification_helpers_cover_remaining_p
     dataset_conn = SimpleNamespace(
         getObject=lambda obj_type, dataset_id: None,
     )
-    assert core_functions._verify_import(dataset_conn, "sample.tif", dataset_id=1) is False
+    assert (
+        core_functions._verify_import(dataset_conn, "sample.tif", dataset_id=1) is False
+    )
     failing_dataset_conn = SimpleNamespace(
         getObject=lambda obj_type, dataset_id: SimpleNamespace(
             listChildren=lambda: (_ for _ in ()).throw(RuntimeError("dataset exploded"))
@@ -334,7 +363,9 @@ def test_core_function_message_and_import_verification_helpers_cover_remaining_p
         is False
     )
     global_failing_conn = SimpleNamespace(
-        getObjects=lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("global exploded"))
+        getObjects=lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("global exploded")
+        )
     )
     assert core_functions._verify_import(global_failing_conn, "sample.tif") is False
 

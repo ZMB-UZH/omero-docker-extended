@@ -482,7 +482,7 @@ def test_imaris_service_additional_helper_edges_cover_remaining_type_and_config_
 
     bad_script = SimpleNamespace(
         name="IMS_Export.py",
-        path="/tmp/IMS_Export.py",
+        path="scripts/IMS_Export.py",
         id=SimpleNamespace(val=None),
     )
     monkeypatch.setattr(
@@ -528,30 +528,36 @@ def test_imaris_service_additional_helper_edges_cover_remaining_type_and_config_
         is False
     )
     assert imaris_service._get_node_descriptors_config(noisy_config_conn) is None
-    assert imaris_service._get_node_descriptors_config(
-        SimpleNamespace(
-            isAdmin=lambda: True,
-            c=SimpleNamespace(
-                sf=SimpleNamespace(
-                    getConfigService=lambda: types.SimpleNamespace(
-                        getConfigValue=lambda _key: None
+    assert (
+        imaris_service._get_node_descriptors_config(
+            SimpleNamespace(
+                isAdmin=lambda: True,
+                c=SimpleNamespace(
+                    sf=SimpleNamespace(
+                        getConfigService=lambda: types.SimpleNamespace(
+                            getConfigValue=lambda _key: None
+                        )
                     )
-                )
-            ),
+                ),
+            )
         )
-    ) is None
-    assert imaris_service._get_node_descriptors_config(
-        SimpleNamespace(
-            isAdmin=lambda: True,
-            c=SimpleNamespace(
-                sf=SimpleNamespace(
-                    getConfigService=lambda: types.SimpleNamespace(
-                        getConfigValue=lambda _key: "   "
+        is None
+    )
+    assert (
+        imaris_service._get_node_descriptors_config(
+            SimpleNamespace(
+                isAdmin=lambda: True,
+                c=SimpleNamespace(
+                    sf=SimpleNamespace(
+                        getConfigService=lambda: types.SimpleNamespace(
+                            getConfigValue=lambda _key: "   "
+                        )
                     )
-                )
-            ),
+                ),
+            )
         )
-    ) is None
+        is None
+    )
     assert imaris_service._format_script_exception(RuntimeError("plain failure")) == (
         "plain failure"
     )
@@ -563,7 +569,9 @@ def test_imaris_service_additional_helper_edges_cover_remaining_type_and_config_
         "NoProcessorAvailable",
         (NoProcessorAvailable,),
     )
-    assert imaris_service._is_no_processor_available(RuntimeError("No processor available"))
+    assert imaris_service._is_no_processor_available(
+        RuntimeError("No processor available")
+    )
 
 
 def test_imaris_service_remaining_job_state_and_output_paths_are_exercised(
@@ -599,11 +607,10 @@ def test_imaris_service_remaining_job_state_and_output_paths_are_exercised(
     )
     assert imaris_service._get_job_state_and_outputs(object(), 12) == (None, None)
 
-    class _BadInt:
-        def __int__(self):
-            raise ValueError("bad integer")
+    class _NonNumericJobId:
+        pass
 
-    assert imaris_service._extract_job_id({"job_id": _BadInt()}) is None
+    assert imaris_service._extract_job_id({"job_id": _NonNumericJobId()}) is None
     assert imaris_service._extract_output_value(None, "Export_Name") is None
     assert imaris_service._infer_finished_from_outputs({"Other": "value"}) is False
 
@@ -627,7 +634,7 @@ def test_imaris_service_covers_remaining_descriptor_and_job_iteration_edges(
 
     broken_id_script = SimpleNamespace(
         name="IMS_Export.py",
-        path="/tmp/IMS_Export.py",
+        path="scripts/IMS_Export.py",
         id=_BrokenId(),
     )
     monkeypatch.setattr(
@@ -667,17 +674,19 @@ def test_imaris_service_covers_remaining_descriptor_and_job_iteration_edges(
         )
         is None
     )
-    assert imaris_service._is_no_processor_available(
-        RuntimeError("backend said NoProcessorAvailable")
-    ) is True
+    assert (
+        imaris_service._is_no_processor_available(
+            RuntimeError("backend said NoProcessorAvailable")
+        )
+        is True
+    )
 
-    class _BadValue:
-        def __int__(self):
-            raise ValueError("bad value")
+    class _NonNumericValue:
+        pass
 
     class _BadJobId:
         def getValue(self):
-            return _BadValue()
+            return _NonNumericValue()
 
     assert imaris_service._extract_job_id(_BadJobId()) is None
 
@@ -685,7 +694,7 @@ def test_imaris_service_covers_remaining_descriptor_and_job_iteration_edges(
         job_id = 19
 
         def getJobId(self):
-            return _BadValue()
+            return _NonNumericValue()
 
     assert imaris_service._extract_job_id(_BadAccessorJob()) == 19
 

@@ -128,7 +128,9 @@ def test_manage_script_path_validation_and_template_guards_cover_remaining_edges
     empty_config = dict(config)
     empty_config["omero.fs.repo.path"] = ""
     with pytest.raises(RuntimeError, match="Missing required OMERO config value"):
-        module._render_repo_template(empty_config, "users_private", "alice", datetime.now())
+        module._render_repo_template(
+            empty_config, "users_private", "alice", datetime.now()
+        )
 
     slash_only_config = dict(config)
     slash_only_config["omero.fs.repo.path"] = "/"
@@ -182,7 +184,9 @@ def test_manage_script_prefix_suffix_cleanup_and_symlink_guards_cover_remaining_
         module._reject_symlinks(symlink_root)
 
     original_render_repo_template = module._render_repo_template
-    monkeypatch.setattr(module, "_render_repo_template", lambda *args, **kwargs: ([".."], []))
+    monkeypatch.setattr(
+        module, "_render_repo_template", lambda *args, **kwargs: ([".."], [])
+    )
     with pytest.raises(RuntimeError, match="prefix escaped its root"):
         module._user_prefix_dir(
             config,

@@ -383,7 +383,9 @@ def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
         data_store,
         "_load_psycopg2",
         lambda: (
-            SimpleNamespace(connect=lambda **kwargs: (_ for _ in ()).throw(AssertionError)),
+            SimpleNamespace(
+                connect=lambda **kwargs: (_ for _ in ()).throw(AssertionError)
+            ),
             _FakeExtras,
         ),
     )

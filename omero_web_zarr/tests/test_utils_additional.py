@@ -225,7 +225,9 @@ def test_plane_render_and_encoding_helpers_cover_remaining_utils_paths(monkeypat
         == 256
     )
     assert np.array_equal(
-        utils._normalize_to_uint8(np.array([[1.0]], dtype=np.float32), (float("nan"), 1.0)),
+        utils._normalize_to_uint8(
+            np.array([[1.0]], dtype=np.float32), (float("nan"), 1.0)
+        ),
         np.zeros((1, 1), dtype=np.uint8),
     )
 
@@ -305,9 +307,12 @@ def test_store_backed_metadata_helpers_cover_symlink_resolution_and_reader_fallb
     signature = utils._store_node_signature(zarr_json_store)
     assert signature[0][0] == "zarr.json"
     assert signature[1][0] == "0/zarr.json"
-    assert utils._channel_limits_from_omero_channel(
-        {"window": {"start": "bad", "end": "10"}}
-    ) is None
+    assert (
+        utils._channel_limits_from_omero_channel(
+            {"window": {"start": "bad", "end": "10"}}
+        )
+        is None
+    )
 
     (store_root / ".zattrs").write_text(json.dumps({}), encoding="utf-8")
     assert utils._load_store_backed_image_node_from_metadata(store_root) is None
@@ -321,7 +326,9 @@ def test_store_backed_metadata_helpers_cover_symlink_resolution_and_reader_fallb
     fake_reader_module = types.ModuleType("ome_zarr.reader")
     monkeypatch.setitem(sys.modules, "ome_zarr.io", fake_io_module)
     monkeypatch.setitem(sys.modules, "ome_zarr.reader", fake_reader_module)
-    monkeypatch.setattr(utils, "_resolve_ome_zarr_format", lambda current_root: object())
+    monkeypatch.setattr(
+        utils, "_resolve_ome_zarr_format", lambda current_root: object()
+    )
 
     fake_io_module.parse_url = lambda current_root, fmt=None: None
     fake_reader_module.Reader = lambda location: lambda: []

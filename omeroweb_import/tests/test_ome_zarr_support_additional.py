@@ -776,7 +776,14 @@ def test_ome_zarr_support_helper_guards_cover_remaining_metadata_and_axis_edges(
         support,
         "_load_root_ome_zarr_metadata",
         lambda _path: (
-            {"multiscales": [{"axes": [{"name": "y"}, {"name": "x"}], "datasets": [{"path": "0"}]}]},
+            {
+                "multiscales": [
+                    {
+                        "axes": [{"name": "y"}, {"name": "x"}],
+                        "datasets": [{"path": "0"}],
+                    }
+                ]
+            },
             None,
         ),
     )
@@ -862,7 +869,9 @@ def test_ome_zarr_support_downscale_and_codec_edges_cover_remaining_branches(
 
     original_import = builtins.__import__
 
-    def _failing_numcodecs_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def _failing_numcodecs_import(
+        name, globals=None, locals=None, fromlist=(), level=0
+    ):
         if name == "numcodecs":
             raise ImportError("numcodecs missing")
         return original_import(name, globals, locals, fromlist, level)
@@ -882,7 +891,9 @@ def test_ome_zarr_support_downscale_and_codec_edges_cover_remaining_branches(
             (),
             {
                 "decode": staticmethod(
-                    lambda _payload: (_ for _ in ()).throw(RuntimeError("decode failed"))
+                    lambda _payload: (_ for _ in ()).throw(
+                        RuntimeError("decode failed")
+                    )
                 )
             },
         )(),
@@ -931,8 +942,8 @@ def test_ome_zarr_support_downscale_and_codec_edges_cover_remaining_branches(
     assert np.allclose(reduced, np.array([[1.5, 3.0]]))
 
     fake_transform = type(sys)("skimage.transform")
-    fake_transform.downscale_local_mean = lambda data, factors: np.asarray(data) + sum(
-        factors
+    fake_transform.downscale_local_mean = lambda data, factors: (
+        np.asarray(data) + sum(factors)
     )
     monkeypatch.setitem(sys.modules, "skimage.transform", fake_transform)
     assert np.array_equal(
@@ -1086,16 +1097,18 @@ def test_regenerate_xy_only_pyramid_handles_numpy_dependency_and_translation_edg
     monkeypatch.setattr(
         support,
         "_write_zarr_v2_level",
-        lambda level_dir, data, chunks, compressor, filters, codec: written.setdefault(
-            "call",
-            {
-                "level_dir": level_dir,
-                "data_shape": tuple(data.shape),
-                "compressor": compressor,
-                "codec_is_present": codec is not None,
-            },
-        )
-        and None,
+        lambda level_dir, data, chunks, compressor, filters, codec: (
+            written.setdefault(
+                "call",
+                {
+                    "level_dir": level_dir,
+                    "data_shape": tuple(data.shape),
+                    "compressor": compressor,
+                    "codec_is_present": codec is not None,
+                },
+            )
+            and None
+        ),
     )
     assert support._regenerate_xy_only_pyramid(store) is None
     updated = json.loads((store / ".zattrs").read_text(encoding="utf-8"))

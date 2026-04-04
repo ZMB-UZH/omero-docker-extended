@@ -184,8 +184,15 @@ def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(
             OSError(errno.ELOOP, "symlink loop")
         ),
     )
-    with pytest.raises(core_functions._ManagedPathValidationError):
-        core_functions._open_managed_upload_file_fd(3, "file.bin", 0, "file.bin")
+    opened_fd = None
+    try:
+        with pytest.raises(core_functions._ManagedPathValidationError):
+            opened_fd = core_functions._open_managed_upload_file_fd(
+                3, "file.bin", 0, "file.bin"
+            )
+    finally:
+        if opened_fd is not None:
+            core_functions.os.close(opened_fd)
 
     monkeypatch.setattr(
         core_functions,

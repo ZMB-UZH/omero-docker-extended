@@ -131,7 +131,7 @@ def test_omp_job_storage_load_job_returns_none_if_file_disappears_after_lock(
             raise AssertionError("path should not be opened when the job disappears")
 
     job_path = _DisappearingPath()
-    lock_path = Path("/tmp/fake.lock")
+    lock_path = Path("fake.lock")
 
     monkeypatch.setattr(job_storage.portalocker, "Lock", _Lock)
     monkeypatch.setattr(

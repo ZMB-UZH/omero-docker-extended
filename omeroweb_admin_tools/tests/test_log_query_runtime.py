@@ -211,9 +211,9 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
     monkeypatch.setattr(
         log_query_module.requests,
         "get",
-        lambda url, timeout=2.5: (
-            _ for _ in ()
-        ).throw(log_query_module.requests.Timeout("late")),
+        lambda url, timeout=2.5: (_ for _ in ()).throw(
+            log_query_module.requests.Timeout("late")
+        ),
     )
     with pytest.raises(RuntimeError, match="timed out"):
         log_query_module._execute_loki_query(
@@ -300,10 +300,14 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
         "ThreadPoolExecutor",
         _FakeExecutor,
     )
+
+    def _as_completed(futures):
+        return list(futures)
+
     monkeypatch.setattr(
         log_query_module.concurrent.futures,
         "as_completed",
-        lambda futures: list(futures),
+        _as_completed,
     )
 
     result = log_query_module.fetch_loki_logs(

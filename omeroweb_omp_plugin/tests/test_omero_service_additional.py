@@ -284,14 +284,25 @@ def test_image_and_metadata_services_cover_remaining_runtime_failure_paths(monke
             return 3
 
         def __getitem__(self, index):
-            raise RuntimeError(f"bad index {index}")
+            raise IndexError(index)
 
         def __bool__(self):
             return True
 
+    class _BrokenDetectorList:
+        def __bool__(self):
+            return True
+
+        def __iter__(self):
+            def _items():
+                raise RuntimeError("detectors unavailable")
+                yield None
+
+            return _items()
+
     class _BrokenMetadataImage:
         def getId(self):
-            raise RuntimeError("missing id")
+            return 1
 
         def getAcquisitionDate(self):
             return None
@@ -303,13 +314,18 @@ def test_image_and_metadata_services_cover_remaining_runtime_failure_paths(monke
             return []
 
         def getDetectorSettings(self):
-            class _BrokenDetectorList:
-                def __bool__(self):
-                    raise RuntimeError("detectors unavailable")
-
             return _BrokenDetectorList()
 
         def loadOriginalMetadata(self):
             return _BrokenMetadataTuple()
 
     assert metadata_service.extract_acquisition_metadata(_BrokenMetadataImage()) == {}
+
+    class _BrokenMetadataImageWithoutId(_BrokenMetadataImage):
+        def getId(self):
+            raise RuntimeError("missing id")
+
+    assert (
+        metadata_service.extract_acquisition_metadata(_BrokenMetadataImageWithoutId())
+        == {}
+    )

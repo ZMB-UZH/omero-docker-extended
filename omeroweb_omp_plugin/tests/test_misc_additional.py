@@ -298,7 +298,11 @@ def test_help_page_and_user_settings_views_cover_success_and_error_paths(
 def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
     monkeypatch,
 ):
-    monkeypatch.setattr(core.inspect, "signature", lambda fn: (_ for _ in ()).throw(TypeError("bad signature")))
+    monkeypatch.setattr(
+        core.inspect,
+        "signature",
+        lambda fn: (_ for _ in ()).throw(TypeError("bad signature")),
+    )
     assert core._supports_legacy_annotation_kwargs() is False
 
     with pytest.raises(TypeError, match="exactly one image_id"):

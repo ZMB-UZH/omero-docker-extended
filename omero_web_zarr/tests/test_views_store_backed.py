@@ -427,7 +427,9 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
         def write(self, *_args, **_kwargs):
             raise RuntimeError("writer failed")
 
-    monkeypatch.setattr(views, "load_store_backed_image_node", lambda current: fake_node)
+    monkeypatch.setattr(
+        views, "load_store_backed_image_node", lambda current: fake_node
+    )
     monkeypatch.setattr(
         views.tempfile,
         "NamedTemporaryFile",
@@ -564,7 +566,9 @@ def test_image_preview_and_download_views_cover_missing_store_backed_images(
             else "/zarr/"
         ),
     )
-    redirect_response = views.image_preview.__wrapped__(request, 14, conn=_FakeConn(image))
+    redirect_response = views.image_preview.__wrapped__(
+        request, 14, conn=_FakeConn(image)
+    )
     assert redirect_response.status_code == 302
     assert redirect_response["Location"] == "/webclient/preview/14/"
 
@@ -607,7 +611,9 @@ def test_app_shell_helpers_cover_empty_paths_cache_fetch_and_invalid_apps(monkey
         "validator",
         "https://ome.github.io/ome-ngff-validator/",
     )
-    assert injected.startswith('<base href="https://ome.github.io/ome-ngff-validator/">')
+    assert injected.startswith(
+        '<base href="https://ome.github.io/ome-ngff-validator/">'
+    )
 
     events = []
 

@@ -889,7 +889,9 @@ def test_job_view_start_helpers_cover_method_chunk_size_and_rate_limit_edges(
     factory = RequestFactory()
     saved_jobs = []
     monkeypatch.setattr(job_view, "_resolve_image_ids", lambda *_args: [7, 8])
-    monkeypatch.setattr(job_view, "_validate_user_password", lambda *_args: (True, None))
+    monkeypatch.setattr(
+        job_view, "_validate_user_password", lambda *_args: (True, None)
+    )
     monkeypatch.setattr(
         job_view, "check_major_action_rate_limit", lambda *_args: (False, 12)
     )
@@ -943,7 +945,9 @@ def test_job_view_start_helpers_cover_method_chunk_size_and_rate_limit_edges(
         job_view, "check_major_action_rate_limit", lambda *_args: (True, None)
     )
     chunk_capped = inspect.unwrap(job_view.start_delete_plugin_job)(
-        _json_request({"project_id": 5, "password": TEST_AUTH_INPUT, "chunk_size": 999}),
+        _json_request(
+            {"project_id": 5, "password": TEST_AUTH_INPUT, "chunk_size": 999}
+        ),
         conn=conn,
     )
     assert chunk_capped.status_code == 200
@@ -1085,9 +1089,10 @@ def test_validate_user_password_and_job_progress_cover_remaining_logging_and_reg
 
     current_job["value"] = jobs["delete_all_warn"]
     delete_all = inspect.unwrap(job_view.job_progress)(request, "7" * 32, conn=conn)
-    assert "warning - only confirmed 1 of 2 deletions" in _json_payload(delete_all)[
-        "last_log"
-    ]
+    assert (
+        "warning - only confirmed 1 of 2 deletions"
+        in _json_payload(delete_all)["last_log"]
+    )
 
     current_job["value"] = {
         **jobs["delete_all_warn"],
@@ -1095,15 +1100,18 @@ def test_validate_user_password_and_job_progress_cover_remaining_logging_and_reg
         "index": 0,
         "image_ids": [62],
     }
-    monkeypatch.setattr(job_view, "delete_existing_annotations", lambda *_args: (0, 0, 1))
+    monkeypatch.setattr(
+        job_view, "delete_existing_annotations", lambda *_args: (0, 0, 1)
+    )
     delete_all_unconfirmed = inspect.unwrap(job_view.job_progress)(
         request,
         "a" * 32,
         conn=conn,
     )
-    assert "deletions could not be confirmed" in _json_payload(delete_all_unconfirmed)[
-        "last_log"
-    ]
+    assert (
+        "deletions could not be confirmed"
+        in _json_payload(delete_all_unconfirmed)["last_log"]
+    )
     monkeypatch.setattr(job_view, "delete_existing_annotations", _delete_annotations)
 
     current_job["value"] = jobs["delete_plugin_empty"]
@@ -1112,9 +1120,10 @@ def test_validate_user_password_and_job_progress_cover_remaining_logging_and_reg
         "8" * 32,
         conn=conn,
     )
-    assert "no key-value pairs to delete found" in _json_payload(delete_plugin_empty)[
-        "last_log"
-    ]
+    assert (
+        "no key-value pairs to delete found"
+        in _json_payload(delete_plugin_empty)["last_log"]
+    )
 
     current_job["value"] = jobs["delete_plugin_error"]
     delete_plugin_error = inspect.unwrap(job_view.job_progress)(
@@ -1122,6 +1131,7 @@ def test_validate_user_password_and_job_progress_cover_remaining_logging_and_reg
         "9" * 32,
         conn=conn,
     )
-    assert "ERROR deleting plugin key-value pairs" in _json_payload(
-        delete_plugin_error
-    )["last_log"]
+    assert (
+        "ERROR deleting plugin key-value pairs"
+        in _json_payload(delete_plugin_error)["last_log"]
+    )

@@ -35,9 +35,9 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     monkeypatch.setattr(
         annotation_service,
         "get_env",
-        lambda name, env_file=None: "shared-secret",
+        lambda name, env_file=None: "shared-hash-value",
     )
-    assert annotation_service.get_hash_secret() == "shared-secret"
+    assert annotation_service.get_hash_secret() == "shared-hash-value"
 
     monkeypatch.setattr(annotation_service, "ParametersI", _Params)
     monkeypatch.setattr(annotation_service, "rlong", lambda value: value)
@@ -355,7 +355,8 @@ def test_rate_limit_non_dummy_cache_and_delete_miss_paths(monkeypatch):
     monkeypatch.setattr(rate_limit.time, "time", lambda: current_time[0])
 
     cache = rate_limit.InMemoryCache()
-    assert cache.delete("missing") is False
+    deleted = cache.delete("missing")
+    assert deleted is False
 
     backend_calls = []
 
