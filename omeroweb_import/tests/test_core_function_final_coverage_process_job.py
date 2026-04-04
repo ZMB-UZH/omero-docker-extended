@@ -39,16 +39,6 @@ class _ImportedImage:
         return [SimpleNamespace(getId=lambda: 77)]
 
 
-def _call_fd_function_and_close(func, *args, **kwargs):
-    fd = None
-    try:
-        fd = func(*args, **kwargs)
-        return fd
-    finally:
-        if isinstance(fd, int):
-            core_functions.os.close(fd)
-
-
 def _base_job(job_id: str) -> dict:
     return {
         "job_id": job_id,
@@ -259,13 +249,13 @@ def test_core_function_remaining_helper_paths_cover_last_direct_branches(
         lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk failure")),
     )
     with pytest.raises(OSError, match="disk failure"):
-        _call_fd_function_and_close(
-            core_functions._open_managed_upload_file_fd,
+        fd = core_functions._open_managed_upload_file_fd(
             7,
             "demo.txt",
             0,
             "demo.txt",
         )
+        core_functions.os.close(fd)
 
     assert core_functions._looks_like_directory_package_root(
         [

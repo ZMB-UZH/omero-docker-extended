@@ -19,16 +19,6 @@ class _Value:
         return self.val
 
 
-def _call_fd_function_and_close(func, *args, **kwargs):
-    fd = None
-    try:
-        fd = func(*args, **kwargs)
-        return fd
-    finally:
-        if isinstance(fd, int):
-            os.close(fd)
-
-
 def test_core_function_misc_final_edges_cover_remaining_helper_branches(
     monkeypatch, tmp_path: Path
 ):
@@ -192,9 +182,8 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
         lambda *args, **kwargs: (_ for _ in ()).throw(NotADirectoryError("boom")),
     )
     with pytest.raises(FileNotFoundError):
-        _call_fd_function_and_close(
-            core_functions._open_trusted_managed_root_fd, tmp_path
-        )
+        fd = core_functions._open_trusted_managed_root_fd(tmp_path)
+        os.close(fd)
 
     monkeypatch.setattr(
         core_functions.os,
@@ -204,9 +193,8 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
         ),
     )
     with pytest.raises(core_functions._ManagedPathValidationError):
-        _call_fd_function_and_close(
-            core_functions._open_trusted_managed_root_fd, tmp_path
-        )
+        fd = core_functions._open_trusted_managed_root_fd(tmp_path)
+        os.close(fd)
     monkeypatch.setattr(core_functions.os, "open", real_os_open)
 
     root_dir = tmp_path / "managed"
@@ -246,13 +234,13 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
         ),
     )
     with pytest.raises(core_functions._ManagedPathValidationError):
-        _call_fd_function_and_close(
-            core_functions._open_managed_upload_file_fd,
+        fd = core_functions._open_managed_upload_file_fd(
             root_fd,
             "file.txt",
             os.O_CREAT,
             "file.txt",
         )
+        os.close(fd)
     os.close(root_fd)
 
     close_calls = []
