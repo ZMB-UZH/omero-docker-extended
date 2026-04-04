@@ -78,6 +78,8 @@ def test_resolve_omero_host_port_prefers_connection_then_settings_then_env(monke
 
 
 def test_validate_user_password_and_session_key_helpers(monkeypatch):
+    assert utils.get_session_key(None) is None
+
     monkeypatch.setattr(utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(utils, "resolve_omero_host_port", lambda conn: ("omero", 4064))
 
@@ -93,7 +95,7 @@ def test_validate_user_password_and_session_key_helpers(monkeypatch):
             self.closed = True
 
     client = SuccessfulClient()
-    monkeypatch.setattr(utils.omero, "client", lambda host, port: client)
+    monkeypatch.setattr(utils.omero, "client", lambda host, port: client, raising=False)
     valid, error = utils.validate_user_password(SimpleNamespace(), "secret")
     assert valid is True
     assert error is None

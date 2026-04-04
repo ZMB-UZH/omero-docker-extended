@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import runpy
 import sys
 import types
 from datetime import datetime
@@ -233,3 +234,87 @@ def test_manage_script_prefix_suffix_cleanup_and_symlink_guards_cover_remaining_
     )
     assert cleaned == managed_file
     assert not managed_file.exists()
+
+
+def test_manage_script_handles_prefix_not_directory_and_main_entrypoint(
+    monkeypatch,
+    tmp_path: Path,
+):
+    module = _load_manage_script_module()
+    config = _server_config(tmp_path)
+    managed_root = tmp_path / "data" / "ManagedRepository"
+    managed_root.mkdir(parents=True)
+
+    monkeypatch.setattr(
+        module,
+        "_render_repo_template",
+        lambda *args, **kwargs: (["users_private"], ["alice"]),
+    )
+    real_is_dir = Path.is_dir
+    real_mkdir = Path.mkdir
+
+    def _patched_is_dir(self):
+        if self == managed_root / "users_private" / "alice":
+            return False
+        return real_is_dir(self)
+
+    monkeypatch.setattr(Path, "mkdir", lambda self, *args, **kwargs: None)
+    monkeypatch.setattr(Path, "is_dir", _patched_is_dir)
+    with pytest.raises(RuntimeError, match="prefix path is not a directory"):
+        module._user_prefix_dir(
+            config,
+            "users_private",
+            "alice",
+            datetime.now(),
+            create_missing=True,
+        )
+    monkeypatch.setattr(Path, "mkdir", real_mkdir)
+
+    output_calls = []
+
+    class _Client:
+        def getInputs(self, unwrap=True):
+            return {}
+
+        def setOutput(self, key, value):
+            output_calls.append((key, value))
+
+        def closeSession(self):
+            output_calls.append(("closed", True))
+
+    omero_module = types.ModuleType("omero")
+    omero_module.scripts = types.SimpleNamespace(
+        client=lambda *args, **kwargs: _Client(),
+        String=lambda *args, **kwargs: None,
+    )
+    gateway_module = types.ModuleType("omero.gateway")
+    gateway_module.BlitzGateway = lambda client_obj=None: object()
+    rtypes_module = types.ModuleType("omero.rtypes")
+    rtypes_module.rstring = lambda value: value
+
+    original_modules = {
+        name: sys.modules.get(name)
+        for name in ("omero", "omero.gateway", "omero.rtypes")
+    }
+    sys.modules["omero"] = omero_module
+    sys.modules["omero.gateway"] = gateway_module
+    sys.modules["omero.rtypes"] = rtypes_module
+    try:
+        with pytest.raises(RuntimeError):
+            runpy.run_path(
+                str(
+                    REPO_ROOT
+                    / "omeroweb_import"
+                    / "omero_scripts"
+                    / "Manage_Zarr_ManagedRepository.py"
+                ),
+                run_name="__main__",
+            )
+    finally:
+        for name, original in original_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+    assert ("closed", True) in output_calls

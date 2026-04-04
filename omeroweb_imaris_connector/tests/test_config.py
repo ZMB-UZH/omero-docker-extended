@@ -15,6 +15,13 @@ TEST_AUTH_WEB = "web-fixture-auth"
 TEST_AUTH_SERVER = "server-fixture-auth"
 
 
+def test_use_celery_reads_boolean_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OMERO_IMS_USE_CELERY", "true")
+    assert config.use_celery() is True
+
+
 def test_use_job_service_session_requires_explicit_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
