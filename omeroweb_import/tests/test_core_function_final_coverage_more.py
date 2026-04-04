@@ -19,6 +19,16 @@ class _Value:
         return self.val
 
 
+def _call_fd_function_and_close(func, *args, **kwargs):
+    fd = None
+    try:
+        fd = func(*args, **kwargs)
+        return fd
+    finally:
+        if isinstance(fd, int):
+            os.close(fd)
+
+
 def test_core_function_misc_final_edges_cover_remaining_helper_branches(
     monkeypatch, tmp_path: Path
 ):
@@ -182,7 +192,9 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
         lambda *args, **kwargs: (_ for _ in ()).throw(NotADirectoryError("boom")),
     )
     with pytest.raises(FileNotFoundError):
-        core_functions._open_trusted_managed_root_fd(tmp_path)
+        _call_fd_function_and_close(
+            core_functions._open_trusted_managed_root_fd, tmp_path
+        )
 
     monkeypatch.setattr(
         core_functions.os,
@@ -192,7 +204,9 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
         ),
     )
     with pytest.raises(core_functions._ManagedPathValidationError):
-        core_functions._open_trusted_managed_root_fd(tmp_path)
+        _call_fd_function_and_close(
+            core_functions._open_trusted_managed_root_fd, tmp_path
+        )
     monkeypatch.setattr(core_functions.os, "open", real_os_open)
 
     root_dir = tmp_path / "managed"
@@ -232,8 +246,12 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
         ),
     )
     with pytest.raises(core_functions._ManagedPathValidationError):
-        core_functions._open_managed_upload_file_fd(
-            root_fd, "file.txt", os.O_CREAT, "file.txt"
+        _call_fd_function_and_close(
+            core_functions._open_managed_upload_file_fd,
+            root_fd,
+            "file.txt",
+            os.O_CREAT,
+            "file.txt",
         )
     os.close(root_fd)
 
@@ -303,7 +321,7 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
     monkeypatch.setattr(
         core_functions,
         "_extract_import_candidates",
-        lambda output: ["/tmp/candidate"],
+        lambda output: [str(tmp_path / "candidate")],
     )
     monkeypatch.setattr(
         core_functions,
@@ -341,10 +359,12 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
     assert core_functions._extract_import_candidates("") == []
     assert core_functions._parse_candidate_path_line("") is None
     assert core_functions._parse_candidate_path_line('""') is None
-    assert core_functions._parse_candidate_path_line("/tmp/path/") is None
-    assert core_functions._parse_import_groups("\n# Group: /tmp/a\n") == [
-        {"group_path": Path("/tmp/a"), "members": []}
-    ]
+    candidate_directory_line = f"{(tmp_path / 'path').as_posix()}/"
+    assert core_functions._parse_candidate_path_line(candidate_directory_line) is None
+    group_path = tmp_path / "a"
+    assert core_functions._parse_import_groups(
+        f"\n# Group: {group_path.as_posix()}\n"
+    ) == [{"group_path": group_path, "members": []}]
     assert core_functions._relative_path_within_root("a/b", "") is False
     assert core_functions._common_relative_prefix([]) == ""
     assert core_functions._common_relative_prefix(["a/b", "x/y"]) == ""
