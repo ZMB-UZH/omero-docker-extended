@@ -65,10 +65,9 @@ class _Project:
 
 
 class _ExplodingFormatImage:
-    def __getattribute__(self, name):
-        if name == "getFileset":
-            raise RuntimeError("format failure")
-        return super().__getattribute__(name)
+    @property
+    def getFileset(self):
+        raise RuntimeError("format failure")
 
     def getId(self):
         return _Value(1)
@@ -143,6 +142,9 @@ def test_list_models_covers_claude_custom_and_empty_model_sets(monkeypatch):
 def test_annotation_and_image_services_cover_remaining_nonfatal_edge_paths(
     monkeypatch,
 ):
+    def _query_service():
+        return object()
+
     class _NamedValueWithBrokenGetter:
         name = _Value("alpha")
 
@@ -170,7 +172,7 @@ def test_annotation_and_image_services_cover_remaining_nonfatal_edge_paths(
     deleted = annotation_service.delete_existing_annotations(
         SimpleNamespace(
             SERVICE_OPTS=object(),
-            getQueryService=lambda: object(),
+            getQueryService=_query_service,
             getObject=lambda kind, obj_id: None,
         ),
         SimpleNamespace(deleteObject=lambda obj: None),

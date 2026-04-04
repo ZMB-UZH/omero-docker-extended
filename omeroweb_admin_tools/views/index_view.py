@@ -1514,9 +1514,6 @@ def _build_target_service_status(
             direct_match = expected_lookup.get(variant)
             if direct_match:
                 return direct_match
-            lower_match = expected_lookup.get(variant.lower())
-            if lower_match:
-                return lower_match
         return ""
 
     status_by_service: Dict[str, str] = {
