@@ -23,7 +23,7 @@ Start from `third_party/ecc-v1.9.0/skills/search-first/SKILL.md` for the generic
 ## Mandatory search order
 
 1. Search this repository first with `rg`.
-2. Read the nearest tests, docs, and example env files.
+2. Route through `docs/reference/ai-agent-context-routing.md` and read the nearest tests, docs, and example env files.
 3. Check official upstream docs and release notes.
 4. Check existing upstream implementations or maintained references.
 5. Only then decide whether to adopt, extend, or build custom logic.
@@ -34,6 +34,7 @@ Start from `third_party/ecc-v1.9.0/skills/search-first/SKILL.md` for the generic
 - Search `tests/` and package-local `*/tests/` before assuming coverage is missing.
 - Search `docs/`, `README.md`, `ARCHITECTURE.md`, and `CLAUDE.md` for existing operating rules.
 - Treat `env/*_example.env` and `installation_paths_example.env` as canonical contracts.
+- Refine the search in small loops instead of opening entire directories at once.
 
 ## Primary sources for this repo
 

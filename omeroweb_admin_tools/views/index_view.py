@@ -1888,18 +1888,16 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
 
     if last_response is None:
         raise RuntimeError("No Grafana backend URLs configured; cannot proxy request.")
-    if getattr(last_response, "status_code", 502) in {500, 502, 503, 504}:
-        logger.warning(
-            "Grafana proxy unavailable for path=%s after checking backends=%s",
-            sanitize_log_value(subpath),
-            ", ".join(sanitize_url_for_logging(url) for url in backend_urls),
-        )
-        return _grafana_unavailable_response(
-            proxy_prefix=proxy_prefix,
-            attempted_backends=backend_urls,
-            status_code=int(getattr(last_response, "status_code", 502)),
-        )
-    return last_response
+    logger.warning(
+        "Grafana proxy unavailable for path=%s after checking backends=%s",
+        sanitize_log_value(subpath),
+        ", ".join(sanitize_url_for_logging(url) for url in backend_urls),
+    )
+    return _grafana_unavailable_response(
+        proxy_prefix=proxy_prefix,
+        attempted_backends=backend_urls,
+        status_code=int(getattr(last_response, "status_code", 502)),
+    )
 
 
 @login_required()

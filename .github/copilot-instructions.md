@@ -1,15 +1,16 @@
 # GitHub Copilot Instructions
 
-Use [AGENTS.md](../AGENTS.md) as the universal project contract and [docs/reference/ai-agent-skills.md](../docs/reference/ai-agent-skills.md) as the skill catalog.
+Use [AGENTS.md](../AGENTS.md) as the universal project contract, [docs/reference/ai-agent-context-routing.md](../docs/reference/ai-agent-context-routing.md) as the narrow-context router, and [docs/reference/ai-agent-skills.md](../docs/reference/ai-agent-skills.md) as the skill catalog.
 
 ## Core rules
 
-- Start with `AGENTS.md` before proposing code changes.
+- Start with `AGENTS.md`, then load the smallest correct task slice from the routing doc.
 - Use repo-local skills from `.agents/skills/` when they match the task.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.
 - Do not edit `env/omero_secrets.env`.
 - Do not use background agents or subagents unless the user explicitly asks for them.
 - Prefer existing helpers, tests, docs, and `*_example*` files over new abstractions.
+- Open one domain doc and one nearest test module before broadening context.
 
 ## Verification rules
 
@@ -33,4 +34,5 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract and [docs/refere
 - Gemini CLI: `GEMINI.md`
 - Cursor: `.cursor/rules/`
 - Platform map and upkeep rules: `docs/reference/ai-agent-integrations.md`
+- Deep runtime procedure: `docs/reference/ai-agent-runtime-playbook.md`
 - Pinned ECC upstream source map: `docs/reference/ai-agent-upstream-sources.md`

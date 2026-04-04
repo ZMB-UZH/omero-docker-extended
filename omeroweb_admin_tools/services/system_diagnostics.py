@@ -276,20 +276,19 @@ def _inspect_docker_service_runtime(
     if not isinstance(payload, list) or not payload:
         return None, f"No container found for compose service {service!r}."
 
-    def _created_key(item: object) -> int:
-        if not isinstance(item, dict):
-            return -1
-        try:
-            return int(item.get("Created") or 0)
-        except (TypeError, ValueError):
-            return 0
-
     containers = [item for item in payload if isinstance(item, dict)]
     if not containers:
         return (
             None,
             f"Docker API returned no container records for service {service!r}.",
         )
+
+    def _created_key(item: dict[str, object]) -> int:
+        try:
+            return int(item.get("Created") or 0)
+        except (TypeError, ValueError):
+            return 0
+
     container = max(containers, key=_created_key)
     container_id = str(container.get("Id") or "").strip()
     if not container_id:

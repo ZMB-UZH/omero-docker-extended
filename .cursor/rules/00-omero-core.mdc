@@ -7,6 +7,7 @@ alwaysApply: true
 
 - Start with `AGENTS.md` before proposing code changes.
 - Treat `AGENTS.md` as the universal contract. Use `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, and this ruleset only as additive adapters.
+- Use `docs/reference/ai-agent-context-routing.md` to keep the loaded context narrow.
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
 - Never use background agents or subagents unless the user explicitly asks for them.
 - Keep configuration environment-driven and never edit `env/omero_secrets.env`.

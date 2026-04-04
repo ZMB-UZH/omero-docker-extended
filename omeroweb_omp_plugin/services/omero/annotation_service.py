@@ -340,8 +340,6 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
     service_opts = getattr(conn, "SERVICE_OPTS", None)
 
     def _delete_links_for_annotation(aid):
-        if aid is None:
-            return True
         try:
             link_ids = find_annotation_link_ids(conn, aid)
             for lid in link_ids:
@@ -375,8 +373,6 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
             return False
 
     def _annotation_exists(aid):
-        if aid is None:
-            return False
         try:
             params = ParametersI()
             params.add("aid", rlong(int(aid)))
@@ -390,13 +386,7 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
             return True
 
     def _delete_by_id(aid):
-        if aid is None:
-            return False
-        try:
-            links_deleted = _delete_links_for_annotation(aid)
-        except Exception as e:
-            logger.warning("Failed to delete links for annotation %s: %s", aid, e)
-            links_deleted = False
+        links_deleted = _delete_links_for_annotation(aid)
         if not links_deleted:
             logger.warning(
                 "Skipping annotation %s delete because links still exist.",

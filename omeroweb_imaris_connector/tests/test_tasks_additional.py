@@ -241,7 +241,12 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
         def connect(self):
             return self.connected
 
-    monkeypatch.setattr(tasks.omero, "client", lambda host, port: DummyClient())
+    monkeypatch.setattr(
+        tasks.omero,
+        "client",
+        lambda host, port: DummyClient(),
+        raising=False,
+    )
     monkeypatch.setattr(
         tasks, "BlitzGateway", lambda *args, **kwargs: DummyGateway(*args, **kwargs)
     )
@@ -309,6 +314,7 @@ def test_run_ims_export_task_updates_failure_meta_and_closes_connections(
         "finding_script",
         "running_script",
     ]
+    assert updates[2][1]["script_id"] == 99
     assert updates[-1][0] == tasks.states.FAILURE
     assert updates[-1][1]["error"] == "IMS export job failed."
     assert closed == [True]
@@ -427,6 +433,7 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
         "finding_script",
         "running_script",
     ]
+    assert updates[2][1]["script_id"] == 88
     assert result == {
         "state": "FINISHED",
         "outputs": {"Export_Name": "demo.ims"},
@@ -495,6 +502,9 @@ def test_task_helpers_cover_security_validation_and_close_warning_paths(
         tasks._open_job_service_connection("omeroserver", None)
     with pytest.raises(RuntimeError, match="Invalid port value"):
         tasks._open_job_service_connection("omeroserver", "bad-port")
+    monkeypatch.setattr(tasks, "get_job_service_credentials", lambda: ("", "secret"))
+    with pytest.raises(RuntimeError, match="username is required"):
+        tasks._open_job_service_connection("omeroserver", 4064)
 
     monkeypatch.setattr(tasks, "use_job_service_session", lambda: False)
     conn = types.SimpleNamespace(

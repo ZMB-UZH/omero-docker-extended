@@ -328,7 +328,7 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
         # Run the script through OMERO CLI. This path is the live-validated
         # execution path in the OMERO.web container and avoids brittle
         # ScriptService callback/process-handle behavior.
-        _update_task_state("running_script")
+        _update_task_state("running_script", {"script_id": script_id})
         cli_session_key = session_key
         if not cli_session_key and use_job_service_session():
             cli_session_key = _get_connection_session_key(conn)

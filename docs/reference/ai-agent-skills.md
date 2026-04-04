@@ -11,9 +11,10 @@ ECC-derived overlays point back to the pinned upstream snapshot in `third_party/
 Apply guidance in this order:
 
 1. `AGENTS.md`
-2. `docs/reference/ai-agent-security-prevention-playbook.md`
-3. the relevant skill in `.agents/skills/`
-4. harness-specific files such as `CLAUDE.md`
+2. `docs/reference/ai-agent-context-routing.md`
+3. `docs/reference/ai-agent-security-prevention-playbook.md`
+4. the relevant skill in `.agents/skills/`
+5. harness-specific files such as `CLAUDE.md`
 
 The skill surface is additive. It must not override the repo's no-subagent rule, security read order, split-pytest policy, or environment-driven configuration model.
 
@@ -49,7 +50,7 @@ The skill surface is additive. It must not override the repo's no-subagent rule,
 
 ## Usage notes
 
-- Start with `AGENTS.md` to find the right domain docs.
+- Start with `AGENTS.md` and `docs/reference/ai-agent-context-routing.md` to find the right domain docs.
 - Use the nearest skill before falling back to a generic workflow.
 - When a skill references live or version-sensitive behavior, verify with official upstream docs or releases.
 - Never paste secrets, PATs, passwords, or internal-only URLs into external research tools.
