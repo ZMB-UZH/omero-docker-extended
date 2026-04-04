@@ -533,13 +533,16 @@ def test_sem_edx_parser_remaining_edges_cover_empty_layouts_and_default_plot_pat
     tmp_path: Path,
 ):
     sem_edx_parser.plt.close(None)
-    assert sem_edx_parser.genetic_label_placement(
-        [],
-        sem_edx_parser.BBox(0, 0, 10, 10),
-        None,
-        None,
-        None,
-    ) == []
+    assert (
+        sem_edx_parser.genetic_label_placement(
+            [],
+            sem_edx_parser.BBox(0, 0, 10, 10),
+            None,
+            None,
+            None,
+        )
+        == []
+    )
 
     txt_path = tmp_path / "spectrum.txt"
     monkeypatch.setattr(
@@ -611,10 +614,20 @@ def test_sem_edx_table_creation_covers_cleanup_and_attach_failure_logging(
     monkeypatch.setattr(
         sem_edx_parser,
         "parse_emsa_file",
-        lambda _path: {"spectrum": [(1.0, 10.0)], "elements": [], "metadata": {}, "title": ""},
+        lambda _path: {
+            "spectrum": [(1.0, 10.0)],
+            "elements": [],
+            "metadata": {},
+            "title": "",
+        },
     )
-    monkeypatch.setattr(sem_edx_parser, "create_spectrum_table", lambda *args, **kwargs: None)
-    assert sem_edx_parser.attach_sem_edx_tables(failing_conn, 7, tmp_path / "sample.txt") is None
+    monkeypatch.setattr(
+        sem_edx_parser, "create_spectrum_table", lambda *args, **kwargs: None
+    )
+    assert (
+        sem_edx_parser.attach_sem_edx_tables(failing_conn, 7, tmp_path / "sample.txt")
+        is None
+    )
 
 
 def test_sem_edx_parser_covers_remaining_parse_and_fitness_edges(tmp_path: Path):

@@ -1770,7 +1770,9 @@ def test_index_view_additional_chunk_and_prune_error_paths_cover_remaining_retur
         "_load_owned_job",
         lambda request, conn, current_job_id, missing_error: (base_job, None),
     )
-    monkeypatch.setattr(index_view, "load_json_body", lambda request: {"keep_paths": []})
+    monkeypatch.setattr(
+        index_view, "load_json_body", lambda request: {"keep_paths": []}
+    )
     monkeypatch.setattr(
         index_view,
         "_update_job",

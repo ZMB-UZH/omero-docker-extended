@@ -134,7 +134,9 @@ def test_run_compatibility_check_inner_covers_remaining_idle_state_transitions(
     monkeypatch.setattr(core_functions, "_load_job", lambda job_id: None)
     core_functions._run_compatibility_check_inner("0" * 32)
 
-    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: tmp_path / "uploads")
+    monkeypatch.setattr(
+        core_functions, "_get_upload_root", lambda: tmp_path / "uploads"
+    )
     monkeypatch.setattr(core_functions.time, "time", lambda: 7100.0)
     monkeypatch.setattr(
         core_functions,
