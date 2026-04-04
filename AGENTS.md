@@ -74,6 +74,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 ## Small-context rules
 
 - Start with `rg` and the routing doc before opening files.
+- Treat the routing doc's numeric caps as mandatory, not advisory.
 - Open one domain doc, one nearest test module, and one matching skill before broadening context.
 - Stop once you can name the exact files to edit and the exact suites to run.
 - Summarize long docs once and reuse the summary instead of reopening them repeatedly.

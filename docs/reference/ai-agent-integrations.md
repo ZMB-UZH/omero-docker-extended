@@ -60,6 +60,7 @@ This avoids importing ECC hooks, commands, multi-agent orchestration, or platfor
 The adapter set is designed to improve accuracy first, then reduce wasted context:
 
 - route agents into `AGENTS.md`, `docs/reference/ai-agent-context-routing.md`, and the nearest domain doc before broad repo reads
+- keep the routing doc's numeric caps CI-validated so first-pass reads, refine loops, and escalation stay bounded
 - expose reusable workflows through `.agents/skills/`
 - add path-specific Copilot and Cursor guidance so agents do not rediscover the same rules every time
 - keep `AGENTS.md`, Claude, Gemini, Copilot, and Cursor core rules concise so they do not bloat always-on context

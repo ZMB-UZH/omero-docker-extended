@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
+try:
+    from tools.agent_context_policy import CONTEXT_SURFACE_CONTRACTS
+except ModuleNotFoundError:  # pragma: no cover - direct script execution path
+    from agent_context_policy import CONTEXT_SURFACE_CONTRACTS
+
 
 @dataclass(frozen=True)
 class ValidationError:
@@ -56,54 +61,6 @@ REQUIRED_INDEX_LINKS: tuple[str, ...] = (
 )
 
 
-@dataclass(frozen=True)
-class AgentSurfaceBudget:
-    """Compactness and routing requirements for always-loaded agent files."""
-
-    max_nonempty_lines: int
-    required_tokens: tuple[str, ...]
-
-
-AGENT_SURFACE_BUDGETS: dict[str, AgentSurfaceBudget] = {
-    "AGENTS.md": AgentSurfaceBudget(
-        max_nonempty_lines=110,
-        required_tokens=(
-            "docs/reference/ai-agent-context-routing.md",
-            "docs/reference/ai-agent-runtime-playbook.md",
-            "docs/reference/ai-agent-skills.md",
-            "python3 -m ruff check .",
-            "python3 -m ruff format --check .",
-        ),
-    ),
-    "CLAUDE.md": AgentSurfaceBudget(
-        max_nonempty_lines=60,
-        required_tokens=(
-            "docs/reference/ai-agent-context-routing.md",
-            "docs/reference/ai-agent-runtime-playbook.md",
-            "docs/reference/ai-agent-skills.md",
-        ),
-    ),
-    "GEMINI.md": AgentSurfaceBudget(
-        max_nonempty_lines=25,
-        required_tokens=(
-            "docs/reference/ai-agent-context-routing.md",
-            "docs/reference/ai-agent-runtime-playbook.md",
-        ),
-    ),
-    ".github/copilot-instructions.md": AgentSurfaceBudget(
-        max_nonempty_lines=30,
-        required_tokens=(
-            "docs/reference/ai-agent-context-routing.md",
-            "docs/reference/ai-agent-runtime-playbook.md",
-        ),
-    ),
-    ".cursor/rules/00-omero-core.mdc": AgentSurfaceBudget(
-        max_nonempty_lines=15,
-        required_tokens=("docs/reference/ai-agent-context-routing.md",),
-    ),
-}
-
-
 def validate_required_paths(repo_root: Path) -> list[ValidationError]:
     """Validate that required docs and mapping files exist."""
     errors: list[ValidationError] = []
@@ -132,24 +89,25 @@ def validate_index_links(repo_root: Path) -> list[ValidationError]:
     return errors
 
 
-def validate_agent_context_surfaces(repo_root: Path) -> list[ValidationError]:
-    """Validate compact always-loaded agent surfaces and routing links."""
+def validate_context_surfaces(repo_root: Path) -> list[ValidationError]:
+    """Validate compact agent surfaces and their routing contracts."""
     errors: list[ValidationError] = []
-    for rel_path, budget in AGENT_SURFACE_BUDGETS.items():
+    for rel_path, contract in CONTEXT_SURFACE_CONTRACTS.items():
         path = repo_root / rel_path
         if not path.exists():
-            errors.append(ValidationError(f"Missing agent surface: {rel_path}"))
+            errors.append(ValidationError(f"Missing context surface: {rel_path}"))
             continue
         text = path.read_text(encoding="utf-8")
-        nonempty_lines = [line for line in text.splitlines() if line.strip()]
-        if len(nonempty_lines) > budget.max_nonempty_lines:
-            errors.append(
-                ValidationError(
-                    f"{rel_path} exceeds compactness budget: "
-                    f"{len(nonempty_lines)} non-empty lines > {budget.max_nonempty_lines}"
+        if contract.max_nonempty_lines is not None:
+            nonempty_lines = [line for line in text.splitlines() if line.strip()]
+            if len(nonempty_lines) > contract.max_nonempty_lines:
+                errors.append(
+                    ValidationError(
+                        f"{rel_path} exceeds compactness budget: "
+                        f"{len(nonempty_lines)} non-empty lines > {contract.max_nonempty_lines}"
+                    )
                 )
-            )
-        for token in budget.required_tokens:
+        for token in contract.required_tokens:
             if token not in text:
                 errors.append(
                     ValidationError(
@@ -165,7 +123,7 @@ def run_validations(repo_root: Path) -> Sequence[ValidationError]:
     validators: Iterable = (
         validate_required_paths,
         validate_index_links,
-        validate_agent_context_surfaces,
+        validate_context_surfaces,
     )
     for validator in validators:
         errors.extend(validator(repo_root))

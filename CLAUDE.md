@@ -14,6 +14,7 @@ Project-specific instructions for Claude Code sessions working on this repositor
 
 - Treat `AGENTS.md` as the universal baseline and this file as a Claude-specific adapter.
 - Keep context small: load one task class, one code root, one nearest test module, and one matching skill before broadening scope.
+- Follow the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
 - Never use background agents or subagents unless the user explicitly asks for them.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.
