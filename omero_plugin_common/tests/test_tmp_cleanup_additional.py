@@ -136,7 +136,11 @@ def test_tmp_cleanup_covers_symlink_directory_cleanup_and_marker_cleanup_failure
     artifact = root / "artifact.txt"
     artifact.write_text("payload", encoding="utf-8")
     real_unlink = Path.unlink
-    monkeypatch.setattr(tmp_cleanup.os, "replace", lambda src, dst: (_ for _ in ()).throw(OSError("replace failed")))
+    monkeypatch.setattr(
+        tmp_cleanup.os,
+        "replace",
+        lambda src, dst: (_ for _ in ()).throw(OSError("replace failed")),
+    )
 
     def _fail_tmp_unlink(self, *args, **kwargs):
         if self.suffix == ".tmp":

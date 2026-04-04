@@ -826,11 +826,15 @@ def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single
 
     def original_marshal(image, key=None, request=None):
         return "original"
+
     marshal_module = SimpleNamespace(
         imageMarshal=original_marshal,
         _omero_web_zarr_safe_image_marshal_installed=True,
     )
-    assert integration._install_safe_image_marshal_overrides(marshal_module) is original_marshal
+    assert (
+        integration._install_safe_image_marshal_overrides(marshal_module)
+        is original_marshal
+    )
 
     from omeroweb.webgateway import views as webgateway_views
 
@@ -871,7 +875,9 @@ def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single
     assert response.status_code == 200
     assert image.level is None
 
-    monkeypatch.setattr(integration, "load_store_backed_image_node", lambda current_image: None)
+    monkeypatch.setattr(
+        integration, "load_store_backed_image_node", lambda current_image: None
+    )
     monkeypatch.setattr(
         integration,
         "_decorate_store_backed_channels",

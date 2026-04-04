@@ -476,11 +476,12 @@ def test_variable_and_user_data_views_cover_store_failures_and_guard_edges(
 def test_variable_and_user_data_views_cover_remaining_method_and_username_guards(
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(
-        variable_set_view, "current_username", lambda request, conn: ""
-    )
+    monkeypatch.setattr(variable_set_view, "current_username", lambda request, conn: "")
     save_missing_user_request = RequestFactory().post("/omp/varsets/save/")
-    save_missing_user_request._decoded_payload = {"set_name": "demo", "var_names": ["a"]}
+    save_missing_user_request._decoded_payload = {
+        "set_name": "demo",
+        "var_names": ["a"],
+    }
     monkeypatch.setattr(
         variable_set_view,
         "load_request_data",
@@ -488,7 +489,10 @@ def test_variable_and_user_data_views_cover_remaining_method_and_username_guards
     )
     save_missing_user = variable_set_view.save_set(save_missing_user_request, conn=None)
     assert save_missing_user.status_code == 400
-    assert _payload(save_missing_user)["error"] == omp_errors.unable_to_determine_username()
+    assert (
+        _payload(save_missing_user)["error"]
+        == omp_errors.unable_to_determine_username()
+    )
 
     save_wrong_method = variable_set_view.save_set(
         RequestFactory().get("/omp/varsets/save/"),

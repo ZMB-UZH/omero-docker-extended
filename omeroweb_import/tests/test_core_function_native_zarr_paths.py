@@ -690,7 +690,9 @@ def test_mark_failed_job_for_deferred_cleanup_reports_partial_failures(
     monkeypatch.setattr(
         core_functions, "_get_failed_import_retention_seconds", lambda: 3600
     )
-    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: tmp_path / "uploads")
+    monkeypatch.setattr(
+        core_functions, "_get_upload_root", lambda: tmp_path / "uploads"
+    )
     monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: tmp_path / "jobs")
     results = iter([True, False])
     monkeypatch.setattr(

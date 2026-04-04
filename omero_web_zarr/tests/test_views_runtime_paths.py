@@ -627,15 +627,23 @@ def test_runtime_view_helpers_cover_store_shortcuts_and_single_plane_iterators(
     assert views.get_chunk_shape(multi_dim_image) == [1, 1, 4, 5]
 
     image = _FakeImage(image_id=72, size_y=4, size_x=5)
-    store_json_response = HttpResponse('{"store": true}', content_type="application/json")
+    store_json_response = HttpResponse(
+        '{"store": true}', content_type="application/json"
+    )
     store_chunk_response = HttpResponse(
         b"store-chunk",
         content_type="application/octet-stream",
     )
     store_path_response = HttpResponse('{"ok": 1}', content_type="application/json")
-    monkeypatch.setattr(views, "_store_backed_json_response", lambda *_args: store_json_response)
-    monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: store_chunk_response)
-    monkeypatch.setattr(views, "_store_backed_response", lambda *_args: store_path_response)
+    monkeypatch.setattr(
+        views, "_store_backed_json_response", lambda *_args: store_json_response
+    )
+    monkeypatch.setattr(
+        views, "_store_backed_chunk_response", lambda *_args: store_chunk_response
+    )
+    monkeypatch.setattr(
+        views, "_store_backed_response", lambda *_args: store_path_response
+    )
 
     zarray_response = views.image_zarray.__wrapped__(
         RequestFactory().get("/zarr/v0.4/image/72.zarr/0/.zarray"),
