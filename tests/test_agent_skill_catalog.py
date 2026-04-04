@@ -84,6 +84,8 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
             ),
             ("search the narrow file set", "find the narrow file set"),
             "summarize long docs once",
+            "open at most 4 task-specific files in the first pass",
+            "run at most 2 refine loops",
         ),
         adapter_phrases=("context", "smallest correct"),
     ),

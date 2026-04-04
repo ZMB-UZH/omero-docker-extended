@@ -5,6 +5,7 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract, [docs/reference
 ## Core rules
 
 - Start with `AGENTS.md`, then load the smallest correct task slice from the routing doc.
+- Honor the routing doc's numeric caps before broadening context.
 - Use repo-local skills from `.agents/skills/` when they match the task.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.
 - Do not edit `env/omero_secrets.env`.

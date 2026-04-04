@@ -24,6 +24,15 @@ Use the ECC-inspired progressive retrieval pattern:
 
 Three strong files beat thirty mediocre ones.
 
+## Numeric caps
+
+These numeric caps are CI-validated by `python3 tools/lint_docs_structure.py`.
+
+- Open at most 4 task-specific files in the first pass: one domain doc, one implementation file, one nearest test module or suite, and one matching skill.
+- Run at most 2 refine loops before you either name the edit target or escalate.
+- Add at most 3 more files per escalation round: one additional domain doc, one adjacent implementation file, and one more confirming test module.
+- If you have opened 8 task-specific files without naming the edit target and verification lane, stop and summarize before reading more.
+
 ## Task matrix
 
 | Task class | Load first docs | Code roots | Default skills | First verification lane |

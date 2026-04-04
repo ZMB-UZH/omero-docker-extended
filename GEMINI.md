@@ -5,6 +5,7 @@ Use [AGENTS.md](AGENTS.md) as the universal project contract, [docs/reference/ai
 ## Core rules
 
 - Start with `AGENTS.md`, then the routing doc.
+- Honor the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` when a skill matches the task.
 - Keep configuration environment-driven and never edit `env/omero_secrets.env`.
 - Do not use background agents or subagents unless the user explicitly asks for them.

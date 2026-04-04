@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.lint_docs_structure import AGENT_SURFACE_BUDGETS
+from tools.agent_context_policy import CONTEXT_SURFACE_CONTRACTS
 from tools.lint_docs_structure import run_validations
 
 
@@ -45,6 +45,7 @@ class DocsStructureLintTests(unittest.TestCase):
                 "docs/reference/ai-agent-context-routing.md",
                 "docs/reference/ai-agent-runtime-playbook.md",
                 "docs/reference/ai-agent-skills.md",
+                ".agents/skills/context-budget/SKILL.md",
                 "docs/design-docs/index.md",
                 "docs/design-docs/core-beliefs.md",
                 "docs/exec-plans/tech-debt-tracker.md",
@@ -82,7 +83,7 @@ class DocsStructureLintTests(unittest.TestCase):
 
             bloated_agents = "\n".join(
                 ["docs/reference/ai-agent-skills.md"]
-                * (AGENT_SURFACE_BUDGETS["AGENTS.md"].max_nonempty_lines + 5)
+                * (CONTEXT_SURFACE_CONTRACTS["AGENTS.md"].max_nonempty_lines + 5)
             )
             (repo_root / "AGENTS.md").write_text(bloated_agents, encoding="utf-8")
 
@@ -97,6 +98,13 @@ class DocsStructureLintTests(unittest.TestCase):
             self.assertTrue(
                 any(
                     "CLAUDE.md missing required routing token" in err.message
+                    for err in errors
+                )
+            )
+            self.assertTrue(
+                any(
+                    "docs/reference/ai-agent-context-routing.md missing required routing token"
+                    in err.message
                     for err in errors
                 )
             )
