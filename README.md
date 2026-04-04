@@ -7,8 +7,8 @@
 [![Codecov](https://img.shields.io/codecov/c/github/ZMB-UZH/omero-docker-extended?label=Codecov&logo=codecov)](https://codecov.io/gh/ZMB-UZH/omero-docker-extended)
 [![super-linter](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/super-linter.yml?branch=main&label=super-linter)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/super-linter.yml)
 [![Ruff](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/ruff.yml?branch=main&logo=ruff&label=Ruff)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/ruff.yml)
-[![everything-claude-code](https://img.shields.io/static/v1?label=everything-claude-code&message=ECC+v1.9.0+skills&color=0F766E&logo=github)](https://github.com/affaan-m/everything-claude-code/tree/v1.9.0/skills)
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ZMB-UZH/omero-docker-extended)](https://github.com/ZMB-UZH/omero-docker-extended/commits/main)
+[![everything-claude-code](https://img.shields.io/static/v1?label=everything-claude-code&message=ECC+v1.9.0+skills&color=0F766E&logo=github)](https://github.com/affaan-m/everything-claude-code/tree/v1.9.0/skills)
 <!-- END GENERATED BADGES -->
 
 Production-grade (see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom OMERO.web plugins for microscopy metadata workflows, file upload/import management, direct Imaris 11 integration, administrator tools, and a full server monitoring stack.

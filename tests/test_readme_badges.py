@@ -53,11 +53,11 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![Ruff]("),
-            badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
+            badge_block.index("[![GitHub commit activity]("),
         )
         self.assertLess(
-            badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
             badge_block.index("[![GitHub commit activity]("),
+            badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
         )
 
     def test_generated_commit_activity_badge_uses_repo_slug_and_default_branch(
