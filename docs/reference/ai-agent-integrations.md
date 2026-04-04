@@ -9,11 +9,13 @@ The goal is to support the major documented instruction systems without changing
 Apply guidance in this order:
 
 1. `AGENTS.md`
-2. `docs/reference/ai-agent-security-prevention-playbook.md`
-3. `docs/reference/code-scanning-resolved-findings.md`
-4. `docs/operations/code-scanning.md`
-5. `docs/reference/ai-agent-skills.md` and `.agents/skills/`
-6. harness-specific adapter files
+2. `docs/reference/ai-agent-context-routing.md`
+3. `docs/reference/ai-agent-runtime-playbook.md`
+4. `docs/reference/ai-agent-security-prevention-playbook.md`
+5. `docs/reference/code-scanning-resolved-findings.md`
+6. `docs/operations/code-scanning.md`
+7. `docs/reference/ai-agent-skills.md` and `.agents/skills/`
+8. harness-specific adapter files
 
 Harness-specific files are additive. They must not override the repo's security read order, no-subagent rule, environment-driven configuration model, or split-pytest policy.
 
@@ -21,7 +23,7 @@ Harness-specific files are additive. They must not override the repo's security 
 
 | Harness or surface | Files in this repo | Purpose |
 | --- | --- | --- |
-| Universal | `AGENTS.md`, `.agents/skills/`, `docs/reference/ai-agent-skills.md` | shared repo contract and reusable workflows |
+| Universal | `AGENTS.md`, `docs/reference/ai-agent-context-routing.md`, `docs/reference/ai-agent-runtime-playbook.md`, `.agents/skills/`, `docs/reference/ai-agent-skills.md` | shared repo contract, narrow routing, deep runtime procedure, and reusable workflows |
 | Claude Code | `CLAUDE.md` | Claude-specific session guidance |
 | GitHub Copilot | `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md`, `.agents/skills/` | repo-wide and path-specific Copilot guidance |
 | Cursor | `.cursor/rules/*.mdc`, `AGENTS.md`, `.agents/skills/` | rule-based Cursor context plus shared skills |
@@ -57,10 +59,10 @@ This avoids importing ECC hooks, commands, multi-agent orchestration, or platfor
 
 The adapter set is designed to improve accuracy first, then reduce wasted context:
 
-- route agents into `AGENTS.md` and the nearest domain doc before broad repo reads
+- route agents into `AGENTS.md`, `docs/reference/ai-agent-context-routing.md`, and the nearest domain doc before broad repo reads
 - expose reusable workflows through `.agents/skills/`
 - add path-specific Copilot and Cursor guidance so agents do not rediscover the same rules every time
-- keep Gemini and Copilot adapter files concise so they do not bloat always-on context
+- keep `AGENTS.md`, Claude, Gemini, Copilot, and Cursor core rules concise so they do not bloat always-on context
 
 ## Maintenance rules
 

@@ -165,7 +165,12 @@ def test_validate_user_password_handles_missing_details_and_auth_failure(monkeyp
         def closeSession(self):
             return None
 
-    monkeypatch.setattr(job_view.omero, "client", lambda host, port: FailingClient())
+    monkeypatch.setattr(
+        job_view.omero,
+        "client",
+        lambda host, port: FailingClient(),
+        raising=False,
+    )
     monkeypatch.setattr(settings, "OMERO_HOST", "omeroserver", raising=False)
     monkeypatch.setattr(settings, "OMERO_PORT", 4064, raising=False)
 
@@ -966,7 +971,12 @@ def test_validate_user_password_and_job_progress_cover_remaining_logging_and_reg
         def closeSession(self):
             raise RuntimeError("close exploded")
 
-    monkeypatch.setattr(job_view.omero, "client", lambda host, port: _Client())
+    monkeypatch.setattr(
+        job_view.omero,
+        "client",
+        lambda host, port: _Client(),
+        raising=False,
+    )
     monkeypatch.setattr(settings, "OMERO_HOST", "omeroserver", raising=False)
     monkeypatch.setattr(settings, "OMERO_PORT", 4064, raising=False)
     assert job_view._validate_user_password(conn, TEST_AUTH_INPUT) == (True, None)

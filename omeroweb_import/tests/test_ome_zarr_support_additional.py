@@ -39,6 +39,61 @@ def test_ome_zarr_support_covers_additional_root_and_single_image_validation_pat
     assert payload is None
     assert "well layouts are not supported" in (inspection.support_error or "")
 
+
+def test_ome_zarr_support_tolerates_unparseable_array_shapes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    metadata_payload = {
+        "multiscales": [
+            {
+                "version": "0.4",
+                "axes": [{"name": "y"}, {"name": "x"}],
+                "datasets": [{"path": "0"}],
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        support,
+        "_load_root_ome_zarr_metadata",
+        lambda store_root: (metadata_payload, None),
+    )
+    monkeypatch.setattr(
+        support,
+        "_read_zarr_format_metadata",
+        lambda store_root, metadata_payload: 2,
+    )
+    monkeypatch.setattr(
+        support,
+        "_extract_axes",
+        lambda axes: (["y", "x"], [None, None], None),
+    )
+    monkeypatch.setattr(
+        support,
+        "_extract_physical_sizes",
+        lambda axis_names, axis_units, transforms: ({}, None),
+    )
+    monkeypatch.setattr(
+        support,
+        "_read_array_metadata_payload",
+        lambda store_root, dataset_path: ({"shape": ["bad"], "dtype": "uint16"}, None),
+    )
+    monkeypatch.setattr(
+        support,
+        "_extract_dataset_relative_paths",
+        lambda metadata_payload: ["0"],
+    )
+    monkeypatch.setattr(support, "ome_zarr_package_version", lambda: "1.2.3")
+
+    inspection = support.inspect_ome_zarr_image(tmp_path / "demo.ome.zarr")
+
+    assert inspection.supported is True
+    assert inspection.shape == ()
+    monkeypatch.setattr(
+        support,
+        "_extract_axes",
+        lambda axes: ([axis.get("name") for axis in axes], [None for _ in axes], None),
+    )
+
     assert "no multiscale image definition" in (
         support._inspect_single_ome_zarr_image(tmp_path, {}).support_error or ""
     )

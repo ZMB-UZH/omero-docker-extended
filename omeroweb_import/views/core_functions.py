@@ -2289,15 +2289,13 @@ def _prepare_uploaded_job_for_request_path_import(
     if job_dict.get("status") not in ("checking", "awaiting_confirmation", "ready"):
         return job_dict, None
 
-    if job_dict.get(
-        "compatibility_thread_active"
-    ) and not _planned_import_units_for_request(job_dict):
-        return job_dict, None
-
-    if (
-        job_dict.get("compatibility_enabled", True)
-        and job_dict.get("status") in ("checking", "awaiting_confirmation")
-        and not _planned_import_units_for_request(job_dict)
+    planned_units = _planned_import_units_for_request(job_dict)
+    if not planned_units and (
+        job_dict.get("compatibility_thread_active")
+        or (
+            job_dict.get("compatibility_enabled", True)
+            and job_dict.get("status") in ("checking", "awaiting_confirmation")
+        )
     ):
         return job_dict, None
 
@@ -3585,31 +3583,19 @@ def _open_group_scoped_session_connection(
     if not session_key:
         return None
 
-    conn = None
-    try:
-        conn = _open_session_connection(session_key, host, port)
-        if conn is None:
-            return None
-        if group_id is not None:
-            try:
-                conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
-            except Exception as exc:
-                logger.warning(
-                    "Failed to set session-scoped post-import group context to %s: %s",
-                    sanitize_log_value(group_id),
-                    sanitize_log_value(exc),
-                )
-        return conn
-    except Exception:
-        if conn is not None:
-            try:
-                conn.close()
-            except Exception as close_exc:
-                logger.warning(
-                    "Failed to close session-scoped OMERO connection after exception: %s",
-                    sanitize_log_value(close_exc),
-                )
-        raise
+    conn = _open_session_connection(session_key, host, port)
+    if conn is None:
+        return None
+    if group_id is not None:
+        try:
+            conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
+        except Exception as exc:
+            logger.warning(
+                "Failed to set session-scoped post-import group context to %s: %s",
+                sanitize_log_value(group_id),
+                sanitize_log_value(exc),
+            )
+    return conn
 
 
 def _open_user_owned_background_connection(
@@ -4106,16 +4092,7 @@ def _validated_managed_component(component: str, display_path: str) -> str:
 
 
 def _managed_safe_component_name(component: str, display_path: str) -> str:
-    component_text = _validated_managed_component(component, display_path)
-    normalized_name = os.path.normpath(component_text)
-    if (
-        not normalized_name
-        or normalized_name in {".", ".."}
-        or normalized_name != component_text
-        or os.path.basename(normalized_name) != normalized_name
-    ):
-        raise _invalid_managed_path(display_path)
-    return normalized_name
+    return _validated_managed_component(component, display_path)
 
 
 def _open_trusted_managed_root_fd(root_path: Path) -> int:
@@ -7156,8 +7133,6 @@ def _process_import_job(job_id: str):
 
             for start in range(0, len(entries_to_import), batch_size):
                 batch = entries_to_import[start : start + batch_size]
-                if not batch:
-                    continue
                 logger.info(
                     "Import thread: processing batch %d-%d of %d for job %s",
                     start,
