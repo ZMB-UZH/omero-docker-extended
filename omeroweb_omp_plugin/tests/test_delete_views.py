@@ -5,6 +5,7 @@ import json
 import subprocess
 from types import SimpleNamespace
 
+import pytest
 from django.test import RequestFactory
 
 from omeroweb_omp_plugin.views import delete_all_view, delete_plugin_view
@@ -225,6 +226,11 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
 
 
 def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatch):
+    with pytest.raises(ValueError, match="Invalid annotation id"):
+        delete_plugin_view._validated_delete_object_id(0, "annotation id")
+    with pytest.raises(ValueError, match="Unsupported OMERO delete target"):
+        delete_plugin_view._run_omero_delete(["omero"], "Dataset", 1)
+
     conn = _Conn()
     factory = RequestFactory()
 

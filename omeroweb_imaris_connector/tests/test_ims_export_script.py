@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import pathlib
+import runpy
 import subprocess
 import sys
 import types
@@ -201,6 +202,25 @@ def test_export_root_and_checksum_helpers_cover_fallback_cleanup_and_altsep(
         lambda path: (_ for _ in ()).throw(OSError("size failed")),
     )
     assert module._is_valid_bioformats_jar(str(tmp_path / "missing.jar")) is False
+    assert (
+        module._safe_filename("\x00\x00", fallback="fallback-name") == "fallback-name"
+    )
+
+
+def test_run_conversion_returns_missing_original_file_error(tmp_path) -> None:
+    module = _load_script_module()
+
+    class _Conn:
+        def getObject(self, object_type, image_id):
+            return types.SimpleNamespace(getName=lambda: "demo.ome.tif")
+
+    module.get_original_file_path = lambda conn, image: None
+    assert module.run_conversion(_Conn(), 7, str(tmp_path)) == (
+        False,
+        "Could not get original file path",
+        None,
+    )
+    assert module._safe_filename(None, fallback="") == ""
 
 
 def test_copy_and_validate_bioformats_jar_cover_integrity_paths(
@@ -859,3 +879,34 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
     assert error_calls[0][0] == "Message"
     assert "Script error:" in error_calls[0][1]
     assert ("closed", True) in error_calls
+
+
+def test_ims_export_script_main_entrypoint_executes_run_script() -> None:
+    _install_omero_stub()
+
+    output_calls = []
+
+    class _Client:
+        def getInputs(self, unwrap=True):
+            raise RuntimeError("boom")
+
+        def setOutput(self, key, value):
+            output_calls.append((key, value))
+
+        def closeSession(self):
+            output_calls.append(("closed", True))
+
+    sys.modules["omero"].scripts.client = lambda *args, **kwargs: _Client()
+    sys.modules["omero"].scripts.Long = lambda *args, **kwargs: None
+
+    runpy.run_path(
+        str(
+            pathlib.Path(__file__).resolve().parents[1]
+            / "omero_scripts"
+            / "IMS_Export.py"
+        ),
+        run_name="__main__",
+    )
+
+    assert output_calls[0][0] == "Message"
+    assert ("closed", True) in output_calls

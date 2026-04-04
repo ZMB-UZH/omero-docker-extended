@@ -725,12 +725,6 @@ def index(request, conn=None, url=None, **kwargs):
                     {"error": errors.no_filenames_available()}, status=400
                 )
 
-            if provider == "local":
-                return JsonResponse(
-                    {"error": errors.provider_required()},
-                    status=400,
-                )
-
             username = current_username(request, conn)
             if not username:
                 return JsonResponse(
