@@ -739,3 +739,15 @@ def test_diagnose_docker_health_reports_api_none(monkeypatch) -> None:
     monkeypatch.setattr(index_view, "_docker_api_json", lambda *a, **kw: None)
     diag = index_view._diagnose_docker_health()
     assert diag["api_error"] == "API returned None (connection or permission error)"
+
+
+def test_diagnose_docker_health_handles_unknown_uid(monkeypatch) -> None:
+    """_diagnose_docker_health reports uid when pwd.getpwuid raises KeyError."""
+    import pwd
+
+    monkeypatch.setattr(
+        pwd, "getpwuid", lambda uid: (_ for _ in ()).throw(KeyError(uid))
+    )
+    monkeypatch.setattr(index_view, "_docker_api_json", lambda *a, **kw: [])
+    diag = index_view._diagnose_docker_health()
+    assert diag["current_user"].startswith("uid=")

@@ -782,3 +782,30 @@ def test_background_user_connection_without_session_key_close_fails(
     ) as conn:
         assert conn is not None
     # No exception raised — warning was logged internally
+
+
+def test_background_user_connection_background_session_yields_empty_key(
+    monkeypatch,
+) -> None:
+    """_background_user_connection yields None when background session produces empty key."""
+    from contextlib import contextmanager
+
+    @contextmanager
+    def fake_background_session(*args, **kwargs):
+        yield ""
+
+    monkeypatch.setattr(
+        core_functions, "_background_import_session", fake_background_session
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            AssertionError("should not be called for empty key")
+        ),
+    )
+
+    with core_functions._background_user_connection(
+        "alice", host="omeroserver", port=4064
+    ) as conn:
+        assert conn is None
