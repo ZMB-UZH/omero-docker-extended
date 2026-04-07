@@ -1,7 +1,7 @@
 ---
 name: omero-runtime-verifier
 description: Safe runtime-debugging workflow for OMERO Docker Extended, including Loki-first log triage, container venv discovery, and correct OMERO service-user usage.
-origin: repo-local skill informed by ECC v1.9.0 workflow patterns
+origin: repo-local skill informed by ECC v1.10.0 workflow patterns
 ---
 
 # OMERO Runtime Verifier

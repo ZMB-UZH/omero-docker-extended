@@ -24,7 +24,7 @@ class AgentSkillProvenanceTests(TestCase):
         self.assertEqual(
             {
                 "label": ["everything-claude-code"],
-                "message": ["ECC v1.9.0 skills"],
+                "message": ["ECC v1.10.0 skills"],
                 "color": ["0F766E"],
                 "logo": ["github"],
             },

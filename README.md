@@ -8,7 +8,7 @@
 [![super-linter](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/super-linter.yml?branch=main&label=super-linter)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/super-linter.yml)
 [![Ruff](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/ruff.yml?branch=main&logo=ruff&label=Ruff)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/ruff.yml)
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ZMB-UZH/omero-docker-extended)](https://github.com/ZMB-UZH/omero-docker-extended/commits/main)
-[![everything-claude-code](https://img.shields.io/static/v1?label=everything-claude-code&message=ECC+v1.9.0+skills&color=0F766E&logo=github)](https://github.com/affaan-m/everything-claude-code/tree/v1.9.0/skills)
+[![everything-claude-code](https://img.shields.io/static/v1?label=everything-claude-code&message=ECC+v1.10.0+skills&color=0F766E&logo=github)](https://github.com/affaan-m/everything-claude-code/tree/v1.10.0/skills)
 <!-- END GENERATED BADGES -->
 
 Production-grade (see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom OMERO.web plugins for microscopy metadata workflows, file upload/import management, direct Imaris 11 integration, administrator tools, and a full server monitoring stack.
@@ -114,7 +114,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── installation_paths_example.env     # Template: all filesystem path definitions
 ├── github_pull_project_bash_example   # Safe self-updating pull script (public upstream)
 ├── docs/                              # Full documentation set (see docs/index.md)
-├── third_party/ecc-v1.9.0/            # Pinned selected ECC v1.9.0 skill snapshot (MIT)
+├── third_party/ecc-v1.10.0/            # Pinned selected ECC v1.10.0 skill snapshot (MIT)
 ├── tools/                             # Development tooling (docs linter)
 ├── tests/                             # Test suite
 └── .github/                           # CI workflows, Dependabot, and Copilot adapters
@@ -378,7 +378,7 @@ Both operations are designed for online use. They may briefly acquire locks; the
 | [`GEMINI.md`](GEMINI.md) | Gemini CLI project context |
 | [`docs/reference/ai-agent-skills.md`](docs/reference/ai-agent-skills.md) | Harness-neutral skill catalog for recurring AI-agent workflows |
 | [`docs/reference/ai-agent-integrations.md`](docs/reference/ai-agent-integrations.md) | Native adapter map for Copilot, Cursor, Claude, Gemini, and shared skills |
-| [`docs/reference/ai-agent-upstream-sources.md`](docs/reference/ai-agent-upstream-sources.md) | Pinned ECC v1.9.0 upstream provenance for ECC-derived local skills |
+| [`docs/reference/ai-agent-upstream-sources.md`](docs/reference/ai-agent-upstream-sources.md) | Pinned ECC v1.10.0 upstream provenance for ECC-derived local skills |
 | [`docs/index.md`](docs/index.md) | Full documentation index with cross-links |
 | [`docs/deployment/quickstart.md`](docs/deployment/quickstart.md) | Step-by-step deployment guide |
 | [`docs/deployment/configuration.md`](docs/deployment/configuration.md) | Configuration reference |
