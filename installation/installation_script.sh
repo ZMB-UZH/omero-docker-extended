@@ -3070,10 +3070,11 @@ if [ "${ENABLE_VULNERABILITY_SCAN}" = "1" ]; then
     run_docker_scout_summary
 fi
 
-echo " "
+echo ""
 echo "============================================"
 echo "Discovering actual UID/GID from built images"
 echo "============================================"
+echo ""
 
 discover_first_existing_user_or_die() {
     local image="$1"
@@ -3472,6 +3473,7 @@ else
     CROWDSEC_GID=0
 fi
 
+echo ""
 echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
 echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WEB_IMAGE})"
 echo "Prometheus   UID:GID = ${PROMETHEUS_UID}:${PROMETHEUS_GID} (image=${PROMETHEUS_IMAGE})"
@@ -3490,6 +3492,7 @@ echo ""
 echo "========================================================"
 echo "Fixing host bind-mount ownership based on actual UID/GID"
 echo "========================================================"
+echo ""
 
 chown_tree_or_die() {
     local path="$1"
@@ -3616,13 +3619,16 @@ if [ -f "${PROMETHEUS_CONFIG}" ]; then
     if is_crowdsec_enabled; then
         if ! grep -qF "http://crowdsec:8080/health" "${PROMETHEUS_CONFIG}"; then  # DevSkim: ignore DS137138
             sed -i "/# CROWDSEC_PROBE_MARKER/a\\${CROWDSEC_PROBE_LINE}" "${PROMETHEUS_CONFIG}"
+            echo ""
             echo "Injected CrowdSec health probe into prometheus.yml"
         else
+            echo ""
             echo "CrowdSec health probe already present in prometheus.yml"
         fi
     else
         if grep -qF "http://crowdsec:8080/health" "${PROMETHEUS_CONFIG}"; then  # DevSkim: ignore DS137138
             sed -i '\|http://crowdsec:8080/health|d' "${PROMETHEUS_CONFIG}"  # DevSkim: ignore DS137138
+            echo ""
             echo "Removed CrowdSec health probe from prometheus.yml (CrowdSec disabled)"
         fi
     fi
@@ -3640,9 +3646,11 @@ install_quota_enforcer_if_supported() {
     local omero_user_data_dir="$1"
     local installer_path="${OMERO_INSTALLATION_PATH%/}/scripts/install-quota-enforcer.sh"
 
+    echo ""
     echo "=============================================="
     echo "Checking ext4 project quota support for quotas"
     echo "=============================================="
+    echo ""
 
     if [ ! -f "${installer_path}" ]; then
         echo "INFO: Quota enforcer installer not found at ${installer_path}."
@@ -3736,6 +3744,7 @@ if [ -d "${admin_tools_dir}" ]; then
     if [ -d "${admin_tools_dir}/quota" ]; then
         chmod 0777 "${admin_tools_dir}/quota" 2>/dev/null || true
     fi
+    echo ""
     echo "Ensured .admin-tools directory permissions for omeroweb container (mode 0777, no sticky bit)."
 else
     # Create it even if the quota enforcer wasn't installed, so the omeroweb
@@ -3743,6 +3752,7 @@ else
     mkdir -p "${admin_tools_dir}/quota"
     chmod 0777 "${admin_tools_dir}" 2>/dev/null || true
     chmod 0777 "${admin_tools_dir}/quota" 2>/dev/null || true
+    echo ""
     echo "Created .admin-tools directory with write permissions for omeroweb container (mode 0777, no sticky bit)."
 fi
 
@@ -3761,9 +3771,11 @@ install_tmp_cleaner_if_available() {
     local omero_tmp_dir="$1"
     local installer_path="${OMERO_INSTALLATION_PATH%/}/scripts/install-tmp-cleaner.sh"
 
+    echo ""
     echo "=============================================="
     echo "Installing host-side tmp artifact cleaner"
     echo "=============================================="
+    echo ""
 
     if [ ! -f "${installer_path}" ]; then
         echo "INFO: Tmp cleaner installer not found at ${installer_path}."
@@ -3835,6 +3847,7 @@ if [ "${START_CONTAINERS}" -eq 1 ]; then
     echo "vm.overcommit_memory = 1" > /etc/sysctl.d/99-redis-overcommit.conf
     sysctl -w vm.overcommit_memory=1 >/dev/null 2>&1 || true
     echo "Set vm.overcommit_memory=1 (persisted to /etc/sysctl.d/99-redis-overcommit.conf)"
+    echo ""
 
     repo_root_sync_started_epoch="$(date +%s)"
     compose_up_with_retries "${COMPOSE_FILE}"
@@ -3849,13 +3862,16 @@ if [ "${START_CONTAINERS}" -eq 1 ]; then
     fi
 
     add_job_service_to_install_groups "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_LIST:-}"
+    echo ""
     print_binary_repository_cleanse_notice "started"
 else
     echo "Skipping container startup (START_CONTAINERS=0)."
+    echo ""
     print_binary_repository_cleanse_notice "deferred"
 fi
 
 # Cleanup build containers
 bash "${SCRIPT_DIR}/cleanup_build_containers.sh"
 
+echo ""
 echo "Done. Wait 30 seconds and check if the containers are up and running."
