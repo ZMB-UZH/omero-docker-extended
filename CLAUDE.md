@@ -29,7 +29,7 @@ Project-specific instructions for Claude Code sessions working on this repositor
 - Configuration templates: `env/*_example.env`, `installation_paths_example.env`
 - Full doc hub: `docs/index.md`
 - Cross-agent adapter map: `docs/reference/ai-agent-integrations.md`
-- Pinned ECC provenance: `docs/reference/ai-agent-upstream-sources.md`, `third_party/ecc-v1.9.0/`
+- Pinned ECC provenance: `docs/reference/ai-agent-upstream-sources.md`, `third_party/ecc-v1.10.0/`
 
 ## Verification
 

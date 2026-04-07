@@ -35,7 +35,7 @@ This repository does not run ECC's installer directly against the working tree.
 
 Instead it uses:
 
-- a pinned upstream snapshot under `third_party/ecc-v1.9.0/`
+- a pinned upstream snapshot under `third_party/ecc-v1.10.0/`
 - repo-specific overlays in `.agents/skills/`
 - native adapter files for each harness
 

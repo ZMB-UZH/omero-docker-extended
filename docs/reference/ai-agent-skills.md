@@ -4,7 +4,7 @@ This document catalogs the repository's shared skill surface for AI agents.
 
 The skills live under `.agents/skills/`. Harnesses that support skill discovery can load them directly. Harnesses that do not can still read the corresponding `SKILL.md` files manually.
 
-ECC-derived overlays point back to the pinned upstream snapshot in `third_party/ecc-v1.9.0/`. Repo-native operational skills remain local-only.
+ECC-derived overlays point back to the pinned upstream snapshot in `third_party/ecc-v1.10.0/`. Repo-native operational skills remain local-only.
 
 ## Precedence
 

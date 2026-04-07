@@ -71,7 +71,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `reference/ai-agent-runtime-playbook.md` -- deep Git, Docker, OMERO CLI, testing, logging, and joined-session procedure for AI agents
 - `reference/ai-agent-skills.md` -- harness-neutral catalog for repo-local AI-agent skills under `.agents/skills/`
 - `reference/ai-agent-integrations.md` -- platform adapter map for Copilot, Cursor, Claude, Gemini, and shared skill loaders
-- `reference/ai-agent-upstream-sources.md` -- pinned ECC v1.9.0 upstream provenance for ECC-derived local skills
+- `reference/ai-agent-upstream-sources.md` -- pinned ECC v1.10.0 upstream provenance for ECC-derived local skills
 - `reference/ai-agent-security-prevention-playbook.md` -- canonical anti-regression security playbook for AI agents; external best-practice links, concrete examples, and document ownership rules
 - `reference/service-endpoints.md` -- infrastructure ports, plugin routes, proxy forwarding
 - `reference/release-notes.md` -- release history and change documentation template
