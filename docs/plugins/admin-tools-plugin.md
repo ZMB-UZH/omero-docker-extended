@@ -29,7 +29,7 @@ The admin tools plugin exposes operational interfaces for log exploration, syste
 | `/omeroweb_admin_tools/resource-monitoring/`                           | GET      | Resource monitoring UI                                    |
 | `/omeroweb_admin_tools/resource-monitoring/data/`                      | GET      | Fetch container stats and system info                     |
 | `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/<subpath>`    | GET/POST | Proxy to Grafana API                                      |
-| `/omeroweb_admin_tools/resource-monitoring/prometheus-proxy/<subpath>` | GET/POST | Proxy to Prometheus API                                   |
+| `/omeroweb_admin_tools/resource-monitoring/prometheus-proxy/<subpath>`    | GET      | Proxy to Prometheus API                                   |
 | `/omeroweb_admin_tools/storage/`                                       | GET      | Storage analytics UI                                      |
 | `/omeroweb_admin_tools/storage/data/`                                  | GET      | Fetch storage usage data plus quota reconciliation state  |
 | `/omeroweb_admin_tools/storage/quota/data/`                            | GET      | Fetch persisted group quota state and reconciliation logs |
@@ -104,9 +104,12 @@ Quota reconciliation responses include explicit path-access diagnostics for the 
 Quota reconciliation and the host enforcer intentionally do **not** create missing ManagedRepository group directories. OMERO.server must create/register those directories first; creating them externally can trigger import failures such as `Directory exists but is not registered`.
 
 Grafana proxy authentication depends on passing session and auth headers
-through OMERO.web. The proxy forwards `Authorization` and `Cookie` request
-headers, rewrites `Origin` and `Referer` to match the Grafana backend origin,
-and preserves `Set-Cookie` responses. Cookie `Path` attributes are rewritten to
+through OMERO.web. The proxy forwards `Authorization`, `Cookie`, and
+`X-Grafana-Csrf-Token` request headers, rewrites `Origin` and `Referer` to
+match the Grafana backend origin, and preserves `Set-Cookie` responses.
+The view is marked `@csrf_exempt` so Django's own CSRF middleware does not
+block Grafana login POST requests; Grafana's backend validates CSRF
+independently. Cookie `Path` attributes are rewritten to
 `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/` so Grafana login
 sessions continue to work when Grafana is accessed through the plugin proxy
 route.
