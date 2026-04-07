@@ -50,6 +50,7 @@ flowchart TD
 - The plugin asks OMERO/Bio-Formats for a dry-run grouping plan.
 - That output becomes the source of truth for logical import units.
 - Dataset creation and later import execution both follow the same persisted plan.
+- The request path should prepare missing Dataset targets when possible, but the import worker can also create them later through an independent admin-created user session if planning finished after the upload response returned.
 
 ### 3. Route decision
 
@@ -95,6 +96,8 @@ flowchart TD
 - Mutate only the disposable native-import copy when the current runtime requires it.
 - Never route non-Zarr imports through the native Zarr branch.
 - Keep timeouts environment-driven.
+- Never reopen the live browser OMERO.web session in background import work.
+- Never assume `job-service.suConn()` can safely impersonate the importing user for Dataset creation or file-attachment follow-up work.
 
 ## Failure boundaries
 

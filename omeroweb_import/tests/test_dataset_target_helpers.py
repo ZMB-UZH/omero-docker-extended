@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 from omeroweb_import.strings import errors as import_errors
@@ -734,10 +735,14 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
         ],
     ) == (False, import_errors.unable_prepare_import_destination())
 
+    @contextmanager
+    def _missing_background_user_connection(*args, **kwargs):
+        yield None
+
     monkeypatch.setattr(
         core_functions,
-        "_open_service_connection",
-        lambda host, port, group_id=None: None,
+        "_background_user_connection",
+        _missing_background_user_connection,
     )
     assert core_functions._ensure_job_dataset_targets(
         {
@@ -756,14 +761,6 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
         ],
     ) == (False, import_errors.unable_prepare_import_destination())
 
-    class _ServiceConn:
-        def __init__(self):
-            self.closed = False
-
-        def close(self):
-            self.closed = True
-            raise RuntimeError("service close exploded")
-
     class _UserConn:
         def __init__(self):
             self.closed = False
@@ -772,17 +769,22 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
             self.closed = True
             raise RuntimeError("user close exploded")
 
-    service_conn = _ServiceConn()
     user_conn = _UserConn()
+
+    @contextmanager
+    def _background_user_connection(*args, **kwargs):
+        try:
+            yield user_conn
+        finally:
+            try:
+                user_conn.close()
+            except RuntimeError:
+                pass
+
     monkeypatch.setattr(
         core_functions,
-        "_open_service_connection",
-        lambda host, port, group_id=None: service_conn,
-    )
-    monkeypatch.setattr(
-        core_functions,
-        "_open_user_owned_background_connection",
-        lambda username, **kwargs: user_conn,
+        "_background_user_connection",
+        _background_user_connection,
     )
     monkeypatch.setattr(
         core_functions,
@@ -809,4 +811,3 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
     assert ok is False
     assert error == import_errors.unable_prepare_import_destination()
     assert user_conn.closed is True
-    assert service_conn.closed is True

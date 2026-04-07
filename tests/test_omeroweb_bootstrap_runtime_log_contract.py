@@ -64,6 +64,16 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
             'ensure_runtime_file "${log_path}" "${label}" 0664', self.bootstrap_text
         )
 
+    def test_bootstrap_ensures_tmpdir_for_session_storage(self) -> None:
+        self.assertIn(
+            'ensure_runtime_directory "${TMPDIR}" "OMERO.web TMPDIR (session storage)"',
+            self.bootstrap_text,
+        )
+        self.assertIn(
+            "${TMPDIR:-}",
+            self.bootstrap_text,
+        )
+
     def test_bootstrap_verifies_runtime_user_write_path_instead_of_root_only(
         self,
     ) -> None:

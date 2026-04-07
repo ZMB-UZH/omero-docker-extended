@@ -137,9 +137,37 @@ load_active_retention_markers() {
     )
 }
 
+path_is_structural() {
+    # Protect namespace directories (depth 1) and their tmp/ subdirectories
+    # (depth 2) from deletion.  These are the TMPDIR targets that running
+    # containers rely on; removing them breaks session storage and temp file
+    # creation until the next container restart.
+    local path="$1"
+    local relative="${path#"${TMP_DIR}"/}"
+
+    [[ "${relative}" == "${path}" ]] && return 1
+
+    case "${relative}" in
+        # depth-1 namespace dir  (e.g. omero-web, omero-server, omeroweb-import)
+        */*) ;;
+        *)   return 0 ;;
+    esac
+
+    case "${relative}" in
+        # depth-2 tmp dir  (e.g. omero-web/tmp, omero-server/tmp)
+        */tmp) return 0 ;;
+    esac
+
+    return 1
+}
+
 path_is_retained() {
     local path="$1"
     local retained_dir retained_file retained_marker
+
+    if path_is_structural "${path}"; then
+        return 0
+    fi
 
     for retained_dir in "${RETAINED_DIRS[@]}"; do
         if path_is_within "${path}" "${retained_dir}"; then

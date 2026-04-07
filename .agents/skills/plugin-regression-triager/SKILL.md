@@ -21,13 +21,14 @@ Use this skill to choose the narrowest correct verification set after a change.
 ## Combination rules
 
 - Shared-library plus plugin change: run both suites
+- Shared helper plus root shell/bootstrap change: run `omero_plugin_common/tests/`, `tests/`, and each directly affected package suite
 - Root docs plus plugin change: run `tests/` plus the affected plugin suite
 - `docker/`, `startup/`, or `installation/` change: run `tests/`, syntax checks, and any affected package suites
 - Multi-plugin refactor: run every touched package suite separately
 
-## Fast fallback checks
+## Fast checks
 
-If the runtime-complete environment is unavailable:
+If the runtime-complete environment is blocked:
 
 - `python3 -m py_compile` for touched Python files
 - `bash -n` for touched shell scripts
@@ -38,9 +39,3 @@ Fallback checks do not replace the required split-suite tests when those suites 
 ## Anti-patterns
 
 - Running one giant `pytest` command across all suites
-- Claiming "tests passed" after only running the top-level `tests/` directory
-- Skipping `tests/` when changing workflows, docs contracts, or root helper tools
-
-## Good outcome
-
-Each change is validated by the smallest correct set of suites, and no suite is skipped because of path confusion.

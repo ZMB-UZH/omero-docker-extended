@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 import types
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -628,10 +629,14 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
         def __str__(self):
             return self.name
 
+    @contextmanager
+    def _missing_background_user_connection(*args, **kwargs):
+        yield None
+
     monkeypatch.setattr(
         core_functions,
-        "_open_user_owned_background_connection",
-        lambda *args, **kwargs: None,
+        "_background_user_connection",
+        _missing_background_user_connection,
     )
     with pytest.raises(RuntimeError, match="Failed to create connection as user"):
         core_functions._attach_txt_to_image_service(
@@ -649,10 +654,15 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
         getObject=lambda kind, image_id: None,
         close=lambda: (_ for _ in ()).throw(RuntimeError("close failed")),
     )
+
+    @contextmanager
+    def _missing_image_background_user_connection(*args, **kwargs):
+        yield missing_image_conn
+
     monkeypatch.setattr(
         core_functions,
-        "_open_user_owned_background_connection",
-        lambda *args, **kwargs: missing_image_conn,
+        "_background_user_connection",
+        _missing_image_background_user_connection,
     )
     with pytest.raises(RuntimeError, match="Image:99 not found"):
         core_functions._attach_txt_to_image_service(
@@ -713,10 +723,15 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
         "omeroweb_import.services.omero.sem_edx_parser",
         sem_edx_parser,
     )
+
+    @contextmanager
+    def _user_background_connection(*args, **kwargs):
+        yield _UserConn()
+
     monkeypatch.setattr(
         core_functions,
-        "_open_user_owned_background_connection",
-        lambda *args, **kwargs: _UserConn(),
+        "_background_user_connection",
+        _user_background_connection,
     )
 
     class _BadPlotPath:
@@ -741,8 +756,8 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
 
     monkeypatch.setattr(
         core_functions,
-        "_open_user_owned_background_connection",
-        lambda *args, **kwargs: _UserConn(),
+        "_background_user_connection",
+        _user_background_connection,
     )
     with pytest.raises(RuntimeError, match="Unable to read file"):
         core_functions._attach_txt_to_image_service(
