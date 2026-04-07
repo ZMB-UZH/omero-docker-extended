@@ -44,16 +44,16 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block.index("[![security-code-scanning]("),
         )
         self.assertLess(
+            badge_block.index("[![GitHub commit activity]("),
+            badge_block.index("[![Codecov]("),
+        )
+        self.assertLess(
             badge_block.index("[![Codecov]("),
             badge_block.index("[![super-linter]("),
         )
         self.assertLess(
             badge_block.index("[![super-linter]("),
             badge_block.index("[![Ruff]("),
-        )
-        self.assertLess(
-            badge_block.index("[![Ruff]("),
-            badge_block.index("[![GitHub commit activity]("),
         )
         self.assertLess(
             badge_block.index("[![GitHub commit activity]("),
