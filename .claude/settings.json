@@ -1,0 +1,36 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; if [[ \"$f\" == *.py ]] && [[ -f \"$f\" ]]; then /home/itservice/.local/bin/ruff check --fix --quiet \"$f\" && /home/itservice/.local/bin/ruff format --quiet \"$f\"; fi; } 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Auto-formatting Python..."
+          },
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; if [[ \"$f\" == *.md ]] && [[ -f \"$f\" ]]; then npx markdownlint-cli2 \"$f\" 2>&1; fi; } 2>/dev/null || true",
+            "timeout": 15,
+            "statusMessage": "Checking Markdown lint..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // empty' | { read -r cmd; if echo \"$cmd\" | grep -qE '^(sudo\\s+)?docker\\s+compose\\b'; then python3 /opt/omero/tools/env_safety_guard.py check; fi; } 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Checking env file safety..."
+          }
+        ]
+      }
+    ]
+  }
+}
