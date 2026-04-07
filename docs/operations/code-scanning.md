@@ -8,16 +8,16 @@ The repository also includes a `security-delta` job inside `.github/workflows/se
 
 ## Active scanners
 
-| Scanner        | Type                       | Scope                                        | Free |
-| -------------- | -------------------------- | -------------------------------------------- | ---- |
-| CodeQL         | SAST                       | Python, JavaScript/TypeScript                | Yes  |
-| Trivy          | Vuln/misconfig/secret scan | Filesystem (dependencies, configs, secrets)  | Yes  |
-| Semgrep        | SAST                       | 1000+ rules (Django, shell, Python patterns) | Yes  |
-| Bandit         | Python security            | Hardcoded creds, injection, unsafe calls     | Yes  |
-| Hadolint       | Dockerfile lint            | All 8 Dockerfiles (matrix strategy)          | Yes  |
-| DevSkim        | Security patterns          | Cross-language pattern matching (Microsoft)  | Yes  |
-| OSV Scanner    | Dependency vulns           | Google OSV vulnerability database            | Yes  |
-| OSSF Scorecard | Supply-chain               | Branch protection, pinning, CI security      | Yes  |
+| Scanner        | Type                                 | Scope                                                 | Free |
+| -------------- | ------------------------------------ | ----------------------------------------------------- | ---- |
+| CodeQL         | SAST                                 | Python, JavaScript/TypeScript                         | Yes  |
+| Trivy          | Vuln/misconfig/secret/license scan   | Filesystem (dependencies, configs, secrets, licenses) | Yes  |
+| Semgrep        | SAST                                 | 1000+ rules (Django, shell, Python patterns)          | Yes  |
+| Bandit         | Python security                      | Hardcoded creds, injection, unsafe calls              | Yes  |
+| Hadolint       | Dockerfile lint                      | All 8 Dockerfiles (matrix strategy)                   | Yes  |
+| DevSkim        | Security patterns                    | Cross-language pattern matching (Microsoft)           | Yes  |
+| OSV Scanner    | Dependency vulns                     | Google OSV vulnerability database                     | Yes  |
+| OSSF Scorecard | Supply-chain                         | Branch protection, pinning, CI security               | Yes  |
 
 ## Trigger model
 
