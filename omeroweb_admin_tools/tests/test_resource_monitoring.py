@@ -1538,7 +1538,7 @@ def test_proxy_http_request_forwards_extra_headers(monkeypatch) -> None:
 
     class DummyDjangoRequest:
         method = "POST"
-        body = b'{"user":"admin","password":"secret"}'
+        body = b'{"user":"admin","credential":"test-value"}'
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
