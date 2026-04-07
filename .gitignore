@@ -126,6 +126,7 @@ celerybeat.pid
 # Environments
 .env
 installation_paths.env
+.env_backups/
 .venv
 /logo/logo.png
 !env/

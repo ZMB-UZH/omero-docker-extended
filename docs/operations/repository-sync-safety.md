@@ -25,9 +25,30 @@ That means:
 6. Never choose the remote target branch by copying the current local branch name.
 7. If the sync must exclude specific files, preserve those exclusions explicitly in the temporary destination clone before committing.
 
+## Pre-Sync Safety Check (mandatory)
+
+Before **any** file-sync, rsync, or tree-replacement operation, run:
+
+```bash
+python3 tools/env_safety_guard.py check
+python3 tools/env_safety_guard.py backup
+```
+
+The first command verifies every file listed in `.env_manifest` exists and is non-empty.
+The second creates a timestamped backup under `.env_backups/`.
+
+If the check fails, **stop immediately** and investigate.
+
+To restore after an accidental deletion:
+
+```bash
+python3 tools/env_safety_guard.py restore
+```
+
 ## Safe Sync Procedure
 
-1. Fetch the latest source and destination refs.
+1. Run `python3 tools/env_safety_guard.py check && python3 tools/env_safety_guard.py backup`.
+2. Fetch the latest source and destination refs.
 2. Resolve the destination remote's default branch explicitly.
    - Example: `git remote show <remote>` and read `HEAD branch: ...`
    - If the human did not explicitly name a target branch, use that default branch.
