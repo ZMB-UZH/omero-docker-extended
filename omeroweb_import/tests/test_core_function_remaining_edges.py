@@ -367,6 +367,11 @@ def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
 def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
     monkeypatch,
 ):
+    monkeypatch.setattr(
+        core_functions,
+        "_open_admin_connection",
+        lambda host, port: None,
+    )
     assert (
         core_functions._create_dataset_via_admin_connection(
             "alice",

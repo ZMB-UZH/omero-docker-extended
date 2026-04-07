@@ -401,6 +401,9 @@ def test_run_zarr_managed_repo_script_and_cleanup_helpers_cover_error_paths(
     monkeypatch,
     tmp_path,
 ) -> None:
+    monkeypatch.setattr(
+        core_functions, "_open_admin_connection", lambda host, port: None
+    )
     assert core_functions._run_zarr_managed_repo_script(
         "stage",
         "omeroserver",

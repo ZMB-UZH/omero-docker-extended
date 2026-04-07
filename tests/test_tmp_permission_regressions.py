@@ -52,7 +52,7 @@ class TmpPermissionRegressionTests(unittest.TestCase):
                 f"""\
                 set -euo pipefail
                 {function_text}
-                ensure_omero_tmp_layout "{tmp_root}" {current_uid} {current_gid} {current_uid} {current_gid} omero-server
+                ensure_omero_tmp_layout "{tmp_root}" {current_uid} {current_gid} {current_uid} {current_gid} omero-server omero-web
                 """
             )
             self._run_bash(script)
@@ -76,6 +76,41 @@ class TmpPermissionRegressionTests(unittest.TestCase):
             self.assertEqual(0o700, (tmp_root / "omero-server").stat().st_mode & 0o777)
             self.assertEqual(
                 0o700, (tmp_root / "omero-server" / "tmp").stat().st_mode & 0o777
+            )
+
+    def test_installation_layout_creates_web_tmp_directory(self) -> None:
+        """ensure_omero_tmp_layout must create omero-web/tmp owned by web uid."""
+        function_text = self._slice_function(
+            self.installation_script,
+            "ensure_omero_tmp_layout() {",
+            'if ! chown_tree_or_die "${OMERO_USER_DATA_PATH}"',
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir) / "omero_temp"
+            current_uid = os.getuid()
+            current_gid = os.getgid()
+
+            script = textwrap.dedent(
+                f"""\
+                set -euo pipefail
+                {function_text}
+                ensure_omero_tmp_layout "{tmp_root}" {current_uid} {current_gid} {current_uid} {current_gid} omero-server omero-web
+                """
+            )
+            self._run_bash(script)
+
+            web_tmp = tmp_root / "omero-web" / "tmp"
+            self.assertTrue(
+                web_tmp.is_dir(),
+                "ensure_omero_tmp_layout must create omero-web/tmp",
+            )
+            self.assertEqual(
+                (current_uid, current_gid),
+                self._ownership(web_tmp),
+            )
+            self.assertEqual(
+                (current_uid, current_gid),
+                self._ownership(tmp_root / "omero-web"),
             )
 
     def test_server_bootstrap_removes_exact_legacy_lock_namespace(self) -> None:

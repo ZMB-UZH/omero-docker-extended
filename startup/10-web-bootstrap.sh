@@ -271,6 +271,15 @@ ensure_web_var_layout
 ensure_runtime_directory "${log_dir}" "OMERO.web log directory" 0755
 prepare_supervisor_logs_from_config "${supervisord_config_path}"
 
+# ── Ensure TMPDIR exists and is writable (Django file-based session storage) ──
+# docker-compose.yml sets TMPDIR to a bind-mounted host path.  If this directory
+# does not exist or is not owned by the runtime user, Django's file session
+# backend silently fails to persist sessions and login breaks (the authenticated
+# session evaporates on redirect).
+if [[ -n "${TMPDIR:-}" && "${TMPDIR}" != "/tmp" ]]; then
+    ensure_runtime_directory "${TMPDIR}" "OMERO.web TMPDIR (session storage)" 0700
+fi
+
 # ── Ensure .admin-tools directory is writable for quota state persistence ──
 omero_data_dir="${OMERO_DATA_DIR:-}"
 if [[ -z "${omero_data_dir}" ]]; then

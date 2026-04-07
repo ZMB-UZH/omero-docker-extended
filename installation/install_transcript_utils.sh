@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 
+_INSTALL_TRANSCRIPT_UTILS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_ENV_ASSIGNMENT_HELPER_PATH="${_INSTALL_TRANSCRIPT_UTILS_DIR}/env_assignment_utils.sh"
+if [ ! -r "${_ENV_ASSIGNMENT_HELPER_PATH}" ]; then
+    echo "ERROR: Missing env assignment helper: ${_ENV_ASSIGNMENT_HELPER_PATH}" >&2
+    return 1 2>/dev/null || exit 1
+fi
+# shellcheck disable=SC1090
+. "${_ENV_ASSIGNMENT_HELPER_PATH}"
+unset _INSTALL_TRANSCRIPT_UTILS_DIR _ENV_ASSIGNMENT_HELPER_PATH
+
 install_transcript_timestamp_utc() {
     if [ -n "${OMERO_INSTALL_TRANSCRIPT_TIMESTAMP:-}" ]; then
         printf '%s' "${OMERO_INSTALL_TRANSCRIPT_TIMESTAMP}"
@@ -13,6 +23,9 @@ install_transcript_load_paths_env_value() {
     local env_file_path="$1"
     local variable_name="$2"
     local env_line=""
+    local env_key=""
+    local env_value=""
+    local resolved_value=""
 
     if [ ! -r "${env_file_path}" ]; then
         return 1
@@ -25,7 +38,14 @@ install_transcript_load_paths_env_value() {
                     continue
                     ;;
                 [A-Za-z_]*=*)
-                    eval "${env_line}"
+                    env_key="${env_line%%=*}"
+                    env_value="${env_line#*=}"
+                    if ! resolved_value="$(resolve_env_assignment_value "${env_value}")"; then
+                        echo "ERROR: Refusing unsafe value for ${env_key} from ${env_file_path}" >&2
+                        return 1
+                    fi
+                    printf -v "${env_key}" '%s' "${resolved_value}"
+                    export "${env_key}"
                     ;;
             esac
         done < "${env_file_path}"
@@ -174,6 +194,16 @@ install_transcript_enable() {
     OMERO_INSTALL_TRANSCRIPT_TMP_LOG="${temp_log_path}"
     OMERO_INSTALL_TRANSCRIPT_FINAL_PATH_FILE="${metadata_path}"
     OMERO_INSTALL_TRANSCRIPT_SOURCE_NAME="${source_name}"
+
+    if [ -r "${env_file_path}" ]; then
+        if ! final_path="$(install_transcript_resolve_final_path "${source_name}" "${env_file_path}" "" )"; then
+            rm -f "${temp_log_path}" "${metadata_path}" 2>/dev/null || true
+            echo "ERROR: Failed to resolve installation transcript destination from ${env_file_path}" >&2
+            return 1
+        fi
+        printf '%s\n' "${final_path}" > "${metadata_path}"
+        chmod 0600 "${metadata_path}" 2>/dev/null || true
+    fi
 
     if command -v script >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then
         local reexec_cmd=""

@@ -20,48 +20,22 @@ Start from `third_party/ecc-v1.9.0/skills/search-first/SKILL.md` for the generic
 - Fixing a bug where an upstream or in-repo solution may already exist
 - Writing a refactor plan for a large file or subsystem
 
-## Mandatory search order
+## Search order
 
 1. Search this repository first with `rg`.
 2. Route through `docs/reference/ai-agent-context-routing.md` and read the nearest tests, docs, and example env files.
 3. Check official upstream docs and release notes.
-4. Check existing upstream implementations or maintained references.
+4. Check upstream implementations or maintained references.
 5. Only then decide whether to adopt, extend, or build custom logic.
 
-## Repo-first checklist
+## Repo rules
 
 - Search the relevant package, service, or plugin directory first.
 - Search `tests/` and package-local `*/tests/` before assuming coverage is missing.
 - Search `docs/`, `README.md`, `ARCHITECTURE.md`, and `CLAUDE.md` for existing operating rules.
 - Treat `env/*_example.env` and `installation_paths_example.env` as canonical contracts.
-- Refine the search in small loops instead of opening entire directories at once.
-
-## Primary sources for this repo
-
-- OMERO product docs and the OMERO config glossary
-- Official OMERO server/web Docker repos and release notes
-- Django and Python standard-library docs
-- Docker and Docker Compose docs
-- PostgreSQL docs
-- Grafana, Loki, Alloy, and Prometheus docs
-- Official GitHub Actions releases/tags when touching workflows
-
-## Decision rules
-
-- Adopt: exact match, maintained upstream, fits repo contracts
-- Extend: strong base exists but needs a thin repo-specific wrapper
-- Build custom: no maintained fit exists or the repo needs a stricter contract
-
-## Repo-specific constraints
-
+- Adopt when the existing pattern is already correct, extend when a thin repo wrapper is enough, and build custom only when the repo needs a stricter contract.
 - Do not use background agents or subagents for research in this repo.
 - Do not leak PATs, tokens, passwords, or internal URLs into web queries or docs tools.
 - For security-sensitive facts, use primary sources only.
 - For version-sensitive facts, cite the exact version, release tag, or document page used.
-
-## Anti-patterns
-
-- Writing a new helper before searching `omero_plugin_common/`
-- Adding new env variables without checking existing templates and config loaders
-- Rewriting Docker/bootstrap logic without checking startup scripts and regression tests
-- Treating stale memory as authoritative when the official docs or releases can be checked

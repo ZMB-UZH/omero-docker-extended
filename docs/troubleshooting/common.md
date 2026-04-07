@@ -368,12 +368,13 @@ Cause:
 
 - The Import plugin always lets OMERO CLI/Bio-Formats build the logical import plan before import starts, even when browser-side compatibility checking is disabled.
 - Compatibility-disabled jobs use that background step for planning only: it persists `planned_import_units`, but it does not run the first-batch compatibility scan.
-- Dataset creation must still happen on the request path with the live user-owned OMERO connection. If the import thread reaches background dataset preparation instead, OMERO.web can no longer safely reuse the browser session and the job falls back to the generic destination-preparation error.
+- Older broken builds tried to recover by switching background dataset preparation onto a `job-service` impersonation path. On stacks where `job-service` could not impersonate the importing user, that path collapsed into the generic destination-preparation error.
+- Fixed builds use an independent admin-created user session for background dataset preparation, so they do not need the browser session and do not reintroduce the historical logout/disconnect problem.
 
 Validation:
 
 ```bash
-rg -n "planning import units before request-path dataset preparation|cannot reuse the live OMERO.web session|could not switch to OMERO user" \
+rg -n "planning import units before request-path dataset preparation|cannot reuse the live OMERO.web session|could not open an independent user session|could not switch to OMERO user" \
   /disks/omero_data/omero_web_logs/OMEROweb.log
 ```
 
@@ -381,11 +382,11 @@ Expected result:
 
 - Healthy behavior:
   - the logs show the planning/import-unit message first
-  - a later browser poll/import-step request prepares datasets on the request path
-  - the import thread starts without the background session-switch warning
+  - either a later browser poll/import-step request prepares datasets on the request path, or the import thread prepares them through an independent background user session
+  - the import thread starts without any `job-service` impersonation warning
 - Failing behavior:
-  - the logs show `Service connection could not switch to OMERO user ... for dataset preparation on job ...`
-  - followed by `Background dataset preparation for job ... cannot reuse the live OMERO.web session.`
+  - the logs show `Service connection could not switch to OMERO user ... for dataset preparation on job ...` or `Background dataset preparation for job ... cannot reuse the live OMERO.web session.`
+  - those messages indicate an older broken session-ownership path and should disappear after the import-plugin rewrite is deployed.
 
 ## 15. `omeroserver` restart loop with `ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set.`
 

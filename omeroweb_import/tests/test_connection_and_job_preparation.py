@@ -253,55 +253,36 @@ def test_job_service_credentials_and_session_helpers_cover_env_and_cleanup(monke
     )
 
 
-def test_background_connection_helpers_cover_missing_service_failures_and_group_scope():
+def test_background_connection_helpers_require_independent_session_keys(monkeypatch):
     assert (
         core_functions._open_user_owned_background_connection(
             "alice",
-            service_conn=None,
-            purpose="dataset preparation",
-        )
-        is None
-    )
-
-    service_conn = SimpleNamespace(
-        suConn=lambda username: (_ for _ in ()).throw(RuntimeError("cannot switch"))
-    )
-    assert (
-        core_functions._open_user_owned_background_connection(
-            "alice",
-            group_id=4,
-            service_conn=service_conn,
-            purpose="dataset preparation",
-        )
-        is None
-    )
-
-    empty_conn = SimpleNamespace(suConn=lambda username: None)
-    assert (
-        core_functions._open_user_owned_background_connection(
-            "alice",
-            group_id=4,
-            service_conn=empty_conn,
             purpose="dataset preparation",
         )
         is None
     )
 
     group_calls = []
-    impersonated_conn = SimpleNamespace(
+    session_conn = SimpleNamespace(
         SERVICE_OPTS=SimpleNamespace(
             setOmeroGroup=lambda value: group_calls.append(value)
         )
     )
-    valid_service_conn = SimpleNamespace(suConn=lambda username: impersonated_conn)
+    monkeypatch.setattr(
+        core_functions,
+        "_open_session_connection",
+        lambda session_key, host, port: session_conn,
+    )
     assert (
         core_functions._open_user_owned_background_connection(
             "alice",
+            session_key="session-key",
+            host="omeroserver",
+            port=4064,
             group_id=4,
-            service_conn=valid_service_conn,
             purpose="dataset preparation",
         )
-        is impersonated_conn
+        is session_conn
     )
     assert group_calls == ["4"]
 
@@ -312,11 +293,18 @@ def test_background_connection_helpers_cover_missing_service_failures_and_group_
             )
         )
     )
+    monkeypatch.setattr(
+        core_functions,
+        "_open_session_connection",
+        lambda session_key, host, port: warning_conn,
+    )
     assert (
         core_functions._open_user_owned_background_connection(
             "alice",
+            session_key="session-key",
+            host="omeroserver",
+            port=4064,
             group_id=4,
-            service_conn=SimpleNamespace(suConn=lambda username: warning_conn),
             purpose="dataset preparation",
         )
         is warning_conn

@@ -15,6 +15,7 @@ Use this skill whenever a change touches env files, config loaders, startup scri
 - Treat `env/*_example.env` and `installation_paths_example.env` as the canonical tracked contract.
 - Never create, edit, overwrite, or delete `env/omero_secrets.env`.
 - Prefer `omero_plugin_common.env_utils` for typed Python config loading.
+- Treat shell env parsing as a security boundary: config must be parsed as data, never executed as shell code.
 
 ## Required change pattern
 
@@ -29,6 +30,7 @@ Use this skill whenever a change touches env files, config loaders, startup scri
 - compose `args:` or fallback values duplicating tracked env templates
 - config values added only in code, not in templates
 - installation-specific absolute paths in tests
+- shell loaders that use `eval`, `source`, or command substitution on tracked env content
 - mismatched variable naming relative to existing OMERO property conventions
 
 ## Fast verification
@@ -38,8 +40,5 @@ python3 tools/lint_docs_structure.py
 ruff check <touched-python-files>
 ruff format --check <touched-python-files>
 python3 -m py_compile <touched-python-files>
+bash -n <touched-shell-scripts>
 ```
-
-## Good outcome
-
-Every new or changed configuration value is visible in the tracked templates, loaded through the repo's standard helpers, and documented in the deployment reference.

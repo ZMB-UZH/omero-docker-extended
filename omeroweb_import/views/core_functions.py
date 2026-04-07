@@ -2370,27 +2370,17 @@ def _ensure_job_dataset_targets(
         )
         return False, generic_error
 
-    service_conn = _open_service_connection(
-        host, port, group_id=job_dict.get("group_id")
-    )
-    if not service_conn:
-        logger.warning(
-            "Unable to open OMERO service connection for dataset preparation on job %s.",
-            sanitize_log_value(job_dict.get("job_id")),
-        )
-        return False, generic_error
-
-    user_conn = None
-    try:
-        user_conn = _open_user_owned_background_connection(
-            username,
-            group_id=job_dict.get("group_id"),
-            service_conn=service_conn,
-            purpose=f"dataset preparation on job {job_dict.get('job_id') or '?'}",
-        )
+    with _background_user_connection(
+        username,
+        host=host,
+        port=int(port),
+        group_id=job_dict.get("group_id"),
+        group_name=job_dict.get("group_name"),
+        purpose=f"dataset preparation on job {job_dict.get('job_id') or '?'}",
+    ) as user_conn:
         if not user_conn:
             logger.warning(
-                "Background dataset preparation for job %s cannot reuse the live OMERO.web session.",
+                "Background dataset preparation for job %s could not open an independent user session.",
                 sanitize_log_value(job_dict.get("job_id")),
             )
             return False, generic_error
@@ -2404,27 +2394,12 @@ def _ensure_job_dataset_targets(
             )
             if dataset_id is None:
                 logger.warning(
-                    "Failed to create dataset %s for job %s using the service OMERO connection.",
+                    "Failed to create dataset %s for job %s using an independent background OMERO session.",
                     sanitize_log_value(dataset_name),
                     sanitize_log_value(job_dict.get("job_id")),
                 )
                 return False, generic_error
         return True, None
-    finally:
-        if user_conn is not None:
-            try:
-                user_conn.close()
-            except Exception as exc:
-                logger.warning(
-                    "Failed to close impersonated OMERO connection after dataset creation: %s",
-                    exc,
-                )
-        try:
-            service_conn.close()
-        except Exception as exc:
-            logger.warning(
-                "Failed to close job-service connection after dataset creation: %s", exc
-            )
 
 
 def _prepare_job_import_datasets(
@@ -2735,6 +2710,93 @@ def _background_import_session(
             admin_conn.close()
         except Exception:
             logger.debug("Suppressed exception in cleanup", exc_info=True)
+
+
+@contextmanager
+def _background_user_connection(
+    username: str,
+    *,
+    session_key: str = "",
+    host: str = "",
+    port: Optional[int] = None,
+    group_id: Optional[int] = None,
+    group_name: Optional[str] = None,
+    purpose: str = "background OMERO work",
+    timeout_hint_seconds: Optional[int] = None,
+):
+    """Open a user-owned OMERO connection for background work.
+
+    This helper never reuses the live OMERO.web session and never relies on
+    ``job-service.suConn()``. Background work must either receive an existing
+    independent session key or create one through the admin-backed session
+    helper.
+    """
+    if not username or not host or port is None:
+        logger.warning(
+            "Missing OMERO connection details for %s as user %s.",
+            sanitize_log_value(purpose),
+            sanitize_log_value(username),
+        )
+        yield None
+        return
+
+    def _open_from_session(active_session_key: str):
+        if not active_session_key:
+            return None
+        try:
+            return _open_group_scoped_session_connection(
+                active_session_key,
+                host,
+                int(port),
+                group_id=group_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to open background OMERO connection for %s as user %s: %s",
+                sanitize_log_value(purpose),
+                sanitize_log_value(username),
+                sanitize_log_value(exc),
+            )
+            return None
+
+    conn = None
+    if session_key:
+        conn = _open_from_session(session_key)
+        try:
+            yield conn
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to close temporary user OMERO connection after %s: %s",
+                        sanitize_log_value(purpose),
+                        sanitize_log_value(exc),
+                    )
+        return
+
+    with _background_import_session(
+        username,
+        host,
+        int(port),
+        group_id=group_id,
+        group_name=group_name,
+        timeout_hint_seconds=timeout_hint_seconds,
+    ) as background_session_key:
+        conn = _open_from_session(background_session_key)
+        try:
+            yield conn
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to close temporary user OMERO connection after %s: %s",
+                        sanitize_log_value(purpose),
+                        sanitize_log_value(exc),
+                    )
 
 
 def _write_cli_ice_config(
@@ -3608,47 +3670,23 @@ def _open_user_owned_background_connection(
     service_conn: Optional[BlitzGateway] = None,
     purpose: str = "background OMERO work",
 ):
-    """Open a user-owned OMERO connection without reusing the live OMERO.web session."""
-    if service_conn is None or not username:
-        logger.warning(
-            "No service connection available for %s as user %s. "
-            "Live OMERO.web sessions are not reopened in background workers.",
-            sanitize_log_value(purpose),
-            sanitize_log_value(username),
-        )
-        return None
+    """Open a user-owned OMERO connection from an independent session key only."""
+    del service_conn
+    del username
 
-    try:
-        conn = service_conn.suConn(username)
-    except Exception as exc:
+    if not session_key or not host or port is None:
         logger.warning(
-            "Service connection failed to switch to OMERO user %s for %s: %s",
-            sanitize_log_value(username),
-            sanitize_log_value(purpose),
-            sanitize_log_value(exc),
-        )
-        return None
-
-    if not conn:
-        logger.warning(
-            "Service connection could not switch to OMERO user %s for %s.",
-            sanitize_log_value(username),
+            "Background OMERO connection for %s requires an independent session key.",
             sanitize_log_value(purpose),
         )
         return None
 
-    if group_id is not None:
-        try:
-            conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
-        except Exception as exc:
-            logger.warning(
-                "Failed to set impersonated group context to %s for %s: %s",
-                sanitize_log_value(group_id),
-                sanitize_log_value(purpose),
-                sanitize_log_value(exc),
-            )
-
-    return conn
+    return _open_group_scoped_session_connection(
+        session_key,
+        host,
+        int(port),
+        group_id=group_id,
+    )
 
 
 def _logical_import_entry_display_name(entry: dict) -> str:
@@ -3881,19 +3919,18 @@ def _attach_txt_to_image_service(
         fa = update_service.saveAndReturnObject(fa)
         image_obj.linkAnnotation(FileAnnotationWrapper(user_connection, fa))
 
-    user_conn = _open_user_owned_background_connection(
+    with _background_user_connection(
         username,
         session_key=session_key,
         host=host,
         port=port,
         group_id=group_id,
-        service_conn=conn,
         purpose=f"SEM-EDX attachment for Image:{image_id}",
-    )
-    if not user_conn:
-        raise RuntimeError(f"Failed to create connection as user {username}")
+        timeout_hint_seconds=_get_import_timeout_seconds(),
+    ) as user_conn:
+        if not user_conn:
+            raise RuntimeError(f"Failed to create connection as user {username}")
 
-    try:
         # Get the image in user's context
         image_obj = user_conn.getObject("Image", image_id)
         if not image_obj:
@@ -3933,12 +3970,6 @@ def _attach_txt_to_image_service(
                     image_id,
                     exc,
                 )
-    finally:
-        # Always close the user connection
-        try:
-            user_conn.close()
-        except Exception as exc:
-            logger.warning("Failed to close temporary user OMERO connection: %s", exc)
 
 
 def _append_job_message(job: dict, message: str):

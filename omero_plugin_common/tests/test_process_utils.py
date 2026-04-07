@@ -157,6 +157,42 @@ def test_run_streaming_raises_called_process_error_with_output() -> None:
     assert excinfo.value.stderr == "boom\n"
 
 
+def test_run_handles_large_unbroken_output() -> None:
+    payload_size = 200_000
+
+    result = process_utils.run(
+        [
+            sys.executable,
+            "-c",
+            f"import sys; sys.stdout.write('x' * {payload_size})",
+        ],
+        check=True,
+    )
+
+    assert result.stdout == "x" * payload_size
+    assert result.stderr == ""
+
+
+def test_run_streaming_handles_large_unbroken_output() -> None:
+    payload_size = 200_000
+
+    result = process_utils.run_streaming(
+        [
+            sys.executable,
+            "-c",
+            (
+                f"import sys; sys.stdout.write('x' * {payload_size}); "
+                f"sys.stderr.write('y' * {payload_size})"
+            ),
+        ],
+        check=True,
+        tick_interval=0.05,
+    )
+
+    assert result.stdout == "x" * payload_size
+    assert result.stderr == "y" * payload_size
+
+
 def test_run_works_inside_running_event_loop() -> None:
     async def _exercise() -> None:
         result = process_utils.run(

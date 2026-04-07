@@ -534,30 +534,19 @@ def test_ensure_job_dataset_targets_creates_only_logical_datasets(monkeypatch):
         def close(self):
             self.closed = True
 
-    class _FakeServiceConn:
-        def __init__(self):
-            self.user_conn = _FakeUserConn()
-            self.closed = False
-            self.usernames = []
+    fake_user_conn = _FakeUserConn()
 
-        def suConn(self, username):
-            self.usernames.append(username)
-            return self.user_conn
-
-        def close(self):
-            self.closed = True
-
-    fake_service_conn = _FakeServiceConn()
+    @contextmanager
+    def fake_background_user_connection(*args, **kwargs):
+        try:
+            yield fake_user_conn
+        finally:
+            fake_user_conn.close()
 
     monkeypatch.setattr(
         core_functions,
-        "_open_service_connection",
-        lambda host, port, group_id=None: fake_service_conn,
-    )
-    monkeypatch.setattr(
-        core_functions,
-        "_create_dataset_via_admin_connection",
-        lambda *args, **kwargs: None,
+        "_background_user_connection",
+        fake_background_user_connection,
     )
 
     def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
@@ -598,10 +587,8 @@ def test_ensure_job_dataset_targets_creates_only_logical_datasets(monkeypatch):
     assert created == [("plate.zarr", None)]
     assert job["dataset_map"] == {"plate.zarr": 1}
     assert job["orphan_dataset_name"] is None
-    assert fake_service_conn.usernames == ["alice"]
-    assert fake_service_conn.user_conn.SERVICE_OPTS.groups == ["4"]
-    assert fake_service_conn.user_conn.closed is True
-    assert fake_service_conn.closed is True
+    assert fake_user_conn.SERVICE_OPTS.groups == []
+    assert fake_user_conn.closed is True
 
 
 def test_ensure_job_dataset_targets_uses_request_connection_when_available(monkeypatch):
@@ -760,28 +747,15 @@ def test_prepare_request_job_import_datasets_uses_planned_import_units_for_gener
     assert job["dataset_map"] == {"bundle.pkg": 44}
 
 
-def test_ensure_job_dataset_targets_hides_impersonation_details(monkeypatch):
-    class _FakeServiceConn:
-        def __init__(self):
-            self.closed = False
-
-        def suConn(self, username):
-            return None
-
-        def close(self):
-            self.closed = True
-
-    fake_service_conn = _FakeServiceConn()
+def test_ensure_job_dataset_targets_hides_background_session_details(monkeypatch):
+    @contextmanager
+    def fake_background_user_connection(*args, **kwargs):
+        yield None
 
     monkeypatch.setattr(
         core_functions,
-        "_open_service_connection",
-        lambda host, port, group_id=None: fake_service_conn,
-    )
-    monkeypatch.setattr(
-        core_functions,
-        "_create_dataset_via_admin_connection",
-        lambda *args, **kwargs: None,
+        "_background_user_connection",
+        fake_background_user_connection,
     )
 
     job = {
@@ -806,8 +780,7 @@ def test_ensure_job_dataset_targets_hides_impersonation_details(monkeypatch):
 
     assert ok is False
     assert error == errors.unable_prepare_import_destination()
-    assert "impersonate" not in error.lower()
-    assert fake_service_conn.closed is True
+    assert "session" not in error.lower()
 
 
 def test_import_job_entry_uses_directory_package_dataset_id(

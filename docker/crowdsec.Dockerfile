@@ -9,6 +9,8 @@ ARG APPLY_SECURITY_HARDENING=0
 #
 # nftables: native backend on Ubuntu 24.04+ and Debian 13+ (Trixie).
 # iptables + ipset: legacy fallback for older host kernels.
+# Alpine 3.21 exposes the IPv6 frontend via the iptables package, so there is
+# no separate ip6tables package to install or pin here.
 #
 # The same crowdsec-firewall-bouncer binary supports both modes; the entrypoint
 # auto-detects the host backend at startup and generates the matching config.
@@ -28,7 +30,6 @@ RUN set -eu; \
         "cs-firewall-bouncer=$(require_apk_version cs-firewall-bouncer)" \
         "nftables=$(require_apk_version nftables)" \
         "iptables=$(require_apk_version iptables)" \
-        "ip6tables=$(require_apk_version ip6tables)" \
         "ipset=$(require_apk_version ipset)"; \
     if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then \
         echo "Applying optional security updates (APPLY_SECURITY_HARDENING=1)..."; \

@@ -110,6 +110,7 @@ PY
 - When request-scoped helper code joins an existing end-user OMERO session, call `detachOnDestroy()` on the joined session before wrapping it in `BlitzGateway`.
 - Do not reopen the importing user's live OMERO.web session inside background threads or subprocess follow-up work.
 - Do not assume the `job-service` account can impersonate users with `suConn()`.
+- In `omeroweb_import`, background dataset preparation and SEM-EDX follow-up attachments must use an independent admin-created user session or an already-created detached user session key. Do not route those paths through `job-service.suConn()`.
 - Keep request-path dataset-target preparation light and format-agnostic.
 - Keep heavy import-unit planning and CLI dry-run scans in background compatibility/import threads, not in upload HTTP handlers.
 - For grouped-package naming, prefer OMERO CLI `-n` over post-import rename work when possible.

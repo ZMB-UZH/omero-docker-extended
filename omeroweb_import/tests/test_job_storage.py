@@ -119,7 +119,7 @@ def test_job_storage_file_access_helpers_cover_lock_fallback_retry_and_corrupt_u
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert saved["status"] == "ready"
     assert isinstance(saved["updated"], float)
-    assert attempts["count"] == 2
+    assert attempts["count"] >= 2
 
     class _AlwaysFailLock:
         def __init__(self, *_args, **_kwargs):

@@ -56,6 +56,14 @@ CROWDSEC_INSTALL_BOOTSTRAP_STATUS=""
 
 set -euo pipefail
 
+ENV_ASSIGNMENT_HELPER_PATH="${SCRIPT_DIR}/env_assignment_utils.sh"
+if [ ! -r "${ENV_ASSIGNMENT_HELPER_PATH}" ]; then
+    echo "ERROR: Missing env assignment helper: ${ENV_ASSIGNMENT_HELPER_PATH}" >&2
+    exit 1
+fi
+# shellcheck disable=SC1090
+. "${ENV_ASSIGNMENT_HELPER_PATH}"
+
 TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/install_transcript_utils.sh"
 if [ -r "${TRANSCRIPT_HELPER_PATH}" ]; then
     # shellcheck disable=SC1090
@@ -186,6 +194,7 @@ load_installation_paths_env() {
     local env_line
     local env_key
     local env_value
+    local resolved_value
 
     if [ ! -r "${env_file_path}" ]; then
         echo "ERROR: Installation paths file is missing or unreadable: ${env_file_path}" >&2
@@ -200,7 +209,12 @@ load_installation_paths_env() {
             [A-Za-z_]*=*)
                 env_key="${env_line%%=*}"
                 env_value="${env_line#*=}"
-                eval "${env_key}=\"${env_value}\""
+                if ! resolved_value="$(resolve_env_assignment_value "${env_value}")"; then
+                    echo "ERROR: Refusing unsafe value for ${env_key} from ${env_file_path}" >&2
+                    return 1
+                fi
+                printf -v "${env_key}" '%s' "${resolved_value}"
+                export "${env_key}"
                 ;;
             *)
                 ;;
@@ -1407,19 +1421,7 @@ warn_directory_not_empty() {
 }
 
 collect_bootstrap_sentinel_names() {
-    if [ -z "${SCRIPT_ENV_FILE}" ] || [ ! -r "${SCRIPT_ENV_FILE}" ]; then
-        return 0
-    fi
-
     (
-        local env_line
-        while IFS= read -r env_line || [ -n "${env_line}" ]; do
-            case "${env_line}" in
-                ''|'#'*) continue ;;
-                [A-Za-z_]*=*) eval "${env_line}" ;;
-            esac
-        done < "${SCRIPT_ENV_FILE}"
-
         local _install_root="${OMERO_INSTALLATION_PATH:-}"
         _install_root="${_install_root%/}"
 
@@ -1475,19 +1477,7 @@ collect_bootstrap_sentinel_names() {
 collect_repo_data_dir_names() {
     local repo_root="${REPO_ROOT_DIR%/}"
 
-    if [ -z "${SCRIPT_ENV_FILE}" ] || [ ! -r "${SCRIPT_ENV_FILE}" ]; then
-        return 0
-    fi
-
     (
-        local env_line
-        while IFS= read -r env_line || [ -n "${env_line}" ]; do
-            case "${env_line}" in
-                ''|'#'*) continue ;;
-                [A-Za-z_]*=*) eval "${env_line}" ;;
-            esac
-        done < "${SCRIPT_ENV_FILE}"
-
         local _path
         for _path in \
             "${OMERO_DATABASE_PATH:-}" \
@@ -3531,8 +3521,11 @@ ensure_omero_tmp_layout() {
     local server_uid="$4"
     local server_gid="$5"
     local server_runtime_user="$6"
+    local web_runtime_user="${7:-omero-web}"
     local server_namespace_dir="${tmp_root%/}/${server_runtime_user}"
     local server_tmp_dir="${server_namespace_dir}/tmp"
+    local web_namespace_dir="${tmp_root%/}/${web_runtime_user}"
+    local web_tmp_dir="${web_namespace_dir}/tmp"
     local top_level_entry=""
 
     if [ -e "${tmp_root}" ] && [ ! -d "${tmp_root}" ]; then
@@ -3540,7 +3533,7 @@ ensure_omero_tmp_layout() {
         return 1
     fi
 
-    mkdir -p "${server_tmp_dir}"
+    mkdir -p "${server_tmp_dir}" "${web_tmp_dir}"
 
     if ! chown "${web_uid}:${web_gid}" "${tmp_root}"; then
         echo "ERROR: Failed to assign OMERO.web ownership for temp root: ${tmp_root}" >&2
@@ -3591,7 +3584,7 @@ if ! chown_tree_or_die "${OMERO_SERVER_LOGS_PATH}" "OMERO server logs directory"
 if ! chown_tree_or_die "${OMERO_WEB_VAR_PATH}" "OMERO web var directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_WEB_LOGS_PATH}" "OMERO web logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
-if ! ensure_omero_tmp_layout "${OMERO_TMP_PATH}" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}" "${OMERO_SERVER_RUNTIME_USER:-omero-server}"; then exit 1; fi
+if ! ensure_omero_tmp_layout "${OMERO_TMP_PATH}" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}" "${OMERO_SERVER_RUNTIME_USER:-omero-server}" "${WEB_USER:-omero-web}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_DATABASE_PATH}" "OMERO database directory" "${DATABASE_UID}" "${DATABASE_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory" "${DATABASE_PLUGIN_UID}" "${DATABASE_PLUGIN_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi
