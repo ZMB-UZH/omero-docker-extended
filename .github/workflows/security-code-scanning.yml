@@ -81,6 +81,26 @@ jobs:
             -not -path './.git/*' -not -path './node_modules/*' | sort | head -100
           echo "::endgroup::"
 
+      - name: Set up Python for license metadata
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies for license detection
+        run: |
+          # Auto-discover ALL Dockerfiles and extract pip package specifiers
+          : > /tmp/license-audit-deps.txt
+          for df in $(find . -name '*.Dockerfile' -o -name 'Dockerfile' | grep -v '.git'); do
+            python3 tools/extract_dockerfile_pip_deps.py "$df" >> /tmp/license-audit-deps.txt 2>/dev/null
+          done
+          # Include any checked-in requirements files
+          find . -name 'requirements*.txt' -not -path './.git/*' -exec cat {} + >> /tmp/license-audit-deps.txt 2>/dev/null
+          sort -u /tmp/license-audit-deps.txt > /tmp/license-audit-deps-unique.txt
+          echo "::group::Dependencies for license audit (auto-extracted from Dockerfiles)"
+          cat /tmp/license-audit-deps-unique.txt
+          echo "::endgroup::"
+          pip install --quiet -r /tmp/license-audit-deps-unique.txt || true
+
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
