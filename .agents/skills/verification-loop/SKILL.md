@@ -33,7 +33,7 @@ ruff format --check <touched-python-files>
 
 ### 3. Fast syntax and shell checks
 
-Use these when runtime-complete verification is unavailable or when shell/bootstrap logic changed.
+Use these when shell/bootstrap logic changed or when runtime-complete verification is blocked.
 
 ```bash
 python3 -m py_compile <touched-python-files>
@@ -53,6 +53,8 @@ python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
 ```
+
+Boundary helper change: rerun the helper's own suite plus every directly affected package suite.
 
 ### 5. Diff review
 
@@ -78,7 +80,3 @@ Never imply that full pytest passed when only `py_compile`, `bash -n`, or narrow
 - Host Python missing Django: switch to the dependency-complete runtime or use the fallback verification order documented in `AGENTS.md`
 - Docker socket unavailable: do not keep retrying the same runtime probe
 - Root-owned repo or cache warnings: keep `-p no:cacheprovider`
-
-## Good outcome
-
-The final report says exactly what was checked, what was blocked, and what residual risk remains.

@@ -13,18 +13,20 @@ Use this skill when a task is getting broad, slow, or repetitive, or when the us
 
 Start from `third_party/ecc-v1.9.0/skills/context-budget/SKILL.md` for the generic context-audit mindset.
 
-## Repo overlay
+## Fast route
 
 - Read `AGENTS.md` first, then `docs/reference/ai-agent-context-routing.md`. Do not dump the whole docs tree into context.
-- Use `rg` to find the narrow file set before opening files.
-- Use an iterative retrieval loop: broad search, evaluate, refine once or twice, then stop when the context is good enough.
-- Follow the routing doc's numeric caps. They are CI-validated by `python3 tools/lint_docs_structure.py`.
+- Search the narrow file set with `rg` before opening files.
 - Open at most 4 task-specific files in the first pass: one domain doc, one implementation file, one nearest test module or suite, and one matching skill.
-- Run at most 2 refine loops before you either name the edit target or escalate.
+- Run at most 2 refine loops before broadening scope.
 - Add at most 3 more files per escalation round: one additional domain doc, one adjacent implementation file, and one more confirming test module.
 - If you have opened 8 task-specific files without naming the edit target and verification lane, stop and summarize before reading more.
-- Prefer the nearest skill in `.agents/skills/` over re-deriving a workflow from scratch.
+
+## Repo rules
+
+- Keep agent context small and high-signal.
+- Follow the routing doc's numeric caps; they are CI-validated by `python3 tools/lint_docs_structure.py`.
+- Load one domain doc, one nearest test module, and one split verification lane before broadening.
 - Summarize long docs once and reuse the summary instead of reopening the same file repeatedly.
-- Load one domain doc, one nearest test module, and one split verification lane before broadening scope.
+- Prefer the nearest skill in `.agents/skills/` over re-deriving a workflow from scratch.
 - For verification, run only the relevant split test lanes, not every suite by default.
-- Keep platform-native adapter files concise so they stay cheap to load on every session.

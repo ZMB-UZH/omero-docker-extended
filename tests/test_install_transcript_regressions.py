@@ -139,6 +139,47 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
             self.assertNotIn("PIPESTATUS[1]: unbound variable", result.stdout)
             self.assertNotIn("PIPESTATUS[1]: unbound variable", transcript_text)
 
+    def test_transcript_helper_rejects_unsafe_env_assignments_without_executing_them(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_root = Path(tmpdir)
+            env_file = temp_root / "installation_paths.env"
+            marker_file = temp_root / "should-not-exist"
+            fake_script = temp_root / "fake_pull.sh"
+
+            env_file.write_text(
+                f'OMERO_DATA_PATH=$(touch "{marker_file}")\n',
+                encoding="utf-8",
+            )
+
+            fake_script.write_text(
+                textwrap.dedent(
+                    f"""\
+                    #!/usr/bin/env bash
+                    set -euo pipefail
+                    # shellcheck disable=SC1091
+                    . {self.helper_path}
+                    install_transcript_enable "{env_file}" "$0" "$@"
+                    echo "should not run"
+                    """
+                ),
+                encoding="utf-8",
+            )
+            fake_script.chmod(0o755)
+
+            result = subprocess.run(
+                [BASH_BIN, str(fake_script)],
+                check=False,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(marker_file.exists())
+            self.assertIn("Refusing unsafe value", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

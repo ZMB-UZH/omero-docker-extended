@@ -17,6 +17,8 @@ Start from `third_party/ecc-v1.9.0/skills/security-review/SKILL.md` for the gene
 
 - Follow the mandatory security read order in `AGENTS.md`.
 - Focus on helper and boundary correctness: file paths, uploads, SQL, subprocesses, Docker/workflows, outbound HTTP, logs, and HTTP responses.
+- Focus on uploads, filesystem paths, SQL, responses, subprocesses, Docker, workflows, and secrets.
 - Prefer root-cause fixes over suppressions or call-site patches.
+- Treat env parsing and shell interpolation as security boundaries, not convenience helpers.
 - Name the regression tests and validation steps before editing code.
 - If the change touches workflows, refresh action pins from official sources first.
