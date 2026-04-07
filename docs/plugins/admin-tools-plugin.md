@@ -29,7 +29,7 @@ The admin tools plugin exposes operational interfaces for log exploration, syste
 | `/omeroweb_admin_tools/resource-monitoring/`                           | GET      | Resource monitoring UI                                    |
 | `/omeroweb_admin_tools/resource-monitoring/data/`                      | GET      | Fetch container stats and system info                     |
 | `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/<subpath>`    | GET/POST | Proxy to Grafana API                                      |
-| `/omeroweb_admin_tools/resource-monitoring/prometheus-proxy/<subpath>`    | GET      | Proxy to Prometheus API                                   |
+| `/omeroweb_admin_tools/resource-monitoring/prometheus-proxy/<subpath>` | GET      | Proxy to Prometheus API                                   |
 | `/omeroweb_admin_tools/storage/`                                       | GET      | Storage analytics UI                                      |
 | `/omeroweb_admin_tools/storage/data/`                                  | GET      | Fetch storage usage data plus quota reconciliation state  |
 | `/omeroweb_admin_tools/storage/quota/data/`                            | GET      | Fetch persisted group quota state and reconciliation logs |
