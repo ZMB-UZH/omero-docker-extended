@@ -768,6 +768,7 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
         *,
         proxy_prefix="",
         rewrite_origin_headers=False,
+        extra_forwarded_headers=(),
     ):
         captured.update(
             {
@@ -831,6 +832,7 @@ def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         *,
         proxy_prefix="",
         rewrite_origin_headers=False,
+        extra_forwarded_headers=(),
     ):
         captured.update(
             {
@@ -885,6 +887,7 @@ def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         *,
         proxy_prefix="",
         rewrite_origin_headers=False,
+        extra_forwarded_headers=(),
     ):
         captured.update(
             {
@@ -996,6 +999,7 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
         *,
         proxy_prefix="",
         rewrite_origin_headers=False,
+        extra_forwarded_headers=(),
     ):
         attempts.append(base_url)
         if base_url == "https://grafana:3000":
@@ -1514,4 +1518,94 @@ def test_proxy_rewrites_set_cookie_path_for_grafana(monkeypatch) -> None:
     assert (
         response.cookies["grafana_session"]["path"]
         == "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/"
+    )
+
+
+def test_proxy_http_request_forwards_extra_headers(monkeypatch) -> None:
+    """extra_forwarded_headers passes backend-specific headers like X-Grafana-Csrf-Token."""
+    captured = {}
+
+    def fake_request(
+        method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
+    ):
+        captured["headers"] = dict(headers or {})
+        return _RequestsResponse(200, payload=b'{"ok":true}')
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.requests.request",
+        fake_request,
+    )
+
+    class DummyDjangoRequest:
+        method = "POST"
+        body = b'{"user":"admin","password":"secret"}'
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Cookie": "grafana_csrf_token=tok123; grafana_session=sess456",
+            "X-Grafana-Csrf-Token": "tok123",
+        }
+
+    response = _proxy_http_request(
+        DummyDjangoRequest(),
+        "http://grafana:3000",
+        "login",
+        extra_forwarded_headers=("X-Grafana-Csrf-Token",),
+    )
+
+    assert response.status_code == 200
+    assert captured["headers"]["X-Grafana-Csrf-Token"] == "tok123"
+    assert (
+        captured["headers"]["Cookie"]
+        == "grafana_csrf_token=tok123; grafana_session=sess456"
+    )
+
+
+def test_proxy_http_request_ignores_absent_extra_headers(monkeypatch) -> None:
+    """Extra headers that are absent in the request are silently skipped."""
+    captured = {}
+
+    def fake_request(
+        method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
+    ):
+        captured["headers"] = dict(headers or {})
+        return _RequestsResponse(200, payload=b'{"ok":true}')
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.requests.request",
+        fake_request,
+    )
+
+    class DummyDjangoRequest:
+        method = "GET"
+        body = b""
+        headers = {"Accept": "text/html"}
+
+    _proxy_http_request(
+        DummyDjangoRequest(),
+        "http://grafana:3000",
+        "login",
+        extra_forwarded_headers=("X-Grafana-Csrf-Token",),
+    )
+
+    assert "X-Grafana-Csrf-Token" not in captured["headers"]
+
+
+def test_grafana_proxy_is_csrf_exempt() -> None:
+    """Grafana proxy must be csrf_exempt so Django does not block Grafana login POSTs."""
+    from omeroweb_admin_tools.views import index_view
+
+    view_func = index_view.grafana_proxy
+    assert getattr(view_func, "csrf_exempt", False) is True, (
+        "grafana_proxy must be decorated with @csrf_exempt"
+    )
+
+
+def test_prometheus_proxy_is_not_csrf_exempt() -> None:
+    """Prometheus proxy must NOT be csrf_exempt — it only allows safe methods."""
+    from omeroweb_admin_tools.views import index_view
+
+    view_func = index_view.prometheus_proxy
+    assert getattr(view_func, "csrf_exempt", False) is False, (
+        "prometheus_proxy must not be decorated with @csrf_exempt"
     )
