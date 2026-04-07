@@ -99,7 +99,10 @@ jobs:
           echo "::group::Dependencies for license audit (auto-extracted from Dockerfiles)"
           cat /tmp/license-audit-deps-unique.txt
           echo "::endgroup::"
-          pip install --quiet -r /tmp/license-audit-deps-unique.txt || true
+          # Install into a venv INSIDE the checkout so Trivy's fs scan finds .dist-info
+          python3 -m venv .license-audit-venv
+          .license-audit-venv/bin/pip install --quiet -r /tmp/license-audit-deps-unique.txt || true
+          echo "Installed $(find .license-audit-venv -name '*.dist-info' -type d | wc -l) packages for license scanning"
 
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
