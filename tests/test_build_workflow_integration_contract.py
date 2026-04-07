@@ -792,7 +792,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertFalse(markdown_config["MD033"])
         self.assertEqual(
-            "third_party/ecc-v1.9.0/**\n",
+            "third_party/ecc-v1.10.0/**\n",
             (self.repo_root / ".markdownlintignore").read_text(encoding="utf-8"),
         )
 

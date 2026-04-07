@@ -1,7 +1,7 @@
 ---
 name: env-contract-reviewer
 description: Review environment-driven configuration changes so they stay template-backed, typed, documented, and free of hard-coded runtime values.
-origin: repo-local skill informed by ECC v1.9.0 workflow patterns
+origin: repo-local skill informed by ECC v1.10.0 workflow patterns
 ---
 
 # Env Contract Reviewer

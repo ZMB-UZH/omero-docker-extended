@@ -1,8 +1,8 @@
 ---
 name: search-first
 description: Research-before-coding workflow for OMERO Docker Extended. Check the repo, tests, official upstream docs, and release notes before writing new code.
-origin: ECC v1.9.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.9.0/skills/search-first/SKILL.md
+origin: ECC v1.10.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v1.10.0/skills/search-first/SKILL.md
 ---
 
 # Search First
@@ -11,7 +11,7 @@ Use this skill before introducing new code, dependencies, wrappers, or automatio
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.9.0/skills/search-first/SKILL.md` for the generic research-before-coding workflow.
+Start from `third_party/ecc-v1.10.0/skills/search-first/SKILL.md` for the generic research-before-coding workflow.
 
 ## When to activate
 

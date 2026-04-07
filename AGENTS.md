@@ -52,7 +52,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - `docs/reference/ai-agent-runtime-playbook.md`: deep operational procedures and pitfalls.
 - `docs/reference/ai-agent-skills.md`: harness-neutral skill catalog for `.agents/skills/`.
 - `docs/reference/ai-agent-integrations.md`: Copilot, Cursor, Claude, Gemini, and ECC adapter map.
-- `docs/reference/ai-agent-upstream-sources.md` and `third_party/ecc-v1.9.0/`: pinned ECC provenance.
+- `docs/reference/ai-agent-upstream-sources.md` and `third_party/ecc-v1.10.0/`: pinned ECC provenance.
 - `docs/reference/ai-agent-security-prevention-playbook.md`: canonical anti-regression security guide.
 
 ## Domain roots

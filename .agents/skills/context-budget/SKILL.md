@@ -1,8 +1,8 @@
 ---
 name: context-budget
 description: Keep agent context small and high-signal by routing into AGENTS, the nearest docs, and the narrowest correct test lanes.
-origin: ECC v1.9.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.9.0/skills/context-budget/SKILL.md
+origin: ECC v1.10.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v1.10.0/skills/context-budget/SKILL.md
 ---
 
 # Context Budget
@@ -11,7 +11,7 @@ Use this skill when a task is getting broad, slow, or repetitive, or when the us
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.9.0/skills/context-budget/SKILL.md` for the generic context-audit mindset.
+Start from `third_party/ecc-v1.10.0/skills/context-budget/SKILL.md` for the generic context-audit mindset.
 
 ## Fast route
 
