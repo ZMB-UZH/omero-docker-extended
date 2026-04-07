@@ -1,8 +1,8 @@
 ---
 name: ai-regression-testing
 description: Catch AI-style regressions with narrow contract tests, split pytest lanes, and sandbox-path checks before and after fixes.
-origin: ECC v1.9.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.9.0/skills/ai-regression-testing/SKILL.md
+origin: ECC v1.10.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v1.10.0/skills/ai-regression-testing/SKILL.md
 ---
 
 # AI Regression Testing
@@ -11,7 +11,7 @@ Use this skill when an AI agent has changed helpers, views, startup scripts, wor
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.9.0/skills/ai-regression-testing/SKILL.md` for the general anti-blind-spot workflow.
+Start from `third_party/ecc-v1.10.0/skills/ai-regression-testing/SKILL.md` for the general anti-blind-spot workflow.
 
 ## Repo overlay
 

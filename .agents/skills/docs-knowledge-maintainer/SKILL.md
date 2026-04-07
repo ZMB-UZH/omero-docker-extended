@@ -1,7 +1,7 @@
 ---
 name: docs-knowledge-maintainer
 description: Keep repository documentation accurate when behavior, topology, env contracts, or troubleshooting procedures change.
-origin: repo-local skill informed by ECC v1.9.0 workflow patterns
+origin: repo-local skill informed by ECC v1.10.0 workflow patterns
 ---
 
 # Docs Knowledge Maintainer

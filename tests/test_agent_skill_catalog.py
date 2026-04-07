@@ -490,7 +490,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
                     self.assertNotIn("## Upstream baseline", skill_text)
                 else:
                     self.assertIn("ecc", str(frontmatter.get("origin", "")).lower())
-                    self.assertIn("third_party/ecc-v1.9.0/", skill_text)
+                    self.assertIn("third_party/ecc-v1.10.0/", skill_text)
 
     def test_each_skill_supports_a_realistic_repo_scenario(self) -> None:
         for skill_name, scenario in SKILL_SCENARIOS.items():

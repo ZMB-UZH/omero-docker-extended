@@ -1,8 +1,8 @@
 ---
 name: verification-loop
 description: Repository-specific verification flow for OMERO Docker Extended. Runs docs validation, Ruff, split pytest suites, and targeted fallback checks without overstating coverage.
-origin: ECC v1.9.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.9.0/skills/verification-loop/SKILL.md
+origin: ECC v1.10.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v1.10.0/skills/verification-loop/SKILL.md
 ---
 
 # Verification Loop
@@ -11,7 +11,7 @@ Use this skill after any non-trivial change and before proposing a PR.
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.9.0/skills/verification-loop/SKILL.md` for the generic verify-before-finish workflow.
+Start from `third_party/ecc-v1.10.0/skills/verification-loop/SKILL.md` for the generic verify-before-finish workflow.
 
 ## Verification order
 
