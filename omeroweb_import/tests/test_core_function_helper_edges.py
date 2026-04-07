@@ -643,3 +643,142 @@ def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_p
     assert ok is False
     assert outputs == {}
     assert message == "Managed-repository Zarr helper failed with exit code 3."
+
+
+def test_background_user_connection_yields_none_when_details_missing(
+    monkeypatch,
+) -> None:
+    """_background_user_connection yields None when host/port/username is missing."""
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda *a, **kw: (_ for _ in ()).throw(AssertionError("should not be called")),
+    )
+
+    with core_functions._background_user_connection("", host="h", port=4064) as conn:
+        assert conn is None
+
+    with core_functions._background_user_connection("u", host="", port=4064) as conn:
+        assert conn is None
+
+    with core_functions._background_user_connection("u", host="h", port=None) as conn:
+        assert conn is None
+
+
+def test_background_user_connection_with_session_key(monkeypatch) -> None:
+    """_background_user_connection uses existing session key and closes connection."""
+    closed = {"count": 0}
+
+    class FakeConn:
+        def close(self):
+            closed["count"] += 1
+
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda *a, **kw: FakeConn(),
+    )
+
+    with core_functions._background_user_connection(
+        "alice", session_key="abc123", host="omeroserver", port=4064
+    ) as conn:
+        assert conn is not None
+
+    assert closed["count"] == 1
+
+
+def test_background_user_connection_with_session_key_open_fails(monkeypatch) -> None:
+    """_background_user_connection yields None when session open raises."""
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("conn refused")),
+    )
+
+    with core_functions._background_user_connection(
+        "alice", session_key="abc123", host="omeroserver", port=4064
+    ) as conn:
+        assert conn is None
+
+
+def test_background_user_connection_with_session_key_close_fails(
+    monkeypatch,
+) -> None:
+    """_background_user_connection logs warning when connection close raises."""
+
+    class FakeConn:
+        def close(self):
+            raise RuntimeError("close failed")
+
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda *a, **kw: FakeConn(),
+    )
+
+    with core_functions._background_user_connection(
+        "alice", session_key="abc123", host="omeroserver", port=4064
+    ) as conn:
+        assert conn is not None
+    # No exception raised — warning was logged internally
+
+
+def test_background_user_connection_without_session_key(monkeypatch) -> None:
+    """_background_user_connection creates a background session when no key given."""
+    from contextlib import contextmanager
+
+    closed = {"count": 0}
+
+    class FakeConn:
+        def close(self):
+            closed["count"] += 1
+
+    @contextmanager
+    def fake_background_session(*args, **kwargs):
+        yield "generated-session-key"
+
+    monkeypatch.setattr(
+        core_functions, "_background_import_session", fake_background_session
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda *a, **kw: FakeConn(),
+    )
+
+    with core_functions._background_user_connection(
+        "alice", host="omeroserver", port=4064
+    ) as conn:
+        assert conn is not None
+
+    assert closed["count"] == 1
+
+
+def test_background_user_connection_without_session_key_close_fails(
+    monkeypatch,
+) -> None:
+    """_background_user_connection logs warning when background session close fails."""
+    from contextlib import contextmanager
+
+    class FakeConn:
+        def close(self):
+            raise RuntimeError("close failed")
+
+    @contextmanager
+    def fake_background_session(*args, **kwargs):
+        yield "generated-session-key"
+
+    monkeypatch.setattr(
+        core_functions, "_background_import_session", fake_background_session
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda *a, **kw: FakeConn(),
+    )
+
+    with core_functions._background_user_connection(
+        "alice", host="omeroserver", port=4064
+    ) as conn:
+        assert conn is not None
+    # No exception raised — warning was logged internally
