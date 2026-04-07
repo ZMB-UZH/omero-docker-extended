@@ -71,12 +71,41 @@ When one recent rewrite causes a large set of older branches to drift wildly:
 5. Update only the affected recent branches with `--force-with-lease`.
 6. Confirm the repaired refs on the remote before deleting any backup branches.
 
+## Incident Reference: 2026-04-07 Branch-Root Contamination
+
+On 2026-04-07 a cross-repository file sync pushed a commit whose ancestry came
+from the **source** repository's branch graph instead of the **destination**
+repository's graph. This caused 644 branches to show thousands of commits
+ahead/behind main because they no longer shared a common ancestor with main.
+
+Root causes:
+
+1. The sync commit was created on the local `alpha` branch (which carried
+   the source repository's full commit history) and then pushed to the
+   destination's `main` — injecting foreign ancestry.
+2. The operator attempted to repair the drift by force-pushing all 644
+   branch refs to tree-matched equivalents on the new lineage. This changed
+   every branch ref twice and inflated ahead/behind counts further because
+   the two lineages had different commit granularity.
+
+Lessons:
+
+- **Always sync via a disposable clone of the destination repository** (step 4
+  above). Never commit source content onto a local branch that carries source
+  history.
+- **Never batch-rewrite hundreds of branch refs** to fix a single bad push.
+  Instead, revert the one bad push and replay the small set of new commits.
+- **Back up branch tips before any force-push.** Without backups, the original
+  state cannot be recovered.
+
 ## What Agents Must Not Do
 
 - Do not assume "same files" implies "same branch history."
 - Do not repair branch-history drift by merging the repositories together.
 - Do not delete backup refs immediately after a rewrite.
 - Do not leave PAT-backed temporary clones or remotes on disk after the operation completes.
+- Do not batch-rewrite hundreds of old branch refs to fix a problem caused by one bad commit on main.
+- Do not push any commit to the destination whose root commit differs from the destination's existing root.
 
 ## Minimum Verification Checklist
 
