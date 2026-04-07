@@ -47,9 +47,21 @@ python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
 python3 -m ruff check .
 python3 -m ruff format --check .
+python3 tools/env_safety_guard.py check
 ```
 
 Use the routing doc and `verification-loop` skill to select the smallest correct subset while iterating, then state the exact verification level achieved.
+
+## Env file protection
+
+Deployment config files (`env/*.env`, `installation_paths.env`) are **untracked** and **irreplaceable** from git alone. Before ANY file-sync or rsync operation:
+
+```bash
+python3 tools/env_safety_guard.py check    # verify all exist
+python3 tools/env_safety_guard.py backup   # create timestamped backup
+```
+
+**NEVER use `rsync --delete` or any tree-replacement command on the working directory.** Always sync via a disposable clone. See `docs/operations/repository-sync-safety.md`.
 
 ## Runtime reminders
 
