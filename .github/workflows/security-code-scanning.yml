@@ -68,7 +68,7 @@ jobs:
       - name: Audit — list files in scan scope
         run: |
           echo "::group::Trivy filesystem scan scope"
-          echo "Scanning lockfiles and config files for dependency vulnerabilities, misconfigs, and secrets."
+          echo "Scanning lockfiles and config files for dependency vulnerabilities, misconfigs, secrets, and license compliance."
           echo "--- Dependency manifests ---"
           find . -maxdepth 5 \( -name 'requirements*.txt' -o -name 'Pipfile.lock' \
             -o -name 'poetry.lock' -o -name 'package-lock.json' -o -name 'yarn.lock' \
@@ -87,7 +87,7 @@ jobs:
           scan-type: fs
           format: sarif
           output: trivy-results.sarif
-          scanners: vuln,misconfig,secret
+          scanners: vuln,misconfig,secret,license
           severity: CRITICAL,HIGH
           ignore-unfixed: true
 
