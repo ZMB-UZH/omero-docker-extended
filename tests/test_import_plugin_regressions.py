@@ -7,6 +7,7 @@ import tempfile
 import types
 import json
 import subprocess
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime as real_datetime
 from pathlib import Path
@@ -2520,35 +2521,33 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("window.location.origin", script)
         self.assertIn("encodeURIComponent(sourceUrl.toString())", script)
 
-    def test_open_user_owned_background_connection_requires_service_connection(self):
+    def test_open_user_owned_background_connection_requires_independent_session_key(
+        self,
+    ):
         with mock.patch.object(
             core_functions,
             "_open_group_scoped_session_connection",
         ) as open_session:
             conn = core_functions._open_user_owned_background_connection(
                 "alice",
-                session_key="session-key",
-                host="omeroserver",
-                port=4064,
-                group_id=4,
                 purpose="dataset preparation",
             )
 
         self.assertIsNone(conn)
         open_session.assert_not_called()
 
-    def test_ensure_job_dataset_targets_hides_impersonation_details(self):
-        class _FakeServiceConn:
-            def __init__(self):
-                self.closed = False
+    def test_import_plugin_source_forbids_job_service_impersonation_for_background_user_work(
+        self,
+    ):
+        source = (REPO_ROOT / "omeroweb_import/views/core_functions.py").read_text(
+            encoding="utf-8"
+        )
 
-            def suConn(self, username):
-                return None
+        self.assertIn("def _background_user_connection(", source)
+        self.assertIn("independent background OMERO session", source)
+        self.assertNotIn("service_conn.suConn(", source)
 
-            def close(self):
-                self.closed = True
-
-        fake_service_conn = _FakeServiceConn()
+    def test_ensure_job_dataset_targets_hides_background_session_details(self):
         job = {
             "job_id": "b" * 32,
             "host": "omeroserver",
@@ -2567,8 +2566,14 @@ class ImportPluginRegressionTests(TestCase):
             }
         ]
 
+        @contextmanager
+        def _background_user_connection(*args, **kwargs):
+            yield None
+
         with mock.patch.object(
-            core_functions, "_open_service_connection", return_value=fake_service_conn
+            core_functions,
+            "_background_user_connection",
+            _background_user_connection,
         ):
             ok, error = core_functions._ensure_job_dataset_targets(
                 job, entries_to_import
@@ -2578,8 +2583,7 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual(
             "OMERO could not prepare the destination for this import.", error
         )
-        self.assertNotIn("impersonate", error.lower())
-        self.assertTrue(fake_service_conn.closed)
+        self.assertNotIn("session", error.lower())
 
     def test_start_import_thread_does_not_spawn_when_save_fails(self):
         job = {"job_id": "b" * 32, "status": "ready", "import_thread_started": False}

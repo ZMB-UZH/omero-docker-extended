@@ -274,19 +274,6 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
     assert (
         core_functions._open_user_owned_background_connection(
             "alice",
-            service_conn=SimpleNamespace(
-                suConn=lambda username: (_ for _ in ()).throw(
-                    RuntimeError("su exploded")
-                )
-            ),
-            purpose="imports",
-        )
-        is None
-    )
-    assert (
-        core_functions._open_user_owned_background_connection(
-            "alice",
-            service_conn=SimpleNamespace(suConn=lambda username: None),
             purpose="imports",
         )
         is None
@@ -298,11 +285,18 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
             )
         )
     )
+    monkeypatch.setattr(
+        core_functions,
+        "_open_session_connection",
+        lambda *args, **kwargs: switched_conn,
+    )
     assert (
         core_functions._open_user_owned_background_connection(
             "alice",
+            session_key="session-key",
+            host="omeroserver",
+            port=4064,
             group_id=4,
-            service_conn=SimpleNamespace(suConn=lambda username: switched_conn),
             purpose="imports",
         )
         is switched_conn

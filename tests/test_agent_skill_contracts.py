@@ -201,6 +201,50 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
         ),
     ),
     SmokeCheck(
+        name="process-helper-boundary-contracts",
+        command=(
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-W",
+            "error",
+            "omero_plugin_common/tests/test_process_utils.py",
+        ),
+        covers=frozenset(
+            {
+                "ai-regression-testing",
+                "python-patterns",
+                "python-testing",
+                "verification-loop",
+            }
+        ),
+    ),
+    SmokeCheck(
+        name="installation-env-parser-regressions",
+        command=(
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-W",
+            "error",
+            "tests/test_installation_env_parsing_regressions.py",
+        ),
+        covers=frozenset(
+            {
+                "deployment-patterns",
+                "env-contract-reviewer",
+                "security-review",
+                "verification-loop",
+            }
+        ),
+    ),
+    SmokeCheck(
         name="plugin-suite-contracts",
         command=(
             "python3",
@@ -255,6 +299,16 @@ class AgentSkillContractTests(unittest.TestCase):
             cls.repo_root
         )
         cls._command_cache: dict[tuple[str, ...], subprocess.CompletedProcess[str]] = {}
+
+    COMPACT_SKILL_LINE_BUDGETS: dict[str, int] = {
+        "ai-regression-testing": 24,
+        "context-budget": 32,
+        "env-contract-reviewer": 44,
+        "plugin-regression-triager": 41,
+        "search-first": 41,
+        "security-review": 24,
+        "verification-loop": 82,
+    }
 
     @staticmethod
     def parse_frontmatter(skill_text: str) -> dict[str, object]:
@@ -360,6 +414,20 @@ class AgentSkillContractTests(unittest.TestCase):
                     len(local_lines),
                     len(upstream_lines),
                     f"{skill_name} overlay should be slimmer than its vendored upstream baseline",
+                )
+
+    def test_high_frequency_skills_stay_compact(self) -> None:
+        for skill_name, max_nonempty_lines in self.COMPACT_SKILL_LINE_BUDGETS.items():
+            with self.subTest(skill_name=skill_name):
+                local_lines = [
+                    line
+                    for line in self.skill_texts[skill_name].splitlines()
+                    if line.strip()
+                ]
+                self.assertLessEqual(
+                    len(local_lines),
+                    max_nonempty_lines,
+                    f"{skill_name} should stay compact to control context cost",
                 )
 
     def test_active_skills_do_not_retain_generic_upstream_harness_instructions(

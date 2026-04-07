@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import types
+from contextlib import contextmanager
 from pathlib import Path
 
 from omeroweb_import.views import core_functions
@@ -987,10 +988,18 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
             self.closed = True
 
     user_conn = _UserConn()
+
+    @contextmanager
+    def _background_user_connection(*args, **kwargs):
+        try:
+            yield user_conn
+        finally:
+            user_conn.close()
+
     monkeypatch.setattr(
         core_functions,
-        "_open_user_owned_background_connection",
-        lambda *args, **kwargs: user_conn,
+        "_background_user_connection",
+        _background_user_connection,
     )
     sem_edx_parser = types.ModuleType("omeroweb_import.services.omero.sem_edx_parser")
     sem_edx_parser.attach_sem_edx_tables = (

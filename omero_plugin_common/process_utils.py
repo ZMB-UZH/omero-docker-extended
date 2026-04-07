@@ -162,7 +162,7 @@ async def _consume_stream(
     if stream is None:
         return
     while True:
-        chunk = await stream.readline()
+        chunk = await stream.read(65536)
         if not chunk:
             return
         destination.append(_decode_output(chunk))

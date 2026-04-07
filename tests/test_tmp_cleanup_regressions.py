@@ -160,6 +160,75 @@ class TmpCleanupRegressionTests(TestCase):
 
             self.assertFalse(job_file.exists())
 
+    def test_tmp_cleaner_preserves_structural_namespace_directories(self):
+        """Namespace dirs (depth-1) and their tmp/ subdirs must survive cleanup."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            for ns in ("omero-web", "omero-server", "omeroweb-import"):
+                (root / ns / "tmp").mkdir(parents=True)
+            old_time = time.time() - 172800  # 48h
+            for ns in ("omero-web", "omero-server", "omeroweb-import"):
+                os.utime(root / ns, (old_time, old_time))
+                os.utime(root / ns / "tmp", (old_time, old_time))
+
+            subprocess.run(
+                [
+                    BASH_BIN,
+                    str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"),
+                    "--tmp-dir",
+                    str(root),
+                    "--max-age-seconds",
+                    "60",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            for ns in ("omero-web", "omero-server", "omeroweb-import"):
+                self.assertTrue(
+                    (root / ns).is_dir(),
+                    f"Structural namespace dir {ns}/ was deleted by cleaner",
+                )
+                self.assertTrue(
+                    (root / ns / "tmp").is_dir(),
+                    f"Structural tmp dir {ns}/tmp/ was deleted by cleaner",
+                )
+
+    def test_tmp_cleaner_still_deletes_deep_empty_subdirectories(self):
+        """Non-structural dirs deeper than depth-2 should still be pruned."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "omero-web" / "tmp").mkdir(parents=True)
+            ephemeral = root / "omero-web" / "tmp" / "runtime" / "session-abc"
+            ephemeral.mkdir(parents=True)
+            old_time = time.time() - 172800
+            for p in (
+                root / "omero-web",
+                root / "omero-web" / "tmp",
+                root / "omero-web" / "tmp" / "runtime",
+                ephemeral,
+            ):
+                os.utime(p, (old_time, old_time))
+
+            subprocess.run(
+                [
+                    BASH_BIN,
+                    str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"),
+                    "--tmp-dir",
+                    str(root),
+                    "--max-age-seconds",
+                    "60",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertFalse(ephemeral.exists())
+            self.assertTrue((root / "omero-web" / "tmp").is_dir())
+            self.assertTrue((root / "omero-web").is_dir())
+
 
 if __name__ == "__main__":
     unittest_main()
