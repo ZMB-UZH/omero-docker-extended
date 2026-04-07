@@ -65,6 +65,18 @@ The adapter set is designed to improve accuracy first, then reduce wasted contex
 - add path-specific Copilot and Cursor guidance so agents do not rediscover the same rules every time
 - keep `AGENTS.md`, Claude, Gemini, Copilot, and Cursor core rules concise so they do not bloat always-on context
 
+## Claude Code hooks
+
+`.claude/settings.json` defines PostToolUse and PreToolUse hooks that automate rules from `AGENTS.md`:
+
+| Event | Matcher | Action | Rule enforced |
+| --- | --- | --- | --- |
+| PostToolUse | Write\|Edit | Run `ruff check --fix` and `ruff format` on edited `.py` files | Ruff is the canonical Python formatter and lint gate |
+| PostToolUse | Write\|Edit | Run `npx markdownlint-cli2` on edited `.md` files | Validate Markdown to prevent CI super-linter failures |
+| PreToolUse | Bash | Run `python3 tools/env_safety_guard.py check` before `docker compose` commands | Verify deployment env files are intact before compose operations |
+
+These hooks are Claude Code-specific (other harnesses do not support hooks). The underlying rules are documented in `AGENTS.md` so all agents follow them regardless of automation.
+
 ## Maintenance rules
 
 - Update `docs/index.md` when this surface changes.
