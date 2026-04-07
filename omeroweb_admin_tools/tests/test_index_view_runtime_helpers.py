@@ -723,3 +723,19 @@ def test_logs_compose_prometheus_and_proxy_helpers_cover_remaining_runtime_guard
             "dash",
             conn=None,
         )
+
+
+def test_docker_api_json_returns_none_when_socket_missing(
+    monkeypatch, tmp_path
+) -> None:
+    """_docker_api_json returns None when the Docker socket does not exist."""
+    monkeypatch.setenv("ADMIN_TOOLS_DOCKER_SOCKET", str(tmp_path / "missing.sock"))
+    result = index_view._docker_api_json("/containers/json")
+    assert result is None
+
+
+def test_diagnose_docker_health_reports_api_none(monkeypatch) -> None:
+    """_diagnose_docker_health sets api_error when _docker_api_json returns None."""
+    monkeypatch.setattr(index_view, "_docker_api_json", lambda *a, **kw: None)
+    diag = index_view._diagnose_docker_health()
+    assert diag["api_error"] == "API returned None (connection or permission error)"
