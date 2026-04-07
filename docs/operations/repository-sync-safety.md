@@ -49,21 +49,21 @@ python3 tools/env_safety_guard.py restore
 
 1. Run `python3 tools/env_safety_guard.py check && python3 tools/env_safety_guard.py backup`.
 2. Fetch the latest source and destination refs.
-2. Resolve the destination remote's default branch explicitly.
+3. Resolve the destination remote's default branch explicitly.
    - Example: `git remote show <remote>` and read `HEAD branch: ...`
    - If the human did not explicitly name a target branch, use that default branch.
-3. Inspect ancestry before changing anything:
+4. Inspect ancestry before changing anything:
    - `git merge-base <destination-branch> <source-ref>`
    - `git rev-list --max-parents=0 <destination-branch>`
    - `git rev-list --max-parents=0 <source-ref>`
-4. Create a disposable clone or temporary worktree from the **destination** repository and check out the destination branch there.
-5. Replace the destination tree contents from the source tree in that disposable clone.
+5. Create a disposable clone or temporary worktree from the **destination** repository and check out the destination branch there.
+6. Replace the destination tree contents from the source tree in that disposable clone.
    - Use tree-copy approaches such as `git checkout <source-ref> -- .`, `git archive`, or equivalent file-level sync in the temporary destination clone.
    - Do **not** merge the source branch history into the destination branch.
-6. Restore explicitly excluded paths to their destination-repository state, or remove them if they must stay absent.
-7. Review the staged diff to confirm it is a content diff, not a history rewrite.
-8. Commit in the destination repository.
-9. Push the destination commit normally to the verified destination branch.
+7. Restore explicitly excluded paths to their destination-repository state, or remove them if they must stay absent.
+8. Review the staged diff to confirm it is a content diff, not a history rewrite.
+9. Commit in the destination repository.
+10. Push the destination commit normally to the verified destination branch.
 
 ## Hard Stop Signals
 
