@@ -26,7 +26,7 @@ from django.shortcuts import render
 from django.template.backends.django import DjangoTemplates
 from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from omeroweb.decorators import login_required
 from omero_plugin_common import process_utils
 from omero_plugin_common.logging_utils import (
@@ -59,6 +59,7 @@ LOG_TABLE_ROW_CAP = 5000
 _SAFE_REDIRECT_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 _PROXY_SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
+_GRAFANA_PROXY_METHODS = ("GET", "HEAD", "OPTIONS", "POST")
 _INLINE_TEMPLATE_BACKEND = DjangoTemplates(
     {
         "NAME": "inline_admin_tools",
@@ -69,12 +70,14 @@ _INLINE_TEMPLATE_BACKEND = DjangoTemplates(
 )
 
 
-def _proxy_method_not_allowed_response() -> JsonResponse:
+def _proxy_method_not_allowed_response(
+    allowed: tuple = _PROXY_SAFE_METHODS,
+) -> JsonResponse:
     response = JsonResponse(
-        {"error": "Method not allowed", "allowed_methods": list(_PROXY_SAFE_METHODS)},
+        {"error": "Method not allowed", "allowed_methods": list(allowed)},
         status=405,
     )
-    response["Allow"] = ", ".join(_PROXY_SAFE_METHODS)
+    response["Allow"] = ", ".join(allowed)
     return response
 
 
@@ -214,6 +217,7 @@ def _proxy_http_request(
     *,
     proxy_prefix: str = "",
     rewrite_origin_headers: bool = False,
+    extra_forwarded_headers: tuple = (),
 ) -> HttpResponse:
     """Proxy an HTTP request to a backend URL and return the response body."""
     try:
@@ -248,6 +252,7 @@ def _proxy_http_request(
         "Cookie",
         "Origin",
         "Referer",
+        *extra_forwarded_headers,
     ):
         value = django_request.headers.get(header_name)
         if value:
@@ -1837,6 +1842,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     )
 
 
+@csrf_exempt
 @login_required()
 @require_root_user
 def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
@@ -1844,8 +1850,8 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     root_error = _require_root_user(request, conn)
     if root_error:
         return root_error
-    if request.method not in _PROXY_SAFE_METHODS:
-        return _proxy_method_not_allowed_response()
+    if request.method not in _GRAFANA_PROXY_METHODS:
+        return _proxy_method_not_allowed_response(allowed=_GRAFANA_PROXY_METHODS)
 
     grafana_base_url = _internal_service_base_url(
         "ADMIN_TOOLS_GRAFANA_URL",
@@ -1878,6 +1884,7 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
             merged_query,
             proxy_prefix=proxy_prefix,
             rewrite_origin_headers=True,
+            extra_forwarded_headers=("X-Grafana-Csrf-Token",),
         )
         last_response = response
         if getattr(response, "status_code", 502) != 502:
