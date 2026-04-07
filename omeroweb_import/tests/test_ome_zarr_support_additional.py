@@ -1169,3 +1169,29 @@ def test_regenerate_xy_only_pyramid_handles_numpy_dependency_and_translation_edg
     updated = json.loads((store / ".zattrs").read_text(encoding="utf-8"))
     transforms = updated["multiscales"][0]["datasets"][1]["coordinateTransformations"]
     assert transforms[1]["type"] == "translation"
+
+
+def test_downscale_local_mean_falls_back_when_skimage_import_fails(
+    monkeypatch,
+) -> None:
+    """_downscale_local_mean uses the fallback when skimage.transform import fails."""
+    # Remove skimage.transform from sys.modules so the import inside the
+    # function actually executes, then make it raise ImportError.
+    monkeypatch.delitem(sys.modules, "skimage.transform", raising=False)
+    monkeypatch.delitem(sys.modules, "skimage", raising=False)
+
+    real_import = builtins.__import__
+
+    def blocked_import(name, *args, **kwargs):
+        if name == "skimage.transform" or name == "skimage":
+            raise ImportError("skimage blocked for test")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked_import)
+
+    data = np.array([[1.0, 2.0, 3.0, 4.0]])
+    result = support._downscale_local_mean(data, (1, 2))
+
+    # The fallback averages adjacent pairs: (1+2)/2=1.5, (3+4)/2=3.5
+    assert result.shape == (1, 2)
+    assert np.allclose(result, np.array([[1.5, 3.5]]))
