@@ -27,6 +27,7 @@ show_missing = true
 # measuring executable package wiring modules that contain code.
 omit =
     omero_plugin_common/__init__.py
+    omero_plugin_common/apps.py
     omero_web_zarr/templatetags/__init__.py
     omeroweb_admin_tools/__init__.py
     omeroweb_admin_tools/services/__init__.py
