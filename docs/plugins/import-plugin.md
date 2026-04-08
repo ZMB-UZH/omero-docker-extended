@@ -124,7 +124,14 @@ Related docs:
 - Job lifecycle: start, upload, import, confirm, prune.
 - Job status polling for progress tracking.
 - SEM-EDX spectrum parsing (EMSA format) with matplotlib visualization and genetic algorithm label placement.
-- **NGFF converter (bioformats2raw)**: a special import workflow that converts uploaded files to OME-NGFF (zarr) format using `bioformats2raw` before importing into OMERO. The UI exposes all `bioformats2raw` settings (compression, tile size, resolutions, downsampling algorithm, workers, nested paths, HCS mode, etc.) and supports save/load/restore for user-specific presets via the `database_plugin`. The conversion runs server-side after the upload phase completes and before the OMERO import begins. The resulting `.zarr` outputs are then imported through the standard import pipeline.
+- **NGFF converter (bioformats2raw)**: a special import workflow that converts
+  uploaded files to OME-NGFF (zarr) format using `bioformats2raw` before
+  importing into OMERO. The UI exposes all `bioformats2raw` settings
+  (compression, tile size, resolutions, downsampling, workers, nested paths,
+  HCS mode, etc.) and supports save/load/restore for user-specific presets
+  via the `database_plugin`. The conversion runs server-side after upload
+  and before the OMERO import. The resulting `.zarr` outputs are imported
+  through the standard import pipeline.
 - File attachment support: link related files (spectra, metadata) to imported images.
 - Automatic temp cleanup: immediate deletion after successful import; failed imports retain their staged payload and job status for deferred cleanup after `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` (default `172800`, 48 hours).
 - User settings and special-method settings persistence in `database_plugin`.
@@ -147,21 +154,21 @@ Useful commands (host):
 
 ## Key routes
 
-| Route                                            | Method | Purpose                                     |
-| ------------------------------------------------ | ------ | ------------------------------------------- |
-| `/omeroweb_import/`                              | GET    | Main upload page                            |
-| `/omeroweb_import/projects/`                     | GET    | List accessible projects                    |
-| `/omeroweb_import/root-status/`                  | GET    | Check if current user is OMERO root         |
-| `/omeroweb_import/help/`                         | GET    | Serve plugin help documentation (Markdown)  |
-| `/omeroweb_import/start/`                        | POST   | Create a new upload session (job)           |
-| `/omeroweb_import/upload/<job_id>/`              | POST   | Transfer files to the job directory         |
-| `/omeroweb_import/import/<job_id>/`              | POST   | Trigger OMERO CLI import for uploaded files |
-| `/omeroweb_import/confirm/<job_id>/`             | POST   | Confirm import completion                   |
-| `/omeroweb_import/prune/<job_id>/`               | POST   | Remove temporary upload files               |
-| `/omeroweb_import/status/<job_id>/`              | GET    | Poll job status                             |
-| `/omeroweb_import/user-settings/save/`           | POST   | Save user upload preferences                |
-| `/omeroweb_import/special-method-settings/save/` | POST   | Save special method settings (SEM-EDX, NGFF converter) |
-| `/omeroweb_import/special-method-settings/load/` | POST   | Load special method settings (SEM-EDX, NGFF converter) |
+| Route                                            | Method | Purpose                                                  |
+| ------------------------------------------------ | ------ | -------------------------------------------------------- |
+| `/omeroweb_import/`                              | GET    | Main upload page                                         |
+| `/omeroweb_import/projects/`                     | GET    | List accessible projects                                 |
+| `/omeroweb_import/root-status/`                  | GET    | Check if current user is OMERO root                      |
+| `/omeroweb_import/help/`                         | GET    | Serve plugin help documentation (Markdown)               |
+| `/omeroweb_import/start/`                        | POST   | Create a new upload session (job)                        |
+| `/omeroweb_import/upload/<job_id>/`              | POST   | Transfer files to the job directory                      |
+| `/omeroweb_import/import/<job_id>/`              | POST   | Trigger OMERO CLI import for uploaded files               |
+| `/omeroweb_import/confirm/<job_id>/`             | POST   | Confirm import completion                                |
+| `/omeroweb_import/prune/<job_id>/`               | POST   | Remove temporary upload files                            |
+| `/omeroweb_import/status/<job_id>/`              | GET    | Poll job status                                          |
+| `/omeroweb_import/user-settings/save/`           | POST   | Save user upload preferences                             |
+| `/omeroweb_import/special-method-settings/save/` | POST   | Save special method settings (SEM-EDX, NGFF converter)   |
+| `/omeroweb_import/special-method-settings/load/` | POST   | Load special method settings (SEM-EDX, NGFF converter)   |
 
 ## Typical user workflow
 
