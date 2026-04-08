@@ -1230,6 +1230,12 @@ const previewForm = document.getElementById('preview_form');
             updateAiModalPlaceholders();
             return;
         }
+        if (isLocalProvider(provider)) {
+            setModelVisibility(false, { select: aiParseModelSelect, container: aiParseModelWrapper });
+            updateAiParseModalStatus(messages.localProviderReady);
+            updateAiModalPlaceholders();
+            return;
+        }
         if (aiCredentialProviders.has(provider)) {
             updateAiParseModalStatus(messages.providerKeyReady);
             ensureAiModels(provider, aiParseModelSelect, updateAiParseModalStatus, getAiDefaultModel('parse', provider), { container: aiParseModelWrapper });
@@ -3564,11 +3570,7 @@ const previewForm = document.getElementById('preview_form');
                 updateAiParseModalStatus(messages.aiModalChooseProvider, true);
                 return;
             }
-            if (provider === 'local') {
-                updateAiParseModalStatus(messages.chooseProvider, true);
-                return;
-            }
-            if (!aiCredentialProviders.has(provider)) {
+            if (!isLocalProvider(provider) && !aiCredentialProviders.has(provider)) {
                 updateAiParseModalStatus(messages.aiModalAddKeySelected, true);
                 return;
             }
