@@ -14,3 +14,10 @@ OMERO_WEB_VENV = os.environ.get("OMERO_WEB_VENV", "venv-3.12")
 
 OMERO_CLI = os.path.join(OMERO_WEB_ROOT, OMERO_WEB_VENV, "bin", "omero")
 OMERO_IMPORT_SCAN_DEPTH = 15
+
+# bioformats2raw binary path.
+# Override via BIOFORMATS2RAW_CLI environment variable when the installation
+# path differs from the Docker image default.
+BIOFORMATS2RAW_CLI = os.environ.get(
+    "BIOFORMATS2RAW_CLI", "/usr/local/bin/bioformats2raw"
+)

@@ -164,6 +164,93 @@
                         <button type="button" id="sem_edx_settings_save">Save to database</button>
                     </div>
                 </div>
+                <div id="ngff_converter_settings" class="file-tree ngff-converter-settings" aria-live="polite">
+                    <div class="ngff-settings-grid">
+                        <div class="ngff-settings-group">
+                            <div class="ngff-settings-group__title">Output</div>
+                            <div class="ngff-setting-row">
+                                <label for="ngff_compression">Compression</label>
+                                <select id="ngff_compression">
+                                    <option value="blosc" selected>Blosc</option>
+                                    <option value="zlib">Zlib</option>
+                                    <option value="null">None</option>
+                                </select>
+                            </div>
+                            <div class="ngff-setting-row">
+                                <label for="ngff_tile_width">Tile width</label>
+                                <input type="number" id="ngff_tile_width" value="1024" min="64" max="8192" step="64">
+                            </div>
+                            <div class="ngff-setting-row">
+                                <label for="ngff_tile_height">Tile height</label>
+                                <input type="number" id="ngff_tile_height" value="1024" min="64" max="8192" step="64">
+                            </div>
+                            <div class="ngff-setting-row">
+                                <label for="ngff_resolutions">Resolutions</label>
+                                <input type="number" id="ngff_resolutions" value="0" min="0" max="20" title="0 = automatic">
+                            </div>
+                            <div class="ngff-setting-row">
+                                <label for="ngff_downsampling">Downsampling</label>
+                                <select id="ngff_downsampling">
+                                    <option value="SIMPLE" selected>Simple</option>
+                                    <option value="GAUSSIAN">Gaussian</option>
+                                    <option value="AREA">Area</option>
+                                    <option value="LINEAR">Linear</option>
+                                    <option value="CUBIC">Cubic</option>
+                                    <option value="LANCZOS">Lanczos</option>
+                                </select>
+                            </div>
+                            <div class="ngff-setting-row">
+                                <label for="ngff_chunk_depth">Chunk depth</label>
+                                <input type="number" id="ngff_chunk_depth" value="1" min="1" max="256">
+                            </div>
+                        </div>
+                        <div class="ngff-settings-group">
+                            <div class="ngff-settings-group__title">Performance</div>
+                            <div class="ngff-setting-row">
+                                <label for="ngff_max_workers">Max workers</label>
+                                <input type="number" id="ngff_max_workers" value="4" min="1" max="32">
+                            </div>
+                            <div class="ngff-setting-row">
+                                <label for="ngff_max_cached_tiles">Max cached tiles</label>
+                                <input type="number" id="ngff_max_cached_tiles" value="64" min="1" max="4096">
+                            </div>
+                            <div class="ngff-setting-row">
+                                <label for="ngff_target_min_size">Target min size</label>
+                                <input type="number" id="ngff_target_min_size" value="256" min="1" max="65536">
+                            </div>
+                            <div class="ngff-setting-row">
+                                <label for="ngff_fill_value">Fill value</label>
+                                <input type="number" id="ngff_fill_value" value="0" min="0" max="255">
+                            </div>
+                            <div class="ngff-setting-row">
+                                <label for="ngff_series">Series (optional)</label>
+                                <input type="text" id="ngff_series" value="" placeholder="e.g. 0,1,3" title="Comma-separated series indexes. Leave empty for all.">
+                            </div>
+                            <div class="ngff-settings-group__title" style="margin-top:8px">Options</div>
+                            <div class="ngff-setting-toggle">
+                                <input type="checkbox" id="ngff_min_max" checked>
+                                <span>Calculate min/max values</span>
+                            </div>
+                            <div class="ngff-setting-toggle">
+                                <input type="checkbox" id="ngff_nested" checked>
+                                <span>Use nested chunk paths</span>
+                            </div>
+                            <div class="ngff-setting-toggle">
+                                <input type="checkbox" id="ngff_hcs" checked>
+                                <span>Enable HCS writing</span>
+                            </div>
+                            <div class="ngff-setting-toggle">
+                                <input type="checkbox" id="ngff_overwrite" checked>
+                                <span>Overwrite existing output</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ngff-settings-actions">
+                        <button type="button" id="ngff_settings_save">Save to database</button>
+                        <button type="button" id="ngff_settings_load">Load from database</button>
+                        <button type="button" id="ngff_settings_defaults">Restore defaults</button>
+                    </div>
+                </div>
                 <div id="status" class="status"></div>
             </div>
         </div>
@@ -208,6 +295,14 @@
             <div class="compatibility-popup__actions">
                 <button type="button" id="sem_edx_confirm-no-btn" class="duplicate-popup__btn">No</button>
                 <button type="button" id="sem_edx_confirm-yes-btn" class="duplicate-popup__btn">Yes</button>
+            </div>
+        </div>
+        <div id="ngff_confirm-overlay" class="duplicate-overlay" aria-hidden="true"></div>
+        <div id="ngff_confirm-popup" class="duplicate-popup" role="alertdialog" aria-modal="true" aria-hidden="true">
+            <p id="ngff_confirm-message" class="duplicate-popup__message"></p>
+            <div class="compatibility-popup__actions">
+                <button type="button" id="ngff_confirm-no-btn" class="duplicate-popup__btn">No</button>
+                <button type="button" id="ngff_confirm-yes-btn" class="duplicate-popup__btn">Yes</button>
             </div>
         </div>
         <div id="nb-modal-overlay"
@@ -395,6 +490,31 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
         const semEdxSettingFiguresAttachment = document.getElementById('sem_edx_setting_figures_attachment');
         const semEdxSettingFiguresImage = document.getElementById('sem_edx_setting_figures_image');
         const semEdxSettingsSave = document.getElementById('sem_edx_settings_save');
+        // NGFF Converter DOM references
+        const ngffSettingsPanel = document.getElementById('ngff_converter_settings');
+        const ngffCompression = document.getElementById('ngff_compression');
+        const ngffTileWidth = document.getElementById('ngff_tile_width');
+        const ngffTileHeight = document.getElementById('ngff_tile_height');
+        const ngffResolutions = document.getElementById('ngff_resolutions');
+        const ngffDownsampling = document.getElementById('ngff_downsampling');
+        const ngffChunkDepth = document.getElementById('ngff_chunk_depth');
+        const ngffMaxWorkers = document.getElementById('ngff_max_workers');
+        const ngffMaxCachedTiles = document.getElementById('ngff_max_cached_tiles');
+        const ngffTargetMinSize = document.getElementById('ngff_target_min_size');
+        const ngffFillValue = document.getElementById('ngff_fill_value');
+        const ngffSeries = document.getElementById('ngff_series');
+        const ngffMinMax = document.getElementById('ngff_min_max');
+        const ngffNested = document.getElementById('ngff_nested');
+        const ngffHcs = document.getElementById('ngff_hcs');
+        const ngffOverwrite = document.getElementById('ngff_overwrite');
+        const ngffSettingsSave = document.getElementById('ngff_settings_save');
+        const ngffSettingsLoad = document.getElementById('ngff_settings_load');
+        const ngffSettingsDefaults = document.getElementById('ngff_settings_defaults');
+        const ngffConfirmOverlay = document.getElementById('ngff_confirm-overlay');
+        const ngffConfirmPopup = document.getElementById('ngff_confirm-popup');
+        const ngffConfirmMessage = document.getElementById('ngff_confirm-message');
+        const ngffConfirmYesBtn = document.getElementById('ngff_confirm-yes-btn');
+        const ngffConfirmNoBtn = document.getElementById('ngff_confirm-no-btn');
         let isProjectRefreshInFlight = false;
         let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
         const MAX_USER_PROJECT_RESULTS = 15;
@@ -511,6 +631,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
         const specialUploadOptions = specialMethodsEnabled
             ? [
                 { value: '', label: 'No special method (clear selection)', isEmpty: true },
+                { value: 'ngff_converter', label: 'NGFF converter (bioformats2raw)' },
                 { value: 'sem_edx_spectra', label: 'Zeiss GeminiSEM 450: EDX spectra' },
             ]
             : [{ value: '', label: 'No special method (clear selection)', isEmpty: true }];
@@ -549,6 +670,177 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
         let semEdxAssociationReady = false;
         let skipSpecialUploadReset = false;
         loadSemEdxAssociationsFromStorage();
+
+        // NGFF Converter state
+        let ngffModeActive = false;
+        let ngffInstructionStep = 1;
+        const ngffStep1Lines = [
+            '1) Add all image files and folders you wish to convert to OME-NGFF (zarr) format.',
+            'Supported input formats: all Bio-Formats compatible files (TIFF, CZI, LIF, ND2, etc.).',
+        ];
+        const ngffStep2Lines = [
+            '2) Configure the NGFF conversion settings, then proceed with Upload & Import.',
+            'Settings can be saved in the user database for automatic retrieval in subsequent conversions.',
+        ];
+        const ngffSettingsDefaultValues = {
+            compression: 'blosc',
+            tile_width: 1024,
+            tile_height: 1024,
+            resolutions: 0,
+            max_workers: 4,
+            chunk_depth: 1,
+            downsampling: 'SIMPLE',
+            min_max: true,
+            nested: true,
+            hcs: true,
+            overwrite: true,
+            series: '',
+            fill_value: 0,
+            max_cached_tiles: 64,
+            target_min_size: 256,
+        };
+        let ngffSettingsDraft = null;
+        let ngffConfirmPopupResolver = null;
+
+        function isNgffConverterSelected() {
+            return specialUploadSelect?.value === 'ngff_converter';
+        }
+
+        function isNgffAddLocked() {
+            return isNgffConverterSelected() && ngffInstructionStep > 1;
+        }
+
+        function applyNgffSettings(settings) {
+            const s = Object.assign({}, ngffSettingsDefaultValues, settings || {});
+            if (ngffCompression) ngffCompression.value = s.compression;
+            if (ngffTileWidth) ngffTileWidth.value = s.tile_width;
+            if (ngffTileHeight) ngffTileHeight.value = s.tile_height;
+            if (ngffResolutions) ngffResolutions.value = s.resolutions;
+            if (ngffMaxWorkers) ngffMaxWorkers.value = s.max_workers;
+            if (ngffChunkDepth) ngffChunkDepth.value = s.chunk_depth;
+            if (ngffDownsampling) ngffDownsampling.value = s.downsampling;
+            if (ngffMinMax) ngffMinMax.checked = !!s.min_max;
+            if (ngffNested) ngffNested.checked = !!s.nested;
+            if (ngffHcs) ngffHcs.checked = !!s.hcs;
+            if (ngffOverwrite) ngffOverwrite.checked = !!s.overwrite;
+            if (ngffSeries) ngffSeries.value = s.series || '';
+            if (ngffFillValue) ngffFillValue.value = s.fill_value;
+            if (ngffMaxCachedTiles) ngffMaxCachedTiles.value = s.max_cached_tiles;
+            if (ngffTargetMinSize) ngffTargetMinSize.value = s.target_min_size;
+            ngffSettingsDraft = s;
+        }
+
+        function getNgffSettingsPayload() {
+            return {
+                compression: ngffCompression?.value || 'blosc',
+                tile_width: parseInt(ngffTileWidth?.value, 10) || 1024,
+                tile_height: parseInt(ngffTileHeight?.value, 10) || 1024,
+                resolutions: parseInt(ngffResolutions?.value, 10) || 0,
+                max_workers: parseInt(ngffMaxWorkers?.value, 10) || 4,
+                chunk_depth: parseInt(ngffChunkDepth?.value, 10) || 1,
+                downsampling: ngffDownsampling?.value || 'SIMPLE',
+                min_max: !!ngffMinMax?.checked,
+                nested: !!ngffNested?.checked,
+                hcs: !!ngffHcs?.checked,
+                overwrite: !!ngffOverwrite?.checked,
+                series: (ngffSeries?.value || '').trim(),
+                fill_value: parseInt(ngffFillValue?.value, 10) || 0,
+                max_cached_tiles: parseInt(ngffMaxCachedTiles?.value, 10) || 64,
+                target_min_size: parseInt(ngffTargetMinSize?.value, 10) || 256,
+            };
+        }
+
+        function resetNgffSettingsDraft() {
+            ngffSettingsDraft = null;
+        }
+
+        function syncNgffSettingsDraft() {
+            ngffSettingsDraft = getNgffSettingsPayload();
+        }
+
+        function setNgffInstructionsStep(step) {
+            ngffInstructionStep = step;
+            if (!semEdxInstructions) return;
+            const instructionLines = step === 2
+                ? ngffStep2Lines
+                : ngffStep1Lines;
+            setSemEdxInstructionLines(instructionLines);
+            refreshFileList();
+            updateNgffStepControls();
+            updateUploadControlAvailability();
+            if (uploadCard) {
+                uploadCard.classList.toggle('ngff-step-two', isNgffConverterSelected() && step > 1);
+            }
+        }
+
+        function updateNgffStepControls() {
+            // Delegate to unified controller
+            updateStepControls();
+        }
+
+        /**
+         * Unified step button controller.
+         * All special methods delegate here. This single function decides
+         * whether Next/Previous step buttons should be visible and enabled.
+         * Adding a new workflow only requires adding a branch here.
+         */
+        function updateStepControls() {
+            let showNext = false;
+            let showPrevious = false;
+            let disableNext = false;
+
+            if (isSemEdxSelected()) {
+                const { hasFiles, valid } = evaluateSemEdxFiles(pendingFiles);
+                const appendedCount = getSemEdxAppendedCount();
+                const isSemEdxReady = hasFiles && (semEdxInstructionStep <= 1 ? valid : (valid && appendedCount > 0));
+                showNext = semEdxInstructionStep > 1 || isSemEdxReady;
+                showPrevious = semEdxInstructionStep > 1;
+                disableNext = semEdxInstructionStep > 1 && !isSemEdxReady;
+            } else if (isNgffConverterSelected()) {
+                const hasFiles = pendingFiles.length > 0;
+                showNext = ngffInstructionStep > 1 || hasFiles;
+                showPrevious = ngffInstructionStep > 1;
+                disableNext = ngffInstructionStep > 1 && !hasFiles;
+            }
+
+            if (nextStepBtn) {
+                nextStepBtn.classList.toggle('is-hidden', !showNext);
+                nextStepBtn.disabled = disableNext;
+            }
+            if (previousStepBtn) {
+                previousStepBtn.classList.toggle('is-hidden', !showPrevious);
+            }
+        }
+
+        function showNgffConfirmPopup(message) {
+            return new Promise((resolve) => {
+                ngffConfirmPopupResolver = resolve;
+                if (ngffConfirmMessage) ngffConfirmMessage.textContent = message;
+                if (ngffConfirmOverlay) {
+                    ngffConfirmOverlay.style.display = 'block';
+                    ngffConfirmOverlay.setAttribute('aria-hidden', 'false');
+                }
+                if (ngffConfirmPopup) {
+                    ngffConfirmPopup.style.display = 'block';
+                    ngffConfirmPopup.setAttribute('aria-hidden', 'false');
+                }
+            });
+        }
+
+        function hideNgffConfirmPopup(result) {
+            if (ngffConfirmOverlay) {
+                ngffConfirmOverlay.style.display = 'none';
+                ngffConfirmOverlay.setAttribute('aria-hidden', 'true');
+            }
+            if (ngffConfirmPopup) {
+                ngffConfirmPopup.style.display = 'none';
+                ngffConfirmPopup.setAttribute('aria-hidden', 'true');
+            }
+            if (typeof ngffConfirmPopupResolver === 'function') {
+                ngffConfirmPopupResolver(result);
+                ngffConfirmPopupResolver = null;
+            }
+        }
 
         function setStatus(message, type) {
             statusEl.textContent = message || '';
@@ -621,7 +913,18 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
             Object.keys(base).forEach((key) => {
                 if (Object.prototype.hasOwnProperty.call(raw, key)) {
-                    base[key] = !!raw[key];
+                    const defaultType = typeof base[key];
+                    const rawValue = raw[key];
+                    if (defaultType === 'boolean') {
+                        base[key] = !!rawValue;
+                    } else if (defaultType === 'number') {
+                        const parsed = Number(rawValue);
+                        base[key] = Number.isFinite(parsed) ? parsed : base[key];
+                    } else if (defaultType === 'string') {
+                        base[key] = String(rawValue ?? '');
+                    } else {
+                        base[key] = rawValue;
+                    }
                 }
             });
             return base;
@@ -708,7 +1011,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             const { onSuccess, onError } = options;
             return fetch(specialMethodSettingsSaveUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: setRequestHeaders({ 'Content-Type': 'application/json' }),
                 credentials: 'same-origin',
                 body: JSON.stringify({ method: methodKey, settings }),
             })
@@ -765,7 +1068,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
         }
 
         function updateUploadControlAvailability() {
-            const shouldDisable = isUploading || isPreparingFiles || !uploadEnabled || isSemEdxAddLocked();
+            const shouldDisable = isUploading || isPreparingFiles || !uploadEnabled || isSemEdxAddLocked() || isNgffAddLocked();
             fileInput.disabled = shouldDisable;
             folderInput.disabled = shouldDisable;
             if (fileBtn) {
@@ -795,12 +1098,21 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateSemEdxStatus();
         }
 
+        function resetNgffStateAfterUpload() {
+            if (!isNgffConverterSelected()) return;
+            setNgffInstructionsStep(1);
+            resetNgffSettingsDraft();
+        }
+
         function resetSpecialUploadStateAfterUpload() {
             if (!specialUploadSelect?.value) {
                 return;
             }
             if (isSemEdxSelected()) {
                 resetSemEdxStateAfterUpload();
+            }
+            if (isNgffConverterSelected()) {
+                resetNgffStateAfterUpload();
             }
         }
 
@@ -1787,21 +2099,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
 
         function updateSemEdxIntroVisibility() {
             if (!uploadIntroText) return;
-            const shouldHide = isSemEdxSelected() && semEdxInstructionStep > 1;
+            const shouldHide = (isSemEdxSelected() && semEdxInstructionStep > 1)
+                || (isNgffConverterSelected() && ngffInstructionStep > 1);
             uploadIntroText.style.visibility = shouldHide ? 'hidden' : 'visible';
         }
 
         function updateSemEdxStepControls(isSemEdxReady) {
-            const isActive = isSemEdxSelected();
-            if (nextStepBtn) {
-                const shouldShowNext = isActive && (semEdxInstructionStep > 1 || isSemEdxReady);
-                nextStepBtn.classList.toggle('is-hidden', !shouldShowNext);
-                nextStepBtn.disabled = isActive && semEdxInstructionStep > 1 && !isSemEdxReady;
-            }
-            if (previousStepBtn) {
-                const shouldShowPrevious = isActive && semEdxInstructionStep > 1;
-                previousStepBtn.classList.toggle('is-hidden', !shouldShowPrevious);
-            }
+            // Delegate to unified controller
+            updateStepControls();
             updateSemEdxIntroVisibility();
         }
 
@@ -1836,13 +2141,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
 
         function applySpecialUploadMode(value) {
             const isSemEdx = value === 'sem_edx_spectra';
-            const shouldHideProjectSelection = !!value;
-            document.documentElement.classList.toggle('special-upload-active', shouldHideProjectSelection);
+            const isNgff = value === 'ngff_converter';
+            const shouldHideProjectSelection = isSemEdx;
+            document.documentElement.classList.toggle('special-upload-active', !!value);
             if (document.body) {
-                document.body.classList.toggle('special-upload-active', shouldHideProjectSelection);
+                document.body.classList.toggle('special-upload-active', !!value);
             }
             if (semEdxInstructions) {
-                semEdxInstructions.style.display = isSemEdx ? 'flex' : 'none';
+                semEdxInstructions.style.display = (isSemEdx || isNgff) ? 'flex' : 'none';
             }
             if (uploadBtn) {
                 uploadBtn.classList.toggle('action-btn-hidden', !!value);
@@ -1851,12 +2157,38 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                 semEdxInstructionStep = 1;
                 setSemEdxInstructionsStep(1);
                 updateSemEdxStepControls(false);
+                ngffInstructionStep = 1;
+                setNgffInstructionsStep(1);
+                updateNgffStepControls();
+                if (uploadCard) {
+                    uploadCard.classList.remove('ngff-step-two');
+                }
             }
-            setProjectSelectionVisibility(!value);
+            setProjectSelectionVisibility(!shouldHideProjectSelection);
             if (isSemEdx) {
                 semEdxModeActive = true;
                 setSemEdxInstructionsStep(1);
                 setSemEdxAssociationMode('automatic');
+                // Reset NGFF state when switching to SEM
+                if (ngffModeActive) {
+                    clearSelectedFiles();
+                }
+                ngffModeActive = false;
+                ngffInstructionStep = 1;
+                resetNgffSettingsDraft();
+                if (uploadCard) {
+                    uploadCard.classList.remove('ngff-step-two');
+                }
+            } else if (isNgff) {
+                ngffModeActive = true;
+                setNgffInstructionsStep(1);
+                // Reset SEM state when switching to NGFF
+                resetSemEdxSettingsDraft();
+                if (semEdxModeActive) {
+                    clearSelectedFiles();
+                }
+                semEdxModeActive = false;
+                updateSemEdxStepControls(false);
             } else {
                 resetSemEdxSettingsDraft();
                 if (semEdxModeActive) {
@@ -1865,6 +2197,15 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                 semEdxModeActive = false;
                 setStatus('');
                 updateSemEdxStepControls(false);
+                resetNgffSettingsDraft();
+                if (ngffModeActive) {
+                    clearSelectedFiles();
+                }
+                ngffModeActive = false;
+                updateNgffStepControls();
+                if (uploadCard) {
+                    uploadCard.classList.remove('ngff-step-two');
+                }
             }
             updateSemEdxStatus();
         }
@@ -2329,6 +2670,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             invalidateSemEdxAssociations();
             refreshFileList();
             updateSemEdxStatus();
+            updateNgffStepControls();
         }
 
         function buildTree(entries) {
@@ -2434,6 +2776,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             invalidateSemEdxAssociations();
             refreshFileList();
             updateSemEdxStatus();
+            updateNgffStepControls();
         }
 
         function removeFileEntry(rawPath) {
@@ -3810,6 +4153,27 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             resolveSemEdxConfirmPopup(false);
         });
 
+        // NGFF Converter confirm popup handlers
+        if (ngffConfirmYesBtn) {
+            ngffConfirmYesBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                hideNgffConfirmPopup(true);
+            });
+        }
+        if (ngffConfirmNoBtn) {
+            ngffConfirmNoBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                hideNgffConfirmPopup(false);
+            });
+        }
+        if (ngffConfirmOverlay) {
+            ngffConfirmOverlay.addEventListener('click', () => {
+                hideNgffConfirmPopup(false);
+            });
+        }
+
         async function parseJsonResponse(response) {
             let text = '';
             try {
@@ -4000,6 +4364,10 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             if (isSemEdxSelected()) {
                 semEdxSettings = getSemEdxSettingsPayload();
             }
+            let ngffConverterSettings = null;
+            if (isNgffConverterSelected()) {
+                ngffConverterSettings = getNgffSettingsPayload();
+            }
 
             const response = await fetch(startUrl, {
                 method: 'POST',
@@ -4012,6 +4380,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                     special_upload: specialUploadValue,
                     sem_edx_associations: semEdxAssociations,
                     sem_edx_settings: semEdxSettings,
+                    ngff_converter_settings: ngffConverterSettings,
                     batch_size: currentUploadBatchFiles,
                 }),
                 credentials: 'same-origin',
@@ -4997,6 +5366,36 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
 
         if (nextStepBtn) {
             nextStepBtn.addEventListener('click', async () => {
+                // NGFF Converter step handling
+                if (isNgffConverterSelected()) {
+                    if (ngffInstructionStep <= 1) {
+                        if (pendingFiles.length === 0) return;
+                        // Load saved settings from database
+                        if (ngffSettingsDraft) {
+                            applyNgffSettings(ngffSettingsDraft);
+                        } else {
+                            const loadedSettings = await ensureSpecialMethodSettingsLoaded(
+                                'ngff_converter',
+                                ngffSettingsDefaultValues,
+                                applyNgffSettings
+                            );
+                            ngffSettingsDraft = loadedSettings;
+                        }
+                        setNgffInstructionsStep(2);
+                        return;
+                    }
+                    // Step 2: confirm and upload
+                    syncNgffSettingsDraft();
+                    const proceed = await showNgffConfirmPopup(
+                        'Are you sure you want to proceed with Upload & Convert? The selected files will be uploaded and converted to OME-NGFF (zarr) format, then imported into OMERO.'
+                    );
+                    if (proceed) {
+                        uploadBtn?.click();
+                    }
+                    return;
+                }
+
+                // SEM EDX step handling
                 if (!isSemEdxSelected()) return;
                 if (semEdxInstructionStep <= 1) {
                     setSemEdxInstructionsStep(2);
@@ -5055,6 +5454,13 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
 
         if (previousStepBtn) {
             previousStepBtn.addEventListener('click', () => {
+                // NGFF Converter previous step
+                if (isNgffConverterSelected()) {
+                    const prevStep = Math.max(1, ngffInstructionStep - 1);
+                    setNgffInstructionsStep(prevStep);
+                    return;
+                }
+                // SEM EDX previous step
                 if (!isSemEdxSelected()) return;
                 const nextStep = Math.max(1, semEdxInstructionStep - 1);
                 setSemEdxInstructionsStep(nextStep);
@@ -5161,6 +5567,42 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
         if (semEdxSettingFiguresImage) {
             semEdxSettingFiguresImage.addEventListener('change', syncSemEdxSettingsDraft);
         }
+
+        // NGFF Converter settings event handlers
+        if (ngffSettingsSave) {
+            ngffSettingsSave.addEventListener('click', () => {
+                if (!isNgffConverterSelected()) return;
+                const settings = getNgffSettingsPayload();
+                saveSpecialMethodSettingsToDatabase('ngff_converter', settings);
+            });
+        }
+        if (ngffSettingsLoad) {
+            ngffSettingsLoad.addEventListener('click', async () => {
+                if (!isNgffConverterSelected()) return;
+                specialMethodSettingsCache.delete('ngff_converter');
+                const loaded = await ensureSpecialMethodSettingsLoaded(
+                    'ngff_converter',
+                    ngffSettingsDefaultValues,
+                    applyNgffSettings
+                );
+                ngffSettingsDraft = loaded;
+            });
+        }
+        if (ngffSettingsDefaults) {
+            ngffSettingsDefaults.addEventListener('click', () => {
+                applyNgffSettings(ngffSettingsDefaultValues);
+            });
+        }
+        // Sync draft on any NGFF setting change
+        const ngffInputElements = [
+            ngffCompression, ngffTileWidth, ngffTileHeight, ngffResolutions,
+            ngffDownsampling, ngffChunkDepth, ngffMaxWorkers, ngffMaxCachedTiles,
+            ngffTargetMinSize, ngffFillValue, ngffSeries,
+            ngffMinMax, ngffNested, ngffHcs, ngffOverwrite,
+        ];
+        ngffInputElements.forEach((el) => {
+            if (el) el.addEventListener('change', syncNgffSettingsDraft);
+        });
 
         const storedCompatibilityState = loadCompatibilityState();
         if (storedCompatibilityState !== null) {

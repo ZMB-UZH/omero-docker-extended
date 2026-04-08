@@ -19,7 +19,17 @@ logger = logging.getLogger(__name__)
 def _normalize_special_method_settings(settings_payload):
     if not isinstance(settings_payload, dict):
         return {}
-    return {key: bool(value) for key, value in settings_payload.items()}
+    normalized = {}
+    for key, value in settings_payload.items():
+        if isinstance(value, bool):
+            normalized[key] = value
+        elif isinstance(value, (int, float)):
+            normalized[key] = value
+        elif isinstance(value, str):
+            normalized[key] = value
+        else:
+            normalized[key] = bool(value)
+    return normalized
 
 
 @login_required()
