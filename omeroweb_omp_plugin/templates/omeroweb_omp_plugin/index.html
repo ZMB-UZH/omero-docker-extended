@@ -869,9 +869,9 @@ const previewForm = document.getElementById('preview_form');
     }
 
     populateProviderSelect(aiProviderSelect, { includeLocal: true });
-    populateProviderSelect(aiParseProviderSelect);
+    populateProviderSelect(aiParseProviderSelect, { includeLocal: true });
     populateProviderSelect(aiRegexDefaultProviderSelect, { includeLocal: true });
-    populateProviderSelect(aiParseDefaultProviderSelect);
+    populateProviderSelect(aiParseDefaultProviderSelect, { includeLocal: true });
     populateProviderSelect(aiCredentialsProvider);
     let lastDatasetRows = [];
     let aiRegexTransferred = false;
