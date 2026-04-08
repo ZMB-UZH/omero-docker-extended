@@ -124,6 +124,7 @@ Related docs:
 - Job lifecycle: start, upload, import, confirm, prune.
 - Job status polling for progress tracking.
 - SEM-EDX spectrum parsing (EMSA format) with matplotlib visualization and genetic algorithm label placement.
+- **NGFF converter (bioformats2raw)**: a special import workflow that converts uploaded files to OME-NGFF (zarr) format using `bioformats2raw` before importing into OMERO. The UI exposes all `bioformats2raw` settings (compression, tile size, resolutions, downsampling algorithm, workers, nested paths, HCS mode, etc.) and supports save/load/restore for user-specific presets via the `database_plugin`. The conversion runs server-side after the upload phase completes and before the OMERO import begins. The resulting `.zarr` outputs are then imported through the standard import pipeline.
 - File attachment support: link related files (spectra, metadata) to imported images.
 - Automatic temp cleanup: immediate deletion after successful import; failed imports retain their staged payload and job status for deferred cleanup after `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` (default `172800`, 48 hours).
 - User settings and special-method settings persistence in `database_plugin`.
@@ -159,19 +160,20 @@ Useful commands (host):
 | `/omeroweb_import/prune/<job_id>/`               | POST   | Remove temporary upload files               |
 | `/omeroweb_import/status/<job_id>/`              | GET    | Poll job status                             |
 | `/omeroweb_import/user-settings/save/`           | POST   | Save user upload preferences                |
-| `/omeroweb_import/special-method-settings/save/` | POST   | Save SEM-EDX method settings                |
-| `/omeroweb_import/special-method-settings/load/` | POST   | Load SEM-EDX method settings                |
+| `/omeroweb_import/special-method-settings/save/` | POST   | Save special method settings (SEM-EDX, NGFF converter) |
+| `/omeroweb_import/special-method-settings/load/` | POST   | Load special method settings (SEM-EDX, NGFF converter) |
 
 ## Typical user workflow
 
 1. Open upload page at `/omeroweb_import/`.
-2. Select target project and dataset.
+2. Select target project and dataset (or select a special method from the dropdown).
 3. Start upload session (creates job directory on tmpfs).
 4. Transfer files to the job-specific upload endpoint.
 5. Trigger import step (OMERO CLI `import` with batching).
 6. For SEM-EDX data: spectrum files are parsed, visualized, and attached to imported images.
-7. Confirm import and monitor status until terminal state.
-8. Prune temporary upload assets once processing is complete.
+7. For NGFF converter: uploaded files are converted to OME-NGFF zarr via `bioformats2raw` before OMERO import.
+8. Confirm import and monitor status until terminal state.
+9. Prune temporary upload assets once processing is complete.
 
 ## Code structure
 
