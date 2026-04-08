@@ -42,6 +42,7 @@ from .core_functions import (
     _load_job,
     _managed_upload_error_message,
     _normalize_job_batch_size,
+    _normalize_ngff_converter_settings,
     _normalize_sem_edx_associations,
     _normalize_sem_edx_settings,
     _normalize_upload_relative_path,
@@ -170,13 +171,17 @@ def _start_upload(request, conn):
         compatibility_enabled = bool(compatibility_enabled)
     raw_sem_edx_associations = payload.get("sem_edx_associations") or {}
     raw_sem_edx_settings = payload.get("sem_edx_settings") or {}
+    raw_ngff_converter_settings = payload.get("ngff_converter_settings") or {}
     if not _special_methods_enabled():
         special_upload = ""
         raw_sem_edx_associations = {}
         raw_sem_edx_settings = {}
+        raw_ngff_converter_settings = {}
     if special_upload != "sem_edx_spectra":
         raw_sem_edx_associations = {}
         raw_sem_edx_settings = {}
+    if special_upload != "ngff_converter":
+        raw_ngff_converter_settings = {}
     default_batch_size = _get_env_int(
         UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10
     )
@@ -292,6 +297,11 @@ def _start_upload(request, conn):
         if special_upload == "sem_edx_spectra"
         else {}
     )
+    ngff_converter_settings = (
+        _normalize_ngff_converter_settings(raw_ngff_converter_settings)
+        if special_upload == "ngff_converter"
+        else {}
+    )
 
     dataset_map = {}
     orphan_dataset_name = None
@@ -360,6 +370,7 @@ def _start_upload(request, conn):
         "special_upload": special_upload,
         "sem_edx_associations": sem_edx_associations,
         "sem_edx_settings": sem_edx_settings,
+        "ngff_converter_settings": ngff_converter_settings,
     }
     if not _save_job(job):
         logger.error(
