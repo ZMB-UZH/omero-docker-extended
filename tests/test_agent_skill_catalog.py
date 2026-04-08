@@ -21,6 +21,7 @@ ALL_SKILLS: tuple[str, ...] = (
     "docs-knowledge-maintainer",
     "documentation-lookup",
     "env-contract-reviewer",
+    "frontend-preview",
     "omero-runtime-verifier",
     "plugin-regression-triager",
     "postgres-patterns",
@@ -37,6 +38,7 @@ REPO_NATIVE_SKILLS: frozenset[str] = frozenset(
     {
         "docs-knowledge-maintainer",
         "env-contract-reviewer",
+        "frontend-preview",
         "omero-runtime-verifier",
         "plugin-regression-triager",
         "security-finding-triager",
@@ -194,6 +196,18 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
             "docs/deployment/configuration.md",
         ),
         adapter_phrases=("env", "config"),
+    ),
+    "frontend-preview": SkillScenario(
+        scenario=(
+            "An AI agent needs to visually validate HTML, CSS, or JavaScript changes "
+            "in plugin templates without rebuilding the Docker container."
+        ),
+        skill_phrases=(
+            "vite",
+            "PLUGIN_ROOT",
+            "django-template-strip",
+        ),
+        adapter_phrases=("preview", "vite"),
     ),
     "omero-runtime-verifier": SkillScenario(
         scenario=(
@@ -406,7 +420,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
         self,
     ) -> None:
         self.assertEqual(set(ALL_SKILLS), set(self.skill_dirs))
-        self.assertEqual(20, len(self.skill_dirs))
+        self.assertEqual(21, len(self.skill_dirs))
         self.assertEqual(set(ALL_SKILLS), set(SKILL_SCENARIOS))
 
     def test_every_skill_has_frontmatter_adapter_and_catalog_entry(self) -> None:
