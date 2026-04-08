@@ -602,6 +602,8 @@ services:
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: "24h"
     volumes:
       - ${OLLAMA_DATA_PATH:-/disks/omero_temp/ollama}:/root/.ollama
     networks:
