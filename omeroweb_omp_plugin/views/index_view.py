@@ -660,12 +660,6 @@ def index(request, conn=None, url=None, **kwargs):
                 request.POST.get("custom_instructions") or ""
             ).strip()
 
-            if provider == "local":
-                return JsonResponse(
-                    {"error": errors.provider_required()},
-                    status=400,
-                )
-
             if not project_id:
                 return JsonResponse(
                     {"error": errors.select_project_first()}, status=400
@@ -731,20 +725,24 @@ def index(request, conn=None, url=None, **kwargs):
                     {"error": errors.unable_to_determine_username()}, status=400
                 )
 
-            try:
-                api_key = (get_ai_credential(username, provider) or "").strip()
-            except AiCredentialStoreError as e:
-                logger.error(
-                    "AI provider lookup failed for AI parse: %s",
-                    sanitize_log_value(e),
-                    exc_info=sanitized_exc_info(e),
-                )
-                return JsonResponse(
-                    {"error": errors.ai_credentials_fetch_failed()}, status=500
-                )
+            api_key = ""
+            if provider != "local":
+                try:
+                    api_key = (get_ai_credential(username, provider) or "").strip()
+                except AiCredentialStoreError as e:
+                    logger.error(
+                        "AI provider lookup failed for AI parse: %s",
+                        sanitize_log_value(e),
+                        exc_info=sanitized_exc_info(e),
+                    )
+                    return JsonResponse(
+                        {"error": errors.ai_credentials_fetch_failed()}, status=500
+                    )
 
-            if not api_key:
-                return JsonResponse({"error": errors.ai_api_key_required()}, status=400)
+                if not api_key:
+                    return JsonResponse(
+                        {"error": errors.ai_api_key_required()}, status=400
+                    )
 
             try:
                 result = generate_ai_parsed_values(
