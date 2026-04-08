@@ -162,7 +162,7 @@ Useful commands (host):
 | `/omeroweb_import/help/`                         | GET    | Serve plugin help documentation (Markdown)               |
 | `/omeroweb_import/start/`                        | POST   | Create a new upload session (job)                        |
 | `/omeroweb_import/upload/<job_id>/`              | POST   | Transfer files to the job directory                      |
-| `/omeroweb_import/import/<job_id>/`              | POST   | Trigger OMERO CLI import for uploaded files               |
+| `/omeroweb_import/import/<job_id>/`              | POST   | Trigger OMERO CLI import for uploaded files              |
 | `/omeroweb_import/confirm/<job_id>/`             | POST   | Confirm import completion                                |
 | `/omeroweb_import/prune/<job_id>/`               | POST   | Remove temporary upload files                            |
 | `/omeroweb_import/status/<job_id>/`              | GET    | Poll job status                                          |
