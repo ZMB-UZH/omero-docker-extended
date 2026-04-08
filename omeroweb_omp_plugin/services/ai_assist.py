@@ -14,7 +14,12 @@ from .filename_utils import (
     suggest_separator_regex,
 )
 from .http_utils import extract_error_details
-from ..constants import COMMON_SEPARATORS
+from ..constants import (
+    COMMON_SEPARATORS,
+    OLLAMA_BASE_URL,
+    OLLAMA_MODEL,
+    OLLAMA_TIMEOUT_SECONDS,
+)
 from ..strings import errors
 
 logger = logging.getLogger(__name__)
@@ -384,6 +389,43 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
         if not content:
             raise AiAssistError(errors.provider_response_empty())
         return content
+
+    if provider == "local":
+        url = f"{OLLAMA_BASE_URL}/api/generate"
+        payload = {
+            "model": model or OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": 0.0,
+                "num_predict": max_tokens,
+                "top_p": 0.1,
+            },
+        }
+        try:
+            response = requests.post(
+                url,
+                json=payload,
+                timeout=OLLAMA_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            data = response.json()
+            content = (data.get("response") or "").strip()
+            if not content:
+                raise AiAssistError(errors.provider_response_empty())
+            return content
+        except requests.ConnectionError:
+            logger.warning("Local AI (Ollama) not reachable at %s", url)
+            raise AiAssistError(errors.provider_unreachable())
+        except requests.Timeout:
+            logger.warning(
+                "Local AI (Ollama) timed out after %ds", OLLAMA_TIMEOUT_SECONDS
+            )
+            raise AiAssistError(errors.provider_unreachable())
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else 0
+            logger.warning("Local AI (Ollama) HTTP error %s", status_code)
+            raise AiAssistError(errors.provider_http_status(status_code))
 
     raise AiAssistError(errors.provider_not_supported(provider))
 

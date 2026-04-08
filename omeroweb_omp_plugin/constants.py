@@ -1,6 +1,6 @@
 import os
 
-from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
+from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env, get_optional_env
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 import logging
 
@@ -40,6 +40,27 @@ MAX_VARIABLE_SET_ENTRIES = 10
 # Whitelist of common, safe separators for filename parsing
 # Prevents weird Unicode characters from being chosen as separators
 COMMON_SEPARATORS = ["_", "-", ".", " ", "__"]
+
+# Ollama local AI inference endpoint.
+# Resolved from environment at import time; falls back to the Docker
+# Compose service name on the internal network.
+OLLAMA_BASE_URL = (
+    get_optional_env(
+        "OMP_OLLAMA_BASE_URL",
+        env_file=ENV_FILE_OMEROWEB,
+    )
+    or "http://ollama:11434"
+)
+
+OLLAMA_MODEL = (
+    get_optional_env(
+        "OMP_OLLAMA_MODEL",
+        env_file=ENV_FILE_OMEROWEB,
+    )
+    or "qwen2.5:3b"
+)
+
+OLLAMA_TIMEOUT_SECONDS = 45
 
 # Namespaces used for MapAnnotations
 MAP_NS = "openmicroscopy.org/omero/client/mapAnnotation"  # default client namespace that allows editing in OMERO.web

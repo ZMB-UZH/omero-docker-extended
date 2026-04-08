@@ -688,6 +688,8 @@ def test_index_ai_parse_validates_provider_inputs_and_rate_limits(monkeypatch):
         lambda *_args: (_Project(5, "Project"), "owned"),
     )
 
+    # Local provider is accepted (routes to Ollama) but fails when no
+    # filenames are available from the selected datasets.
     local_provider = inspect.unwrap(index_view.index)(
         RequestFactory().post(
             "/",
@@ -702,7 +704,8 @@ def test_index_ai_parse_validates_provider_inputs_and_rate_limits(monkeypatch):
     )
     assert local_provider.status_code == 400
     assert (
-        _json_payload(local_provider)["error"] == index_view.errors.provider_required()
+        _json_payload(local_provider)["error"]
+        == index_view.errors.no_filenames_available()
     )
 
     missing_datasets = inspect.unwrap(index_view.index)(
