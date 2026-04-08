@@ -1,12 +1,17 @@
 ---
 name: frontend-preview
 description: Spin up a temporary Vite dev server to preview HTML/CSS/JS changes in Django plugin templates without rebuilding Docker. AI-agent-only skill for visual validation.
-origin: repo-native
+origin: repo-local skill for AI agent visual validation
 ---
 
 # Frontend Preview (Vite)
 
 Use this skill when you need to **visually validate** HTML, CSS, or JavaScript changes in plugin templates before committing. This avoids blind edits and eliminates the Docker rebuild cycle for frontend-only iterations.
+
+## Related docs
+
+- `docs/plugins/import-plugin.md` for the import plugin UI structure
+- `docs/reference/ai-agent-runtime-playbook.md` for Docker rebuild guidance
 
 ## When to activate
 

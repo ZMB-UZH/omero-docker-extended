@@ -23,6 +23,25 @@ Deep operational guidance for AI agents. `AGENTS.md` should route here instead o
 - `docker compose --env-file installation_paths.env ps` fails when the secrets env file is absent. Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as the fallback probe.
 - Treat a Docker socket permission error as a sandbox or privilege problem, not proof that Docker is down.
 
+## OMERO.web env variable naming convention (CRITICAL)
+
+OMERO.web configuration properties are set via `CONFIG_omero_web_*` environment variables in `env/omeroweb.env`. The translation from OMERO config property names to Docker env variable names follows strict rules:
+
+- **Dots (`.`) become single underscores (`_`)**: `omero.web.session_engine` → `CONFIG_omero_web_session_engine`
+- **Underscores (`_`) become DOUBLE underscores (`__`)**: `omero.web.session_cookie_age` → `CONFIG_omero_web_session__cookie__age`
+
+Examples:
+
+| OMERO config property                          | Docker env variable                                      |
+| ---------------------------------------------- | -------------------------------------------------------- |
+| `omero.web.session_engine`                     | `CONFIG_omero_web_session__engine`                       |
+| `omero.web.session_cookie_age`                 | `CONFIG_omero_web_session__cookie__age`                  |
+| `omero.web.session_expire_at_browser_close`    | `CONFIG_omero_web_session__expire__at__browser__close`   |
+| `omero.web.csrf_trusted_origins`               | `CONFIG_omero_web_csrf__trusted__origins`                |
+| `omero.web.application_server_port`            | `CONFIG_omero_web_application__server__port`             |
+
+**Common mistake**: using single underscores where doubles are required. `CONFIG_omero_web_session_engine` (wrong) vs `CONFIG_omero_web_session__engine` (correct). The single-underscore version silently creates a different (nonexistent) config property.
+
 ## Docker image rebuilds: cached vs no-cache
 
 - `docker compose build <service>` uses the layer cache. This is fast but will NOT pick up changes to build ARGs that are already baked into a cached layer. Use this for code-only changes (Python files, templates, static assets) where the COPY layers invalidate naturally.

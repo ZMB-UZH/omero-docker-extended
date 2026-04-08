@@ -97,6 +97,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
                 "context-budget",
                 "documentation-lookup",
                 "docs-knowledge-maintainer",
+                "frontend-preview",
                 "search-first",
                 "tdd-workflow",
                 "verification-loop",
