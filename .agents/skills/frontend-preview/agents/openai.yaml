@@ -1,0 +1,7 @@
+interface:
+  display_name: "Frontend Preview"
+  short_description: "Preview HTML/CSS/JS changes via temporary Vite dev server"
+  brand_color: "#646CFF"
+  default_prompt: "Start a Vite preview server for the target plugin and validate visual changes"
+policy:
+  allow_implicit_invocation: true
