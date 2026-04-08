@@ -578,6 +578,106 @@ body {
         .upload-card.sem-edx-step-three #sem_edx_settings {
             display: flex;
         }
+        /* NGFF Converter step transitions */
+        .upload-card.ngff-step-two .upload-actions__pickers {
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
+        }
+        .upload-card.ngff-step-two #file-tree {
+            display: none;
+        }
+        .upload-card.ngff-step-two #ngff_converter_settings {
+            display: flex !important;
+        }
+        /* NGFF Converter settings panel */
+        #ngff_converter_settings {
+            display: none;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+        }
+        .ngff-settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 20px;
+            width: 100%;
+        }
+        .ngff-settings-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 4px 0;
+        }
+        .ngff-settings-group__title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #007bff;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 2px;
+            margin-bottom: 1px;
+        }
+        .ngff-setting-row {
+            display: grid;
+            grid-template-columns: 140px 1fr;
+            align-items: center;
+            gap: 4px;
+        }
+        .ngff-setting-row label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #374151;
+            white-space: nowrap;
+        }
+        .ngff-setting-row select,
+        .ngff-setting-row input[type="text"],
+        .ngff-setting-row input[type="number"] {
+            padding: 3px 6px;
+            border: 1px solid #cbd5e1;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            font-family: inherit;
+            background: #fff;
+            color: #1f2937;
+            width: 130px;
+            min-width: 130px;
+            max-width: 130px;
+            box-sizing: border-box;
+        }
+        .ngff-setting-row select:focus,
+        .ngff-setting-row input:focus {
+            outline: 2px solid #007bff;
+            outline-offset: -1px;
+            border-color: #007bff;
+        }
+        .ngff-setting-toggle {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .ngff-setting-toggle input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            accent-color: #007bff;
+        }
+        .ngff-setting-toggle span {
+            font-size: 0.8rem;
+            color: #374151;
+        }
+        .ngff-settings-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 8px;
+            padding-top: 4px;
+            border-top: 1px solid #e2e8f0;
+            margin-top: 2px;
+        }
         .upload-actions input[type="file"]::file-selector-button,
         .upload-actions input[type="file"]::-webkit-file-upload-button {
             background: #007bff;

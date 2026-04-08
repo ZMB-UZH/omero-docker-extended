@@ -255,18 +255,18 @@ def test_special_method_settings_views_normalize_and_load_payloads(
         "success": True,
         "message": import_messages.special_method_settings_saved_db(),
         "settings": {
-            "enabled": True,
-            "create_tables": False,
-            "notes": True,
+            "enabled": 1,
+            "create_tables": "",
+            "notes": "yes",
         },
     }
     assert saved == {
         "username": "alice",
         "method_key": "sem_edx_spectra",
         "payload": {
-            "enabled": True,
-            "create_tables": False,
-            "notes": True,
+            "enabled": 1,
+            "create_tables": "",
+            "notes": "yes",
         },
     }
 

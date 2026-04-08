@@ -87,6 +87,7 @@
     <form method='POST'
           id="preview_form"
           style='background:#f8f9fa;padding:30px;border-radius:10px;border:2px solid #007bff;'>
+        {% csrf_token %}
         <div style='margin-bottom:20px;'>
             <label><strong>Project:</strong></label><br>
             <div style='display:flex; align-items:flex-start; gap:14px;'>

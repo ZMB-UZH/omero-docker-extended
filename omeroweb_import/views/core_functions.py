@@ -37,6 +37,7 @@ from omero.rtypes import rstring
 from omeroweb.decorators import login_required
 from typing import Optional
 from ..constants import (
+    BIOFORMATS2RAW_CLI,
     MAX_UPLOAD_BATCH_BYTES,
     MAX_UPLOAD_BATCH_GB,
     OMERO_CLI,
@@ -154,6 +155,7 @@ __all__ = [
     "_mark_failed_job_for_deferred_cleanup",
     "_normalize_job_batch_size",
     "_normalize_upload_relative_path",
+    "_normalize_ngff_converter_settings",
     "_normalize_sem_edx_associations",
     "_normalize_sem_edx_settings",
     "_open_service_connection",
@@ -331,6 +333,25 @@ SEM_EDX_SETTINGS_DEFAULTS = {
     "create_tables": True,
     "create_figures_attachments": True,
     "create_figures_images": True,
+}
+
+NGFF_CONVERTER_SETTINGS_DEFAULTS = {
+    "compression": "blosc",
+    "tile_width": 1024,
+    "tile_height": 1024,
+    "resolutions": 0,
+    "max_workers": 4,
+    "chunk_depth": 1,
+    "downsampling": "SIMPLE",
+    "min_max": True,
+    "nested": True,
+    "hcs": True,
+    "overwrite": True,
+    "series": "",
+    "fill_value": 0,
+    "max_cached_tiles": 64,
+    "target_min_size": 256,
+    "progress": True,
 }
 
 # Cache for directory paths (initialized once per application lifecycle)
@@ -572,6 +593,124 @@ def _normalize_sem_edx_settings(raw_settings):
         if key in raw_settings:
             normalized[key] = bool(raw_settings[key])
     return normalized
+
+
+def _normalize_ngff_converter_settings(raw_settings):
+    """Normalize and validate NGFF converter settings from the UI."""
+    if not isinstance(raw_settings, dict):
+        return dict(NGFF_CONVERTER_SETTINGS_DEFAULTS)
+
+    defaults = NGFF_CONVERTER_SETTINGS_DEFAULTS
+    normalized = dict(defaults)
+
+    # String fields with allowed values
+    compression = str(raw_settings.get("compression", defaults["compression"])).lower()
+    if compression not in ("blosc", "zlib", "null"):
+        compression = defaults["compression"]
+    normalized["compression"] = compression
+
+    downsampling = str(
+        raw_settings.get("downsampling", defaults["downsampling"])
+    ).upper()
+    if downsampling not in (
+        "SIMPLE",
+        "GAUSSIAN",
+        "AREA",
+        "LINEAR",
+        "CUBIC",
+        "LANCZOS",
+    ):
+        downsampling = defaults["downsampling"]
+    normalized["downsampling"] = downsampling
+
+    # Integer fields with bounds
+    int_fields = {
+        "tile_width": (64, 8192),
+        "tile_height": (64, 8192),
+        "resolutions": (0, 20),
+        "max_workers": (1, 32),
+        "chunk_depth": (1, 256),
+        "fill_value": (0, 255),
+        "max_cached_tiles": (1, 4096),
+        "target_min_size": (1, 65536),
+    }
+    for field, (low, high) in int_fields.items():
+        try:
+            val = int(raw_settings.get(field, defaults[field]))
+        except (TypeError, ValueError):
+            val = defaults[field]
+        normalized[field] = max(low, min(high, val))
+
+    # Boolean fields
+    for field in ("min_max", "nested", "hcs", "overwrite", "progress"):
+        normalized[field] = bool(raw_settings.get(field, defaults[field]))
+
+    # Series: comma-separated integers, sanitize
+    series_raw = str(raw_settings.get("series", "") or "").strip()
+    if series_raw:
+        parts = []
+        for part in series_raw.split(","):
+            part = part.strip()
+            if part.isdigit():
+                parts.append(part)
+        normalized["series"] = ",".join(parts)
+    else:
+        normalized["series"] = ""
+
+    return normalized
+
+
+def _build_bioformats2raw_command(
+    input_path: str, output_path: str, settings: dict
+) -> list:
+    """Build the bioformats2raw CLI command from normalized settings."""
+    cmd = [BIOFORMATS2RAW_CLI]
+
+    s = settings or NGFF_CONVERTER_SETTINGS_DEFAULTS
+
+    compression = s.get("compression", "blosc")
+    if compression != "null":
+        cmd.extend(["--compression", compression])
+    else:
+        cmd.extend(["--compression", "null"])
+
+    cmd.extend(["--tile-width", str(s.get("tile_width", 1024))])
+    cmd.extend(["--tile-height", str(s.get("tile_height", 1024))])
+
+    resolutions = s.get("resolutions", 0)
+    if resolutions and resolutions > 0:
+        cmd.extend(["--resolutions", str(resolutions)])
+
+    cmd.extend(["--max-workers", str(s.get("max_workers", 4))])
+    cmd.extend(["--chunk-depth", str(s.get("chunk_depth", 1))])
+    cmd.extend(["--downsample-type", s.get("downsampling", "SIMPLE")])
+    cmd.extend(["--fill-value", str(s.get("fill_value", 0))])
+    cmd.extend(["--max-cached-tiles", str(s.get("max_cached_tiles", 64))])
+    cmd.extend(["--target-min-size", str(s.get("target_min_size", 256))])
+
+    if not s.get("min_max", True):
+        cmd.append("--no-minmax")
+
+    if not s.get("nested", True):
+        cmd.append("--no-nested")
+
+    if not s.get("hcs", True):
+        cmd.append("--no-hcs")
+
+    if s.get("overwrite", True):
+        cmd.append("--overwrite")
+
+    if s.get("progress", True):
+        cmd.append("--progress")
+
+    series = s.get("series", "")
+    if series:
+        cmd.extend(["--series", series])
+
+    cmd.append(input_path)
+    cmd.append(output_path)
+
+    return cmd
 
 
 def _resolve_job_batch_size(job_dict) -> int:
@@ -7135,6 +7274,175 @@ def _process_import_job(job_id: str):
                     safe_job_id,
                 )
                 _save_job(job)
+
+            # ----------------------------------------------------------
+            # NGFF Converter: run bioformats2raw on uploaded files
+            # ----------------------------------------------------------
+            if job.get("special_upload") == "ngff_converter":
+                ngff_settings = _normalize_ngff_converter_settings(
+                    job.get("ngff_converter_settings") or {}
+                )
+                _append_job_message(
+                    job,
+                    "NGFF converter: starting bioformats2raw conversion",
+                )
+                _save_job(job)
+
+                conversion_errors = 0
+                conversion_ok = 0
+                importable_entries = [
+                    e
+                    for e in job.get("files", [])
+                    if e.get("status") == "uploaded" and not e.get("import_skip")
+                ]
+
+                for entry_idx, entry in enumerate(importable_entries):
+                    rel_path = entry.get("relative_path", "")
+                    staged_path = entry.get("staged_path", "")
+                    source_file = upload_root / staged_path
+                    if not source_file.exists():
+                        entry["status"] = "error"
+                        entry.setdefault("errors", []).append(
+                            f"Source file not found for conversion: {rel_path}"
+                        )
+                        conversion_errors += 1
+                        _append_job_message(
+                            job,
+                            f"NGFF converter: source not found: {rel_path}",
+                        )
+                        _save_job(job)
+                        continue
+
+                    # Output zarr goes next to the source file
+                    zarr_name = source_file.stem + ".zarr"
+                    zarr_output = source_file.parent / zarr_name
+
+                    cmd = _build_bioformats2raw_command(
+                        str(source_file), str(zarr_output), ngff_settings
+                    )
+
+                    _append_job_message(
+                        job,
+                        f"NGFF converter ({entry_idx + 1}/{len(importable_entries)}): "
+                        f"converting {rel_path}",
+                    )
+                    _save_job(job)
+
+                    try:
+                        result = subprocess.run(
+                            cmd,
+                            timeout=7200,
+                        )
+                        stdout_text = result.stdout or ""
+                        stderr_text = result.stderr or ""
+
+                        if result.returncode != 0:
+                            error_summary = summarize_process_output(
+                                stderr_text or stdout_text, max_lines=10
+                            )
+                            entry["status"] = "error"
+                            entry.setdefault("errors", []).append(
+                                f"bioformats2raw failed (exit {result.returncode}): "
+                                f"{error_summary}"
+                            )
+                            _append_job_error(
+                                job,
+                                f"NGFF converter failed for {rel_path}: {error_summary}",
+                            )
+                            conversion_errors += 1
+                            _save_job(job)
+                            continue
+
+                        if not zarr_output.exists():
+                            entry["status"] = "error"
+                            entry.setdefault("errors", []).append(
+                                f"bioformats2raw completed but zarr output not found: "
+                                f"{zarr_name}"
+                            )
+                            conversion_errors += 1
+                            _save_job(job)
+                            continue
+
+                        # Mark the original file as skipped (don't import it).
+                        # Do NOT count its bytes as imported — the zarr
+                        # entry inherits the original size so the progress
+                        # bar advances naturally during the OMERO import.
+                        entry["status"] = "skipped"
+                        entry["import_skip"] = True
+                        entry["ngff_converted"] = True
+
+                        # Compute the staged_path for the zarr relative to
+                        # upload_root so the import subsystem can find it.
+                        zarr_staged = str(zarr_output.relative_to(upload_root))
+
+                        # Add the zarr as a new synthetic file entry.
+                        # Use the ORIGINAL file size for progress tracking
+                        # so the bar advances proportionally during import.
+                        original_size = entry.get("size", 0)
+                        zarr_entry = {
+                            "upload_id": f"ngff_{entry.get('upload_id', '')}",
+                            "relative_path": str(Path(rel_path).parent / zarr_name),
+                            "staged_path": zarr_staged,
+                            "size": original_size,
+                            "status": "uploaded",
+                            "errors": [],
+                            "compatibility_skip": False,
+                            "import_skip": False,
+                            "ngff_synthetic": True,
+                        }
+                        job["files"].append(zarr_entry)
+                        conversion_ok += 1
+                        _append_job_message(
+                            job,
+                            f"NGFF converter: created {zarr_name} from {rel_path}",
+                        )
+                        _save_job(job)
+
+                    except subprocess.TimeoutExpired:
+                        entry["status"] = "error"
+                        entry.setdefault("errors", []).append(
+                            f"bioformats2raw timed out after 7200s for {rel_path}"
+                        )
+                        conversion_errors += 1
+                        _append_job_error(
+                            job,
+                            f"NGFF converter timed out for {rel_path}",
+                        )
+                        _save_job(job)
+                        continue
+                    except Exception as conv_exc:
+                        entry["status"] = "error"
+                        entry.setdefault("errors", []).append(
+                            f"bioformats2raw error: {conv_exc}"
+                        )
+                        conversion_errors += 1
+                        logger.error(
+                            "NGFF converter unexpected error for %s: %s",
+                            sanitize_log_value(rel_path),
+                            sanitize_log_value(conv_exc),
+                            exc_info=sanitized_exc_info(conv_exc),
+                        )
+                        _save_job(job)
+                        continue
+
+                _append_job_message(
+                    job,
+                    f"NGFF converter complete: {conversion_ok} converted, "
+                    f"{conversion_errors} errors",
+                )
+                _save_job(job)
+
+                if conversion_ok == 0 and conversion_errors > 0:
+                    job["status"] = "error"
+                    _append_job_error(
+                        job,
+                        "All NGFF converter jobs failed. No files to import.",
+                    )
+                    _save_job(job)
+                    return
+
+                # Reload to pick up newly appended zarr entries
+                job = _load_job(job_id) or job
 
             # Keep OMERO CLI dry-run planning off the request path. Large grouped
             # formats such as .zarr can legitimately spend tens of seconds here.
