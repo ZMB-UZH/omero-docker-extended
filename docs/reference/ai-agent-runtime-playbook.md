@@ -23,6 +23,19 @@ Deep operational guidance for AI agents. `AGENTS.md` should route here instead o
 - `docker compose --env-file installation_paths.env ps` fails when the secrets env file is absent. Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as the fallback probe.
 - Treat a Docker socket permission error as a sandbox or privilege problem, not proof that Docker is down.
 
+## Docker image rebuilds: cached vs no-cache
+
+- `docker compose build <service>` uses the layer cache. This is fast but will NOT pick up changes to build ARGs that are already baked into a cached layer. Use this for code-only changes (Python files, templates, static assets) where the COPY layers invalidate naturally.
+- `docker compose build --no-cache <service>` rebuilds every layer from scratch. Use this when changing build ARGs (package versions like `BIOFORMATS2RAW_VERSION`, `OME_ZARR_PY_VERSION`), base image digests, or OS-level package lists.
+- Build ARGs such as `BIOFORMATS2RAW_VERSION` are defined in BOTH `docker-compose.yml` (the single source of truth for default values) and `docker/<service>.Dockerfile` (fallback defaults). When updating a version, change `docker-compose.yml` first — that value takes precedence. The Dockerfile ARG default serves only as documentation and offline build fallback.
+
+## bioformats2raw version compatibility
+
+- `bioformats2raw` is installed in the `omeroweb` container. The version is controlled by the `BIOFORMATS2RAW_VERSION` build arg in `docker-compose.yml`.
+- Before upgrading `bioformats2raw`, verify Java compatibility: run `bioformats2raw --version` inside the container. If the new version requires a newer Java runtime (check "class file version" errors), you must first install the required JDK in the Dockerfile.
+- The base image `openmicroscopy/omero-web-standalone` ships Java 8 (class file version 52). `bioformats2raw` v0.11.x works with Java 8. Starting from v0.12.x, Java 11+ (class file version 55) is required.
+- `bioformats2raw` bundles its own Bio-Formats version. Check `bioformats2raw --version` output for the bundled Bio-Formats version. This is independent of any Bio-Formats version used by OMERO.server.
+
 ## Host sandbox vs container network
 
 - Do not keep retrying host-side `localhost` probes after one failure.
