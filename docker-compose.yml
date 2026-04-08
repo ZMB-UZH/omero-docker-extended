@@ -599,5 +599,21 @@ services:
       - no-new-privileges:true
 
 
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ${OLLAMA_DATA_PATH:-/disks/omero_temp/ollama}:/root/.ollama
+    networks:
+      omero:
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
 networks:
   omero:
