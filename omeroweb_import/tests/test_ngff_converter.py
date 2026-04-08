@@ -17,8 +17,8 @@ try:
     import django
 
     django.setup()
-except Exception:
-    pass
+except ImportError:
+    django = None  # Django not available; tests may skip or fail naturally
 
 from omeroweb_import.views.core_functions import (
     NGFF_CONVERTER_SETTINGS_DEFAULTS,
