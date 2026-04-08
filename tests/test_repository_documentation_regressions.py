@@ -79,7 +79,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
 
     def test_service_topology_docs_match_compose_terms(self) -> None:
-        self.assertEqual(20, len(self.services))
+        self.assertEqual(21, len(self.services))
         self.assertIn("redis-sysctl-init", self.services)
         self.assertEqual("no", str(self.services["redis-sysctl-init"].get("restart")))
         self.assertEqual(
