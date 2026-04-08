@@ -66,7 +66,7 @@ OLLAMA_MODEL = (
     or "qwen2.5:3b"
 )
 
-OLLAMA_TIMEOUT_SECONDS = 45
+OLLAMA_TIMEOUT_SECONDS = 120
 
 # Namespaces used for MapAnnotations
 MAP_NS = "openmicroscopy.org/omero/client/mapAnnotation"  # default client namespace that allows editing in OMERO.web
