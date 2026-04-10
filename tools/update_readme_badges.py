@@ -21,7 +21,7 @@ README_PATH = Path("README.md")
 CANONICAL_METADATA_PATH = Path(".github/readme_badges.json")
 CAVEMAN_BADGE_TITLE = "Caveman"
 CAVEMAN_BADGE_IMAGE_URL = (
-    "https://img.shields.io/badge/Caveman-compression-6B7280?logo=github"
+    "https://img.shields.io/badge/Caveman-6B7280?logo=github&labelColor=6B7280"
 )
 CAVEMAN_BADGE_TARGET_URL = "https://github.com/JuliusBrussee/caveman"
 
