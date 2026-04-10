@@ -54,6 +54,7 @@ Compression stays opt-in and quality-first:
 - use `context-budget` to reduce input/context cost first
 - use `caveman` only when the user explicitly asks for lower-token replies
 - default to lite compression and return to normal detail whenever safety, sequencing, or ambiguity matters
+- keep routing, tool use, verification scope, and uncertainty handling identical to normal mode
 
 The upstream Caveman hooks, plugin auto-loading, and compression-tool context rewriting are not activated in this repo.
 

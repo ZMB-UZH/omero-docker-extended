@@ -46,4 +46,4 @@ Do not replace the local overlays with the upstream files verbatim unless the re
 - Caveman vendor path: `third_party/caveman-v1.3.5/`
 - License: MIT (`third_party/caveman-v1.3.5/LICENSE`)
 - Selected upstream reference: `third_party/caveman-v1.3.5/skills/caveman/SKILL.md`
-- Integration rule: the active repo surface is `.agents/skills/caveman/`; upstream hooks, plugin auto-loading, and compression-tool context rewriting stay disabled.
+- Integration rule: the active repo surface is `.agents/skills/caveman/`; it is an opt-in overlay for lower-token replies only. Upstream hooks, plugin auto-loading, and compression-tool context rewriting stay disabled, and the local overlay changes reply style only without changing routing, tool choice, verification scope, or uncertainty handling.
