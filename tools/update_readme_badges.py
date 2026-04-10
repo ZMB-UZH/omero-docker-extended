@@ -19,6 +19,11 @@ BADGE_BLOCK_BEGIN = "<!-- BEGIN GENERATED BADGES -->"
 BADGE_BLOCK_END = "<!-- END GENERATED BADGES -->"
 README_PATH = Path("README.md")
 CANONICAL_METADATA_PATH = Path(".github/readme_badges.json")
+CAVEMAN_BADGE_TITLE = "Caveman"
+CAVEMAN_BADGE_IMAGE_URL = (
+    "https://img.shields.io/badge/Caveman-compression-6B7280?logo=github"
+)
+CAVEMAN_BADGE_TARGET_URL = "https://github.com/JuliusBrussee/caveman"
 
 
 @dataclass(frozen=True)
@@ -200,6 +205,7 @@ def render_badge_block(
         f"[![Ruff](https://img.shields.io/github/actions/workflow/status/{github_path}/ruff.yml?branch={branch}&logo=ruff&label=Ruff)](https://github.com/{github_path}/actions/workflows/ruff.yml)",
         f"[![Vulture](https://img.shields.io/github/actions/workflow/status/{github_path}/vulture.yml?branch={branch}&logo=python&label=Vulture)](https://github.com/{github_path}/actions/workflows/vulture.yml)",
         f"[![{upstream_sources.badge_title}]({upstream_sources.badge_image_url})]({upstream_sources.skills_tree_url})",
+        f"[![{CAVEMAN_BADGE_TITLE}]({CAVEMAN_BADGE_IMAGE_URL})]({CAVEMAN_BADGE_TARGET_URL})",
         BADGE_BLOCK_END,
     ]
     return "\n".join(lines)
