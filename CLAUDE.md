@@ -16,6 +16,7 @@ Project-specific instructions for Claude Code sessions working on this repositor
 - Keep context small: load one task class, one code root, one nearest test module, and one matching skill before broadening scope.
 - Follow the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
+- If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill and drop back to normal detail whenever safety, sequencing, or ambiguity matters.
 - Never use background agents or subagents unless the user explicitly asks for them.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.
 - Never edit `env/omero_secrets.env`.

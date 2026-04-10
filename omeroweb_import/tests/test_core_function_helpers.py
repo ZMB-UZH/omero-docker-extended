@@ -272,6 +272,16 @@ def test_compatibility_output_parsers_cover_candidates_groups_and_failures(
         )[0]
         == "error"
     )
+    assert core_functions._classify_compatibility_output(
+        2,
+        "",
+        "Generic failure from OMERO CLI",
+    ) == ("error", "Generic failure from OMERO CLI")
+    assert core_functions._classify_compatibility_output(
+        7,
+        "",
+        "",
+    ) == ("error", "OMERO compatibility check failed with exit code 7")
 
 
 def test_relative_root_helpers_detect_directory_package_shapes() -> None:

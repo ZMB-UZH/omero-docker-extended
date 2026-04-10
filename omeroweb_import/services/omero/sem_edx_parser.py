@@ -568,7 +568,6 @@ def genetic_label_placement(
     fig,
     ax,
     renderer,
-    fixed_offset_pixels: float = 30,
 ) -> List[Tuple[float, float, str, float, float, List[float]]]:
     """
     Genetic algorithm for label placement
@@ -771,9 +770,7 @@ def create_edx_spectrum_plot(
     )
 
     # Run genetic algorithm for label placement
-    final_positions = genetic_label_placement(
-        labels_data, axes_bbox, fig, ax, renderer, fixed_offset_pixels=30
-    )
+    final_positions = genetic_label_placement(labels_data, axes_bbox, fig, ax, renderer)
 
     # Draw labels and connector lines
     for (

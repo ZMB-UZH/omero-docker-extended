@@ -4793,8 +4793,15 @@ def _classify_compatibility_output(
     if any(marker in lowered for marker in incompatible_markers):
         return "incompatible", details
 
-    # 3. No candidates found and no clear incompatibility message.
-    #    Check stderr for fatal errors (missing file, CLI crash, etc.).
+    # 3. A non-zero exit code without import candidates or explicit
+    #    incompatibility markers means the CLI failed, even if stderr is generic.
+    if return_code != 0:
+        return (
+            "error",
+            details or f"OMERO compatibility check failed with exit code {return_code}",
+        )
+
+    # 4. Exit code was clean but stderr may still contain fatal runtime errors.
     if stderr and stderr.strip():
         stderr_lower = stderr.lower()
         fatal_indicators = [
@@ -4805,7 +4812,7 @@ def _classify_compatibility_output(
         if any(indicator in stderr_lower for indicator in fatal_indicators):
             return "error", stderr.strip()
 
-    # 4. Fallback: no candidates, no clear signal → incompatible.
+    # 5. Fallback: no candidates, no clear signal, clean exit code → incompatible.
     return "incompatible", details or "No importable files detected by Bio-Formats"
 
 

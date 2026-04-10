@@ -37,3 +37,13 @@ The vendor snapshot includes only the ECC skills that map cleanly onto this repo
 The files under `.agents/skills/` are the active repo-specific overlays. They are intentionally shorter than the upstream ECC files and route agents into this repo's actual docs, tests, env contracts, and security rules.
 
 Do not replace the local overlays with the upstream files verbatim unless the repo's own workflow contracts have been reviewed and preserved.
+
+## Caveman reference snapshot
+
+- Repository: `JuliusBrussee/caveman`
+- Caveman release tag: `v1.3.5`
+- Caveman release commit: `92f892f2b99744a4501f35bce9a2e384878e4877`
+- Caveman vendor path: `third_party/caveman-v1.3.5/`
+- License: MIT (`third_party/caveman-v1.3.5/LICENSE`)
+- Selected upstream reference: `third_party/caveman-v1.3.5/skills/caveman/SKILL.md`
+- Integration rule: the active repo surface is `.agents/skills/caveman/`; upstream hooks, plugin auto-loading, and compression-tool context rewriting stay disabled.
