@@ -196,7 +196,6 @@ def render_badge_block(
     branch = metadata.branch_query_value
     lines = [
         BADGE_BLOCK_BEGIN,
-        f"[![License](https://img.shields.io/github/license/{github_path})](LICENSE)",
         f"[![tests](https://img.shields.io/github/actions/workflow/status/{github_path}/tests.yml?branch={branch}&label=tests)](https://github.com/{github_path}/actions/workflows/tests.yml)",
         f"[![security-code-scanning](https://img.shields.io/github/actions/workflow/status/{github_path}/security-code-scanning.yml?branch={branch}&label=security-code-scanning)](https://github.com/{github_path}/actions/workflows/security-code-scanning.yml)",
         f"[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/{github_path})](https://github.com/{github_path}/commits/{branch})",
@@ -204,6 +203,7 @@ def render_badge_block(
         f"[![super-linter](https://img.shields.io/github/actions/workflow/status/{github_path}/super-linter.yml?branch={branch}&label=super-linter&logo=github)](https://github.com/{github_path}/actions/workflows/super-linter.yml)",
         f"[![Ruff](https://img.shields.io/github/actions/workflow/status/{github_path}/ruff.yml?branch={branch}&logo=ruff&label=Ruff)](https://github.com/{github_path}/actions/workflows/ruff.yml)",
         f"[![Vulture](https://img.shields.io/github/actions/workflow/status/{github_path}/vulture.yml?branch={branch}&logo=python&label=Vulture)](https://github.com/{github_path}/actions/workflows/vulture.yml)",
+        f"[![License](https://img.shields.io/github/license/{github_path})](LICENSE)",
         f"[![{upstream_sources.badge_title}]({upstream_sources.badge_image_url})]({upstream_sources.skills_tree_url})",
         f"[![{CAVEMAN_BADGE_TITLE}]({CAVEMAN_BADGE_IMAGE_URL})]({CAVEMAN_BADGE_TARGET_URL})",
         BADGE_BLOCK_END,
