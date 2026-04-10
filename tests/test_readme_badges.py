@@ -56,6 +56,10 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block.index("[![Ruff]("),
         )
         self.assertLess(
+            badge_block.index("[![Ruff]("),
+            badge_block.index("[![Vulture]("),
+        )
+        self.assertLess(
             badge_block.index("[![GitHub commit activity]("),
             badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
         )
@@ -103,6 +107,14 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertIn(
             "https://img.shields.io/github/actions/workflow/status/example-owner/example-repo/super-linter.yml?branch=main&label=super-linter",
+            badge_block,
+        )
+        self.assertIn(
+            "https://github.com/example-owner/example-repo/actions/workflows/vulture.yml",
+            badge_block,
+        )
+        self.assertIn(
+            "https://img.shields.io/github/actions/workflow/status/example-owner/example-repo/vulture.yml?branch=main&logo=python&label=Vulture",
             badge_block,
         )
         self.assertIn(

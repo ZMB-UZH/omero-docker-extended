@@ -35,6 +35,10 @@ class RuffIntegrationContractTests(unittest.TestCase):
             "[![Ruff](",
             readme_text,
         )
+        self.assertIn(
+            "[![Vulture](",
+            readme_text,
+        )
 
     def test_docs_index_links_to_python_style_reference(self) -> None:
         index_text = self.read_text("docs/index.md")
