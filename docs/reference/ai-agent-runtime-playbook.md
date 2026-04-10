@@ -19,8 +19,8 @@ Deep operational guidance for AI agents. `AGENTS.md` should route here instead o
 
 ## Docker compose and env files
 
-- In this repo, `docker compose build`, `up`, and `config` normally require both `--env-file installation_paths.env` and `--env-file env/omero_secrets.env`.
-- `docker compose --env-file installation_paths.env ps` fails when the secrets env file is absent. Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as the fallback probe.
+- In this repo, explicit `docker compose build`, `up`, and `config` commands normally require `--env-file installation_paths.env`, `--env-file env/omero_secrets.env`, and `--env-file env/omeroserver.env`.
+- `docker compose --env-file installation_paths.env ps` fails when the required secrets/server env files are absent. Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as the fallback probe.
 - Treat a Docker socket permission error as a sandbox or privilege problem, not proof that Docker is down.
 
 ## OMERO.web env variable naming convention (CRITICAL)
@@ -46,11 +46,11 @@ Examples:
 
 - `docker compose build <service>` uses the layer cache. This is fast but will NOT pick up changes to build ARGs that are already baked into a cached layer. Use this for code-only changes (Python files, templates, static assets) where the COPY layers invalidate naturally.
 - `docker compose build --no-cache <service>` rebuilds every layer from scratch. Use this when changing build ARGs (package versions like `BIOFORMATS2RAW_VERSION`, `OME_ZARR_PY_VERSION`), base image digests, or OS-level package lists.
-- Build ARGs such as `BIOFORMATS2RAW_VERSION` are defined in BOTH `docker-compose.yml` (the single source of truth for default values) and `docker/<service>.Dockerfile` (fallback defaults). When updating a version, change `docker-compose.yml` first — that value takes precedence. The Dockerfile ARG default serves only as documentation and offline build fallback.
+- Build ARGs such as `BIOFORMATS2RAW_VERSION` come from `env/omeroserver.env`. `docker-compose.yml` and `docker/<service>.Dockerfile` fail closed when those values are absent instead of silently falling back to in-code defaults.
 
 ## bioformats2raw version compatibility
 
-- `bioformats2raw` is installed in the `omeroweb` container. The version is controlled by the `BIOFORMATS2RAW_VERSION` build arg in `docker-compose.yml`.
+- `bioformats2raw` is installed in the `omeroweb` container. The version is controlled by `BIOFORMATS2RAW_VERSION` from `env/omeroserver.env`.
 - Before upgrading `bioformats2raw`, verify Java compatibility: run `bioformats2raw --version` inside the container. If the new version requires a newer Java runtime (check "class file version" errors), you must first install the required JDK in the Dockerfile.
 - The base image `openmicroscopy/omero-web-standalone` ships Java 8 (class file version 52). `bioformats2raw` v0.11.x works with Java 8. Starting from v0.12.x, Java 11+ (class file version 55) is required.
 - `bioformats2raw` bundles its own Bio-Formats version. Check `bioformats2raw --version` output for the bundled Bio-Formats version. This is independent of any Bio-Formats version used by OMERO.server.
@@ -154,6 +154,9 @@ PY
 - `omero zarr import` is reference-based and stores the managed-store path in `Image.details.externalInfo.lsid`.
 - Native Zarr metadata finalization must normalize shorthand units such as `nm` or `µm` before persisting physical sizes.
 - Restage browser uploads to a durable server-readable location before native Zarr import; do not point native import at `_staged/`.
+- Managed-repository native Zarr staging must leave the group/user/date/time prefix traversal-only, the staged `.zarr` tree service-readable, and create or delete staged managed paths through OMERO's repository API; owner-only modes cause `PermissionError`, and raw `mkdir` under `ManagedRepository` can trigger `Directory exists but is not registered`.
+- If a live repository suffix path exists on disk but `Repository.fileExists(...)` returns `False` while `treeList(...)` still traverses it, treat that suffix as stale unmanaged residue from an older helper revision rather than a healthy registered path.
+- When resolving the managed-repository proxy from OMERO shared resources, do not assume `RepositoryMap.proxies` is a hash map. Live servers can expose it as a description-aligned sequence with `None` holes; pair it with `descriptions` by index when it is not mapping-like.
 - Route every Zarr layout supported by the installed `omero-cli-zarr` runtime through the native path.
 - For NGFF-backed images, thumbnail/render failures often surface in `master.err` from the Zarr pixel service or reader stack.
 - OMERO.iviewer and OMERO.figure import `omeroweb.webgateway.marshal.imageMarshal` by value at import time. Hardened marshal overrides must patch already-imported viewer modules too.

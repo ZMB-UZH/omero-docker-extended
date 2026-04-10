@@ -2693,6 +2693,28 @@ def _extract_imported_object_ids(output: str) -> list[str]:
     return created_ids
 
 
+def _extract_imported_image_ids_for_normalization(
+    output: str,
+    fallback_image_ids=None,
+) -> list[int]:
+    image_ids = _extract_imported_image_ids(output)
+    if image_ids:
+        return image_ids
+
+    normalized_ids = []
+    seen_ids = set()
+    for object_id in fallback_image_ids or []:
+        try:
+            image_id = int(str(object_id).strip())
+        except (TypeError, ValueError):
+            continue
+        if image_id in seen_ids:
+            continue
+        seen_ids.add(image_id)
+        normalized_ids.append(image_id)
+    return normalized_ids
+
+
 def _reports_no_processor_available(stdout: str, stderr: str) -> bool:
     combined = "\n".join(part for part in (stdout, stderr) if part)
     lowered = combined.lower()
@@ -3003,6 +3025,8 @@ def _classify_import_failure(stdout: str, stderr: str) -> str:
             group_name=group_name,
             parent_id=parent_id,
         )
+    if "permission denied" in combined or "permissionerror" in combined:
+        return errors.import_path_not_readable()
     return errors.import_failed()
 
 
@@ -3835,6 +3859,13 @@ def _logical_import_entry_display_name(entry: dict) -> str:
     return PurePosixPath(rel_path).name
 
 
+def _logical_import_entry_source_display_name(entry: dict) -> str:
+    source_rel_path = (entry.get("source_relative_path") or "").strip()
+    if source_rel_path:
+        return PurePosixPath(source_rel_path).name
+    return _logical_import_entry_display_name(entry)
+
+
 def _logical_import_entry_group_header_name(entry: dict) -> str:
     explicit_group_header_name = (entry.get("group_header_name") or "").strip()
     if explicit_group_header_name:
@@ -3860,7 +3891,105 @@ def _entry_requires_name_normalization(entry: dict, dataset_id: Optional[int]) -
     )
 
 
-def _build_import_name_normalization_context(entry: dict, dataset_id: Optional[int]):
+@dataclass(frozen=True)
+class _ImportNameNormalizationContext:
+    cli_import_name: Optional[str] = None
+    group_header_name: str = ""
+    expected_image_names: tuple[str, ...] = ()
+
+
+def _build_source_aware_image_name(
+    source_display_name: str,
+    image_display_name: str,
+) -> str:
+    source_text = (source_display_name or "").strip()
+    image_text = (image_display_name or "").strip()
+    if not source_text:
+        return image_text
+    if not image_text or image_text == source_text:
+        return source_text
+    if image_text.startswith(f"{source_text} ["):
+        return image_text
+    return f"{source_text} [{image_text}]"
+
+
+def _coerce_import_name_normalization_context(
+    context,
+) -> Optional[_ImportNameNormalizationContext]:
+    if context is None or isinstance(context, _ImportNameNormalizationContext):
+        return context
+    if not isinstance(context, dict):
+        return None
+    return _ImportNameNormalizationContext(
+        cli_import_name=(
+            str(
+                context.get("cli_import_name") or context.get("desired_name") or ""
+            ).strip()
+            or None
+        ),
+        group_header_name=str(context.get("group_header_name") or "").strip(),
+        expected_image_names=tuple(
+            str(name or "").strip()
+            for name in (context.get("expected_image_names") or ())
+        ),
+    )
+
+
+def _build_ome_zarr_import_name_normalization_context(
+    entry: dict,
+    file_path: Path,
+) -> Optional[_ImportNameNormalizationContext]:
+    if not file_path.is_dir() or not any(
+        file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS
+    ):
+        return None
+
+    inspection = inspect_ome_zarr_image(file_path)
+    image_node_paths = tuple(
+        str(path or "").strip()
+        for path in (getattr(inspection, "image_node_relative_paths", ()) or ())
+    )
+    image_display_names = tuple(
+        str(name or "").strip()
+        for name in (getattr(inspection, "image_display_names", ()) or ())
+    )
+    if image_node_paths and len(image_node_paths) != len(image_display_names):
+        logger.warning(
+            "Ignoring inconsistent OME-Zarr naming metadata for %s: %d image nodes but %d display names.",
+            sanitize_log_value(file_path),
+            len(image_node_paths),
+            len(image_display_names),
+        )
+        return None
+    if not any(image_display_names):
+        return None
+
+    desired_name = _logical_import_entry_source_display_name(entry) or file_path.name
+    if not desired_name:
+        return None
+
+    return _ImportNameNormalizationContext(
+        cli_import_name=desired_name,
+        expected_image_names=tuple(
+            _build_source_aware_image_name(desired_name, image_display_name)
+            for image_display_name in image_display_names
+        ),
+    )
+
+
+def _build_import_name_normalization_context(
+    entry: dict,
+    dataset_id: Optional[int],
+    file_path: Optional[Path] = None,
+):
+    if file_path is not None:
+        zarr_context = _build_ome_zarr_import_name_normalization_context(
+            entry,
+            file_path,
+        )
+        if zarr_context is not None:
+            return zarr_context
+
     if not _entry_requires_name_normalization(entry, dataset_id):
         return None
 
@@ -3869,10 +3998,10 @@ def _build_import_name_normalization_context(entry: dict, dataset_id: Optional[i
     if not desired_name or not group_header_name:
         return None
 
-    return {
-        "desired_name": desired_name,
-        "group_header_name": group_header_name,
-    }
+    return _ImportNameNormalizationContext(
+        cli_import_name=desired_name,
+        group_header_name=group_header_name,
+    )
 
 
 def _extract_imported_image_ids(import_stdout: str) -> list[int]:
@@ -3881,7 +4010,14 @@ def _extract_imported_image_ids(import_stdout: str) -> list[int]:
 
     imported_ids = []
     seen_ids = set()
-    for match in re.finditer(r"(?m)^\s*Image:(\d+)\s*$", import_stdout):
+    for match in re.finditer(r"\bImage:([0-9]+(?:,[0-9]+)*)\b", import_stdout):
+        for raw_image_id in match.group(1).split(","):
+            image_id = int(raw_image_id)
+            if image_id in seen_ids:
+                continue
+            seen_ids.add(image_id)
+            imported_ids.append(image_id)
+    for match in re.finditer(r"\bCreated Image\s+(\d+)\b", import_stdout):
         image_id = int(match.group(1))
         if image_id in seen_ids:
             continue
@@ -3901,19 +4037,18 @@ def _image_name_requires_normalization(
 
 def _apply_import_name_normalization_context(
     entry: dict,
-    context: Optional[dict],
+    context: Optional[_ImportNameNormalizationContext],
     imported_image_ids: list[int],
     session_key: str,
     host: str,
     port: int,
     group_id: Optional[int],
 ) -> list[int]:
+    context = _coerce_import_name_normalization_context(context)
     if not context or not session_key:
         return []
 
-    desired_name = (context.get("desired_name") or "").strip()
-    group_header_name = (context.get("group_header_name") or "").strip()
-    if not imported_image_ids or not desired_name or not group_header_name:
+    if not imported_image_ids:
         return []
 
     conn = _open_group_scoped_session_connection(
@@ -3936,6 +4071,38 @@ def _apply_import_name_normalization_context(
                 )
                 continue
             images.append(image)
+
+        target_image_names = tuple(
+            str(name or "").strip() for name in context.expected_image_names
+        )
+        if any(target_image_names):
+            if len(images) != len(target_image_names):
+                logger.warning(
+                    "Skipping metadata-driven name normalization for %s because %d imported images do not match %d expected names.",
+                    sanitize_log_value(entry.get("relative_path") or ""),
+                    len(images),
+                    len(target_image_names),
+                )
+                return []
+
+            renamed_ids = []
+            for image, target_name in zip(images, target_image_names):
+                if not target_name:
+                    continue
+                current_name = (image.getName() or "").strip()
+                if current_name == target_name:
+                    continue
+                image.setName(target_name)
+                image.save()
+                image_id = _get_id(image)
+                if image_id is not None:
+                    renamed_ids.append(int(image_id))
+            return renamed_ids
+
+        desired_name = (context.cli_import_name or "").strip()
+        group_header_name = (context.group_header_name or "").strip()
+        if not desired_name or not group_header_name:
+            return []
 
         renamed_ids = []
         if len(images) == 1:
@@ -6053,6 +6220,7 @@ def _import_zarr_via_cli(
     progress_job: Optional[dict] = None,
     username: Optional[str] = None,
     group_name: Optional[str] = None,
+    normalization_context: Optional[_ImportNameNormalizationContext] = None,
     native_plan: Optional[_NativeZarrImportPlan] = None,
 ) -> dict:
     """Import a Zarr image store using ``omero zarr import``.
@@ -6234,6 +6402,7 @@ def _import_zarr_via_cli(
     # --- Detect created objects --------------------------------------------
     combined_output = stdout + "\n" + stderr
     imported_objects = _extract_imported_object_ids(combined_output)
+    api_verified_image_ids = []
     expected_lsid = None if native_plan.verify_lsid_prefix else str(managed_zarr)
     expected_lsid_prefix = str(managed_zarr) if native_plan.verify_lsid_prefix else None
 
@@ -6251,6 +6420,7 @@ def _import_zarr_via_cli(
             group_name=group_name,
         )
         if api_objects:
+            api_verified_image_ids = list(api_objects)
             imported_objects = api_objects
             logger.info(
                 "OMERO API verification found native-zarr images for %s: %s",
@@ -6368,6 +6538,19 @@ def _import_zarr_via_cli(
             "job_message": job_error,
         }
 
+    _apply_import_name_normalization_context(
+        entry,
+        normalization_context,
+        _extract_imported_image_ids_for_normalization(
+            combined_output,
+            api_verified_image_ids,
+        ),
+        session_key,
+        host,
+        port,
+        group_id,
+    )
+
     return {
         "cleanup_staged_paths": cleanup_staged_paths,
         "covered_indexes": covered_indexes,
@@ -6460,6 +6643,7 @@ def _verify_zarr_import_via_api(
                 params.add("lsid_prefix", omero.rtypes.rstring(prefix_value))
                 where_parts.append("i.details.externalInfo.lsid like :lsid_prefix")
             query_parts.append("WHERE " + " AND ".join(where_parts))
+            query_parts.append("ORDER BY i.id")
             rows = qs.projection(" ".join(query_parts), params, conn.SERVICE_OPTS)
             exact_ids = [str(row[0].val) for row in rows] if rows else []
             if exact_ids:
@@ -6695,7 +6879,8 @@ def _verify_import_via_api(
         query = (
             "SELECT i.id FROM Image i "
             "JOIN i.datasetLinks dl "
-            "WHERE dl.parent.id = :id AND i.name IN (:names)"
+            "WHERE dl.parent.id = :id AND i.name IN (:names) "
+            "ORDER BY i.id"
         )
         qs = conn.getQueryService()
         rows = qs.projection(query, params, conn.SERVICE_OPTS)
@@ -6771,10 +6956,17 @@ def _import_job_entry(
         dataset_name = _dataset_name_for_import_entry(entry, orphan_dataset_name)
         dataset_id = dataset_map.get(dataset_name)
 
-    normalization_context = _build_import_name_normalization_context(entry, dataset_id)
+    normalization_context = _build_import_name_normalization_context(
+        entry,
+        dataset_id,
+        file_path=file_path,
+    )
+    normalization_context = _coerce_import_name_normalization_context(
+        normalization_context
+    )
     import_name = None
     if normalization_context:
-        import_name = (normalization_context.get("desired_name") or "").strip() or None
+        import_name = (normalization_context.cli_import_name or "").strip() or None
 
     # For directory packages (.zarr), ensure the import name is set to the
     # directory name so OMERO doesn't fall back to an internal chunk
@@ -6938,6 +7130,7 @@ def _import_job_entry(
                 progress_job=progress_job,
                 username=username,
                 group_name=group_name,
+                normalization_context=normalization_context,
                 native_plan=native_plan,
             )
         if (
@@ -7024,8 +7217,15 @@ def _import_job_entry(
         # ------------------------------------------------------------------
         combined_output = (stdout or "") + "\n" + (stderr or "")
         imported_objects = _extract_imported_object_ids(combined_output)
+        imported_image_ids = _extract_imported_image_ids(combined_output)
+        needs_api_image_lookup = (
+            dataset_id is not None
+            and normalization_context is not None
+            and not imported_image_ids
+        )
+        api_verified_image_ids = []
 
-        if not imported_objects and dataset_id:
+        if dataset_id and (not imported_objects or needs_api_image_lookup):
             api_objects = _verify_import_via_api(
                 username or "",
                 host,
@@ -7037,12 +7237,20 @@ def _import_job_entry(
                 group_name=group_name,
             )
             if api_objects:
-                imported_objects = api_objects
-                logger.info(
-                    "OMERO API verification found objects for %s: %s",
-                    sanitize_log_value(rel_path),
-                    sanitize_log_value(imported_objects[:5]),
-                )
+                api_verified_image_ids = list(api_objects)
+                if not imported_objects:
+                    imported_objects = api_objects
+                    logger.info(
+                        "OMERO API verification found objects for %s: %s",
+                        sanitize_log_value(rel_path),
+                        sanitize_log_value(imported_objects[:5]),
+                    )
+                elif needs_api_image_lookup:
+                    logger.info(
+                        "OMERO API verification found imported images for post-import naming on %s: %s",
+                        sanitize_log_value(rel_path),
+                        sanitize_log_value(api_verified_image_ids[:5]),
+                    )
 
         if not success:
             if imported_objects:
@@ -7093,6 +7301,19 @@ def _import_job_entry(
                 "job_error": job_error,
                 "job_message": job_error,
             }
+
+        _apply_import_name_normalization_context(
+            entry,
+            normalization_context,
+            _extract_imported_image_ids_for_normalization(
+                combined_output,
+                api_verified_image_ids,
+            ),
+            background_session_key,
+            host,
+            port,
+            group_id,
+        )
 
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
@@ -7276,7 +7497,7 @@ def _process_import_job(job_id: str):
                 _save_job(job)
 
             # ----------------------------------------------------------
-            # NGFF Converter: run bioformats2raw on uploaded files
+            # OME-NGFF converter (OME-Zarr): run bioformats2raw on uploaded files
             # ----------------------------------------------------------
             if job.get("special_upload") == "ngff_converter":
                 ngff_settings = _normalize_ngff_converter_settings(
@@ -7284,7 +7505,7 @@ def _process_import_job(job_id: str):
                 )
                 _append_job_message(
                     job,
-                    "NGFF converter: starting bioformats2raw conversion",
+                    "OME-NGFF converter (OME-Zarr): starting conversion",
                 )
                 _save_job(job)
 
@@ -7308,7 +7529,7 @@ def _process_import_job(job_id: str):
                         conversion_errors += 1
                         _append_job_message(
                             job,
-                            f"NGFF converter: source not found: {rel_path}",
+                            f"OME-NGFF converter (OME-Zarr): source not found: {rel_path}",
                         )
                         _save_job(job)
                         continue
@@ -7323,7 +7544,7 @@ def _process_import_job(job_id: str):
 
                     _append_job_message(
                         job,
-                        f"NGFF converter ({entry_idx + 1}/{len(importable_entries)}): "
+                        f"OME-NGFF converter (OME-Zarr) ({entry_idx + 1}/{len(importable_entries)}): "
                         f"converting {rel_path}",
                     )
                     _save_job(job)
@@ -7347,7 +7568,7 @@ def _process_import_job(job_id: str):
                             )
                             _append_job_error(
                                 job,
-                                f"NGFF converter failed for {rel_path}: {error_summary}",
+                                f"OME-NGFF converter (OME-Zarr) failed for {rel_path}: {error_summary}",
                             )
                             conversion_errors += 1
                             _save_job(job)
@@ -7382,6 +7603,7 @@ def _process_import_job(job_id: str):
                         zarr_entry = {
                             "upload_id": f"ngff_{entry.get('upload_id', '')}",
                             "relative_path": str(Path(rel_path).parent / zarr_name),
+                            "source_relative_path": rel_path,
                             "staged_path": zarr_staged,
                             "size": original_size,
                             "status": "uploaded",
@@ -7394,7 +7616,7 @@ def _process_import_job(job_id: str):
                         conversion_ok += 1
                         _append_job_message(
                             job,
-                            f"NGFF converter: created {zarr_name} from {rel_path}",
+                            f"OME-NGFF converter (OME-Zarr): created {zarr_name} from {rel_path}",
                         )
                         _save_job(job)
 
@@ -7406,7 +7628,7 @@ def _process_import_job(job_id: str):
                         conversion_errors += 1
                         _append_job_error(
                             job,
-                            f"NGFF converter timed out for {rel_path}",
+                            f"OME-NGFF converter (OME-Zarr) timed out for {rel_path}",
                         )
                         _save_job(job)
                         continue
@@ -7417,7 +7639,7 @@ def _process_import_job(job_id: str):
                         )
                         conversion_errors += 1
                         logger.error(
-                            "NGFF converter unexpected error for %s: %s",
+                            "OME-NGFF converter (OME-Zarr) unexpected error for %s: %s",
                             sanitize_log_value(rel_path),
                             sanitize_log_value(conv_exc),
                             exc_info=sanitized_exc_info(conv_exc),
@@ -7427,7 +7649,7 @@ def _process_import_job(job_id: str):
 
                 _append_job_message(
                     job,
-                    f"NGFF converter complete: {conversion_ok} converted, "
+                    f"OME-NGFF converter (OME-Zarr) complete: {conversion_ok} converted, "
                     f"{conversion_errors} errors",
                 )
                 _save_job(job)
@@ -7436,7 +7658,7 @@ def _process_import_job(job_id: str):
                     job["status"] = "error"
                     _append_job_error(
                         job,
-                        "All NGFF converter jobs failed. No files to import.",
+                        "All OME-NGFF converter (OME-Zarr) jobs failed. No files to import.",
                     )
                     _save_job(job)
                     return

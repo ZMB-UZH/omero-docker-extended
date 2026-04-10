@@ -135,6 +135,14 @@ def import_failed():
     return "Import failed."
 
 
+def import_path_not_readable():
+    return (
+        "Import failed because the OMERO CLI could not read a required import "
+        "path. Check filesystem permissions for the staged source and any "
+        "managed-repository bridge paths."
+    )
+
+
 def import_no_objects_created():
     return (
         "Import command succeeded but no images were created in OMERO. "

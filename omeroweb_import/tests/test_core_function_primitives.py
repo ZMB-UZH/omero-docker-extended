@@ -347,6 +347,16 @@ def test_cli_and_shared_zarr_helpers_cover_env_and_safe_cleanup(monkeypatch, tmp
     assert core_functions._extract_imported_object_ids(
         "Image:1\nFileset:2\nCreated Image 3\nImage:1"
     ) == ["1", "2", "3"]
+    assert core_functions._extract_imported_image_ids_for_normalization(
+        "Fileset:2\nPlate:4\n",
+        ["7", "8", "7"],
+    ) == [7, 8]
+    assert (
+        core_functions._extract_imported_image_ids_for_normalization(
+            "Fileset:2\nPlate:4\n"
+        )
+        == []
+    )
     assert core_functions._reports_no_processor_available("NoProcessorAvailable", "")
     assert core_functions._reports_no_processor_available("", "No processor available")
     assert core_functions._get_background_import_session_timeout_seconds(10) == (

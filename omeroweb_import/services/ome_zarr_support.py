@@ -35,6 +35,8 @@ class OMEZarrImageInspection:
     compatibility_details: str = ""
     verify_lsid_prefix: bool = False
     image_relative_paths: tuple[str, ...] = ()
+    image_node_relative_paths: tuple[str, ...] = ()
+    image_display_names: tuple[str, ...] = ()
     physical_sizes: dict[str, tuple[float, str]] = field(default_factory=dict)
     dtype_name: str = ""
     shape: tuple[int, ...] = ()
@@ -180,6 +182,7 @@ def _inspect_single_ome_zarr_image(
             support_error="OME-Zarr multiscale metadata is malformed.",
         )
 
+    display_name = str(multiscale.get("name") or "").strip()
     format_version = str(multiscale.get("version") or "").strip() or None
     zarr_format = _read_zarr_format_metadata(store_root, metadata_payload)
     axis_names, axis_units, axis_error = _extract_axes(multiscale.get("axes"))
@@ -284,6 +287,8 @@ def _inspect_single_ome_zarr_image(
         relative_path=primary_dataset_path or None,
         compatibility_details=details,
         image_relative_paths=dataset_relative_paths,
+        image_node_relative_paths=(".",),
+        image_display_names=(display_name,),
         physical_sizes=physical_sizes,
         dtype_name=dtype_name,
         shape=shape,
@@ -318,6 +323,8 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
 
     first_supported = None
     dataset_relative_paths = []
+    image_node_relative_paths = []
+    image_display_names = []
     for series_dir in series_dirs:
         series_metadata, inspection = _load_root_ome_zarr_metadata(series_dir)
         if inspection is not None:
@@ -340,6 +347,11 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
             )
         if first_supported is None:
             first_supported = series_inspection
+        image_node_relative_paths.append(series_dir.name)
+        if series_inspection.image_display_names:
+            image_display_names.append(series_inspection.image_display_names[0])
+        else:
+            image_display_names.append("")
         if series_inspection.image_relative_paths:
             dataset_relative_paths.extend(
                 f"{series_dir.name}/{relative_path}"
@@ -361,6 +373,8 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
         compatibility_details=details,
         verify_lsid_prefix=True,
         image_relative_paths=tuple(dict.fromkeys(dataset_relative_paths)),
+        image_node_relative_paths=tuple(image_node_relative_paths),
+        image_display_names=tuple(image_display_names),
     )
 
 
