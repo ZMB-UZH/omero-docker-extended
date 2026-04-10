@@ -23,6 +23,7 @@ jobs:
     name: CodeQL (${{ matrix.language }})
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: read
       security-events: write
     strategy:
@@ -56,6 +57,7 @@ jobs:
     name: Trivy filesystem scan (SARIF)
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: read
       security-events: write
 
@@ -101,6 +103,7 @@ jobs:
     name: Semgrep SAST
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: read
       security-events: write
     container:
@@ -143,6 +146,7 @@ jobs:
     name: Bandit Python security scan
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: read
       security-events: write
 
@@ -345,6 +349,7 @@ jobs:
     if: needs.hadolint-discover.outputs.dockerfiles != '[]'
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: read
       security-events: write
     strategy:
@@ -386,6 +391,7 @@ jobs:
     name: DevSkim security lint
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: read
       security-events: write
 
