@@ -43,11 +43,12 @@ Related docs:
   filenames or hand-parsed metadata.
 - **Pinned native Zarr toolchain**: the `omeroweb` image installs
   `omero-cli-zarr`, `bioformats2raw`, and `ome-zarr` from explicit
-  compose-driven build args (`OMERO_CLI_ZARR_VERSION`,
-  `BIOFORMATS2RAW_VERSION`, `OME_ZARR_PY_VERSION`) so native Zarr behavior
-  stays reproducible and upgrades remain deliberate. The tracked example env
-  pins `ome-zarr` to `0.14.0`, and changing that runtime is an environment/build
-  decision rather than an in-code constant.
+  env-driven build args loaded from `env/omeroserver.env`
+  (`OMERO_CLI_ZARR_VERSION`, `BIOFORMATS2RAW_VERSION`,
+  `OME_ZARR_PY_VERSION`) so native Zarr behavior stays reproducible and
+  upgrades remain deliberate. The tracked example env pins `ome-zarr` to
+  `0.14.0`, and changing that runtime is an environment/build decision rather
+  than an in-code constant.
 - **Zarr pre-flight scan and routing persistence**: the Bio-Formats dry-run
   (`omero import -f`) is still used for all non-zarr imports and for `.zarr`
   compatibility planning. When that dry-run says the staged `.zarr` is
@@ -72,7 +73,13 @@ Related docs:
   multiscale level selection. This prevents blurry z-slices in 2D viewers like
   Vizarr that select resolution level based on XY viewport zoom. Full-resolution
   data (level 0) is never modified.
-- **Zarr directory import naming**: when importing a `.zarr` directory, the plugin always passes the directory name to OMERO CLI via `-n` so Bio-Formats does not fall back to an internal chunk coordinate as the image name.
+- **Zarr import naming reconciliation**: when importing a `.zarr` directory,
+  the plugin always passes a stable logical name to OMERO CLI via `-n` so
+  Bio-Formats does not fall back to an internal chunk coordinate. For
+  NGFF-converter outputs and native OME-Zarr imports, the plugin then
+  reconciles imported image names against the original source filename and
+  OME-Zarr multiscale names when that metadata is available, instead of leaving
+  generic series paths such as `0/0`.
 - **Zarr managed-repository staging**: before `omero zarr import`, the plugin
   stages the directory into the standard OMERO managed repository at
   `${CONFIG_omero_managed_dir}` using the server-side
@@ -90,9 +97,19 @@ Related docs:
   browser session state. OMERO.web first creates a transient server-readable
   copy under `${OMERO_TMP_PATH}/omeroweb-import/managed-zarr-transfer`; that
   handoff tree is the only cross-service bridge, and the original `_staged/`
-  upload tree remains private to `omero-web`. The OMERO.server helper now
-  creates a missing per-user managed-repository prefix on first native Zarr
-  import instead of requiring a prior non-Zarr managed import.
+  upload tree remains private to `omero-web`. The OMERO.server helper keeps
+  the managed-repository group/user/date/time prefix traversal-only (`0711`)
+  and the staged `.zarr` tree service-readable (`0755` directories, `0644`
+  files) so the separate `omero-web` Unix account can hand the managed path
+  back into `omero zarr import` without gaining write access or sibling-user
+  directory listings. The helper requires the configured `%user%` prefix to
+  already exist, and it creates or deletes only the suffix and staged native
+  Zarr directory through OMERO's managed-repository API instead of raw
+  filesystem `mkdir` or `rmtree` calls, so it cannot leave behind unregistered
+  managed-repository directories. If it encounters a suffix directory that
+  already exists on disk but is missing from OMERO's repository metadata, it
+  now fails fast with an explicit stale-prefix error instead of letting the
+  later `makeDir` call collapse into a generic repository exception.
 - **Zarr helper startup retries**: if OMERO script processors are temporarily not ready, the managed-repository helper launch retries for `OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS` with a sleep interval of `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS` before the import is failed.
 - **Native Zarr metadata finalization**: after `omero zarr import`, the plugin
   reopens each created Image through `externalInfo.lsid`, parses the source

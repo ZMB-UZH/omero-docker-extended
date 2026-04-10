@@ -5,9 +5,9 @@
 Checks:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env ps
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=10m omeroserver
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=10m omeroweb
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env ps
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=10m omeroserver
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=10m omeroweb
 ```
 
 Focus on:
@@ -22,8 +22,8 @@ Focus on:
 Checks:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env exec omeroweb env | rg CONFIG_omero_web_apps
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=10m omeroweb
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env exec omeroweb env | rg CONFIG_omero_web_apps
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=10m omeroweb
 ```
 
 Ensure the plugin app name exists in `CONFIG_omero_web_apps` and OMERO.web was restarted after config change.
@@ -82,7 +82,9 @@ Symptom:
 
 Cause:
 
-- one or both env files were not loaded (`installation_paths.env` for paths, `env/omero_secrets.env` for credentials).
+- one or more required env files were not loaded (`installation_paths.env` for
+  paths, `env/omero_secrets.env` for credentials, `env/omeroserver.env` for
+  compose-interpolated server/build variables).
 
 Fix:
 
@@ -92,16 +94,17 @@ Security rationale:
 - Use the standard compose `tmpfs:` key to override `/dev/disk`, which blocks anonymous volume creation without exposing host block-device topology.
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env down
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env down
 ```
 
-If you run compose commands manually, always include both env files for
+If you run compose commands manually, always include all three env files for
 `build`, `up`, `down`, `ps`, `logs`, and `exec`.
 
 If you installed with `installation/installation_script.sh`, generated `.env` already sets
-`COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env` and mirrors
-`OMERO_DATA_DIR`, `OMERO_DB_PASS`, and `OMP_PLUGIN_DB_PASS` (mode `0600`), so plain
-`docker compose <command>` works from the installation root.
+`COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env:env/omeroserver.env`
+and mirrors `OMERO_DATA_DIR`, `OMERO_DB_PASS`, and `OMP_PLUGIN_DB_PASS`
+(mode `0600`), so plain `docker compose <command>` works from the installation
+root.
 
 If you run the installer with `sudo`, the script now assigns `.env` ownership to
 the invoking sudo user (from `SUDO_UID:SUDO_GID`) while keeping mode `0600`, so
@@ -147,8 +150,8 @@ Security rationale:
 - Use the standard compose `tmpfs:` key to override `/dev/disk`, which blocks anonymous volume creation without exposing host block-device topology.
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env down
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env down
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env up -d
 
 docker volume ls
 # If a leftover anonymous volume still exists and is unused:
@@ -181,13 +184,13 @@ Check/verify commands:
 
 ```bash
 # 1) Recreate only cAdvisor with current compose config
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d cadvisor
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env up -d cadvisor
 
 # 2) Confirm startup no longer prints usage/help
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=2m cadvisor | rg -n 'Starting cAdvisor version|Usage of|flag provided but not defined'
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=2m cadvisor | rg -n 'Starting cAdvisor version|Usage of|flag provided but not defined'
 
 # 3) Confirm metrics endpoint is reachable inside the container network
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env exec -T cadvisor wget --no-verbose --tries=1 --spider http://localhost:8080/metrics
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env exec -T cadvisor wget --no-verbose --tries=1 --spider http://localhost:8080/metrics
 ```
 
 Expected result:
@@ -215,8 +218,8 @@ Fix:
 - Restart and inspect logs:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d database omeroserver omeroweb
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=5m database omeroserver
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env up -d database omeroserver omeroweb
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=5m database omeroserver
 ```
 
 Expected result:
@@ -251,7 +254,7 @@ Fix:
 Validation:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env exec omeroserver \
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env exec omeroserver \
   /opt/omero/server/OMERO.server/bin/omero config get omero.ldap.new_user_group
 ```
 
@@ -343,10 +346,10 @@ Next step:
 Validation:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env exec omeroserver \
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env exec omeroserver \
   cat /opt/omero/server/OMERO.server/var/repo-root-sync.status
 
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=10m omeroserver \
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=10m omeroserver \
   | rg 'repo-root-bootstrap|normalized_prefix_count|failed_prefix_count'
 ```
 
@@ -404,11 +407,11 @@ Cause:
 Fix:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env config | rg '^\s+OMERO_TMP_PATH:' -n
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env config | rg '^\s+OMERO_TMP_PATH:' -n
 
 # if missing in config output, ensure compose service env wiring and restart
 bash installation/installation_script.sh
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d --build omeroserver omeroweb
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env up -d --build omeroserver omeroweb
 ```
 
 Expected result:
@@ -438,7 +441,7 @@ docker compose exec omeroserver ls -ld /opt/omero/server/omero/tmp
 # fix ownership/permissions on the host path mounted at /opt/omero/server
 # so the legacy path is writable and warning-free on startup
 
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d --build omeroserver
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env up -d --build omeroserver
 ```
 
 Expected result:
@@ -446,6 +449,74 @@ Expected result:
 - Bootstrap continues successfully using `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` as `TMPDIR`.
 - If ownership/permissions are corrected, the legacy warning disappears.
 - Current installer/bootstrap logic also reclaims stale `${OMERO_TMP_PATH}/omero-server/tmp/omero_omero-server` lock namespaces so repeated `github_pull...` reinstall runs do not reintroduce `PermissionError` on `.lock` files.
+
+## 16a. Native Zarr import fails with `PermissionError` on `/OMERO/ManagedRepository/.../*.zarr`
+
+Symptom:
+
+- `omero zarr import` returns a traceback ending with:
+  - `PermissionError: [Errno 13] Permission denied: '/OMERO/ManagedRepository/.../sample.zarr'`
+- The import plugin reports a generic or path-permission failure immediately after the managed-repository staging step.
+
+Cause:
+
+- The server-side native-Zarr stage copied the `.zarr` tree into the managed repository, but the path was normalized too tightly for the separate `omero-web` Unix account.
+- OMERO.web only needs to traverse the known group/user/date/time prefix and read the staged `.zarr` tree; it does not need write access to the managed repository.
+
+Fix:
+
+1. Update to the current `Manage_Zarr_ManagedRepository.py` contract.
+2. Verify the staged managed path uses:
+   - `0711` on the group/user/date/time prefix directories
+   - `0755` on the staged `.zarr` directories
+   - `0644` on staged files
+3. Rebuild the affected `omeroserver` and `omeroweb` images, then recreate those containers.
+
+Expected result:
+
+- `omero zarr import` can open the staged managed path without widening write access.
+- The import succeeds or fails for a real data reason instead of a filesystem traversal error.
+
+## 16b. Native Zarr import fails with `Directory exists but is not registered`
+
+Symptom:
+
+- `omero zarr import` returns a traceback ending with:
+  - `omero.ResourceError: InternalException: Directory exists but is not registered: CheckedPath(...)`
+- The failing `CheckedPath(...)` points at a group/user/date/time directory under
+  `/OMERO/ManagedRepository/...`, not at the browser `_staged/` upload tree.
+
+Cause:
+
+- Some part of the native-Zarr staging path under `ManagedRepository` was
+  created with raw filesystem operations instead of OMERO's managed-repository
+  API.
+- OMERO only accepts managed paths whose created directories were registered
+  through the repository service; a plain `mkdir` leaves the directory on disk
+  but outside OMERO's repository metadata.
+
+Fix:
+
+1. Update to the current `Manage_Zarr_ManagedRepository.py` contract.
+2. Ensure the configured `%user%` prefix already exists before native Zarr
+   staging starts.
+3. Ensure the helper creates or deletes only the suffix and staged native-Zarr
+   directory through OMERO's repository API, not with manual `mkdir` or
+   `rmtree`.
+4. If the helper now reports that a suffix directory exists on disk but is not
+   registered in OMERO, treat that as stale residue from an older helper
+   revision that created managed-repository suffix paths with raw filesystem
+   operations. Do not create new files there manually; clean or rotate that
+   contaminated prefix through an operator-controlled maintenance procedure
+   before retrying native Zarr staging.
+5. Rebuild the affected `omeroserver` and `omeroweb` images, then recreate
+   those containers.
+
+Expected result:
+
+- Native Zarr staging produces a managed path that OMERO accepts as registered.
+- `omero zarr import` proceeds past the managed-path lookup instead of failing
+  before object creation.
 
 ## 17. Host-side `pytest` fails with `ModuleNotFoundError: No module named 'django'`
 

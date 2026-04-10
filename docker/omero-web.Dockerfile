@@ -174,10 +174,13 @@ COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_
 # Add redis and django-redis for shared cache across workers
 # Fix permissions in the end (plugin should be owned by omero-web)
 # ----------------------------------------------------------------
-ARG OMERO_CLI_ZARR_VERSION=0.8.0
-ARG OME_ZARR_PY_VERSION=0.14.0
-ARG BIOFORMATS2RAW_VERSION=0.11.0
+ARG OMERO_CLI_ZARR_VERSION
+ARG OME_ZARR_PY_VERSION
+ARG BIOFORMATS2RAW_VERSION
 RUN set -euo pipefail; \
+    : "${OMERO_CLI_ZARR_VERSION:?OMERO_CLI_ZARR_VERSION must be provided from env/omeroserver.env}"; \
+    : "${OME_ZARR_PY_VERSION:?OME_ZARR_PY_VERSION must be provided from env/omeroserver.env}"; \
+    : "${BIOFORMATS2RAW_VERSION:?BIOFORMATS2RAW_VERSION must be provided from env/omeroserver.env}"; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \

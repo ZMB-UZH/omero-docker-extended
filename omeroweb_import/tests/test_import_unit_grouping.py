@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import django
 from django.conf import settings
@@ -813,7 +814,7 @@ def test_import_job_entry_uses_directory_package_dataset_id(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
     scan_stdout = f"# Group: {package_root}\n{metadata_path}\n"
     scan_mock = type(
@@ -899,6 +900,17 @@ def test_extract_imported_image_ids_deduplicates_stdout():
     """
 
     assert core_functions._extract_imported_image_ids(stdout) == [42, 43]
+
+
+def test_extract_imported_image_ids_parses_comma_separated_image_lists():
+    stdout = """
+    IMPORT_DONE Imported file: /tmp/example.zarr
+    Image:565,566,567
+    Other imported objects:
+    Fileset:503
+    """
+
+    assert core_functions._extract_imported_image_ids(stdout) == [565, 566, 567]
 
 
 def test_apply_import_name_normalization_context_renames_single_placeholder_image(
@@ -1038,6 +1050,108 @@ def test_apply_import_name_normalization_context_suffixes_multiple_placeholder_i
     assert fake_conn.closed is True
 
 
+def test_build_import_name_normalization_context_prefers_ome_zarr_metadata_names(
+    tmp_path: Path,
+    monkeypatch,
+):
+    zarr_dir = tmp_path / "named.ome.zarr"
+    zarr_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        core_functions,
+        "inspect_ome_zarr_image",
+        lambda path: SimpleNamespace(
+            image_node_relative_paths=("0", "1"),
+            image_display_names=("Series A", "Series B"),
+        ),
+    )
+
+    context = core_functions._build_import_name_normalization_context(
+        {
+            "relative_path": "named.ome.zarr",
+            "source_relative_path": "source/original.lif",
+            "staged_path": "_staged/named.ome.zarr",
+        },
+        7,
+        zarr_dir,
+    )
+
+    assert context.cli_import_name == "original.lif"
+    assert context.group_header_name == ""
+    assert context.expected_image_names == (
+        "original.lif [Series A]",
+        "original.lif [Series B]",
+    )
+
+
+def test_apply_import_name_normalization_context_uses_metadata_image_names(
+    monkeypatch,
+):
+    class _FakeImage:
+        def __init__(self, image_id, name):
+            self._id = image_id
+            self._name = name
+            self.saved = False
+
+        def getId(self):
+            return self._id
+
+        def getName(self):
+            return self._name
+
+        def setName(self, value):
+            self._name = value
+
+        def save(self):
+            self.saved = True
+
+    class _FakeConn:
+        def __init__(self, images):
+            self._images = images
+            self.closed = False
+
+        def getObject(self, object_type, object_id):
+            if object_type == "Image":
+                return self._images.get(object_id)
+            return None
+
+        def close(self):
+            self.closed = True
+
+    imported_a = _FakeImage(42, "plate.zarr [0/0]")
+    imported_b = _FakeImage(43, "plate.zarr [1/0]")
+    fake_conn = _FakeConn({42: imported_a, 43: imported_b})
+
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda session_key, host, port, group_id=None: fake_conn,
+    )
+
+    renamed_ids = core_functions._apply_import_name_normalization_context(
+        {
+            "relative_path": "plate.zarr",
+            "staged_path": "_staged/plate.zarr",
+        },
+        core_functions._ImportNameNormalizationContext(
+            cli_import_name="plate.zarr",
+            expected_image_names=("Series A", "Series B"),
+        ),
+        [42, 43],
+        "session-key",
+        "omeroserver",
+        4064,
+        4,
+    )
+
+    assert renamed_ids == [42, 43]
+    assert imported_a.getName() == "Series A"
+    assert imported_b.getName() == "Series B"
+    assert imported_a.saved is True
+    assert imported_b.saved is True
+    assert fake_conn.closed is True
+
+
 def test_import_job_entry_applies_name_normalization_for_grouped_package(
     tmp_path: Path, monkeypatch
 ):
@@ -1052,7 +1166,7 @@ def test_import_job_entry_applies_name_normalization_for_grouped_package(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: {
+        lambda entry, dataset_id, file_path=None: {
             "desired_name": "plate.zarr",
             "group_header_name": "METADATA.ome.xml",
         },
@@ -1160,7 +1274,7 @@ def test_import_job_entry_fails_when_cli_succeeds_but_no_objects_created(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
     # Bio-Formats also rejects the malformed store as incompatible.
     scan_mock = type(
@@ -1217,7 +1331,7 @@ def test_import_job_entry_succeeds_when_stdout_contains_image_id(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
     _patch_background_import_session(monkeypatch)
 
@@ -1267,7 +1381,7 @@ def test_import_job_entry_salvages_success_when_cli_nonzero_but_objects_exist(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
     _patch_background_import_session(monkeypatch)
 
@@ -1316,7 +1430,7 @@ def test_import_job_entry_salvages_success_when_objects_in_stderr(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
     _patch_background_import_session(monkeypatch)
 
@@ -1364,7 +1478,7 @@ def test_import_job_entry_fails_when_cli_nonzero_and_no_objects(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
     _patch_background_import_session(monkeypatch)
 
@@ -1402,7 +1516,7 @@ def test_import_job_entry_uses_api_verification_after_cli_failure(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
     monkeypatch.setattr(
         core_functions,
@@ -1432,6 +1546,72 @@ def test_import_job_entry_uses_api_verification_after_cli_failure(
     assert result["status"] == "imported"
 
 
+def test_import_job_entry_uses_api_verified_image_ids_for_name_normalization(
+    tmp_path: Path, monkeypatch
+):
+    upload_root = tmp_path / "job-root"
+    staged_file = upload_root / "_staged" / "converted.ome.tif"
+    staged_file.parent.mkdir(parents=True, exist_ok=True)
+    staged_file.write_text("x", encoding="utf-8")
+    captured = {}
+
+    def fake_import_file(
+        conn,
+        session_key,
+        host,
+        port,
+        path,
+        dataset_id,
+        import_name=None,
+        progress_job=None,
+    ):
+        return True, "Fileset:10\nPlate:7\n", ""
+
+    monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id, file_path=None: (
+            core_functions._ImportNameNormalizationContext(
+                cli_import_name="source.lif",
+                expected_image_names=("source.lif [Series A]", "source.lif [Series B]"),
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_verify_import_via_api",
+        lambda *args, **kwargs: ["44", "45"],
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_apply_import_name_normalization_context",
+        lambda entry, context, imported_image_ids, *args, **kwargs: captured.setdefault(
+            "image_ids", list(imported_image_ids)
+        ),
+    )
+    _patch_background_import_session(monkeypatch)
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "converted.ome.tif",
+            "staged_path": "_staged/converted.ome.tif",
+            "dataset_id_override": 77,
+            "covered_indexes": [0],
+            "covered_relative_paths": ["converted.ome.tif"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {},
+        None,
+    )
+
+    assert result["status"] == "imported"
+    assert captured["image_ids"] == [44, 45]
+
+
 def test_import_job_entry_reports_api_verification_miss_and_import_exceptions(
     tmp_path: Path, monkeypatch
 ):
@@ -1443,7 +1623,7 @@ def test_import_job_entry_reports_api_verification_miss_and_import_exceptions(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
     monkeypatch.setattr(
         core_functions,
@@ -1532,7 +1712,7 @@ def test_import_job_entry_sets_import_name_for_zarr_directory(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
     scan_stdout = f"# Group: {zarr_dir}\n{zarr_dir / '.zattrs'}\n"
     scan_mock = type(
@@ -1590,7 +1770,7 @@ def test_ome_ngff_zarr_uses_cli_zarr_import_only_after_bioformats_incompatible(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
     scan_mock = type(
         "Result",
@@ -1749,7 +1929,7 @@ def test_bioformats_compatible_zarr_uses_standard_import_path(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
     scan_stdout = f"# Group: {zarr_dir}\n{array_dir}\n"
     scan_mock = type(
@@ -1831,7 +2011,7 @@ def test_incompatible_bioformats2raw_zarr_uses_native_import_path(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
     scan_mock = type(
         "Result", (), {"stdout": "", "stderr": "unsupported", "returncode": 0}
@@ -1934,7 +2114,7 @@ def test_import_job_entry_uses_precomputed_native_zarr_route_without_rescanning(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
 
     def scan_must_not_run(path, timeout=None):
@@ -2003,7 +2183,7 @@ def test_import_job_entry_uses_precomputed_bioformats_zarr_route_without_rescann
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
 
     def scan_must_not_run(path, timeout=None):
@@ -2077,7 +2257,7 @@ def test_preflight_scan_passes_zarr_when_bioformats_finds_groups(
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
 
     def fake_import_file(
@@ -2128,7 +2308,7 @@ def test_preflight_scan_timeout_does_not_block_import(tmp_path: Path, monkeypatc
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
-        lambda entry, dataset_id: None,
+        lambda entry, dataset_id, file_path=None: None,
     )
 
     def fake_import_file(

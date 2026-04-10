@@ -29,14 +29,33 @@ _CONFIG_MANAGED_DIR = "omero.managed.dir"
 _CONFIG_REPO_PATH = "omero.fs.repo.path"
 _CONFIG_SHARED_TMP_PATH = "omero.web.import.shared_tmp_path"
 _RUNTIME_STATE_FILENAME = "managed-zarr-runtime.env"
+_PREFIX_DIR_MODE = stat.S_IRWXU | stat.S_IXGRP | stat.S_IXOTH
+_STAGED_DIR_MODE = (
+    stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
+)
+_STAGED_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH
+_VOLATILE_TEMPLATE_PATTERNS = {
+    "%year%": r"\d{4}",
+    "%month%": r"\d{2}",
+    "%day%": r"\d{2}",
+    "%time%": r"\d{2}-\d{2}-\d{2}",
+}
 
 
-def _set_owner_only_directory_mode(path: Path | str) -> None:
-    os.chmod(path, stat.S_IRWXU)
+def _set_prefix_directory_mode(path: Path | str) -> None:
+    # Allow a separate OMERO.web service account to traverse the known
+    # managed-repository prefix without exposing sibling directory listings.
+    os.chmod(path, _PREFIX_DIR_MODE)
 
 
-def _set_owner_only_file_mode(path: Path | str) -> None:
-    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+def _set_staged_directory_mode(path: Path | str) -> None:
+    # Native ``omero zarr import`` runs from OMERO.web, so the staged tree
+    # must be readable across service-user boundaries on shared host mounts.
+    os.chmod(path, _STAGED_DIR_MODE)
+
+
+def _set_staged_file_mode(path: Path | str) -> None:
+    os.chmod(path, _STAGED_FILE_MODE)
 
 
 def _require_config_value(config: dict[str, str], key: str) -> str:
@@ -125,6 +144,34 @@ def _validate_path_component(value: str, label: str) -> str:
     return component
 
 
+def _repo_model_attr(model_obj, attr_name: str):
+    value = getattr(model_obj, attr_name, None)
+    if value is None:
+        value = getattr(model_obj, f"_{attr_name}", None)
+    return value
+
+
+def _repo_text(value) -> str:
+    if value is None:
+        return ""
+    inner = getattr(value, "val", None)
+    if inner is None:
+        inner = getattr(value, "_val", None)
+    if inner is None:
+        inner = value
+    return str(inner or "").strip()
+
+
+def _repo_description_root(description) -> str:
+    description_path = _repo_text(_repo_model_attr(description, "path")).rstrip("/")
+    description_name = _repo_text(_repo_model_attr(description, "name")).strip("/")
+    if description_path and description_name:
+        return f"{description_path}/{description_name}"
+    if description_name:
+        return f"/{description_name}"
+    return description_path
+
+
 def _render_repo_template(
     config: dict[str, str], group_name: str, username: str, when: datetime
 ):
@@ -174,6 +221,74 @@ def _render_repo_template(
 
     suffix_parts = rendered_parts[len(prefix_parts) :]
     return prefix_parts, suffix_parts
+
+
+def _cleanup_prefix_parts(
+    config: dict[str, str],
+    group_name: str,
+    username: str,
+    actual_parts: tuple[str, ...],
+) -> list[str]:
+    template = _require_config_value(config, _CONFIG_REPO_PATH)
+    raw_parts = [part for part in template.split("/") if part]
+    if not raw_parts:
+        raise RuntimeError(f"{_CONFIG_REPO_PATH} must not be empty.")
+
+    group_component = _validate_path_component(group_name, "group name")
+    user_component = _validate_path_component(username, "username")
+    matched_parts: list[str] = []
+    seen_user = False
+
+    for index, raw_part in enumerate(raw_parts):
+        if index >= len(actual_parts):
+            break
+
+        tokens = set(_TOKEN_PATTERN.findall(raw_part))
+        unknown_tokens = tokens - _KNOWN_TEMPLATE_TOKENS
+        if unknown_tokens:
+            raise RuntimeError(
+                f"{_CONFIG_REPO_PATH} contains unsupported tokens: "
+                + ", ".join(sorted(unknown_tokens))
+            )
+
+        matcher_parts = ["^"]
+        cursor = 0
+        for token_match in _TOKEN_PATTERN.finditer(raw_part):
+            matcher_parts.append(re.escape(raw_part[cursor : token_match.start()]))
+            token = token_match.group(0)
+            if token == "%group%":
+                matcher_parts.append(re.escape(group_component))
+            elif token == "%user%":
+                matcher_parts.append(re.escape(user_component))
+            else:
+                matcher_parts.append(_VOLATILE_TEMPLATE_PATTERNS[token])
+            cursor = token_match.end()
+        matcher_parts.append(re.escape(raw_part[cursor:]))
+        matcher_parts.append("$")
+
+        preview = raw_part
+        for token in _KNOWN_TEMPLATE_TOKENS:
+            preview = preview.replace(token, "TOKEN")
+        if "%" in preview:
+            raise RuntimeError(f"{_CONFIG_REPO_PATH} contains unresolved token syntax.")
+
+        actual_part = _validate_path_component(
+            actual_parts[index], "managed-repository cleanup path segment"
+        )
+        if not re.fullmatch("".join(matcher_parts), actual_part):
+            break
+
+        matched_parts.append(actual_part)
+        if "%user%" in raw_part:
+            seen_user = True
+            break
+
+    if not seen_user:
+        raise RuntimeError(
+            "Managed Zarr path does not match the configured group/user repository "
+            "prefix."
+        )
+    return matched_parts
 
 
 def _managed_repository_root(config: dict[str, str]) -> Path:
@@ -242,8 +357,6 @@ def _user_prefix_dir(
     group_name: str,
     username: str,
     when: datetime,
-    *,
-    create_missing: bool,
 ) -> tuple[Path, list[str]]:
     managed_root = _managed_repository_root(config)
     prefix_parts, suffix_parts = _render_repo_template(
@@ -258,18 +371,11 @@ def _user_prefix_dir(
             raise RuntimeError(
                 f"Managed-repository prefix escaped its root: {prefix_dir}"
             ) from exc
-        if create_missing:
-            prefix_dir.mkdir(parents=False, exist_ok=True)
-        elif not prefix_dir.exists() or not prefix_dir.is_dir():
+        if not prefix_dir.exists() or not prefix_dir.is_dir():
             raise RuntimeError(
-                "Managed-repository user prefix does not exist yet and must be created "
-                f"by OMERO.server first: {prefix_dir}"
+                "Managed-repository user prefix must already exist and be created by "
+                f"OMERO.server first: {prefix_dir}"
             )
-        if not prefix_dir.is_dir():
-            raise RuntimeError(
-                f"Managed-repository prefix path is not a directory: {prefix_dir}"
-            )
-        _set_owner_only_directory_mode(prefix_dir)
     return prefix_dir, suffix_parts
 
 
@@ -286,9 +392,151 @@ def _ensure_suffix_dir(
         raise RuntimeError(
             f"Managed-repository target escaped its root: {target_dir}"
         ) from exc
-    target_dir.mkdir(parents=True, exist_ok=True)
-    _set_owner_only_directory_mode(target_dir)
     return target_dir
+
+
+def _managed_repository_proxy(conn: BlitzGateway, config: dict[str, str]):
+    if conn is None:
+        raise RuntimeError("Missing OMERO connection for managed-repository access.")
+
+    try:
+        repo_map = conn.c.sf.sharedResources().repositories()
+    except Exception as exc:
+        raise RuntimeError(
+            "Failed to resolve the managed-repository proxy from OMERO shared resources."
+        ) from exc
+
+    proxies = getattr(repo_map, "proxies", None) or {}
+    descriptions = list(getattr(repo_map, "descriptions", None) or [])
+    managed_root = str(_managed_repository_root(config)).rstrip("/")
+
+    for index, description in enumerate(descriptions):
+        if _repo_description_root(description).rstrip("/") != managed_root:
+            continue
+        if isinstance(proxies, dict):
+            for key in (
+                _repo_text(_repo_model_attr(description, "hash")),
+                _repo_text(_repo_model_attr(description, "name")),
+            ):
+                if key and key in proxies and proxies[key] is not None:
+                    return proxies[key]
+            continue
+        if index < len(proxies) and proxies[index] is not None:
+            return proxies[index]
+
+    if not descriptions and "ManagedRepository" in proxies:
+        return proxies["ManagedRepository"]
+
+    if not descriptions:
+        if isinstance(proxies, dict) and len(proxies) == 1:
+            return next(iter(proxies.values()))
+        if len(proxies) == 1 and proxies[0] is not None:
+            return proxies[0]
+
+    raise RuntimeError(
+        f"Failed to resolve the managed-repository proxy for {managed_root}."
+    )
+
+
+def _repo_relative_path(
+    managed_root: Path, path: Path, *, directory: bool, leading_slash: bool = False
+) -> str:
+    target = path.resolve(strict=False)
+    try:
+        relative_path = target.relative_to(managed_root)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Managed-repository path escaped its root: {target}"
+        ) from exc
+
+    path_text = relative_path.as_posix().strip("/")
+    if not path_text:
+        raise RuntimeError("Managed-repository relative path must not be empty.")
+    if directory:
+        path_text = f"{path_text.rstrip('/')}/"
+    if leading_slash:
+        path_text = f"/{path_text.lstrip('/')}"
+    return path_text
+
+
+def _register_managed_directory(
+    repo_proxy, managed_root: Path, target_dir: Path
+) -> None:
+    repo_relative_dir = _repo_relative_path(managed_root, target_dir, directory=True)
+    try:
+        repo_proxy.makeDir(repo_relative_dir, True)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to create registered managed-repository directory: {target_dir}"
+        ) from exc
+
+
+def _repository_directory_registered(
+    repo_proxy,
+    managed_root: Path,
+    directory: Path,
+) -> bool:
+    repo_relative_dir = _repo_relative_path(managed_root, directory, directory=True)
+    try:
+        return bool(repo_proxy.fileExists(repo_relative_dir))
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to query managed-repository registration state for: {directory}"
+        ) from exc
+
+
+def _assert_no_unregistered_suffix_dirs(
+    repo_proxy,
+    managed_root: Path,
+    prefix_dir: Path,
+    target_dir: Path,
+) -> None:
+    current = prefix_dir.resolve(strict=False)
+    for part in target_dir.relative_to(prefix_dir).parts:
+        current = (current / part).resolve(strict=False)
+        if not current.exists():
+            continue
+        if not current.is_dir():
+            raise RuntimeError(f"Managed-repository path is not a directory: {current}")
+        if _repository_directory_registered(repo_proxy, managed_root, current):
+            continue
+        raise RuntimeError(
+            "Managed-repository suffix path exists on disk but is not registered "
+            f"in OMERO: {current}. This usually means a stale native-Zarr staging "
+            "directory was left behind by an older helper that created suffix "
+            "directories with raw filesystem operations."
+        )
+
+
+def _registered_delete_path(managed_root: Path, target: Path) -> str:
+    return _repo_relative_path(
+        managed_root,
+        target,
+        directory=target.is_dir(),
+        leading_slash=True,
+    )
+
+
+def _delete_registered_managed_path(
+    conn: BlitzGateway, repo_proxy, managed_root: Path, target: Path
+) -> None:
+    delete_path = _registered_delete_path(managed_root, target)
+    try:
+        handle = repo_proxy.deletePaths([delete_path], True, False)
+        conn.c.waitOnCmd(handle, closehandle=True)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to delete managed-repository path: {target}"
+        ) from exc
+
+
+def _prefix_directories(managed_root: Path, leaf_parent: Path) -> list[Path]:
+    prefix_dirs: list[Path] = []
+    current = managed_root
+    for part in leaf_parent.relative_to(managed_root).parts:
+        current = (current / part).resolve(strict=False)
+        prefix_dirs.append(current)
+    return prefix_dirs
 
 
 def _allocate_destination_dir(target_dir: Path, source_name: str) -> Path:
@@ -315,49 +563,67 @@ def _allocate_destination_dir(target_dir: Path, source_name: str) -> Path:
 
 def _normalize_tree_permissions(root: Path) -> None:
     for dirpath, dirnames, filenames in os.walk(root):
-        _set_owner_only_directory_mode(dirpath)
+        _set_staged_directory_mode(dirpath)
         for dirname in dirnames:
-            _set_owner_only_directory_mode(os.path.join(dirpath, dirname))
+            _set_staged_directory_mode(os.path.join(dirpath, dirname))
         for filename in filenames:
-            _set_owner_only_file_mode(os.path.join(dirpath, filename))
+            _set_staged_file_mode(os.path.join(dirpath, filename))
 
 
 def _stage_zarr(
-    config: dict[str, str], source_path: str, group_name: str, username: str
+    conn: BlitzGateway,
+    config: dict[str, str],
+    source_path: str,
+    group_name: str,
+    username: str,
 ) -> Path:
     when = datetime.now()
     source = _validate_source_path(config, source_path)
     _reject_symlinks(source)
     managed_root = _managed_repository_root(config)
-    prefix_dir, suffix_parts = _user_prefix_dir(
-        config,
-        group_name,
-        username,
-        when,
-        create_missing=True,
-    )
+    prefix_dir, suffix_parts = _user_prefix_dir(config, group_name, username, when)
     target_dir = _ensure_suffix_dir(managed_root, prefix_dir, suffix_parts)
+    repo_proxy = _managed_repository_proxy(conn, config)
+    _assert_no_unregistered_suffix_dirs(
+        repo_proxy, managed_root, prefix_dir, target_dir
+    )
     destination = _allocate_destination_dir(target_dir, source.name)
-    shutil.copytree(source, destination)
+    _register_managed_directory(repo_proxy, managed_root, destination)
+    for directory in _prefix_directories(managed_root, destination.parent):
+        if not directory.is_dir():
+            raise RuntimeError(
+                f"Managed-repository prefix path is not a directory: {directory}"
+            )
+        _set_prefix_directory_mode(directory)
+    shutil.copytree(source, destination, dirs_exist_ok=True)
     _normalize_tree_permissions(destination)
     return destination
 
 
 def _cleanup_zarr(
-    config: dict[str, str], managed_path: str, group_name: str, username: str
+    conn: BlitzGateway,
+    config: dict[str, str],
+    managed_path: str,
+    group_name: str,
+    username: str,
 ) -> Path:
-    when = datetime.now()
     managed_root = _managed_repository_root(config)
-    prefix_dir, _ = _user_prefix_dir(
-        config,
-        group_name,
-        username,
-        when,
-        create_missing=False,
-    )
     target = Path(str(managed_path or "")).resolve(strict=False)
     try:
-        target.relative_to(managed_root)
+        relative_parts = target.relative_to(managed_root).parts
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Managed Zarr path is outside the allowed user prefix: {target}"
+        ) from exc
+    try:
+        prefix_dir = managed_root.joinpath(
+            *_cleanup_prefix_parts(config, group_name, username, relative_parts)
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(
+            f"Managed Zarr path is outside the allowed user prefix: {target}"
+        ) from exc
+    try:
         target.relative_to(prefix_dir)
     except ValueError as exc:
         raise RuntimeError(
@@ -368,10 +634,8 @@ def _cleanup_zarr(
         raise RuntimeError("Refusing to delete the user managed-repository prefix.")
 
     if target.exists():
-        if target.is_dir():
-            shutil.rmtree(target)
-        else:
-            target.unlink()
+        repo_proxy = _managed_repository_proxy(conn, config)
+        _delete_registered_managed_path(conn, repo_proxy, managed_root, target)
     return target
 
 
@@ -430,6 +694,7 @@ def run_script():
 
         if action == _ACTION_STAGE:
             managed_path = _stage_zarr(
+                conn,
                 server_config,
                 source_path=str(params.get("Source_Path") or ""),
                 group_name=group_name,
@@ -438,6 +703,7 @@ def run_script():
             message = f"Staged Zarr into managed repository: {managed_path}"
         else:
             managed_path = _cleanup_zarr(
+                conn,
                 server_config,
                 managed_path=str(params.get("Managed_Path") or ""),
                 group_name=group_name,

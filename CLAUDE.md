@@ -65,7 +65,7 @@ python3 tools/env_safety_guard.py backup   # create timestamped backup
 
 ## Runtime reminders
 
-- Docker compose commands normally need both env files.
+- Docker compose commands normally need installation paths, secrets, and OMERO.server env files.
 - Switch from host `localhost` probes to container-network probes after the first sandbox miss.
 - Never run OMERO CLI as `root` inside OMERO containers.
 - Use the runtime playbook for Git ownership issues, Docker socket permissions, joined-session rules, and log triage.

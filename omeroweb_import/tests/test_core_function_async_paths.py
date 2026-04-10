@@ -306,6 +306,7 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
     assert image_ids == ["41", "42"]
     dataset_query, dataset_params = conn.query_service.calls[-1]
     assert "i.name IN (:names)" in dataset_query
+    assert "ORDER BY i.id" in dataset_query
     assert dataset_params["names"] == ["imported.ome.tif", "input.ome.tif"]
     assert conn.closed is True
     assert admin_conn.closed is True
@@ -332,6 +333,8 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
         dataset_id=9,
         group_id=5,
     ) == ["31"]
+    exact_lsid_query, _exact_lsid_params = conn.query_service.calls[0]
+    assert "ORDER BY i.id" in exact_lsid_query
     assert conn.group == "5"
 
     conn = _Conn()

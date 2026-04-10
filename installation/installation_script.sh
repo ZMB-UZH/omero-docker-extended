@@ -412,6 +412,22 @@ run_image_build() {
     local buildx_helper_path="${OMERO_INSTALLATION_PATH%/}/${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH}"
     local local_cache_enabled_setting="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}"
     local provenance_setting=""
+    local server_env_source="${OMERO_SERVER_ENV_FILE:-env/omeroserver.env}"
+
+    if [ -z "${OMERO_CLI_ZARR_VERSION:-}" ]; then
+        echo "ERROR: Missing required configuration variable OMERO_CLI_ZARR_VERSION in ${server_env_source}" >&2
+        return 1
+    fi
+
+    if [ -z "${OME_ZARR_PY_VERSION:-}" ]; then
+        echo "ERROR: Missing required configuration variable OME_ZARR_PY_VERSION in ${server_env_source}" >&2
+        return 1
+    fi
+
+    if [ -z "${BIOFORMATS2RAW_VERSION:-}" ]; then
+        echo "ERROR: Missing required configuration variable BIOFORMATS2RAW_VERSION in ${server_env_source}" >&2
+        return 1
+    fi
 
     provenance_setting="$(resolve_build_provenance_setting)"
 
@@ -1675,7 +1691,7 @@ write_compose_dot_env() {
 #
 # Load both path and secrets env files automatically for all docker compose
 # commands, including manual lifecycle commands such as \`docker compose down\`.
-COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env
+COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env:env/omeroserver.env
 #
 # This file contains fully-resolved paths so that docker compose
 # commands (up, down, ps, logs, ...) work out of the box without
