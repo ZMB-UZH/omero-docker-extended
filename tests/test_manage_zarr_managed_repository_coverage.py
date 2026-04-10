@@ -142,6 +142,13 @@ def _managed_repo_conn(managed_root: Path, *, proxies_shape: str = "mapping"):
     return conn, repo_proxy, wait_calls
 
 
+def _register_repo_path(repo_proxy, managed_root: Path, target: Path) -> None:
+    current = managed_root.resolve(strict=False)
+    for part in target.resolve(strict=False).relative_to(managed_root).parts:
+        current = (current / part).resolve(strict=False)
+        repo_proxy.registered_paths.add(current)
+
+
 def test_manage_script_config_and_runtime_helpers_cover_remaining_guards(
     monkeypatch,
     tmp_path: Path,
@@ -266,11 +273,9 @@ def test_manage_script_prefix_suffix_cleanup_and_symlink_guards_cover_remaining_
         module._reject_symlinks(symlink_root)
 
     original_render_repo_template = module._render_repo_template
-    monkeypatch.setattr(
-        module, "_render_repo_template", lambda *args, **kwargs: ([".."], [])
-    )
-    with pytest.raises(RuntimeError, match="prefix escaped its root"):
-        module._user_prefix_dir(
+    monkeypatch.setattr(module, "_render_repo_template", lambda *args, **kwargs: [".."])
+    with pytest.raises(RuntimeError, match="template escaped its root"):
+        module._template_container_dir(
             config,
             "users_private",
             "alice",
@@ -278,18 +283,8 @@ def test_manage_script_prefix_suffix_cleanup_and_symlink_guards_cover_remaining_
         )
     monkeypatch.setattr(module, "_render_repo_template", original_render_repo_template)
 
-    with pytest.raises(RuntimeError, match="must already exist"):
-        module._user_prefix_dir(
-            config,
-            "users_private",
-            "alice",
-            datetime.now(),
-        )
-
     prefix_dir = managed_root / "users_private" / "alice"
     prefix_dir.mkdir(parents=True)
-    with pytest.raises(RuntimeError, match="target escaped its root"):
-        module._ensure_suffix_dir(managed_root, tmp_path / "outside", ["escape"])
 
     existing_plain = prefix_dir / "sample"
     existing_plain.mkdir()
@@ -304,8 +299,12 @@ def test_manage_script_prefix_suffix_cleanup_and_symlink_guards_cover_remaining_
     assert zarr_candidate.name.endswith(".ome.zarr")
 
     conn, repo_proxy, wait_calls = _managed_repo_conn(managed_root)
-    managed_dir = prefix_dir / "delete-me.zarr"
+    staged_parent = prefix_dir / "2026-03-22" / "09-51-15"
+    staged_parent.mkdir(parents=True)
+    _register_repo_path(repo_proxy, managed_root, staged_parent)
+    managed_dir = staged_parent / "delete-me.zarr"
     managed_dir.mkdir()
+    _register_repo_path(repo_proxy, managed_root, managed_dir)
     cleaned = module._cleanup_zarr(
         conn,
         config,
@@ -316,7 +315,7 @@ def test_manage_script_prefix_suffix_cleanup_and_symlink_guards_cover_remaining_
     assert cleaned == managed_dir
     assert not managed_dir.exists()
     assert repo_proxy.delete_calls == [
-        (["/users_private/alice/delete-me.zarr/"], True, False)
+        (["/users_private/alice/2026-03-22/09-51-15/delete-me.zarr/"], True, False)
     ]
     assert wait_calls == [("delete-handle", True)]
 
@@ -326,8 +325,10 @@ def test_manage_script_stage_permissions_allow_service_read_access(tmp_path: Pat
     config = _server_config(tmp_path)
     managed_root = tmp_path / "data" / "ManagedRepository"
     managed_root.mkdir(parents=True)
-    (managed_root / "users_private" / "alice").mkdir(parents=True)
+    prefix_dir = managed_root / "users_private" / "alice"
+    prefix_dir.mkdir(parents=True)
     conn, repo_proxy, wait_calls = _managed_repo_conn(managed_root)
+    _register_repo_path(repo_proxy, managed_root, prefix_dir)
     source = tmp_path / "shared" / "job-1" / "sample.zarr"
     nested_dir = source / "0"
     nested_dir.mkdir(parents=True)
@@ -344,9 +345,13 @@ def test_manage_script_stage_permissions_allow_service_read_access(tmp_path: Pat
 
     assert repo_proxy.make_dir_calls == [
         (
+            f"users_private/alice/{destination.parent.parent.name}/{destination.parent.name}/",
+            True,
+        ),
+        (
             f"users_private/alice/{destination.parent.parent.name}/{destination.parent.name}/sample.zarr/",
             True,
-        )
+        ),
     ]
     assert wait_calls == []
     assert (managed_root / "users_private").stat().st_mode & 0o777 == 0o711
@@ -388,6 +393,7 @@ def test_manage_script_rejects_unregistered_existing_suffix_dirs(tmp_path: Path)
     fixed_now = datetime(2026, 3, 22, 9, 51, 15)
     stale_suffix = prefix_dir / "2026-03-22"
     stale_suffix.mkdir(parents=True)
+    _register_repo_path(repo_proxy, managed_root, prefix_dir)
 
     class _FixedDatetime:
         @staticmethod
@@ -411,38 +417,107 @@ def test_manage_script_rejects_unregistered_existing_suffix_dirs(tmp_path: Path)
     assert repo_proxy.make_dir_calls == []
 
 
+def test_manage_script_stages_from_generic_template_without_user_anchor(
+    tmp_path: Path,
+):
+    module = _load_manage_script_module()
+    config = _server_config(tmp_path)
+    config["omero.fs.repo.path"] = "shared/%year%/%group%/%time%"
+    managed_root = tmp_path / "data" / "ManagedRepository"
+    managed_root.mkdir(parents=True)
+    (tmp_path / "shared" / "job-1").mkdir(parents=True)
+    source = tmp_path / "shared" / "job-1" / "sample.zarr"
+    (source / "0").mkdir(parents=True)
+    (source / "0" / "0").write_text("pixels", encoding="utf-8")
+
+    conn, repo_proxy, _wait_calls = _managed_repo_conn(managed_root)
+    fixed_now = datetime(2026, 3, 22, 9, 51, 15)
+
+    class _FixedDatetime:
+        @staticmethod
+        def now():
+            return fixed_now
+
+    original_datetime = module.datetime
+    module.datetime = _FixedDatetime
+    try:
+        destination = module._stage_zarr(
+            conn,
+            config,
+            str(source),
+            "users_private",
+            "alice",
+        )
+    finally:
+        module.datetime = original_datetime
+
+    assert destination == (
+        managed_root / "shared" / "2026" / "users_private" / "09-51-15" / "sample.zarr"
+    )
+    assert repo_proxy.make_dir_calls == [
+        ("shared/2026/users_private/09-51-15/", True),
+        ("shared/2026/users_private/09-51-15/sample.zarr/", True),
+    ]
+
+
+def test_manage_script_cleanup_restricts_deletion_to_staged_leaf(
+    tmp_path: Path,
+):
+    module = _load_manage_script_module()
+    config = _server_config(tmp_path)
+    config["omero.fs.repo.path"] = "shared/%year%/%group%/%time%"
+    managed_root = tmp_path / "data" / "ManagedRepository"
+    managed_root.mkdir(parents=True)
+    staged_dir = (
+        managed_root / "shared" / "2026" / "users_private" / "09-51-15" / "sample.zarr"
+    )
+    nested_dir = staged_dir / "0"
+    nested_dir.mkdir(parents=True)
+
+    conn, repo_proxy, _wait_calls = _managed_repo_conn(managed_root)
+    _register_repo_path(repo_proxy, managed_root, staged_dir)
+
+    with pytest.raises(
+        RuntimeError, match="only supports staged .zarr directories directly"
+    ):
+        module._cleanup_zarr(
+            conn,
+            config,
+            str(nested_dir),
+            "users_private",
+            "alice",
+        )
+
+    cleaned = module._cleanup_zarr(
+        conn,
+        config,
+        str(staged_dir),
+        "users_private",
+        "alice",
+    )
+    assert cleaned == staged_dir
+    assert not staged_dir.exists()
+    assert repo_proxy.delete_calls == [
+        (["/shared/2026/users_private/09-51-15/sample.zarr/"], True, False)
+    ]
+
+
 def test_manage_script_handles_prefix_not_directory_and_main_entrypoint(
     monkeypatch,
     tmp_path: Path,
 ):
     module = _load_manage_script_module()
-    config = _server_config(tmp_path)
     managed_root = tmp_path / "data" / "ManagedRepository"
     managed_root.mkdir(parents=True)
+    blocking_file = managed_root / "users_private"
+    blocking_file.write_text("not-a-directory", encoding="utf-8")
 
-    monkeypatch.setattr(
-        module,
-        "_render_repo_template",
-        lambda *args, **kwargs: (["users_private"], ["alice"]),
-    )
-    real_is_dir = Path.is_dir
-    real_mkdir = Path.mkdir
-
-    def _patched_is_dir(self):
-        if self == managed_root / "users_private" / "alice":
-            return False
-        return real_is_dir(self)
-
-    monkeypatch.setattr(Path, "mkdir", lambda self, *args, **kwargs: None)
-    monkeypatch.setattr(Path, "is_dir", _patched_is_dir)
-    with pytest.raises(RuntimeError, match="must already exist"):
-        module._user_prefix_dir(
-            config,
-            "users_private",
-            "alice",
-            datetime.now(),
+    with pytest.raises(RuntimeError, match="path is not a directory"):
+        module._assert_no_unregistered_existing_dirs(
+            object(),
+            managed_root,
+            managed_root / "users_private" / "alice",
         )
-    monkeypatch.setattr(Path, "mkdir", real_mkdir)
 
     output_calls = []
 

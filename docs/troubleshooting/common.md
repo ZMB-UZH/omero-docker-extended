@@ -461,13 +461,13 @@ Symptom:
 Cause:
 
 - The server-side native-Zarr stage copied the `.zarr` tree into the managed repository, but the path was normalized too tightly for the separate `omero-web` Unix account.
-- OMERO.web only needs to traverse the known group/user/date/time prefix and read the staged `.zarr` tree; it does not need write access to the managed repository.
+- OMERO.web only needs to traverse the rendered repository-template path and read the staged `.zarr` tree; it does not need write access to the managed repository.
 
 Fix:
 
 1. Update to the current `Manage_Zarr_ManagedRepository.py` contract.
 2. Verify the staged managed path uses:
-   - `0711` on the group/user/date/time prefix directories
+   - `0711` on the rendered repository-template path
    - `0755` on the staged `.zarr` directories
    - `0644` on staged files
 3. Rebuild the affected `omeroserver` and `omeroweb` images, then recreate those containers.
@@ -483,7 +483,7 @@ Symptom:
 
 - `omero zarr import` returns a traceback ending with:
   - `omero.ResourceError: InternalException: Directory exists but is not registered: CheckedPath(...)`
-- The failing `CheckedPath(...)` points at a group/user/date/time directory under
+- The failing `CheckedPath(...)` points at a rendered managed-repository template path under
   `/OMERO/ManagedRepository/...`, not at the browser `_staged/` upload tree.
 
 Cause:
@@ -498,16 +498,17 @@ Cause:
 Fix:
 
 1. Update to the current `Manage_Zarr_ManagedRepository.py` contract.
-2. Ensure the configured `%user%` prefix already exists before native Zarr
-   staging starts.
-3. Ensure the helper creates or deletes only the suffix and staged native-Zarr
-   directory through OMERO's repository API, not with manual `mkdir` or
+2. Keep upload and conversion work in tmp/shared-transfer space; use the
+   managed repository only for the final persistent native-Zarr handoff.
+3. Ensure the helper creates or deletes only the rendered template container
+   path plus the staged native-Zarr leaf through OMERO's repository API, not
+   with manual `mkdir` or
    `rmtree`.
-4. If the helper now reports that a suffix directory exists on disk but is not
+4. If the helper now reports that a rendered managed path exists on disk but is not
    registered in OMERO, treat that as stale residue from an older helper
-   revision that created managed-repository suffix paths with raw filesystem
+   revision that created managed-repository paths with raw filesystem
    operations. Do not create new files there manually; clean or rotate that
-   contaminated prefix through an operator-controlled maintenance procedure
+   contaminated path through an operator-controlled maintenance procedure
    before retrying native Zarr staging.
 5. Rebuild the affected `omeroserver` and `omeroweb` images, then recreate
    those containers.

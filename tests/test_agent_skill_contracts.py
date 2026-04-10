@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
@@ -363,18 +364,25 @@ class AgentSkillContractTests(unittest.TestCase):
     def run_smoke_command(
         cls, smoke_check: SmokeCheck
     ) -> subprocess.CompletedProcess[str]:
-        cached = cls._command_cache.get(smoke_check.command)
+        resolved_command = cls._resolve_smoke_command(smoke_check.command)
+        cached = cls._command_cache.get(resolved_command)
         if cached is not None:
             return cached
         completed = subprocess.run(
-            smoke_check.command,
+            resolved_command,
             cwd=cls.repo_root,
             capture_output=True,
             text=True,
             timeout=600,
         )
-        cls._command_cache[smoke_check.command] = completed
+        cls._command_cache[resolved_command] = completed
         return completed
+
+    @staticmethod
+    def _resolve_smoke_command(command: tuple[str, ...]) -> tuple[str, ...]:
+        if not command or command[0] != "python3":
+            return command
+        return (sys.executable, *command[1:])
 
     def test_upstream_sources_doc_matches_adapted_skill_frontmatter(self) -> None:
         adapted_skill_names = {

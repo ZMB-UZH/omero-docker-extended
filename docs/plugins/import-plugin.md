@@ -95,21 +95,22 @@ Related docs:
   state file under `OMERO.server/var/managed-zarr-runtime.env` for the
   env-derived shared temp root, instead of relying on hardcoded paths or
   browser session state. OMERO.web first creates a transient server-readable
-  copy under `${OMERO_TMP_PATH}/omeroweb-import/managed-zarr-transfer`; that
-  handoff tree is the only cross-service bridge, and the original `_staged/`
-  upload tree remains private to `omero-web`. The OMERO.server helper keeps
-  the managed-repository group/user/date/time prefix traversal-only (`0711`)
-  and the staged `.zarr` tree service-readable (`0755` directories, `0644`
-  files) so the separate `omero-web` Unix account can hand the managed path
-  back into `omero zarr import` without gaining write access or sibling-user
-  directory listings. The helper requires the configured `%user%` prefix to
-  already exist, and it creates or deletes only the suffix and staged native
-  Zarr directory through OMERO's managed-repository API instead of raw
-  filesystem `mkdir` or `rmtree` calls, so it cannot leave behind unregistered
-  managed-repository directories. If it encounters a suffix directory that
-  already exists on disk but is missing from OMERO's repository metadata, it
-  now fails fast with an explicit stale-prefix error instead of letting the
-  later `makeDir` call collapse into a generic repository exception.
+  copy under `${OMERO_TMP_PATH}/omeroweb-import/managed-zarr-transfer`; upload
+  and conversion stay in tmp/shared-transfer space, and the original `_staged/`
+  upload tree remains private to `omero-web`. The managed repository is used
+  only for the final persistent handoff immediately before `omero zarr import`.
+  The OMERO.server helper renders the full configured repository template,
+  creates or deletes only the rendered staging container and staged native-Zarr
+  leaf through OMERO's managed-repository API instead of raw filesystem
+  `mkdir` or `rmtree` calls, keeps the rendered template path traversal-only
+  (`0711`), and keeps the staged `.zarr` tree service-readable (`0755`
+  directories, `0644` files). That keeps the flow template-driven across old or
+  custom repository layouts without giving `omero-web` direct write access or
+  leaving behind unregistered managed-repository directories. If the helper
+  encounters a rendered managed-repository path that already exists on disk but
+  is missing from OMERO's repository metadata, it now fails fast with an
+  explicit stale-registration error instead of letting the later `makeDir` call
+  collapse into a generic repository exception.
 - **Zarr helper startup retries**: if OMERO script processors are temporarily not ready, the managed-repository helper launch retries for `OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS` with a sleep interval of `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS` before the import is failed.
 - **Native Zarr metadata finalization**: after `omero zarr import`, the plugin
   reopens each created Image through `externalInfo.lsid`, parses the source

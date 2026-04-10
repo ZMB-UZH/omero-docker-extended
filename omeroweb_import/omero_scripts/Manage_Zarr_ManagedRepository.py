@@ -172,13 +172,34 @@ def _repo_description_root(description) -> str:
     return description_path
 
 
-def _render_repo_template(
-    config: dict[str, str], group_name: str, username: str, when: datetime
-):
+def _repo_template_parts(config: dict[str, str]) -> list[str]:
     template = _require_config_value(config, _CONFIG_REPO_PATH)
     raw_parts = [part for part in template.split("/") if part]
     if not raw_parts:
         raise RuntimeError(f"{_CONFIG_REPO_PATH} must not be empty.")
+    return raw_parts
+
+
+def _assert_supported_template_tokens(raw_part: str) -> None:
+    tokens = set(_TOKEN_PATTERN.findall(raw_part))
+    unknown_tokens = tokens - _KNOWN_TEMPLATE_TOKENS
+    if unknown_tokens:
+        raise RuntimeError(
+            f"{_CONFIG_REPO_PATH} contains unsupported tokens: "
+            + ", ".join(sorted(unknown_tokens))
+        )
+
+    preview = raw_part
+    for token in _KNOWN_TEMPLATE_TOKENS:
+        preview = preview.replace(token, "TOKEN")
+    if "%" in preview:
+        raise RuntimeError(f"{_CONFIG_REPO_PATH} contains unresolved token syntax.")
+
+
+def _render_repo_template(
+    config: dict[str, str], group_name: str, username: str, when: datetime
+) -> list[str]:
+    raw_parts = _repo_template_parts(config)
 
     values = {
         "%group%": _validate_path_component(group_name, "group name"),
@@ -190,66 +211,38 @@ def _render_repo_template(
     }
 
     rendered_parts = []
-    prefix_parts = []
-    seen_user = False
 
     for raw_part in raw_parts:
+        _assert_supported_template_tokens(raw_part)
         part = raw_part
         for token, token_value in values.items():
             part = part.replace(token, token_value)
 
-        unknown_tokens = set(_TOKEN_PATTERN.findall(part)) - _KNOWN_TEMPLATE_TOKENS
-        if unknown_tokens:
-            raise RuntimeError(
-                f"{_CONFIG_REPO_PATH} contains unsupported tokens: "
-                + ", ".join(sorted(unknown_tokens))
-            )
-        if "%" in part:
-            raise RuntimeError(f"{_CONFIG_REPO_PATH} contains unresolved token syntax.")
-
         rendered = _validate_path_component(part, "managed-repository template segment")
         rendered_parts.append(rendered)
-        if not seen_user:
-            prefix_parts.append(rendered)
-        if "%user%" in raw_part:
-            seen_user = True
 
-    if not seen_user:
-        raise RuntimeError(
-            f"{_CONFIG_REPO_PATH} must include a %user% token for Zarr staging."
-        )
-
-    suffix_parts = rendered_parts[len(prefix_parts) :]
-    return prefix_parts, suffix_parts
+    return rendered_parts
 
 
-def _cleanup_prefix_parts(
+def _match_repo_template(
     config: dict[str, str],
     group_name: str,
     username: str,
     actual_parts: tuple[str, ...],
-) -> list[str]:
-    template = _require_config_value(config, _CONFIG_REPO_PATH)
-    raw_parts = [part for part in template.split("/") if part]
-    if not raw_parts:
-        raise RuntimeError(f"{_CONFIG_REPO_PATH} must not be empty.")
+) -> tuple[list[str], tuple[str, ...]]:
+    raw_parts = _repo_template_parts(config)
+    if len(actual_parts) < len(raw_parts):
+        raise RuntimeError(
+            "Managed Zarr path does not match the configured managed-repository "
+            "staging template."
+        )
 
     group_component = _validate_path_component(group_name, "group name")
     user_component = _validate_path_component(username, "username")
     matched_parts: list[str] = []
-    seen_user = False
 
     for index, raw_part in enumerate(raw_parts):
-        if index >= len(actual_parts):
-            break
-
-        tokens = set(_TOKEN_PATTERN.findall(raw_part))
-        unknown_tokens = tokens - _KNOWN_TEMPLATE_TOKENS
-        if unknown_tokens:
-            raise RuntimeError(
-                f"{_CONFIG_REPO_PATH} contains unsupported tokens: "
-                + ", ".join(sorted(unknown_tokens))
-            )
+        _assert_supported_template_tokens(raw_part)
 
         matcher_parts = ["^"]
         cursor = 0
@@ -266,29 +259,17 @@ def _cleanup_prefix_parts(
         matcher_parts.append(re.escape(raw_part[cursor:]))
         matcher_parts.append("$")
 
-        preview = raw_part
-        for token in _KNOWN_TEMPLATE_TOKENS:
-            preview = preview.replace(token, "TOKEN")
-        if "%" in preview:
-            raise RuntimeError(f"{_CONFIG_REPO_PATH} contains unresolved token syntax.")
-
         actual_part = _validate_path_component(
             actual_parts[index], "managed-repository cleanup path segment"
         )
         if not re.fullmatch("".join(matcher_parts), actual_part):
-            break
+            raise RuntimeError(
+                "Managed Zarr path does not match the configured "
+                "managed-repository staging template."
+            )
 
         matched_parts.append(actual_part)
-        if "%user%" in raw_part:
-            seen_user = True
-            break
-
-    if not seen_user:
-        raise RuntimeError(
-            "Managed Zarr path does not match the configured group/user repository "
-            "prefix."
-        )
-    return matched_parts
+    return matched_parts, actual_parts[len(raw_parts) :]
 
 
 def _managed_repository_root(config: dict[str, str]) -> Path:
@@ -352,47 +333,24 @@ def _reject_symlinks(path: Path) -> None:
                 )
 
 
-def _user_prefix_dir(
+def _template_container_dir(
     config: dict[str, str],
     group_name: str,
     username: str,
     when: datetime,
-) -> tuple[Path, list[str]]:
+) -> Path:
     managed_root = _managed_repository_root(config)
-    prefix_parts, suffix_parts = _render_repo_template(
-        config, group_name, username, when
-    )
-    prefix_dir = managed_root
-    for part in prefix_parts:
-        prefix_dir = (prefix_dir / part).resolve(strict=False)
+    rendered_parts = _render_repo_template(config, group_name, username, when)
+    container_dir = managed_root
+    for part in rendered_parts:
+        container_dir = (container_dir / part).resolve(strict=False)
         try:
-            prefix_dir.relative_to(managed_root)
+            container_dir.relative_to(managed_root)
         except ValueError as exc:
             raise RuntimeError(
-                f"Managed-repository prefix escaped its root: {prefix_dir}"
+                f"Managed-repository template escaped its root: {container_dir}"
             ) from exc
-        if not prefix_dir.exists() or not prefix_dir.is_dir():
-            raise RuntimeError(
-                "Managed-repository user prefix must already exist and be created by "
-                f"OMERO.server first: {prefix_dir}"
-            )
-    return prefix_dir, suffix_parts
-
-
-def _ensure_suffix_dir(
-    managed_root: Path, prefix_dir: Path, suffix_parts: list[str]
-) -> Path:
-    target_dir = prefix_dir
-    for part in suffix_parts:
-        target_dir = target_dir / part
-    target_dir = target_dir.resolve(strict=False)
-    try:
-        target_dir.relative_to(managed_root)
-    except ValueError as exc:
-        raise RuntimeError(
-            f"Managed-repository target escaped its root: {target_dir}"
-        ) from exc
-    return target_dir
+    return container_dir
 
 
 def _managed_repository_proxy(conn: BlitzGateway, config: dict[str, str]):
@@ -485,14 +443,13 @@ def _repository_directory_registered(
         ) from exc
 
 
-def _assert_no_unregistered_suffix_dirs(
+def _assert_no_unregistered_existing_dirs(
     repo_proxy,
     managed_root: Path,
-    prefix_dir: Path,
     target_dir: Path,
 ) -> None:
-    current = prefix_dir.resolve(strict=False)
-    for part in target_dir.relative_to(prefix_dir).parts:
+    current = managed_root.resolve(strict=False)
+    for part in target_dir.relative_to(managed_root).parts:
         current = (current / part).resolve(strict=False)
         if not current.exists():
             continue
@@ -501,10 +458,10 @@ def _assert_no_unregistered_suffix_dirs(
         if _repository_directory_registered(repo_proxy, managed_root, current):
             continue
         raise RuntimeError(
-            "Managed-repository suffix path exists on disk but is not registered "
+            "Managed-repository path exists on disk but is not registered "
             f"in OMERO: {current}. This usually means a stale native-Zarr staging "
-            "directory was left behind by an older helper that created suffix "
-            "directories with raw filesystem operations."
+            "directory was left behind by an older helper that created "
+            "managed-repository directories with raw filesystem operations."
         )
 
 
@@ -581,13 +538,12 @@ def _stage_zarr(
     source = _validate_source_path(config, source_path)
     _reject_symlinks(source)
     managed_root = _managed_repository_root(config)
-    prefix_dir, suffix_parts = _user_prefix_dir(config, group_name, username, when)
-    target_dir = _ensure_suffix_dir(managed_root, prefix_dir, suffix_parts)
+    container_dir = _template_container_dir(config, group_name, username, when)
     repo_proxy = _managed_repository_proxy(conn, config)
-    _assert_no_unregistered_suffix_dirs(
-        repo_proxy, managed_root, prefix_dir, target_dir
-    )
-    destination = _allocate_destination_dir(target_dir, source.name)
+    _assert_no_unregistered_existing_dirs(repo_proxy, managed_root, container_dir)
+    if not container_dir.exists():
+        _register_managed_directory(repo_proxy, managed_root, container_dir)
+    destination = _allocate_destination_dir(container_dir, source.name)
     _register_managed_directory(repo_proxy, managed_root, destination)
     for directory in _prefix_directories(managed_root, destination.parent):
         if not directory.is_dir():
@@ -613,29 +569,55 @@ def _cleanup_zarr(
         relative_parts = target.relative_to(managed_root).parts
     except ValueError as exc:
         raise RuntimeError(
-            f"Managed Zarr path is outside the allowed user prefix: {target}"
+            f"Managed Zarr path is outside the managed repository: {target}"
         ) from exc
     try:
-        prefix_dir = managed_root.joinpath(
-            *_cleanup_prefix_parts(config, group_name, username, relative_parts)
+        container_parts, remainder = _match_repo_template(
+            config, group_name, username, relative_parts
         )
     except RuntimeError as exc:
         raise RuntimeError(
-            f"Managed Zarr path is outside the allowed user prefix: {target}"
+            f"Managed Zarr path is outside the configured staging template: {target}"
         ) from exc
+    if len(remainder) != 1:
+        raise RuntimeError(
+            "Managed Zarr cleanup only supports staged .zarr directories directly "
+            "under the configured managed-repository template."
+        )
+    staged_name = _validate_path_component(remainder[0], "managed Zarr directory name")
+    if not (staged_name.endswith(".zarr") or staged_name.endswith(".ome.zarr")):
+        raise RuntimeError(
+            "Managed Zarr cleanup only supports staged .zarr directories."
+        )
+    container_dir = managed_root.joinpath(*container_parts)
+    prefix_dir = container_dir / staged_name
     try:
         target.relative_to(prefix_dir)
     except ValueError as exc:
         raise RuntimeError(
-            f"Managed Zarr path is outside the allowed user prefix: {target}"
+            f"Managed Zarr path is outside the configured staging leaf: {target}"
         ) from exc
 
     if target == prefix_dir:
-        raise RuntimeError("Refusing to delete the user managed-repository prefix.")
+        repo_proxy = _managed_repository_proxy(conn, config)
+        if target.exists():
+            if not target.is_dir():
+                raise RuntimeError(
+                    f"Managed-repository path is not a directory: {target}"
+                )
+            if not _repository_directory_registered(repo_proxy, managed_root, target):
+                raise RuntimeError(
+                    "Managed-repository path exists on disk but is not registered "
+                    f"in OMERO: {target}"
+                )
+            _delete_registered_managed_path(conn, repo_proxy, managed_root, target)
+        return target
 
     if target.exists():
-        repo_proxy = _managed_repository_proxy(conn, config)
-        _delete_registered_managed_path(conn, repo_proxy, managed_root, target)
+        raise RuntimeError(
+            "Managed Zarr cleanup only supports deleting the staged .zarr root, "
+            f"not nested paths: {target}"
+        )
     return target
 
 

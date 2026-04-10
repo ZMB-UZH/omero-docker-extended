@@ -26,6 +26,8 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Never use background agents or subagents unless the user explicitly asks for them.
 - All configuration is environment-driven. Never hard-code paths, credentials, or endpoints.
 - In committed code and tests, do not hard-code installation-specific clone paths or host paths unless the product intentionally guarantees that runtime path.
+- Custom import workflows must keep upload and conversion work in tmp/shared-transfer space and move data into `ManagedRepository` only at the final persistent import handoff.
+- Do not assume any Dataset, Project, Screen, or other OMERO object already exists in a live installation unless the current task explicitly provisions it first.
 - Keep changes deterministic, explicit, and reproducible across environments.
 - Update `docs/` whenever behavior or operating assumptions change.
 - Run `python3 tools/lint_docs_structure.py` after documentation or instruction-surface edits.

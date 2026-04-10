@@ -153,9 +153,15 @@ PY
 
 - `omero zarr import` is reference-based and stores the managed-store path in `Image.details.externalInfo.lsid`.
 - Native Zarr metadata finalization must normalize shorthand units such as `nm` or `µm` before persisting physical sizes.
-- Restage browser uploads to a durable server-readable location before native Zarr import; do not point native import at `_staged/`.
-- Managed-repository native Zarr staging must leave the group/user/date/time prefix traversal-only, the staged `.zarr` tree service-readable, and create or delete staged managed paths through OMERO's repository API; owner-only modes cause `PermissionError`, and raw `mkdir` under `ManagedRepository` can trigger `Directory exists but is not registered`.
-- If a live repository suffix path exists on disk but `Repository.fileExists(...)` returns `False` while `treeList(...)` still traverses it, treat that suffix as stale unmanaged residue from an older helper revision rather than a healthy registered path.
+- Restage browser uploads to a durable server-readable tmp/shared-transfer location before native Zarr import; do not point native import at `_staged/`, and do not move upload or conversion work into `ManagedRepository`.
+- Managed-repository native Zarr staging must treat the fully rendered
+  `omero.fs.repo.path` template as the persistent handoff container, create or
+  delete that rendered container plus the staged `.zarr` leaf through OMERO's
+  repository API, keep the rendered template path traversal-only, and keep the
+  staged `.zarr` tree service-readable; owner-only modes cause
+  `PermissionError`, and raw `mkdir` under `ManagedRepository` can trigger
+  `Directory exists but is not registered`.
+- If a live rendered managed path exists on disk but `Repository.fileExists(...)` returns `False` while `treeList(...)` still traverses it, treat that path as stale unmanaged residue from an older helper revision rather than a healthy registered path.
 - When resolving the managed-repository proxy from OMERO shared resources, do not assume `RepositoryMap.proxies` is a hash map. Live servers can expose it as a description-aligned sequence with `None` holes; pair it with `descriptions` by index when it is not mapping-like.
 - Route every Zarr layout supported by the installed `omero-cli-zarr` runtime through the native path.
 - For NGFF-backed images, thumbnail/render failures often surface in `master.err` from the Zarr pixel service or reader stack.
