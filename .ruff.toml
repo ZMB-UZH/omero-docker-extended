@@ -1,4 +1,4 @@
-required-version = "==0.15.8"
+required-version = "==0.15.10"
 target-version = "py39"
 
 [lint]
