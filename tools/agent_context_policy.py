@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ContextRoutingLimits:
     """Numeric retrieval limits that keep agent context small and predictable."""
 
@@ -24,7 +24,7 @@ class ContextRoutingLimits:
         )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ContextSurfaceContract:
     """Compactness and routing expectations for agent-facing context surfaces."""
 
