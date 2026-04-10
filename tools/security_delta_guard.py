@@ -234,6 +234,20 @@ def select_push_delta_alerts(
     return delta_alerts
 
 
+def select_pull_request_delta_alerts(
+    pull_request_alerts: list[dict[str, Any]],
+    base_branch_alerts: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep only alerts that are absent from the base branch snapshot."""
+
+    base_numbers = {int(alert.get("number", 0)) for alert in base_branch_alerts}
+    return [
+        alert
+        for alert in pull_request_alerts
+        if int(alert.get("number", 0)) not in base_numbers
+    ]
+
+
 def evaluate_default_branch_alerts(
     ref: str,
     workflow_started_at: datetime | None,
@@ -281,6 +295,7 @@ def evaluate_pull_request_alerts(
     pr_number: int,
     fetch_alerts: AlertFetcher,
     *,
+    base_ref: str | None = None,
     settle_timeout_seconds: int,
     poll_interval_seconds: int,
     monotonic: ClockFn = time.monotonic,
@@ -293,6 +308,15 @@ def evaluate_pull_request_alerts(
         monotonic=monotonic,
         sleep=sleep,
     )
+    if base_ref:
+        base_branch_alerts = wait_for_stable_snapshot(
+            lambda: fetch_alerts(ref=base_ref),
+            settle_timeout_seconds=settle_timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            monotonic=monotonic,
+            sleep=sleep,
+        )
+        alerts = select_pull_request_delta_alerts(alerts, base_branch_alerts)
     if alerts:
         return EvaluationResult(
             status="fail",
@@ -364,9 +388,14 @@ def evaluate_workflow_run(
                 ),
             )
         pr_number = int(pull_requests[0]["number"])
+        base_ref = _first_non_empty(
+            pull_requests[0].get("base", {}).get("ref"),
+            payload_default_branch(event_payload),
+        )
         return evaluate_pull_request_alerts(
             pr_number,
             fetch_alerts,
+            base_ref=f"refs/heads/{base_ref}" if base_ref else None,
             settle_timeout_seconds=settle_timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
             monotonic=monotonic,
@@ -458,9 +487,14 @@ def evaluate_direct_event(
                     "a pull request number."
                 ),
             )
+        base_ref = _first_non_empty(
+            (event_payload.get("pull_request") or {}).get("base", {}).get("ref"),
+            payload_default_branch(event_payload),
+        )
         return evaluate_pull_request_alerts(
             pr_number,
             fetch_alerts,
+            base_ref=f"refs/heads/{base_ref}" if base_ref else None,
             settle_timeout_seconds=settle_timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
             monotonic=monotonic,
