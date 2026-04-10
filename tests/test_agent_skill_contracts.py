@@ -87,6 +87,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
             "unittest",
             "-v",
             "tests.test_agent_skill_catalog",
+            "tests.test_caveman_skill_contract",
             "tests.test_agent_skill_provenance",
             "tests.test_readme_badges",
             "tests.test_lint_docs_structure",
@@ -94,6 +95,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
         covers=frozenset(
             {
                 "ai-regression-testing",
+                "caveman",
                 "context-budget",
                 "documentation-lookup",
                 "docs-knowledge-maintainer",
@@ -141,6 +143,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
             "tests/test_build_workflow_integration_contract.py",
             "tests/test_docker_healthcheck_contracts.py",
             "tests/test_ruff_integration_contract.py",
+            "tests/test_vulture_integration_contract.py",
         ),
         covers=frozenset(
             {
@@ -303,6 +306,7 @@ class AgentSkillContractTests(unittest.TestCase):
 
     COMPACT_SKILL_LINE_BUDGETS: dict[str, int] = {
         "ai-regression-testing": 24,
+        "caveman": 24,
         "context-budget": 32,
         "env-contract-reviewer": 44,
         "plugin-regression-triager": 41,

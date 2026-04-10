@@ -18,6 +18,8 @@ Apply guidance in this order:
 
 The skill surface is additive. It must not override the repo's no-subagent rule, security read order, split-pytest policy, or environment-driven configuration model.
 
+Opt-in compression skills are advisory only. They never override risk handling, safety warnings, exact dates, or clarity-first explanations.
+
 ## Repo-native operational skills
 
 | Skill | Path | Use when | Key outcome |
@@ -25,6 +27,7 @@ The skill surface is additive. It must not override the repo's no-subagent rule,
 | `search-first` | `.agents/skills/search-first/SKILL.md` | before adding helpers, integrations, wrappers, or dependencies | repo and upstream evidence are checked before coding |
 | `documentation-lookup` | `.agents/skills/documentation-lookup/SKILL.md` | when a fact is version-sensitive or could have changed recently | answers are grounded in current official docs and releases |
 | `verification-loop` | `.agents/skills/verification-loop/SKILL.md` | after non-trivial changes and before PRs | verification states exactly what was checked and what was blocked |
+| `caveman` | `.agents/skills/caveman/SKILL.md` | when the user explicitly asks for lower-token replies or terse mode | output tokens drop without losing technical substance or safety |
 | `docs-knowledge-maintainer` | `.agents/skills/docs-knowledge-maintainer/SKILL.md` | when behavior, env contracts, topology, or troubleshooting guidance changes | docs stay aligned with the code and routing model |
 | `plugin-regression-triager` | `.agents/skills/plugin-regression-triager/SKILL.md` | when selecting the correct split pytest suites | the narrowest correct regression set is chosen |
 | `omero-runtime-verifier` | `.agents/skills/omero-runtime-verifier/SKILL.md` | for live runtime debugging, service checks, or OMERO CLI work | runtime triage follows the documented safe procedure |
@@ -55,6 +58,7 @@ The skill surface is additive. It must not override the repo's no-subagent rule,
 - Use the nearest skill before falling back to a generic workflow.
 - When a skill references live or version-sensitive behavior, verify with official upstream docs or releases.
 - Never paste secrets, PATs, passwords, or internal-only URLs into external research tools.
+- `caveman` is opt-in. Use it only when the user asks for terseness or lower token usage, and drop it immediately if clarity or safety would suffer.
 
 ## Maintenance rules
 

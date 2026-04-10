@@ -27,6 +27,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - All configuration is environment-driven. Never hard-code paths, credentials, or endpoints.
 - In committed code and tests, do not hard-code installation-specific clone paths or host paths unless the product intentionally guarantees that runtime path.
 - Keep changes deterministic, explicit, and reproducible across environments.
+- If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill at the lowest compression level that preserves clarity; drop compression for destructive actions, security guidance, multi-step runbooks, or unresolved ambiguity.
 - Update `docs/` whenever behavior or operating assumptions change.
 - Run `python3 tools/lint_docs_structure.py` after documentation or instruction-surface edits.
 - Use Ruff as the canonical Python formatter and lint gate.
