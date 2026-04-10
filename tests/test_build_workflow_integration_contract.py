@@ -928,6 +928,28 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIn('wc -l -- "${DOCKERFILE_PATH}"', hadolint_audit_step["run"])
 
+    def test_security_sarif_upload_jobs_can_read_workflow_run_metadata(self) -> None:
+        import yaml  # noqa: F811  — available in CI
+
+        workflow_path = (
+            self.repo_root / ".github" / "workflows" / "security-code-scanning.yml"
+        )
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+
+        for job_name in (
+            "codeql",
+            "trivy-filesystem",
+            "semgrep",
+            "bandit",
+            "hadolint",
+            "devskim",
+        ):
+            self.assertEqual(
+                "read",
+                workflow["jobs"][job_name]["permissions"]["actions"],
+                f"{job_name} must grant actions: read so SARIF uploads can resolve workflow run metadata.",
+            )
+
     def test_all_workflow_checkouts_disable_persisted_credentials(self) -> None:
         import yaml  # noqa: F811  — available in CI
 
