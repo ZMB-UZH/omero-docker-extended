@@ -4,4 +4,4 @@ interface:
   brand_color: "#6B7280"
   default_prompt: "Use caveman mode only when the user explicitly asks for lower-token replies, while preserving safety and clarity"
 policy:
-  allow_implicit_invocation: true
+  allow_implicit_invocation: false

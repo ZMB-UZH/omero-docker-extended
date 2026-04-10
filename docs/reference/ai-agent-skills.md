@@ -59,6 +59,7 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 - When a skill references live or version-sensitive behavior, verify with official upstream docs or releases.
 - Never paste secrets, PATs, passwords, or internal-only URLs into external research tools.
 - `caveman` is opt-in. Use it only when the user asks for terseness or lower token usage, and drop it immediately if clarity or safety would suffer.
+- `caveman` changes reply style only. It never changes routing, tool use, verification scope, or the need to surface uncertainty clearly.
 
 ## Maintenance rules
 

@@ -13,12 +13,14 @@ Use this skill only when the user explicitly asks for lower-token replies, terse
 - Keep `AGENTS.md`, `docs/reference/ai-agent-context-routing.md`, and `docs/reference/ai-agent-skills.md` as the primary contract.
 - Use `context-budget` to cut input/context cost first; use `caveman` to cut output tokens second.
 - The upstream reference lives in `third_party/caveman-v1.3.5/skills/caveman/SKILL.md`.
+- Caveman changes response style only. It must not change context selection, tool choice, verification scope, or the decision to ask clarifying questions.
 
 ## Compression rules
 
 - Compression never outranks correctness, safety, or precise dates.
 - Default to lite compression; use heavier compression only if the user asks for it.
 - Keep code, commands, file references, exact errors, and verification results normal and lossless.
+- If terse wording would hide uncertainty, name the uncertainty normally instead of compressing it away.
 - Drop compression and return to normal detail for destructive actions, security guidance, migrations, multi-step runbooks, incident analysis, or unresolved ambiguity.
 - If the user seems confused, explain clearly first and resume terse mode only after the risky part is resolved.
 

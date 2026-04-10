@@ -5,6 +5,8 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 class CavemanSkillContractTests(unittest.TestCase):
     @classmethod
@@ -28,9 +30,21 @@ class CavemanSkillContractTests(unittest.TestCase):
         skill_text = self.read_text(".agents/skills/caveman/SKILL.md")
         self.assertIn("Use this skill only when the user explicitly asks", skill_text)
         self.assertIn("context-budget", skill_text)
+        self.assertIn("changes response style only", skill_text)
+        self.assertIn("must not change context selection", skill_text)
         self.assertIn("Compression never outranks correctness", skill_text)
         self.assertIn("Drop compression and return to normal detail", skill_text)
         self.assertIn("third_party/caveman-v1.3.5/skills/caveman/SKILL.md", skill_text)
+
+    def test_caveman_adapter_disables_implicit_invocation(self) -> None:
+        adapter = yaml.safe_load(
+            self.read_text(".agents/skills/caveman/agents/openai.yaml")
+        )
+        self.assertEqual(False, adapter["policy"]["allow_implicit_invocation"])
+        self.assertIn(
+            "explicitly asks",
+            adapter["interface"]["default_prompt"],
+        )
 
     def test_cross_agent_surfaces_present_caveman_as_opt_in(self) -> None:
         tracked_surfaces = (
@@ -40,19 +54,29 @@ class CavemanSkillContractTests(unittest.TestCase):
             ".github/copilot-instructions.md",
             "docs/reference/ai-agent-skills.md",
             "docs/reference/ai-agent-integrations.md",
+            "docs/reference/ai-agent-upstream-sources.md",
         )
         for relative_path in tracked_surfaces:
             with self.subTest(relative_path=relative_path):
                 text = self.read_text(relative_path)
-                self.assertIn("caveman", text.lower())
+                text_lower = text.lower()
+                self.assertIn("caveman", text_lower)
                 self.assertTrue(
-                    "lower-token" in text.lower() or "lower token" in text.lower()
+                    "lower-token" in text_lower or "lower token" in text_lower
+                )
+                self.assertTrue(
+                    "style only" in text_lower
+                    or "reply style only" in text_lower
+                    or "routing" in text_lower
+                    or "tool choice" in text_lower
+                    or "verification scope" in text_lower
                 )
 
     def test_repo_does_not_activate_upstream_caveman_runtime(self) -> None:
         integrations_text = self.read_text("docs/reference/ai-agent-integrations.md")
         self.assertIn("plugin auto-loading", integrations_text)
         self.assertIn("not activated in this repo", integrations_text)
+        self.assertIn("verification scope", integrations_text)
         self.assertFalse((self.repo_root / ".codex-plugin").exists())
         self.assertNotIn("caveman", self.read_text(".claude/settings.json").lower())
 
