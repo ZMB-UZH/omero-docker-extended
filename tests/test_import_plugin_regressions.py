@@ -2,6 +2,7 @@ import importlib
 import importlib.util
 import inspect
 import os
+import shutil
 import sys
 import tempfile
 import types
@@ -2691,6 +2692,67 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             "omero.web.import.shared_tmp_path": str(tmp_root),
         }
 
+    @staticmethod
+    def _managed_repo_conn(managed_root: Path):
+        class _RepoProxy:
+            def __init__(self, root: Path):
+                self.root = root
+                self.make_dir_calls = []
+                self.delete_calls = []
+                self.registered_paths = set()
+
+            def makeDir(self, path, parents):
+                self.make_dir_calls.append((path, parents))
+                target = self.root / path.strip("/")
+                target.mkdir(parents=parents, exist_ok=True)
+                current = self.root
+                for part in target.relative_to(self.root).parts:
+                    current = current / part
+                    self.registered_paths.add(current.resolve(strict=False))
+
+            def fileExists(self, path):
+                target = (self.root / path.strip("/")).resolve(strict=False)
+                return target in self.registered_paths
+
+            def deletePaths(self, paths, recursively, force):
+                self.delete_calls.append((list(paths), recursively, force))
+                for raw_path in paths:
+                    target = (self.root / raw_path.strip("/")).resolve(strict=False)
+                    self.registered_paths = {
+                        candidate
+                        for candidate in self.registered_paths
+                        if candidate != target and target not in candidate.parents
+                    }
+                    if target.is_dir():
+                        shutil.rmtree(target)
+                    elif target.exists():
+                        target.unlink()
+                return "delete-handle"
+
+        repo_proxy = _RepoProxy(managed_root)
+        description = types.SimpleNamespace(
+            path=types.SimpleNamespace(val=str(managed_root.parent)),
+            name=types.SimpleNamespace(val=managed_root.name),
+            hash=types.SimpleNamespace(val="managed-repo-hash"),
+        )
+        wait_calls = []
+        conn = types.SimpleNamespace(
+            c=types.SimpleNamespace(
+                sf=types.SimpleNamespace(
+                    sharedResources=lambda: types.SimpleNamespace(
+                        repositories=lambda: types.SimpleNamespace(
+                            descriptions=[description],
+                            proxies={"managed-repo-hash": repo_proxy},
+                        )
+                    )
+                ),
+                waitOnCmd=lambda handle, closehandle=True: wait_calls.append(
+                    (handle, closehandle)
+                ),
+            )
+        )
+        return conn, repo_proxy, wait_calls
+
     def test_stage_zarr_uses_existing_user_prefix_and_template_suffix(self):
         manage_script = _load_manage_zarr_script_module()
         fixed_now = real_datetime(2026, 3, 22, 9, 51, 15)
@@ -2706,10 +2768,12 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             user_prefix = managed_root / "users_private" / "test"
             user_prefix.mkdir(parents=True, exist_ok=True)
             server_config = self._server_config(tmpdir, tmp_root)
+            conn, repo_proxy, wait_calls = self._managed_repo_conn(managed_root)
 
             with mock.patch.object(manage_script, "datetime") as mock_datetime:
                 mock_datetime.now.return_value = fixed_now
                 destination = manage_script._stage_zarr(
+                    conn,
                     server_config,
                     str(source),
                     "users_private",
@@ -2720,9 +2784,22 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 user_prefix / "2026-03-22" / "09-51-15" / "sample.ome.zarr",
                 destination,
             )
+            self.assertEqual(
+                [
+                    (
+                        "users_private/test/2026-03-22/09-51-15/sample.ome.zarr/",
+                        True,
+                    )
+                ],
+                repo_proxy.make_dir_calls,
+            )
+            self.assertEqual([], wait_calls)
             self.assertTrue((destination / "0" / "0").is_file())
-            self.assertEqual(0o700, destination.stat().st_mode & 0o777)
-            self.assertEqual(0o600, (destination / "0" / "0").stat().st_mode & 0o777)
+            self.assertEqual(0o711, user_prefix.stat().st_mode & 0o777)
+            self.assertEqual(0o711, (user_prefix / "2026-03-22").stat().st_mode & 0o777)
+            self.assertEqual(0o711, destination.parent.stat().st_mode & 0o777)
+            self.assertEqual(0o755, destination.stat().st_mode & 0o777)
+            self.assertEqual(0o644, (destination / "0" / "0").stat().st_mode & 0o777)
 
     def test_shared_tmp_root_requires_persisted_server_config(self):
         manage_script = _load_manage_zarr_script_module()
@@ -2749,7 +2826,7 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             with self.assertRaisesRegex(RuntimeError, "must stay within"):
                 manage_script._managed_repository_root(config)
 
-    def test_stage_zarr_creates_missing_user_prefix(self):
+    def test_stage_zarr_requires_existing_user_prefix(self):
         manage_script = _load_manage_zarr_script_module()
         fixed_now = real_datetime(2026, 3, 22, 9, 51, 15)
 
@@ -2761,26 +2838,55 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             managed_root = Path(tmpdir) / "data" / "ManagedRepository"
             managed_root.mkdir(parents=True, exist_ok=True)
             server_config = self._server_config(tmpdir, tmp_root)
+            conn, repo_proxy, _wait_calls = self._managed_repo_conn(managed_root)
 
             with mock.patch.object(manage_script, "datetime") as mock_datetime:
                 mock_datetime.now.return_value = fixed_now
-                destination = manage_script._stage_zarr(
-                    server_config,
-                    str(source),
-                    "users_private",
-                    "test",
-                )
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "user prefix must already exist",
+                ):
+                    manage_script._stage_zarr(
+                        conn,
+                        server_config,
+                        str(source),
+                        "users_private",
+                        "test",
+                    )
 
-            self.assertEqual(
-                managed_root
-                / "users_private"
-                / "test"
-                / "2026-03-22"
-                / "09-51-15"
-                / "sample.zarr",
-                destination,
-            )
-            self.assertTrue((managed_root / "users_private" / "test").is_dir())
+            self.assertEqual([], repo_proxy.make_dir_calls)
+
+    def test_stage_zarr_rejects_existing_unregistered_suffix_dirs(self):
+        manage_script = _load_manage_zarr_script_module()
+        fixed_now = real_datetime(2026, 3, 22, 9, 51, 15)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir) / "tmp"
+            source = tmp_root / "job-1" / "sample.zarr"
+            (source / "0").mkdir(parents=True, exist_ok=True)
+            (source / "0" / "0").write_text("pixels", encoding="utf-8")
+            managed_root = Path(tmpdir) / "data" / "ManagedRepository"
+            user_prefix = managed_root / "users_private" / "test"
+            user_prefix.mkdir(parents=True, exist_ok=True)
+            (user_prefix / "2026-03-22").mkdir()
+            server_config = self._server_config(tmpdir, tmp_root)
+            conn, repo_proxy, _wait_calls = self._managed_repo_conn(managed_root)
+
+            with mock.patch.object(manage_script, "datetime") as mock_datetime:
+                mock_datetime.now.return_value = fixed_now
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "exists on disk but is not registered in OMERO",
+                ):
+                    manage_script._stage_zarr(
+                        conn,
+                        server_config,
+                        str(source),
+                        "users_private",
+                        "test",
+                    )
+
+            self.assertEqual([], repo_proxy.make_dir_calls)
 
     def test_load_server_config_reads_runtime_state_file(self):
         manage_script = _load_manage_zarr_script_module()
@@ -2905,6 +3011,7 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             prefix_dir.mkdir(parents=True, exist_ok=True)
             target_dir = prefix_dir / "2026-03-22" / "09-51-15"
             target_dir.mkdir(parents=True, exist_ok=True)
+            conn, repo_proxy, wait_calls = self._managed_repo_conn(managed_root)
             existing = target_dir / "sample.zarr"
             existing.mkdir()
 
@@ -2919,16 +3026,35 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             payload.mkdir()
             server_config = self._server_config(tmpdir, Path(tmpdir) / "tmp")
             deleted = manage_script._cleanup_zarr(
-                server_config, str(payload), "users_private", "test"
+                conn,
+                server_config,
+                str(payload),
+                "users_private",
+                "test",
             )
             self.assertEqual(payload, deleted)
             self.assertFalse(payload.exists())
+            self.assertEqual(
+                [
+                    (
+                        ["/users_private/test/2026-03-22/09-51-15/delete-me.zarr/"],
+                        True,
+                        False,
+                    )
+                ],
+                repo_proxy.delete_calls,
+            )
+            self.assertEqual([("delete-handle", True)], wait_calls)
 
             with self.assertRaisesRegex(
                 RuntimeError, "Refusing to delete the user managed-repository prefix"
             ):
                 manage_script._cleanup_zarr(
-                    server_config, str(prefix_dir), "users_private", "test"
+                    conn,
+                    server_config,
+                    str(prefix_dir),
+                    "users_private",
+                    "test",
                 )
 
             symlink_source = Path(tmpdir) / "tmp" / "job-1" / "link.zarr"
@@ -2946,6 +3072,7 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "data" / "ManagedRepository"
             (managed_root / "users_private" / "test").mkdir(parents=True, exist_ok=True)
+            conn, _repo_proxy, _wait_calls = self._managed_repo_conn(managed_root)
             outside_path = (
                 managed_root
                 / "users_private"
@@ -2960,8 +3087,47 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 RuntimeError, "outside the allowed user prefix"
             ):
                 manage_script._cleanup_zarr(
-                    server_config, str(outside_path), "users_private", "test"
+                    conn,
+                    server_config,
+                    str(outside_path),
+                    "users_private",
+                    "test",
                 )
+
+    def test_cleanup_zarr_matches_template_prefix_without_current_time_assumption(self):
+        manage_script = _load_manage_zarr_script_module()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir) / "tmp"
+            managed_root = Path(tmpdir) / "data" / "ManagedRepository"
+            target = (
+                managed_root
+                / "users_private"
+                / "2026"
+                / "test"
+                / "09-51-15"
+                / "sample.zarr"
+            )
+            target.mkdir(parents=True, exist_ok=True)
+            server_config = self._server_config(tmpdir, tmp_root)
+            server_config["omero.fs.repo.path"] = "%group%/%year%/%user%/%time%"
+            conn, repo_proxy, wait_calls = self._managed_repo_conn(managed_root)
+
+            deleted = manage_script._cleanup_zarr(
+                conn,
+                server_config,
+                str(target),
+                "users_private",
+                "test",
+            )
+
+            self.assertEqual(target, deleted)
+            self.assertFalse(target.exists())
+            self.assertEqual(
+                [(["/users_private/2026/test/09-51-15/sample.zarr/"], True, False)],
+                repo_proxy.delete_calls,
+            )
+            self.assertEqual([("delete-handle", True)], wait_calls)
 
     def test_run_script_sets_outputs_and_closes_session(self):
         manage_script = _load_manage_zarr_script_module()

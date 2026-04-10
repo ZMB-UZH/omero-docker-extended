@@ -321,6 +321,19 @@ def test_classify_import_failure_detects_parent_directory_write_denial_without_m
     )
 
 
+def test_classify_import_failure_detects_path_permission_denial():
+    stderr = """
+    Traceback (most recent call last):
+      File "/opt/omero/web/venv-3.12/lib64/python3.12/site-packages/zarr/storage/_local.py", line 171, in _open
+        if not self.root.exists():
+    PermissionError: [Errno 13] Permission denied: '/OMERO/ManagedRepository/users/test/2026-04-10/17-28-10/sample.zarr'
+    """
+
+    assert core_functions._classify_import_failure("", stderr) == (
+        errors.import_path_not_readable()
+    )
+
+
 def test_classify_import_failure_does_not_treat_generic_object_not_exist_as_session_expiry():
     stderr = """
     java.lang.RuntimeException: Failure response on import!

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import runpy
+import shutil
 import sys
 import types
 from datetime import datetime
@@ -59,6 +60,86 @@ def _server_config(tmp_path: Path) -> dict[str, str]:
         "omero.fs.repo.path": "%group%/%user%/%year%-%month%-%day%/%time%",
         "omero.web.import.shared_tmp_path": str(tmp_path / "shared"),
     }
+
+
+def _managed_repo_conn(managed_root: Path, *, proxies_shape: str = "mapping"):
+    class _RepoProxy:
+        def __init__(self, root: Path):
+            self.root = root
+            self.make_dir_calls = []
+            self.delete_calls = []
+            self.registered_paths = set()
+
+        def makeDir(self, path, parents):
+            self.make_dir_calls.append((path, parents))
+            target = self.root / path.strip("/")
+            target.mkdir(parents=parents, exist_ok=True)
+            current = self.root
+            for part in target.relative_to(self.root).parts:
+                current = current / part
+                self.registered_paths.add(current.resolve(strict=False))
+
+        def fileExists(self, path):
+            target = (self.root / path.strip("/")).resolve(strict=False)
+            return target in self.registered_paths
+
+        def deletePaths(self, paths, recursively, force):
+            self.delete_calls.append((list(paths), recursively, force))
+            for raw_path in paths:
+                target = (self.root / raw_path.strip("/")).resolve(strict=False)
+                self.registered_paths = {
+                    candidate
+                    for candidate in self.registered_paths
+                    if candidate != target and target not in candidate.parents
+                }
+                if target.is_dir():
+                    shutil.rmtree(target)
+                elif target.exists():
+                    target.unlink()
+            return "delete-handle"
+
+    repo_proxy = _RepoProxy(managed_root)
+    description = types.SimpleNamespace(
+        path=types.SimpleNamespace(val=str(managed_root.parent)),
+        name=types.SimpleNamespace(val=managed_root.name),
+        hash=types.SimpleNamespace(val="managed-repo-hash"),
+    )
+    descriptions = [description]
+    wait_calls = []
+    if proxies_shape == "mapping":
+        proxies = {"managed-repo-hash": repo_proxy}
+    elif proxies_shape == "sequence":
+        stale_description = types.SimpleNamespace(
+            path=types.SimpleNamespace(val=str(managed_root.parent.parent)),
+            name=types.SimpleNamespace(val="OMERO"),
+            hash=types.SimpleNamespace(val="stale-root-hash"),
+        )
+        description = types.SimpleNamespace(
+            path=types.SimpleNamespace(val=str(managed_root.parent)),
+            name=types.SimpleNamespace(val=managed_root.name),
+            hash=types.SimpleNamespace(val="managed-repo-hash"),
+        )
+        descriptions = [stale_description, description]
+        proxies = [None, repo_proxy]
+    else:
+        raise ValueError(f"Unsupported proxies_shape: {proxies_shape}")
+
+    conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(
+                sharedResources=lambda: types.SimpleNamespace(
+                    repositories=lambda: types.SimpleNamespace(
+                        descriptions=descriptions,
+                        proxies=proxies,
+                    )
+                )
+            ),
+            waitOnCmd=lambda handle, closehandle=True: wait_calls.append(
+                (handle, closehandle)
+            ),
+        )
+    )
+    return conn, repo_proxy, wait_calls
 
 
 def test_manage_script_config_and_runtime_helpers_cover_remaining_guards(
@@ -194,17 +275,15 @@ def test_manage_script_prefix_suffix_cleanup_and_symlink_guards_cover_remaining_
             "users_private",
             "alice",
             datetime.now(),
-            create_missing=True,
         )
     monkeypatch.setattr(module, "_render_repo_template", original_render_repo_template)
 
-    with pytest.raises(RuntimeError, match="must be created by OMERO.server first"):
+    with pytest.raises(RuntimeError, match="must already exist"):
         module._user_prefix_dir(
             config,
             "users_private",
             "alice",
             datetime.now(),
-            create_missing=False,
         )
 
     prefix_dir = managed_root / "users_private" / "alice"
@@ -224,16 +303,112 @@ def test_manage_script_prefix_suffix_cleanup_and_symlink_guards_cover_remaining_
     assert zarr_candidate.name.startswith("sample__")
     assert zarr_candidate.name.endswith(".ome.zarr")
 
-    managed_file = prefix_dir / "delete-me.zarr"
-    managed_file.write_text("payload", encoding="utf-8")
+    conn, repo_proxy, wait_calls = _managed_repo_conn(managed_root)
+    managed_dir = prefix_dir / "delete-me.zarr"
+    managed_dir.mkdir()
     cleaned = module._cleanup_zarr(
+        conn,
         config,
-        str(managed_file),
+        str(managed_dir),
         "users_private",
         "alice",
     )
-    assert cleaned == managed_file
-    assert not managed_file.exists()
+    assert cleaned == managed_dir
+    assert not managed_dir.exists()
+    assert repo_proxy.delete_calls == [
+        (["/users_private/alice/delete-me.zarr/"], True, False)
+    ]
+    assert wait_calls == [("delete-handle", True)]
+
+
+def test_manage_script_stage_permissions_allow_service_read_access(tmp_path: Path):
+    module = _load_manage_script_module()
+    config = _server_config(tmp_path)
+    managed_root = tmp_path / "data" / "ManagedRepository"
+    managed_root.mkdir(parents=True)
+    (managed_root / "users_private" / "alice").mkdir(parents=True)
+    conn, repo_proxy, wait_calls = _managed_repo_conn(managed_root)
+    source = tmp_path / "shared" / "job-1" / "sample.zarr"
+    nested_dir = source / "0"
+    nested_dir.mkdir(parents=True)
+    payload = nested_dir / "0"
+    payload.write_text("pixels", encoding="utf-8")
+
+    destination = module._stage_zarr(
+        conn,
+        config,
+        str(source),
+        "users_private",
+        "alice",
+    )
+
+    assert repo_proxy.make_dir_calls == [
+        (
+            f"users_private/alice/{destination.parent.parent.name}/{destination.parent.name}/sample.zarr/",
+            True,
+        )
+    ]
+    assert wait_calls == []
+    assert (managed_root / "users_private").stat().st_mode & 0o777 == 0o711
+    assert (managed_root / "users_private" / "alice").stat().st_mode & 0o777 == 0o711
+    assert destination.parent.parent.stat().st_mode & 0o777 == 0o711
+    assert destination.parent.stat().st_mode & 0o777 == 0o711
+    assert destination.stat().st_mode & 0o777 == 0o755
+    assert (destination / "0").stat().st_mode & 0o777 == 0o755
+    assert (destination / "0" / "0").stat().st_mode & 0o777 == 0o644
+
+
+def test_manage_script_resolves_sequence_style_repository_maps(tmp_path: Path):
+    module = _load_manage_script_module()
+    config = _server_config(tmp_path)
+    managed_root = tmp_path / "data" / "ManagedRepository"
+    managed_root.mkdir(parents=True)
+    (managed_root / "users_private" / "alice").mkdir(parents=True)
+    conn, repo_proxy, _wait_calls = _managed_repo_conn(
+        managed_root, proxies_shape="sequence"
+    )
+
+    resolved_proxy = module._managed_repository_proxy(conn, config)
+
+    assert resolved_proxy is repo_proxy
+
+
+def test_manage_script_rejects_unregistered_existing_suffix_dirs(tmp_path: Path):
+    module = _load_manage_script_module()
+    config = _server_config(tmp_path)
+    managed_root = tmp_path / "data" / "ManagedRepository"
+    managed_root.mkdir(parents=True)
+    prefix_dir = managed_root / "users_private" / "alice"
+    prefix_dir.mkdir(parents=True)
+    source = tmp_path / "shared" / "job-1" / "sample.zarr"
+    (source / "0").mkdir(parents=True)
+    (source / "0" / "0").write_text("pixels", encoding="utf-8")
+
+    conn, repo_proxy, _wait_calls = _managed_repo_conn(managed_root)
+    fixed_now = datetime(2026, 3, 22, 9, 51, 15)
+    stale_suffix = prefix_dir / "2026-03-22"
+    stale_suffix.mkdir(parents=True)
+
+    class _FixedDatetime:
+        @staticmethod
+        def now():
+            return fixed_now
+
+    original_datetime = module.datetime
+    module.datetime = _FixedDatetime
+    try:
+        with pytest.raises(RuntimeError, match="exists on disk but is not registered"):
+            module._stage_zarr(
+                conn,
+                config,
+                str(source),
+                "users_private",
+                "alice",
+            )
+    finally:
+        module.datetime = original_datetime
+
+    assert repo_proxy.make_dir_calls == []
 
 
 def test_manage_script_handles_prefix_not_directory_and_main_entrypoint(
@@ -260,13 +435,12 @@ def test_manage_script_handles_prefix_not_directory_and_main_entrypoint(
 
     monkeypatch.setattr(Path, "mkdir", lambda self, *args, **kwargs: None)
     monkeypatch.setattr(Path, "is_dir", _patched_is_dir)
-    with pytest.raises(RuntimeError, match="prefix path is not a directory"):
+    with pytest.raises(RuntimeError, match="must already exist"):
         module._user_prefix_dir(
             config,
             "users_private",
             "alice",
             datetime.now(),
-            create_missing=True,
         )
     monkeypatch.setattr(Path, "mkdir", real_mkdir)
 

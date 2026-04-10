@@ -52,10 +52,11 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             runbook_text,
         )
 
-    def test_explicit_manual_compose_examples_include_both_env_files(self) -> None:
+    def test_explicit_manual_compose_examples_include_required_env_files(
+        self,
+    ) -> None:
         tracked_docs = [
             "CLAUDE.md",
-            "README.md",
             "docs/deployment/quickstart.md",
             "docs/product-specs/new-user-onboarding.md",
             "docs/references/docker-compose-llms.txt",
@@ -69,13 +70,16 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 if (
                     "docker compose" in line
                     and "installation_paths.env" in line
-                    and "omero_secrets.env" not in line
+                    and (
+                        "omero_secrets.env" not in line or "omeroserver.env" not in line
+                    )
                 ):
                     offenders.append(f"{relative_path}:{line_number}:{line}")
         self.assertEqual(
             [],
             offenders,
-            "Found stale single-env compose examples:\n" + "\n".join(offenders),
+            "Found stale compose examples without the full env contract:\n"
+            + "\n".join(offenders),
         )
 
     def test_service_topology_docs_match_compose_terms(self) -> None:

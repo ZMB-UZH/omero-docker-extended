@@ -311,10 +311,9 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
     }
     assert core_functions._build_import_name_normalization_context(entry, None) is None
     context = core_functions._build_import_name_normalization_context(entry, 7)
-    assert context == {
-        "desired_name": "sample.ome.tif",
-        "group_header_name": "group-header.ome.tif",
-    }
+    assert context.cli_import_name == "sample.ome.tif"
+    assert context.group_header_name == "group-header.ome.tif"
+    assert context.expected_image_names == ()
     assert core_functions._extract_imported_image_ids("") == []
     assert core_functions._image_name_requires_normalization("", "group-header") is True
     assert (
