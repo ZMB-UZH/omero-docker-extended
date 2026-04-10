@@ -60,6 +60,14 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block.index("[![Vulture]("),
         )
         self.assertLess(
+            badge_block.index("[![Vulture]("),
+            badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
+        )
+        self.assertLess(
+            badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
+            badge_block.index("[![Caveman]("),
+        )
+        self.assertLess(
             badge_block.index("[![GitHub commit activity]("),
             badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
         )
@@ -115,6 +123,14 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertIn(
             "https://img.shields.io/github/actions/workflow/status/example-owner/example-repo/vulture.yml?branch=main&logo=python&label=Vulture",
+            badge_block,
+        )
+        self.assertIn(
+            "https://img.shields.io/badge/Caveman-compression-6B7280?logo=github",
+            badge_block,
+        )
+        self.assertIn(
+            "https://github.com/JuliusBrussee/caveman",
             badge_block,
         )
         self.assertIn(
