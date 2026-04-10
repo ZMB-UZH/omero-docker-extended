@@ -119,12 +119,12 @@ Managed-repository Zarr staging:
     bootstrap-written runtime state file
     `OMERO.server/var/managed-zarr-runtime.env` rather than relying on
     hardcoded paths,
-  - requires the `%user%` prefix from `CONFIG_omero_fs_repo_path` to already
-    exist, so the web plugin does not create group/user repository roots with
-    the wrong owner,
-  - creates and deletes only the registered suffix and staged native-Zarr
-    directories after `%user%` through OMERO's managed-repository API, never
-    with raw filesystem `mkdir` or `rmtree`,
+  - keeps upload and conversion work in tmp/shared-transfer space and uses the
+    managed repository only for the final persistent native-Zarr handoff,
+  - renders the full `CONFIG_omero_fs_repo_path` template and creates or
+    deletes only the registered rendered container path plus the staged native-
+    Zarr leaf through OMERO's managed-repository API, never with raw
+    filesystem `mkdir` or `rmtree`,
   - normalizes the copied tree to repository-safe `0755` directories and
     `0644` files.
 
@@ -241,9 +241,9 @@ Import-plugin Zarr bridge:
   - leaves `${OMERO_TMP_PATH}/omeroweb-import/data` and the original `_staged/`
     upload tree under OMERO.web ownership.
 - `omeroweb_import/omero_scripts/Manage_Zarr_ManagedRepository.py`
-  - keeps the managed-repository group/user/date/time prefix traversal-only
-    with `0711`, so OMERO.web can reach a known staged path without listing
-    sibling users,
+  - keeps the rendered managed-repository template path traversal-only with
+    `0711`, so OMERO.web can reach a known staged path without listing sibling
+    directories,
   - normalizes the staged managed `.zarr` tree to `0755` directories and
     `0644` files so `omero zarr import` can read it from the separate
     `omero-web` runtime UID,
