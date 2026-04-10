@@ -71,6 +71,9 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                     ENABLE_VULNERABILITY_SCAN=0
                     DOCKER_BUILD_PROVENANCE=0
                     DOCKER_BUILD_FLATTEN_FINAL_IMAGE=0
+                    OMERO_CLI_ZARR_VERSION=0.8.0
+                    OME_ZARR_PY_VERSION=0.14.0
+                    BIOFORMATS2RAW_VERSION=0.11.0
                     COMPOSE_FILE="{temp_path / "docker-compose.yml"}"
                     OMERO_INSTALLATION_PATH="{temp_path}"
                     BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="{helper_path.name}"
@@ -128,6 +131,9 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                     DOCKER_BUILD_FLATTEN_FINAL_IMAGE=0
                     DOCKER_BUILD_LOCAL_CACHE_ENABLED=1
                     DOCKER_BUILD_LOCAL_CACHE_MODE=min
+                    OMERO_CLI_ZARR_VERSION=0.8.0
+                    OME_ZARR_PY_VERSION=0.14.0
+                    BIOFORMATS2RAW_VERSION=0.11.0
                     COMPOSE_FILE="{temp_path / "docker-compose.yml"}"
                     OMERO_INSTALLATION_PATH="{temp_path}"
                     BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="{helper_path.name}"

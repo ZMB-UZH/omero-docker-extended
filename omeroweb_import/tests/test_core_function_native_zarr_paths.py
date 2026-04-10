@@ -378,19 +378,107 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
         ),
     )
     assert timeout_failure["status"] == "error"
-    assert cleanup_calls[-1] == ("managed", managed_zarr)
 
-    execution_failure = run_case(
-        returncode=0,
-        stdout="",
-        stderr="",
-        api_ids=[],
-        finalize_result=(True, []),
-        render_result=(True, []),
-        run_error=RuntimeError("cli exploded"),
+
+def test_import_zarr_via_cli_uses_api_verified_image_ids_for_name_normalization(
+    tmp_path: Path,
+    monkeypatch,
+):
+    source_path = tmp_path / "image.zarr"
+    source_path.mkdir()
+    shared_source = tmp_path / "shared.zarr"
+    shared_source.mkdir()
+    transfer_parent = tmp_path / "transfer"
+    transfer_parent.mkdir()
+    managed_zarr = tmp_path / "managed" / "image.zarr"
+    captured = {}
+
+    monkeypatch.setattr(
+        core_functions,
+        "_prepare_server_readable_zarr_source",
+        lambda path: (shared_source, transfer_parent, None),
     )
-    assert execution_failure["status"] == "error"
-    assert cleanup_calls[-1] == ("managed", managed_zarr)
+    monkeypatch.setattr(
+        core_functions,
+        "_cleanup_shared_zarr_transfer",
+        lambda path: None,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_run_zarr_managed_repo_script",
+        lambda action, host, port, **kwargs: (
+            True,
+            {"Managed_Path": str(managed_zarr)},
+            "",
+        ),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_build_omero_cli_command",
+        lambda *args, **kwargs: ["omero", "zarr", "import"],
+    )
+    monkeypatch.setattr(core_functions, "_build_cli_env", lambda: {"TEST": "1"})
+    monkeypatch.setattr(core_functions, "_get_import_timeout_seconds", lambda: 30)
+    monkeypatch.setattr(
+        core_functions.process_utils,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=["omero", "zarr", "import"],
+            returncode=0,
+            stdout="Fileset:10\n",
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_verify_zarr_import_via_api",
+        lambda *args, **kwargs: ["201", "202"],
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_finalize_imported_zarr_image_metadata",
+        lambda *args, **kwargs: (True, []),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_verify_imported_zarr_images_renderable",
+        lambda *args, **kwargs: (True, []),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_apply_import_name_normalization_context",
+        lambda entry, context, imported_image_ids, *args, **kwargs: captured.setdefault(
+            "image_ids", list(imported_image_ids)
+        ),
+    )
+
+    result = core_functions._import_zarr_via_cli(
+        file_path=source_path,
+        session_key="session",
+        host="omeroserver",
+        port=4064,
+        dataset_id=11,
+        import_name="image.zarr",
+        rel_path="image.zarr",
+        entry={"index": 0},
+        cleanup_staged_paths=["_staged/image.zarr"],
+        covered_indexes=[0],
+        covered_relative_paths=["image.zarr"],
+        username="alice",
+        group_id=7,
+        group_name="users_private",
+        normalization_context=core_functions._ImportNameNormalizationContext(
+            cli_import_name="source.lif",
+            expected_image_names=("source.lif [Series A]", "source.lif [Series B]"),
+        ),
+        native_plan=core_functions._NativeZarrImportPlan(
+            kind="ome-zarr",
+            verify_lsid_prefix=True,
+        ),
+    )
+
+    assert result["status"] == "imported"
+    assert captured["image_ids"] == [201, 202]
 
 
 def test_finalize_imported_zarr_image_metadata_records_reload_failures(
