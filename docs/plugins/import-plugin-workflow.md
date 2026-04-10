@@ -61,7 +61,8 @@ flowchart TD
 ### 4. Managed-repository handoff for native Zarr
 
 - The browser-staged tree is not imported in place.
-- OMERO.web prepares a disposable server-readable copy, then stages that copy into the managed repository through a server-side helper.
+- OMERO.web prepares a disposable server-readable tmp/shared-transfer copy, and any conversion or normalization work stays on that disposable copy.
+- Only the final persistent handoff is staged into the managed repository through a server-side helper.
 - This keeps the original staged upload private to `omero-web` and ensures the imported `externalInfo.lsid` points at a durable OMERO-managed store.
 
 ### 5. Disposable normalization

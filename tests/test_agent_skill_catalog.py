@@ -6,6 +6,7 @@ import re
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Union
 
 import yaml
 
@@ -45,7 +46,7 @@ REPO_NATIVE_SKILLS: frozenset[str] = frozenset(
     }
 )
 
-Concept = str | tuple[str, ...]
+Concept = Union[str, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
