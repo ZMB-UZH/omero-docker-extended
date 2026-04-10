@@ -19,14 +19,9 @@ class RuffIntegrationContractTests(unittest.TestCase):
 
     def test_readme_has_ruff_badge_in_top_row(self) -> None:
         readme_text = self.read_text("README.md")
-        self.assertIn(
-            "[![License](",
-            readme_text,
-        )
-        self.assertLess(
-            readme_text.index("[![License]("),
-            readme_text.index("[![tests]("),
-        )
+        self.assertIn("[![tests](", readme_text)
+        self.assertIn("[![security-code-scanning](", readme_text)
+        self.assertIn("[![GitHub commit activity](", readme_text)
         self.assertIn(
             "[![Codecov](",
             readme_text,
@@ -38,6 +33,15 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertIn(
             "[![Vulture](",
             readme_text,
+        )
+        self.assertIn("[![License](", readme_text)
+        self.assertLess(
+            readme_text.index("[![Ruff]("),
+            readme_text.index("[![Vulture]("),
+        )
+        self.assertLess(
+            readme_text.index("[![Vulture]("),
+            readme_text.index("[![License]("),
         )
 
     def test_docs_index_links_to_python_style_reference(self) -> None:
