@@ -1,7 +1,6 @@
 # OMERO Docker Extended
 
 <!-- BEGIN GENERATED BADGES -->
-[![License](https://img.shields.io/github/license/ZMB-UZH/omero-docker-extended)](LICENSE)
 [![tests](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/tests.yml?branch=main&label=tests)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/tests.yml)
 [![security-code-scanning](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/security-code-scanning.yml?branch=main&label=security-code-scanning)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/security-code-scanning.yml)
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ZMB-UZH/omero-docker-extended)](https://github.com/ZMB-UZH/omero-docker-extended/commits/main)
@@ -9,6 +8,7 @@
 [![super-linter](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/super-linter.yml?branch=main&label=super-linter&logo=github)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/super-linter.yml)
 [![Ruff](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/ruff.yml?branch=main&logo=ruff&label=Ruff)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/ruff.yml)
 [![Vulture](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/vulture.yml?branch=main&logo=python&label=Vulture)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/vulture.yml)
+[![License](https://img.shields.io/github/license/ZMB-UZH/omero-docker-extended)](LICENSE)
 [![everything-claude-code](https://img.shields.io/static/v1?label=everything-claude-code&message=ECC+v1.10.0+skills&color=0F766E&logo=github)](https://github.com/affaan-m/everything-claude-code/tree/v1.10.0/skills)
 [![Caveman](https://img.shields.io/badge/Caveman-compression-6B7280?logo=github)](https://github.com/JuliusBrussee/caveman)
 <!-- END GENERATED BADGES -->

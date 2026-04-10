@@ -36,10 +36,6 @@ class ReadmeBadgeGenerationTests(TestCase):
             metadata, self.upstream_sources
         )
         self.assertLess(
-            badge_block.index("[![License]("),
-            badge_block.index("[![tests]("),
-        )
-        self.assertLess(
             badge_block.index("[![tests]("),
             badge_block.index("[![security-code-scanning]("),
         )
@@ -58,6 +54,14 @@ class ReadmeBadgeGenerationTests(TestCase):
         self.assertLess(
             badge_block.index("[![Ruff]("),
             badge_block.index("[![Vulture]("),
+        )
+        self.assertLess(
+            badge_block.index("[![Vulture]("),
+            badge_block.index("[![License]("),
+        )
+        self.assertLess(
+            badge_block.index("[![License]("),
+            badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
         )
         self.assertLess(
             badge_block.index("[![Vulture]("),
@@ -87,6 +91,10 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertIn(
             "https://img.shields.io/github/commit-activity/m/example-owner/example-repo",
+            badge_block,
+        )
+        self.assertIn(
+            "https://img.shields.io/github/license/example-owner/example-repo",
             badge_block,
         )
         self.assertIn(
