@@ -119,6 +119,18 @@ def test_select_push_delta_alerts_only_keeps_alerts_created_after_run_start() ->
     assert [alert["number"] for alert in result] == [2, 3]
 
 
+def test_select_pull_request_delta_alerts_subtracts_base_branch_backlog() -> None:
+    result = security_delta_guard.select_pull_request_delta_alerts(
+        [
+            _alert(7, created_at="2026-04-02T12:05:00Z"),
+            _alert(8, created_at="2026-04-02T12:06:00Z"),
+        ],
+        [_alert(7, created_at="2026-04-01T09:00:00Z")],
+    )
+
+    assert [alert["number"] for alert in result] == [8]
+
+
 def test_evaluate_push_alerts_fails_without_workflow_start_timestamp() -> None:
     result = security_delta_guard.evaluate_push_alerts(
         "refs/heads/main",
@@ -134,10 +146,20 @@ def test_evaluate_push_alerts_fails_without_workflow_start_timestamp() -> None:
     assert "start timestamp" in result.message
 
 
-def test_evaluate_pull_request_alerts_fails_on_any_open_alerts() -> None:
+def test_evaluate_pull_request_alerts_fails_only_on_alerts_not_present_on_base_ref() -> (
+    None
+):
     result = security_delta_guard.evaluate_pull_request_alerts(
         17,
-        lambda **kwargs: [_alert(91, created_at="2026-04-02T12:30:00Z")],
+        lambda **kwargs: (
+            [_alert(90, created_at="2026-04-01T09:00:00Z")]
+            if kwargs.get("ref") == "refs/heads/main"
+            else [
+                _alert(90, created_at="2026-04-01T09:00:00Z"),
+                _alert(91, created_at="2026-04-02T12:30:00Z"),
+            ]
+        ),
+        base_ref="refs/heads/main",
         settle_timeout_seconds=0,
         poll_interval_seconds=0,
         monotonic=lambda: 0.0,
@@ -147,6 +169,23 @@ def test_evaluate_pull_request_alerts_fails_on_any_open_alerts() -> None:
     assert result.status == "fail"
     assert "Pull request #17 introduced code scanning alerts" in result.message
     assert "CodeQL/py/log-injection" in result.message
+
+
+def test_evaluate_pull_request_alerts_passes_when_only_base_branch_alerts_remain() -> (
+    None
+):
+    result = security_delta_guard.evaluate_pull_request_alerts(
+        17,
+        lambda **kwargs: [_alert(91, created_at="2026-04-02T12:30:00Z")],
+        base_ref="refs/heads/main",
+        settle_timeout_seconds=0,
+        poll_interval_seconds=0,
+        monotonic=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result.status == "pass"
+    assert "introduced no open code scanning alerts" in result.message
 
 
 def test_evaluate_push_alerts_passes_when_only_old_backlog_remains() -> None:
@@ -189,21 +228,27 @@ def test_get_workflow_run_started_at_prefers_run_started_at(monkeypatch) -> None
 
 
 def test_evaluate_direct_event_pull_request_uses_payload_pr_number() -> None:
+    calls = []
+
+    def fetch_alerts(**kwargs):
+        calls.append(kwargs)
+        return [_alert(91, created_at="2026-04-02T12:30:00Z")]
+
     result = security_delta_guard.evaluate_direct_event(
         "pull_request",
-        {"pull_request": {"number": 17}},
+        {"pull_request": {"number": 17, "base": {"ref": "main"}}},
         repository="ZMB-UZH/omero-docker-extended",
         ref="refs/pull/17/merge",
         run_id="123",
-        fetch_alerts=lambda **kwargs: [_alert(91, created_at="2026-04-02T12:30:00Z")],
+        fetch_alerts=fetch_alerts,
         settle_timeout_seconds=0,
         poll_interval_seconds=0,
         monotonic=lambda: 0.0,
         sleep=lambda _seconds: None,
     )
 
-    assert result.status == "fail"
-    assert "Pull request #17 introduced code scanning alerts" in result.message
+    assert result.status == "pass"
+    assert calls == [{"pr": 17}, {"ref": "refs/heads/main"}]
 
 
 def test_evaluate_direct_event_push_uses_run_start_resolver() -> None:
@@ -391,3 +436,36 @@ def test_evaluate_workflow_run_fails_when_upstream_security_scan_failed() -> Non
 
     assert result.status == "fail"
     assert "did not complete successfully" in result.message
+
+
+def test_evaluate_workflow_run_pull_request_subtracts_base_branch_alerts() -> None:
+    calls = []
+
+    def fetch_alerts(**kwargs):
+        calls.append(kwargs)
+        if kwargs.get("ref") == "refs/heads/main":
+            return [_alert(44, created_at="2026-04-01T09:00:00Z")]
+        return [
+            _alert(44, created_at="2026-04-01T09:00:00Z"),
+            _alert(45, created_at="2026-04-02T12:00:00Z"),
+        ]
+
+    result = security_delta_guard.evaluate_workflow_run(
+        {
+            "repository": {"default_branch": "main"},
+            "workflow_run": {
+                "conclusion": "success",
+                "event": "pull_request",
+                "pull_requests": [{"number": 19, "base": {"ref": "main"}}],
+            },
+        },
+        fetch_alerts,
+        settle_timeout_seconds=0,
+        poll_interval_seconds=0,
+        monotonic=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result.status == "fail"
+    assert calls == [{"pr": 19}, {"ref": "refs/heads/main"}]
+    assert "#45" in result.message
