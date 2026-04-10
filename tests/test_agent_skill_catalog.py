@@ -13,6 +13,7 @@ import yaml
 
 ALL_SKILLS: tuple[str, ...] = (
     "ai-regression-testing",
+    "caveman",
     "context-budget",
     "deployment-patterns",
     "django-patterns",
@@ -37,6 +38,7 @@ ALL_SKILLS: tuple[str, ...] = (
 
 REPO_NATIVE_SKILLS: frozenset[str] = frozenset(
     {
+        "caveman",
         "docs-knowledge-maintainer",
         "env-contract-reviewer",
         "frontend-preview",
@@ -72,6 +74,22 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
             ("path mismatches", "host-vs-container", "request-vs-service-account"),
         ),
         adapter_phrases=("regression", "fix"),
+    ),
+    "caveman": SkillScenario(
+        scenario=(
+            "A maintainer explicitly asks for lower-token replies but still needs "
+            "the repo's safety rules, exact file references, and clear escalation "
+            "back to normal detail when a risky step appears."
+        ),
+        skill_phrases=(
+            "lower token usage",
+            "user explicitly asks",
+            "context-budget",
+            "compression never outranks correctness",
+            ("drop compression", "return to normal detail"),
+            "destructive actions",
+        ),
+        adapter_phrases=("tokens", "terse"),
     ),
     "context-budget": SkillScenario(
         scenario=(
@@ -421,7 +439,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
         self,
     ) -> None:
         self.assertEqual(set(ALL_SKILLS), set(self.skill_dirs))
-        self.assertEqual(21, len(self.skill_dirs))
+        self.assertEqual(22, len(self.skill_dirs))
         self.assertEqual(set(ALL_SKILLS), set(SKILL_SCENARIOS))
 
     def test_every_skill_has_frontmatter_adapter_and_catalog_entry(self) -> None:

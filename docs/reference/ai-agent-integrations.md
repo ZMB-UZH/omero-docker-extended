@@ -41,9 +41,26 @@ Instead it uses:
 
 This avoids importing ECC hooks, commands, multi-agent orchestration, or platform configs that would disturb the repo's existing workflows.
 
+## Caveman integration model
+
+This repository also carries an opt-in Caveman communication overlay:
+
+- vendored upstream reference material under `third_party/caveman-v1.3.5/`
+- a repo-local overlay at `.agents/skills/caveman/`
+- small adapter reminders in `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md`
+
+Compression stays opt-in and quality-first:
+
+- use `context-budget` to reduce input/context cost first
+- use `caveman` only when the user explicitly asks for lower-token replies
+- default to lite compression and return to normal detail whenever safety, sequencing, or ambiguity matters
+
+The upstream Caveman hooks, plugin auto-loading, and compression-tool context rewriting are not activated in this repo.
+
 ## What is intentionally imported
 
 - engineering skills relevant to this repo: Python, Django, testing, verification, Docker, deployment, PostgreSQL, security, research, and context-budget control
+- the opt-in `caveman` overlay for lower-token replies when the user explicitly requests terseness
 - ECC provenance and license material for the selected upstream skills
 - harness-specific adapters that route agents into the repo's existing docs and tests
 
@@ -53,6 +70,7 @@ This avoids importing ECC hooks, commands, multi-agent orchestration, or platfor
 - ECC command shims
 - ECC multi-agent orchestration and loop automation
 - ECC MCP server configs
+- Caveman hook runtime, plugin auto-loading, and `/compress` context-rewrite automation
 - unrelated domain skills such as business-content, media-generation, or social-distribution
 
 ## Token and speed guidance
@@ -62,6 +80,7 @@ The adapter set is designed to improve accuracy first, then reduce wasted contex
 - route agents into `AGENTS.md`, `docs/reference/ai-agent-context-routing.md`, and the nearest domain doc before broad repo reads
 - keep the routing doc's numeric caps CI-validated so first-pass reads, refine loops, and escalation stay bounded
 - expose reusable workflows through `.agents/skills/`
+- prefer `context-budget` for input reduction and the opt-in `caveman` overlay for output reduction
 - add path-specific Copilot and Cursor guidance so agents do not rediscover the same rules every time
 - keep `AGENTS.md`, Claude, Gemini, Copilot, and Cursor core rules concise so they do not bloat always-on context
 
@@ -80,6 +99,6 @@ These hooks are Claude Code-specific (other harnesses do not support hooks). The
 ## Maintenance rules
 
 - Update `docs/index.md` when this surface changes.
-- Update `docs/reference/ai-agent-upstream-sources.md` when the ECC snapshot or selected upstream skills change.
+- Update `docs/reference/ai-agent-upstream-sources.md` when the ECC snapshot, vendored Caveman references, or selected upstream skills change.
 - For ECC-derived local skills, keep the repo overlay concise and point to the pinned upstream snapshot.
 - Run `python3 tools/lint_docs_structure.py` and the AI-surface regression tests after changing any adapter or skill file.

@@ -7,6 +7,7 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract, [docs/reference
 - Start with `AGENTS.md`, then load the smallest correct task slice from the routing doc.
 - Honor the routing doc's numeric caps before broadening context.
 - Use repo-local skills from `.agents/skills/` when they match the task.
+- If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill and return to normal detail for destructive actions, security guidance, or unresolved ambiguity.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.
 - Do not edit `env/omero_secrets.env`.
 - Do not use background agents or subagents unless the user explicitly asks for them.
@@ -35,5 +36,4 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract, [docs/reference
 - Gemini CLI: `GEMINI.md`
 - Cursor: `.cursor/rules/`
 - Platform map and upkeep rules: `docs/reference/ai-agent-integrations.md`
-- Deep runtime procedure: `docs/reference/ai-agent-runtime-playbook.md`
-- Pinned ECC upstream source map: `docs/reference/ai-agent-upstream-sources.md`
+- Deep runtime procedure and pinned upstream source map: `docs/reference/ai-agent-runtime-playbook.md`, `docs/reference/ai-agent-upstream-sources.md`
