@@ -483,8 +483,9 @@ class AgentSkillCatalogTests(unittest.TestCase):
                     self.assertIn("## Upstream baseline", skill_text)
 
                 self.assertIsInstance(adapter, dict)
+                expected_implicit_policy = skill_name != "caveman"
                 self.assertEqual(
-                    True,
+                    expected_implicit_policy,
                     adapter.get("policy", {}).get("allow_implicit_invocation"),
                 )
                 interface = adapter.get("interface", {})
