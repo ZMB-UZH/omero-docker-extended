@@ -114,6 +114,11 @@ class CavemanSkillContractTests(unittest.TestCase):
     def test_readme_documents_opt_in_caveman_badge(self) -> None:
         readme_text = self.read_text("README.md")
         self.assertIn("[![caveman](", readme_text)
+        self.assertIn("https://img.shields.io/badge/caveman-555", readme_text)
+        self.assertNotIn(
+            "https://img.shields.io/badge/caveman-555?logo=github&labelColor=555",
+            readme_text,
+        )
         self.assertIn("https://github.com/JuliusBrussee/caveman", readme_text)
 
 
