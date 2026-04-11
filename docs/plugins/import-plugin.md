@@ -46,9 +46,12 @@ Related docs:
   env-driven build args loaded from `env/omeroserver.env`
   (`OMERO_CLI_ZARR_VERSION`, `BIOFORMATS2RAW_VERSION`,
   `OME_ZARR_PY_VERSION`) so native Zarr behavior stays reproducible and
-  upgrades remain deliberate. The tracked example env pins `ome-zarr` to
-  `0.14.0`, and changing that runtime is an environment/build decision rather
-  than an in-code constant.
+  upgrades remain deliberate. The tracked example env now pins `ome-zarr` to
+  `0.15.0`. That upstream release deprecates legacy writer targets (`v01` to
+  `v03`), but this repo uses `ome-zarr` only for detection and read-side
+  inspection while the normalization write path stays repo-local, so the
+  upgrade remains an environment/build decision rather than an in-code writer
+  contract change.
 - **Zarr pre-flight scan and routing persistence**: the Bio-Formats dry-run
   (`omero import -f`) is still used for all non-zarr imports and for `.zarr`
   compatibility planning. When that dry-run says the staged `.zarr` is

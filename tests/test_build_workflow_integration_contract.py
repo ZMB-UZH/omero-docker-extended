@@ -727,6 +727,30 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             security_workflow,
         )
 
+    def test_python_backed_ci_workflows_pin_exact_setup_python_runtime(self) -> None:
+        import yaml  # noqa: F811  — available in CI
+
+        expected_versions = {
+            ".github/workflows/docs-knowledge-base.yml": ["3.14.4"],
+            ".github/workflows/tests.yml": ["3.14.4"],
+            ".github/workflows/vulture.yml": ["3.14.4"],
+            ".github/workflows/security-code-scanning.yml": ["3.14.4", "3.14.4"],
+        }
+
+        for relative_path, expected in expected_versions.items():
+            workflow = yaml.safe_load(
+                (self.repo_root / relative_path).read_text(encoding="utf-8")
+            )
+            actual = [
+                step["with"]["python-version"]
+                for job in workflow["jobs"].values()
+                for step in job.get("steps", [])
+                if step.get("uses")
+                == "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405"
+            ]
+            with self.subTest(relative_path=relative_path):
+                self.assertEqual(expected, actual)
+
     def test_super_linter_workflow_is_pinned_and_covers_repo_hygiene_surfaces(
         self,
     ) -> None:
@@ -850,7 +874,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertEqual({"contents": "read"}, workflow["permissions"])
         self.assertEqual(
-            "semgrep/semgrep:1.156.0@sha256:a3d49dc967b8534a6a76628e50c51cbfe33eb7195dc2feab1fdc0f100852c8ef",
+            "semgrep/semgrep:1.159.0@sha256:d7d67e1e0c0ed26278ab35f0be082f0afdfd7a880f4927aee86f8127fdbce617",
             workflow["jobs"]["semgrep"]["container"]["image"],
         )
 
