@@ -766,7 +766,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "${{ secrets.GITHUB_TOKEN }}", lint_step["env"]["GITHUB_TOKEN"]
         )
         self.assertEqual(
-            "(^|/)third_party/(ecc-v1\\.10\\.0|caveman-v1\\.3\\.5)/",
+            "(^|/)third_party/(ecc-v1\\.10\\.0|caveman-v1\\.5\\.0)/",
             lint_step["env"]["FILTER_REGEX_EXCLUDE"],
         )
         self.assertEqual(".", lint_step["env"]["LINTER_RULES_PATH"])
@@ -792,7 +792,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertFalse(markdown_config["MD033"])
         self.assertEqual(
-            "third_party/ecc-v1.10.0/**\nthird_party/caveman-v1.3.5/**\n",
+            "third_party/ecc-v1.10.0/**\nthird_party/caveman-v1.5.0/**\n",
             (self.repo_root / ".markdownlintignore").read_text(encoding="utf-8"),
         )
 

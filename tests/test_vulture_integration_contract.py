@@ -74,7 +74,7 @@ class VultureIntegrationContractTests(TestCase):
             "tests/test_vulture_integration_contract.py",
             "omeroweb_import/tests/test_core_function_helpers.py",
             "docs/conf.py",
-            "third_party/caveman-v1.3.5/tools/helper.py",
+            "third_party/caveman-v1.5.0/tools/helper.py",
             ".agents/skills/caveman/SKILL.md",
             ".github/scripts/helper.py",
             "omeroweb_import/conftest.py",
