@@ -10,7 +10,7 @@
 [![Ruff](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/ruff.yml?branch=main&logo=ruff&label=Ruff)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/ruff.yml)
 [![Vulture](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/vulture.yml?branch=main&logo=python&label=Vulture)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/vulture.yml)
 [![everything-claude-code](https://img.shields.io/static/v1?label=everything-claude-code&message=ECC+v1.10.0+skills&color=0F766E&logo=github)](https://github.com/affaan-m/everything-claude-code/tree/v1.10.0/skills)
-[![Caveman](https://img.shields.io/badge/Caveman-555?logo=github&labelColor=555)](https://github.com/JuliusBrussee/caveman)
+[![caveman](https://img.shields.io/badge/caveman-555?logo=github&labelColor=555)](https://github.com/JuliusBrussee/caveman)
 <!-- END GENERATED BADGES -->
 
 Production-grade (see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom OMERO.web plugins for microscopy metadata workflows, file upload/import management, direct Imaris 11 integration, administrator tools, and a full server monitoring stack.
@@ -373,7 +373,7 @@ Both operations are designed for online use. They may briefly acquire locks; the
 <summary><h2>Documentation</h2></summary>
 
 Optional AI-agent compression is available via the opt-in
-[`caveman`](https://github.com/JuliusBrussee/caveman) overlay.
+[`caveman`](https://github.com/JuliusBrussee/caveman) overlay for internal AI communication only. Repository documentation, comments, docstrings, function descriptions, and user-facing text stay in standard prose.
 
 | Entry point | Purpose |
 | --- | --- |
@@ -383,7 +383,7 @@ Optional AI-agent compression is available via the opt-in
 | [`GEMINI.md`](GEMINI.md) | Gemini CLI project context |
 | [`docs/reference/ai-agent-skills.md`](docs/reference/ai-agent-skills.md) | Harness-neutral skill catalog for recurring AI-agent workflows |
 | [`docs/reference/ai-agent-integrations.md`](docs/reference/ai-agent-integrations.md) | Native adapter map for Copilot, Cursor, Claude, Gemini, and shared skills |
-| [`docs/reference/ai-agent-upstream-sources.md`](docs/reference/ai-agent-upstream-sources.md) | Pinned upstream provenance for ECC-derived local skills and vendored Caveman references |
+| [`docs/reference/ai-agent-upstream-sources.md`](docs/reference/ai-agent-upstream-sources.md) | Pinned upstream provenance for ECC-derived local skills and vendored caveman prompt references |
 | [`docs/index.md`](docs/index.md) | Full documentation index with cross-links |
 | [`docs/deployment/quickstart.md`](docs/deployment/quickstart.md) | Step-by-step deployment guide |
 | [`docs/deployment/configuration.md`](docs/deployment/configuration.md) | Configuration reference |

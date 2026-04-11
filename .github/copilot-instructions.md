@@ -7,7 +7,12 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract, [docs/reference
 - Start with `AGENTS.md`, then load the smallest correct task slice from the routing doc.
 - Honor the routing doc's numeric caps before broadening context.
 - Use repo-local skills from `.agents/skills/` when they match the task.
-- If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill. It changes reply style only and never changes routing, tool choice, verification scope, or uncertainty handling. Return to normal detail for destructive actions, security guidance, or unresolved ambiguity.
+- If the user explicitly asks for lower-token replies, use the opt-in `caveman`
+  skill. It is for internal AI communication only, never for repo docs,
+  comments, docstrings, function descriptions, or user-facing copy, and it
+  changes reply style only, not routing, tool choice, verification scope, or
+  uncertainty handling. Return to normal detail for destructive actions,
+  security guidance, or unresolved ambiguity.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.
 - Do not edit `env/omero_secrets.env`.
 - Do not use background agents or subagents unless the user explicitly asks for them.
@@ -23,17 +28,11 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract, [docs/reference
 
 ## Security rules
 
-- Before security-sensitive edits, read:
-  1. `docs/reference/ai-agent-security-prevention-playbook.md`
-  2. `docs/reference/code-scanning-resolved-findings.md`
-  3. `docs/operations/code-scanning.md`
+- Before security-sensitive edits, follow the mandatory read order in `AGENTS.md`.
 - Use official upstream docs and release notes for version-sensitive facts.
 - Never paste PATs, passwords, tokens, or internal-only URLs into external tools.
 
 ## Cross-agent surfaces
 
-- Claude Code: `CLAUDE.md`
-- Gemini CLI: `GEMINI.md`
-- Cursor: `.cursor/rules/`
-- Platform map and upkeep rules: `docs/reference/ai-agent-integrations.md`
-- Deep runtime procedure and pinned upstream source map: `docs/reference/ai-agent-runtime-playbook.md`, `docs/reference/ai-agent-upstream-sources.md`
+- Claude Code: `CLAUDE.md`; Gemini CLI: `GEMINI.md`; Cursor: `.cursor/rules/`
+- Platform map and upkeep rules: `docs/reference/ai-agent-integrations.md`; deep runtime procedure and pinned upstream source map: `docs/reference/ai-agent-runtime-playbook.md`, `docs/reference/ai-agent-upstream-sources.md`

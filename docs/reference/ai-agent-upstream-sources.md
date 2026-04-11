@@ -38,12 +38,19 @@ The files under `.agents/skills/` are the active repo-specific overlays. They ar
 
 Do not replace the local overlays with the upstream files verbatim unless the repo's own workflow contracts have been reviewed and preserved.
 
-## Caveman reference snapshot
+## caveman reference snapshot
 
 - Repository: `JuliusBrussee/caveman`
-- Caveman release tag: `v1.3.5`
-- Caveman release commit: `92f892f2b99744a4501f35bce9a2e384878e4877`
-- Caveman vendor path: `third_party/caveman-v1.3.5/`
-- License: MIT (`third_party/caveman-v1.3.5/LICENSE`)
-- Selected upstream reference: `third_party/caveman-v1.3.5/skills/caveman/SKILL.md`
-- Integration rule: the active repo surface is `.agents/skills/caveman/`; it is an opt-in overlay for lower-token replies only. Upstream hooks, plugin auto-loading, and compression-tool context rewriting stay disabled, and the local overlay changes reply style only without changing routing, tool choice, verification scope, or uncertainty handling.
+- Reviewed release notes: `v1.4.0`, `v1.4.1`, and `v1.5.0` for the upgrade path from the prior `v1.3.5` pin
+- caveman release tag: `v1.5.0`
+- caveman release commit: `c80f8d7fe1cf5a7536020db15b7ab8620e0c90f3`
+- caveman vendor path: `third_party/caveman-v1.5.0/`
+- License: MIT (`third_party/caveman-v1.5.0/LICENSE`)
+- Vendored files: `LICENSE` and `skills/caveman/SKILL.md` only. Upstream README/install docs stay upstream-only so repo docs remain standard prose.
+- Selected upstream reference: `third_party/caveman-v1.5.0/skills/caveman/SKILL.md`
+- Integration rule: the active repo surface is `.agents/skills/caveman/`; it
+  is an opt-in overlay for lower-token replies and internal AI prompting only.
+  Upstream auto-activation hooks, `CAVEMAN_DEFAULT_MODE`/config resolution,
+  `off`, `caveman-help`, and compression-tool context rewriting stay disabled,
+  and the local overlay starts at lite compression without changing routing,
+  tool choice, verification scope, or uncertainty handling.
