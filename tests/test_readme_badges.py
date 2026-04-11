@@ -65,7 +65,7 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
-            badge_block.index("[![Caveman]("),
+            badge_block.index("[![caveman]("),
         )
         self.assertLess(
             badge_block.index("[![GitHub commit activity]("),
@@ -130,7 +130,7 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block,
         )
         self.assertIn(
-            "https://img.shields.io/badge/Caveman-555?logo=github&labelColor=555",
+            "https://img.shields.io/badge/caveman-555?logo=github&labelColor=555",
             badge_block,
         )
         self.assertIn(

@@ -1,4 +1,4 @@
-"""Contract tests for the opt-in Caveman integration."""
+"""Contract tests for the opt-in caveman integration."""
 
 from __future__ import annotations
 
@@ -18,12 +18,15 @@ class CavemanSkillContractTests(unittest.TestCase):
 
     def test_vendored_caveman_reference_exists(self) -> None:
         self.assertTrue(
-            (self.repo_root / "third_party/caveman-v1.3.5/LICENSE").is_file()
+            (self.repo_root / "third_party/caveman-v1.5.0/LICENSE").is_file()
         )
         self.assertTrue(
             (
-                self.repo_root / "third_party/caveman-v1.3.5/skills/caveman/SKILL.md"
+                self.repo_root / "third_party/caveman-v1.5.0/skills/caveman/SKILL.md"
             ).is_file()
+        )
+        self.assertFalse(
+            (self.repo_root / "third_party/caveman-v1.5.0/README.md").exists()
         )
 
     def test_active_caveman_skill_is_guarded_and_repo_specific(self) -> None:
@@ -34,7 +37,11 @@ class CavemanSkillContractTests(unittest.TestCase):
         self.assertIn("must not change context selection", skill_text)
         self.assertIn("Compression never outranks correctness", skill_text)
         self.assertIn("Drop compression and return to normal detail", skill_text)
-        self.assertIn("third_party/caveman-v1.3.5/skills/caveman/SKILL.md", skill_text)
+        self.assertIn("internal AI reply/prompting only", skill_text)
+        self.assertIn("Never use caveman prose", skill_text)
+        self.assertIn("CAVEMAN_DEFAULT_MODE", skill_text)
+        self.assertIn("caveman-help", skill_text)
+        self.assertIn("third_party/caveman-v1.5.0/skills/caveman/SKILL.md", skill_text)
 
     def test_caveman_adapter_disables_implicit_invocation(self) -> None:
         adapter = yaml.safe_load(
@@ -45,6 +52,7 @@ class CavemanSkillContractTests(unittest.TestCase):
             "explicitly asks",
             adapter["interface"]["default_prompt"],
         )
+        self.assertIn("normal prose", adapter["interface"]["default_prompt"])
 
     def test_cross_agent_surfaces_present_caveman_as_opt_in(self) -> None:
         tracked_surfaces = (
@@ -72,6 +80,29 @@ class CavemanSkillContractTests(unittest.TestCase):
                     or "verification scope" in text_lower
                 )
 
+    def test_public_docs_keep_caveman_prompt_only(self) -> None:
+        tracked_docs = (
+            "README.md",
+            "AGENTS.md",
+            "docs/reference/ai-agent-skills.md",
+            "docs/reference/ai-agent-integrations.md",
+            "docs/reference/ai-agent-upstream-sources.md",
+        )
+        for relative_path in tracked_docs:
+            with self.subTest(relative_path=relative_path):
+                text_lower = self.read_text(relative_path).lower()
+                self.assertIn("caveman", text_lower)
+                self.assertTrue(
+                    "internal ai" in text_lower
+                    or "internal ai communication" in text_lower
+                )
+                self.assertTrue(
+                    "normal prose" in text_lower
+                    or "standard prose" in text_lower
+                    or "never rewrite" in text_lower
+                    or "user-facing copy" in text_lower
+                )
+
     def test_repo_does_not_activate_upstream_caveman_runtime(self) -> None:
         integrations_text = self.read_text("docs/reference/ai-agent-integrations.md")
         self.assertIn("plugin auto-loading", integrations_text)
@@ -82,7 +113,7 @@ class CavemanSkillContractTests(unittest.TestCase):
 
     def test_readme_documents_opt_in_caveman_badge(self) -> None:
         readme_text = self.read_text("README.md")
-        self.assertIn("[![Caveman](", readme_text)
+        self.assertIn("[![caveman](", readme_text)
         self.assertIn("https://github.com/JuliusBrussee/caveman", readme_text)
 
 
