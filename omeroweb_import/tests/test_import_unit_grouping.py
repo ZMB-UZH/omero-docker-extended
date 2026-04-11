@@ -2071,7 +2071,7 @@ def test_build_import_units_preserves_precomputed_zarr_routing(
     job, _ = _stage_relative_paths(upload_root, ["image.ome.zarr/.zattrs"])
     job["files"][0]["compatibility"] = "compatible"
     job["files"][0]["compatibility_details"] = (
-        "OME-Zarr image detected by ome-zarr 0.14.0"
+        "OME-Zarr image detected by ome-zarr 0.15.0"
     )
     job["files"][0]["import_backend"] = core_functions._ZARR_IMPORT_BACKEND_NATIVE
     job["files"][0]["native_zarr_plan"] = {
@@ -2079,7 +2079,7 @@ def test_build_import_units_preserves_precomputed_zarr_routing(
         "recognized_zarr": True,
         "validation_error": None,
         "verify_lsid_prefix": False,
-        "compatibility_details": "OME-Zarr image detected by ome-zarr 0.14.0",
+        "compatibility_details": "OME-Zarr image detected by ome-zarr 0.15.0",
     }
 
     scan_mock = type("Result", (), {"stdout": "", "stderr": "", "returncode": 0})()
@@ -2093,7 +2093,7 @@ def test_build_import_units_preserves_precomputed_zarr_routing(
     assert units[0]["compatibility"] == "compatible"
     assert (
         units[0]["compatibility_details"]
-        == "OME-Zarr image detected by ome-zarr 0.14.0"
+        == "OME-Zarr image detected by ome-zarr 0.15.0"
     )
     assert units[0]["import_backend"] == core_functions._ZARR_IMPORT_BACKEND_NATIVE
     assert (
@@ -2148,14 +2148,14 @@ def test_import_job_entry_uses_precomputed_native_zarr_route_without_rescanning(
             "covered_indexes": [0],
             "covered_relative_paths": ["image.ome.zarr/.zattrs"],
             "compatibility": "compatible",
-            "compatibility_details": "OME-Zarr image detected by ome-zarr 0.14.0",
+            "compatibility_details": "OME-Zarr image detected by ome-zarr 0.15.0",
             "import_backend": core_functions._ZARR_IMPORT_BACKEND_NATIVE,
             "native_zarr_plan": {
                 "kind": core_functions._NATIVE_ZARR_KIND_OME_ZARR,
                 "recognized_zarr": True,
                 "validation_error": None,
                 "verify_lsid_prefix": False,
-                "compatibility_details": "OME-Zarr image detected by ome-zarr 0.14.0",
+                "compatibility_details": "OME-Zarr image detected by ome-zarr 0.15.0",
             },
         },
         upload_root,

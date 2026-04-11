@@ -23,7 +23,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
     def test_omeroserver_example_defines_native_zarr_build_versions(self) -> None:
         env_text = self.read_text("env/omeroserver_example.env")
         self.assertIn("OMERO_CLI_ZARR_VERSION=0.8.0", env_text)
-        self.assertIn("OME_ZARR_PY_VERSION=0.14.0", env_text)
+        self.assertIn("OME_ZARR_PY_VERSION=0.15.0", env_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=0.11.0", env_text)
 
     def test_compose_requires_build_versions_from_omeroserver_env(self) -> None:
