@@ -74,11 +74,12 @@ class AgentSkillUpstreamSources:
         return self.repo_name
 
     @property
+    def repo_url(self) -> str:
+        return f"https://github.com/{self.repo_slug}"
+
+    @property
     def skills_tree_url(self) -> str:
-        return (
-            f"https://github.com/{self.repo_slug}/tree/"
-            f"{self.tag}/{self.upstream_skill_root}"
-        )
+        return f"{self.repo_url}/tree/{self.tag}/{self.upstream_skill_root}"
 
     @property
     def badge_image_url(self) -> str:

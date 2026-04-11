@@ -205,7 +205,7 @@ def render_badge_block(
         f"[![super-linter](https://img.shields.io/github/actions/workflow/status/{github_path}/super-linter.yml?branch={branch}&label=super-linter&logo=github)](https://github.com/{github_path}/actions/workflows/super-linter.yml)",
         f"[![Ruff](https://img.shields.io/github/actions/workflow/status/{github_path}/ruff.yml?branch={branch}&logo=ruff&label=Ruff)](https://github.com/{github_path}/actions/workflows/ruff.yml)",
         f"[![Vulture](https://img.shields.io/github/actions/workflow/status/{github_path}/vulture.yml?branch={branch}&logo=python&label=Vulture)](https://github.com/{github_path}/actions/workflows/vulture.yml)",
-        f"[![{upstream_sources.badge_title}]({upstream_sources.badge_image_url})]({upstream_sources.skills_tree_url})",
+        f"[![{upstream_sources.badge_title}]({upstream_sources.badge_image_url})]({upstream_sources.repo_url})",
         f"[![{CAVEMAN_BADGE_TITLE}]({CAVEMAN_BADGE_IMAGE_URL})]({CAVEMAN_BADGE_TARGET_URL})",
         BADGE_BLOCK_END,
     ]
