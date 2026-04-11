@@ -41,11 +41,11 @@ Instead it uses:
 
 This avoids importing ECC hooks, commands, multi-agent orchestration, or platform configs that would disturb the repo's existing workflows.
 
-## Caveman integration model
+## caveman integration model
 
-This repository also carries an opt-in Caveman communication overlay:
+This repository also carries an opt-in `caveman` communication overlay:
 
-- vendored upstream reference material under `third_party/caveman-v1.3.5/`
+- vendored upstream prompt reference material under `third_party/caveman-v1.5.0/`
 - a repo-local overlay at `.agents/skills/caveman/`
 - small adapter reminders in `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md`
 
@@ -53,10 +53,13 @@ Compression stays opt-in and quality-first:
 
 - use `context-budget` to reduce input/context cost first
 - use `caveman` only when the user explicitly asks for lower-token replies
-- default to lite compression and return to normal detail whenever safety, sequencing, or ambiguity matters
+- start at lite compression in this repo and return to normal detail whenever safety, sequencing, or ambiguity matters
+- keep `caveman` limited to internal AI communication and prompting; repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text stay in normal prose
 - keep routing, tool use, verification scope, and uncertainty handling identical to normal mode
 
-The upstream Caveman hooks, plugin auto-loading, and compression-tool context rewriting are not activated in this repo.
+Upstream `caveman` `v1.5.0` adds configurable default-mode resolution (`CAVEMAN_DEFAULT_MODE` / `~/.config/caveman/config.json`), `off`, and `caveman-help`. This repo does not import those activation or configuration surfaces.
+
+The upstream `caveman` hooks, plugin auto-loading, and compression-tool context rewriting are not activated in this repo.
 
 ## What is intentionally imported
 
@@ -71,7 +74,7 @@ The upstream Caveman hooks, plugin auto-loading, and compression-tool context re
 - ECC command shims
 - ECC multi-agent orchestration and loop automation
 - ECC MCP server configs
-- Caveman hook runtime, plugin auto-loading, and `/compress` context-rewrite automation
+- `caveman` hook runtime, plugin auto-loading, default-mode config resolution, `off`, `caveman-help`, and `/compress` context-rewrite automation
 - unrelated domain skills such as business-content, media-generation, or social-distribution
 
 ## Token and speed guidance
@@ -100,6 +103,6 @@ These hooks are Claude Code-specific (other harnesses do not support hooks). The
 ## Maintenance rules
 
 - Update `docs/index.md` when this surface changes.
-- Update `docs/reference/ai-agent-upstream-sources.md` when the ECC snapshot, vendored Caveman references, or selected upstream skills change.
+- Update `docs/reference/ai-agent-upstream-sources.md` when the ECC snapshot, vendored `caveman` prompt references, or selected upstream skills change.
 - For ECC-derived local skills, keep the repo overlay concise and point to the pinned upstream snapshot.
 - Run `python3 tools/lint_docs_structure.py` and the AI-surface regression tests after changing any adapter or skill file.
