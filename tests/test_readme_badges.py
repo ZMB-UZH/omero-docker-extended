@@ -130,11 +130,15 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block,
         )
         self.assertIn(
-            "https://img.shields.io/badge/caveman-555",
+            "https://img.shields.io/static/v1?label=&message=caveman&color=555&logo=github&logoColor=white",
             badge_block,
         )
         self.assertNotIn(
             "https://img.shields.io/badge/caveman-555?logo=github&labelColor=555",
+            badge_block,
+        )
+        self.assertNotIn(
+            "https://img.shields.io/badge/caveman-555",
             badge_block,
         )
         self.assertIn(

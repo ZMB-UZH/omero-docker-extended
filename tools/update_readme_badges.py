@@ -20,7 +20,10 @@ BADGE_BLOCK_END = "<!-- END GENERATED BADGES -->"
 README_PATH = Path("README.md")
 CANONICAL_METADATA_PATH = Path(".github/readme_badges.json")
 CAVEMAN_BADGE_TITLE = "caveman"
-CAVEMAN_BADGE_IMAGE_URL = "https://img.shields.io/badge/caveman-555"
+CAVEMAN_BADGE_IMAGE_URL = (
+    "https://img.shields.io/static/v1?label=&message=caveman&color=555"
+    "&logo=github&logoColor=white"
+)
 CAVEMAN_BADGE_TARGET_URL = "https://github.com/JuliusBrussee/caveman"
 
 
