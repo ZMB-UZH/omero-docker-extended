@@ -33,6 +33,16 @@ class AgentSkillProvenanceTests(TestCase):
         self.assertNotIn(self.sources.repo_slug, self.sources.badge_image_url)
         self.assertEqual("everything-claude-code", self.sources.badge_title)
 
+    def test_repo_url_and_skills_tree_url_remain_stable(self) -> None:
+        self.assertEqual(
+            "https://github.com/affaan-m/everything-claude-code",
+            self.sources.repo_url,
+        )
+        self.assertEqual(
+            ("https://github.com/affaan-m/everything-claude-code/tree/v1.10.0/skills"),
+            self.sources.skills_tree_url,
+        )
+
     def test_fetch_text_rejects_unapproved_hosts_and_schemes(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unsupported fetch scheme"):
             agent_skill_provenance.fetch_text("ssh://raw.githubusercontent.com/x/y")

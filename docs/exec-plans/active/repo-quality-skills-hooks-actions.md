@@ -44,34 +44,34 @@ These are repo-local or agent-facing capabilities that would improve the quality
 
 These should be local, fast, and deterministic. They are meant to fail early before a pull request is opened. Existing Ruff and docs hooks are already in place; the items below focus on the remaining gaps.
 
-| Hook                         | What it should run                                                               | Why it matters here                                                                                                 | Priority |
-| ---------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------- |
-| `pre-commit:docs-structure`  | `python3 tools/lint_docs_structure.py`                                           | The repo already enforces docs structure; this is the obvious first local guardrail.                                | Now      |
-| `pre-commit:python-compile`  | `python3 -m py_compile` on changed Python files                                  | Useful fallback when the full Django/OMERO runtime is not available locally.                                        | Now      |
-| `pre-commit:shell-lint`      | `bash -n` plus `shellcheck` for changed `.sh` files                              | Startup and install scripts are critical-path logic, not helper scripts.                                            | Now      |
-| `pre-commit:workflow-lint`   | `actionlint` and YAML validation for `.github/workflows/*.yml`                   | Workflow breakage is costly and currently only caught after push.                                                   | Now      |
-| `pre-commit:dockerfile-lint` | `hadolint` on changed Dockerfiles                                                | The repo already treats Dockerfiles as security-sensitive infrastructure code.                                      | Now      |
-| `pre-commit:secret-surface`  | block edits/commits of operator-managed secrets and runtime-only env files       | The repo explicitly forbids AI edits to `env/omero_secrets.env` and relies on example files as canonical templates. | Now      |
-| `pre-push:split-pytest`      | run only the relevant test directory, one suite at a time                        | `AGENTS.md` explicitly requires split pytest execution to avoid conftest cross-contamination.                       | Next     |
-| `pre-push:docs-drift`        | grep for stale plugin names, stale service counts, and missing env-file guidance | The repo already shows drift around `omeroweb_upload`, service counts, and compose command examples.                | Next     |
-| `pre-push:compose-contract`  | lightweight compose/workflow sanity checks when Docker or env templates change   | Compose failures in this repo often come from env interpolation and runtime permissions, not syntax alone.          | Next     |
+| Hook | What it should run | Why it matters here | Priority |
+| --- | --- | --- | --- |
+| `pre-commit:docs-structure` | `python3 tools/lint_docs_structure.py` | The repo already enforces docs structure; this is the obvious first local guardrail. | Now |
+| `pre-commit:python-compile` | `python3 -m py_compile` on changed Python files | Useful fallback when the full Django or OMERO runtime is not available locally. | Now |
+| `pre-commit:shell-lint` | `bash -n` plus `shellcheck` for changed `.sh` files | Startup and install scripts are critical-path logic, not helper scripts. | Now |
+| `pre-commit:workflow-lint` | `actionlint` and YAML validation for `.github/workflows/*.yml` | Workflow breakage is costly and currently only caught after push. | Now |
+| `pre-commit:dockerfile-lint` | `hadolint` on changed Dockerfiles | The repo already treats Dockerfiles as security-sensitive infrastructure code. | Now |
+| `pre-commit:secret-surface` | block edits and commits of operator-managed secrets and runtime-only env files | The repo explicitly forbids AI edits to `env/omero_secrets.env` and relies on example files as canonical templates. | Now |
+| `pre-push:split-pytest` | run only the relevant test directory, one suite at a time | `AGENTS.md` explicitly requires split pytest execution to avoid conftest cross-contamination. | Next |
+| `pre-push:docs-drift` | check for stale plugin names, stale topology facts, and missing env-file guidance | The repo has already fixed compose-command and service-count drift once, while stale `omeroweb_upload` references still remain. | Next |
+| `pre-push:compose-contract` | lightweight compose and workflow sanity checks when Docker or env templates change | Compose failures in this repo often come from env interpolation and runtime permissions, not syntax alone. | Next |
 
 ## Recommended GitHub Actions
 
 The current workflows already cover docs validation, split tests, Ruff, Vulture, super-linter, and security scanning. Quality would still improve if the repository added the missing infrastructure and drift-specific lanes below.
 
-| Workflow                                          | What it should do                                                                                                                                                                         | Why it is grounded in this repo                                                      | Priority |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | -------- |
-| change-aware test selection lane                  | skip or narrow expensive lanes based on touched paths while preserving the existing `tests.yml` split-suite contract                                                                       | The repo already has the full split-test workflow; the missing piece is path-aware speed. | Next     |
-| lightweight local-quality mirror lane             | run `python3 -m py_compile`, docs lint, and lightweight static checks on changed files                                                                                                    | The repo has strong CI gates now, but local and changed-file feedback is still thinner. | Next     |
-| `shell-and-workflow-lint.yml`                     | run `shellcheck`, `actionlint`, and YAML validation                                                                                                                                       | The repo has many shell and workflow files but no dedicated enforcement lane.        | Now      |
-| `docker-smoke.yml`                                | build changed Dockerfiles and run targeted smoke/contract tests                                                                                                                           | Dockerfiles and startup wrappers are central to repo correctness.                    | Now      |
-| `docs-drift.yml`                                  | catch stale plugin names, stale service counts, and missing index entries                                                                                                                 | Current repo state already shows this class of drift.                                | Now      |
-| `security-code-scanning.yml` `security-delta` job | fail when new code-scanning alerts are introduced by the current security workflow run                                                                                                    | The security runbook already defines severity SLAs and merge expectations.           | Done     |
-| `action-pin-policy.yml`                           | verify GitHub Actions stay pinned to approved SHAs and least-privilege permissions                                                                                                        | SHA pinning is in place now, but the repo still lacks an automated guard against regression. | Next |
-| `release-hygiene.yml`                             | require release-note/docs updates when startup, env, or operator behavior changes                                                                                                         | The repo says docs must change when behavior changes, but the rule is not automated. | Next     |
-| `dependency-hygiene.yml`                          | validate Dependabot coverage and optionally inventory dependency surfaces                                                                                                                 | Dependabot exists but only covers a narrow subset of the repo.                       | Later    |
-| `nightly-stack-validation.yml`                    | run a slower compose-level validation path on a schedule or manual dispatch                                                                                                               | The repo already notes the absence of a full deployment validation suite.            | Later    |
+| Workflow | What it should do | Why it is grounded in this repo | Priority |
+| --- | --- | --- | --- |
+| change-aware test selection lane | skip or narrow expensive lanes based on touched paths while preserving the existing `tests.yml` split-suite contract | The repo already has the full split-test workflow; the missing piece is path-aware speed. | Next |
+| lightweight local-quality mirror lane | run `python3 -m py_compile`, docs lint, and lightweight static checks on changed files | The repo has strong CI gates now, but local and changed-file feedback is still thinner. | Next |
+| `shell-and-workflow-lint.yml` | run `shellcheck`, `actionlint`, and YAML validation | The repo has many shell and workflow files but no dedicated enforcement lane. | Now |
+| `docker-smoke.yml` | build changed Dockerfiles and run targeted smoke and contract tests | Dockerfiles and startup wrappers are central to repo correctness. | Now |
+| `docs-drift.yml` | catch stale plugin names, stale topology facts, and missing index entries | The repo already benefits from narrower docs-drift regression tests, but stale plugin-name cleanup and broader drift enforcement are still incomplete. | Now |
+| `security-code-scanning.yml` `security-delta` job | fail when new code-scanning alerts are introduced by the current security workflow run | The security runbook already defines severity SLAs and merge expectations. | Done |
+| `action-pin-policy.yml` | verify GitHub Actions stay pinned to approved SHAs and least-privilege permissions | SHA pinning is in place now, but the repo still lacks an automated guard against regression. | Next |
+| `release-hygiene.yml` | require release-note and docs updates when startup, env, or operator behavior changes | The repo says docs must change when behavior changes, but the rule is not automated. | Next |
+| `dependency-hygiene.yml` | validate Dependabot coverage and optionally inventory dependency surfaces | Dependabot exists but only covers a narrow subset of the repo. | Later |
+| `nightly-stack-validation.yml` | run a slower compose-level validation path on a schedule or manual dispatch | The repo already notes the absence of a full deployment validation suite. | Later |
 
 ## Related Repo Settings
 
