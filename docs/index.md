@@ -51,6 +51,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `QUALITY_SCORE.md` -- quality scorecard by domain with grades and improvement targets
 - `design-docs/index.md` -- design document catalog
 - `design-docs/acquisition-metadata-search-options.md` -- feasibility study and three options for OMERO.web acquisition-metadata search
+- `design-docs/python-acceleration-options.md` -- investigation of automatic Python acceleration options, Cython limits, and ranked future paths for this repository
 - `exec-plans/active/knowledge-base-bootstrap.md` -- active execution plan
 - `exec-plans/active/repo-feature-capability-roadmap.md` -- grounded roadmap of candidate new product and platform capabilities
 - `exec-plans/active/repo-quality-skills-hooks-actions.md` -- skills, git hooks, GitHub Actions, and repo settings to raise quality
