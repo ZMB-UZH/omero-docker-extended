@@ -146,11 +146,15 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block,
         )
         self.assertIn(
-            self.upstream_sources.skills_tree_url,
+            self.upstream_sources.repo_url,
             badge_block,
         )
         self.assertIn(
             self.upstream_sources.badge_image_url,
+            badge_block,
+        )
+        self.assertNotIn(
+            self.upstream_sources.skills_tree_url,
             badge_block,
         )
         self.assertNotIn(
