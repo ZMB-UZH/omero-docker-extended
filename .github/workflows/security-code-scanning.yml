@@ -107,7 +107,7 @@ jobs:
       contents: read
       security-events: write
     container:
-      image: semgrep/semgrep:1.156.0@sha256:a3d49dc967b8534a6a76628e50c51cbfe33eb7195dc2feab1fdc0f100852c8ef
+      image: semgrep/semgrep:1.159.0@sha256:d7d67e1e0c0ed26278ab35f0be082f0afdfd7a880f4927aee86f8127fdbce617
 
     steps:
       - name: Checkout
@@ -159,7 +159,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: '3.12'
+          python-version: '3.14.4'
 
       - name: Install Bandit
         run: python3 -m pip install --require-hashes --requirement .github/requirements/security-code-scanning.txt
@@ -421,7 +421,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Run DevSkim scan
-        uses: microsoft/DevSkim-Action@4b5047945a44163b94642a1cecc0d93a3f428cc6 # v1
+        uses: microsoft/DevSkim-Action@4b5047945a44163b94642a1cecc0d93a3f428cc6 # v1.0.16
         with:
           directory-to-scan: .
           ignore-globs: "**/.git/**,**/pgdata/**,**/omero_data/**,**/omero_temp/**"
@@ -539,7 +539,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: '3.12'
+          python-version: '3.14.4'
 
       - name: Enforce zero added code scanning alerts
         env:
