@@ -10,7 +10,7 @@
 [![Ruff](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/ruff.yml?branch=main&logo=ruff&label=Ruff)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/ruff.yml)
 [![Vulture](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/vulture.yml?branch=main&logo=python&label=Vulture)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/vulture.yml)
 [![everything-claude-code](https://img.shields.io/static/v1?label=everything-claude-code&message=ECC+v1.10.0+skills&color=0F766E&logo=github)](https://github.com/affaan-m/everything-claude-code/tree/v1.10.0/skills)
-[![caveman](https://img.shields.io/badge/caveman-555?logo=github&labelColor=555)](https://github.com/JuliusBrussee/caveman)
+[![caveman](https://img.shields.io/badge/caveman-555)](https://github.com/JuliusBrussee/caveman)
 <!-- END GENERATED BADGES -->
 
 Production-grade (see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom OMERO.web plugins for microscopy metadata workflows, file upload/import management, direct Imaris 11 integration, administrator tools, and a full server monitoring stack.
