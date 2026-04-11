@@ -52,6 +52,8 @@ class VultureIntegrationContractTests(TestCase):
             "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405",
             uses_values,
         )
+        setup_step = next(step for step in steps if step.get("name") == "Setup Python")
+        self.assertEqual("3.14.4", setup_step["with"]["python-version"])
         self.assertTrue(
             any(
                 "python3 -m pip install --require-hashes --requirement .github/requirements/vulture-ci.txt"
