@@ -1,6 +1,7 @@
 ---
 name: web-discovery
 description: Plan and run current public-web discovery for docs, releases, issues, and community evidence without guessing or over-browsing.
+origin: repo-local web research workflow
 ---
 
 # Web Discovery

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Browser Fallback"
+  short_description: "Deterministic browser steps for JS-heavy pages"
+  brand_color: "#2563EB"
+  default_prompt: "Use $browser-fallback only after direct fetch fails on a JS-heavy or stateful page, and record the exact browser path."
+policy:
+  allow_implicit_invocation: true
