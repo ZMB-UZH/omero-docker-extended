@@ -13,7 +13,9 @@ import yaml
 
 ALL_SKILLS: tuple[str, ...] = (
     "ai-regression-testing",
+    "browser-fallback",
     "caveman",
+    "compliance-and-rate-limit",
     "context-budget",
     "deployment-patterns",
     "django-patterns",
@@ -32,19 +34,27 @@ ALL_SKILLS: tuple[str, ...] = (
     "search-first",
     "security-finding-triager",
     "security-review",
+    "site-extract",
+    "source-audit",
     "tdd-workflow",
     "verification-loop",
+    "web-discovery",
 )
 
 REPO_NATIVE_SKILLS: frozenset[str] = frozenset(
     {
+        "browser-fallback",
         "caveman",
+        "compliance-and-rate-limit",
         "docs-knowledge-maintainer",
         "env-contract-reviewer",
         "frontend-preview",
         "omero-runtime-verifier",
         "plugin-regression-triager",
+        "site-extract",
+        "source-audit",
         "security-finding-triager",
+        "web-discovery",
     }
 )
 
@@ -75,6 +85,21 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
         ),
         adapter_phrases=("regression", "fix"),
     ),
+    "browser-fallback": SkillScenario(
+        scenario=(
+            "A release-note check depends on a JS-heavy docs page, so the agent "
+            "needs a deterministic browser session only after direct fetch and "
+            "bounded extraction fail."
+        ),
+        skill_phrases=(
+            "direct fetch",
+            "js-heavy",
+            "stateful",
+            "deterministic",
+            "minimum reproducible navigation steps",
+        ),
+        adapter_phrases=("browser", "js-heavy"),
+    ),
     "caveman": SkillScenario(
         scenario=(
             "A maintainer explicitly asks for lower-token replies but still needs "
@@ -90,6 +115,21 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
             "destructive actions",
         ),
         adapter_phrases=("tokens", "terse"),
+    ),
+    "compliance-and-rate-limit": SkillScenario(
+        scenario=(
+            "A repeated multi-page docs check is starting to hit policy and load "
+            "limits, so the agent must keep the collection cache-aware, paced, "
+            "and non-evasive."
+        ),
+        skill_phrases=(
+            "official APIs, feeds, sitemaps",
+            "cache",
+            "exponential backoff",
+            ("no bypass", "no evasion"),
+            "stop escalating",
+        ),
+        adapter_phrases=("cache-aware", "paced"),
     ),
     "context-budget": SkillScenario(
         scenario=(
@@ -202,6 +242,35 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
             "github actions version pinning",
         ),
         adapter_phrases=("current", "docs"),
+    ),
+    "site-extract": SkillScenario(
+        scenario=(
+            "A specific public status or release page is already known, and the "
+            "agent only needs the smallest set of fields and dates from it."
+        ),
+        skill_phrases=(
+            "known public page",
+            "structured fields",
+            "page title",
+            "publish/update date",
+            "browser-fallback",
+        ),
+        adapter_phrases=("extract", "public page"),
+    ),
+    "source-audit": SkillScenario(
+        scenario=(
+            "A recommendation about public-web evidence needs source weighting, "
+            "dates, and a clean separation between confirmed facts and "
+            "inference."
+        ),
+        skill_phrases=(
+            "source type",
+            "canonical URL",
+            "independent second source",
+            "confirmed facts",
+            "unresolved uncertainty",
+        ),
+        adapter_phrases=("source quality", "inference"),
     ),
     "env-contract-reviewer": SkillScenario(
         scenario=(
@@ -363,6 +432,20 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
         ),
         adapter_phrases=("verify", "split-test"),
     ),
+    "web-discovery": SkillScenario(
+        scenario=(
+            "A version-sensitive integration question needs current official docs, "
+            "release notes, issue trackers, and broader community evidence "
+            "without guessing."
+        ),
+        skill_phrases=(
+            "current public-web research",
+            "official docs, release notes, source repositories, standards pages, and issue trackers",
+            "exact product names, versions, dates",
+            "source-audit",
+        ),
+        adapter_phrases=("current", "public-web"),
+    ),
 }
 
 
@@ -439,7 +522,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
         self,
     ) -> None:
         self.assertEqual(set(ALL_SKILLS), set(self.skill_dirs))
-        self.assertEqual(22, len(self.skill_dirs))
+        self.assertEqual(27, len(self.skill_dirs))
         self.assertEqual(set(ALL_SKILLS), set(SKILL_SCENARIOS))
 
     def test_every_skill_has_frontmatter_adapter_and_catalog_entry(self) -> None:
