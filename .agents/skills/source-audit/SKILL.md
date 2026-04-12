@@ -1,6 +1,7 @@
 ---
 name: source-audit
 description: Verify public-web findings with source quality, dates, and second-source checks before turning them into advice or claims.
+origin: repo-local web research workflow
 ---
 
 # Source Audit

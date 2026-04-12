@@ -96,14 +96,19 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
         covers=frozenset(
             {
                 "ai-regression-testing",
+                "browser-fallback",
                 "caveman",
+                "compliance-and-rate-limit",
                 "context-budget",
                 "documentation-lookup",
                 "docs-knowledge-maintainer",
                 "frontend-preview",
+                "site-extract",
+                "source-audit",
                 "search-first",
                 "tdd-workflow",
                 "verification-loop",
+                "web-discovery",
             }
         ),
     ),

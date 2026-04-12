@@ -1,6 +1,7 @@
 ---
 name: browser-fallback
 description: Use a deterministic browser workflow only when direct fetch or extraction is insufficient for a public-web task.
+origin: repo-local web research workflow
 ---
 
 # Browser Fallback

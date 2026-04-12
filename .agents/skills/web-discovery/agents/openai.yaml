@@ -1,0 +1,7 @@
+interface:
+  display_name: "Web Discovery"
+  short_description: "Current public-web discovery across primary sources"
+  brand_color: "#0F766E"
+  default_prompt: "Use $web-discovery to gather current official docs, releases, issues, and community evidence without guessing."
+policy:
+  allow_implicit_invocation: true

@@ -1,6 +1,7 @@
 ---
 name: compliance-and-rate-limit
 description: Keep public-web research compliant, bounded, and efficient through rule checks, caching, and backoff instead of evasive scraping.
+origin: repo-local web research workflow
 ---
 
 # Compliance And Rate Limit
