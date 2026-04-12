@@ -1,0 +1,7 @@
+interface:
+  display_name: "Compliance and Rate Limit"
+  short_description: "Bound web collection with cache and backoff"
+  brand_color: "#047857"
+  default_prompt: "Use $compliance-and-rate-limit to keep repeated public-web collection compliant, cache-aware, and paced."
+policy:
+  allow_implicit_invocation: true

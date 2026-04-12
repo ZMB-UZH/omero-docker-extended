@@ -1,6 +1,7 @@
 ---
 name: site-extract
 description: Extract the smallest useful amount of text or structured data from a known public page before falling back to full browser automation.
+origin: repo-local web research workflow
 ---
 
 # Site Extract

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Site Extract"
+  short_description: "Bounded extraction from a known public page"
+  brand_color: "#0369A1"
+  default_prompt: "Use $site-extract to extract only the needed facts from a known public page and keep the URL and date."
+policy:
+  allow_implicit_invocation: true
