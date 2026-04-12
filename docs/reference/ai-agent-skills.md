@@ -26,6 +26,11 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 | --- | --- | --- | --- |
 | `search-first` | `.agents/skills/search-first/SKILL.md` | before adding helpers, integrations, wrappers, or dependencies | repo and upstream evidence are checked before coding |
 | `documentation-lookup` | `.agents/skills/documentation-lookup/SKILL.md` | when a fact is version-sensitive or could have changed recently | answers are grounded in current official docs and releases |
+| `web-discovery` | `.agents/skills/web-discovery/SKILL.md` | when current public-web discovery is needed across docs, releases, issues, or community sources | the search stays bounded and source-first instead of memory-driven |
+| `site-extract` | `.agents/skills/site-extract/SKILL.md` | when a known public page needs structured extraction | extraction stays bounded, citation-ready, and easy to verify |
+| `browser-fallback` | `.agents/skills/browser-fallback/SKILL.md` | when direct fetch is not enough because a page is JS-heavy or stateful | browser use stays deterministic and limited to real need |
+| `source-audit` | `.agents/skills/source-audit/SKILL.md` | before giving advice or claims based on web research | final answers separate confirmed facts, inference, and open gaps |
+| `compliance-and-rate-limit` | `.agents/skills/compliance-and-rate-limit/SKILL.md` | when repeated requests, crawling, or larger-scope extraction could create policy or load risk | collection stays cache-aware, paced, and non-evasive |
 | `verification-loop` | `.agents/skills/verification-loop/SKILL.md` | after non-trivial changes and before PRs | verification states exactly what was checked and what was blocked |
 | `caveman` | `.agents/skills/caveman/SKILL.md` | when the user explicitly asks for lower-token replies or terse mode in AI communication | output tokens drop without losing technical substance or safety |
 | `docs-knowledge-maintainer` | `.agents/skills/docs-knowledge-maintainer/SKILL.md` | when behavior, env contracts, topology, or troubleshooting guidance changes | docs stay aligned with the code and routing model |
