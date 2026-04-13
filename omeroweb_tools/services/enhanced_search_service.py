@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from django.urls import reverse
+from kombu import Connection
 from omero.gateway import BlitzGateway
 from omero.rtypes import rtime
 
@@ -25,6 +26,7 @@ from ..config import (
     build_enhanced_search_celery_config,
     build_enhanced_search_config,
 )
+from ..task_names import ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME
 from .acquisition_metadata import extract_search_document
 from .enhanced_search_store import (
     EnhancedSearchStoreError,
@@ -372,12 +374,15 @@ def _current_user_id(conn) -> int | None:
 def _sync_state_needs_refresh(state: dict[str, Any] | None) -> bool:
     if not state:
         return True
+    stale_after = timedelta(seconds=runtime_config().sync_stale_seconds)
+    updated_at = _normalized_sort_datetime(state.get("updated_at"))
     if state.get("status") == "running":
-        return False
+        if updated_at is None:
+            return True
+        return (datetime.now(timezone.utc) - updated_at) >= stale_after
     last_successful_at = _normalized_sort_datetime(state.get("last_successful_at"))
     if last_successful_at is None:
         return True
-    stale_after = timedelta(seconds=runtime_config().sync_stale_seconds)
     return (datetime.now(timezone.utc) - last_successful_at) >= stale_after
 
 
@@ -1143,6 +1148,26 @@ def _start_threaded_sync(scope: EnhancedSearchScope, run_token: str) -> None:
     worker.start()
 
 
+def _dispatch_scope_sync_task(
+    scope_key: str,
+    run_token: str,
+    celery_config: EnhancedSearchCeleryConfig,
+) -> None:
+    # Import the plugin Celery app lazily so we publish on the enhanced-search
+    # queue without recreating a module-load cycle. The broker connection is
+    # created explicitly here because OMERO.web hosts multiple Celery apps in
+    # the same long-lived web process.
+    from ..celery_app import app as enhanced_search_celery_app
+
+    with Connection(celery_config.broker_url) as broker_connection:
+        enhanced_search_celery_app.send_task(
+            ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME,
+            args=(scope_key, run_token),
+            queue=celery_config.queue,
+            connection=broker_connection,
+        )
+
+
 def request_scope_sync(
     scope_key: str,
     requested_by: str,
@@ -1176,12 +1201,7 @@ def request_scope_sync(
     celery_config = runtime_celery_config()
     if celery_config.enabled:
         try:
-            from ..tasks import run_enhanced_search_scope_sync
-
-            run_enhanced_search_scope_sync.apply_async(
-                args=(scope.scope_key, run_token),
-                queue=celery_config.queue,
-            )
+            _dispatch_scope_sync_task(scope.scope_key, run_token, celery_config)
             return True, "Indexing started."
         except Exception as exc:
             logger.error(

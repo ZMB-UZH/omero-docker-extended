@@ -23,6 +23,7 @@ Design goals:
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -30,6 +31,8 @@ from pathlib import Path
 
 MANIFEST_NAME = ".env_manifest"
 BACKUP_DIR_NAME = ".env_backups"
+INSTALLATION_PATHS_ENV_NAME = "installation_paths.env"
+DOT_ENV_NAME = ".env"
 
 # ---------------------------------------------------------------------------
 # Manifest helpers
@@ -54,6 +57,47 @@ def load_manifest(repo_root: Path) -> list[Path]:
         # relative bookkeeping for checks and backups.
         entries.append(repo_root / line)
     return entries
+
+
+def load_env_assignments(env_path: Path) -> dict[str, str]:
+    """Return simple KEY=VALUE assignments from an env-style file."""
+    if not env_path.exists():
+        return {}
+
+    assignments: dict[str, str] = {}
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        assignments[key] = value.strip().strip("\"'")
+    return assignments
+
+
+def derive_compose_project_name(installation_path: str | Path) -> str:
+    """Return a deterministic compose project name for an installation path."""
+    install_root = Path(str(installation_path).strip() or ".")
+    stem = install_root.name.strip() or "omero"
+    normalized = re.sub(r"[^a-z0-9_-]+", "-", stem.lower()).strip("-_")
+    if not normalized:
+        normalized = "omero"
+    if not normalized[0].isalnum():
+        normalized = f"omero-{normalized}"
+    return normalized
+
+
+def expected_compose_project_name(repo_root: Path) -> str:
+    """Return the canonical compose project name for the declared installation."""
+    installation_env = load_env_assignments(repo_root / INSTALLATION_PATHS_ENV_NAME)
+    installation_path = installation_env.get("OMERO_INSTALLATION_PATH", "").strip()
+    if not installation_path:
+        raise ValueError(
+            f"Missing OMERO_INSTALLATION_PATH in {INSTALLATION_PATHS_ENV_NAME}"
+        )
+    return derive_compose_project_name(installation_path)
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +140,60 @@ def cmd_check(repo_root: Path) -> int:
         return 1
 
     print(f"OK: All {len(entries)} manifest entries present and non-empty.")
+    return 0
+
+
+def cmd_compose_guard(repo_root: Path) -> int:
+    """Refuse compose operations from non-canonical worktrees."""
+    if cmd_check(repo_root) != 0:
+        return 1
+
+    installation_env = load_env_assignments(repo_root / INSTALLATION_PATHS_ENV_NAME)
+    installation_path = installation_env.get("OMERO_INSTALLATION_PATH", "").strip()
+    if not installation_path:
+        print(
+            f"CRITICAL: {INSTALLATION_PATHS_ENV_NAME} does not define OMERO_INSTALLATION_PATH.",
+            file=sys.stderr,
+        )
+        return 1
+
+    declared_root = Path(installation_path).expanduser().resolve()
+    current_root = repo_root.resolve()
+    expected_project_name = expected_compose_project_name(repo_root)
+    dot_env = load_env_assignments(repo_root / DOT_ENV_NAME)
+    configured_project_name = dot_env.get("COMPOSE_PROJECT_NAME", "").strip()
+
+    errors: list[str] = []
+    if current_root != declared_root:
+        errors.append(
+            "Repository root does not match OMERO_INSTALLATION_PATH: "
+            f"{current_root} != {declared_root}"
+        )
+    if dot_env and configured_project_name != expected_project_name:
+        errors.append(
+            ".env COMPOSE_PROJECT_NAME does not match the canonical project name: "
+            f"{configured_project_name or '<missing>'} != {expected_project_name}"
+        )
+
+    if errors:
+        print(
+            "CRITICAL: Refusing docker compose from this checkout because it can "
+            "target the live bind mounts with a second compose project.",
+            file=sys.stderr,
+        )
+        for error in errors:
+            print(f"  - {error}", file=sys.stderr)
+        print(
+            "Run compose only from the declared OMERO_INSTALLATION_PATH after "
+            "regenerating the installation .env if needed.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        "OK: Compose guard passed for "
+        f"{current_root} (project {expected_project_name})."
+    )
     return 0
 
 
@@ -220,6 +318,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("check", help="Verify all manifest entries exist and are non-empty.")
     sub.add_parser(
+        "compose-guard",
+        help="Refuse compose operations from a non-canonical checkout or project name.",
+    )
+    sub.add_parser(
         "backup", help="Create a timestamped backup of all manifest entries."
     )
 
@@ -247,6 +349,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "check":
         return cmd_check(repo_root)
+    if args.command == "compose-guard":
+        return cmd_compose_guard(repo_root)
     if args.command == "backup":
         return cmd_backup(repo_root)
     if args.command == "restore":
