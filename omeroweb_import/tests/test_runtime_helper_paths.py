@@ -80,6 +80,19 @@ def test_directory_helpers_cover_failure_and_permission_fix_paths(
     assert core_functions._ensure_dir_with_permissions(existing, 0o700) is True
     assert chmod_calls == [0o700]
 
+    inaccessible = tmp_path / "inaccessible"
+    inaccessible.mkdir()
+    original_access = core_functions.os.access
+
+    def access(path, mode):
+        if Path(path) == inaccessible:
+            return False
+        return original_access(path, mode)
+
+    monkeypatch.setattr(core_functions.os, "access", access)
+    assert core_functions._ensure_dir_with_permissions(inaccessible, 0o700) is False
+    assert core_functions._ensure_dir(inaccessible) is False
+
 
 def test_runtime_env_helpers_normalize_boolean_and_integer_values(monkeypatch):
     monkeypatch.setenv("IMPORT_BATCH", " 7 ")

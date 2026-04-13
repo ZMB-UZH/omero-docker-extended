@@ -1339,10 +1339,12 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     tmp_path, monkeypatch
 ):
     upload_root = tmp_path / "upload-root"
+    jobs_root = tmp_path / "jobs-root"
     job_id = _test_job_id("e4")
     unlink_path = upload_root / job_id / "_staged" / "drop" / "file.bin"
     unlink_path.parent.mkdir(parents=True, exist_ok=True)
     unlink_path.write_bytes(b"drop")
+    jobs_root.mkdir(parents=True, exist_ok=True)
 
     base_job = {
         "job_id": job_id,
@@ -1385,6 +1387,7 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     original_refresh_job_status = index_view._refresh_job_status
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(import_core_functions, "_get_jobs_root", lambda: jobs_root)
     missing_response = index_view.json_error(errors.upload_job_not_found())
     monkeypatch.setattr(
         index_view,

@@ -22,6 +22,7 @@ Deep operational guidance for AI agents. `AGENTS.md` should route here instead o
 - In this repo, explicit `docker compose build`, `up`, and `config` commands normally require `--env-file installation_paths.env`, `--env-file env/omero_secrets.env`, and `--env-file env/omeroserver.env`.
 - `docker compose --env-file installation_paths.env ps` fails when the required secrets/server env files are absent. Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as the fallback probe.
 - Treat a Docker socket permission error as a sandbox or privilege problem, not proof that Docker is down.
+- Treat plugin tmp helpers as non-mutating path resolvers unless the immediate runtime sink truly needs the directory to exist. Import-time or root-context helper calls that eagerly create `OMERO_TMP_PATH` plugin subtrees can leave `omeroweb-*` paths owned by the wrong UID and break later non-root request handling.
 
 ## OMERO.web env variable naming convention (CRITICAL)
 
@@ -96,6 +97,7 @@ Avoid deeply nested heredocs inside `docker exec ... bash -lc "..."`.
 - In root-owned clones, keep `-p no:cacheprovider -W error`.
 - If host `pytest` cannot import Django, switch to the dependency-complete runtime first.
 - If full runtime verification is blocked, use direct-module or syntax validation only as an explicit fallback and report that limitation accurately.
+- After rebuilding `omeroweb`, verify existing plugin temp subtrees under `OMERO_TMP_PATH` inside the live container. `startup/10-web-bootstrap.sh` is expected to repair non-server top-level plugin trees such as `omeroweb-import/` back to the OMERO.web runtime UID before supervisord drops privileges.
 
 ## Verification order
 
