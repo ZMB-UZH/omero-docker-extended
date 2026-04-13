@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -14,12 +13,10 @@ from omero_plugin_common.env_utils import (
 
 logger = logging.getLogger(__name__)
 
-ENHANCED_SEARCH_SCOPES_ENV = "TOOLS_ENHANCED_SEARCH_SCOPES"
 ENHANCED_SEARCH_BATCH_SIZE_ENV = "TOOLS_ENHANCED_SEARCH_INDEX_BATCH_SIZE"
 ENHANCED_SEARCH_MAX_RESULTS_ENV = "TOOLS_ENHANCED_SEARCH_MAX_RESULTS"
 ENHANCED_SEARCH_STALE_SECONDS_ENV = "TOOLS_ENHANCED_SEARCH_SYNC_STALE_SECONDS"
 ENHANCED_SEARCH_SCHEMA_VERSION_ENV = "TOOLS_ENHANCED_SEARCH_SCHEMA_VERSION"
-ENHANCED_SEARCH_SCOPE_IMAGE_CAP_ENV = "TOOLS_ENHANCED_SEARCH_SCOPE_IMAGE_CAP"
 
 ENHANCED_SEARCH_USE_CELERY_ENV = "TOOLS_ENHANCED_SEARCH_USE_CELERY"
 ENHANCED_SEARCH_CELERY_BROKER_ENV = "TOOLS_ENHANCED_SEARCH_CELERY_BROKER_URL"
@@ -42,7 +39,6 @@ DEFAULT_BATCH_SIZE = 100
 DEFAULT_MAX_RESULTS = 50
 DEFAULT_STALE_SECONDS = 600
 DEFAULT_SCHEMA_VERSION = 1
-DEFAULT_SCOPE_IMAGE_CAP = 10000
 DEFAULT_USE_CELERY = True
 DEFAULT_CELERY_QUEUE = "enhanced_search"
 DEFAULT_CELERY_RESULT_EXPIRES = 7200
@@ -53,7 +49,6 @@ DEFAULT_CELERY_MAX_RETRIES = 20
 DEFAULT_CELERY_PREFETCH = 1
 MAX_BATCH_SIZE = 500
 MAX_MAX_RESULTS = 200
-MAX_SCOPE_IMAGE_CAP = 100000
 
 
 @dataclass(frozen=True)
@@ -77,12 +72,10 @@ class EnhancedSearchScope:
 
 @dataclass(frozen=True)
 class EnhancedSearchRuntimeConfig:
-    scopes: tuple[EnhancedSearchScope, ...]
     batch_size: int
     max_results: int
     sync_stale_seconds: int
     schema_version: int
-    scope_image_cap: int
 
 
 @dataclass(frozen=True)
@@ -130,72 +123,8 @@ def _optional_bool(raw_value: str | None, default: bool) -> bool:
     return default
 
 
-def _scope_label(scope_type: str, scope_id: int, payload: dict[str, Any]) -> str:
-    explicit = str(payload.get("label") or "").strip()
-    if explicit:
-        return explicit
-    if scope_type == "group":
-        return f"Group {scope_id}"
-    if scope_type == "project":
-        return f"Project {scope_id}"
-    return f"Dataset {scope_id}"
-
-
-def _parse_scopes(raw_value: str | None) -> tuple[EnhancedSearchScope, ...]:
-    if raw_value is None or str(raw_value).strip() == "":
-        return ()
-    try:
-        payload = json.loads(raw_value)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"{ENHANCED_SEARCH_SCOPES_ENV} must be a JSON array of scope objects."
-        ) from exc
-    if not isinstance(payload, list):
-        raise ValueError(
-            f"{ENHANCED_SEARCH_SCOPES_ENV} must be a JSON array of scope objects."
-        )
-
-    scopes: list[EnhancedSearchScope] = []
-    seen: set[tuple[str, int]] = set()
-    allowed_scope_types = {"group", "project", "dataset"}
-    for item in payload:
-        if not isinstance(item, dict):
-            raise ValueError(
-                f"{ENHANCED_SEARCH_SCOPES_ENV} entries must be JSON objects."
-            )
-        scope_type = str(item.get("type") or item.get("scope_type") or "").strip().lower()
-        if scope_type not in allowed_scope_types:
-            raise ValueError(
-                f"{ENHANCED_SEARCH_SCOPES_ENV} entries must use one of: "
-                f"{', '.join(sorted(allowed_scope_types))}."
-            )
-        try:
-            scope_id = int(item.get("id"))
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"{ENHANCED_SEARCH_SCOPES_ENV} entries must define an integer id."
-            ) from exc
-        scope_key = (scope_type, scope_id)
-        if scope_key in seen:
-            continue
-        seen.add(scope_key)
-        scopes.append(
-            EnhancedSearchScope(
-                scope_type=scope_type,
-                scope_id=scope_id,
-                label=_scope_label(scope_type, scope_id, item),
-            )
-        )
-    return tuple(scopes)
-
-
 def build_enhanced_search_config() -> EnhancedSearchRuntimeConfig:
-    raw_scopes = get_optional_env(
-        ENHANCED_SEARCH_SCOPES_ENV,
-        env_file=ENV_FILE_OMEROWEB,
-    )
     return EnhancedSearchRuntimeConfig(
-        scopes=_parse_scopes(raw_scopes),
         batch_size=_bounded_int(
             get_optional_env(
                 ENHANCED_SEARCH_BATCH_SIZE_ENV,
@@ -231,15 +160,6 @@ def build_enhanced_search_config() -> EnhancedSearchRuntimeConfig:
             DEFAULT_SCHEMA_VERSION,
             1,
             1000,
-        ),
-        scope_image_cap=_bounded_int(
-            get_optional_env(
-                ENHANCED_SEARCH_SCOPE_IMAGE_CAP_ENV,
-                env_file=ENV_FILE_OMEROWEB,
-            ),
-            DEFAULT_SCOPE_IMAGE_CAP,
-            1,
-            MAX_SCOPE_IMAGE_CAP,
         ),
     )
 
