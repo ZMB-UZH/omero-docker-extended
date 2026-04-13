@@ -82,6 +82,20 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
             self.bootstrap_text,
         )
 
+    def test_bootstrap_repairs_plugin_tmp_subtrees_for_runtime_user(self) -> None:
+        self.assertIn("repair_plugin_tmp_layout()", self.bootstrap_text)
+        self.assertIn('local tmp_root="${OMERO_TMP_PATH:-}"', self.bootstrap_text)
+        self.assertIn(
+            'local server_runtime_user="${OMERO_SERVER_RUNTIME_USER:-omero-server}"',
+            self.bootstrap_text,
+        )
+        self.assertIn('"${runtime_user}"|omeroweb-*', self.bootstrap_text)
+        self.assertIn(
+            'chown -R "${runtime_user}:${runtime_group}" "${top_level_entry}"',
+            self.bootstrap_text,
+        )
+        self.assertIn("repair_plugin_tmp_layout", self.bootstrap_text)
+
     def test_bootstrap_verifies_runtime_user_write_path_instead_of_root_only(
         self,
     ) -> None:
