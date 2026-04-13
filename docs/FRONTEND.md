@@ -16,6 +16,7 @@ Plugins register in OMERO.web via `CONFIG_omero_web_apps` in `env/omeroweb.env` 
 
 - **OMP Plugin** (`/omeroweb_omp_plugin/`): project/dataset selector, variable configuration, parsing preview, job progress, settings management. Template: `index.html` with extensive JavaScript for AJAX interactions.
 - **Import Plugin** (`/omeroweb_import/`): upload session management, file transfer, import progress, SEM-EDX method settings. Template: `index.html` with `upload.js` for file handling.
+- **Tools Plugin** (`/omeroweb_tools/`): Admin-Tools-style landing page plus the `Enhanced search` workspace for regular users. Templates: `index.html`, `enhanced_search.html`. Shares structural CSS with Admin Tools but keeps plugin-scoped styles and user-only behavior.
 - **Admin Tools** (`/omeroweb_admin_tools/`): multi-page interface with tabs for logs, resource monitoring, storage, and server diagnostics. Templates: `index.html`, `logs.html`, `resource_monitoring.html`, `storage.html`, `server_database_testing.html`. Embeds Grafana iframes via proxy endpoints.
 - **Imaris Connector**: API-only endpoint (`/imaris-export/`), no dedicated UI template.
 
@@ -25,6 +26,6 @@ Plugins register in OMERO.web via `CONFIG_omero_web_apps` in `env/omeroweb.env` 
 - CSS goes in plugin-specific static directories, not in shared locations.
 - Views return `JsonResponse` for AJAX endpoints and `render()` for page loads.
 - Use `@login_required` decorator (from `omeroweb.decorators`) for all views that need authentication.
-- The admin tools plugin uses `_require_root_user()` to restrict access to OMERO root accounts.
+- The admin tools plugin uses root-only guards for administrator surfaces; the Tools plugin uses `require_non_root_user` on mutating endpoints and blocks root users from executing the regular-user workflow.
 - When changing UI workflows, include a validation plan in `docs/exec-plans/active/`.
 - Document user-facing behavior changes in the relevant `docs/plugins/` guide.

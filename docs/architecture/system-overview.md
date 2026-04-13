@@ -22,12 +22,12 @@ Stateful backend providing the OMERO API, image storage, script execution, and d
 
 ### OMERO.web (`omeroweb`)
 
-Django-based web frontend with all registered plugin apps and a co-located Celery worker.
+Django-based web frontend with all registered plugin apps and co-located Celery workers.
 
 - Custom Dockerfile (`docker/omero-web.Dockerfile`) based on `openmicroscopy/omero-web-standalone`.
-- Installs all four plugin packages, `omero_plugin_common`, plus third-party OMERO.web plugins (gallery, figure, fpbioimage, iviewer, mapr, parade, web-zarr, autotag, tagsearch).
-- Installs matplotlib (SEM-EDX visualization), psycopg2-binary (plugin database), celery+redis (Imaris export), and pinned `pytest` for in-container plugin regression tests.
-- Managed by supervisord (`supervisord.conf`): runs OMERO.web and the Imaris Celery worker as two supervised processes.
+- Installs all five plugin packages, `omero_plugin_common`, plus third-party OMERO.web plugins (gallery, figure, fpbioimage, iviewer, mapr, parade, web-zarr, autotag, tagsearch).
+- Installs matplotlib (SEM-EDX visualization), psycopg2-binary (plugin database), celery+redis (Imaris export and Tools enhanced-search indexing), and pinned `pytest` for in-container plugin regression tests.
+- Managed by supervisord (`supervisord.conf`): runs OMERO.web plus the Imaris and Tools Celery workers as three supervised processes.
 - Bootstrap script (`startup/10-web-bootstrap.sh`) validates/repairs the OMERO.web `var/` runtime layout, guarantees `var/django_secret_key` exists, validates log-directory access, and configures Docker socket GID.
 - Exposed on port 4090, health check: `curl` to `/webgateway/`.
 - Mounts: OMERO data (read-write), upload temp directory (tmpfs for job files), Docker socket (read-only), server logs (read-only for admin tools).
@@ -37,7 +37,7 @@ Django-based web frontend with all registered plugin apps and a co-located Celer
 Two isolated PostgreSQL 16.12 instances:
 
 - **`database`** (port 5432): primary OMERO database. User `omero`, database `omero`.
-- **`database_plugin`** (port 5433): OMERO plugin storage. User `omero-plugin`, database `omero-plugin`. Stores variable sets, AI credentials, user settings, and special method configurations for OMERO.web plugins, including OMP and Upload.
+- **`database_plugin`** (port 5433): OMERO plugin storage. User `omero-plugin`, database `omero-plugin`. Stores variable sets, AI credentials, user settings, special method configurations, and the Tools enhanced-search index/saved queries for OMERO.web plugins.
 
 Both use a `pgdata` subdirectory inside bind mounts to avoid ext4 `lost+found` issues. Timezone set to `Europe/Zurich`.
 
@@ -48,7 +48,7 @@ Cache backend and Celery message broker:
 - Version 8.4.0-alpine with in-memory only configuration (`--save ""` `--appendonly no`).
 - 512MB max memory with LRU eviction, backed by tmpfs.
 - Requires `vm.overcommit_memory=1`, persisted on the host by the installation script (`/etc/sysctl.d/99-redis-overcommit.conf`). The profile-gated `redis-sysctl-init` one-shot sidecar is available as a fallback.
-- Used as: OMERO.web session cache (db 1), Celery broker and result backend (db 2).
+- Used as: OMERO.web session cache (db 1), Imaris Celery broker/result backend (db 2), Tools enhanced-search broker/result backend (db 3).
 
 ### Monitoring stack
 
@@ -118,6 +118,16 @@ Staged file upload and OMERO import:
 - File attachment support (link related files to imported OMERO images).
 - Configurable: concurrency, batch size, cleanup intervals, temp directory locations.
 - Database: stores user settings and special method configurations in the OMERO plugin database (`database_plugin`).
+
+### Tools Plugin (`omeroweb_tools`)
+
+User-facing tools surface with an Admin-Tools-style layout:
+
+- Landing page for future regular-user tools inside OMERO.web.
+- Current feature: `Enhanced search`, backed by a selective PostgreSQL index in `database_plugin`.
+- Index refresh reads OMERO metadata through the OMERO API, then writes indexed rows, scope membership, sync state, and saved queries only to the plugin database.
+- Search results are revalidated through OMERO before display so plugin-database matches do not bypass current OMERO visibility rules.
+- Access: intended for regular users; root is intentionally blocked from running searches or refreshes.
 
 ### OMERO.web Zarr Plugin (`omero_web_zarr`)
 

@@ -1,0 +1,1037 @@
+from __future__ import annotations
+
+import logging
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from typing import Any, Iterable
+
+from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
+
+
+logger = logging.getLogger(__name__)
+
+TABLE_IMAGE = "acquisition_search_image"
+TABLE_CHANNEL = "acquisition_search_channel"
+TABLE_ATTRIBUTE = "acquisition_search_attribute"
+TABLE_SCOPE_ITEM = "acquisition_search_scope_item"
+TABLE_SYNC_STATE = "acquisition_search_sync_state"
+TABLE_SAVED_QUERY = "acquisition_search_saved_query"
+
+ENV_USER = "OMP_DATA_USER"
+ENV_AUTH = "OMP_DATA_PASS"
+ENV_HOST = "OMP_DATA_HOST"
+ENV_DB = "OMP_DATA_DB"
+ENV_PORT = "OMP_DATA_PORT"
+
+_psycopg2_mod = None
+_psycopg2_extras = None
+_psycopg2_sql = None
+
+
+class EnhancedSearchStoreError(Exception):
+    """Raised when Tools enhanced-search persistence fails."""
+
+
+def _load_psycopg2():
+    global _psycopg2_mod, _psycopg2_extras
+    if _psycopg2_mod is not None and _psycopg2_extras is not None:
+        return _psycopg2_mod, _psycopg2_extras
+    try:
+        import psycopg2  # type: ignore
+        from psycopg2 import extras  # type: ignore
+    except ImportError as exc:
+        raise EnhancedSearchStoreError("psycopg2 is required for enhanced search.") from exc
+    _psycopg2_mod = psycopg2
+    _psycopg2_extras = extras
+    return _psycopg2_mod, _psycopg2_extras
+
+
+def _load_psycopg2_sql():
+    global _psycopg2_sql
+    if _psycopg2_sql is not None:
+        return _psycopg2_sql
+    try:
+        from psycopg2 import sql  # type: ignore
+    except ImportError as exc:
+        raise EnhancedSearchStoreError("psycopg2 is required for enhanced search.") from exc
+    _psycopg2_sql = sql
+    return _psycopg2_sql
+
+
+def _safe_query(template, *identifiers):
+    sql_mod = _load_psycopg2_sql()
+    return sql_mod.SQL(template).format(*[sql_mod.Identifier(i) for i in identifiers])
+
+
+def _db_params():
+    user = get_env(ENV_USER, env_file=ENV_FILE_OMEROWEB)
+    password = get_env(ENV_AUTH, env_file=ENV_FILE_OMEROWEB)
+    host = get_env(ENV_HOST, env_file=ENV_FILE_OMEROWEB)
+    dbname = get_env(ENV_DB, env_file=ENV_FILE_OMEROWEB)
+    port = int(get_env(ENV_PORT, env_file=ENV_FILE_OMEROWEB))
+    return {"user": user, "password": password, "host": host, "dbname": dbname, "port": port}
+
+
+@contextmanager
+def connect():
+    psycopg2, _ = _load_psycopg2()
+    conn = None
+    try:
+        conn = psycopg2.connect(**_db_params())
+        yield conn
+    except EnhancedSearchStoreError:
+        raise
+    except Exception as exc:
+        logger.error(
+            "Enhanced-search database operation failed: %s",
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
+        raise EnhancedSearchStoreError("Enhanced-search database operation failed.") from exc
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                logger.debug("Suppressed non-fatal close error in enhanced-search store.", exc_info=True)
+
+
+def ensure_schema(conn) -> None:
+    _load_psycopg2_sql()
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                CREATE TABLE IF NOT EXISTS {} (
+                    image_id BIGINT PRIMARY KEY,
+                    group_id BIGINT NOT NULL,
+                    group_name TEXT NOT NULL DEFAULT '',
+                    group_can_read BOOLEAN NOT NULL DEFAULT FALSE,
+                    owner_id BIGINT,
+                    owner_name TEXT NOT NULL DEFAULT '',
+                    image_name TEXT NOT NULL DEFAULT '',
+                    dataset_id BIGINT,
+                    dataset_name TEXT NOT NULL DEFAULT '',
+                    project_id BIGINT,
+                    project_name TEXT NOT NULL DEFAULT '',
+                    schema_version INTEGER NOT NULL,
+                    indexed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    acquisition_date TIMESTAMPTZ,
+                    instrument_manufacturer TEXT NOT NULL DEFAULT '',
+                    instrument_model TEXT NOT NULL DEFAULT '',
+                    objective_model TEXT NOT NULL DEFAULT '',
+                    objective_magnification DOUBLE PRECISION,
+                    objective_na DOUBLE PRECISION,
+                    detector_model TEXT NOT NULL DEFAULT '',
+                    detector_binning TEXT NOT NULL DEFAULT '',
+                    detector_gain DOUBLE PRECISION,
+                    pixel_size_x_um DOUBLE PRECISION,
+                    pixel_size_y_um DOUBLE PRECISION,
+                    z_step_um DOUBLE PRECISION,
+                    channel_summary TEXT NOT NULL DEFAULT '',
+                    search_document TEXT NOT NULL DEFAULT ''
+                );
+                """,
+                TABLE_IMAGE,
+            )
+        )
+        cur.execute(
+            _safe_query(
+                """
+                CREATE TABLE IF NOT EXISTS {} (
+                    image_id BIGINT NOT NULL REFERENCES {} (image_id) ON DELETE CASCADE,
+                    channel_index INTEGER NOT NULL,
+                    label TEXT NOT NULL DEFAULT '',
+                    excitation_nm DOUBLE PRECISION,
+                    emission_nm DOUBLE PRECISION,
+                    PRIMARY KEY (image_id, channel_index)
+                );
+                """,
+                TABLE_CHANNEL,
+                TABLE_IMAGE,
+            )
+        )
+        cur.execute(
+            _safe_query(
+                """
+                CREATE TABLE IF NOT EXISTS {} (
+                    image_id BIGINT NOT NULL REFERENCES {} (image_id) ON DELETE CASCADE,
+                    attribute_key TEXT NOT NULL,
+                    attribute_text TEXT NOT NULL DEFAULT '',
+                    attribute_numeric DOUBLE PRECISION,
+                    PRIMARY KEY (image_id, attribute_key)
+                );
+                """,
+                TABLE_ATTRIBUTE,
+                TABLE_IMAGE,
+            )
+        )
+        cur.execute(
+            _safe_query(
+                """
+                CREATE TABLE IF NOT EXISTS {} (
+                    scope_type TEXT NOT NULL,
+                    scope_id BIGINT NOT NULL,
+                    image_id BIGINT NOT NULL REFERENCES {} (image_id) ON DELETE CASCADE,
+                    run_token TEXT NOT NULL DEFAULT '',
+                    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (scope_type, scope_id, image_id)
+                );
+                """,
+                TABLE_SCOPE_ITEM,
+                TABLE_IMAGE,
+            )
+        )
+        cur.execute(
+            _safe_query(
+                """
+                CREATE TABLE IF NOT EXISTS {} (
+                    scope_type TEXT NOT NULL,
+                    scope_id BIGINT NOT NULL,
+                    scope_label TEXT NOT NULL DEFAULT '',
+                    schema_version INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'idle',
+                    requested_by TEXT NOT NULL DEFAULT '',
+                    run_token TEXT NOT NULL DEFAULT '',
+                    last_cursor_image_id BIGINT,
+                    indexed_image_count INTEGER NOT NULL DEFAULT 0,
+                    current_message TEXT NOT NULL DEFAULT '',
+                    last_error TEXT NOT NULL DEFAULT '',
+                    last_started_at TIMESTAMPTZ,
+                    last_finished_at TIMESTAMPTZ,
+                    last_successful_at TIMESTAMPTZ,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (scope_type, scope_id)
+                );
+                """,
+                TABLE_SYNC_STATE,
+            )
+        )
+        cur.execute(
+            _safe_query(
+                """
+                CREATE TABLE IF NOT EXISTS {} (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    query_name TEXT NOT NULL,
+                    query_payload JSONB NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (username, query_name)
+                );
+                """,
+                TABLE_SAVED_QUERY,
+            )
+        )
+        for index_name, table_name, columns in (
+            (f"{TABLE_IMAGE}_group_idx", TABLE_IMAGE, "(group_id)"),
+            (f"{TABLE_IMAGE}_acq_date_idx", TABLE_IMAGE, "(acquisition_date DESC NULLS LAST)"),
+            (f"{TABLE_CHANNEL}_label_idx", TABLE_CHANNEL, "(label)"),
+            (f"{TABLE_SCOPE_ITEM}_image_idx", TABLE_SCOPE_ITEM, "(image_id)"),
+            (f"{TABLE_SYNC_STATE}_status_idx", TABLE_SYNC_STATE, "(status)"),
+            (f"{TABLE_SAVED_QUERY}_username_idx", TABLE_SAVED_QUERY, "(username)"),
+        ):
+            cur.execute(
+                _safe_query(
+                    f"CREATE INDEX IF NOT EXISTS {{}} ON {{}} {columns};",
+                    index_name,
+                    table_name,
+                )
+            )
+        cur.execute(
+            _safe_query(
+                """
+                CREATE INDEX IF NOT EXISTS {} ON {}
+                USING GIN (to_tsvector('simple', search_document));
+                """,
+                f"{TABLE_IMAGE}_search_document_idx",
+                TABLE_IMAGE,
+            )
+        )
+    conn.commit()
+
+
+def ensure_sync_state_rows(conn, scopes: Iterable[dict[str, Any]], schema_version: int) -> None:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        for scope in scopes:
+            cur.execute(
+                _safe_query(
+                    """
+                    INSERT INTO {} (
+                        scope_type,
+                        scope_id,
+                        scope_label,
+                        schema_version,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, NOW())
+                    ON CONFLICT (scope_type, scope_id)
+                    DO UPDATE SET
+                        scope_label = EXCLUDED.scope_label,
+                        schema_version = EXCLUDED.schema_version,
+                        updated_at = NOW()
+                    """,
+                    TABLE_SYNC_STATE,
+                ),
+                (
+                    scope["scope_type"],
+                    scope["scope_id"],
+                    scope["label"],
+                    schema_version,
+                ),
+            )
+    conn.commit()
+
+
+def list_sync_states(conn) -> list[dict[str, Any]]:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                SELECT
+                    scope_type,
+                    scope_id,
+                    scope_label,
+                    schema_version,
+                    status,
+                    requested_by,
+                    run_token,
+                    last_cursor_image_id,
+                    indexed_image_count,
+                    current_message,
+                    last_error,
+                    last_started_at,
+                    last_finished_at,
+                    last_successful_at,
+                    updated_at
+                FROM {}
+                ORDER BY scope_label ASC, scope_type ASC, scope_id ASC
+                """,
+                TABLE_SYNC_STATE,
+            )
+        )
+        rows = cur.fetchall()
+    columns = (
+        "scope_type",
+        "scope_id",
+        "scope_label",
+        "schema_version",
+        "status",
+        "requested_by",
+        "run_token",
+        "last_cursor_image_id",
+        "indexed_image_count",
+        "current_message",
+        "last_error",
+        "last_started_at",
+        "last_finished_at",
+        "last_successful_at",
+        "updated_at",
+    )
+    return [dict(zip(columns, row)) for row in rows]
+
+
+def try_start_scope_sync(
+    conn,
+    scope_type: str,
+    scope_id: int,
+    scope_label: str,
+    schema_version: int,
+    requested_by: str,
+    run_token: str,
+    stale_after_seconds: int,
+) -> bool:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                INSERT INTO {} (
+                    scope_type,
+                    scope_id,
+                    scope_label,
+                    schema_version,
+                    status,
+                    requested_by,
+                    run_token,
+                    current_message,
+                    indexed_image_count,
+                    last_error,
+                    last_started_at,
+                    updated_at
+                )
+                VALUES (%s, %s, %s, %s, 'running', %s, %s, %s, 0, '', NOW(), NOW())
+                ON CONFLICT (scope_type, scope_id)
+                DO UPDATE SET
+                    scope_label = EXCLUDED.scope_label,
+                    schema_version = EXCLUDED.schema_version,
+                    status = CASE
+                        WHEN {}.status = 'running'
+                         AND {}.updated_at > (NOW() - (%s * INTERVAL '1 second'))
+                        THEN {}.status
+                        ELSE 'running'
+                    END,
+                    requested_by = CASE
+                        WHEN {}.status = 'running'
+                         AND {}.updated_at > (NOW() - (%s * INTERVAL '1 second'))
+                        THEN {}.requested_by
+                        ELSE EXCLUDED.requested_by
+                    END,
+                    run_token = CASE
+                        WHEN {}.status = 'running'
+                         AND {}.updated_at > (NOW() - (%s * INTERVAL '1 second'))
+                        THEN {}.run_token
+                        ELSE EXCLUDED.run_token
+                    END,
+                    current_message = CASE
+                        WHEN {}.status = 'running'
+                         AND {}.updated_at > (NOW() - (%s * INTERVAL '1 second'))
+                        THEN {}.current_message
+                        ELSE EXCLUDED.current_message
+                    END,
+                    indexed_image_count = CASE
+                        WHEN {}.status = 'running'
+                         AND {}.updated_at > (NOW() - (%s * INTERVAL '1 second'))
+                        THEN {}.indexed_image_count
+                        ELSE 0
+                    END,
+                    last_error = CASE
+                        WHEN {}.status = 'running'
+                         AND {}.updated_at > (NOW() - (%s * INTERVAL '1 second'))
+                        THEN {}.last_error
+                        ELSE ''
+                    END,
+                    last_started_at = CASE
+                        WHEN {}.status = 'running'
+                         AND {}.updated_at > (NOW() - (%s * INTERVAL '1 second'))
+                        THEN {}.last_started_at
+                        ELSE NOW()
+                    END,
+                    updated_at = NOW()
+                RETURNING status, run_token
+                """,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+            ),
+            (
+                scope_type,
+                scope_id,
+                scope_label,
+                schema_version,
+                requested_by,
+                run_token,
+                "Indexing scope…",
+                stale_after_seconds,
+                stale_after_seconds,
+                stale_after_seconds,
+                stale_after_seconds,
+                stale_after_seconds,
+                stale_after_seconds,
+                stale_after_seconds,
+                stale_after_seconds,
+                stale_after_seconds,
+                stale_after_seconds,
+                stale_after_seconds,
+            ),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    return bool(row and row[0] == "running" and row[1] == run_token)
+
+
+def update_sync_progress(
+    conn,
+    scope_type: str,
+    scope_id: int,
+    *,
+    run_token: str,
+    indexed_image_count: int,
+    current_message: str,
+    last_cursor_image_id: int | None,
+) -> None:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                UPDATE {}
+                SET
+                    indexed_image_count = %s,
+                    current_message = %s,
+                    last_cursor_image_id = %s,
+                    updated_at = NOW()
+                WHERE scope_type = %s AND scope_id = %s AND run_token = %s
+                """,
+                TABLE_SYNC_STATE,
+            ),
+            (
+                indexed_image_count,
+                current_message,
+                last_cursor_image_id,
+                scope_type,
+                scope_id,
+                run_token,
+            ),
+        )
+    conn.commit()
+
+
+def mark_sync_complete(
+    conn,
+    scope_type: str,
+    scope_id: int,
+    *,
+    run_token: str,
+    indexed_image_count: int,
+    current_message: str,
+) -> None:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                UPDATE {}
+                SET
+                    status = 'idle',
+                    indexed_image_count = %s,
+                    current_message = %s,
+                    last_cursor_image_id = NULL,
+                    last_error = '',
+                    last_finished_at = NOW(),
+                    last_successful_at = NOW(),
+                    updated_at = NOW()
+                WHERE scope_type = %s AND scope_id = %s AND run_token = %s
+                """,
+                TABLE_SYNC_STATE,
+            ),
+            (
+                indexed_image_count,
+                current_message,
+                scope_type,
+                scope_id,
+                run_token,
+            ),
+        )
+    conn.commit()
+
+
+def mark_sync_error(
+    conn,
+    scope_type: str,
+    scope_id: int,
+    *,
+    run_token: str,
+    error_text: str,
+    indexed_image_count: int,
+) -> None:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                UPDATE {}
+                SET
+                    status = 'error',
+                    indexed_image_count = %s,
+                    current_message = 'Indexing failed.',
+                    last_error = %s,
+                    last_finished_at = NOW(),
+                    updated_at = NOW()
+                WHERE scope_type = %s AND scope_id = %s AND run_token = %s
+                """,
+                TABLE_SYNC_STATE,
+            ),
+            (
+                indexed_image_count,
+                error_text,
+                scope_type,
+                scope_id,
+                run_token,
+            ),
+        )
+    conn.commit()
+
+
+def upsert_search_document(
+    conn,
+    *,
+    image_row: dict[str, Any],
+    channels: Iterable[dict[str, Any]],
+    attributes: Iterable[dict[str, Any]],
+    scope_type: str,
+    scope_id: int,
+    run_token: str,
+) -> None:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                INSERT INTO {} (
+                    image_id,
+                    group_id,
+                    group_name,
+                    group_can_read,
+                    owner_id,
+                    owner_name,
+                    image_name,
+                    dataset_id,
+                    dataset_name,
+                    project_id,
+                    project_name,
+                    schema_version,
+                    indexed_at,
+                    acquisition_date,
+                    instrument_manufacturer,
+                    instrument_model,
+                    objective_model,
+                    objective_magnification,
+                    objective_na,
+                    detector_model,
+                    detector_binning,
+                    detector_gain,
+                    pixel_size_x_um,
+                    pixel_size_y_um,
+                    z_step_um,
+                    channel_summary,
+                    search_document
+                )
+                VALUES (
+                    %(image_id)s,
+                    %(group_id)s,
+                    %(group_name)s,
+                    %(group_can_read)s,
+                    %(owner_id)s,
+                    %(owner_name)s,
+                    %(image_name)s,
+                    %(dataset_id)s,
+                    %(dataset_name)s,
+                    %(project_id)s,
+                    %(project_name)s,
+                    %(schema_version)s,
+                    NOW(),
+                    %(acquisition_date)s,
+                    %(instrument_manufacturer)s,
+                    %(instrument_model)s,
+                    %(objective_model)s,
+                    %(objective_magnification)s,
+                    %(objective_na)s,
+                    %(detector_model)s,
+                    %(detector_binning)s,
+                    %(detector_gain)s,
+                    %(pixel_size_x_um)s,
+                    %(pixel_size_y_um)s,
+                    %(z_step_um)s,
+                    %(channel_summary)s,
+                    %(search_document)s
+                )
+                ON CONFLICT (image_id)
+                DO UPDATE SET
+                    group_id = EXCLUDED.group_id,
+                    group_name = EXCLUDED.group_name,
+                    group_can_read = EXCLUDED.group_can_read,
+                    owner_id = EXCLUDED.owner_id,
+                    owner_name = EXCLUDED.owner_name,
+                    image_name = EXCLUDED.image_name,
+                    dataset_id = EXCLUDED.dataset_id,
+                    dataset_name = EXCLUDED.dataset_name,
+                    project_id = EXCLUDED.project_id,
+                    project_name = EXCLUDED.project_name,
+                    schema_version = EXCLUDED.schema_version,
+                    indexed_at = NOW(),
+                    acquisition_date = EXCLUDED.acquisition_date,
+                    instrument_manufacturer = EXCLUDED.instrument_manufacturer,
+                    instrument_model = EXCLUDED.instrument_model,
+                    objective_model = EXCLUDED.objective_model,
+                    objective_magnification = EXCLUDED.objective_magnification,
+                    objective_na = EXCLUDED.objective_na,
+                    detector_model = EXCLUDED.detector_model,
+                    detector_binning = EXCLUDED.detector_binning,
+                    detector_gain = EXCLUDED.detector_gain,
+                    pixel_size_x_um = EXCLUDED.pixel_size_x_um,
+                    pixel_size_y_um = EXCLUDED.pixel_size_y_um,
+                    z_step_um = EXCLUDED.z_step_um,
+                    channel_summary = EXCLUDED.channel_summary,
+                    search_document = EXCLUDED.search_document
+                """,
+                TABLE_IMAGE,
+            ),
+            image_row,
+        )
+        cur.execute(
+            _safe_query("DELETE FROM {} WHERE image_id = %s", TABLE_CHANNEL),
+            (image_row["image_id"],),
+        )
+        for channel in channels:
+            cur.execute(
+                _safe_query(
+                    """
+                    INSERT INTO {} (
+                        image_id,
+                        channel_index,
+                        label,
+                        excitation_nm,
+                        emission_nm
+                    )
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    TABLE_CHANNEL,
+                ),
+                (
+                    image_row["image_id"],
+                    channel["channel_index"],
+                    channel["label"],
+                    channel["excitation_nm"],
+                    channel["emission_nm"],
+                ),
+            )
+        cur.execute(
+            _safe_query("DELETE FROM {} WHERE image_id = %s", TABLE_ATTRIBUTE),
+            (image_row["image_id"],),
+        )
+        for attribute in attributes:
+            cur.execute(
+                _safe_query(
+                    """
+                    INSERT INTO {} (
+                        image_id,
+                        attribute_key,
+                        attribute_text,
+                        attribute_numeric
+                    )
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    TABLE_ATTRIBUTE,
+                ),
+                (
+                    image_row["image_id"],
+                    attribute["attribute_key"],
+                    attribute["attribute_text"],
+                    attribute["attribute_numeric"],
+                ),
+            )
+        cur.execute(
+            _safe_query(
+                """
+                INSERT INTO {} (
+                    scope_type,
+                    scope_id,
+                    image_id,
+                    run_token,
+                    last_seen_at
+                )
+                VALUES (%s, %s, %s, %s, NOW())
+                ON CONFLICT (scope_type, scope_id, image_id)
+                DO UPDATE SET
+                    run_token = EXCLUDED.run_token,
+                    last_seen_at = NOW()
+                """,
+                TABLE_SCOPE_ITEM,
+            ),
+            (
+                scope_type,
+                scope_id,
+                image_row["image_id"],
+                run_token,
+            ),
+        )
+    conn.commit()
+
+
+def prune_scope_membership(conn, scope_type: str, scope_id: int, run_token: str) -> int:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                DELETE FROM {}
+                WHERE scope_type = %s AND scope_id = %s AND run_token <> %s
+                """,
+                TABLE_SCOPE_ITEM,
+            ),
+            (scope_type, scope_id, run_token),
+        )
+        deleted = cur.rowcount or 0
+    conn.commit()
+    return deleted
+
+
+def prune_orphan_documents(conn) -> int:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                DELETE FROM {}
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM {} scope_items
+                    WHERE scope_items.image_id = {}.image_id
+                )
+                """,
+                TABLE_IMAGE,
+                TABLE_SCOPE_ITEM,
+                TABLE_IMAGE,
+            )
+        )
+        deleted = cur.rowcount or 0
+    conn.commit()
+    return deleted
+
+
+def search_index_rows(
+    conn,
+    *,
+    visible_group_ids: list[int] | None,
+    current_user_id: int | None,
+    scope_filter: tuple[str, int] | None,
+    query_text: str,
+    filters: dict[str, Any],
+    limit: int,
+    offset: int,
+) -> tuple[list[dict[str, Any]], int]:
+    ensure_schema(conn)
+    joins = [
+        f"FROM {TABLE_IMAGE} images",
+        f"JOIN {TABLE_SCOPE_ITEM} scope_items ON scope_items.image_id = images.image_id",
+        f"LEFT JOIN {TABLE_CHANNEL} channels ON channels.image_id = images.image_id",
+    ]
+    where = ["1=1"]
+    params: list[Any] = []
+
+    if visible_group_ids is not None:
+        if not visible_group_ids:
+            return [], 0
+        where.append("images.group_id = ANY(%s)")
+        params.append(visible_group_ids)
+
+    if current_user_id is not None:
+        where.append("(images.group_can_read = TRUE OR images.owner_id = %s)")
+        params.append(current_user_id)
+
+    if scope_filter is not None:
+        where.append("scope_items.scope_type = %s AND scope_items.scope_id = %s")
+        params.extend([scope_filter[0], scope_filter[1]])
+
+    if query_text:
+        where.append(
+            "to_tsvector('simple', images.search_document) @@ plainto_tsquery('simple', %s)"
+        )
+        params.append(query_text)
+
+    for column_name in (
+        "instrument_model",
+        "instrument_manufacturer",
+        "objective_model",
+        "detector_model",
+        "image_name",
+        "dataset_name",
+        "project_name",
+    ):
+        raw_value = str(filters.get(column_name) or "").strip()
+        if raw_value:
+            where.append(f"images.{column_name} ILIKE %s")
+            params.append(f"%{raw_value}%")
+
+    for numeric_field in (
+        "objective_magnification",
+        "objective_na",
+        "pixel_size_x_um",
+        "pixel_size_y_um",
+        "z_step_um",
+        "detector_gain",
+    ):
+        min_value = filters.get(f"{numeric_field}_min")
+        max_value = filters.get(f"{numeric_field}_max")
+        if min_value is not None:
+            where.append(f"images.{numeric_field} >= %s")
+            params.append(min_value)
+        if max_value is not None:
+            where.append(f"images.{numeric_field} <= %s")
+            params.append(max_value)
+
+    if filters.get("acquisition_date_from") is not None:
+        where.append("images.acquisition_date >= %s")
+        params.append(filters["acquisition_date_from"])
+    if filters.get("acquisition_date_to") is not None:
+        where.append("images.acquisition_date <= %s")
+        params.append(filters["acquisition_date_to"])
+
+    channel_label = str(filters.get("channel_label") or "").strip()
+    if channel_label:
+        where.append("channels.label ILIKE %s")
+        params.append(f"%{channel_label}%")
+
+    for numeric_field in ("excitation_nm", "emission_nm"):
+        min_value = filters.get(f"channel_{numeric_field}_min")
+        max_value = filters.get(f"channel_{numeric_field}_max")
+        if min_value is not None:
+            where.append(f"channels.{numeric_field} >= %s")
+            params.append(min_value)
+        if max_value is not None:
+            where.append(f"channels.{numeric_field} <= %s")
+            params.append(max_value)
+
+    sql_where = " AND ".join(where)
+    count_sql = f"""
+        SELECT COUNT(DISTINCT images.image_id)
+        {' '.join(joins)}
+        WHERE {sql_where}
+    """
+    rows_sql = f"""
+        SELECT DISTINCT
+            images.image_id,
+            images.group_id,
+            images.group_name,
+            images.owner_id,
+            images.owner_name,
+            images.image_name,
+            images.dataset_id,
+            images.dataset_name,
+            images.project_id,
+            images.project_name,
+            images.acquisition_date,
+            images.instrument_manufacturer,
+            images.instrument_model,
+            images.objective_model,
+            images.objective_magnification,
+            images.objective_na,
+            images.detector_model,
+            images.detector_binning,
+            images.detector_gain,
+            images.pixel_size_x_um,
+            images.pixel_size_y_um,
+            images.z_step_um,
+            images.channel_summary,
+            images.indexed_at
+        {' '.join(joins)}
+        WHERE {sql_where}
+        ORDER BY images.acquisition_date DESC NULLS LAST, images.image_id DESC
+        LIMIT %s OFFSET %s
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(count_sql, params)
+        count_row = cur.fetchone()
+        total_count = int(count_row[0]) if count_row and count_row[0] is not None else 0
+        cur.execute(rows_sql, [*params, limit, offset])
+        rows = cur.fetchall()
+
+    columns = (
+        "image_id",
+        "group_id",
+        "group_name",
+        "owner_id",
+        "owner_name",
+        "image_name",
+        "dataset_id",
+        "dataset_name",
+        "project_id",
+        "project_name",
+        "acquisition_date",
+        "instrument_manufacturer",
+        "instrument_model",
+        "objective_model",
+        "objective_magnification",
+        "objective_na",
+        "detector_model",
+        "detector_binning",
+        "detector_gain",
+        "pixel_size_x_um",
+        "pixel_size_y_um",
+        "z_step_um",
+        "channel_summary",
+        "indexed_at",
+    )
+    return [dict(zip(columns, row)) for row in rows], total_count
+
+
+def list_saved_queries(conn, username: str) -> list[dict[str, Any]]:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                SELECT id, query_name, query_payload, created_at, updated_at
+                FROM {}
+                WHERE username = %s
+                ORDER BY updated_at DESC, query_name ASC
+                """,
+                TABLE_SAVED_QUERY,
+            ),
+            (username,),
+        )
+        rows = cur.fetchall()
+    return [
+        {
+            "id": row[0],
+            "query_name": row[1],
+            "query_payload": row[2],
+            "created_at": row[3],
+            "updated_at": row[4],
+        }
+        for row in rows
+    ]
+
+
+def save_saved_query(conn, username: str, query_name: str, query_payload: dict[str, Any]) -> None:
+    _, extras = _load_psycopg2()
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                INSERT INTO {} (username, query_name, query_payload, updated_at)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (username, query_name)
+                DO UPDATE SET query_payload = EXCLUDED.query_payload, updated_at = NOW()
+                """,
+                TABLE_SAVED_QUERY,
+            ),
+            (
+                username,
+                query_name,
+                extras.Json(query_payload),
+            ),
+        )
+    conn.commit()
+
+
+def delete_saved_query(conn, username: str, query_id: int) -> bool:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                "DELETE FROM {} WHERE username = %s AND id = %s",
+                TABLE_SAVED_QUERY,
+            ),
+            (username, query_id),
+        )
+        deleted = cur.rowcount or 0
+    conn.commit()
+    return deleted > 0
+

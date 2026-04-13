@@ -13,7 +13,7 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 │     Monitoring, alerting, database maintenance, runbooks        │
 ├─────────────────────────────────────────────────────────────────┤
 │  3. Application layer                                           │
-│     omeroweb_omp_plugin/  omeroweb_import/                     │
+│     omeroweb_omp_plugin/  omeroweb_import/  omeroweb_tools/    │
 │     omeroweb_admin_tools/  omeroweb_imaris_connector/          │
 │     omero_plugin_common/  XTOmeroConnector.py                  │
 │     Plugin business logic, OMERO API integration, UI           │
@@ -26,7 +26,7 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 │     docker-compose.yml  docker/  env/  installation_paths.env  │
 │     Image builds, service wiring, networking, health checks    │
 └─────────────────────────────────────────────────────────────────┘
-```text
+```
 
 ### 1. Infrastructure layer
 
@@ -55,23 +55,26 @@ Bootstrap scripts run at container start to configure services that cannot be fu
 - `10-server-bootstrap.sh`: configures `omero.scripts.python`, generates TLS certificates with SANs, creates job-service user, clones OMERO.Figure scripts, registers official scripts.
 - `10-web-bootstrap.sh`: validates log directory write access, auto-discovers and configures Docker socket GID for the omeroweb container.
 - `40-start-imaris-celery-worker.sh`: dynamically discovers the venv path, tests task import, starts celery worker.
+- `40-start-tools-celery-worker.sh`: dynamically discovers the venv path, tests enhanced-search task import, starts the Tools celery worker when enabled.
 - `50-install-omero-downloader.sh`: downloads OMERO.downloader from GitHub releases (version-gated).
 - `51-install-imarisconvert.sh`: compiles ImarisConvertBioformats from source with CMake, downloads Bio-Formats JAR.
 
-The `omeroweb` container runs two processes via supervisord:
+The `omeroweb` container runs three processes via supervisord:
 
 1. OMERO.web (Django application server)
 2. Imaris Celery worker (async export tasks)
+3. Tools Celery worker (enhanced-search indexing tasks)
 
 ### 3. Application layer
 
 **Files:** `omeroweb_*`, `omero_plugin_common/`, `XTOmeroConnector.py`
 
-Four Django app plugins register in OMERO.web via `CONFIG_omero_web_apps`:
+Five Django app plugins register in OMERO.web via `CONFIG_omero_web_apps`:
 
 ```text
 omeroweb_omp_plugin ──────┐
 omeroweb_import ──────────┤
+omeroweb_tools ───────────┤
 omeroweb_admin_tools ─────┼──> omero_plugin_common
 omeroweb_imaris_connector ┘         │
                                     ├── env_utils (typed env var loading)
@@ -79,7 +82,7 @@ omeroweb_imaris_connector ┘         │
                                     ├── omero_helpers (object data extraction)
                                     ├── request_utils (JSON/POST parsing)
                                     └── string_utils (case conversion)
-```text
+```
 
 Each plugin follows a standard layout: `apps.py` (AppConfig), `config.py` (env-driven settings), `urls.py` (routing), `views/` (request handlers), `services/` (business logic), `strings/` (error/message functions), `templates/`, `static/`, `tests/`.
 
@@ -87,6 +90,7 @@ Each plugin follows a standard layout: `apps.py` (AppConfig), `config.py` (env-d
 
 - **OMP Plugin**: user selects project/dataset -> filenames fetched from OMERO -> regex/AI parsing -> preview -> background job writes MapAnnotations with hash-based ownership tracking. Per-user data (variable sets, AI credentials, settings) persisted in the OMERO plugin database (`database_plugin`) via psycopg2.
 - **Import Plugin**: user starts upload session -> files transferred to tmpfs job directory -> OMERO CLI import with batching -> file attachments linked -> confirm/prune lifecycle. SEM-EDX files parsed (EMSA format) with matplotlib visualization. Settings persisted in the OMERO plugin database (`database_plugin`).
+- **Tools Plugin**: user opens Tools -> Enhanced search -> plugin DB index prefilters fielded/full-text queries -> OMERO API rehydrates and rechecks visible images before results are shown. Scope sync reads OMERO metadata through a root gateway session but writes only to the OMERO plugin database (`database_plugin`) for indexed rows, sync state, and saved queries.
 - **Admin Tools**: proxies Loki LogQL queries, Grafana dashboards, Prometheus metrics. Queries Docker socket for container stats. Computes storage usage from OMERO API. Root-only diagnostic scripts.
 - **Imaris Connector**: export request -> Celery task dispatched to Redis queue -> worker opens OMERO session (user session or job-service account) -> finds and runs IMS export script -> polls for completion -> returns result with download path.
 
@@ -117,7 +121,8 @@ Database maintenance:
                                │ depends on
           ┌────────────────────┼────────────────────┐
           │                    │                     │
-   omeroweb_omp_plugin  omeroweb_import  omeroweb_admin_tools
+   omeroweb_omp_plugin  omeroweb_import  omeroweb_tools
+                            omeroweb_admin_tools
           │
           └─── omeroweb_imaris_connector
 ```

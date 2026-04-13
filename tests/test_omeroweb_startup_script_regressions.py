@@ -238,6 +238,11 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             "COPY startup/98-cleanprevious.sh /startup/98-cleanprevious.sh",
             dockerfile_text,
         )
+        self.assertIn("COPY omeroweb_tools /tmp/omeroweb_tools", dockerfile_text)
+        self.assertIn(
+            "COPY startup/40-start-tools-celery-worker.sh /opt/omero/web/bin/start-tools-celery-worker.sh",
+            dockerfile_text,
+        )
 
 
 if __name__ == "__main__":

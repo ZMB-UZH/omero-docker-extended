@@ -18,6 +18,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `plugins/omp-plugin-workflow.md` -- end-to-end OMP workflow, parser configuration, job execution, annotation lifecycle
 - `plugins/import-plugin.md` -- staged upload, OMERO CLI import, SEM-EDX parsing, job lifecycle
 - `plugins/import-plugin-workflow.md` -- end-to-end import workflow, native OME-Zarr routing, managed-repository handoff
+- `plugins/tools-plugin.md` -- user-facing Tools launcher, enhanced-search indexing, saved queries, sync-state flow
 - `plugins/admin-tools-plugin.md` -- log exploration, resource monitoring, storage analytics, diagnostics
 - `plugins/admin-tools-workflow.md` -- quota enforcement lifecycle, log exploration pipeline, resource monitoring proxy
 - `plugins/imaris-connector-plugin.md` -- async Imaris export, Celery worker, OMERO CLI launch path
@@ -29,6 +30,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 
 - `help/omeroweb_omp_plugin_help.md` -- end-user help for Filename & Metadata Manager
 - `help/omeroweb_import_help.md` -- end-user help for Import plugin
+- `help/omeroweb_tools_help.md` -- end-user help for Tools / Enhanced search
 - `help/omeroweb_admin_tools_help.md` -- end-user help for Admin Tools
 
 ## 5. Operations

@@ -36,6 +36,14 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
             self.supervisord_text,
         )
         self.assertIn(
+            "stderr_logfile=/opt/omero/web/OMERO.web/var/log/tools-celery-worker.stderr.log",
+            self.supervisord_text,
+        )
+        self.assertIn(
+            "stdout_logfile=/opt/omero/web/OMERO.web/var/log/tools-celery-worker.stdout.log",
+            self.supervisord_text,
+        )
+        self.assertIn(
             "stderr_logfile=/opt/omero/web/OMERO.web/var/log/storage-quota-reconcile.stderr.log",
             self.supervisord_text,
         )

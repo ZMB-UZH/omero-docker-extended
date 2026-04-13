@@ -53,7 +53,7 @@ docker compose --env-file installation_paths.env --env-file env/omero_secrets.en
 Open OMERO.web at `http://localhost:4090` and confirm:
 
 - Login works with valid OMERO credentials.
-- Plugin menu entries are visible in the top navigation (OMP Plugin, Upload, Admin Tools).
+- Plugin menu entries are visible in the top navigation (OMP Plugin, Import, Tools, Admin Tools).
 - Each plugin page loads without errors.
 
 ### 5. Verify monitoring
@@ -65,7 +65,7 @@ Open OMERO.web at `http://localhost:4090` and confirm:
 ### 6. First operational checks
 
 - Confirm OMERO.server logs show successful startup and script registration.
-- Confirm Celery worker process is active (if Imaris export is enabled).
+- Confirm the co-located Celery worker processes are active when enabled (Imaris export and Tools enhanced-search indexing).
 - Confirm pg-maintenance container is running with cron active.
 - Run a test metadata parse, upload, or Imaris export to validate end-to-end functionality.
 

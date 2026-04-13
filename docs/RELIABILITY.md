@@ -59,12 +59,13 @@ See `docs/reference/service-endpoints.md` for the complete endpoint map.
 
 ## Process management
 
-The `omeroweb` container runs two processes via supervisord:
+The `omeroweb` container runs three processes via supervisord:
 
 1. **omero-web**: the Django application server (autorestart on failure).
 2. **imaris-celery-worker**: the Celery worker for Imaris export tasks (autorestart on unexpected exit).
+3. **tools-celery-worker**: the Celery worker for Tools enhanced-search indexing (autorestart on unexpected exit when enabled).
 
-Both processes have dedicated log files with rotation (20MB max, 3 backups).
+All three processes have dedicated log files with rotation (20MB max, 3 backups).
 
 ## Database reliability
 
@@ -78,6 +79,7 @@ Both processes have dedicated log files with rotation (20MB max, 3 backups).
 
 - **Celery task timeout**: Imaris export tasks have configurable time limits (`OMERO_IMS_CELERY_TIME_LIMIT`). Timed-out tasks are reported as failures.
 - **Imaris export startup failures**: The Imaris connector launches `IMS_Export.py` through the OMERO CLI inside the `omeroweb` container. If exports stall, first verify `Processor-0` is active in `omero admin diagnostics`, then validate direct `omero script launch` from both `omeroserver` and `omeroweb`.
+- **Enhanced search refresh failures**: the Tools plugin writes only to `database_plugin`, but refresh jobs still need OMERO API read access and a healthy `tools-celery-worker` when celery mode is enabled. Check the OMERO.web container logs, `tools-celery-worker` logs, and scope configuration before rerunning refresh.
 - **Upload cleanup**: The Import plugin prunes stale temporary files based on configurable age thresholds to prevent disk growth.
 - **Zarr helper startup timing**: managed-repository staging retries `NoProcessorAvailable` for an env-driven window (`OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS` / `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS`) instead of failing immediately when script processors are still coming up.
 - **Job file locking**: OMP and Import plugins use `portalocker` for safe concurrent access to job JSON files on tmpfs.

@@ -154,6 +154,7 @@ RUN set -euo pipefail; \
     rm -rf "${SITE_PACKAGES}/omeroweb_omp_plugin" \
         "${SITE_PACKAGES}/omero_web_zarr" \
         "${SITE_PACKAGES}/omeroweb_import" \
+        "${SITE_PACKAGES}/omeroweb_tools" \
         "${SITE_PACKAGES}/omeroweb_admin_tools" \
         "${SITE_PACKAGES}/omeroweb_imaris_connector" \
         "${SITE_PACKAGES}/omero_plugin_common"
@@ -162,6 +163,7 @@ RUN set -euo pipefail; \
 # -----------------------------------
 COPY omeroweb_omp_plugin /tmp/omeroweb_omp_plugin
 COPY omeroweb_import /tmp/omeroweb_import
+COPY omeroweb_tools /tmp/omeroweb_tools
 COPY omeroweb_admin_tools /tmp/omeroweb_admin_tools
 COPY omeroweb_imaris_connector /tmp/omeroweb_imaris_connector
 COPY omero_plugin_common /tmp/omero_plugin_common
@@ -186,6 +188,7 @@ RUN set -euo pipefail; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     cp -a /tmp/omeroweb_omp_plugin "${SITE_PACKAGES}/omeroweb_omp_plugin"; \
     cp -a /tmp/omeroweb_import "${SITE_PACKAGES}/omeroweb_import"; \
+    cp -a /tmp/omeroweb_tools "${SITE_PACKAGES}/omeroweb_tools"; \
     cp -a /tmp/omeroweb_admin_tools "${SITE_PACKAGES}/omeroweb_admin_tools"; \
     cp -a /tmp/omeroweb_imaris_connector "${SITE_PACKAGES}/omeroweb_imaris_connector"; \
     cp -a /tmp/omero_plugin_common "${SITE_PACKAGES}/omero_plugin_common"; \
@@ -210,11 +213,12 @@ RUN set -euo pipefail; \
         "${SITE_PACKAGES}/omeroweb_omp_plugin" \
         "${SITE_PACKAGES}/omero_web_zarr" \
         "${SITE_PACKAGES}/omeroweb_import" \
+        "${SITE_PACKAGES}/omeroweb_tools" \
         "${SITE_PACKAGES}/omeroweb_admin_tools" \
         "${SITE_PACKAGES}/omeroweb_imaris_connector" \
         "${SITE_PACKAGES}/omero_plugin_common" \
         "${SITE_PACKAGES}/docs/help"; \
-    rm -rf /tmp/omeroweb_omp_plugin /tmp/omero_web_zarr /tmp/omeroweb_import /tmp/omeroweb_admin_tools /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common /tmp/omero_plugin_help_docs
+    rm -rf /tmp/omeroweb_omp_plugin /tmp/omero_web_zarr /tmp/omeroweb_import /tmp/omeroweb_tools /tmp/omeroweb_admin_tools /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common /tmp/omero_plugin_help_docs
 
 RUN set -euo pipefail; \
     archive="/tmp/bioformats2raw-${BIOFORMATS2RAW_VERSION}.zip"; \
@@ -401,10 +405,11 @@ RUN set -euo pipefail; \
     echo "Skipping blanket OMERO.web venv upgrades to preserve pinned/plugin-dependent packages."; \
     echo "Only curated compatibility-safe Python tooling updates are applied in this image."
 
-# Configure supervisord to run OMERO.web and Imaris Celery worker
-# ---------------------------------------------------------------
+# Configure supervisord to run OMERO.web and plugin background workers
+# -------------------------------------------------------------------
 COPY supervisord.conf /etc/supervisord.conf
 COPY startup/40-start-imaris-celery-worker.sh /opt/omero/web/bin/start-imaris-celery-worker.sh
+COPY startup/40-start-tools-celery-worker.sh /opt/omero/web/bin/start-tools-celery-worker.sh
 RUN set -euo pipefail; \
     rm -f /startup/50-config.py /startup/60-default-web-config.sh /startup/98-cleanprevious.sh /startup/99-run.sh
 COPY startup/10-web-bootstrap.sh /startup/10-web-bootstrap.sh
@@ -415,7 +420,7 @@ COPY startup/60-enforce-ext4-project-quota.sh /opt/omero/web/bin/enforce-ext4-pr
 COPY startup/61-storage-quota-reconcile-loop.sh /opt/omero/web/bin/storage-quota-reconcile-loop.sh
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/web/bin /opt/omero/web/logs; \
-    chmod 0555 /opt/omero/web/bin/start-imaris-celery-worker.sh /startup/10-web-bootstrap.sh /startup/50-config.py /startup/60-default-web-config.sh /startup/98-cleanprevious.sh /opt/omero/web/bin/enforce-ext4-project-quota.sh /opt/omero/web/bin/storage-quota-reconcile-loop.sh; \
+    chmod 0555 /opt/omero/web/bin/start-imaris-celery-worker.sh /opt/omero/web/bin/start-tools-celery-worker.sh /startup/10-web-bootstrap.sh /startup/50-config.py /startup/60-default-web-config.sh /startup/98-cleanprevious.sh /opt/omero/web/bin/enforce-ext4-project-quota.sh /opt/omero/web/bin/storage-quota-reconcile-loop.sh; \
     chown -R omero-web:omero-web /opt/omero/web/logs
 
 # FIX: Take ownership of the base image startup chain.

@@ -239,6 +239,7 @@ _ISOLATED_MODULE_PREFIXES = (
     "omeroweb_imaris_connector",
     "omeroweb_import",
     "omeroweb_omp_plugin",
+    "omeroweb_tools",
     "portalocker",
 )
 
