@@ -70,6 +70,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             "COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env:env/omeroserver.env",
             script_text,
         )
+        self.assertIn("COMPOSE_PROJECT_NAME=${OMERO_COMPOSE_PROJECT_NAME}", script_text)
         self.assertIn(
             "Missing required configuration variable OMERO_CLI_ZARR_VERSION in ${server_env_source}",
             script_text,

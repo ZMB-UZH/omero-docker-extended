@@ -31,11 +31,13 @@ Before **any** file-sync, rsync, or tree-replacement operation, run:
 
 ```bash
 python3 tools/env_safety_guard.py check
+python3 tools/env_safety_guard.py compose-guard
 python3 tools/env_safety_guard.py backup
 ```
 
 The first command verifies every file listed in `.env_manifest` exists and is non-empty.
-The second creates a timestamped backup under `.env_backups/`.
+The second refuses `docker compose` from a non-canonical checkout whose repository root or `.env` project name does not match the declared installation.
+The third creates a timestamped backup under `.env_backups/`.
 
 If the check fails, **stop immediately** and investigate.
 
@@ -47,7 +49,7 @@ python3 tools/env_safety_guard.py restore
 
 ## Safe Sync Procedure
 
-1. Run `python3 tools/env_safety_guard.py check && python3 tools/env_safety_guard.py backup`.
+1. Run `python3 tools/env_safety_guard.py check && python3 tools/env_safety_guard.py compose-guard && python3 tools/env_safety_guard.py backup`.
 2. Fetch the latest source and destination refs.
 3. Resolve the destination remote's default branch explicitly.
    - Example: `git remote show <remote>` and read `HEAD branch: ...`

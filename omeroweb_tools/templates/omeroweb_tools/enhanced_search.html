@@ -85,11 +85,19 @@
                         </div>
                         <div class="tools-search-field tools-search-field--date">
                             <label for="acquisition_date_from">Acquired from</label>
-                            <input type="date" id="acquisition_date_from" name="acquisition_date_from" value="{{ query.acquisition_date_from|date:'Y-m-d' }}">
+                            <input type="date"
+                                   id="acquisition_date_from"
+                                   name="acquisition_date_from"
+                                   value="{{ query.acquisition_date_from|date:'Y-m-d' }}"
+                                   placeholder="dd--mm--yyyy">
                         </div>
                         <div class="tools-search-field tools-search-field--date">
                             <label for="acquisition_date_to">Acquired to</label>
-                            <input type="date" id="acquisition_date_to" name="acquisition_date_to" value="{{ query.acquisition_date_to|date:'Y-m-d' }}">
+                            <input type="date"
+                                   id="acquisition_date_to"
+                                   name="acquisition_date_to"
+                                   value="{{ query.acquisition_date_to|date:'Y-m-d' }}"
+                                   placeholder="dd--mm--yyyy">
                         </div>
                     </div>
                 </form>
@@ -301,6 +309,8 @@
                         {% endif %}
                     </div>
                 </div>
+                {% elif query.query_text or query.acquisition_date_from or query.acquisition_date_to %}
+                <p class="tools-search-empty">No matching images were found.</p>
                 {% else %}
                 <p class="tools-search-empty">Run a search to see indexed results.</p>
                 {% endif %}

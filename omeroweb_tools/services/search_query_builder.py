@@ -8,7 +8,12 @@ _TOKEN_PATTERN = re.compile(r"[^\W_]+", re.UNICODE)
 
 
 def _phrase_tokens(raw_text: str) -> list[str]:
-    return _TOKEN_PATTERN.findall(str(raw_text or ""))
+    tokens: list[str] = []
+    for token in _TOKEN_PATTERN.findall(str(raw_text or "")):
+        if len(token) == 1 and token.isalpha():
+            continue
+        tokens.append(token)
+    return tokens
 
 
 def _parsed_clauses(raw_text: str) -> list[tuple[str, list[str]]]:

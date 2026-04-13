@@ -52,7 +52,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Prefer repo-local skills before falling back to generic workflows.
 - Native adapter files exist for GitHub Copilot, Cursor, Claude, and Gemini. Treat `AGENTS.md` as the universal baseline; adapters are additive only.
 - Never create, edit, overwrite, or delete `env/omero_secrets.env` as an AI agent.
-- Run `python3 tools/env_safety_guard.py check` before any `docker compose` operation to verify deployment env files are intact.
+- Run `python3 tools/env_safety_guard.py check` and `python3 tools/env_safety_guard.py compose-guard` before any `docker compose` operation to verify deployment env files are intact and the checkout matches the live installation root.
 - Validate Markdown with `npx markdownlint-cli2` after editing `.md` files to prevent CI super-linter failures.
 
 ## Repository map

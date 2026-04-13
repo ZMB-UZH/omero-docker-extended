@@ -80,6 +80,7 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "Indexed scope" in template_text
     assert "Acquired from" in template_text
     assert "Acquired to" in template_text
+    assert 'placeholder="dd--mm--yyyy"' in template_text
     assert "tools-search-field--actions" in template_text
     assert "tools-search-inline-action--primary" in template_text
     assert "tools-search-page-loader" in template_text
@@ -89,6 +90,8 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "<th>Channel(s)</th>" in template_text
     assert "Indexed by:" in template_text
     assert "Owner:" in template_text
+    assert "No matching images were found." in template_text
+    assert "Run a search to see indexed results." in template_text
     assert "X:" in template_text
     assert "Y:" in template_text
     assert "Optics / Detector" not in template_text
@@ -107,9 +110,15 @@ def test_tools_landing_template_has_single_enhanced_search_entry_without_descrip
     assert "tools-page-lead" not in template_text
 
 
-def test_tasks_module_defers_service_import_until_task_execution():
+def test_tools_task_wiring_avoids_service_task_import_cycle():
     task_path = Path(__file__).resolve().parents[1] / "tasks.py"
+    task_names_path = Path(__file__).resolve().parents[1] / "task_names.py"
+    service_path = (
+        Path(__file__).resolve().parents[1] / "services" / "enhanced_search_service.py"
+    )
     module = ast.parse(task_path.read_text(encoding="utf-8"))
+    task_names_module = ast.parse(task_names_path.read_text(encoding="utf-8"))
+    service_module = ast.parse(service_path.read_text(encoding="utf-8"))
 
     top_level_service_import = [
         node
@@ -117,7 +126,20 @@ def test_tasks_module_defers_service_import_until_task_execution():
         if isinstance(node, ast.ImportFrom)
         and node.module == "services.enhanced_search_service"
     ]
-    assert top_level_service_import == []
+    imported_names = {
+        alias.name for node in top_level_service_import for alias in node.names
+    }
+    assert imported_names == {"run_scope_sync_task"}
+
+    top_level_task_name_import = [
+        node
+        for node in module.body
+        if isinstance(node, ast.ImportFrom) and node.module == "task_names"
+    ]
+    task_name_imported_names = {
+        alias.name for node in top_level_task_name_import for alias in node.names
+    }
+    assert task_name_imported_names == {"ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME"}
 
     task_func = next(
         node
@@ -127,8 +149,34 @@ def test_tasks_module_defers_service_import_until_task_execution():
     )
     nested_service_import = [
         node
-        for node in task_func.body
+        for node in ast.walk(task_func)
         if isinstance(node, ast.ImportFrom)
         and node.module == "services.enhanced_search_service"
     ]
-    assert len(nested_service_import) == 1
+    assert nested_service_import == []
+
+    service_task_imports = [
+        node
+        for node in service_module.body
+        if isinstance(node, ast.ImportFrom) and node.module == "tasks"
+    ]
+    assert service_task_imports == []
+
+    service_celery_app_imports = [
+        node
+        for node in service_module.body
+        if isinstance(node, ast.ImportFrom) and node.module == "celery_app"
+    ]
+    assert service_celery_app_imports == []
+
+    task_name_assignments = [
+        node
+        for node in task_names_module.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name)
+            and target.id == "ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME"
+            for target in node.targets
+        )
+    ]
+    assert len(task_name_assignments) == 1

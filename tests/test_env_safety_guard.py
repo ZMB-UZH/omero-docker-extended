@@ -83,6 +83,105 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(entries, [repo / "env/omeroweb.env"])
         self.assertTrue(entries[0].exists())
 
+    def test_derive_compose_project_name_uses_installation_basename(self):
+        self.assertEqual(
+            env_safety_guard.derive_compose_project_name("/srv/OMERO Live"),
+            "omero-live",
+        )
+
+    def test_compose_guard_passes_for_canonical_installation_root(self):
+        repo = self._make_repo(
+            [
+                "installation_paths.env",
+                "env/omeroweb.env",
+                "env/omeroserver.env",
+                "env/omero_secrets.env",
+                "env/grafana.env",
+                "env/omero-celery.env",
+            ],
+            {
+                "installation_paths.env": "",
+                "env/omeroweb.env": "CONFIG=value",
+                "env/omeroserver.env": "CONFIG=value",
+                "env/omero_secrets.env": "SECRET=value",
+                "env/grafana.env": "GF=value",
+                "env/omero-celery.env": "QUEUE=value",
+            },
+        )
+        compose_project_name = env_safety_guard.derive_compose_project_name(repo)
+        (repo / "installation_paths.env").write_text(
+            f"OMERO_INSTALLATION_PATH={repo}\n",
+            encoding="utf-8",
+        )
+        (repo / ".env").write_text(
+            f"COMPOSE_PROJECT_NAME={compose_project_name}\n", encoding="utf-8"
+        )
+
+        self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 0)
+
+    def test_compose_guard_fails_for_non_canonical_worktree(self):
+        repo = self._make_repo(
+            [
+                "installation_paths.env",
+                "env/omeroweb.env",
+                "env/omeroserver.env",
+                "env/omero_secrets.env",
+                "env/grafana.env",
+                "env/omero-celery.env",
+            ],
+            {
+                "installation_paths.env": "",
+                "env/omeroweb.env": "CONFIG=value",
+                "env/omeroserver.env": "CONFIG=value",
+                "env/omero_secrets.env": "SECRET=value",
+                "env/grafana.env": "GF=value",
+                "env/omero-celery.env": "QUEUE=value",
+            },
+        )
+        live_root = Path(tempfile.mkdtemp())
+        self.addCleanup(
+            lambda: __import__("shutil").rmtree(live_root, ignore_errors=True)
+        )
+        compose_project_name = env_safety_guard.derive_compose_project_name(live_root)
+        (repo / "installation_paths.env").write_text(
+            f"OMERO_INSTALLATION_PATH={live_root}\n",
+            encoding="utf-8",
+        )
+        (repo / ".env").write_text(
+            f"COMPOSE_PROJECT_NAME={compose_project_name}\n", encoding="utf-8"
+        )
+
+        self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 1)
+
+    def test_compose_guard_fails_when_dot_env_project_name_is_missing(self):
+        repo = self._make_repo(
+            [
+                "installation_paths.env",
+                "env/omeroweb.env",
+                "env/omeroserver.env",
+                "env/omero_secrets.env",
+                "env/grafana.env",
+                "env/omero-celery.env",
+            ],
+            {
+                "installation_paths.env": "",
+                "env/omeroweb.env": "CONFIG=value",
+                "env/omeroserver.env": "CONFIG=value",
+                "env/omero_secrets.env": "SECRET=value",
+                "env/grafana.env": "GF=value",
+                "env/omero-celery.env": "QUEUE=value",
+            },
+        )
+        (repo / "installation_paths.env").write_text(
+            f"OMERO_INSTALLATION_PATH={repo}\n",
+            encoding="utf-8",
+        )
+        (repo / ".env").write_text(
+            "COMPOSE_ENV_FILES=installation_paths.env\n", encoding="utf-8"
+        )
+
+        self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 1)
+
     # ---- backup command ----
 
     def test_backup_creates_timestamped_copy(self):

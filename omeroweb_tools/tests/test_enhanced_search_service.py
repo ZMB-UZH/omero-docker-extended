@@ -74,6 +74,36 @@ def test_search_without_query_text_or_date_filters_returns_empty_payload():
     }
 
 
+def test_sync_state_needs_refresh_for_stale_running_state(monkeypatch):
+    monkeypatch.setattr(
+        service,
+        "runtime_config",
+        lambda: SimpleNamespace(sync_stale_seconds=600),
+    )
+
+    state = {
+        "status": "running",
+        "updated_at": datetime.now(timezone.utc) - timedelta(seconds=601),
+    }
+
+    assert service._sync_state_needs_refresh(state) is True
+
+
+def test_sync_state_needs_refresh_for_recent_running_state(monkeypatch):
+    monkeypatch.setattr(
+        service,
+        "runtime_config",
+        lambda: SimpleNamespace(sync_stale_seconds=600),
+    )
+
+    state = {
+        "status": "running",
+        "updated_at": datetime.now(timezone.utc) - timedelta(seconds=60),
+    }
+
+    assert service._sync_state_needs_refresh(state) is False
+
+
 def test_save_user_settings_clears_current_user_scope_when_disabled(monkeypatch):
     class _DbConn:
         def __enter__(self):
@@ -453,9 +483,35 @@ def test_search_omero_builtin_rows_uses_prefix_query_for_partial_matching(monkey
     assert captured["kwargs"]["rawQuery"] is True
 
 
+def test_search_omero_builtin_rows_drops_single_letter_noise_terms(monkeypatch):
+    captured = {}
+
+    class _Conn:
+        def searchObjects(self, obj_types, text, **kwargs):
+            captured["obj_types"] = obj_types
+            captured["text"] = text
+            captured["kwargs"] = kwargs
+            return []
+
+    rows = service._search_omero_builtin_rows(
+        _Conn(),
+        service.SearchQuery(query_text="definitely-not-a-real-hit-xyz"),
+    )
+
+    assert rows == []
+    assert captured["obj_types"] == ["Project", "Dataset", "Image"]
+    assert captured["text"] == "definitely* OR not* OR real* OR hit* OR xyz*"
+    assert captured["kwargs"]["rawQuery"] is True
+
+
 def test_request_scope_sync_dispatches_celery_task(monkeypatch):
     scope = service.EnhancedSearchScope("user", 7, "Your acquisition metadata")
     monkeypatch.setattr(service, "scope_from_key", lambda scope_key, label=None: scope)
+    celery_config = SimpleNamespace(
+        enabled=True,
+        broker_url="redis://redis:6379/3",
+        queue="enhanced-search",
+    )
     monkeypatch.setattr(
         service,
         "runtime_config",
@@ -464,7 +520,7 @@ def test_request_scope_sync_dispatches_celery_task(monkeypatch):
     monkeypatch.setattr(
         service,
         "runtime_celery_config",
-        lambda: SimpleNamespace(enabled=True, queue="enhanced-search"),
+        lambda: celery_config,
     )
 
     class _Conn:
@@ -483,17 +539,17 @@ def test_request_scope_sync_dispatches_celery_task(monkeypatch):
     )
 
     dispatched = {}
-
-    class _Task:
-        @staticmethod
-        def apply_async(*, args, queue):
-            dispatched["args"] = args
-            dispatched["queue"] = queue
-
-    import sys
-
-    fake_tasks_module = SimpleNamespace(run_enhanced_search_scope_sync=_Task())
-    monkeypatch.setitem(sys.modules, "omeroweb_tools.tasks", fake_tasks_module)
+    monkeypatch.setattr(
+        service,
+        "_dispatch_scope_sync_task",
+        lambda scope_key, run_token, config: dispatched.update(
+            {
+                "name": service.ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME,
+                "args": (scope_key, run_token),
+                "config": config,
+            }
+        ),
+    )
 
     started, message = service.request_scope_sync(
         scope.scope_key,
@@ -505,9 +561,134 @@ def test_request_scope_sync_dispatches_celery_task(monkeypatch):
     assert message == "Indexing started."
     assert calls
     assert dispatched == {
+        "name": service.ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME,
         "args": (scope.scope_key, calls[0][0][6]),
-        "queue": "enhanced-search",
+        "config": celery_config,
     }
+
+
+def test_request_scope_sync_marks_error_when_celery_dispatch_fails(monkeypatch):
+    scope = service.EnhancedSearchScope("user", 9, "Your acquisition metadata")
+    monkeypatch.setattr(service, "scope_from_key", lambda scope_key, label=None: scope)
+    celery_config = SimpleNamespace(
+        enabled=True,
+        broker_url="redis://redis:6379/3",
+        queue="enhanced-search",
+    )
+    monkeypatch.setattr(
+        service,
+        "runtime_config",
+        lambda: SimpleNamespace(schema_version=3, sync_stale_seconds=600),
+    )
+    monkeypatch.setattr(
+        service,
+        "runtime_celery_config",
+        lambda: celery_config,
+    )
+
+    class _Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(service, "db_connect", lambda: _Conn())
+    calls = []
+    monkeypatch.setattr(
+        service,
+        "try_start_scope_sync",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or True,
+    )
+    monkeypatch.setattr(
+        service,
+        "_dispatch_scope_sync_task",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("queue offline")),
+    )
+    mark_calls = []
+    monkeypatch.setattr(
+        service,
+        "mark_sync_error",
+        lambda conn, scope_type, scope_id, **kwargs: mark_calls.append(
+            {
+                "scope_type": scope_type,
+                "scope_id": scope_id,
+                **kwargs,
+            }
+        ),
+    )
+
+    started, message = service.request_scope_sync(
+        scope.scope_key,
+        "alice",
+        scope_label=scope.label,
+    )
+
+    assert started is False
+    assert message == "Could not dispatch enhanced-search indexing."
+    assert calls
+    assert mark_calls == [
+        {
+            "scope_type": scope.scope_type,
+            "scope_id": scope.scope_id,
+            "run_token": calls[0][0][6],
+            "error_text": "Enhanced-search worker dispatch failed.",
+            "indexed_image_count": 0,
+        }
+    ]
+
+
+def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
+    send_calls = {}
+
+    class _FakeConnection:
+        def __init__(self, url):
+            self.url = url
+            self.closed = False
+
+        def __enter__(self):
+            send_calls["connection_url"] = self.url
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.closed = True
+            send_calls["connection_closed"] = True
+            return False
+
+    class _FakeApp:
+        def send_task(self, name, *, args, queue, connection):
+            send_calls.update(
+                {
+                    "name": name,
+                    "args": args,
+                    "queue": queue,
+                    "connection_object": connection,
+                }
+            )
+
+    fake_celery_module = SimpleNamespace(app=_FakeApp())
+    monkeypatch.setattr(service, "Connection", _FakeConnection)
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "omeroweb_tools.celery_app",
+        fake_celery_module,
+    )
+
+    celery_config = SimpleNamespace(
+        broker_url="redis://redis:6379/3",
+        queue="enhanced-search",
+    )
+    service._dispatch_scope_sync_task("user:7", "token-123", celery_config)
+
+    assert send_calls == {
+        "connection_url": "redis://redis:6379/3",
+        "connection_closed": True,
+        "name": service.ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME,
+        "args": ("user:7", "token-123"),
+        "queue": "enhanced-search",
+        "connection_object": send_calls["connection_object"],
+    }
+    assert send_calls["connection_object"].url == "redis://redis:6379/3"
 
 
 def test_request_scope_sync_uses_thread_fallback_when_celery_is_disabled(monkeypatch):

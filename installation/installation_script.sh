@@ -1700,6 +1700,7 @@ COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env:env/omeroserver.e
 # NOTE: OMERO_DB_PASS and OMP_PLUGIN_DB_PASS are intentionally mirrored here
 # because docker compose interpolation happens before service-level env_file
 # loading. This guarantees manual commands like \`docker compose down\` work.
+COMPOSE_PROJECT_NAME=${OMERO_COMPOSE_PROJECT_NAME}
 OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
@@ -1744,6 +1745,37 @@ DOTENV
     fi
 
     echo "Generated docker compose .env file: ${dot_env_path}"
+}
+
+derive_compose_project_name() {
+    local install_path="${1:?BUG: derive_compose_project_name requires a path}"
+    local install_name=""
+    local normalized=""
+
+    install_name="$(basename "${install_path%/}")"
+    if [ -z "${install_name}" ] || [ "${install_name}" = "/" ] || [ "${install_name}" = "." ]; then
+        install_name="omero"
+    fi
+
+    normalized="$(
+        printf '%s' "${install_name}" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9_-]+/-/g; s/^[-_]+//; s/[-_]+$//'
+    )"
+
+    if [ -z "${normalized}" ]; then
+        normalized="omero"
+    fi
+
+    case "${normalized}" in
+        [a-z0-9]*)
+            ;;
+        *)
+            normalized="omero-${normalized}"
+            ;;
+    esac
+
+    printf '%s' "${normalized}"
 }
 
 write_installation_paths_env() {
@@ -2592,6 +2624,8 @@ if is_crowdsec_enabled; then
     if ! ensure_data_path "${CROWDSEC_DB_PATH}" "Crowdsec database directory"; then exit 1; fi
     if ! ensure_data_path "${CROWDSEC_CONFIG_PATH}" "Crowdsec config directory"; then exit 1; fi
 fi
+
+OMERO_COMPOSE_PROJECT_NAME="$(derive_compose_project_name "${OMERO_INSTALLATION_PATH}")"
 
 write_installation_paths_env "${SCRIPT_ENV_FILE}"
 if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then

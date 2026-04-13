@@ -21,6 +21,7 @@ Deep operational guidance for AI agents. `AGENTS.md` should route here instead o
 
 - In this repo, explicit `docker compose build`, `up`, and `config` commands normally require `--env-file installation_paths.env`, `--env-file env/omero_secrets.env`, and `--env-file env/omeroserver.env`.
 - `docker compose --env-file installation_paths.env ps` fails when the required secrets/server env files are absent. Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as the fallback probe.
+- Before any `docker compose` command, run `python3 tools/env_safety_guard.py check` and `python3 tools/env_safety_guard.py compose-guard`. The compose guard refuses non-canonical worktrees and `.env` files whose `COMPOSE_PROJECT_NAME` does not match the installation path, preventing a second Compose project from attaching to the same live bind mounts.
 - Treat a Docker socket permission error as a sandbox or privilege problem, not proof that Docker is down.
 - Treat plugin tmp helpers as non-mutating path resolvers unless the immediate runtime sink truly needs the directory to exist. Import-time or root-context helper calls that eagerly create `OMERO_TMP_PATH` plugin subtrees can leave `omeroweb-*` paths owned by the wrong UID and break later non-root request handling.
 
