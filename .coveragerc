@@ -15,6 +15,7 @@ source =
     ./omeroweb_import
     ./omeroweb_admin_tools
     ./omeroweb_imaris_connector
+    ./omeroweb_tools
     ./omero_web_zarr
 omit =
     */tests/*
@@ -42,6 +43,9 @@ omit =
     omeroweb_omp_plugin/services/omero/__init__.py
     omeroweb_omp_plugin/services/parsing/__init__.py
     omeroweb_omp_plugin/utils/__init__.py
+    omeroweb_tools/__init__.py
+    omeroweb_tools/services/__init__.py
+    omeroweb_tools/views/__init__.py
 
 [xml]
 output = coverage.xml
