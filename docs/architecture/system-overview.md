@@ -125,6 +125,7 @@ User-facing tools surface with an Admin-Tools-style layout:
 
 - Landing page for future regular-user tools inside OMERO.web.
 - Current feature: `Enhanced search`, backed by a selective PostgreSQL index in `database_plugin`.
+- Users opt in to acquisition indexing individually; once enabled, OMERO metadata for images they own is indexed in the background.
 - Index refresh reads OMERO metadata through the OMERO API, then writes indexed rows, scope membership, sync state, and saved queries only to the plugin database.
 - Search results are revalidated through OMERO before display so plugin-database matches do not bypass current OMERO visibility rules.
 - Access: intended for regular users; root is intentionally blocked from running searches or refreshes.

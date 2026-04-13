@@ -204,10 +204,10 @@ Operational observability interfaces embedded in OMERO.web.
 User-facing utilities that share the Admin Tools layout pattern without admin-only access.
 
 - Landing page for future user tools inside OMERO.web
-- Enhanced search over a selective PostgreSQL index stored only in the plugin database
-- Fielded search UI for indexed acquisition and context metadata
+- Enhanced search over the OMERO index plus a selective PostgreSQL acquisition index stored only in the plugin database
+- Fielded search UI for acquisition metadata with async image previews
 - Saved queries per user in the plugin database
-- Resumable scope refresh with sync-state tracking and OMERO permission revalidation
+- Per-user opt-in acquisition indexing with automatic background sync for that user's images
 - Regular-user access only; root is intentionally blocked from running searches and refreshes
 
 ### Imaris Connector Plugin (`omeroweb_imaris_connector`)

@@ -196,17 +196,11 @@ The tracked `omeroweb` env places the `Tools` shortcut between `Import` and
   database via the existing `OMP_DATA_*` connection variables.
 - No enhanced-search data is written into the core OMERO PostgreSQL database.
 
-`TOOLS_ENHANCED_SEARCH_SCOPES` in `env/omeroweb.env` is the authoritative
-scope allowlist and is intentionally empty by default so deployments do not
-index arbitrary groups, projects, or datasets by accident. Configure it as a
-JSON array of objects:
-
-```json
-[
-  {"type": "project", "id": 123, "label": "Microscope QA"},
-  {"type": "dataset", "id": 456, "label": "Pilot import set"}
-]
-```
+Acquisition indexing is opt-in per OMERO user. Once a user enables acquisition
+metadata indexing from `Tools > Enhanced search`, the plugin automatically
+indexes acquisition metadata for all images owned by that user. Search results
+remain OMERO-permission-safe because candidate rows are revalidated through
+OMERO before display.
 
 Related `env/omeroweb.env` controls:
 
@@ -214,7 +208,6 @@ Related `env/omeroweb.env` controls:
 - `TOOLS_ENHANCED_SEARCH_MAX_RESULTS`
 - `TOOLS_ENHANCED_SEARCH_SYNC_STALE_SECONDS`
 - `TOOLS_ENHANCED_SEARCH_SCHEMA_VERSION`
-- `TOOLS_ENHANCED_SEARCH_SCOPE_IMAGE_CAP`
 
 Related `env/omero-celery.env` controls:
 
@@ -232,6 +225,10 @@ Related `env/omero-celery.env` controls:
 When celery is enabled, `supervisord.conf` starts a dedicated
 `tools-celery-worker` process in the `omeroweb` container. If celery is
 disabled, refresh requests fall back to an in-process background thread.
+
+`TOOLS_ENHANCED_SEARCH_SYNC_STALE_SECONDS` controls when an enabled user's
+index is considered stale enough for the next page visit or poll request to
+trigger a background refresh automatically.
 
 ### OMERO.web Zarr UI registration
 

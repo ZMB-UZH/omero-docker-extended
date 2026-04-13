@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
+
+from .search_query_builder import build_postgres_prefix_tsquery
 
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ TABLE_ATTRIBUTE = "acquisition_search_attribute"
 TABLE_SCOPE_ITEM = "acquisition_search_scope_item"
 TABLE_SYNC_STATE = "acquisition_search_sync_state"
 TABLE_SAVED_QUERY = "acquisition_search_saved_query"
+TABLE_USER_SETTINGS = "acquisition_search_user_settings"
 
 ENV_USER = "OMP_DATA_USER"
 ENV_AUTH = "OMP_DATA_PASS"
@@ -224,13 +226,27 @@ def ensure_schema(conn) -> None:
                 TABLE_SAVED_QUERY,
             )
         )
+        cur.execute(
+            _safe_query(
+                """
+                CREATE TABLE IF NOT EXISTS {} (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT NOT NULL UNIQUE,
+                    settings JSONB NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """,
+                TABLE_USER_SETTINGS,
+            )
+        )
         for index_name, table_name, columns in (
             (f"{TABLE_IMAGE}_group_idx", TABLE_IMAGE, "(group_id)"),
             (f"{TABLE_IMAGE}_acq_date_idx", TABLE_IMAGE, "(acquisition_date DESC NULLS LAST)"),
-            (f"{TABLE_CHANNEL}_label_idx", TABLE_CHANNEL, "(label)"),
             (f"{TABLE_SCOPE_ITEM}_image_idx", TABLE_SCOPE_ITEM, "(image_id)"),
             (f"{TABLE_SYNC_STATE}_status_idx", TABLE_SYNC_STATE, "(status)"),
             (f"{TABLE_SAVED_QUERY}_username_idx", TABLE_SAVED_QUERY, "(username)"),
+            (f"{TABLE_USER_SETTINGS}_username_idx", TABLE_USER_SETTINGS, "(username)"),
         ):
             cur.execute(
                 _safe_query(
@@ -453,15 +469,43 @@ def try_start_scope_sync(
                 stale_after_seconds,
                 stale_after_seconds,
                 stale_after_seconds,
-                stale_after_seconds,
-                stale_after_seconds,
-                stale_after_seconds,
-                stale_after_seconds,
             ),
         )
         row = cur.fetchone()
     conn.commit()
     return bool(row and row[0] == "running" and row[1] == run_token)
+
+
+def sync_run_is_active(
+    conn,
+    scope_type: str,
+    scope_id: int,
+    *,
+    run_token: str,
+) -> bool:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                SELECT 1
+                FROM {}
+                WHERE
+                    scope_type = %s
+                    AND scope_id = %s
+                    AND status = 'running'
+                    AND run_token = %s
+                """,
+                TABLE_SYNC_STATE,
+            ),
+            (
+                scope_type,
+                scope_id,
+                run_token,
+            ),
+        )
+        row = cur.fetchone()
+    return bool(row and row[0] == 1)
 
 
 def update_sync_progress(
@@ -808,102 +852,57 @@ def search_index_rows(
     *,
     visible_group_ids: list[int] | None,
     current_user_id: int | None,
-    scope_filter: tuple[str, int] | None,
     query_text: str,
     filters: dict[str, Any],
-    limit: int,
-    offset: int,
+    limit: int | None = None,
+    offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
     ensure_schema(conn)
-    joins = [
-        f"FROM {TABLE_IMAGE} images",
-        f"JOIN {TABLE_SCOPE_ITEM} scope_items ON scope_items.image_id = images.image_id",
-        f"LEFT JOIN {TABLE_CHANNEL} channels ON channels.image_id = images.image_id",
-    ]
-    where = ["1=1"]
+    sql_mod = _load_psycopg2_sql()
+    from_sql = _safe_query("FROM {} images", TABLE_IMAGE)
+    where = [sql_mod.SQL("1=1")]
     params: list[Any] = []
 
     if visible_group_ids is not None:
         if not visible_group_ids:
             return [], 0
-        where.append("images.group_id = ANY(%s)")
+        where.append(sql_mod.SQL("images.group_id = ANY(%s)"))
         params.append(visible_group_ids)
 
     if current_user_id is not None:
-        where.append("(images.group_can_read = TRUE OR images.owner_id = %s)")
+        where.append(sql_mod.SQL("(images.group_can_read = TRUE OR images.owner_id = %s)"))
         params.append(current_user_id)
 
-    if scope_filter is not None:
-        where.append("scope_items.scope_type = %s AND scope_items.scope_id = %s")
-        params.extend([scope_filter[0], scope_filter[1]])
-
     if query_text:
+        tsquery = build_postgres_prefix_tsquery(query_text)
+    else:
+        tsquery = ""
+    if tsquery:
         where.append(
-            "to_tsvector('simple', images.search_document) @@ plainto_tsquery('simple', %s)"
+            sql_mod.SQL(
+                "to_tsvector('simple', images.search_document) @@ to_tsquery('simple', %s)"
+            )
         )
-        params.append(query_text)
-
-    for column_name in (
-        "instrument_model",
-        "instrument_manufacturer",
-        "objective_model",
-        "detector_model",
-        "image_name",
-        "dataset_name",
-        "project_name",
-    ):
-        raw_value = str(filters.get(column_name) or "").strip()
-        if raw_value:
-            where.append(f"images.{column_name} ILIKE %s")
-            params.append(f"%{raw_value}%")
-
-    for numeric_field in (
-        "objective_magnification",
-        "objective_na",
-        "pixel_size_x_um",
-        "pixel_size_y_um",
-        "z_step_um",
-        "detector_gain",
-    ):
-        min_value = filters.get(f"{numeric_field}_min")
-        max_value = filters.get(f"{numeric_field}_max")
-        if min_value is not None:
-            where.append(f"images.{numeric_field} >= %s")
-            params.append(min_value)
-        if max_value is not None:
-            where.append(f"images.{numeric_field} <= %s")
-            params.append(max_value)
+        params.append(tsquery)
 
     if filters.get("acquisition_date_from") is not None:
-        where.append("images.acquisition_date >= %s")
+        where.append(sql_mod.SQL("images.acquisition_date >= %s"))
         params.append(filters["acquisition_date_from"])
     if filters.get("acquisition_date_to") is not None:
-        where.append("images.acquisition_date <= %s")
+        where.append(sql_mod.SQL("images.acquisition_date <= %s"))
         params.append(filters["acquisition_date_to"])
 
-    channel_label = str(filters.get("channel_label") or "").strip()
-    if channel_label:
-        where.append("channels.label ILIKE %s")
-        params.append(f"%{channel_label}%")
-
-    for numeric_field in ("excitation_nm", "emission_nm"):
-        min_value = filters.get(f"channel_{numeric_field}_min")
-        max_value = filters.get(f"channel_{numeric_field}_max")
-        if min_value is not None:
-            where.append(f"channels.{numeric_field} >= %s")
-            params.append(min_value)
-        if max_value is not None:
-            where.append(f"channels.{numeric_field} <= %s")
-            params.append(max_value)
-
-    sql_where = " AND ".join(where)
-    count_sql = f"""
-        SELECT COUNT(DISTINCT images.image_id)
-        {' '.join(joins)}
-        WHERE {sql_where}
-    """
-    rows_sql = f"""
-        SELECT DISTINCT
+    where_sql = sql_mod.SQL(" AND ").join(where)
+    count_sql = sql_mod.SQL(
+        """
+        SELECT COUNT(images.image_id)
+        {}
+        WHERE {}
+        """
+    ).format(from_sql, where_sql)
+    rows_sql = sql_mod.SQL(
+        """
+        SELECT
             images.image_id,
             images.group_id,
             images.group_name,
@@ -928,17 +927,22 @@ def search_index_rows(
             images.z_step_um,
             images.channel_summary,
             images.indexed_at
-        {' '.join(joins)}
-        WHERE {sql_where}
+        {}
+        WHERE {}
         ORDER BY images.acquisition_date DESC NULLS LAST, images.image_id DESC
-        LIMIT %s OFFSET %s
-    """
+        """
+    ).format(from_sql, where_sql)
+    paged_rows_sql = rows_sql
+    paged_params = list(params)
+    if limit is not None:
+        paged_rows_sql = sql_mod.SQL("{} LIMIT %s OFFSET %s").format(rows_sql)
+        paged_params.extend([limit, offset])
 
     with conn.cursor() as cur:
         cur.execute(count_sql, params)
         count_row = cur.fetchone()
         total_count = int(count_row[0]) if count_row and count_row[0] is not None else 0
-        cur.execute(rows_sql, [*params, limit, offset])
+        cur.execute(paged_rows_sql, paged_params)
         rows = cur.fetchall()
 
     columns = (
@@ -968,6 +972,103 @@ def search_index_rows(
         "indexed_at",
     )
     return [dict(zip(columns, row)) for row in rows], total_count
+
+
+def load_user_settings(
+    conn,
+    username: str,
+    *,
+    defaults: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    ensure_schema(conn)
+    resolved = dict(defaults or {})
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                SELECT settings
+                FROM {}
+                WHERE username = %s
+                """,
+                TABLE_USER_SETTINGS,
+            ),
+            (username,),
+        )
+        row = cur.fetchone()
+    if row is None or not isinstance(row[0], dict):
+        return resolved
+    resolved.update(row[0])
+    return resolved
+
+
+def save_user_settings(conn, username: str, settings_payload: dict[str, Any]) -> dict[str, Any]:
+    _, extras = _load_psycopg2()
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                INSERT INTO {} (username, settings, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (username)
+                DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
+                """,
+                TABLE_USER_SETTINGS,
+            ),
+            (username, extras.Json(settings_payload)),
+        )
+    conn.commit()
+    return load_user_settings(conn, username, defaults=settings_payload)
+
+
+def clear_scope_index(
+    conn,
+    scope_type: str,
+    scope_id: int,
+    *,
+    current_message: str,
+) -> dict[str, int]:
+    ensure_schema(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            _safe_query(
+                """
+                DELETE FROM {}
+                WHERE scope_type = %s AND scope_id = %s
+                """,
+                TABLE_SCOPE_ITEM,
+            ),
+            (scope_type, scope_id),
+        )
+        deleted_scope_links = int(cur.rowcount or 0)
+        cur.execute(
+            _safe_query(
+                """
+                UPDATE {}
+                SET
+                    status = 'idle',
+                    requested_by = '',
+                    run_token = '',
+                    last_cursor_image_id = NULL,
+                    indexed_image_count = 0,
+                    current_message = %s,
+                    last_error = '',
+                    last_started_at = NULL,
+                    last_finished_at = NOW(),
+                    last_successful_at = NULL,
+                    updated_at = NOW()
+                WHERE scope_type = %s AND scope_id = %s
+                """,
+                TABLE_SYNC_STATE,
+            ),
+            (current_message, scope_type, scope_id),
+        )
+    conn.commit()
+    deleted_documents = prune_orphan_documents(conn)
+    return {
+        "deleted_scope_links": deleted_scope_links,
+        "deleted_documents": deleted_documents,
+    }
 
 
 def list_saved_queries(conn, username: str) -> list[dict[str, Any]]:
@@ -1034,4 +1135,3 @@ def delete_saved_query(conn, username: str, query_id: int) -> bool:
         deleted = cur.rowcount or 0
     conn.commit()
     return deleted > 0
-

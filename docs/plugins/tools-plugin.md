@@ -5,17 +5,19 @@
 The Tools plugin provides a user-facing launcher for OMERO.web utilities that
 should be available to ordinary users instead of root administrators. Its first
 feature is `Enhanced search`, a selective PostgreSQL-backed search engine for
-indexed microscopy metadata.
+indexed acquisition metadata that is merged with OMERO's own built-in search
+results.
 
 ## Main capabilities
 
 - `Tools` landing page that mirrors the Admin Tools layout pattern for future
   expansion.
-- `Enhanced search` UI with free-text and fielded filters.
-- Selective indexing of configured groups, projects, or datasets.
+- `Enhanced search` UI with a compact search row, async image previews, and
+  OMERO-built-in plus acquisition-index search scopes.
+- Per-user opt-in acquisition indexing for all images owned by the current
+  user.
 - Per-user saved queries.
-- Sync-state tracking for each configured scope.
-- Resumable indexing based on the last processed image ID for a scope.
+- Sync-state tracking for the current user's acquisition index.
 - OMERO permission revalidation before search results are displayed.
 - Regular-user access only; root is intentionally blocked from running the
   workflow.
@@ -39,8 +41,8 @@ This plugin has a strict write boundary:
 | `/omeroweb_tools/` | GET | Tools landing page |
 | `/omeroweb_tools/root-status/` | GET | Check whether the current user is root |
 | `/omeroweb_tools/enhanced-search/` | GET | Search UI and results page |
-| `/omeroweb_tools/enhanced-search/sync/` | POST | Trigger index refresh for one configured scope |
-| `/omeroweb_tools/enhanced-search/sync-state/` | GET | Fetch current sync-state table |
+| `/omeroweb_tools/enhanced-search/sync/` | POST | Trigger index refresh for the current user's acquisition index |
+| `/omeroweb_tools/enhanced-search/sync-state/` | GET | Fetch current acquisition-index sync state |
 | `/omeroweb_tools/enhanced-search/saved-queries/save/` | POST | Save current query for the user |
 | `/omeroweb_tools/enhanced-search/saved-queries/delete/` | POST | Delete a saved query |
 | `/omeroweb_tools/enhanced-search/saved-queries/<query_id>/` | GET | Re-open a saved query |
@@ -70,15 +72,10 @@ omeroweb_tools/
 
 ### `env/omeroweb.env`
 
-`TOOLS_ENHANCED_SEARCH_SCOPES` is the authoritative allowlist. It is empty by
-default and must be set explicitly:
-
-```json
-[
-  {"type": "project", "id": 123, "label": "Microscope QA"},
-  {"type": "dataset", "id": 456, "label": "Pilot import set"}
-]
-```
+Acquisition indexing is opt-in per OMERO user. Once enabled in the UI, the
+plugin automatically indexes acquisition metadata for all images owned by that
+user. The indexed rows remain private to the plugin database and search results
+are revalidated through OMERO before display.
 
 Related runtime variables:
 
@@ -86,7 +83,6 @@ Related runtime variables:
 - `TOOLS_ENHANCED_SEARCH_MAX_RESULTS`
 - `TOOLS_ENHANCED_SEARCH_SYNC_STALE_SECONDS`
 - `TOOLS_ENHANCED_SEARCH_SCHEMA_VERSION`
-- `TOOLS_ENHANCED_SEARCH_SCOPE_IMAGE_CAP`
 
 ### `env/omero-celery.env`
 
@@ -109,22 +105,23 @@ background thread inside the `omeroweb` process.
 
 ## Indexing and query flow
 
-1. An operator defines explicit indexed scopes in `TOOLS_ENHANCED_SEARCH_SCOPES`.
-2. A user opens `Tools > Enhanced search`.
-3. The user triggers a scope refresh.
-4. The worker reads OMERO metadata through a root gateway session and extracts
+1. A user opens `Tools > Enhanced search`.
+2. The user enables acquisition metadata indexing for their account.
+3. The worker reads OMERO metadata for images owned by that user through a root gateway session and extracts
    selective search attributes.
-5. The worker writes only to the plugin database tables for indexed documents,
+4. The worker writes only to the plugin database tables for indexed documents,
    scope membership, sync state, and saved queries.
-6. Search queries run against the plugin database first.
-7. Matching image IDs are rehydrated through OMERO and filtered again by actual
+5. Search queries combine OMERO-index matches with plugin-database
+   acquisition matches according to the selected indexed scope.
+6. Matching image IDs are rehydrated through OMERO and filtered again by actual
    OMERO visibility before the UI renders the results.
 
 ## Operator checklist
 
-- Keep scopes selective and intentional.
 - Verify `OMP_DATA_*` points to the plugin database, not the OMERO database.
 - Verify `ROOTPASS`, `OMEROHOST`, and `OMERO_PORT` are available to the
   `omeroweb` container for indexing reads.
 - Verify `tools-celery-worker` is healthy when celery mode is enabled.
-- Refresh indexed scopes after major import or metadata-ingestion changes.
+- Keep `TOOLS_ENHANCED_SEARCH_SYNC_STALE_SECONDS` aligned with how quickly
+  newly imported acquisition metadata should become searchable after a user
+  revisits the page.
