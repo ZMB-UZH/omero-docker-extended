@@ -458,6 +458,17 @@ class AgentSkillCatalogTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         cls.agents_text = (cls.repo_root / "AGENTS.md").read_text(encoding="utf-8")
         cls.claude_text = (cls.repo_root / "CLAUDE.md").read_text(encoding="utf-8")
+        cls.gemini_text = (cls.repo_root / "GEMINI.md").read_text(encoding="utf-8")
+        cls.copilot_text = (
+            cls.repo_root / ".github" / "copilot-instructions.md"
+        ).read_text(encoding="utf-8")
+        cls.cursor_core_text = (
+            cls.repo_root / ".cursor" / "rules" / "00-omero-core.mdc"
+        ).read_text(encoding="utf-8")
+        cls.cursor_rule_texts = {
+            str(path.relative_to(cls.repo_root)): path.read_text(encoding="utf-8")
+            for path in sorted((cls.repo_root / ".cursor" / "rules").glob("*.mdc"))
+        }
         cls.index_text = (cls.repo_root / "docs" / "index.md").read_text(
             encoding="utf-8"
         )
@@ -512,11 +523,41 @@ class AgentSkillCatalogTests(unittest.TestCase):
         if missing:
             self.fail(f"{msg}; missing phrases: {missing}")
 
-    def test_catalog_doc_is_linked_from_agents_claude_and_index(self) -> None:
+    def test_catalog_doc_is_linked_from_all_supported_agent_entrypoints(self) -> None:
         self.assertIn("docs/reference/ai-agent-skills.md", self.agents_text)
         self.assertIn("docs/reference/ai-agent-skills.md", self.claude_text)
+        self.assertIn("docs/reference/ai-agent-skills.md", self.gemini_text)
+        self.assertIn("docs/reference/ai-agent-skills.md", self.copilot_text)
+        for rule_path, rule_text in self.cursor_rule_texts.items():
+            with self.subTest(rule_path=rule_path):
+                self.assertIn(".agents/skills/", rule_text)
         self.assertIn("`reference/ai-agent-skills.md`", self.index_text)
         self.assertIn(".agents/skills/", self.catalog_text)
+
+    def test_supported_agent_entrypoints_keep_the_same_core_contract(self) -> None:
+        entrypoints = {
+            "CLAUDE.md": self.claude_text,
+            "GEMINI.md": self.gemini_text,
+            ".github/copilot-instructions.md": self.copilot_text,
+            ".cursor/rules/00-omero-core.mdc": self.cursor_core_text,
+        }
+        for surface_name, surface_text in entrypoints.items():
+            with self.subTest(surface=surface_name):
+                self.assertContainsAll(
+                    surface_text,
+                    (
+                        "AGENTS.md",
+                        "docs/reference/ai-agent-context-routing.md",
+                        ("docs/reference/ai-agent-skills.md", ".agents/skills/"),
+                        (
+                            "Never use background agents or subagents unless the user explicitly asks for them.",
+                            "Do not use background agents or subagents unless the user explicitly asks for them.",
+                        ),
+                        "env/omero_secrets.env",
+                        "environment-driven",
+                    ),
+                    f"{surface_name} drifted from the shared cross-agent contract",
+                )
 
     def test_all_skill_directories_are_present_and_match_expected_inventory(
         self,

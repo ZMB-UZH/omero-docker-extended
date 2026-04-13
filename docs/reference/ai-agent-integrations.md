@@ -102,6 +102,7 @@ These hooks are Claude Code-specific (other harnesses do not support hooks). The
 
 ## Maintenance rules
 
+- Add new skills once in `.agents/skills/` and once in `docs/reference/ai-agent-skills.md`. Supported harnesses inherit new skills through the shared catalog; do not duplicate per-skill instructions into every harness adapter.
 - Update `docs/index.md` when this surface changes.
 - Update `docs/reference/ai-agent-upstream-sources.md` when the ECC snapshot, vendored `caveman` prompt references, or selected upstream skills change.
 - For ECC-derived local skills, keep the repo overlay concise and point to the pinned upstream snapshot.

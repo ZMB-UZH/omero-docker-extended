@@ -59,8 +59,8 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 
 // Set PLUGIN_ROOT to the plugin directory you're previewing.
-// Example: /opt/omero/omeroweb_import
-const PLUGIN_ROOT = process.env.PLUGIN_ROOT || '/opt/omero/omeroweb_import';
+// Example: ${REPO_ROOT}/omeroweb_import
+const PLUGIN_ROOT = process.env.PLUGIN_ROOT;
 const PLUGIN_NAME = PLUGIN_ROOT.split('/').pop();
 
 export default defineConfig({
@@ -106,7 +106,8 @@ Start the preview server pointing at the plugin you're editing:
 
 ```bash
 cd "$PREVIEW_DIR"
-PLUGIN_ROOT=/opt/omero/omeroweb_import npx vite 2>&1 &
+REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+PLUGIN_ROOT="${PLUGIN_ROOT:-$REPO_ROOT/omeroweb_import}" npx vite 2>&1 &
 VITE_PID=$!
 echo "Vite preview running on http://localhost:5173 (PID: $VITE_PID)"
 ```
@@ -117,11 +118,11 @@ The server watches for file changes. Edit CSS, HTML, or JS in the real plugin di
 
 | Plugin | PLUGIN_ROOT |
 | --- | --- |
-| Import | `/opt/omero/omeroweb_import` |
-| OMP | `/opt/omero/omeroweb_omp_plugin` |
-| Admin Tools | `/opt/omero/omeroweb_admin_tools` |
-| Imaris Connector | `/opt/omero/omeroweb_imaris_connector` |
-| Web Zarr | `/opt/omero/omero_web_zarr` |
+| Import | `$REPO_ROOT/omeroweb_import` |
+| OMP | `$REPO_ROOT/omeroweb_omp_plugin` |
+| Admin Tools | `$REPO_ROOT/omeroweb_admin_tools` |
+| Imaris Connector | `$REPO_ROOT/omeroweb_imaris_connector` |
+| Web Zarr | `$REPO_ROOT/omero_web_zarr` |
 
 ## Limitations
 

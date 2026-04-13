@@ -50,6 +50,19 @@ class _HttpResponseRedirect(_HttpResponse):
         self["Location"] = location
 
 
+class _DjangoTemplates:
+    def __init__(self, config):
+        self.config = config
+
+
+class _TemplateResponse(_HttpResponse):
+    def __init__(self, request, template, context=None, status=200, **_kwargs):
+        super().__init__("", status=status)
+        self.request = request
+        self.template_name = template
+        self.context_data = context or {}
+
+
 def _install_import_stubs():
     if "django.http" not in sys.modules:
         django_module = types.ModuleType("django")
@@ -63,15 +76,30 @@ def _install_import_stubs():
             "args": args,
             "kwargs": kwargs,
         }
+        django_template = types.ModuleType("django.template")
+        django_template.__path__ = []
+        django_template_backends = types.ModuleType("django.template.backends")
+        django_template_backends.__path__ = []
+        django_template_backends_django = types.ModuleType(
+            "django.template.backends.django"
+        )
+        django_template_backends_django.DjangoTemplates = _DjangoTemplates
+        django_template_response = types.ModuleType("django.template.response")
+        django_template_response.TemplateResponse = _TemplateResponse
         django_urls = types.ModuleType("django.urls")
         django_urls.reverse = lambda name, *args, **kwargs: f"/{name}/"
         django_views = types.ModuleType("django.views")
         django_views_decorators = types.ModuleType("django.views.decorators")
         django_views_csrf = types.ModuleType("django.views.decorators.csrf")
         django_views_csrf.csrf_exempt = lambda fn: fn
+        django_views_csrf.ensure_csrf_cookie = lambda fn: fn
         sys.modules["django"] = django_module
         sys.modules["django.http"] = django_http
         sys.modules["django.shortcuts"] = django_shortcuts
+        sys.modules["django.template"] = django_template
+        sys.modules["django.template.backends"] = django_template_backends
+        sys.modules["django.template.backends.django"] = django_template_backends_django
+        sys.modules["django.template.response"] = django_template_response
         sys.modules["django.urls"] = django_urls
         sys.modules["django.views"] = django_views
         sys.modules["django.views.decorators"] = django_views_decorators
@@ -88,6 +116,8 @@ def _install_import_stubs():
         sys.modules["omeroweb"] = omeroweb_module
         sys.modules["omeroweb.decorators"] = omeroweb_decorators
 
+
+_install_import_stubs()
 
 from omeroweb_admin_tools.services import storage_quotas
 from omeroweb_admin_tools.views import index_view
