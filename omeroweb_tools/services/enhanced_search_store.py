@@ -43,7 +43,9 @@ def _load_psycopg2():
         import psycopg2  # type: ignore
         from psycopg2 import extras  # type: ignore
     except ImportError as exc:
-        raise EnhancedSearchStoreError("psycopg2 is required for enhanced search.") from exc
+        raise EnhancedSearchStoreError(
+            "psycopg2 is required for enhanced search."
+        ) from exc
     _psycopg2_mod = psycopg2
     _psycopg2_extras = extras
     return _psycopg2_mod, _psycopg2_extras
@@ -56,7 +58,9 @@ def _load_psycopg2_sql():
     try:
         from psycopg2 import sql  # type: ignore
     except ImportError as exc:
-        raise EnhancedSearchStoreError("psycopg2 is required for enhanced search.") from exc
+        raise EnhancedSearchStoreError(
+            "psycopg2 is required for enhanced search."
+        ) from exc
     _psycopg2_sql = sql
     return _psycopg2_sql
 
@@ -72,7 +76,13 @@ def _db_params():
     host = get_env(ENV_HOST, env_file=ENV_FILE_OMEROWEB)
     dbname = get_env(ENV_DB, env_file=ENV_FILE_OMEROWEB)
     port = int(get_env(ENV_PORT, env_file=ENV_FILE_OMEROWEB))
-    return {"user": user, "password": password, "host": host, "dbname": dbname, "port": port}
+    return {
+        "user": user,
+        "password": password,
+        "host": host,
+        "dbname": dbname,
+        "port": port,
+    }
 
 
 @contextmanager
@@ -90,13 +100,18 @@ def connect():
             sanitize_log_value(exc),
             exc_info=sanitized_exc_info(exc),
         )
-        raise EnhancedSearchStoreError("Enhanced-search database operation failed.") from exc
+        raise EnhancedSearchStoreError(
+            "Enhanced-search database operation failed."
+        ) from exc
     finally:
         if conn is not None:
             try:
                 conn.close()
             except Exception:
-                logger.debug("Suppressed non-fatal close error in enhanced-search store.", exc_info=True)
+                logger.debug(
+                    "Suppressed non-fatal close error in enhanced-search store.",
+                    exc_info=True,
+                )
 
 
 def ensure_schema(conn) -> None:
@@ -242,7 +257,11 @@ def ensure_schema(conn) -> None:
         )
         for index_name, table_name, columns in (
             (f"{TABLE_IMAGE}_group_idx", TABLE_IMAGE, "(group_id)"),
-            (f"{TABLE_IMAGE}_acq_date_idx", TABLE_IMAGE, "(acquisition_date DESC NULLS LAST)"),
+            (
+                f"{TABLE_IMAGE}_acq_date_idx",
+                TABLE_IMAGE,
+                "(acquisition_date DESC NULLS LAST)",
+            ),
             (f"{TABLE_SCOPE_ITEM}_image_idx", TABLE_SCOPE_ITEM, "(image_id)"),
             (f"{TABLE_SYNC_STATE}_status_idx", TABLE_SYNC_STATE, "(status)"),
             (f"{TABLE_SAVED_QUERY}_username_idx", TABLE_SAVED_QUERY, "(username)"),
@@ -268,7 +287,9 @@ def ensure_schema(conn) -> None:
     conn.commit()
 
 
-def ensure_sync_state_rows(conn, scopes: Iterable[dict[str, Any]], schema_version: int) -> None:
+def ensure_sync_state_rows(
+    conn, scopes: Iterable[dict[str, Any]], schema_version: int
+) -> None:
     ensure_schema(conn)
     with conn.cursor() as cur:
         for scope in scopes:
@@ -858,49 +879,61 @@ def search_index_rows(
     offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
     ensure_schema(conn)
-    sql_mod = _load_psycopg2_sql()
-    from_sql = _safe_query("FROM {} images", TABLE_IMAGE)
-    where = [sql_mod.SQL("1=1")]
-    params: list[Any] = []
-
     if visible_group_ids is not None:
         if not visible_group_ids:
             return [], 0
-        where.append(sql_mod.SQL("images.group_id = ANY(%s)"))
-        params.append(visible_group_ids)
+        resolved_visible_group_ids: list[int] | None = list(visible_group_ids)
+    else:
+        resolved_visible_group_ids = None
 
     if current_user_id is not None:
-        where.append(sql_mod.SQL("(images.group_can_read = TRUE OR images.owner_id = %s)"))
-        params.append(current_user_id)
+        resolved_current_user_id: int | None = int(current_user_id)
+    else:
+        resolved_current_user_id = None
 
     if query_text:
         tsquery = build_postgres_prefix_tsquery(query_text)
+        if not tsquery:
+            return [], 0
     else:
         tsquery = ""
-    if tsquery:
-        where.append(
-            sql_mod.SQL(
-                "to_tsvector('simple', images.search_document) @@ to_tsquery('simple', %s)"
-            )
-        )
-        params.append(tsquery)
 
-    if filters.get("acquisition_date_from") is not None:
-        where.append(sql_mod.SQL("images.acquisition_date >= %s"))
-        params.append(filters["acquisition_date_from"])
-    if filters.get("acquisition_date_to") is not None:
-        where.append(sql_mod.SQL("images.acquisition_date <= %s"))
-        params.append(filters["acquisition_date_to"])
-
-    where_sql = sql_mod.SQL(" AND ").join(where)
-    count_sql = sql_mod.SQL(
+    base_params: list[Any] = [
+        resolved_visible_group_ids,
+        resolved_visible_group_ids,
+        resolved_current_user_id,
+        resolved_current_user_id,
+        resolved_current_user_id,
+        tsquery,
+        tsquery,
+        filters.get("acquisition_date_from"),
+        filters.get("acquisition_date_from"),
+        filters.get("acquisition_date_to"),
+        filters.get("acquisition_date_to"),
+    ]
+    count_sql = _safe_query(
         """
         SELECT COUNT(images.image_id)
-        {}
-        WHERE {}
-        """
-    ).format(from_sql, where_sql)
-    rows_sql = sql_mod.SQL(
+        FROM {} images
+        WHERE
+            (%s::bigint[] IS NULL OR images.group_id = ANY(%s::bigint[]))
+            AND (
+                (%s::bigint IS NULL AND images.group_can_read = TRUE)
+                OR (
+                    %s::bigint IS NOT NULL
+                    AND (images.group_can_read = TRUE OR images.owner_id = %s)
+                )
+            )
+            AND (
+                %s = ''
+                OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', %s)
+            )
+            AND (%s::timestamptz IS NULL OR images.acquisition_date >= %s)
+            AND (%s::timestamptz IS NULL OR images.acquisition_date <= %s)
+        """,
+        TABLE_IMAGE,
+    )
+    rows_sql = _safe_query(
         """
         SELECT
             images.image_id,
@@ -927,19 +960,81 @@ def search_index_rows(
             images.z_step_um,
             images.channel_summary,
             images.indexed_at
-        {}
-        WHERE {}
+        FROM {} images
+        WHERE
+            (%s::bigint[] IS NULL OR images.group_id = ANY(%s::bigint[]))
+            AND (
+                (%s::bigint IS NULL AND images.group_can_read = TRUE)
+                OR (
+                    %s::bigint IS NOT NULL
+                    AND (images.group_can_read = TRUE OR images.owner_id = %s)
+                )
+            )
+            AND (
+                %s = ''
+                OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', %s)
+            )
+            AND (%s::timestamptz IS NULL OR images.acquisition_date >= %s)
+            AND (%s::timestamptz IS NULL OR images.acquisition_date <= %s)
         ORDER BY images.acquisition_date DESC NULLS LAST, images.image_id DESC
-        """
-    ).format(from_sql, where_sql)
+        """,
+        TABLE_IMAGE,
+    )
     paged_rows_sql = rows_sql
-    paged_params = list(params)
+    paged_params = list(base_params)
     if limit is not None:
-        paged_rows_sql = sql_mod.SQL("{} LIMIT %s OFFSET %s").format(rows_sql)
+        paged_rows_sql = _safe_query(
+            """
+            SELECT
+                images.image_id,
+                images.group_id,
+                images.group_name,
+                images.owner_id,
+                images.owner_name,
+                images.image_name,
+                images.dataset_id,
+                images.dataset_name,
+                images.project_id,
+                images.project_name,
+                images.acquisition_date,
+                images.instrument_manufacturer,
+                images.instrument_model,
+                images.objective_model,
+                images.objective_magnification,
+                images.objective_na,
+                images.detector_model,
+                images.detector_binning,
+                images.detector_gain,
+                images.pixel_size_x_um,
+                images.pixel_size_y_um,
+                images.z_step_um,
+                images.channel_summary,
+                images.indexed_at
+            FROM {} images
+            WHERE
+                (%s::bigint[] IS NULL OR images.group_id = ANY(%s::bigint[]))
+                AND (
+                    (%s::bigint IS NULL AND images.group_can_read = TRUE)
+                    OR (
+                        %s::bigint IS NOT NULL
+                        AND (images.group_can_read = TRUE OR images.owner_id = %s)
+                    )
+                )
+                AND (
+                    %s = ''
+                    OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', %s)
+                )
+                AND (%s::timestamptz IS NULL OR images.acquisition_date >= %s)
+                AND (%s::timestamptz IS NULL OR images.acquisition_date <= %s)
+            ORDER BY images.acquisition_date DESC NULLS LAST, images.image_id DESC
+            LIMIT %s OFFSET %s
+            """,
+            TABLE_IMAGE,
+        )
         paged_params.extend([limit, offset])
 
     with conn.cursor() as cur:
-        cur.execute(count_sql, params)
+        cur.execute(count_sql, base_params)
         count_row = cur.fetchone()
         total_count = int(count_row[0]) if count_row and count_row[0] is not None else 0
         cur.execute(paged_rows_sql, paged_params)
@@ -1001,7 +1096,9 @@ def load_user_settings(
     return resolved
 
 
-def save_user_settings(conn, username: str, settings_payload: dict[str, Any]) -> dict[str, Any]:
+def save_user_settings(
+    conn, username: str, settings_payload: dict[str, Any]
+) -> dict[str, Any]:
     _, extras = _load_psycopg2()
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -1099,7 +1196,9 @@ def list_saved_queries(conn, username: str) -> list[dict[str, Any]]:
     ]
 
 
-def save_saved_query(conn, username: str, query_name: str, query_payload: dict[str, Any]) -> None:
+def save_saved_query(
+    conn, username: str, query_name: str, query_payload: dict[str, Any]
+) -> None:
     _, extras = _load_psycopg2()
     ensure_schema(conn)
     with conn.cursor() as cur:

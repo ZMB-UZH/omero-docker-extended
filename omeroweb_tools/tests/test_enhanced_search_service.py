@@ -57,6 +57,23 @@ def test_search_without_live_omero_connection_returns_empty_payload():
     }
 
 
+def test_search_without_query_text_or_date_filters_returns_empty_payload():
+    payload = service.search(
+        object(),
+        service.SearchQuery(query_text=""),
+        acquisition_metadata_enabled=True,
+    )
+
+    assert payload == {
+        "results": [],
+        "page": 1,
+        "page_size": service.runtime_config().max_results,
+        "total_count": 0,
+        "has_previous": False,
+        "has_next": False,
+    }
+
+
 def test_save_user_settings_clears_current_user_scope_when_disabled(monkeypatch):
     class _DbConn:
         def __enter__(self):
@@ -134,7 +151,9 @@ def test_save_user_settings_auto_starts_indexing_for_enabled_user(monkeypatch):
     monkeypatch.setattr(
         service,
         "current_sync_states",
-        lambda scopes: [{"indexed_image_count": 0, "last_successful_at": None, "status": "idle"}],
+        lambda scopes: [
+            {"indexed_image_count": 0, "last_successful_at": None, "status": "idle"}
+        ],
     )
     started = []
     monkeypatch.setattr(
@@ -168,7 +187,9 @@ def test_scope_from_key_rejects_non_user_scopes():
     assert service.scope_from_key("group:9") is None
 
 
-def test_ensure_user_index_sync_autostarts_enabled_user_when_state_is_missing(monkeypatch):
+def test_ensure_user_index_sync_autostarts_enabled_user_when_state_is_missing(
+    monkeypatch,
+):
     monkeypatch.setattr(
         service,
         "current_user_scope",
@@ -181,7 +202,9 @@ def test_ensure_user_index_sync_autostarts_enabled_user_when_state_is_missing(mo
     monkeypatch.setattr(
         service,
         "current_sync_states",
-        lambda scopes: [{"scope_key": "user:21", "status": "idle", "last_successful_at": None}],
+        lambda scopes: [
+            {"scope_key": "user:21", "status": "idle", "last_successful_at": None}
+        ],
     )
     started = []
     monkeypatch.setattr(
@@ -263,7 +286,9 @@ def test_ensure_user_index_sync_skips_recent_success(monkeypatch):
 
 
 def test_search_merges_omero_and_acquisition_results(monkeypatch):
-    monkeypatch.setattr(service, "runtime_config", lambda: SimpleNamespace(max_results=10))
+    monkeypatch.setattr(
+        service, "runtime_config", lambda: SimpleNamespace(max_results=10)
+    )
     monkeypatch.setattr(service, "_visible_group_ids", lambda conn: [5])
     monkeypatch.setattr(service, "_current_user_id", lambda conn: 11)
 
@@ -399,8 +424,8 @@ def test_search_merges_omero_and_acquisition_results(monkeypatch):
     assert payload["total_count"] == 2
     results_by_id = {row["image_id"]: row for row in payload["results"]}
     assert results_by_id[17]["indexed_sources"] == [
-        "Acquisition metadata",
         "OMERO index",
+        "Acquisition metadata",
     ]
     assert results_by_id[18]["indexed_sources"] == ["OMERO index"]
     assert results_by_id[17]["image_name"] == "Current 17"

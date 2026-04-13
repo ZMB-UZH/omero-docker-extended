@@ -10,10 +10,7 @@ from .utils import require_non_root_user
 @require_non_root_user
 def help_page(request, conn=None, **kwargs):
     help_path = (
-        Path(__file__).resolve().parents[2]
-        / "docs"
-        / "help"
-        / "omeroweb_tools_help.md"
+        Path(__file__).resolve().parents[2] / "docs" / "help" / "omeroweb_tools_help.md"
     )
     if not help_path.exists():
         raise Http404(f"Help file not found: {help_path}")

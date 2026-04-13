@@ -16,10 +16,9 @@ def test_enhanced_search_view_blocks_root_without_running_search(monkeypatch):
     monkeypatch.setattr(
         index_view,
         "render",
-        lambda request, template, context: captured.update(
-            {"template": template, "context": context}
-        )
-        or context,
+        lambda request, template, context: (
+            captured.update({"template": template, "context": context}) or context
+        ),
     )
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "root")
     monkeypatch.setattr(
@@ -183,7 +182,9 @@ def test_save_user_settings_view_persists_payload(monkeypatch):
         data=json.dumps({"acquisition_metadata_enabled": True}),
         content_type="application/json",
     )
-    response = inspect.unwrap(index_view.save_user_settings_view)(request, conn=object())
+    response = inspect.unwrap(index_view.save_user_settings_view)(
+        request, conn=object()
+    )
 
     assert response.status_code == 200
     assert json.loads(response.content.decode("utf-8")) == {
@@ -205,13 +206,17 @@ def test_start_scope_sync_view_targets_current_user_scope(monkeypatch):
     monkeypatch.setattr(
         index_view,
         "current_user_scope",
-        lambda conn, username: SimpleNamespace(scope_key="user:3", label="Your acquisition metadata"),
+        lambda conn, username: SimpleNamespace(
+            scope_key="user:3", label="Your acquisition metadata"
+        ),
     )
     monkeypatch.setattr(
         index_view,
         "request_scope_sync",
         lambda scope_key, requested_by, scope_label=None: (
-            scope_key == "user:3" and requested_by == "alice" and scope_label == "Your acquisition metadata",
+            scope_key == "user:3"
+            and requested_by == "alice"
+            and scope_label == "Your acquisition metadata",
             "Indexing started.",
         ),
     )
@@ -249,7 +254,9 @@ def test_start_scope_sync_view_ignores_requested_scope_key(monkeypatch):
     monkeypatch.setattr(
         index_view,
         "current_user_scope",
-        lambda conn, username: SimpleNamespace(scope_key="user:3", label="Your acquisition metadata"),
+        lambda conn, username: SimpleNamespace(
+            scope_key="user:3", label="Your acquisition metadata"
+        ),
     )
     requested = {}
     monkeypatch.setattr(

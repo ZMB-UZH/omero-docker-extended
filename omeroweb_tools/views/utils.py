@@ -77,4 +77,3 @@ def validate_user_password(conn, password):
         except Exception:
             pass
     return True, None
-

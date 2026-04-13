@@ -63,6 +63,10 @@ SEARCH_SCOPE_LABELS = {
     SEARCH_SCOPE_ACQUISITION_METADATA: "Acquisition metadata",
     SEARCH_SCOPE_ALL_INDEXED: "All indexed scopes",
 }
+SEARCH_SOURCE_DISPLAY_ORDER = (
+    SEARCH_SCOPE_LABELS[SEARCH_SCOPE_OMERO_BUILTIN],
+    SEARCH_SCOPE_LABELS[SEARCH_SCOPE_ACQUISITION_METADATA],
+)
 USER_SCOPE_TYPE = "user"
 USER_SCOPE_LABEL = "Your acquisition metadata"
 
@@ -86,7 +90,9 @@ class SearchQuery:
             "page": self.page,
         }
         if self.acquisition_date_from is not None:
-            payload["acquisition_date_from"] = self.acquisition_date_from.date().isoformat()
+            payload["acquisition_date_from"] = (
+                self.acquisition_date_from.date().isoformat()
+            )
         if self.acquisition_date_to is not None:
             payload["acquisition_date_to"] = self.acquisition_date_to.date().isoformat()
         return payload
@@ -126,11 +132,15 @@ def user_scope(user_id: int, username: str) -> EnhancedSearchScope:
     return EnhancedSearchScope(
         scope_type=USER_SCOPE_TYPE,
         scope_id=int(user_id),
-        label=USER_SCOPE_LABEL if username else _default_scope_label(USER_SCOPE_TYPE, int(user_id)),
+        label=USER_SCOPE_LABEL
+        if username
+        else _default_scope_label(USER_SCOPE_TYPE, int(user_id)),
     )
 
 
-def scope_from_key(scope_key: str, *, label: str | None = None) -> EnhancedSearchScope | None:
+def scope_from_key(
+    scope_key: str, *, label: str | None = None
+) -> EnhancedSearchScope | None:
     raw_scope_key = str(scope_key or "").strip()
     if ":" not in raw_scope_key:
         return None
@@ -142,11 +152,17 @@ def scope_from_key(scope_key: str, *, label: str | None = None) -> EnhancedSearc
         scope_id = int(str(raw_scope_id).strip())
     except (TypeError, ValueError):
         return None
-    resolved_label = str(label or "").strip() or _default_scope_label(scope_type, scope_id)
-    return EnhancedSearchScope(scope_type=scope_type, scope_id=scope_id, label=resolved_label)
+    resolved_label = str(label or "").strip() or _default_scope_label(
+        scope_type, scope_id
+    )
+    return EnhancedSearchScope(
+        scope_type=scope_type, scope_id=scope_id, label=resolved_label
+    )
 
 
-def ensure_scope_state(scopes: tuple[EnhancedSearchScope, ...] | list[EnhancedSearchScope]) -> list[dict[str, Any]]:
+def ensure_scope_state(
+    scopes: tuple[EnhancedSearchScope, ...] | list[EnhancedSearchScope],
+) -> list[dict[str, Any]]:
     normalized_scopes = tuple(scopes or ())
     if not normalized_scopes:
         return []
@@ -159,7 +175,9 @@ def ensure_scope_state(scopes: tuple[EnhancedSearchScope, ...] | list[EnhancedSe
         return list_sync_states(conn)
 
 
-def current_sync_states(scopes: tuple[EnhancedSearchScope, ...] | list[EnhancedSearchScope]) -> list[dict[str, Any]]:
+def current_sync_states(
+    scopes: tuple[EnhancedSearchScope, ...] | list[EnhancedSearchScope],
+) -> list[dict[str, Any]]:
     by_key = {
         f"{state['scope_type']}:{state['scope_id']}": state
         for state in ensure_scope_state(scopes)
@@ -263,7 +281,9 @@ def _query_filters(query: SearchQuery) -> dict[str, Any]:
     }
 
 
-def _empty_search_payload(*, page: int = 1, page_size: int | None = None) -> dict[str, Any]:
+def _empty_search_payload(
+    *, page: int = 1, page_size: int | None = None
+) -> dict[str, Any]:
     return {
         "results": [],
         "page": page,
@@ -301,7 +321,9 @@ def _coerce_bool(raw_value: Any) -> bool:
     return bool(raw_value)
 
 
-def _normalized_user_settings(settings_payload: dict[str, Any] | None) -> dict[str, Any]:
+def _normalized_user_settings(
+    settings_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
     payload = dict(default_user_settings())
     payload["acquisition_metadata_enabled"] = _coerce_bool(
         (settings_payload or {}).get("acquisition_metadata_enabled")
@@ -386,7 +408,9 @@ def ensure_user_index_sync(
     return sync_states_for_user(conn, username), started, message
 
 
-def save_user_settings(conn, username: str, settings_payload: dict[str, Any]) -> dict[str, Any]:
+def save_user_settings(
+    conn, username: str, settings_payload: dict[str, Any]
+) -> dict[str, Any]:
     normalized = _normalized_user_settings(settings_payload)
     user_id = _current_user_id(conn)
     previous = user_settings(username)
@@ -408,10 +432,9 @@ def save_user_settings(conn, username: str, settings_payload: dict[str, Any]) ->
     if scope is not None and stored["acquisition_metadata_enabled"]:
         scope_states = current_sync_states((scope,))
         state = scope_states[0] if scope_states else None
-        should_auto_start = (
-            not previous.get("acquisition_metadata_enabled")
-            or _sync_state_needs_refresh(state)
-        )
+        should_auto_start = not previous.get(
+            "acquisition_metadata_enabled"
+        ) or _sync_state_needs_refresh(state)
         if should_auto_start:
             sync_started, sync_message = request_scope_sync(
                 scope.scope_key,
@@ -451,14 +474,20 @@ def _visible_group_ids(conn) -> list[int] | None:
 
 
 def _datetime_to_rtime(value: datetime):
-    normalized = value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    normalized = (
+        value.astimezone(timezone.utc)
+        if value.tzinfo
+        else value.replace(tzinfo=timezone.utc)
+    )
     return rtime(int(normalized.timestamp() * 1000))
 
 
 def _omero_search_created_range(query: SearchQuery):
     if query.acquisition_date_from is None and query.acquisition_date_to is None:
         return None
-    lower_bound = query.acquisition_date_from or datetime(1970, 1, 1, tzinfo=timezone.utc)
+    lower_bound = query.acquisition_date_from or datetime(
+        1970, 1, 1, tzinfo=timezone.utc
+    )
     upper_bound = query.acquisition_date_to or datetime.now(timezone.utc)
     return (_datetime_to_rtime(lower_bound), _datetime_to_rtime(upper_bound))
 
@@ -492,17 +521,23 @@ def _images_from_builtin_search_hit(hit) -> list[Any]:
 
 
 def _merge_indexed_sources(existing: list[str], incoming: list[str]) -> list[str]:
-    merged = list(existing)
-    for source in incoming:
-        if source not in merged:
-            merged.append(source)
-    return merged
+    merged = set(existing or [])
+    merged.update(incoming or [])
+    ordered = [source for source in SEARCH_SOURCE_DISPLAY_ORDER if source in merged]
+    extras = sorted(
+        source for source in merged if source not in SEARCH_SOURCE_DISPLAY_ORDER
+    )
+    return ordered + extras
 
 
 def _normalized_sort_datetime(value: Any) -> datetime | None:
     if not isinstance(value, datetime):
         return None
-    return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return (
+        value.astimezone(timezone.utc)
+        if value.tzinfo
+        else value.replace(tzinfo=timezone.utc)
+    )
 
 
 def _merged_result_sort_key(row: dict[str, Any]) -> tuple[int, datetime, int]:
@@ -571,7 +606,9 @@ def _search_omero_builtin_rows(conn, query: SearchQuery) -> list[dict[str, Any]]
                     continue
                 seen_image_ids.add(image_id)
                 row = _result_row_from_image(image)
-                row["indexed_sources"] = [SEARCH_SCOPE_LABELS[SEARCH_SCOPE_OMERO_BUILTIN]]
+                row["indexed_sources"] = [
+                    SEARCH_SCOPE_LABELS[SEARCH_SCOPE_OMERO_BUILTIN]
+                ]
                 results.append(row)
 
         if len(batch) < batch_size:
@@ -651,10 +688,18 @@ def search(
     page_size = config.max_results
     page = max(1, query.page)
     offset = (page - 1) * page_size
+    has_query_text = bool(str(query.query_text or "").strip())
+    has_date_filter = (
+        query.acquisition_date_from is not None or query.acquisition_date_to is not None
+    )
+
+    if not has_query_text and not has_date_filter:
+        return _empty_search_payload(page=page, page_size=page_size)
 
     acquisition_rows: list[dict[str, Any]] = []
     if (
-        query.indexed_scope in (
+        query.indexed_scope
+        in (
             SEARCH_SCOPE_ACQUISITION_METADATA,
             SEARCH_SCOPE_ALL_INDEXED,
         )
@@ -793,7 +838,9 @@ def _root_connection():
         try:
             conn.close()
         except Exception:
-            logger.debug("Failed to close root enhanced-search connection.", exc_info=True)
+            logger.debug(
+                "Failed to close root enhanced-search connection.", exc_info=True
+            )
 
 
 def _group_context(group_obj) -> tuple[str, bool]:
@@ -945,7 +992,9 @@ def _sync_scope(
             images = _scope_image_rows(admin_conn, scope)
             if not images:
                 with db_connect() as db_conn:
-                    prune_scope_membership(db_conn, scope.scope_type, scope.scope_id, run_token)
+                    prune_scope_membership(
+                        db_conn, scope.scope_type, scope.scope_id, run_token
+                    )
                     prune_orphan_documents(db_conn)
                     mark_sync_complete(
                         db_conn,
@@ -1005,7 +1054,11 @@ def _sync_scope(
             "Enhanced-search sync lease cancelled for %s.",
             scope.scope_key,
         )
-        return {"status": "idle", "indexed_image_count": processed_count, "cancelled": True}
+        return {
+            "status": "idle",
+            "indexed_image_count": processed_count,
+            "cancelled": True,
+        }
     except Exception as exc:
         logger.error(
             "Enhanced-search sync failed for %s: %s",

@@ -139,7 +139,10 @@ def test_extract_search_document_builds_canonical_fields_and_metadata_attributes
     assert document.pixel_size_x_um == 0.108
     assert document.pixel_size_y_um == 0.108
     assert document.z_step_um == 0.4
-    assert document.channel_summary == "DAPI / Ex 405 nm / Em 450 nm; GFP / Ex 488 nm / Em 525 nm"
+    assert (
+        document.channel_summary
+        == "DAPI / Ex 405 nm / Em 450 nm; GFP / Ex 488 nm / Em 525 nm"
+    )
     assert "LSM 980" in document.search_document
     assert "Exposure Time" not in document.search_document
     assert "125 ms" in document.search_document
@@ -148,7 +151,9 @@ def test_extract_search_document_builds_canonical_fields_and_metadata_attributes
     assert "Cell Cycle" not in document.search_document
     assert document.raw_metadata["BF_Exposure Time"] == "125 ms"
 
-    attributes = {attribute.attribute_key: attribute for attribute in document.attributes}
+    attributes = {
+        attribute.attribute_key: attribute for attribute in document.attributes
+    }
     assert attributes["instrument_model"].attribute_text == "LSM 980"
     assert attributes["exposure_time"].attribute_text == "125 ms"
     assert attributes["laser_line_nm"].attribute_numeric == 488.0

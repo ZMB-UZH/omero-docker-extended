@@ -128,6 +128,23 @@ def test_search_index_rows_short_circuits_for_no_visible_groups(monkeypatch):
     assert total == 0
 
 
+def test_search_index_rows_returns_no_rows_for_non_compilable_text(monkeypatch):
+    monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
+
+    rows, total = store.search_index_rows(
+        object(),
+        visible_group_ids=[5],
+        current_user_id=9,
+        query_text="!!! ???",
+        filters={},
+        limit=25,
+        offset=0,
+    )
+
+    assert rows == []
+    assert total == 0
+
+
 def test_search_index_rows_builds_permission_and_date_aware_sql(monkeypatch):
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     conn = _SearchConn()
@@ -155,17 +172,19 @@ def test_search_index_rows_builds_permission_and_date_aware_sql(monkeypatch):
     count_params = count_call["params"]
     rows_params = rows_call["params"]
 
-    assert "images.group_id = ANY(%s)" in count_sql
+    assert "images.group_id = ANY(%s::bigint[])" in count_sql
+    assert "(%s::bigint IS NULL AND images.group_can_read = TRUE)" in count_sql
     assert "(images.group_can_read = TRUE OR images.owner_id = %s)" in count_sql
     assert "to_tsquery('simple', %s)" in count_sql
-    assert "images.acquisition_date >= %s" in count_sql
-    assert "images.acquisition_date <= %s" in count_sql
+    assert "(%s::timestamptz IS NULL OR images.acquisition_date >= %s)" in count_sql
+    assert "(%s::timestamptz IS NULL OR images.acquisition_date <= %s)" in count_sql
     assert "LIMIT %s OFFSET %s" in rows_sql
     assert "JOIN" not in count_sql
 
     assert count_params[0] == [5, 7]
-    assert count_params[1] == 21
-    assert count_params[2] == "lsm:* | zeiss:*"
+    assert count_params[1] == [5, 7]
+    assert count_params[2:5] == [21, 21, 21]
+    assert count_params[5:7] == ["lsm:* | zeiss:*", "lsm:* | zeiss:*"]
     assert rows_params[-2:] == [25, 25]
     assert count_call["raw_sql"].__class__.__name__ != "str"
     assert rows_call["raw_sql"].__class__.__name__ != "str"

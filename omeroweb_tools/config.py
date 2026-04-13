@@ -30,9 +30,7 @@ ENHANCED_SEARCH_CELERY_LOGLEVEL_ENV = "TOOLS_ENHANCED_SEARCH_CELERY_LOGLEVEL"
 ENHANCED_SEARCH_CELERY_WORKER_CONCURRENCY_ENV = (
     "TOOLS_ENHANCED_SEARCH_CELERY_WORKER_CONCURRENCY"
 )
-ENHANCED_SEARCH_CELERY_MAX_RETRIES_ENV = (
-    "TOOLS_ENHANCED_SEARCH_CELERY_MAX_RETRIES"
-)
+ENHANCED_SEARCH_CELERY_MAX_RETRIES_ENV = "TOOLS_ENHANCED_SEARCH_CELERY_MAX_RETRIES"
 ENHANCED_SEARCH_CELERY_PREFETCH_ENV = "TOOLS_ENHANCED_SEARCH_CELERY_PREFETCH"
 
 DEFAULT_BATCH_SIZE = 100
@@ -92,7 +90,9 @@ class EnhancedSearchCeleryConfig:
     prefetch_multiplier: int
 
 
-def _bounded_int(raw_value: str | None, default: int, minimum: int, maximum: int) -> int:
+def _bounded_int(
+    raw_value: str | None, default: int, minimum: int, maximum: int
+) -> int:
     if raw_value is None or str(raw_value).strip() == "":
         return default
     try:
