@@ -51,7 +51,9 @@ def _plugin_suite_fallback() -> int:
 
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
-        print("Usage: python3 tools/run_agent_skill_smoke.py <profile>", file=sys.stderr)
+        print(
+            "Usage: python3 tools/run_agent_skill_smoke.py <profile>", file=sys.stderr
+        )
         return 2
 
     profile = argv[1]

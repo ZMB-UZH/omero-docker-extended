@@ -520,8 +520,8 @@ class AgentSkillContractTests(unittest.TestCase):
         self.assertNotIn("/opt/omero/tools/env_safety_guard.py", settings_text)
         self.assertIn("python3 -m ruff check --fix --quiet", settings_text)
         self.assertIn("python3 -m ruff format --quiet", settings_text)
-        self.assertIn('git rev-parse --show-toplevel', settings_text)
-        self.assertIn('tools/env_safety_guard.py', settings_text)
+        self.assertIn("git rev-parse --show-toplevel", settings_text)
+        self.assertIn("tools/env_safety_guard.py", settings_text)
 
     def test_agent_surfaces_avoid_host_specific_clone_paths(self) -> None:
         surfaces = {
@@ -541,7 +541,11 @@ class AgentSkillContractTests(unittest.TestCase):
             ).read_text(encoding="utf-8"),
             **{
                 str(path.relative_to(self.repo_root)): path.read_text(encoding="utf-8")
-                for path in sorted((self.repo_root / ".github" / "instructions").glob("*.instructions.md"))
+                for path in sorted(
+                    (self.repo_root / ".github" / "instructions").glob(
+                        "*.instructions.md"
+                    )
+                )
             },
             **{
                 str(path.relative_to(self.repo_root)): path.read_text(encoding="utf-8")
