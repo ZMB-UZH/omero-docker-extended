@@ -17,7 +17,7 @@
 | --- | --- | --- |
 | OMERO database | `database:5432` | PostgreSQL (OMERO core) |
 | Plugin database | `database-plugin:5433` | PostgreSQL (plugin data) |
-| Redis | `redis:6379` | Cache (db 1) + Celery broker (db 2) |
+| Redis | `redis:6379` | Cache (db 1) + Imaris Celery broker (db 2) + Tools Celery broker (db 3) |
 | Alloy | `alloy:12345` | Log pipeline metrics |
 | Node exporter | `node-exporter:9100` | Host metrics |
 | cAdvisor | `cadvisor:8080` | Container metrics |
@@ -69,6 +69,22 @@ Base: `/omeroweb_import/`
 | `/root-status/` | Check if current user is OMERO root |
 | `/user-settings/save/` | Save upload preferences |
 | `/special-method-settings/save/`, `/load/` | SEM-EDX method settings |
+| `/help/` | Help Markdown document download |
+
+### Tools Plugin
+
+Base: `/omeroweb_tools/`
+
+| Route | Purpose |
+| --- | --- |
+| `/` | Tools landing page |
+| `/root-status/` | Check if current user is OMERO root |
+| `/enhanced-search/` | Enhanced search UI |
+| `/enhanced-search/sync/` | Request scope index refresh |
+| `/enhanced-search/sync-state/` | Fetch current sync-state table |
+| `/enhanced-search/saved-queries/save/` | Save current query for the logged-in user |
+| `/enhanced-search/saved-queries/delete/` | Delete a saved query |
+| `/enhanced-search/saved-queries/<query_id>/` | Re-open a saved query |
 | `/help/` | Help Markdown document download |
 
 ### OMERO.web Zarr Plugin

@@ -19,7 +19,7 @@ Production-grade (see [LICENSE](LICENSE) for details), security-hardened, docker
 <summary><h2>What this repository delivers</h2></summary>
 
 This repository packages the complete runtime for the OMERO microscopy data
-storage & management platform, extending it with four purpose-built OMERO.web
+storage & management platform, extending it with five purpose-built OMERO.web
 plugins (with several subroutines each), a shared utility library, an
 observability stack, automated database maintenance, and deployment/update
 tooling. Every service runs in separate Docker containers with explicit health
@@ -45,12 +45,13 @@ For the official OMERO documentation, release notes, and guides, your first poin
 
 - OMP plugin (`omeroweb_omp_plugin`)
 - Import plugin (`omeroweb_import`)
+- Tools plugin (`omeroweb_tools`) / Enhanced search
 - Direct Imaris 11 integration
 - Unofficial and helper scripts specific to this repository
 
 ## 🐢 Not working yet / progressing slowly / planned
 
-- Acquisition metadata search
+- Additional user-facing Tools entries beyond Enhanced search
 
 </details>
 
@@ -71,7 +72,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── docker-compose.yml                 # Full service orchestration (20 Compose services total: 18 default long-running containers, 19 with crowdsec; redis-sysctl-init is profile-gated)
 ├── docker/                            # Dockerfiles
 │   ├── omero-server.Dockerfile        #   OMERO.server with CLI plugins, scripts, ImarisConvert
-│   ├── omero-web.Dockerfile           #   OMERO.web with all plugins, supervisord, Celery worker
+│   ├── omero-web.Dockerfile           #   OMERO.web with all plugins, supervisord, Celery workers
 │   ├── omero-celery-worker.Dockerfile #   Standalone Celery worker (Ubuntu 24.04 + Python 3.9)
 │   ├── crowdsec.Dockerfile            #   CrowdSec service with custom bootstrap
 │   ├── pg-maintenance.Dockerfile      #   PostgreSQL maintenance sidecar with cron
@@ -85,12 +86,14 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── startup/                           # Container bootstrap scripts
 │   ├── 10-server-bootstrap.sh         #   Server config, certs, job-service user, script reg.
 │   ├── 10-web-bootstrap.sh            #   Log dir validation, Docker socket access
-│   ├── 40-start-imaris-celery-worker.sh # Celery worker startup
+│   ├── 40-start-imaris-celery-worker.sh # Imaris Celery worker startup
+│   ├── 40-start-tools-celery-worker.sh # Tools enhanced-search Celery worker startup
 │   ├── 50-install-omero-downloader.sh #   OMERO.downloader from GitHub releases
 │   └── 51-install-imarisconvert.sh    #   ImarisConvertBioformats compilation
 ├── omero_plugin_common/               # Shared Python library for all plugins
 ├── omeroweb_omp_plugin/               # Metadata filename parsing plugin
 ├── omeroweb_import/                   # Import plugin
+├── omeroweb_tools/                    # User-facing tools plugin (Enhanced search)
 ├── omeroweb_admin_tools/              # Admin observability plugin
 ├── omeroweb_imaris_connector/         # Imaris export plugin
 ├── monitoring/                        # Observability stack configuration
@@ -111,7 +114,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 │   ├── extra_packages_debian_13_install_script
 │   └── docker_image_analysis.sh
 ├── XTOmeroConnector.py                # Standalone Tkinter GUI: Imaris <-> OMERO transfer
-├── supervisord.conf                   # Process manager: OMERO.web + Celery worker
+├── supervisord.conf                   # Process manager: OMERO.web + co-located Celery workers
 ├── omero-web.config                   # OMERO.web runtime overrides (log directory)
 ├── installation_paths_example.env     # Template: all filesystem path definitions
 ├── github_pull_project_bash_example   # Safe self-updating pull script (public upstream)
@@ -139,9 +142,9 @@ The table below lists the long-running services available in the full profile se
 | Service | Image | Purpose | Port |
 | --- | --- | --- | --- |
 | `omeroserver` | Custom (CentOS) | OMERO.server: image storage, metadata API, script execution | 4064 |
-| `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery worker (supervisord) | 4090 |
+| `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery workers (supervisord) | 4090 |
 | `database` | postgres:16.12 | Primary OMERO PostgreSQL database | 5432 (internal) |
-| `database_plugin` | postgres:16.12 | OMERO plugin PostgreSQL database | 5433 (internal) |
+| `database_plugin` | postgres:16.12 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
 | `redis` | redis:8.4.0-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
 | `pg-maintenance` | Custom (postgres:16.12) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
 | `portainer` | portainer-ce:2.39.0 | Docker container management UI | 9000, 9443 |
@@ -195,6 +198,17 @@ Operational observability interfaces embedded in OMERO.web.
 - Storage analytics by user and group
 - Server and database diagnostic scripts
 - Root-only access controls
+
+### Tools Plugin (`omeroweb_tools`)
+
+User-facing utilities that share the Admin Tools layout pattern without admin-only access.
+
+- Landing page for future user tools inside OMERO.web
+- Enhanced search over a selective PostgreSQL index stored only in the plugin database
+- Fielded search UI for indexed acquisition and context metadata
+- Saved queries per user in the plugin database
+- Resumable scope refresh with sync-state tracking and OMERO permission revalidation
+- Regular-user access only; root is intentionally blocked from running searches and refreshes
 
 ### Imaris Connector Plugin (`omeroweb_imaris_connector`)
 
