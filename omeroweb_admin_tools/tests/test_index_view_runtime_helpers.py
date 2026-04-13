@@ -154,6 +154,7 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
 
 
 def test_internal_service_base_url_builds_valid_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("ADMIN_TOOLS_GRAFANA_URL", raising=False)
     monkeypatch.delenv("ADMIN_TOOLS_PROMETHEUS_URL", raising=False)
     monkeypatch.delenv("ADMIN_TOOLS_INTERNAL_SERVICE_SCHEME", raising=False)
     default_url = index_view._internal_service_base_url(

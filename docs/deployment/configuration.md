@@ -183,6 +183,56 @@ When adding or removing a plugin:
 3. restart OMERO.web,
 4. verify menu link visibility and route health.
 
+The tracked `omeroweb` env places the `Tools` shortcut between `Import` and
+`Admin tools` in the OMERO.web top navigation.
+
+### Tools enhanced-search configuration
+
+`omeroweb_tools` exposes the user-facing `Tools` launcher and the current
+`Enhanced search` feature. Its write path is intentionally isolated:
+
+- OMERO metadata is read through the OMERO API only.
+- Indexed rows, sync state, and saved queries are written only to the plugin
+  database via the existing `OMP_DATA_*` connection variables.
+- No enhanced-search data is written into the core OMERO PostgreSQL database.
+
+`TOOLS_ENHANCED_SEARCH_SCOPES` in `env/omeroweb.env` is the authoritative
+scope allowlist and is intentionally empty by default so deployments do not
+index arbitrary groups, projects, or datasets by accident. Configure it as a
+JSON array of objects:
+
+```json
+[
+  {"type": "project", "id": 123, "label": "Microscope QA"},
+  {"type": "dataset", "id": 456, "label": "Pilot import set"}
+]
+```
+
+Related `env/omeroweb.env` controls:
+
+- `TOOLS_ENHANCED_SEARCH_INDEX_BATCH_SIZE`
+- `TOOLS_ENHANCED_SEARCH_MAX_RESULTS`
+- `TOOLS_ENHANCED_SEARCH_SYNC_STALE_SECONDS`
+- `TOOLS_ENHANCED_SEARCH_SCHEMA_VERSION`
+- `TOOLS_ENHANCED_SEARCH_SCOPE_IMAGE_CAP`
+
+Related `env/omero-celery.env` controls:
+
+- `TOOLS_ENHANCED_SEARCH_USE_CELERY`
+- `TOOLS_ENHANCED_SEARCH_CELERY_BROKER_URL`
+- `TOOLS_ENHANCED_SEARCH_CELERY_BACKEND_URL`
+- `TOOLS_ENHANCED_SEARCH_CELERY_QUEUE`
+- `TOOLS_ENHANCED_SEARCH_CELERY_RESULT_EXPIRES`
+- `TOOLS_ENHANCED_SEARCH_CELERY_TIME_LIMIT`
+- `TOOLS_ENHANCED_SEARCH_CELERY_LOGLEVEL`
+- `TOOLS_ENHANCED_SEARCH_CELERY_WORKER_CONCURRENCY`
+- `TOOLS_ENHANCED_SEARCH_CELERY_MAX_RETRIES`
+- `TOOLS_ENHANCED_SEARCH_CELERY_PREFETCH`
+
+When celery is enabled, `supervisord.conf` starts a dedicated
+`tools-celery-worker` process in the `omeroweb` container. If celery is
+disabled, refresh requests fall back to an in-process background thread.
+
 ### OMERO.web Zarr UI registration
 
 `omero_web_zarr` has additional UI registration beyond `CONFIG_omero_web_apps`:
