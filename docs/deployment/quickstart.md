@@ -23,6 +23,17 @@ Do not deploy with default credentials.
 `installation_paths.env`, `env/omero_secrets.env`, and `env/omeroserver.env`
 via `.env` (`COMPOSE_ENV_FILES`).
 
+The generated `.env` also pins `COMPOSE_PROJECT_NAME` from the declared
+`OMERO_INSTALLATION_PATH`, so related worktrees cannot accidentally create a
+second Compose project against the same live bind mounts.
+
+Before any manual compose command, run:
+
+```bash
+python3 tools/env_safety_guard.py check
+python3 tools/env_safety_guard.py compose-guard
+```
+
 IMPORTANT: This stack uses additional variables from `env/omero_secrets.env` (credentials; never auto-created).
 After `installation/installation_script.sh` runs, generated `.env` includes
 `COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env:env/omeroserver.env`

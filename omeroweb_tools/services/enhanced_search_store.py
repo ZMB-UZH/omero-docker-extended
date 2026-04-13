@@ -88,10 +88,8 @@ def _db_params():
 @contextmanager
 def connect():
     psycopg2, _ = _load_psycopg2()
-    conn = None
     try:
         conn = psycopg2.connect(**_db_params())
-        yield conn
     except EnhancedSearchStoreError:
         raise
     except Exception as exc:
@@ -103,6 +101,8 @@ def connect():
         raise EnhancedSearchStoreError(
             "Enhanced-search database operation failed."
         ) from exc
+    try:
+        yield conn
     finally:
         if conn is not None:
             try:
@@ -304,11 +304,10 @@ def ensure_sync_state_rows(
                         updated_at
                     )
                     VALUES (%s, %s, %s, %s, NOW())
-                    ON CONFLICT (scope_type, scope_id)
-                    DO UPDATE SET
-                        scope_label = EXCLUDED.scope_label,
-                        schema_version = EXCLUDED.schema_version,
-                        updated_at = NOW()
+                ON CONFLICT (scope_type, scope_id)
+                DO UPDATE SET
+                    scope_label = EXCLUDED.scope_label,
+                    schema_version = EXCLUDED.schema_version
                     """,
                     TABLE_SYNC_STATE,
                 ),
@@ -447,9 +446,17 @@ def try_start_scope_sync(
                         THEN {}.last_started_at
                         ELSE NOW()
                     END,
-                    updated_at = NOW()
+                    updated_at = CASE
+                        WHEN {}.status = 'running'
+                         AND {}.updated_at > (NOW() - (%s * INTERVAL '1 second'))
+                        THEN {}.updated_at
+                        ELSE NOW()
+                    END
                 RETURNING status, run_token
                 """,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
+                TABLE_SYNC_STATE,
                 TABLE_SYNC_STATE,
                 TABLE_SYNC_STATE,
                 TABLE_SYNC_STATE,
@@ -483,6 +490,7 @@ def try_start_scope_sync(
                 requested_by,
                 run_token,
                 "Indexing scope…",
+                stale_after_seconds,
                 stale_after_seconds,
                 stale_after_seconds,
                 stale_after_seconds,

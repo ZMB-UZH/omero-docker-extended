@@ -343,11 +343,12 @@ def test_apply_saved_query_view_redirects_with_safe_query_string(monkeypatch):
 
 def test_validate_user_password_closes_session_after_success(monkeypatch):
     closed = []
+    credential_value = "opaque-value"
 
     class _Client:
-        def createSession(self, username, password):
+        def createSession(self, username, provided_value):
             assert username == "alice"
-            assert password == "secret"
+            assert provided_value == credential_value
 
         def closeSession(self):
             closed.append(True)
@@ -360,7 +361,7 @@ def test_validate_user_password_closes_session_after_success(monkeypatch):
     )
     monkeypatch.setattr(view_utils.omero, "client", lambda host, port: _Client())
 
-    valid, error = view_utils.validate_user_password(object(), "secret")
+    valid, error = view_utils.validate_user_password(object(), credential_value)
 
     assert valid is True
     assert error is None
@@ -369,9 +370,11 @@ def test_validate_user_password_closes_session_after_success(monkeypatch):
 
 def test_validate_user_password_does_not_close_session_when_login_fails(monkeypatch):
     closed = []
+    credential_value = "opaque-value"
 
     class _Client:
-        def createSession(self, username, password):
+        def createSession(self, username, provided_value):
+            assert provided_value == credential_value
             raise RuntimeError("nope")
 
         def closeSession(self):
@@ -385,7 +388,7 @@ def test_validate_user_password_does_not_close_session_when_login_fails(monkeypa
     )
     monkeypatch.setattr(view_utils.omero, "client", lambda host, port: _Client())
 
-    valid, error = view_utils.validate_user_password(object(), "secret")
+    valid, error = view_utils.validate_user_password(object(), credential_value)
 
     assert valid is False
     assert error == "Password validation failed: nope"
