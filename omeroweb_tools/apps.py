@@ -10,4 +10,3 @@ class ToolsPluginConfig(AppConfig):
     def ready(self) -> None:
         """Apply plugin-wide runtime configuration."""
         configure_omero_gateway_logging()
-

@@ -137,9 +137,9 @@
 }
 
 .tools-search-card .tools-search-inline-action {
-    min-width: 0;
+    min-width: 94px;
     min-height: 2.5rem;
-    padding: 0.68rem 0.92rem;
+    padding: 0.68rem 1.08rem;
     border: 1px solid #d6deea;
     border-radius: 8px;
     background: #f9fbff;
@@ -148,6 +148,7 @@
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     font-size: 14px;
     font-weight: 600;
+    justify-content: center;
 }
 
 .tools-search-card .tools-search-inline-action:hover,

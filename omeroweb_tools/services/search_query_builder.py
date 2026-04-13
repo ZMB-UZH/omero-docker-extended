@@ -31,7 +31,7 @@ def build_omero_fulltext_query(raw_text: str) -> str:
     query_parts: list[str] = []
     for clause_type, tokens in clauses:
         if clause_type == "phrase":
-            query_parts.append(f"\"{' '.join(tokens)}\"")
+            query_parts.append(f'"{" ".join(tokens)}"')
             continue
         query_parts.extend(f"{token}*" for token in tokens)
     return " OR ".join(query_parts)
