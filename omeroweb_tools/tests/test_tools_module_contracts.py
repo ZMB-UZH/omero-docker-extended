@@ -31,7 +31,10 @@ def test_tools_urls_expose_expected_routes():
     assert route_map["omeroweb_tools_root_status"] == "root-status/"
     assert route_map["omeroweb_tools_enhanced_search"] == "enhanced-search/"
     assert route_map["omeroweb_tools_enhanced_search_sync"] == "enhanced-search/sync/"
-    assert route_map["omeroweb_tools_enhanced_search_settings"] == "enhanced-search/settings/"
+    assert (
+        route_map["omeroweb_tools_enhanced_search_settings"]
+        == "enhanced-search/settings/"
+    )
     assert route_map["omeroweb_tools_enhanced_search_apply_query"] == (
         "enhanced-search/saved-queries/<int:query_id>/"
     )
@@ -80,9 +83,10 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "tools-search-inline-action--primary" in template_text
     assert "tools-search-page-loader" in template_text
     assert "Loading search results" in template_text
+    assert "Please wait while the search results are being queried." in template_text
     assert "<th>Preview</th>" in template_text
     assert "<th>Channel(s)</th>" in template_text
-    assert "Indexed by" in template_text
+    assert "Indexed by:" in template_text
     assert "Owner:" in template_text
     assert "X:" in template_text
     assert "Y:" in template_text

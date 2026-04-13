@@ -151,7 +151,9 @@ def _canonical_field_candidate(
             continue
         if any(excluded in normalized_key for excluded in exclude_terms):
             continue
-        if all(any(term in normalized_key for term in group) for group in include_groups):
+        if all(
+            any(term in normalized_key for term in group) for group in include_groups
+        ):
             return _normalized_text(raw_value)
     return ""
 
@@ -256,7 +258,9 @@ def _collect_channels(image) -> tuple[SearchChannel, ...]:
                 excitation_nm=_parse_float(
                     _safe_channel_value(channel, "getExcitationWave")
                 ),
-                emission_nm=_parse_float(_safe_channel_value(channel, "getEmissionWave")),
+                emission_nm=_parse_float(
+                    _safe_channel_value(channel, "getEmissionWave")
+                ),
             )
         )
     return tuple(channels)
@@ -325,15 +329,14 @@ def _append_attribute(
 ) -> None:
     if not attribute.attribute_key:
         return
-    if (
-        not attribute.attribute_text
-        and attribute.attribute_numeric is None
-    ):
+    if not attribute.attribute_text and attribute.attribute_numeric is None:
         return
     bucket.setdefault(attribute.attribute_key, attribute)
 
 
-def _metadata_attributes(original_metadata: dict[str, str]) -> tuple[SearchAttribute, ...]:
+def _metadata_attributes(
+    original_metadata: dict[str, str],
+) -> tuple[SearchAttribute, ...]:
     attributes: list[SearchAttribute] = []
     seen: set[str] = set()
     for raw_key, raw_value in original_metadata.items():
@@ -363,7 +366,9 @@ def _build_search_text(parts: Iterable[str]) -> str:
     return text[:_SEARCH_TEXT_CAP].rsplit(" ", 1)[0].strip()
 
 
-def extract_search_document(image) -> tuple[SearchDocument, dict[str, int | str | None]]:
+def extract_search_document(
+    image,
+) -> tuple[SearchDocument, dict[str, int | str | None]]:
     original_metadata = _collect_original_metadata(image)
     metadata_pairs = tuple(original_metadata.items())
     channels = _collect_channels(image)
@@ -392,7 +397,9 @@ def extract_search_document(image) -> tuple[SearchDocument, dict[str, int | str 
         objective_collar = _parse_float(
             _safe_details_value(objective_settings, "getCorrectionCollar")
         )
-        objective_id = _normalized_text(_safe_details_value(objective_settings, "getID"))
+        objective_id = _normalized_text(
+            _safe_details_value(objective_settings, "getID")
+        )
 
     detector_binning = ""
     detector_gain = None
@@ -400,7 +407,9 @@ def extract_search_document(image) -> tuple[SearchDocument, dict[str, int | str 
         detector_binning = _normalized_text(
             _safe_details_value(detector_settings[0], "getBinning")
         )
-        detector_gain = _parse_float(_safe_details_value(detector_settings[0], "getGain"))
+        detector_gain = _parse_float(
+            _safe_details_value(detector_settings[0], "getGain")
+        )
 
     pixel_size_x_um = None
     pixel_size_y_um = None

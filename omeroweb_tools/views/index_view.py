@@ -25,6 +25,8 @@ from ..services.enhanced_search_service import (
 )
 from .utils import current_username, load_json_body, require_non_root_user
 
+__all__ = ["SearchQuery"]
+
 
 def _is_root_user(request, conn) -> bool:
     return str(current_username(request, conn) or "").strip() == "root"
@@ -50,9 +52,7 @@ def enhanced_search_view(request, conn=None, url=None, **kwargs):
     username = str(current_username(request, conn) or "")
     blocked_for_root = username == "root"
     settings_payload = (
-        default_user_settings()
-        if blocked_for_root
-        else user_settings(username)
+        default_user_settings() if blocked_for_root else user_settings(username)
     )
     query, query_errors = parse_search_query(request.GET)
     search_payload = {
@@ -130,7 +130,9 @@ def start_scope_sync_view(request, conn=None, url=None, **kwargs):
         )
     current_scope = current_user_scope(conn, username)
     if current_scope is None:
-        return JsonResponse({"error": "Could not resolve the current OMERO user."}, status=400)
+        return JsonResponse(
+            {"error": "Could not resolve the current OMERO user."}, status=400
+        )
     started, message = request_scope_sync(
         current_scope.scope_key,
         username,
