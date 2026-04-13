@@ -67,13 +67,13 @@ def validate_user_password(conn, password):
     if not username or not host or not port:
         return False, "Could not validate the provided password."
     client = omero.client(host=host, port=port)
+    session_created = False
     try:
         client.createSession(username, password)
+        session_created = True
     except Exception as exc:
         return False, f"Password validation failed: {sanitize_log_value(exc)}"
     finally:
-        try:
+        if session_created:
             client.closeSession()
-        except Exception:
-            pass
     return True, None

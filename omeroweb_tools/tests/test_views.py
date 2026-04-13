@@ -8,7 +8,7 @@ import pytest
 from django.test import RequestFactory
 from django.test import override_settings
 
-from omeroweb_tools.views import index_view
+from omeroweb_tools.views import index_view, utils as view_utils
 
 
 def test_enhanced_search_view_blocks_root_without_running_search(monkeypatch):
@@ -339,3 +339,54 @@ def test_apply_saved_query_view_redirects_with_safe_query_string(monkeypatch):
     assert response["Location"].endswith(
         "/enhanced-search/?query_text=Zeiss+LSM+980&indexed_scope=all_indexed_scopes&page=2"
     )
+
+
+def test_validate_user_password_closes_session_after_success(monkeypatch):
+    closed = []
+
+    class _Client:
+        def createSession(self, username, password):
+            assert username == "alice"
+            assert password == "secret"
+
+        def closeSession(self):
+            closed.append(True)
+
+    monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(
+        view_utils,
+        "resolve_omero_host_port",
+        lambda conn: ("omeroserver", 4064),
+    )
+    monkeypatch.setattr(view_utils.omero, "client", lambda host, port: _Client())
+
+    valid, error = view_utils.validate_user_password(object(), "secret")
+
+    assert valid is True
+    assert error is None
+    assert closed == [True]
+
+
+def test_validate_user_password_does_not_close_session_when_login_fails(monkeypatch):
+    closed = []
+
+    class _Client:
+        def createSession(self, username, password):
+            raise RuntimeError("nope")
+
+        def closeSession(self):
+            closed.append(True)
+
+    monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(
+        view_utils,
+        "resolve_omero_host_port",
+        lambda conn: ("omeroserver", 4064),
+    )
+    monkeypatch.setattr(view_utils.omero, "client", lambda host, port: _Client())
+
+    valid, error = view_utils.validate_user_password(object(), "secret")
+
+    assert valid is False
+    assert error == "Password validation failed: nope"
+    assert closed == []

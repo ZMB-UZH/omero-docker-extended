@@ -406,7 +406,7 @@ def test_shared_transfer_helpers_cover_symlink_and_cleanup_error_paths(
     monkeypatch.setattr(
         core_functions,
         "get_plugin_tmp_dir",
-        lambda name: transfer_root,
+        lambda name, create=False: transfer_root,
     )
 
     missing_source, missing_parent, missing_error = (

@@ -40,8 +40,8 @@ def get_tmp_base() -> Path:
     return Path(value)
 
 
-def get_plugin_tmp_dir(subdir: str | None = None) -> Path:
-    """Return a plugin-specific temporary directory, creating it if needed.
+def get_plugin_tmp_dir(subdir: str | None = None, *, create: bool = False) -> Path:
+    """Return a plugin-specific temporary directory path.
 
     The owning plugin is determined automatically from the call stack by
     finding the first module whose top-level package starts with
@@ -52,11 +52,15 @@ def get_plugin_tmp_dir(subdir: str | None = None) -> Path:
     subdir:
         Optional subdirectory within the plugin's temp folder.
         For example ``"jobs"`` or ``"data"``.
+    create:
+        When ``True``, create the resolved directory tree. Keep this ``False``
+        for import-time constants so a root-context module import cannot
+        silently create plugin temp state owned by the wrong user.
 
     Returns
     -------
     Path
-        Fully resolved path, guaranteed to exist.
+        Fully resolved path. The directory exists only when ``create=True``.
 
     Examples
     --------
@@ -74,7 +78,8 @@ def get_plugin_tmp_dir(subdir: str | None = None) -> Path:
     path = get_tmp_base() / caller_plugin
     if subdir:
         path = path / subdir
-    path.mkdir(parents=True, exist_ok=True)
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
     return path
 
 

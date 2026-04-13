@@ -395,7 +395,9 @@ def test_cli_and_shared_zarr_helpers_cover_env_and_safe_cleanup(monkeypatch, tmp
     transfer_root = tmp_path / "shared-transfer"
     transfer_root.mkdir()
     monkeypatch.setattr(
-        core_functions, "get_plugin_tmp_dir", lambda name: transfer_root
+        core_functions,
+        "get_plugin_tmp_dir",
+        lambda name, create=False: transfer_root,
     )
     monkeypatch.setattr(core_functions, "_prepare_native_zarr_copy", lambda path: None)
 
