@@ -52,6 +52,12 @@ coverage:
           - 'omeroweb_imaris_connector/'
           - '!.*/tests/.*'
         threshold: 1%
+      tools-plugin:
+        target: auto
+        paths:
+          - 'omeroweb_tools/'
+          - '!.*/tests/.*'
+        threshold: 1%
       web-zarr:
         target: auto
         paths:
