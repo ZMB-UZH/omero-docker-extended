@@ -10,9 +10,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
 
-import omero
 from django.urls import reverse
 from omero.gateway import BlitzGateway
+from omero.rtypes import rtime
 
 from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_bool_env, get_env
 from omero_plugin_common.logging_utils import sanitize_log_value
@@ -28,21 +28,26 @@ from ..config import (
 from .acquisition_metadata import extract_search_document
 from .enhanced_search_store import (
     EnhancedSearchStoreError,
+    clear_scope_index,
     connect as db_connect,
     delete_saved_query,
     ensure_sync_state_rows,
     list_saved_queries,
     list_sync_states,
+    load_user_settings as load_user_settings_row,
     mark_sync_complete,
     mark_sync_error,
     prune_orphan_documents,
     prune_scope_membership,
+    save_user_settings as save_user_settings_row,
     save_saved_query,
     search_index_rows,
+    sync_run_is_active,
     try_start_scope_sync,
     update_sync_progress,
     upsert_search_document,
 )
+from .search_query_builder import build_omero_fulltext_query
 
 
 logger = logging.getLogger(__name__)
@@ -50,74 +55,36 @@ logger = logging.getLogger(__name__)
 _SYNC_THREADS: dict[str, threading.Thread] = {}
 _SYNC_THREADS_LOCK = threading.Lock()
 
+SEARCH_SCOPE_OMERO_BUILTIN = "omero_builtin"
+SEARCH_SCOPE_ACQUISITION_METADATA = "acquisition_metadata"
+SEARCH_SCOPE_ALL_INDEXED = "all_indexed_scopes"
+SEARCH_SCOPE_LABELS = {
+    SEARCH_SCOPE_OMERO_BUILTIN: "OMERO index",
+    SEARCH_SCOPE_ACQUISITION_METADATA: "Acquisition metadata",
+    SEARCH_SCOPE_ALL_INDEXED: "All indexed scopes",
+}
+USER_SCOPE_TYPE = "user"
+USER_SCOPE_LABEL = "Your acquisition metadata"
+
+
+class ScopeSyncCancelledError(RuntimeError):
+    """Raised when a sync lease is cancelled or superseded."""
+
 
 @dataclass(frozen=True)
 class SearchQuery:
-    scope_key: str = ""
     query_text: str = ""
-    instrument_model: str = ""
-    instrument_manufacturer: str = ""
-    objective_model: str = ""
-    detector_model: str = ""
-    image_name: str = ""
-    dataset_name: str = ""
-    project_name: str = ""
-    objective_magnification_min: float | None = None
-    objective_magnification_max: float | None = None
-    objective_na_min: float | None = None
-    objective_na_max: float | None = None
-    pixel_size_x_um_min: float | None = None
-    pixel_size_x_um_max: float | None = None
-    pixel_size_y_um_min: float | None = None
-    pixel_size_y_um_max: float | None = None
-    z_step_um_min: float | None = None
-    z_step_um_max: float | None = None
-    detector_gain_min: float | None = None
-    detector_gain_max: float | None = None
+    indexed_scope: str = SEARCH_SCOPE_ALL_INDEXED
     acquisition_date_from: datetime | None = None
     acquisition_date_to: datetime | None = None
-    channel_label: str = ""
-    channel_excitation_nm_min: float | None = None
-    channel_excitation_nm_max: float | None = None
-    channel_emission_nm_min: float | None = None
-    channel_emission_nm_max: float | None = None
     page: int = 1
 
     def to_payload(self) -> dict[str, Any]:
         payload = {
-            "scope_key": self.scope_key,
             "query_text": self.query_text,
-            "instrument_model": self.instrument_model,
-            "instrument_manufacturer": self.instrument_manufacturer,
-            "objective_model": self.objective_model,
-            "detector_model": self.detector_model,
-            "image_name": self.image_name,
-            "dataset_name": self.dataset_name,
-            "project_name": self.project_name,
-            "channel_label": self.channel_label,
+            "indexed_scope": self.indexed_scope,
             "page": self.page,
         }
-        for key in (
-            "objective_magnification_min",
-            "objective_magnification_max",
-            "objective_na_min",
-            "objective_na_max",
-            "pixel_size_x_um_min",
-            "pixel_size_x_um_max",
-            "pixel_size_y_um_min",
-            "pixel_size_y_um_max",
-            "z_step_um_min",
-            "z_step_um_max",
-            "detector_gain_min",
-            "detector_gain_max",
-            "channel_excitation_nm_min",
-            "channel_excitation_nm_max",
-            "channel_emission_nm_min",
-            "channel_emission_nm_max",
-        ):
-            value = getattr(self, key)
-            if value is not None:
-                payload[key] = value
         if self.acquisition_date_from is not None:
             payload["acquisition_date_from"] = self.acquisition_date_from.date().isoformat()
         if self.acquisition_date_to is not None:
@@ -149,44 +116,56 @@ def runtime_celery_config() -> EnhancedSearchCeleryConfig:
     return build_enhanced_search_celery_config()
 
 
-def configured_scopes() -> tuple[EnhancedSearchScope, ...]:
-    return runtime_config().scopes
+def _default_scope_label(scope_type: str, scope_id: int) -> str:
+    if scope_type == USER_SCOPE_TYPE:
+        return USER_SCOPE_LABEL
+    return f"{scope_type.title()} {scope_id}"
 
 
-def scope_map() -> dict[str, EnhancedSearchScope]:
-    return {scope.scope_key: scope for scope in configured_scopes()}
+def user_scope(user_id: int, username: str) -> EnhancedSearchScope:
+    return EnhancedSearchScope(
+        scope_type=USER_SCOPE_TYPE,
+        scope_id=int(user_id),
+        label=USER_SCOPE_LABEL if username else _default_scope_label(USER_SCOPE_TYPE, int(user_id)),
+    )
 
 
-def ensure_scope_state() -> list[dict[str, Any]]:
-    config = runtime_config()
-    if not config.scopes:
+def scope_from_key(scope_key: str, *, label: str | None = None) -> EnhancedSearchScope | None:
+    raw_scope_key = str(scope_key or "").strip()
+    if ":" not in raw_scope_key:
+        return None
+    scope_type, raw_scope_id = raw_scope_key.split(":", 1)
+    scope_type = scope_type.strip().lower()
+    if scope_type != USER_SCOPE_TYPE:
+        return None
+    try:
+        scope_id = int(str(raw_scope_id).strip())
+    except (TypeError, ValueError):
+        return None
+    resolved_label = str(label or "").strip() or _default_scope_label(scope_type, scope_id)
+    return EnhancedSearchScope(scope_type=scope_type, scope_id=scope_id, label=resolved_label)
+
+
+def ensure_scope_state(scopes: tuple[EnhancedSearchScope, ...] | list[EnhancedSearchScope]) -> list[dict[str, Any]]:
+    normalized_scopes = tuple(scopes or ())
+    if not normalized_scopes:
         return []
     with db_connect() as conn:
         ensure_sync_state_rows(
             conn,
-            [scope.to_dict() for scope in config.scopes],
-            config.schema_version,
+            [scope.to_dict() for scope in normalized_scopes],
+            runtime_config().schema_version,
         )
         return list_sync_states(conn)
 
 
-def _scope_state(scope: EnhancedSearchScope) -> dict[str, Any] | None:
-    for state in ensure_scope_state():
-        if (
-            state.get("scope_type") == scope.scope_type
-            and int(state.get("scope_id")) == scope.scope_id
-        ):
-            return state
-    return None
-
-
-def current_sync_states() -> list[dict[str, Any]]:
+def current_sync_states(scopes: tuple[EnhancedSearchScope, ...] | list[EnhancedSearchScope]) -> list[dict[str, Any]]:
     by_key = {
         f"{state['scope_type']}:{state['scope_id']}": state
-        for state in ensure_scope_state()
+        for state in ensure_scope_state(scopes)
     }
     merged: list[dict[str, Any]] = []
-    for scope in configured_scopes():
+    for scope in tuple(scopes or ()):
         merged.append(
             {
                 "scope_type": scope.scope_type,
@@ -208,18 +187,6 @@ def current_sync_states() -> list[dict[str, Any]]:
     return merged
 
 
-def _parse_float(raw_value: Any) -> float | None:
-    if raw_value is None:
-        return None
-    text = str(raw_value).strip()
-    if not text:
-        return None
-    try:
-        return float(text)
-    except ValueError as exc:
-        raise ValueError(f"Invalid numeric value: {text}") from exc
-
-
 def _parse_date(raw_value: Any, *, end_of_day: bool = False) -> datetime | None:
     if raw_value is None:
         return None
@@ -239,29 +206,11 @@ def _parse_date(raw_value: Any, *, end_of_day: bool = False) -> datetime | None:
     return parsed
 
 
-def _validate_numeric_bounds(
-    *,
-    field_label: str,
-    minimum: float | None,
-    maximum: float | None,
-    errors: list[str],
-) -> None:
-    if minimum is not None and maximum is not None and minimum > maximum:
-        errors.append(f"{field_label} minimum cannot be greater than maximum.")
-
-
 def parse_search_query(params) -> tuple[SearchQuery, list[str]]:
     errors: list[str] = []
 
     def read_text(name: str) -> str:
         return str(params.get(name) or "").strip()
-
-    def read_float(name: str) -> float | None:
-        try:
-            return _parse_float(params.get(name))
-        except ValueError as exc:
-            errors.append(str(exc))
-            return None
 
     page = 1
     try:
@@ -291,103 +240,26 @@ def parse_search_query(params) -> tuple[SearchQuery, list[str]]:
     ):
         errors.append("Acquisition start date cannot be after the end date.")
 
-    scope_key = read_text("scope_key")
-    if scope_key and scope_key not in scope_map():
-        errors.append("Selected search scope is not enabled.")
-        scope_key = ""
+    indexed_scope = read_text("indexed_scope") or SEARCH_SCOPE_ALL_INDEXED
+    if indexed_scope not in SEARCH_SCOPE_LABELS:
+        errors.append("Selected indexed scope is not supported.")
+        indexed_scope = SEARCH_SCOPE_ALL_INDEXED
 
     query = SearchQuery(
-        scope_key=scope_key,
         query_text=read_text("query_text"),
-        instrument_model=read_text("instrument_model"),
-        instrument_manufacturer=read_text("instrument_manufacturer"),
-        objective_model=read_text("objective_model"),
-        detector_model=read_text("detector_model"),
-        image_name=read_text("image_name"),
-        dataset_name=read_text("dataset_name"),
-        project_name=read_text("project_name"),
-        objective_magnification_min=read_float("objective_magnification_min"),
-        objective_magnification_max=read_float("objective_magnification_max"),
-        objective_na_min=read_float("objective_na_min"),
-        objective_na_max=read_float("objective_na_max"),
-        pixel_size_x_um_min=read_float("pixel_size_x_um_min"),
-        pixel_size_x_um_max=read_float("pixel_size_x_um_max"),
-        pixel_size_y_um_min=read_float("pixel_size_y_um_min"),
-        pixel_size_y_um_max=read_float("pixel_size_y_um_max"),
-        z_step_um_min=read_float("z_step_um_min"),
-        z_step_um_max=read_float("z_step_um_max"),
-        detector_gain_min=read_float("detector_gain_min"),
-        detector_gain_max=read_float("detector_gain_max"),
+        indexed_scope=indexed_scope,
         acquisition_date_from=acquisition_date_from,
         acquisition_date_to=acquisition_date_to,
-        channel_label=read_text("channel_label"),
-        channel_excitation_nm_min=read_float("channel_excitation_nm_min"),
-        channel_excitation_nm_max=read_float("channel_excitation_nm_max"),
-        channel_emission_nm_min=read_float("channel_emission_nm_min"),
-        channel_emission_nm_max=read_float("channel_emission_nm_max"),
         page=page,
     )
-
-    for label, minimum, maximum in (
-        (
-            "Objective magnification",
-            query.objective_magnification_min,
-            query.objective_magnification_max,
-        ),
-        ("Objective NA", query.objective_na_min, query.objective_na_max),
-        ("Pixel size X", query.pixel_size_x_um_min, query.pixel_size_x_um_max),
-        ("Pixel size Y", query.pixel_size_y_um_min, query.pixel_size_y_um_max),
-        ("Z step", query.z_step_um_min, query.z_step_um_max),
-        ("Detector gain", query.detector_gain_min, query.detector_gain_max),
-        (
-            "Channel excitation",
-            query.channel_excitation_nm_min,
-            query.channel_excitation_nm_max,
-        ),
-        (
-            "Channel emission",
-            query.channel_emission_nm_min,
-            query.channel_emission_nm_max,
-        ),
-    ):
-        _validate_numeric_bounds(
-            field_label=label,
-            minimum=minimum,
-            maximum=maximum,
-            errors=errors,
-        )
 
     return query, errors
 
 
 def _query_filters(query: SearchQuery) -> dict[str, Any]:
     return {
-        "instrument_model": query.instrument_model,
-        "instrument_manufacturer": query.instrument_manufacturer,
-        "objective_model": query.objective_model,
-        "detector_model": query.detector_model,
-        "image_name": query.image_name,
-        "dataset_name": query.dataset_name,
-        "project_name": query.project_name,
-        "objective_magnification_min": query.objective_magnification_min,
-        "objective_magnification_max": query.objective_magnification_max,
-        "objective_na_min": query.objective_na_min,
-        "objective_na_max": query.objective_na_max,
-        "pixel_size_x_um_min": query.pixel_size_x_um_min,
-        "pixel_size_x_um_max": query.pixel_size_x_um_max,
-        "pixel_size_y_um_min": query.pixel_size_y_um_min,
-        "pixel_size_y_um_max": query.pixel_size_y_um_max,
-        "z_step_um_min": query.z_step_um_min,
-        "z_step_um_max": query.z_step_um_max,
-        "detector_gain_min": query.detector_gain_min,
-        "detector_gain_max": query.detector_gain_max,
         "acquisition_date_from": query.acquisition_date_from,
         "acquisition_date_to": query.acquisition_date_to,
-        "channel_label": query.channel_label,
-        "channel_excitation_nm_min": query.channel_excitation_nm_min,
-        "channel_excitation_nm_max": query.channel_excitation_nm_max,
-        "channel_emission_nm_min": query.channel_emission_nm_min,
-        "channel_emission_nm_max": query.channel_emission_nm_max,
     }
 
 
@@ -402,6 +274,68 @@ def _empty_search_payload(*, page: int = 1, page_size: int | None = None) -> dic
     }
 
 
+def search_scope_options() -> tuple[dict[str, str], ...]:
+    return tuple(
+        {"value": value, "label": SEARCH_SCOPE_LABELS[value]}
+        for value in (
+            SEARCH_SCOPE_OMERO_BUILTIN,
+            SEARCH_SCOPE_ACQUISITION_METADATA,
+            SEARCH_SCOPE_ALL_INDEXED,
+        )
+    )
+
+
+def default_user_settings() -> dict[str, Any]:
+    return {"acquisition_metadata_enabled": False}
+
+
+def _coerce_bool(raw_value: Any) -> bool:
+    if isinstance(raw_value, bool):
+        return raw_value
+    if isinstance(raw_value, str):
+        normalized = raw_value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off", ""}:
+            return False
+    return bool(raw_value)
+
+
+def _normalized_user_settings(settings_payload: dict[str, Any] | None) -> dict[str, Any]:
+    payload = dict(default_user_settings())
+    payload["acquisition_metadata_enabled"] = _coerce_bool(
+        (settings_payload or {}).get("acquisition_metadata_enabled")
+    )
+    return payload
+
+
+def user_settings(username: str) -> dict[str, Any]:
+    if not username:
+        return default_user_settings()
+    with db_connect() as conn:
+        return _normalized_user_settings(
+            load_user_settings_row(
+                conn,
+                username,
+                defaults=default_user_settings(),
+            )
+        )
+
+
+def sync_states_for_user(conn, username: str) -> list[dict[str, Any]]:
+    scope = current_user_scope(conn, username)
+    if scope is None:
+        return []
+    return current_sync_states((scope,))
+
+
+def current_user_scope(conn, username: str) -> EnhancedSearchScope | None:
+    user_id = _current_user_id(conn)
+    if not username or user_id is None:
+        return None
+    return user_scope(user_id, username)
+
+
 def _current_user_id(conn) -> int | None:
     try:
         user = conn.getUser()
@@ -411,6 +345,86 @@ def _current_user_id(conn) -> int | None:
         return int(user_id.getValue() if hasattr(user_id, "getValue") else user_id)
     except Exception:
         return None
+
+
+def _sync_state_needs_refresh(state: dict[str, Any] | None) -> bool:
+    if not state:
+        return True
+    if state.get("status") == "running":
+        return False
+    last_successful_at = _normalized_sort_datetime(state.get("last_successful_at"))
+    if last_successful_at is None:
+        return True
+    stale_after = timedelta(seconds=runtime_config().sync_stale_seconds)
+    return (datetime.now(timezone.utc) - last_successful_at) >= stale_after
+
+
+def ensure_user_index_sync(
+    conn,
+    username: str,
+    *,
+    settings_payload: dict[str, Any] | None = None,
+) -> tuple[list[dict[str, Any]], bool, str]:
+    scope = current_user_scope(conn, username)
+    if scope is None:
+        return [], False, ""
+
+    states = current_sync_states((scope,))
+    normalized_settings = _normalized_user_settings(settings_payload)
+    if not normalized_settings.get("acquisition_metadata_enabled"):
+        return states, False, ""
+
+    state = states[0] if states else None
+    if not _sync_state_needs_refresh(state):
+        return states, False, ""
+
+    started, message = request_scope_sync(
+        scope.scope_key,
+        username,
+        scope_label=scope.label,
+    )
+    return sync_states_for_user(conn, username), started, message
+
+
+def save_user_settings(conn, username: str, settings_payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = _normalized_user_settings(settings_payload)
+    user_id = _current_user_id(conn)
+    previous = user_settings(username)
+    with db_connect() as db_conn:
+        stored = _normalized_user_settings(
+            save_user_settings_row(db_conn, username, normalized)
+        )
+        if user_id is not None and not stored["acquisition_metadata_enabled"]:
+            clear_scope_index(
+                db_conn,
+                USER_SCOPE_TYPE,
+                user_id,
+                current_message="Acquisition metadata indexing is disabled for your account.",
+            )
+
+    sync_started = False
+    sync_message = ""
+    scope = current_user_scope(conn, username)
+    if scope is not None and stored["acquisition_metadata_enabled"]:
+        scope_states = current_sync_states((scope,))
+        state = scope_states[0] if scope_states else None
+        should_auto_start = (
+            not previous.get("acquisition_metadata_enabled")
+            or _sync_state_needs_refresh(state)
+        )
+        if should_auto_start:
+            sync_started, sync_message = request_scope_sync(
+                scope.scope_key,
+                username,
+                scope_label=scope.label,
+            )
+
+    return {
+        "user_settings": stored,
+        "sync_started": sync_started,
+        "sync_message": sync_message,
+        "sync_states": sync_states_for_user(conn, username),
+    }
 
 
 def _visible_group_ids(conn) -> list[int] | None:
@@ -436,7 +450,199 @@ def _visible_group_ids(conn) -> list[int] | None:
     return sorted(set(group_ids))
 
 
-def search(conn, query: SearchQuery) -> dict[str, Any]:
+def _datetime_to_rtime(value: datetime):
+    normalized = value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return rtime(int(normalized.timestamp() * 1000))
+
+
+def _omero_search_created_range(query: SearchQuery):
+    if query.acquisition_date_from is None and query.acquisition_date_to is None:
+        return None
+    lower_bound = query.acquisition_date_from or datetime(1970, 1, 1, tzinfo=timezone.utc)
+    upper_bound = query.acquisition_date_to or datetime.now(timezone.utc)
+    return (_datetime_to_rtime(lower_bound), _datetime_to_rtime(upper_bound))
+
+
+def _result_row_from_image(image) -> dict[str, Any]:
+    image_row, _channels, _attributes = _document_for_image(
+        image,
+        runtime_config().schema_version,
+    )
+    return image_row
+
+
+def _images_from_builtin_search_hit(hit) -> list[Any]:
+    omero_class = str(getattr(hit, "OMERO_CLASS", "") or "").lower()
+    if omero_class == "image":
+        return [hit]
+    if omero_class == "dataset":
+        try:
+            return list(hit.listChildren() or [])
+        except Exception:
+            return []
+    if omero_class == "project":
+        images: list[Any] = []
+        try:
+            for dataset in list(hit.listChildren() or []):
+                images.extend(list(dataset.listChildren() or []))
+        except Exception:
+            return []
+        return images
+    return []
+
+
+def _merge_indexed_sources(existing: list[str], incoming: list[str]) -> list[str]:
+    merged = list(existing)
+    for source in incoming:
+        if source not in merged:
+            merged.append(source)
+    return merged
+
+
+def _normalized_sort_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, datetime):
+        return None
+    return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _merged_result_sort_key(row: dict[str, Any]) -> tuple[int, datetime, int]:
+    acquisition_date = _normalized_sort_datetime(row.get("acquisition_date"))
+    return (
+        1 if acquisition_date is not None else 0,
+        acquisition_date or datetime(1970, 1, 1, tzinfo=timezone.utc),
+        int(row.get("image_id") or 0),
+    )
+
+
+def _search_omero_builtin_rows(conn, query: SearchQuery) -> list[dict[str, Any]]:
+    if not query.query_text:
+        return []
+
+    fulltext_query = build_omero_fulltext_query(query.query_text)
+    if not fulltext_query:
+        return []
+
+    created = _omero_search_created_range(query)
+    object_types = ["Image"] if created is not None else ["Project", "Dataset", "Image"]
+    batch_size = min(max(runtime_config().max_results * 2, 100), 500)
+    results: list[dict[str, Any]] = []
+    seen_image_ids: set[int] = set()
+    page_index = 0
+    search_kwargs = {
+        "created": created,
+        "batchSize": batch_size,
+        "page": 0,
+        "searchGroup": "-1",
+        "useAcquisitionDate": created is not None,
+        "rawQuery": True,
+    }
+
+    while True:
+        try:
+            batch = conn.searchObjects(
+                object_types,
+                fulltext_query,
+                **{**search_kwargs, "page": page_index},
+            )
+        except Exception:
+            if search_kwargs["searchGroup"] is None:
+                logger.debug("OMERO built-in search failed.", exc_info=True)
+                break
+            logger.debug(
+                "OMERO built-in all-group search failed; retrying current context.",
+                exc_info=True,
+            )
+            search_kwargs["searchGroup"] = None
+            continue
+
+        if not batch:
+            break
+
+        for hit in batch:
+            for image in _images_from_builtin_search_hit(hit):
+                image_id = get_id(image)
+                if image_id is None:
+                    continue
+                try:
+                    image_id = int(image_id)
+                except (TypeError, ValueError):
+                    continue
+                if image_id in seen_image_ids:
+                    continue
+                seen_image_ids.add(image_id)
+                row = _result_row_from_image(image)
+                row["indexed_sources"] = [SEARCH_SCOPE_LABELS[SEARCH_SCOPE_OMERO_BUILTIN]]
+                results.append(row)
+
+        if len(batch) < batch_size:
+            break
+        page_index += 1
+
+    return results
+
+
+def _merge_result_rows(
+    acquisition_rows: list[dict[str, Any]],
+    omero_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged: dict[int, dict[str, Any]] = {}
+
+    for row in acquisition_rows:
+        image_id = int(row["image_id"])
+        merged[image_id] = {
+            **row,
+            "indexed_sources": [SEARCH_SCOPE_LABELS[SEARCH_SCOPE_ACQUISITION_METADATA]],
+        }
+
+    for row in omero_rows:
+        image_id = int(row["image_id"])
+        existing = merged.get(image_id)
+        if existing is None:
+            merged[image_id] = row
+            continue
+        existing["indexed_sources"] = _merge_indexed_sources(
+            existing.get("indexed_sources") or [],
+            row.get("indexed_sources") or [],
+        )
+        for key, value in row.items():
+            if key == "indexed_sources":
+                continue
+            if existing.get(key) in (None, "") and value not in (None, ""):
+                existing[key] = value
+
+    return sorted(
+        merged.values(),
+        key=_merged_result_sort_key,
+        reverse=True,
+    )
+
+
+def _accessible_images_by_id(conn, image_ids: list[int]) -> dict[int, Any]:
+    if not image_ids:
+        return {}
+    try:
+        return {
+            int(get_id(image)): image
+            for image in conn.getObjects("Image", ids=image_ids)
+            if get_id(image) is not None
+        }
+    except TypeError:
+        return {
+            int(get_id(image)): image
+            for image in conn.getObjects("Image", obj_ids=image_ids)
+            if get_id(image) is not None
+        }
+    except Exception:
+        logger.debug("Image rehydration failed during search.", exc_info=True)
+        return {}
+
+
+def search(
+    conn,
+    query: SearchQuery,
+    *,
+    acquisition_metadata_enabled: bool,
+) -> dict[str, Any]:
     if conn is None:
         logger.warning("Enhanced-search request arrived without an OMERO connection.")
         return _empty_search_payload(page=query.page)
@@ -445,46 +651,45 @@ def search(conn, query: SearchQuery) -> dict[str, Any]:
     page_size = config.max_results
     page = max(1, query.page)
     offset = (page - 1) * page_size
-    selected_scope = scope_map().get(query.scope_key) if query.scope_key else None
 
-    with db_connect() as db_conn:
-        rows, total_count = search_index_rows(
-            db_conn,
-            visible_group_ids=_visible_group_ids(conn),
-            current_user_id=_current_user_id(conn),
-            scope_filter=(
-                (selected_scope.scope_type, selected_scope.scope_id)
-                if selected_scope is not None
-                else None
-            ),
-            query_text=query.query_text,
-            filters=_query_filters(query),
-            limit=page_size,
-            offset=offset,
+    acquisition_rows: list[dict[str, Any]] = []
+    if (
+        query.indexed_scope in (
+            SEARCH_SCOPE_ACQUISITION_METADATA,
+            SEARCH_SCOPE_ALL_INDEXED,
         )
+        and acquisition_metadata_enabled
+    ):
+        with db_connect() as db_conn:
+            acquisition_rows, _unused_total = search_index_rows(
+                db_conn,
+                visible_group_ids=_visible_group_ids(conn),
+                current_user_id=_current_user_id(conn),
+                query_text=query.query_text,
+                filters=_query_filters(query),
+                limit=None,
+                offset=0,
+            )
 
-    image_ids = [row["image_id"] for row in rows]
-    accessible: dict[int, Any] = {}
-    if image_ids:
-        try:
-            accessible = {
-                int(get_id(image)): image
-                for image in conn.getObjects("Image", ids=image_ids)
-                if get_id(image) is not None
-            }
-        except TypeError:
-            accessible = {
-                int(get_id(image)): image
-                for image in conn.getObjects("Image", obj_ids=image_ids)
-                if get_id(image) is not None
-            }
-        except Exception:
-            logger.debug("Image rehydration failed during search.", exc_info=True)
-            accessible = {}
+    omero_rows: list[dict[str, Any]] = []
+    if query.indexed_scope in (
+        SEARCH_SCOPE_OMERO_BUILTIN,
+        SEARCH_SCOPE_ALL_INDEXED,
+    ):
+        omero_rows = _search_omero_builtin_rows(conn, query)
+
+    merged_rows = _merge_result_rows(acquisition_rows, omero_rows)
+    total_count = len(merged_rows)
+    page_rows = merged_rows[offset : offset + page_size]
+
+    accessible = _accessible_images_by_id(
+        conn,
+        [int(row["image_id"]) for row in page_rows],
+    )
 
     results = []
     webindex = reverse("webindex")
-    for row in rows:
+    for row in page_rows:
         image = accessible.get(int(row["image_id"]))
         if image is None:
             continue
@@ -497,6 +702,7 @@ def search(conn, query: SearchQuery) -> dict[str, Any]:
                 **row,
                 "image_name": current_name or row["image_name"],
                 "image_url": f"{webindex}?show=image-{row['image_id']}",
+                "thumbnail_url": reverse("render_thumbnail", args=(row["image_id"],)),
                 "dataset_url": (
                     f"{webindex}?show=dataset-{row['dataset_id']}"
                     if row.get("dataset_id")
@@ -630,42 +836,25 @@ def _owner_name(image) -> str:
 
 
 def _images_for_scope(admin_conn, scope: EnhancedSearchScope) -> list[Any]:
-    if scope.scope_type == "project":
-        project = admin_conn.getObject("Project", scope.scope_id)
-        if project is None:
-            return []
-        images: list[Any] = []
-        for dataset in list(project.listChildren() or []):
-            images.extend(list(dataset.listChildren() or []))
-        return images
-
-    if scope.scope_type == "dataset":
-        dataset = admin_conn.getObject("Dataset", scope.scope_id)
-        if dataset is None:
-            return []
-        return list(dataset.listChildren() or [])
-
     try:
-        admin_conn.SERVICE_OPTS.setOmeroGroup(str(scope.scope_id))
+        return list(
+            admin_conn.getObjects(
+                "Image",
+                opts={"owner": scope.scope_id, "group": "-1"},
+            )
+        )
     except Exception:
-        logger.debug("Failed to scope root search connection to group.", exc_info=True)
-    try:
-        return list(admin_conn.getObjects("Image"))
-    except Exception:
-        logger.debug("Group-scoped image listing failed.", exc_info=True)
+        logger.debug("User-scoped image listing failed.", exc_info=True)
         return []
 
 
 def _scope_image_rows(
     admin_conn,
     scope: EnhancedSearchScope,
-    *,
-    resume_after_image_id: int | None,
 ) -> list[Any]:
     images = _images_for_scope(admin_conn, scope)
     deduped = []
     seen: set[int] = set()
-    cap = runtime_config().scope_image_cap
     for image in images:
         image_id = get_id(image)
         if image_id is None:
@@ -674,14 +863,10 @@ def _scope_image_rows(
             image_id = int(image_id)
         except (TypeError, ValueError):
             continue
-        if resume_after_image_id is not None and image_id <= resume_after_image_id:
-            continue
         if image_id in seen:
             continue
         seen.add(image_id)
         deduped.append(image)
-        if len(deduped) >= cap:
-            break
     return sorted(deduped, key=lambda image: int(get_id(image) or 0))
 
 
@@ -752,19 +937,13 @@ def _document_for_image(
 def _sync_scope(
     scope: EnhancedSearchScope,
     run_token: str,
-    *,
-    resume_after_image_id: int | None,
 ) -> dict[str, Any]:
     config = runtime_config()
     processed_count = 0
     try:
         with _root_connection() as admin_conn:
-            images = _scope_image_rows(
-                admin_conn,
-                scope,
-                resume_after_image_id=resume_after_image_id,
-            )
-            if not images and resume_after_image_id is None:
+            images = _scope_image_rows(admin_conn, scope)
+            if not images:
                 with db_connect() as db_conn:
                     prune_scope_membership(db_conn, scope.scope_type, scope.scope_id, run_token)
                     prune_orphan_documents(db_conn)
@@ -821,6 +1000,12 @@ def _sync_scope(
                 ),
             )
         return {"status": "idle", "indexed_image_count": processed_count}
+    except ScopeSyncCancelledError:
+        logger.info(
+            "Enhanced-search sync lease cancelled for %s.",
+            scope.scope_key,
+        )
+        return {"status": "idle", "indexed_image_count": processed_count, "cancelled": True}
     except Exception as exc:
         logger.error(
             "Enhanced-search sync failed for %s: %s",
@@ -853,6 +1038,15 @@ def _process_sync_batch(
     last_image_id = None
     with db_connect() as db_conn:
         for image in images:
+            if not sync_run_is_active(
+                db_conn,
+                scope.scope_type,
+                scope.scope_id,
+                run_token=run_token,
+            ):
+                raise ScopeSyncCancelledError(
+                    f"Sync lease is no longer active for {scope.scope_key}."
+                )
             image_row, channels, attributes = _document_for_image(image, schema_version)
             last_image_id = image_row["image_id"]
             upsert_search_document(
@@ -877,28 +1071,11 @@ def _process_sync_batch(
     return processed_count
 
 
-def _resume_cursor_for_scope(scope: EnhancedSearchScope) -> int | None:
-    state = _scope_state(scope)
-    if not state:
-        return None
-    last_cursor = state.get("last_cursor_image_id")
-    if last_cursor in (None, ""):
-        return None
-    try:
-        return int(last_cursor)
-    except (TypeError, ValueError):
-        return None
-
-
 def run_scope_sync_task(scope_key: str, run_token: str) -> dict[str, Any]:
-    scope = scope_map().get(scope_key)
+    scope = scope_from_key(scope_key)
     if scope is None:
-        raise RuntimeError("Selected search scope is not enabled.")
-    return _sync_scope(
-        scope,
-        run_token,
-        resume_after_image_id=_resume_cursor_for_scope(scope),
-    )
+        raise RuntimeError("Selected search scope is not valid.")
+    return _sync_scope(scope, run_token)
 
 
 def _start_threaded_sync(scope: EnhancedSearchScope, run_token: str) -> None:
@@ -913,10 +1090,15 @@ def _start_threaded_sync(scope: EnhancedSearchScope, run_token: str) -> None:
     worker.start()
 
 
-def request_scope_sync(scope_key: str, requested_by: str) -> tuple[bool, str]:
-    scope = scope_map().get(scope_key)
+def request_scope_sync(
+    scope_key: str,
+    requested_by: str,
+    *,
+    scope_label: str | None = None,
+) -> tuple[bool, str]:
+    scope = scope_from_key(scope_key, label=scope_label)
     if scope is None:
-        return False, "Selected search scope is not enabled."
+        return False, "Selected search scope is not valid."
 
     config = runtime_config()
     run_token = uuid.uuid4().hex

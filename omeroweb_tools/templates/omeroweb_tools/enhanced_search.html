@@ -12,12 +12,9 @@
     <div id="root-user-warning" class="root-user-warning" role="alert"></div>
     <div class="admin-tools-page admin-tools-page--wide">
         <div class="admin-tools-header">
-            <div>
+            <div class="admin-tools-header-left">
                 <a class="admin-tools-back-link" href="{% url 'omeroweb_tools_index' %}">&larr; Back to tools</a>
                 <h1 class="admin-tools-title">Enhanced search</h1>
-                <p class="tools-page-lead">
-                    Search a selective acquisition index stored in the plugin database. Results are revalidated through OMERO before display.
-                </p>
             </div>
             <div class="admin-tools-header-actions">
                 <a href="{% url 'omeroweb_tools_help' %}"
@@ -42,7 +39,6 @@
 
         <div class="tools-search-layout">
             <section class="admin-tools-card admin-tools-card--wide tools-search-card">
-                <h2 class="tools-search-heading">Search filters</h2>
                 {% if query_errors %}
                 <ul class="tools-search-errors">
                     {% for error in query_errors %}
@@ -50,95 +46,88 @@
                     {% endfor %}
                 </ul>
                 {% endif %}
-                <form method="get" action="{% url 'omeroweb_tools_enhanced_search' %}">
-                    <div class="tools-search-grid">
-                        <div class="tools-search-field tools-search-field--wide">
-                            <label for="query_text">Free text</label>
+                <form method="get"
+                      action="{% url 'omeroweb_tools_enhanced_search' %}"
+                      id="enhanced-search-form">
+                    <div class="tools-search-grid tools-search-grid--primary">
+                        <div class="tools-search-field tools-search-field--search-box">
+                            <label for="query_text">Search box</label>
                             <input type="search"
                                    id="query_text"
                                    name="query_text"
                                    value="{{ query.query_text }}"
-                                   placeholder="Microscope model, channel label, detector, project, dataset, metadata value">
+                                   placeholder="Search indexed OMERO data and acquisition metadata">
                         </div>
-                        <div class="tools-search-field">
-                            <label for="scope_key">Indexed scope</label>
-                            <select id="scope_key" name="scope_key">
-                                <option value="">All indexed scopes</option>
-                                {% for scope in configured_scopes %}
-                                <option value="{{ scope.scope_key }}"{% if query.scope_key == scope.scope_key %} selected{% endif %}>
-                                    {{ scope.label }}
+                        <div class="tools-search-field tools-search-field--actions">
+                            <span class="tools-search-field__spacer" aria-hidden="true">Actions</span>
+                            <div class="tools-search-actions">
+                                <button class="admin-tools-button tools-search-inline-action tools-search-inline-action--primary"
+                                        type="submit"
+                                        id="search-submit-btn">
+                                    Search
+                                </button>
+                                <a class="admin-tools-button admin-tools-button-link tools-search-inline-action"
+                                   href="{% url 'omeroweb_tools_enhanced_search' %}"
+                                   data-page-load-message="Resetting search…">
+                                    Clear
+                                </a>
+                            </div>
+                        </div>
+                        <div class="tools-search-field tools-search-field--scope">
+                            <label for="indexed_scope">Indexed scope</label>
+                            <select id="indexed_scope" name="indexed_scope">
+                                {% for option in search_scope_options %}
+                                <option value="{{ option.value }}"{% if query.indexed_scope == option.value %} selected{% endif %}>
+                                    {{ option.label }}
                                 </option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="tools-search-field">
-                            <label for="instrument_model">Instrument model</label>
-                            <input type="text" id="instrument_model" name="instrument_model" value="{{ query.instrument_model }}">
-                        </div>
-                        <div class="tools-search-field">
-                            <label for="instrument_manufacturer">Instrument manufacturer</label>
-                            <input type="text" id="instrument_manufacturer" name="instrument_manufacturer" value="{{ query.instrument_manufacturer }}">
-                        </div>
-                        <div class="tools-search-field">
-                            <label for="objective_model">Objective model</label>
-                            <input type="text" id="objective_model" name="objective_model" value="{{ query.objective_model }}">
-                        </div>
-                        <div class="tools-search-field">
-                            <label for="detector_model">Detector model</label>
-                            <input type="text" id="detector_model" name="detector_model" value="{{ query.detector_model }}">
-                        </div>
-                        <div class="tools-search-field">
-                            <label for="image_name">Image name</label>
-                            <input type="text" id="image_name" name="image_name" value="{{ query.image_name }}">
-                        </div>
-                        <div class="tools-search-field">
-                            <label for="dataset_name">Dataset name</label>
-                            <input type="text" id="dataset_name" name="dataset_name" value="{{ query.dataset_name }}">
-                        </div>
-                        <div class="tools-search-field">
-                            <label for="project_name">Project name</label>
-                            <input type="text" id="project_name" name="project_name" value="{{ query.project_name }}">
-                        </div>
-                        <div class="tools-search-field">
-                            <label for="channel_label">Channel label</label>
-                            <input type="text" id="channel_label" name="channel_label" value="{{ query.channel_label }}">
-                        </div>
-                        <div class="tools-search-field">
+                        <div class="tools-search-field tools-search-field--date">
                             <label for="acquisition_date_from">Acquired from</label>
                             <input type="date" id="acquisition_date_from" name="acquisition_date_from" value="{{ query.acquisition_date_from|date:'Y-m-d' }}">
                         </div>
-                        <div class="tools-search-field">
+                        <div class="tools-search-field tools-search-field--date">
                             <label for="acquisition_date_to">Acquired to</label>
                             <input type="date" id="acquisition_date_to" name="acquisition_date_to" value="{{ query.acquisition_date_to|date:'Y-m-d' }}">
                         </div>
-                        {% for field in range_fields %}
-                        <div class="tools-search-field">
-                            <label for="{{ field.min_name }}">{{ field.label }} min</label>
-                            <input type="number"
-                                   step="{{ field.step }}"
-                                   id="{{ field.min_name }}"
-                                   name="{{ field.min_name }}"
-                                   value="{{ field.min_value|default_if_none:'' }}">
-                        </div>
-                        <div class="tools-search-field">
-                            <label for="{{ field.max_name }}">{{ field.label }} max</label>
-                            <input type="number"
-                                   step="{{ field.step }}"
-                                   id="{{ field.max_name }}"
-                                   name="{{ field.max_name }}"
-                                   value="{{ field.max_value|default_if_none:'' }}">
-                        </div>
-                        {% endfor %}
-                    </div>
-                    <div class="tools-search-actions">
-                        <button class="admin-tools-button" type="submit">Search</button>
-                        <a class="admin-tools-button admin-tools-button-link" href="{% url 'omeroweb_tools_enhanced_search' %}">Clear</a>
                     </div>
                 </form>
             </section>
 
             <section class="admin-tools-card admin-tools-card--wide tools-search-card">
+                <h2 class="tools-search-heading">Acquisition metadata index</h2>
+                <div class="tools-search-inline-form tools-search-inline-form--settings">
+                    <label class="tools-search-checkbox" for="acquisition_metadata_enabled">
+                        <input type="checkbox"
+                               id="acquisition_metadata_enabled"
+                               {% if user_settings.acquisition_metadata_enabled %}checked{% endif %}
+                               {% if blocked_for_root %}disabled{% endif %}>
+                        <span>Enable acquisition metadata indexing for my account</span>
+                    </label>
+                    <button type="button"
+                            class="admin-tools-button"
+                            id="save-user-settings-btn"
+                            {% if blocked_for_root %}disabled{% endif %}>
+                        Save setting
+                    </button>
+                </div>
+                <p class="tools-page-note tools-page-note--tight" id="acquisition-index-status">
+                    {% if user_settings.acquisition_metadata_enabled %}
+                    Acquisition metadata indexing is enabled for your account. All images you own will be indexed automatically in the background.
+                    {% else %}
+                    Acquisition metadata indexing is disabled for your account. No acquisition metadata is stored for your account.
+                    {% endif %}
+                </p>
+            </section>
+
+            <section class="admin-tools-card admin-tools-card--wide tools-search-card">
                 <h2 class="tools-search-heading">Index status</h2>
+                {% if not user_settings.acquisition_metadata_enabled %}
+                <p class="tools-page-note tools-page-note--tight">
+                    Enable acquisition metadata indexing above to start indexing acquisition metadata for all images you own.
+                </p>
+                {% endif %}
                 {% if sync_states %}
                 <table class="tools-search-status-table">
                     <thead>
@@ -167,7 +156,7 @@
                             <button type="button"
                                     class="admin-tools-button sync-scope-btn"
                                     data-scope-key="{{ state.scope_key }}"
-                                    {% if blocked_for_root %}disabled{% endif %}>
+                                    {% if blocked_for_root or not user_settings.acquisition_metadata_enabled %}disabled{% endif %}>
                                 Refresh index
                             </button>
                         </td>
@@ -176,7 +165,7 @@
                     </tbody>
                 </table>
                 {% else %}
-                <p class="tools-search-empty">No enhanced-search scopes are enabled yet.</p>
+                <p class="tools-search-empty">No acquisition indexing status is available yet.</p>
                 {% endif %}
             </section>
 
@@ -204,7 +193,8 @@
                             </div>
                             <div class="tools-search-saved-actions">
                                 <a class="admin-tools-button admin-tools-button-link"
-                                   href="{% url 'omeroweb_tools_enhanced_search_apply_query' item.id %}">
+                                   href="{% url 'omeroweb_tools_enhanced_search_apply_query' item.id %}"
+                                   data-page-load-message="Opening saved search…">
                                     Open
                                 </a>
                                 <button type="button"
@@ -226,25 +216,40 @@
                 <h2 class="tools-search-heading">Results</h2>
                 <p class="tools-page-note">
                     Showing {{ search_payload.results|length }} result(s)
-                    {% if search_payload.total_count %}from {{ search_payload.total_count }} indexed match(es){% endif %}.
+                    {% if search_payload.total_count %}from {{ search_payload.total_count }} matching result(s){% endif %}.
                 </p>
                 {% if search_payload.results %}
                 <table class="tools-search-results">
                     <thead>
                     <tr>
+                        <th>Preview</th>
                         <th>Image</th>
                         <th>Project / Dataset</th>
                         <th>Acquisition</th>
-                        <th>Optics / Detector</th>
-                        <th>Channels</th>
+                        <th>Channel(s)</th>
                     </tr>
                     </thead>
                     <tbody>
                     {% for row in search_payload.results %}
                     <tr>
+                        <td class="tools-search-preview-cell">
+                            <a href="{{ row.image_url }}"
+                               class="tools-search-preview"
+                               data-thumbnail-url="{{ row.thumbnail_url }}"
+                               data-preview-state="idle"
+                               aria-label="Open image {{ row.image_id }}">
+                                <span class="tools-search-preview__placeholder">
+                                    <span class="tools-search-preview__icon" aria-hidden="true"></span>
+                                    <span class="tools-search-preview__spinner" aria-hidden="true"></span>
+                                    <span class="tools-search-preview__label">Preview</span>
+                                </span>
+                                <img class="tools-search-preview__image" alt="" hidden>
+                            </a>
+                        </td>
                         <td>
                             <a href="{{ row.image_url }}">{{ row.image_name|default:row.image_id }}</a>
-                            <small>ID {{ row.image_id }} &middot; Owner {{ row.owner_name|default:row.owner_id }}</small>
+                            <small>ID: {{ row.image_id }} &middot; Owner: {{ row.owner_name|default:row.owner_id }}</small>
+                            <small>Indexed by {{ row.indexed_sources|join:", " }}</small>
                         </td>
                         <td>
                             {% if row.project_url %}
@@ -267,18 +272,9 @@
                             n/a
                             {% endif %}
                             <small>
-                                {% if row.pixel_size_x_um %}X {{ row.pixel_size_x_um|floatformat:4 }} um{% endif %}
-                                {% if row.pixel_size_y_um %} &middot; Y {{ row.pixel_size_y_um|floatformat:4 }} um{% endif %}
-                                {% if row.z_step_um %} &middot; Z {{ row.z_step_um|floatformat:4 }} um{% endif %}
-                            </small>
-                        </td>
-                        <td>
-                            {{ row.instrument_manufacturer }} {{ row.instrument_model }}
-                            <small>
-                                {% if row.objective_model %}Objective {{ row.objective_model }}{% endif %}
-                                {% if row.objective_magnification %} &middot; {{ row.objective_magnification|floatformat:2 }}x{% endif %}
-                                {% if row.objective_na %} &middot; NA {{ row.objective_na|floatformat:2 }}{% endif %}
-                                {% if row.detector_model %} &middot; Detector {{ row.detector_model }}{% endif %}
+                                {% if row.pixel_size_x_um %}X: {{ row.pixel_size_x_um|floatformat:4 }} um{% endif %}
+                                {% if row.pixel_size_y_um %} &middot; Y: {{ row.pixel_size_y_um|floatformat:4 }} um{% endif %}
+                                {% if row.z_step_um %} &middot; Z: {{ row.z_step_um|floatformat:4 }} um{% endif %}
                             </small>
                         </td>
                         <td>{{ row.channel_summary|default:"n/a" }}</td>
@@ -291,35 +287,65 @@
                     <div class="tools-search-saved-actions">
                         {% if previous_page_querystring %}
                         <a class="admin-tools-button admin-tools-button-link"
-                           href="{% url 'omeroweb_tools_enhanced_search' %}?{{ previous_page_querystring }}">
+                           href="{% url 'omeroweb_tools_enhanced_search' %}?{{ previous_page_querystring }}"
+                           data-page-load-message="Loading previous search results…">
                             Previous
                         </a>
                         {% endif %}
                         {% if next_page_querystring %}
                         <a class="admin-tools-button admin-tools-button-link"
-                           href="{% url 'omeroweb_tools_enhanced_search' %}?{{ next_page_querystring }}">
+                           href="{% url 'omeroweb_tools_enhanced_search' %}?{{ next_page_querystring }}"
+                           data-page-load-message="Loading more search results…">
                             Next
                         </a>
                         {% endif %}
                     </div>
                 </div>
                 {% else %}
-                <p class="tools-search-empty">Run a search to see indexed acquisition results.</p>
+                <p class="tools-search-empty">Run a search to see indexed results.</p>
                 {% endif %}
             </section>
         </div>
     </div>
+    <div id="tools-search-page-loader"
+         class="tools-search-page-loader"
+         aria-hidden="true">
+        <div class="tools-search-page-loader__dialog"
+             role="status"
+             aria-live="polite"
+             aria-atomic="true">
+            <span class="tools-search-page-loader__spinner" aria-hidden="true"></span>
+            <div>
+                <strong id="tools-search-page-loader-title">Loading search results…</strong>
+                <p id="tools-search-page-loader-message">Please wait while Enhanced search refreshes the page.</p>
+            </div>
+        </div>
+    </div>
+    <div id="tools-search-live-status"
+         class="tools-search-live-status"
+         role="status"
+         aria-live="polite"
+         aria-atomic="true"
+         hidden></div>
     {{ query.to_payload|json_script:"current-query-payload" }}
     <script defer>
         const blockedForRoot = {{ blocked_for_root|yesno:"true,false" }};
         const rootStatusUrl = new URL('{% url "omeroweb_tools_root_status" %}', window.location.href);
         const syncUrl = new URL('{% url "omeroweb_tools_enhanced_search_sync" %}', window.location.href);
         const syncStateUrl = new URL('{% url "omeroweb_tools_enhanced_search_sync_state" %}', window.location.href);
+        const settingsUrl = new URL('{% url "omeroweb_tools_enhanced_search_settings" %}', window.location.href);
         const saveQueryUrl = new URL('{% url "omeroweb_tools_enhanced_search_save_query" %}', window.location.href);
         const deleteQueryUrl = new URL('{% url "omeroweb_tools_enhanced_search_delete_query" %}', window.location.href);
         const warningEl = document.getElementById('root-user-warning');
+        const liveStatusEl = document.getElementById('tools-search-live-status');
+        const pageLoaderEl = document.getElementById('tools-search-page-loader');
+        const pageLoaderTitleEl = document.getElementById('tools-search-page-loader-title');
+        const pageLoaderMessageEl = document.getElementById('tools-search-page-loader-message');
         const currentQueryPayloadNode = document.getElementById('current-query-payload');
         const queryPayload = currentQueryPayloadNode ? JSON.parse(currentQueryPayloadNode.textContent) : {};
+        let acquisitionMetadataEnabled = {{ user_settings.acquisition_metadata_enabled|yesno:"true,false" }};
+        const autoSyncStarted = {{ auto_sync_started|yesno:"true,false" }};
+        const autoSyncMessage = '{{ auto_sync_message|escapejs }}';
         const csrfToken = document.cookie
             .split(';')
             .map((chunk) => chunk.trim())
@@ -370,6 +396,133 @@
                 throw new Error(data.error || data.message || 'Request failed.');
             }
             return data;
+        };
+
+        const showLiveStatus = (message, state = 'busy') => {
+            if (!liveStatusEl) {
+                return;
+            }
+            liveStatusEl.textContent = message || '';
+            liveStatusEl.dataset.state = message ? state : '';
+            liveStatusEl.hidden = !message;
+        };
+
+        const clearLiveStatus = () => {
+            if (!liveStatusEl) {
+                return;
+            }
+            window.setTimeout(() => {
+                showLiveStatus('', '');
+            }, 1600);
+        };
+
+        const showPageLoader = (title, message) => {
+            if (!pageLoaderEl) {
+                return;
+            }
+            if (pageLoaderTitleEl) {
+                pageLoaderTitleEl.textContent = title || 'Loading search results…';
+            }
+            if (pageLoaderMessageEl) {
+                pageLoaderMessageEl.textContent = message || 'Please wait while Enhanced search refreshes the page.';
+            }
+            pageLoaderEl.classList.add('is-visible');
+            pageLoaderEl.setAttribute('aria-hidden', 'false');
+        };
+
+        const setButtonBusy = (button, isBusy, busyText) => {
+            if (!button) {
+                return;
+            }
+            if (!button.dataset.defaultLabel) {
+                button.dataset.defaultLabel = button.textContent.trim();
+            }
+            button.classList.toggle('is-busy', Boolean(isBusy));
+            button.disabled = Boolean(isBusy);
+            button.textContent = isBusy ? busyText : button.dataset.defaultLabel;
+        };
+
+        const bindPageLoadLinks = (root = document) => {
+            root.querySelectorAll('[data-page-load-message]').forEach((link) => {
+                if (link.dataset.pageLoadBound === 'true') {
+                    return;
+                }
+                link.dataset.pageLoadBound = 'true';
+                link.addEventListener('click', () => {
+                    showPageLoader(
+                        'Loading search results…',
+                        link.dataset.pageLoadMessage || 'Please wait while Enhanced search refreshes the page.'
+                    );
+                });
+            });
+        };
+
+        const loadPreviewCard = (card) => {
+            if (!card || card.dataset.previewState === 'loading' || card.dataset.previewState === 'loaded') {
+                return;
+            }
+            const thumbnailUrl = card.dataset.thumbnailUrl;
+            const img = card.querySelector('.tools-search-preview__image');
+            const label = card.querySelector('.tools-search-preview__label');
+            if (!thumbnailUrl || !img || !label) {
+                return;
+            }
+            card.dataset.previewState = 'loading';
+            label.textContent = 'Loading preview…';
+            const preloader = new Image();
+            preloader.decoding = 'async';
+            preloader.onload = () => {
+                img.src = thumbnailUrl;
+                img.hidden = false;
+                card.dataset.previewState = 'loaded';
+                label.textContent = 'Preview';
+            };
+            preloader.onerror = () => {
+                card.dataset.previewState = 'error';
+                label.textContent = 'Preview unavailable';
+            };
+            preloader.src = thumbnailUrl;
+        };
+
+        const initializePreviewLoading = () => {
+            const cards = Array.from(document.querySelectorAll('.tools-search-preview'));
+            if (!cards.length) {
+                return;
+            }
+            if (!('IntersectionObserver' in window)) {
+                cards.forEach(loadPreviewCard);
+                return;
+            }
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((entry) => {
+                        if (!entry.isIntersecting) {
+                            return;
+                        }
+                        observer.unobserve(entry.target);
+                        loadPreviewCard(entry.target);
+                    });
+                },
+                { rootMargin: '160px 0px' }
+            );
+            cards.forEach((card) => observer.observe(card));
+        };
+
+        const updateAcquisitionIndexUi = (enabled) => {
+            acquisitionMetadataEnabled = Boolean(enabled);
+            const status = document.getElementById('acquisition-index-status');
+            if (status) {
+                status.textContent = acquisitionMetadataEnabled
+                    ? 'Acquisition metadata indexing is enabled for your account. All images you own will be indexed automatically in the background.'
+                    : 'Acquisition metadata indexing is disabled for your account. No acquisition metadata is stored for your account.';
+            }
+            const toggle = document.getElementById('acquisition_metadata_enabled');
+            if (toggle) {
+                toggle.checked = acquisitionMetadataEnabled;
+            }
+            document.querySelectorAll('.sync-scope-btn').forEach((button) => {
+                button.disabled = blockedForRoot || !acquisitionMetadataEnabled;
+            });
         };
 
         const updateSyncTable = (states) => {
@@ -436,6 +589,7 @@
                 const open = document.createElement('a');
                 open.className = 'admin-tools-button admin-tools-button-link';
                 open.href = `${window.location.pathname}saved-queries/${item.id}/`;
+                open.dataset.pageLoadMessage = 'Opening saved search…';
                 open.textContent = 'Open';
                 actions.appendChild(open);
 
@@ -452,34 +606,82 @@
                 wrapper.appendChild(actions);
                 container.appendChild(wrapper);
             }
+            bindPageLoadLinks(container);
         };
 
         const handleDeleteQueryClick = async (event) => {
             const button = event.currentTarget;
-            button.disabled = true;
+            showLiveStatus('Deleting saved search…');
+            setButtonBusy(button, true, 'Deleting…');
             try {
                 const payload = await postJson(deleteQueryUrl, { query_id: button.dataset.queryId });
                 updateSavedQueryList(payload.saved_queries);
+                showLiveStatus('Saved search deleted.', 'success');
             } catch (error) {
+                showLiveStatus(error.message || String(error), 'error');
                 window.alert(error.message || String(error));
-                button.disabled = false;
+            } finally {
+                setButtonBusy(button, false);
+                clearLiveStatus();
             }
         };
 
         if (!blockedForRoot) {
+            updateAcquisitionIndexUi(acquisitionMetadataEnabled);
+            bindPageLoadLinks();
+            if (autoSyncMessage) {
+                showLiveStatus(autoSyncMessage, autoSyncStarted ? 'busy' : 'success');
+                clearLiveStatus();
+            }
+
             document.querySelectorAll('.sync-scope-btn').forEach((button) => {
                 button.addEventListener('click', async () => {
-                    button.disabled = true;
+                    showLiveStatus('Refreshing acquisition metadata index…');
+                    setButtonBusy(button, true, 'Refreshing…');
                     try {
                         const payload = await postJson(syncUrl, { scope_key: button.dataset.scopeKey });
                         updateSyncTable(payload.sync_states);
+                        showLiveStatus('Acquisition metadata index refresh started.', 'success');
                     } catch (error) {
+                        showLiveStatus(error.message || String(error), 'error');
                         window.alert(error.message || String(error));
                     } finally {
-                        button.disabled = false;
+                        setButtonBusy(button, false);
+                        button.disabled = blockedForRoot || !acquisitionMetadataEnabled;
+                        clearLiveStatus();
                     }
                 });
             });
+
+            const saveUserSettingsButton = document.getElementById('save-user-settings-btn');
+            const acquisitionToggle = document.getElementById('acquisition_metadata_enabled');
+            if (saveUserSettingsButton && acquisitionToggle) {
+                saveUserSettingsButton.addEventListener('click', async () => {
+                    showLiveStatus('Saving acquisition metadata indexing setting…');
+                    setButtonBusy(saveUserSettingsButton, true, 'Saving…');
+                    try {
+                        const payload = await postJson(settingsUrl, {
+                            acquisition_metadata_enabled: acquisitionToggle.checked,
+                        });
+                        updateAcquisitionIndexUi(
+                            payload.user_settings && payload.user_settings.acquisition_metadata_enabled
+                        );
+                        updateSyncTable(payload.sync_states);
+                        showLiveStatus(
+                            payload.sync_message
+                                || 'Acquisition metadata indexing setting saved.',
+                            payload.sync_started ? 'success' : 'busy'
+                        );
+                    } catch (error) {
+                        showLiveStatus(error.message || String(error), 'error');
+                        window.alert(error.message || String(error));
+                        updateAcquisitionIndexUi(acquisitionMetadataEnabled);
+                    } finally {
+                        setButtonBusy(saveUserSettingsButton, false);
+                        clearLiveStatus();
+                    }
+                });
+            }
 
             document.querySelectorAll('.delete-query-btn').forEach((button) => {
                 button.addEventListener('click', handleDeleteQueryClick);
@@ -494,7 +696,8 @@
                         window.alert('Enter a name for the saved query.');
                         return;
                     }
-                    saveQueryButton.disabled = true;
+                    showLiveStatus('Saving current search…');
+                    setButtonBusy(saveQueryButton, true, 'Saving…');
                     try {
                         const payload = await postJson(saveQueryUrl, {
                             query_name: queryName,
@@ -502,10 +705,13 @@
                         });
                         savedQueryNameInput.value = '';
                         updateSavedQueryList(payload.saved_queries);
+                        showLiveStatus('Saved search updated.', 'success');
                     } catch (error) {
+                        showLiveStatus(error.message || String(error), 'error');
                         window.alert(error.message || String(error));
                     } finally {
-                        saveQueryButton.disabled = false;
+                        setButtonBusy(saveQueryButton, false);
+                        clearLiveStatus();
                     }
                 });
             }
@@ -523,6 +729,14 @@
                 }
             }, 5000);
         }
+
+        document.getElementById('enhanced-search-form')?.addEventListener('submit', () => {
+            showPageLoader(
+                'Loading search results…',
+                'Please wait while Enhanced search refreshes the matching results.'
+            );
+        });
+        initializePreviewLoading();
     </script>
 </body>
 </html>

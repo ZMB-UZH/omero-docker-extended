@@ -31,6 +31,7 @@ def test_tools_urls_expose_expected_routes():
     assert route_map["omeroweb_tools_root_status"] == "root-status/"
     assert route_map["omeroweb_tools_enhanced_search"] == "enhanced-search/"
     assert route_map["omeroweb_tools_enhanced_search_sync"] == "enhanced-search/sync/"
+    assert route_map["omeroweb_tools_enhanced_search_settings"] == "enhanced-search/settings/"
     assert route_map["omeroweb_tools_enhanced_search_apply_query"] == (
         "enhanced-search/saved-queries/<int:query_id>/"
     )
@@ -58,3 +59,44 @@ def test_tools_help_page_serves_expected_file_and_404s_when_missing(monkeypatch)
         help_file.unlink()
         with pytest.raises(Http404):
             unwrapped(SimpleNamespace())
+
+
+def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
+    template_path = (
+        Path(__file__).resolve().parents[1]
+        / "templates"
+        / "omeroweb_tools"
+        / "enhanced_search.html"
+    )
+    template_text = template_path.read_text(encoding="utf-8")
+
+    assert "Search filters" not in template_text
+    assert "Free text" not in template_text
+    assert "Search box" in template_text
+    assert "Indexed scope" in template_text
+    assert "Acquired from" in template_text
+    assert "Acquired to" in template_text
+    assert "tools-search-field--actions" in template_text
+    assert "tools-search-inline-action--primary" in template_text
+    assert "tools-search-page-loader" in template_text
+    assert "Loading search results" in template_text
+    assert "<th>Preview</th>" in template_text
+    assert "<th>Channel(s)</th>" in template_text
+    assert "Indexed by" in template_text
+    assert "Owner:" in template_text
+    assert "X:" in template_text
+    assert "Y:" in template_text
+    assert "Optics / Detector" not in template_text
+
+
+def test_tools_landing_template_has_single_enhanced_search_entry_without_descriptive_copy():
+    template_path = (
+        Path(__file__).resolve().parents[1]
+        / "templates"
+        / "omeroweb_tools"
+        / "index.html"
+    )
+    template_text = template_path.read_text(encoding="utf-8")
+
+    assert template_text.count("Enhanced search") == 1
+    assert "tools-page-lead" not in template_text

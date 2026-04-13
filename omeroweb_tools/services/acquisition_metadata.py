@@ -483,9 +483,6 @@ def extract_search_document(image) -> tuple[SearchDocument, dict[str, int | str 
 
     scope_context = _extract_dataset_project_context(image)
     search_text_parts = [
-        _normalized_text(_safe_details_value(image, "getName")),
-        scope_context[1],
-        scope_context[3],
         instrument_manufacturer,
         instrument_model,
         objective_model,

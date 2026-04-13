@@ -143,6 +143,9 @@ def test_extract_search_document_builds_canonical_fields_and_metadata_attributes
     assert "LSM 980" in document.search_document
     assert "Exposure Time" not in document.search_document
     assert "125 ms" in document.search_document
+    assert "img-001" not in document.search_document
+    assert "Mitotic Entry" not in document.search_document
+    assert "Cell Cycle" not in document.search_document
     assert document.raw_metadata["BF_Exposure Time"] == "125 ms"
 
     attributes = {attribute.attribute_key: attribute for attribute in document.attributes}

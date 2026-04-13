@@ -3,8 +3,9 @@
 ## Overview
 
 Tools is the user-facing utility area in OMERO.web. The first available tool is
-`Enhanced search`, which lets regular users search a selective metadata index
-stored in the plugin database.
+`Enhanced search`, which lets regular users search OMERO's built-in search
+results together with a selective acquisition-metadata index stored in the
+plugin database.
 
 ## Access model
 
@@ -15,12 +16,14 @@ stored in the plugin database.
 
 ## What Enhanced search does
 
-- Searches a selective PostgreSQL index built from configured groups, projects,
-  or datasets.
-- Supports free-text search plus fielded filters for instrument, detector,
-  objective, acquisition date, channel metadata, and pixel sizes.
+- Supports the `OMERO index`, `Acquisition metadata`, and `All indexed
+  scopes` search modes.
+- Supports a compact search form with a search box, acquisition-date filters,
+  and async image previews in the results table.
+- Lets each user opt in to acquisition metadata indexing for all images they
+  own.
 - Lets each user save and reopen their own searches.
-- Shows per-scope index status and refresh progress.
+- Shows acquisition-index status and refresh progress for the current user.
 
 ## Data handling
 
@@ -35,18 +38,19 @@ stored in the plugin database.
 
 1. Open `Tools` from the OMERO.web top navigation.
 2. Open `Enhanced search`.
-3. Choose a configured indexed scope, or search across all enabled scopes.
-4. Add free-text or fielded filters.
+3. Enable acquisition metadata indexing if you want acquisition metadata for
+   your images to be indexed in the background.
+4. Choose an indexed scope, then add a search term or acquisition-date filter.
 5. Run the search and open matching Project, Dataset, or Image links in
    OMERO.web.
 6. Save useful queries for repeat use.
 
 ## Troubleshooting
 
-- **No scopes are available**: ask an operator to configure
-  `TOOLS_ENHANCED_SEARCH_SCOPES` and restart the `omeroweb` service.
 - **Refresh index fails**: check the `tools-celery-worker` logs and confirm the
   OMERO API and plugin database are reachable from the `omeroweb` container.
+- **Acquisition results do not appear yet**: enable acquisition metadata
+  indexing for your account and wait for the background indexer to finish.
 - **Search returns fewer rows than expected**: OMERO permission revalidation may
   remove indexed matches that are no longer visible to your account.
 - **Root is blocked**: this is intentional; use a normal OMERO user account for
@@ -54,6 +58,7 @@ stored in the plugin database.
 
 ## Best practices
 
-- Keep indexed scopes selective instead of indexing every accessible object.
-- Refresh a scope after major import or metadata-ingestion changes.
-- Use saved queries for common microscope, detector, or acquisition filters.
+- Enable acquisition metadata indexing only for accounts that actually need it.
+- Use saved queries for common acquisition searches.
+- Use `All indexed scopes` when you want OMERO-index and acquisition-index
+  results together.

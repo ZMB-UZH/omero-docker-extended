@@ -12,12 +12,7 @@
     <div id="root-user-warning" class="root-user-warning" role="alert"></div>
     <div class="admin-tools-page">
         <div class="admin-tools-header">
-            <div>
-                <h1 class="admin-tools-title">Tools</h1>
-                <p class="tools-page-lead">
-                    User-facing workflows that extend OMERO.web without writing into the OMERO database.
-                </p>
-            </div>
+            <h1 class="admin-tools-title">Tools</h1>
             <div class="admin-tools-header-actions">
                 <a href="{% url 'omeroweb_tools_help' %}"
                    target="_blank"
@@ -33,12 +28,9 @@
             <div class="admin-tools-actions">
                 <a class="admin-tools-button admin-tools-button-link"
                    href="{% url 'omeroweb_tools_enhanced_search' %}">
-                    Enhanced search
+                   Enhanced search
                 </a>
             </div>
-            <p class="tools-page-note">
-                Enhanced search stores its index and saved queries only in the plugin database, then re-checks OMERO permissions before showing results.
-            </p>
         </div>
     </div>
     <script defer>

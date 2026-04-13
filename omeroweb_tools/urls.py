@@ -7,6 +7,7 @@ from .views.index_view import (
     enhanced_search_view,
     index,
     root_status,
+    save_user_settings_view,
     save_query_view,
     start_scope_sync_view,
     sync_state_view,
@@ -32,6 +33,11 @@ urlpatterns = [
         name="omeroweb_tools_enhanced_search_sync_state",
     ),
     path(
+        "enhanced-search/settings/",
+        save_user_settings_view,
+        name="omeroweb_tools_enhanced_search_settings",
+    ),
+    path(
         "enhanced-search/saved-queries/save/",
         save_query_view,
         name="omeroweb_tools_enhanced_search_save_query",
@@ -48,4 +54,3 @@ urlpatterns = [
     ),
     path("help/", help_page, name="omeroweb_tools_help"),
 ]
-
