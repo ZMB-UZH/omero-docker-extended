@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
-
 from omeroweb_tools.services import enhanced_search_store as store
 
 
@@ -131,17 +129,22 @@ def test_connect_does_not_wrap_exceptions_raised_inside_with_block(monkeypatch):
         "_db_params",
         lambda: {
             "user": "omero-plugin",
-            "password": "secret",
+            "password": "opaque-credential",
             "host": "database_plugin",
             "dbname": "omero-plugin",
             "port": 5433,
         },
     )
 
-    with pytest.raises(RuntimeError, match="inner boom"):
+    raised = None
+    try:
         with store.connect():
             raise RuntimeError("inner boom")
+    except RuntimeError as exc:
+        raised = exc
 
+    assert raised is not None
+    assert str(raised) == "inner boom"
     assert closed == [True]
 
 
