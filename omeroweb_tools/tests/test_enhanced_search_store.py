@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from omeroweb_tools.services import enhanced_search_store as store
 
 
@@ -109,6 +111,38 @@ class _PlaceholderCheckingCursor(_SettingsCursor):
             )
         self.executed.append({"raw_sql": sql, "sql_text": sql_text, "params": params})
         self.rowcount = 0
+
+
+def test_connect_does_not_wrap_exceptions_raised_inside_with_block(monkeypatch):
+    closed = []
+
+    class _FakeConn:
+        def close(self):
+            closed.append(True)
+
+    class _FakePsycopg:
+        @staticmethod
+        def connect(**kwargs):
+            return _FakeConn()
+
+    monkeypatch.setattr(store, "_load_psycopg2", lambda: (_FakePsycopg(), None))
+    monkeypatch.setattr(
+        store,
+        "_db_params",
+        lambda: {
+            "user": "omero-plugin",
+            "password": "secret",
+            "host": "database_plugin",
+            "dbname": "omero-plugin",
+            "port": 5433,
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="inner boom"):
+        with store.connect():
+            raise RuntimeError("inner boom")
+
+    assert closed == [True]
 
 
 def test_search_index_rows_short_circuits_for_no_visible_groups(monkeypatch):
@@ -246,6 +280,28 @@ def test_sync_run_is_active_checks_running_state_with_matching_token(monkeypatch
     assert cursor.executed[0]["params"] == ("user", 7, "abc")
 
 
+def test_ensure_sync_state_rows_does_not_refresh_updated_at_for_existing_rows(
+    monkeypatch,
+):
+    monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
+    cursor = _SettingsCursor([])
+    conn = _SettingsConn(cursor)
+
+    store.ensure_sync_state_rows(
+        conn,
+        [{"scope_type": "user", "scope_id": 21, "label": "Your acquisition metadata"}],
+        schema_version=3,
+    )
+
+    sql_text = cursor.executed[0]["sql_text"]
+    assert "DO UPDATE SET" in sql_text
+    assert "scope_label = EXCLUDED.scope_label" in sql_text
+    assert "schema_version = EXCLUDED.schema_version" in sql_text
+    assert "updated_at = NOW()" not in sql_text.split("DO UPDATE SET", 1)[1]
+    assert cursor.executed[0]["params"] == ("user", 21, "Your acquisition metadata", 3)
+    assert conn.commits == 1
+
+
 def test_try_start_scope_sync_placeholder_count_matches_params(monkeypatch):
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _PlaceholderCheckingCursor([("running", "run-token")])
@@ -264,3 +320,4 @@ def test_try_start_scope_sync_placeholder_count_matches_params(monkeypatch):
 
     assert started is True
     assert conn.commits == 1
+    assert "updated_at = CASE" in cursor.executed[0]["sql_text"]

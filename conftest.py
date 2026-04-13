@@ -117,6 +117,7 @@ class _DummyCelery:
 
 _celery_module.Celery = _DummyCelery
 _celery_module.states = _celery_states
+_celery_module.current_app = MagicMock()
 
 for _mod in [
     "omeroweb",
