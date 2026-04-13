@@ -124,7 +124,7 @@ def _run_script_via_omero_cli(
     env = os.environ.copy()
     # Keep OMERO CLI session/cache files on the managed plugin tmp volume
     # rather than a shared world-writable system temp directory.
-    omero_userdir = get_plugin_tmp_dir("omero-cli")
+    omero_userdir = get_plugin_tmp_dir("omero-cli", create=True)
     session_dir = omero_userdir / "sessions"
     tmp_dir = omero_userdir / "tmp"
     session_dir.mkdir(parents=True, exist_ok=True)

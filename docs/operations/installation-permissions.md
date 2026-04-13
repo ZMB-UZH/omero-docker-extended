@@ -225,10 +225,18 @@ Code path:
 - `omero_plugin_common/tmp_utils.py`
   - all plugin temp directories derive from `OMERO_TMP_PATH`.
   - calling packages such as `omeroweb_import` map to host subtrees like `omeroweb-import`.
+  - helper calls are expected to stay non-mutating unless the caller explicitly
+    asks to create the subtree at the runtime sink. Import-time helper calls
+    must not silently create plugin temp directories.
 
 Installer expectation:
 
 - non-server top-level temp/plugin subtrees are normalized to the web UID/GID by `ensure_omero_tmp_layout()`.
+- `startup/10-web-bootstrap.sh` also repairs any existing non-server top-level
+  plugin subtrees (for example `omeroweb-import/jobs` or
+  `omeroweb-import/compat-check`) back to the OMERO.web runtime UID/GID before
+  supervisord drops privileges. This prevents older root-context helper calls
+  from leaving behind request-breaking ownership drift.
 
 Import-plugin Zarr bridge:
 

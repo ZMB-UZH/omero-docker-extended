@@ -186,6 +186,47 @@ prepare_supervisor_logs_from_config() {
 
 ensure_runtime_identity
 
+repair_plugin_tmp_layout() {
+    local tmp_root="${OMERO_TMP_PATH:-}"
+    local server_runtime_user="${OMERO_SERVER_RUNTIME_USER:-omero-server}"
+    local top_level_entry=""
+    local entry_name=""
+    local probe_path=""
+
+    if [[ -z "${tmp_root}" ]]; then
+        return 0
+    fi
+
+    mkdir -p "${tmp_root}"
+    chown "${runtime_user}:${runtime_group}" "${tmp_root}" 2>/dev/null || true
+    chmod 0755 "${tmp_root}" 2>/dev/null || true
+
+    while IFS= read -r -d '' top_level_entry; do
+        entry_name="$(basename "${top_level_entry}")"
+        case "${entry_name}" in
+            "${server_runtime_user}")
+                continue
+                ;;
+            "${runtime_user}"|omeroweb-*)
+                chown -R "${runtime_user}:${runtime_group}" "${top_level_entry}" 2>/dev/null || true
+                chmod -R u+rwX "${top_level_entry}" 2>/dev/null || true
+                if runtime_user_exists; then
+                    probe_path="${top_level_entry}/.runtime-write-test.$$"
+                    if ! runuser -u "${runtime_user}" -- touch "${probe_path}" 2>/dev/null; then
+                        echo "[web-bootstrap] ERROR: Plugin temp subtree is not writable for ${runtime_user}: ${top_level_entry}" >&2
+                        ls -ld "${top_level_entry}" >&2 || true
+                        exit 1
+                    fi
+                    rm -f "${probe_path}" || true
+                elif [[ ! -w "${top_level_entry}" ]]; then
+                    echo "[web-bootstrap] ERROR: Plugin temp subtree is not writable: ${top_level_entry}" >&2
+                    ls -ld "${top_level_entry}" >&2 || true
+                    exit 1
+                fi
+                ;;
+        esac
+    done < <(find "${tmp_root}" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+}
 
 configure_docker_socket_access() {
     local docker_socket="${ADMIN_TOOLS_DOCKER_SOCKET:-/var/run/docker.sock}"
@@ -279,6 +320,7 @@ prepare_supervisor_logs_from_config "${supervisord_config_path}"
 if [[ -n "${TMPDIR:-}" && "${TMPDIR}" != "/tmp" ]]; then
     ensure_runtime_directory "${TMPDIR}" "OMERO.web TMPDIR (session storage)" 0700
 fi
+repair_plugin_tmp_layout
 
 # ── Ensure .admin-tools directory is writable for quota state persistence ──
 omero_data_dir="${OMERO_DATA_DIR:-}"

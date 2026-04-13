@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import inspect
 import tempfile
 from pathlib import Path
@@ -104,3 +105,30 @@ def test_tools_landing_template_has_single_enhanced_search_entry_without_descrip
 
     assert template_text.count("Enhanced search") == 1
     assert "tools-page-lead" not in template_text
+
+
+def test_tasks_module_defers_service_import_until_task_execution():
+    task_path = Path(__file__).resolve().parents[1] / "tasks.py"
+    module = ast.parse(task_path.read_text(encoding="utf-8"))
+
+    top_level_service_import = [
+        node
+        for node in module.body
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "services.enhanced_search_service"
+    ]
+    assert top_level_service_import == []
+
+    task_func = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "run_enhanced_search_scope_sync"
+    )
+    nested_service_import = [
+        node
+        for node in task_func.body
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "services.enhanced_search_service"
+    ]
+    assert len(nested_service_import) == 1

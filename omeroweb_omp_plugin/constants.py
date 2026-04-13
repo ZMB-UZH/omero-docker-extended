@@ -13,7 +13,7 @@ OMERO_WEB_VENV = get_env("OMERO_WEB_VENV", env_file=ENV_FILE_OMEROWEB)
 OMERO_CLI = os.path.join(OMERO_WEB_ROOT, OMERO_WEB_VENV, "bin", "omero")
 
 # Storage directory for job JSON files.
-# Auto-detected from OMERO_TMP_PATH; directory is created by get_plugin_tmp_dir.
+# Auto-detected from OMERO_TMP_PATH; the job store creates the directory on write.
 JOBS_DIR = str(get_plugin_tmp_dir("jobs"))
 
 # Chunk size for data processing

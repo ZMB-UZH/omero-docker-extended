@@ -37,7 +37,7 @@ BACKUP_DIR_NAME = ".env_backups"
 
 
 def load_manifest(repo_root: Path) -> list[Path]:
-    """Return resolved paths listed in the manifest."""
+    """Return manifest entry paths anchored under the supplied repository root."""
     manifest_path = repo_root / MANIFEST_NAME
     if not manifest_path.exists():
         print(f"ERROR: Manifest file not found: {manifest_path}", file=sys.stderr)
@@ -48,8 +48,11 @@ def load_manifest(repo_root: Path) -> list[Path]:
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
-        resolved = (repo_root / line).resolve()
-        entries.append(resolved)
+        # Keep the manifest entry lexically anchored under the caller-provided
+        # repo root. Deployment worktrees intentionally use symlinked env files,
+        # and resolving them here would escape the worktree and break repo-
+        # relative bookkeeping for checks and backups.
+        entries.append(repo_root / line)
     return entries
 
 

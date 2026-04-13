@@ -97,6 +97,20 @@ def test_job_storage_helpers_cover_missing_corrupt_and_lock_failure_paths(
     )
     assert core_functions._robust_update_job(job_id, lambda current: current) is None
 
+    monkeypatch.setattr(
+        core_functions,
+        "_job_path",
+        lambda current_job_id: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_job_lock_path",
+        lambda current_job_id: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+    assert core_functions._load_job(job_id) is None
+    assert core_functions._save_job({"job_id": job_id}) is False
+    assert core_functions._robust_update_job(job_id, lambda current: current) is None
+
 
 def test_batch_find_images_by_name_covers_dataset_global_and_failure_paths(monkeypatch):
     class _Params:

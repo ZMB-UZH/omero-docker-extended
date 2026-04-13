@@ -66,6 +66,23 @@ class EnvSafetyGuardTests(unittest.TestCase):
         )
         self.assertEqual(env_safety_guard.cmd_check(repo), 0)
 
+    def test_load_manifest_keeps_symlinked_entries_repo_relative(self):
+        repo = self._make_repo(["env/omeroweb.env"])
+        external = Path(tempfile.mkdtemp())
+        self.addCleanup(
+            lambda: __import__("shutil").rmtree(external, ignore_errors=True)
+        )
+        target = external / "omeroweb.env"
+        target.write_text("CONFIG=value", encoding="utf-8")
+        env_dir = repo / "env"
+        env_dir.mkdir(parents=True, exist_ok=True)
+        (env_dir / "omeroweb.env").symlink_to(target)
+
+        entries = env_safety_guard.load_manifest(repo)
+
+        self.assertEqual(entries, [repo / "env/omeroweb.env"])
+        self.assertTrue(entries[0].exists())
+
     # ---- backup command ----
 
     def test_backup_creates_timestamped_copy(self):

@@ -459,6 +459,8 @@ def _ensure_dir(path: Path) -> bool:
     try:
         managed_path = _resolve_managed_directory_path(path)
         managed_path.mkdir(parents=True, exist_ok=True)
+        if not _directory_is_usable(managed_path):
+            return False
         return True
     except (OSError, ValueError) as exc:
         logger.warning(
@@ -467,6 +469,32 @@ def _ensure_dir(path: Path) -> bool:
             sanitize_log_value(exc),
         )
         return False
+
+
+def _directory_is_usable(path: Path) -> bool:
+    """Return whether the current runtime user can traverse and write a directory."""
+    try:
+        if not path.is_dir():
+            logger.warning(
+                "Managed path is not a directory: %s",
+                sanitize_log_value(path),
+            )
+            return False
+    except OSError as exc:
+        logger.warning(
+            "Unable to inspect directory %s: %s",
+            sanitize_log_value(path),
+            sanitize_log_value(exc),
+        )
+        return False
+
+    if not os.access(path, os.R_OK | os.W_OK | os.X_OK):
+        logger.warning(
+            "Directory exists but is not usable for the current runtime user: %s",
+            sanitize_log_value(path),
+        )
+        return False
+    return True
 
 
 def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
@@ -524,7 +552,7 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
                     sanitize_log_value(path),
                     sanitize_log_value(perm_exc),
                 )
-            return True
+            return _directory_is_usable(path)
     except OSError as exc:
         logger.error(
             "Unable to create/verify directory %s: %s",
@@ -816,8 +844,9 @@ def _load_job(job_id: str):
             sanitize_log_value(job_id),
         )
         return None
-    path = _job_path(job_id)
-    lock_path = _job_lock_path(job_id)
+    path, lock_path = _resolve_job_storage_paths(job_id)
+    if path is None or lock_path is None:
+        return None
     if not path.exists():
         return None
     last_lock_error = None
@@ -879,8 +908,9 @@ def _save_job(
             sanitize_log_value(job_id),
         )
         return False
-    path = _job_path(job_id)
-    lock_path = _job_lock_path(job_id)
+    path, lock_path = _resolve_job_storage_paths(job_id)
+    if path is None or lock_path is None:
+        return False
     job_dict["updated"] = time.time()
     for attempt in range(retries):
         if attempt:
@@ -921,8 +951,9 @@ def _robust_update_job(
             sanitize_log_value(job_id),
         )
         return None
-    path = _job_path(job_id)
-    lock_path = _job_lock_path(job_id)
+    path, lock_path = _resolve_job_storage_paths(job_id)
+    if path is None or lock_path is None:
+        return None
     for attempt in range(retries):
         if attempt:
             time.sleep(
@@ -962,6 +993,18 @@ def _robust_update_job(
         retries,
     )
     return None
+
+
+def _resolve_job_storage_paths(job_id: str) -> tuple[Optional[Path], Optional[Path]]:
+    try:
+        return _job_path(job_id), _job_lock_path(job_id)
+    except (OSError, ValueError, _ManagedPathValidationError) as exc:
+        logger.warning(
+            "Unable to resolve upload job storage paths for %s: %s",
+            sanitize_log_value(job_id),
+            sanitize_log_value(exc),
+        )
+        return None, None
 
 
 def _safe_relative_path(raw_name: str):
@@ -3053,7 +3096,8 @@ def _run_local_import_scan(path: Path, timeout: Optional[int] = None):
 
     env = os.environ.copy()
     omerodir_path = (
-        get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        get_plugin_tmp_dir("compat-check", create=True)
+        / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
     )
     env["OMERODIR"] = str(omerodir_path)
 
@@ -5915,7 +5959,7 @@ def _extract_script_outputs(text: str) -> dict[str, str]:
 
 
 def _shared_zarr_transfer_root() -> Path:
-    root = get_plugin_tmp_dir(ZARR_SHARED_TRANSFER_SUBDIR)
+    root = get_plugin_tmp_dir(ZARR_SHARED_TRANSFER_SUBDIR, create=True)
     root.chmod(ZARR_SHARED_TRANSFER_ROOT_MODE)
     return root.resolve(strict=False)
 
