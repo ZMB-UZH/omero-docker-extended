@@ -11,7 +11,6 @@ from typing import Any
 from urllib.parse import urlencode
 
 from django.urls import reverse
-from kombu import Connection
 from omero.gateway import BlitzGateway
 from omero.rtypes import rtime
 
@@ -1158,6 +1157,7 @@ def _dispatch_scope_sync_task(
     # created explicitly here because OMERO.web hosts multiple Celery apps in
     # the same long-lived web process.
     from ..celery_app import app as enhanced_search_celery_app
+    from kombu import Connection
 
     with Connection(celery_config.broker_url) as broker_connection:
         enhanced_search_celery_app.send_task(
