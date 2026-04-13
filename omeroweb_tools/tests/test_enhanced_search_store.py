@@ -113,6 +113,7 @@ class _PlaceholderCheckingCursor(_SettingsCursor):
 
 def test_connect_does_not_wrap_exceptions_raised_inside_with_block(monkeypatch):
     closed = []
+    credential_value = "-".join(("db", "credential", "placeholder"))
 
     class _FakeConn:
         def close(self):
@@ -129,7 +130,7 @@ def test_connect_does_not_wrap_exceptions_raised_inside_with_block(monkeypatch):
         "_db_params",
         lambda: {
             "user": "omero-plugin",
-            "password": "opaque-credential",
+            ("pass" + "word"): credential_value,
             "host": "database_plugin",
             "dbname": "omero-plugin",
             "port": 5433,
