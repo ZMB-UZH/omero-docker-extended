@@ -667,11 +667,15 @@ def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
             )
 
     fake_celery_module = SimpleNamespace(app=_FakeApp())
-    monkeypatch.setattr(service, "Connection", _FakeConnection)
     monkeypatch.setitem(
         __import__("sys").modules,
         "omeroweb_tools.celery_app",
         fake_celery_module,
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "kombu",
+        SimpleNamespace(Connection=_FakeConnection),
     )
 
     celery_config = SimpleNamespace(
