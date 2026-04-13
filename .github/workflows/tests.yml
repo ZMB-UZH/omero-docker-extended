@@ -66,6 +66,7 @@ jobs:
           run_suite .coverage.admin omeroweb_admin_tools/tests/ omeroweb_admin_tools/tests/
           run_suite .coverage.omp omeroweb_omp_plugin/tests/ omeroweb_omp_plugin/tests/
           run_suite .coverage.import omeroweb_import/tests/ omeroweb_import/tests/
+          run_suite .coverage.tools omeroweb_tools/tests/ omeroweb_tools/tests/
           run_suite .coverage.zarr omero_web_zarr/tests/ omero_web_zarr/tests/
 
           exit $EXIT_FINAL

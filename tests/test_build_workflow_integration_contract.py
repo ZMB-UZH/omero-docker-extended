@@ -579,6 +579,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "./omeroweb_import",
             "./omeroweb_admin_tools",
             "./omeroweb_imaris_connector",
+            "./omeroweb_tools",
             "./omero_web_zarr",
         ]
         coveragerc_text = (self.repo_root / ".coveragerc").read_text(encoding="utf-8")
@@ -599,6 +600,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "omeroweb_admin_tools/tests/",
             "omeroweb_omp_plugin/tests/",
             "omeroweb_import/tests/",
+            "omeroweb_tools/tests/",
             "omero_web_zarr/tests/",
         ]
         ci_text = (self.repo_root / ".github" / "workflows" / "tests.yml").read_text(
@@ -701,6 +703,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "omeroweb_import",
             "omeroweb_admin_tools",
             "omeroweb_imaris_connector",
+            "omeroweb_tools",
             "omero_web_zarr",
         }
         for prefix in expected_prefixes:
