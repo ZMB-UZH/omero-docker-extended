@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import importlib.util
 import subprocess
 import sys
 import unittest
@@ -72,6 +73,7 @@ class SmokeCheck:
     name: str
     command: tuple[str, ...]
     covers: frozenset[str]
+    fallback_command: tuple[str, ...] | None = None
 
 
 SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
@@ -119,6 +121,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
             "-m",
             "pytest",
             "-q",
+            "--noconftest",
             "-p",
             "no:cacheprovider",
             "-W",
@@ -142,6 +145,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
             "-m",
             "pytest",
             "-q",
+            "--noconftest",
             "-p",
             "no:cacheprovider",
             "-W",
@@ -169,6 +173,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
             "-m",
             "pytest",
             "-q",
+            "--noconftest",
             "-p",
             "no:cacheprovider",
             "-W",
@@ -193,6 +198,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
             "-m",
             "pytest",
             "-q",
+            "--noconftest",
             "-p",
             "no:cacheprovider",
             "-W",
@@ -217,6 +223,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
             "-m",
             "pytest",
             "-q",
+            "--noconftest",
             "-p",
             "no:cacheprovider",
             "-W",
@@ -239,6 +246,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
             "-m",
             "pytest",
             "-q",
+            "--noconftest",
             "-p",
             "no:cacheprovider",
             "-W",
@@ -280,6 +288,11 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
                 "omero-runtime-verifier",
                 "plugin-regression-triager",
             }
+        ),
+        fallback_command=(
+            "python3",
+            "tools/run_agent_skill_smoke.py",
+            "plugin-suite-fallback",
         ),
     ),
 )
@@ -373,7 +386,13 @@ class AgentSkillContractTests(unittest.TestCase):
     def run_smoke_command(
         cls, smoke_check: SmokeCheck
     ) -> subprocess.CompletedProcess[str]:
-        resolved_command = cls._resolve_smoke_command(smoke_check.command)
+        command = smoke_check.command
+        if (
+            smoke_check.fallback_command is not None
+            and not cls._host_python_has_django()
+        ):
+            command = smoke_check.fallback_command
+        resolved_command = cls._resolve_smoke_command(command)
         cached = cls._command_cache.get(resolved_command)
         if cached is not None:
             return cached
@@ -392,6 +411,10 @@ class AgentSkillContractTests(unittest.TestCase):
         if not command or command[0] != "python3":
             return command
         return (sys.executable, *command[1:])
+
+    @staticmethod
+    def _host_python_has_django() -> bool:
+        return importlib.util.find_spec("django") is not None
 
     def test_upstream_sources_doc_matches_adapted_skill_frontmatter(self) -> None:
         adapted_skill_names = {
@@ -488,6 +511,55 @@ class AgentSkillContractTests(unittest.TestCase):
                 )
                 for reference in sorted(references):
                     self.assert_repo_reference_exists(reference)
+
+    def test_claude_hooks_use_portable_repo_local_commands(self) -> None:
+        settings_text = (self.repo_root / ".claude" / "settings.json").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("/home/itservice/.local/bin/ruff", settings_text)
+        self.assertNotIn("/opt/omero/tools/env_safety_guard.py", settings_text)
+        self.assertIn("python3 -m ruff check --fix --quiet", settings_text)
+        self.assertIn("python3 -m ruff format --quiet", settings_text)
+        self.assertIn('git rev-parse --show-toplevel', settings_text)
+        self.assertIn('tools/env_safety_guard.py', settings_text)
+
+    def test_agent_surfaces_avoid_host_specific_clone_paths(self) -> None:
+        surfaces = {
+            ".claude/settings.json": (
+                self.repo_root / ".claude" / "settings.json"
+            ).read_text(encoding="utf-8"),
+            "CLAUDE.md": (self.repo_root / "CLAUDE.md").read_text(encoding="utf-8"),
+            "GEMINI.md": (self.repo_root / "GEMINI.md").read_text(encoding="utf-8"),
+            "docs/reference/ai-agent-integrations.md": (
+                self.repo_root / "docs" / "reference" / "ai-agent-integrations.md"
+            ).read_text(encoding="utf-8"),
+            "docs/reference/ai-agent-skills.md": (
+                self.repo_root / "docs" / "reference" / "ai-agent-skills.md"
+            ).read_text(encoding="utf-8"),
+            ".github/copilot-instructions.md": (
+                self.repo_root / ".github" / "copilot-instructions.md"
+            ).read_text(encoding="utf-8"),
+            **{
+                str(path.relative_to(self.repo_root)): path.read_text(encoding="utf-8")
+                for path in sorted((self.repo_root / ".github" / "instructions").glob("*.instructions.md"))
+            },
+            **{
+                str(path.relative_to(self.repo_root)): path.read_text(encoding="utf-8")
+                for path in sorted((self.repo_root / ".cursor" / "rules").glob("*.mdc"))
+            },
+            **{
+                f".agents/skills/{name}/SKILL.md": text
+                for name, text in self.skill_texts.items()
+            },
+            **{
+                f".agents/skills/{name}/agents/openai.yaml": text
+                for name, text in self.adapter_texts.items()
+            },
+        }
+        for surface_name, surface_text in surfaces.items():
+            with self.subTest(surface=surface_name):
+                self.assertNotIn("/opt/omero/", surface_text)
+                self.assertNotIn("/home/itservice/", surface_text)
 
     def test_smoke_command_coverage_spans_every_skill(self) -> None:
         expected_skills = set(self.skill_dirs)
