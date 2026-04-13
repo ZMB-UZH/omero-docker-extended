@@ -249,7 +249,7 @@
                         <td>
                             <a href="{{ row.image_url }}">{{ row.image_name|default:row.image_id }}</a>
                             <small>ID: {{ row.image_id }} &middot; Owner: {{ row.owner_name|default:row.owner_id }}</small>
-                            <small>Indexed by {{ row.indexed_sources|join:", " }}</small>
+                            <small>Indexed by: {{ row.indexed_sources|join:", " }}</small>
                         </td>
                         <td>
                             {% if row.project_url %}
@@ -317,7 +317,7 @@
             <span class="tools-search-page-loader__spinner" aria-hidden="true"></span>
             <div>
                 <strong id="tools-search-page-loader-title">Loading search results…</strong>
-                <p id="tools-search-page-loader-message">Please wait while Enhanced search refreshes the page.</p>
+                <p id="tools-search-page-loader-message">Please wait while the search results are being queried.</p>
             </div>
         </div>
     </div>
@@ -424,7 +424,7 @@
                 pageLoaderTitleEl.textContent = title || 'Loading search results…';
             }
             if (pageLoaderMessageEl) {
-                pageLoaderMessageEl.textContent = message || 'Please wait while Enhanced search refreshes the page.';
+                pageLoaderMessageEl.textContent = message || 'Please wait while the search results are being queried.';
             }
             pageLoaderEl.classList.add('is-visible');
             pageLoaderEl.setAttribute('aria-hidden', 'false');
@@ -451,7 +451,7 @@
                 link.addEventListener('click', () => {
                     showPageLoader(
                         'Loading search results…',
-                        link.dataset.pageLoadMessage || 'Please wait while Enhanced search refreshes the page.'
+                        link.dataset.pageLoadMessage || 'Please wait while the search results are being queried.'
                     );
                 });
             });
@@ -733,7 +733,7 @@
         document.getElementById('enhanced-search-form')?.addEventListener('submit', () => {
             showPageLoader(
                 'Loading search results…',
-                'Please wait while Enhanced search refreshes the matching results.'
+                'Please wait while the search results are being queried.'
             );
         });
         initializePreviewLoading();
