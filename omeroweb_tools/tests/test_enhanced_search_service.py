@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
 from django.test import override_settings
 
 from omeroweb_tools.services import enhanced_search_service as service
@@ -22,6 +23,28 @@ def test_parse_search_query_validates_scope_and_date_ranges():
     assert "Invalid page value." in errors
     assert "Selected indexed scope is not supported." in errors
     assert "Acquisition start date cannot be after the end date." in errors
+
+
+def test_parse_search_query_accepts_display_date_formats():
+    query, errors = service.parse_search_query(
+        {
+            "acquisition_date_from": "12--04--2026",
+            "acquisition_date_to": "13-04-2026",
+        }
+    )
+
+    assert errors == []
+    assert query.acquisition_date_from == datetime(2026, 4, 12, tzinfo=timezone.utc)
+    assert query.acquisition_date_to == datetime(
+        2026,
+        4,
+        13,
+        23,
+        59,
+        59,
+        999999,
+        tzinfo=timezone.utc,
+    )
 
 
 def test_saved_query_redirect_url_urlencodes_payload():
@@ -72,6 +95,102 @@ def test_search_without_query_text_or_date_filters_returns_empty_payload():
         "has_previous": False,
         "has_next": False,
     }
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_filter_key"),
+    [
+        (
+            service.SearchQuery(
+                acquisition_date_from=datetime(2026, 4, 12, tzinfo=timezone.utc)
+            ),
+            "acquisition_date_from",
+        ),
+        (
+            service.SearchQuery(
+                acquisition_date_to=datetime(2026, 4, 12, 23, 59, tzinfo=timezone.utc)
+            ),
+            "acquisition_date_to",
+        ),
+    ],
+)
+def test_search_runs_with_one_sided_date_filters(
+    monkeypatch,
+    query,
+    expected_filter_key,
+):
+    class _DbConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    captured_filters = []
+    monkeypatch.setattr(service, "runtime_config", lambda: SimpleNamespace(max_results=10))
+    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
+    monkeypatch.setattr(service, "_visible_group_ids", lambda conn: [5])
+    monkeypatch.setattr(service, "_current_user_id", lambda conn: 21)
+    monkeypatch.setattr(
+        service,
+        "search_index_rows",
+        lambda conn, **kwargs: (
+            captured_filters.append(kwargs["filters"])
+            or (
+                [
+                    {
+                        "image_id": 17,
+                        "group_id": 5,
+                        "group_name": "Research",
+                        "owner_id": 21,
+                        "owner_name": "alice",
+                        "image_name": "img-17",
+                        "dataset_id": 101,
+                        "dataset_name": "Dataset A",
+                        "project_id": 201,
+                        "project_name": "Project A",
+                        "acquisition_date": datetime(
+                            2026, 4, 12, 8, 15, tzinfo=timezone.utc
+                        ),
+                        "channel_summary": "GFP",
+                        "pixel_size_x_um": 0.1,
+                        "pixel_size_y_um": 0.1,
+                        "z_step_um": 0.4,
+                        "indexed_sources": ["Acquisition metadata"],
+                    }
+                ],
+                1,
+            )
+        ),
+    )
+    monkeypatch.setattr(service, "_search_omero_builtin_rows", lambda conn, query: [])
+    monkeypatch.setattr(
+        service,
+        "_accessible_images_by_id",
+        lambda conn, image_ids: {
+            17: SimpleNamespace(getName=lambda: "img-17")
+        },
+    )
+    monkeypatch.setattr(
+        service,
+        "reverse",
+        lambda name, args=None: (
+            "/webclient/"
+            if name == "webindex"
+            else f"/webgateway/render_thumbnail/{args[0]}/"
+        ),
+    )
+    monkeypatch.setattr(service, "get_text", lambda value: value)
+
+    payload = service.search(
+        object(),
+        query,
+        acquisition_metadata_enabled=True,
+    )
+
+    assert payload["total_count"] == 1
+    assert payload["results"][0]["image_id"] == 17
+    assert captured_filters[0][expected_filter_key] is not None
 
 
 def test_sync_state_needs_refresh_for_stale_running_state(monkeypatch):
