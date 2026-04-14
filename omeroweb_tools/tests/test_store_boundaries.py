@@ -107,20 +107,26 @@ def test_psycopg_loaders_cover_success_cache_and_missing_driver(monkeypatch):
 def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
     monkeypatch,
 ):
-    monkeypatch.setattr(
-        store,
-        "get_env",
-        lambda name, env_file=None: {
+    db_auth_value = "plugin-auth-value"
+
+    def _env_value(name, env_file=None):
+        del env_file
+        return {
             store.ENV_USER: "plugin-user",
-            store.ENV_AUTH: "plugin-pass",
+            store.ENV_AUTH: db_auth_value,
             store.ENV_HOST: "database_plugin",
             store.ENV_DB: "plugin-db",
             store.ENV_PORT: "5433",
-        }[name],
+        }[name]
+
+    monkeypatch.setattr(
+        store,
+        "get_env",
+        _env_value,
     )
     assert store._db_params() == {
         "user": "plugin-user",
-        "password": "plugin-pass",
+        "password": db_auth_value,
         "host": "database_plugin",
         "dbname": "plugin-db",
         "port": 5433,
@@ -139,7 +145,7 @@ def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
         match="Enhanced-search database operation failed.",
     ):
         with store.connect():
-            raise AssertionError("unreachable")
+            pass
 
     monkeypatch.setattr(
         store,
@@ -153,7 +159,7 @@ def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
     )
     with pytest.raises(store.EnhancedSearchStoreError, match="driver missing"):
         with store.connect():
-            raise AssertionError("unreachable")
+            pass
 
     class _BadCloseConn:
         def close(self):
@@ -173,10 +179,14 @@ def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
 def test_ensure_schema_bootstraps_tables_indexes_and_commit(monkeypatch):
     cursor = _RecordingCursor()
     conn = _RecordingConn(cursor)
+
+    def _load_sql_module():
+        return object()
+
     monkeypatch.setattr(
         store, "_safe_query", lambda template, *ids: template.format(*ids)
     )
-    monkeypatch.setattr(store, "_load_psycopg2_sql", lambda: object())
+    monkeypatch.setattr(store, "_load_psycopg2_sql", _load_sql_module)
 
     store.ensure_schema(conn)
 
@@ -194,6 +204,7 @@ def test_ensure_schema_bootstraps_tables_indexes_and_commit(monkeypatch):
 
 def test_list_sync_states_and_saved_queries_map_store_rows(monkeypatch):
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
+    run_marker = "sync-run-id"
     cursor = _RecordingCursor(
         fetchall_rows=[
             [
@@ -204,7 +215,7 @@ def test_list_sync_states_and_saved_queries_map_store_rows(monkeypatch):
                     3,
                     "running",
                     "alice",
-                    "token",
+                    run_marker,
                     99,
                     5,
                     "Indexing scope...",
@@ -239,7 +250,7 @@ def test_list_sync_states_and_saved_queries_map_store_rows(monkeypatch):
             "schema_version": 3,
             "status": "running",
             "requested_by": "alice",
-            "run_token": "token",
+            "run_token": run_marker,
             "last_cursor_image_id": 99,
             "indexed_image_count": 5,
             "current_message": "Indexing scope...",
@@ -278,8 +289,9 @@ def test_prune_helpers_search_rows_without_filters_and_non_dict_settings_row(
             cursor.rowcount = 0
 
     cursor.execute = _execute
+    prune_run_marker = "sync-run-a"
 
-    pruned_scope = store.prune_scope_membership(conn, "user", 7, "token")
+    pruned_scope = store.prune_scope_membership(conn, "user", 7, prune_run_marker)
     pruned_docs = store.prune_orphan_documents(conn)
     rows, total = store.search_index_rows(
         conn,
@@ -303,12 +315,13 @@ def test_sync_markers_and_document_upsert_cover_write_paths(monkeypatch):
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _RecordingCursor()
     conn = _RecordingConn(cursor)
+    run_marker = "sync-run-a"
 
     store.update_sync_progress(
         conn,
         "user",
         7,
-        run_token="token",
+        run_token=run_marker,
         indexed_image_count=4,
         current_message="Indexed 4 image(s)...",
         last_cursor_image_id=99,
@@ -317,7 +330,7 @@ def test_sync_markers_and_document_upsert_cover_write_paths(monkeypatch):
         conn,
         "user",
         7,
-        run_token="token",
+        run_token=run_marker,
         indexed_image_count=4,
         current_message="Finished indexing.",
     )
@@ -325,7 +338,7 @@ def test_sync_markers_and_document_upsert_cover_write_paths(monkeypatch):
         conn,
         "user",
         7,
-        run_token="token",
+        run_token=run_marker,
         error_text="Worker dispatch failed.",
         indexed_image_count=2,
     )
@@ -376,7 +389,7 @@ def test_sync_markers_and_document_upsert_cover_write_paths(monkeypatch):
         ],
         scope_type="user",
         scope_id=7,
-        run_token="token",
+        run_token=run_marker,
     )
 
     executed_sql = [call["sql_text"] for call in cursor.executed]
