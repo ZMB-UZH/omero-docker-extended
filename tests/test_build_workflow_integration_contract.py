@@ -10,6 +10,10 @@ import re
 class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     """Verify compressed build workflow is wired into update/install scripts."""
 
+    DEFAULT_BRANCH_JOB_GUARD = (
+        "github.ref_name == github.event.repository.default_branch"
+    )
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.repo_root = Path(__file__).resolve().parents[1]
@@ -642,7 +646,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         security_delta_job = workflow["jobs"]["security-delta"]
 
         self.assertEqual("security", workflow["name"])
-        self.assertEqual("always()", security_delta_job["if"])
+        self.assertEqual(
+            f"always() && {self.DEFAULT_BRANCH_JOB_GUARD}",
+            security_delta_job["if"],
+        )
         self.assertEqual("read", security_delta_job["permissions"]["actions"])
         self.assertEqual("read", security_delta_job["permissions"]["contents"])
         self.assertEqual("read", security_delta_job["permissions"]["security-events"])
@@ -915,6 +922,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2",
             upload_step["uses"],
         )
+        self.assertEqual(
+            "always() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch",
+            upload_step["if"],
+        )
         self.assertEqual("true", str(upload_step["with"]["use_oidc"]).lower())
         self.assertNotIn("token", upload_step["with"])
         self.assertFalse(
@@ -1047,6 +1058,25 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                             step.get("with", {}).get("persist-credentials", True),
                             f"{workflow_path.name} persists checkout credentials",
                         )
+
+    def test_all_workflow_jobs_gate_runner_execution_to_default_branch(self) -> None:
+        import yaml  # noqa: F811  — available in CI
+
+        workflows_dir = self.repo_root / ".github" / "workflows"
+        for workflow_path in sorted(workflows_dir.glob("*.yml")):
+            workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+            for job_name, job in workflow.get("jobs", {}).items():
+                with self.subTest(workflow=workflow_path.name, job=job_name):
+                    self.assertIn(
+                        "if",
+                        job,
+                        f"{workflow_path.name}:{job_name} must gate runner execution to the default branch",
+                    )
+                    self.assertIn(
+                        self.DEFAULT_BRANCH_JOB_GUARD,
+                        str(job["if"]),
+                        f"{workflow_path.name}:{job_name} is missing the default-branch runner guard",
+                    )
 
     def test_dependabot_updates_define_cooldown_windows(self) -> None:
         import yaml  # noqa: F811  — available in CI

@@ -4,8 +4,8 @@ This repository uses [Ruff](https://github.com/astral-sh/ruff) as the canonical 
 
 ## CI workflow
 
-- `.github/workflows/ruff.yml` runs on `pull_request` to `main`, `push` to `main`, and `workflow_dispatch`.
-- `.github/workflows/vulture.yml` runs on `pull_request` to `main`, `push` to `main`, and `workflow_dispatch`.
+- `.github/workflows/ruff.yml` listens for `pull_request` to `main`, `push` to `main`, and `workflow_dispatch`, but the job only executes when the ref resolves to the repository's current default branch.
+- `.github/workflows/vulture.yml` listens for `pull_request` to `main`, `push` to `main`, and `workflow_dispatch`, but the job only executes when the ref resolves to the repository's current default branch.
 - The workflow uses pinned GitHub Actions and a pinned Ruff release (`0.15.10`).
 - The Vulture workflow restores and stores the `pip` download cache using the hash-pinned `.github/requirements/vulture-ci.txt` lockfile as its cache key, then runs `python3 tools/vulture_check.py`.
 - CI runs:
