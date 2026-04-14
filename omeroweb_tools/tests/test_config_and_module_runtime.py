@@ -136,13 +136,14 @@ def test_tasks_module_registers_and_runs_scope_sync_task(monkeypatch):
         "omeroweb_tools.tasks",
         run_name="omeroweb_tools.tasks.__coverage__",
     )
+    run_marker = "sync-run-id"
 
     assert decorated["kwargs"] == {
         "bind": True,
         "name": ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME,
     }
-    assert namespace["run_enhanced_search_scope_sync"](None, "user:9", "token") == {
+    assert namespace["run_enhanced_search_scope_sync"](None, "user:9", run_marker) == {
         "scope_key": "user:9",
-        "run_token": "token",
+        "run_token": run_marker,
         "status": "idle",
     }

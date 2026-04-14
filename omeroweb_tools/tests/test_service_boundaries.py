@@ -18,11 +18,22 @@ class _DbConn:
         return False
 
 
+def _db_connect():
+    return _DbConn()
+
+
 def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch):
     runtime = SimpleNamespace(max_results=25, schema_version=4, sync_stale_seconds=600)
     celery = SimpleNamespace(enabled=True)
-    monkeypatch.setattr(service, "build_enhanced_search_config", lambda: runtime)
-    monkeypatch.setattr(service, "build_enhanced_search_celery_config", lambda: celery)
+
+    def _runtime_config():
+        return runtime
+
+    def _celery_config():
+        return celery
+
+    monkeypatch.setattr(service, "build_enhanced_search_config", _runtime_config)
+    monkeypatch.setattr(service, "build_enhanced_search_celery_config", _celery_config)
 
     assert service.runtime_config() is runtime
     assert service.runtime_celery_config() is celery
@@ -72,18 +83,19 @@ def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch
     ) == {"acquisition_metadata_enabled": True}
     assert service.user_settings("") == {"acquisition_metadata_enabled": False}
 
-    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
-    monkeypatch.setattr(
-        service,
-        "load_user_settings_row",
-        lambda conn, username, defaults=None: {"acquisition_metadata_enabled": "true"},
-    )
+    monkeypatch.setattr(service, "db_connect", _db_connect)
+
+    def _load_user_settings_row(conn, username, defaults=None):
+        del conn, username, defaults
+        return {"acquisition_metadata_enabled": "true"}
+
+    monkeypatch.setattr(service, "load_user_settings_row", _load_user_settings_row)
     assert service.user_settings("alice") == {"acquisition_metadata_enabled": True}
 
 
 def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
     recorded = {}
-    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
+    monkeypatch.setattr(service, "db_connect", _db_connect)
     monkeypatch.setattr(
         service,
         "ensure_sync_state_rows",
@@ -96,9 +108,11 @@ def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
         "list_sync_states",
         lambda conn: [{"scope_type": "user", "scope_id": 7, "status": "running"}],
     )
-    monkeypatch.setattr(
-        service, "runtime_config", lambda: SimpleNamespace(schema_version=3)
-    )
+
+    def _runtime_config():
+        return SimpleNamespace(schema_version=3)
+
+    monkeypatch.setattr(service, "runtime_config", _runtime_config)
     scope = service.user_scope(7, "alice")
 
     ensured = service.ensure_scope_state((scope,))
@@ -284,11 +298,11 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
             [],
         ),
     )
-    monkeypatch.setattr(
-        service,
-        "runtime_config",
-        lambda: SimpleNamespace(schema_version=5, max_results=3),
-    )
+
+    def _runtime_config():
+        return SimpleNamespace(schema_version=5, max_results=3)
+
+    monkeypatch.setattr(service, "runtime_config", _runtime_config)
     assert service._result_row_from_image(object()) == {
         "image_id": 17,
         "image_name": "img-17",
@@ -637,9 +651,10 @@ def test_image_helpers_owner_context_and_document_conversion(monkeypatch):
 
 
 def test_search_skips_inaccessible_images_and_handles_current_name_errors(monkeypatch):
-    monkeypatch.setattr(
-        service, "runtime_config", lambda: SimpleNamespace(max_results=50)
-    )
+    def _runtime_config():
+        return SimpleNamespace(max_results=50)
+
+    monkeypatch.setattr(service, "runtime_config", _runtime_config)
     monkeypatch.setattr(
         service,
         "_merge_result_rows",
@@ -648,7 +663,7 @@ def test_search_skips_inaccessible_images_and_handles_current_name_errors(monkey
             {"image_id": 8, "image_name": "stored-8"},
         ],
     )
-    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
+    monkeypatch.setattr(service, "db_connect", _db_connect)
     monkeypatch.setattr(service, "search_index_rows", lambda *args, **kwargs: ([], 0))
     monkeypatch.setattr(service, "_visible_group_ids", lambda conn: [5])
     monkeypatch.setattr(service, "_current_user_id", lambda conn: 9)
@@ -693,9 +708,9 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
     monkeypatch.delenv("ROOTPASS", raising=False)
     with pytest.raises(RuntimeError, match="ROOTPASS is missing"):
         with service._root_connection():
-            raise AssertionError("unreachable")
+            pass
 
-    monkeypatch.setenv("ROOTPASS", "secret")
+    monkeypatch.setenv("ROOTPASS", "root-auth-value")
     monkeypatch.setattr(
         service,
         "get_env",
@@ -715,7 +730,7 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
     monkeypatch.setattr(service, "BlitzGateway", _FailingGateway)
     with pytest.raises(RuntimeError, match="Failed to connect as root"):
         with service._root_connection():
-            raise AssertionError("unreachable")
+            pass
 
     closed = []
 
@@ -744,11 +759,11 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
     original_scope_from_key = service.scope_from_key
     sync_events = []
     db_context = _DbConn()
-    monkeypatch.setattr(
-        service,
-        "runtime_config",
-        lambda: SimpleNamespace(batch_size=2, schema_version=5),
-    )
+
+    def _runtime_config():
+        return SimpleNamespace(batch_size=2, schema_version=5)
+
+    monkeypatch.setattr(service, "runtime_config", _runtime_config)
 
     @contextmanager
     def _root_connection():
@@ -756,7 +771,11 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
 
     monkeypatch.setattr(service, "_root_connection", _root_connection)
     monkeypatch.setattr(service, "_scope_image_rows", lambda admin_conn, scope: [])
-    monkeypatch.setattr(service, "db_connect", lambda: db_context)
+
+    def _db_context_connect():
+        return db_context
+
+    monkeypatch.setattr(service, "db_connect", _db_context_connect)
     monkeypatch.setattr(
         service,
         "prune_scope_membership",
@@ -776,12 +795,13 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
             ("complete", scope_type, scope_id, kwargs)
         ),
     )
+    sync_run_a = "sync-run-a"
     service._SYNC_THREADS[scope.scope_key] = object()
-    assert service._sync_scope(scope, "token") == {
+    assert service._sync_scope(scope, sync_run_a) == {
         "status": "idle",
         "indexed_image_count": 0,
     }
-    assert sync_events[0] == ("prune_scope", "user", 9, "token")
+    assert sync_events[0] == ("prune_scope", "user", 9, sync_run_a)
     assert scope.scope_key not in service._SYNC_THREADS
 
     error_calls = []
@@ -799,14 +819,16 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
             (scope_type, scope_id, kwargs)
         ),
     )
+    sync_run_b = "sync-run-b"
     service._SYNC_THREADS[scope.scope_key] = object()
     with pytest.raises(RuntimeError, match="boom"):
-        service._sync_scope(scope, "token-2")
+        service._sync_scope(scope, sync_run_b)
     assert error_calls[0][0:2] == ("user", 9)
     assert scope.scope_key not in service._SYNC_THREADS
 
+    invalid_run_marker = "sync-run-bad"
     with pytest.raises(RuntimeError, match="Selected search scope is not valid."):
-        service.run_scope_sync_task("bad-scope", "token")
+        service.run_scope_sync_task("bad-scope", invalid_run_marker)
 
     processed = []
 
@@ -832,8 +854,9 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
             or (processed_count + len(images))
         ),
     )
+    sync_run_c = "sync-run-c"
     service._SYNC_THREADS[scope.scope_key] = object()
-    assert service._sync_scope(scope, "token-3") == {
+    assert service._sync_scope(scope, sync_run_c) == {
         "status": "idle",
         "indexed_image_count": 3,
     }
@@ -846,8 +869,9 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
             service.ScopeSyncCancelledError("cancelled")
         ),
     )
+    sync_run_d = "sync-run-d"
     service._SYNC_THREADS[scope.scope_key] = object()
-    assert service._sync_scope(scope, "token-4") == {
+    assert service._sync_scope(scope, sync_run_d) == {
         "status": "idle",
         "indexed_image_count": 0,
         "cancelled": True,
@@ -881,9 +905,10 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
             {"progress": kwargs}
         ),
     )
+    sync_run_e = "sync-run-e"
     processed_count = service._process_sync_batch(
         scope,
-        "token-5",
+        sync_run_e,
         [SimpleNamespace(_id=7), SimpleNamespace(_id=8)],
         0,
         5,
@@ -895,7 +920,8 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
     monkeypatch.setattr(
         service, "_sync_scope", lambda scope_obj, run_token: {"ok": True}
     )
-    assert service.run_scope_sync_task("user:9", "token-6") == {"ok": True}
+    sync_run_f = "sync-run-f"
+    assert service.run_scope_sync_task("user:9", sync_run_f) == {"ok": True}
     monkeypatch.setattr(service, "scope_from_key", original_scope_from_key)
 
     started = []
@@ -915,8 +941,9 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
             started.append("started")
 
     monkeypatch.setattr(service.threading, "Thread", _FakeThread)
-    service._start_threaded_sync(scope, "thread-token")
-    assert started[0]["args"] == ("user:9", "thread-token")
+    thread_run_a = "thread-run-a"
+    service._start_threaded_sync(scope, thread_run_a)
+    assert started[0]["args"] == ("user:9", thread_run_a)
     assert started[0]["daemon"] is True
     assert started[1] == "started"
 
@@ -925,12 +952,12 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
         "Selected search scope is not valid.",
     )
 
-    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
-    monkeypatch.setattr(
-        service,
-        "runtime_config",
-        lambda: SimpleNamespace(schema_version=5, sync_stale_seconds=600),
-    )
+    monkeypatch.setattr(service, "db_connect", _db_connect)
+
+    def _runtime_config():
+        return SimpleNamespace(schema_version=5, sync_stale_seconds=600)
+
+    monkeypatch.setattr(service, "runtime_config", _runtime_config)
     monkeypatch.setattr(service, "try_start_scope_sync", lambda *args, **kwargs: False)
     assert service.request_scope_sync("user:9", "alice") == (
         False,
