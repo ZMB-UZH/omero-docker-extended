@@ -408,7 +408,7 @@ def _repo_relative_path(
         ) from exc
 
     path_text = relative_path.as_posix().strip("/")
-    if not path_text:
+    if path_text in {"", "."}:
         raise RuntimeError("Managed-repository relative path must not be empty.")
     if directory:
         path_text = f"{path_text.rstrip('/')}/"
@@ -589,35 +589,18 @@ def _cleanup_zarr(
         raise RuntimeError(
             "Managed Zarr cleanup only supports staged .zarr directories."
         )
-    container_dir = managed_root.joinpath(*container_parts)
-    prefix_dir = container_dir / staged_name
-    try:
-        target.relative_to(prefix_dir)
-    except ValueError as exc:
-        raise RuntimeError(
-            f"Managed Zarr path is outside the configured staging leaf: {target}"
-        ) from exc
-
-    if target == prefix_dir:
+    if target.exists():
         repo_proxy = _managed_repository_proxy(conn, config)
-        if target.exists():
-            if not target.is_dir():
-                raise RuntimeError(
-                    f"Managed-repository path is not a directory: {target}"
-                )
-            if not _repository_directory_registered(repo_proxy, managed_root, target):
-                raise RuntimeError(
-                    "Managed-repository path exists on disk but is not registered "
-                    f"in OMERO: {target}"
-                )
-            _delete_registered_managed_path(conn, repo_proxy, managed_root, target)
+        if not target.is_dir():
+            raise RuntimeError(f"Managed-repository path is not a directory: {target}")
+        if not _repository_directory_registered(repo_proxy, managed_root, target):
+            raise RuntimeError(
+                "Managed-repository path exists on disk but is not registered "
+                f"in OMERO: {target}"
+            )
+        _delete_registered_managed_path(conn, repo_proxy, managed_root, target)
         return target
 
-    if target.exists():
-        raise RuntimeError(
-            "Managed Zarr cleanup only supports deleting the staged .zarr root, "
-            f"not nested paths: {target}"
-        )
     return target
 
 

@@ -633,3 +633,199 @@ def test_start_import_thread_covers_missing_job_and_thread_start_failures(
     monkeypatch.setattr(core_functions.threading, "Thread", _BrokenThread)
     core_functions._start_import_thread("w" * 32)
     assert saved[-1]["import_thread_started"] is False
+
+
+def test_process_import_job_handles_ngff_converter_mixed_outcomes_and_synthetic_entries(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    job = _base_job("x" * 32)
+    job["special_upload"] = "ngff_converter"
+    job["ngff_converter_settings"] = {"compression": "zlib"}
+    job["files"] = [
+        {
+            "upload_id": "missing",
+            "relative_path": "missing.lif",
+            "staged_path": "missing.lif",
+            "size": 1,
+            "status": "uploaded",
+            "errors": [],
+        },
+        {
+            "upload_id": "fail",
+            "relative_path": "fail.lif",
+            "staged_path": "fail.lif",
+            "size": 2,
+            "status": "uploaded",
+            "errors": [],
+        },
+        {
+            "upload_id": "no-output",
+            "relative_path": "no-output.lif",
+            "staged_path": "no-output.lif",
+            "size": 3,
+            "status": "uploaded",
+            "errors": [],
+        },
+        {
+            "upload_id": "ok",
+            "relative_path": "ok.lif",
+            "staged_path": "ok.lif",
+            "size": 4,
+            "status": "uploaded",
+            "errors": [],
+        },
+        {
+            "upload_id": "timeout",
+            "relative_path": "timeout.lif",
+            "staged_path": "timeout.lif",
+            "size": 5,
+            "status": "uploaded",
+            "errors": [],
+        },
+        {
+            "upload_id": "explode",
+            "relative_path": "explode.lif",
+            "staged_path": "explode.lif",
+            "size": 6,
+            "status": "uploaded",
+            "errors": [],
+        },
+    ]
+    upload_root = tmp_path / "uploads" / job["job_id"]
+    upload_root.mkdir(parents=True)
+    for filename in (
+        "fail.lif",
+        "no-output.lif",
+        "ok.lif",
+        "timeout.lif",
+        "explode.lif",
+    ):
+        (upload_root / filename).write_text("pixels", encoding="utf-8")
+
+    _, saved_jobs = _install_process_job_defaults(monkeypatch, job, upload_root)
+    monkeypatch.setattr(
+        core_functions,
+        "_normalize_ngff_converter_settings",
+        lambda settings: {"compression": "zlib"},
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_build_bioformats2raw_command",
+        lambda source_file, zarr_output, settings: [source_file, zarr_output],
+    )
+
+    def _run(cmd, timeout):
+        source_name = Path(cmd[0]).name
+        zarr_output = Path(cmd[1])
+        if source_name == "fail.lif":
+            return SimpleNamespace(returncode=5, stdout="", stderr="reader failed")
+        if source_name == "no-output.lif":
+            return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+        if source_name == "ok.lif":
+            zarr_output.mkdir(parents=True)
+            return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+        if source_name == "timeout.lif":
+            raise core_functions.subprocess.TimeoutExpired(cmd, timeout)
+        if source_name == "explode.lif":
+            raise RuntimeError("explode")
+        raise AssertionError(f"Unexpected conversion command: {cmd}")
+
+    monkeypatch.setattr(core_functions.subprocess, "run", _run)
+
+    core_functions._process_import_job(job["job_id"])
+
+    latest_job = saved_jobs[-1]
+    synthetic_entries = [
+        entry for entry in latest_job["files"] if entry.get("ngff_synthetic")
+    ]
+    assert latest_job["status"] == "error"
+    assert any(
+        "OME-NGFF converter (OME-Zarr) complete: 1 converted, 5 errors" in message
+        for message in latest_job["messages"]
+    )
+    assert synthetic_entries == [
+        {
+            "upload_id": "ngff_ok",
+            "relative_path": "ok.zarr",
+            "source_relative_path": "ok.lif",
+            "staged_path": "ok.zarr",
+            "size": 4,
+            "status": "uploaded",
+            "errors": [],
+            "compatibility_skip": False,
+            "import_skip": False,
+            "ngff_synthetic": True,
+        }
+    ]
+    assert latest_job["files"][0]["status"] == "error"
+    assert (
+        "Source file not found for conversion: missing.lif"
+        in latest_job["files"][0]["errors"][0]
+    )
+    assert latest_job["files"][1]["status"] == "error"
+    assert (
+        latest_job["files"][1]["errors"][0]
+        == "bioformats2raw failed (exit 5): reader failed"
+    )
+    assert latest_job["files"][2]["status"] == "error"
+    assert (
+        "zarr output not found: no-output.zarr" in latest_job["files"][2]["errors"][0]
+    )
+    assert latest_job["files"][3]["status"] == "skipped"
+    assert latest_job["files"][3]["import_skip"] is True
+    assert latest_job["files"][3]["ngff_converted"] is True
+    assert latest_job["files"][4]["status"] == "error"
+    assert (
+        "bioformats2raw timed out after 7200s for timeout.lif"
+        in latest_job["files"][4]["errors"][0]
+    )
+    assert latest_job["files"][5]["status"] == "error"
+    assert "bioformats2raw error: explode" in latest_job["files"][5]["errors"][0]
+
+
+def test_process_import_job_marks_ngff_converter_jobs_error_when_every_conversion_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    job = _base_job("y" * 32)
+    job["special_upload"] = "ngff_converter"
+    job["ngff_converter_settings"] = {"compression": "zlib"}
+    job["files"] = [
+        {
+            "upload_id": "fail",
+            "relative_path": "fail.lif",
+            "staged_path": "fail.lif",
+            "size": 2,
+            "status": "uploaded",
+            "errors": [],
+        }
+    ]
+    upload_root = tmp_path / "uploads" / job["job_id"]
+    upload_root.mkdir(parents=True)
+    (upload_root / "fail.lif").write_text("pixels", encoding="utf-8")
+
+    _, saved_jobs = _install_process_job_defaults(monkeypatch, job, upload_root)
+    monkeypatch.setattr(
+        core_functions,
+        "_normalize_ngff_converter_settings",
+        lambda settings: {"compression": "zlib"},
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_build_bioformats2raw_command",
+        lambda source_file, zarr_output, settings: [source_file, zarr_output],
+    )
+    monkeypatch.setattr(
+        core_functions.subprocess,
+        "run",
+        lambda cmd, timeout: SimpleNamespace(returncode=9, stdout="", stderr="broken"),
+    )
+
+    core_functions._process_import_job(job["job_id"])
+
+    assert saved_jobs[-1]["status"] == "error"
+    assert (
+        saved_jobs[-1]["errors"][-1]
+        == "All OME-NGFF converter (OME-Zarr) jobs failed. No files to import."
+    )
