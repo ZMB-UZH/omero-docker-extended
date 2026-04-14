@@ -54,6 +54,11 @@ class VultureIntegrationContractTests(TestCase):
         )
         setup_step = next(step for step in steps if step.get("name") == "Setup Python")
         self.assertEqual("3.14.4", setup_step["with"]["python-version"])
+        self.assertEqual("pip", setup_step["with"]["cache"])
+        self.assertEqual(
+            ".github/requirements/vulture-ci.txt",
+            setup_step["with"]["cache-dependency-path"],
+        )
         self.assertTrue(
             any(
                 "python3 -m pip install --require-hashes --requirement .github/requirements/vulture-ci.txt"

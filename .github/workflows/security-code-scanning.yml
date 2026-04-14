@@ -43,10 +43,9 @@ jobs:
         uses: github/codeql-action/init@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
         with:
           languages: ${{ matrix.language }}
+          build-mode: none
+          dependency-caching: true
           queries: security-extended,security-and-quality
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
 
       - name: Analyze
         uses: github/codeql-action/analyze@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
@@ -160,6 +159,8 @@ jobs:
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.14.4'
+          cache: 'pip'
+          cache-dependency-path: .github/requirements/security-code-scanning.txt
 
       - name: Install Bandit
         run: python3 -m pip install --require-hashes --requirement .github/requirements/security-code-scanning.txt
