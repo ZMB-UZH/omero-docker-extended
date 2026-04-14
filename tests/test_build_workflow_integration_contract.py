@@ -797,7 +797,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
         steps = workflow["jobs"]["codeql"]["steps"]
 
-        init_step = next(step for step in steps if step.get("name") == "Initialize CodeQL")
+        init_step = next(
+            step for step in steps if step.get("name") == "Initialize CodeQL"
+        )
         self.assertEqual("none", init_step["with"]["build-mode"])
         self.assertEqual("true", str(init_step["with"]["dependency-caching"]).lower())
         self.assertFalse(
