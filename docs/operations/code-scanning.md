@@ -6,6 +6,8 @@ GitHub-native code scanning is the supported repository scanning surface here. R
 
 The repository also includes a `security-delta` job inside `.github/workflows/security-code-scanning.yml`. That job fails when a pull request introduces any open code-scanning alert or when a default-branch security scan creates new open alerts.
 
+The current advanced CodeQL setup uses `build-mode: none` for the Python and JavaScript/TypeScript matrix, which matches GitHub's interpreted-language guidance and avoids an unnecessary `autobuild` step. The same workflow also enables CodeQL dependency caching, and the Bandit job restores and stores `pip` downloads keyed to `.github/requirements/security-code-scanning.txt`.
+
 ## Active scanners
 
 | Scanner        | Type                                 | Scope                                                 | Free |
