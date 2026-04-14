@@ -1,0 +1,977 @@
+from __future__ import annotations
+
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
+import pytest
+
+from omeroweb_tools.services import acquisition_metadata as metadata
+from omeroweb_tools.services import enhanced_search_service as service
+
+
+class _DbConn:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch):
+    runtime = SimpleNamespace(max_results=25, schema_version=4, sync_stale_seconds=600)
+    celery = SimpleNamespace(enabled=True)
+    monkeypatch.setattr(service, "build_enhanced_search_config", lambda: runtime)
+    monkeypatch.setattr(service, "build_enhanced_search_celery_config", lambda: celery)
+
+    assert service.runtime_config() is runtime
+    assert service.runtime_celery_config() is celery
+    assert service._default_scope_label("group", 7) == "Group 7"
+    assert service.user_scope(7, "").label == service.USER_SCOPE_LABEL
+    assert service.scope_from_key("user:not-an-int") is None
+    assert service._parse_date("2026-04-12", end_of_day=True).hour == 23
+    with pytest.raises(ValueError):
+        service._parse_date("not-a-date")
+    query = service.SearchQuery(
+        query_text="lsm",
+        acquisition_date_from=datetime(2026, 4, 12, tzinfo=timezone.utc),
+        acquisition_date_to=datetime(2026, 4, 13, tzinfo=timezone.utc),
+        page=2,
+    )
+    assert query.to_payload() == {
+        "query_text": "lsm",
+        "indexed_scope": service.SEARCH_SCOPE_ALL_INDEXED,
+        "page": 2,
+        "acquisition_date_from": "2026-04-12",
+        "acquisition_date_to": "2026-04-13",
+    }
+    assert query.with_page(0).page == 1
+    assert service._query_filters(query) == {
+        "acquisition_date_from": datetime(2026, 4, 12, tzinfo=timezone.utc),
+        "acquisition_date_to": datetime(2026, 4, 13, tzinfo=timezone.utc),
+    }
+    assert service._empty_search_payload(page=2, page_size=9) == {
+        "results": [],
+        "page": 2,
+        "page_size": 9,
+        "total_count": 0,
+        "has_previous": False,
+        "has_next": False,
+    }
+    assert tuple(option["value"] for option in service.search_scope_options()) == (
+        service.SEARCH_SCOPE_OMERO_BUILTIN,
+        service.SEARCH_SCOPE_ACQUISITION_METADATA,
+        service.SEARCH_SCOPE_ALL_INDEXED,
+    )
+    assert service.default_user_settings() == {"acquisition_metadata_enabled": False}
+    assert service._coerce_bool("yes") is True
+    assert service._coerce_bool("off") is False
+    assert service._coerce_bool(3) is True
+    assert service._normalized_user_settings(
+        {"acquisition_metadata_enabled": "yes"}
+    ) == {"acquisition_metadata_enabled": True}
+    assert service.user_settings("") == {"acquisition_metadata_enabled": False}
+
+    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
+    monkeypatch.setattr(
+        service,
+        "load_user_settings_row",
+        lambda conn, username, defaults=None: {"acquisition_metadata_enabled": "true"},
+    )
+    assert service.user_settings("alice") == {"acquisition_metadata_enabled": True}
+
+
+def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
+    recorded = {}
+    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
+    monkeypatch.setattr(
+        service,
+        "ensure_sync_state_rows",
+        lambda conn, scopes, schema_version: recorded.update(
+            {"scopes": scopes, "schema_version": schema_version}
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "list_sync_states",
+        lambda conn: [{"scope_type": "user", "scope_id": 7, "status": "running"}],
+    )
+    monkeypatch.setattr(
+        service, "runtime_config", lambda: SimpleNamespace(schema_version=3)
+    )
+    scope = service.user_scope(7, "alice")
+
+    ensured = service.ensure_scope_state((scope,))
+    merged = service.current_sync_states((scope,))
+
+    assert ensured == [{"scope_type": "user", "scope_id": 7, "status": "running"}]
+    assert recorded == {
+        "scopes": [scope.to_dict()],
+        "schema_version": 3,
+    }
+    assert merged == [
+        {
+            "scope_type": "user",
+            "scope_id": 7,
+            "scope_key": "user:7",
+            "scope_label": "Your acquisition metadata",
+            "status": "running",
+            "requested_by": "",
+            "indexed_image_count": 0,
+            "current_message": "",
+            "last_error": "",
+            "last_started_at": None,
+            "last_finished_at": None,
+            "last_successful_at": None,
+            "updated_at": None,
+        }
+    ]
+    assert service.ensure_scope_state(()) == []
+
+    class _WrappedId:
+        def getValue(self):
+            return 21
+
+    class _User:
+        def getId(self):
+            return _WrappedId()
+
+    assert service._current_user_id(SimpleNamespace(getUser=lambda: _User())) == 21
+    assert service._current_user_id(SimpleNamespace(getUser=lambda: None)) is None
+    assert (
+        service._current_user_id(
+            SimpleNamespace(getUser=lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+        )
+        is None
+    )
+    assert service.current_user_scope(object(), "") is None
+    monkeypatch.setattr(service, "_current_user_id", lambda conn: 21)
+    assert service.current_user_scope(object(), "alice") == service.EnhancedSearchScope(
+        service.USER_SCOPE_TYPE,
+        21,
+        service.USER_SCOPE_LABEL,
+    )
+    monkeypatch.setattr(service, "current_user_scope", lambda conn, username: None)
+    assert service.sync_states_for_user(object(), "alice") == []
+
+
+def test_parse_search_query_sync_state_and_disabled_scope_guard_paths(monkeypatch):
+    assert service._parse_date(None) is None
+    assert service._parse_date("   ") is None
+    converted = service._parse_date("2026-04-12T10:15:00+02:00")
+    assert converted.tzinfo == timezone.utc
+
+    query, errors = service.parse_search_query(
+        {
+            "page": "-5",
+            "acquisition_date_from": "bad",
+            "acquisition_date_to": "still-bad",
+        }
+    )
+
+    assert query.page == 1
+    assert "Invalid acquisition start date." in errors
+    assert "Invalid acquisition end date." in errors
+    assert service._sync_state_needs_refresh(None) is True
+    assert (
+        service._sync_state_needs_refresh({"status": "running", "updated_at": None})
+        is True
+    )
+    assert service.ensure_user_index_sync(object(), "alice")[0] == []
+    monkeypatch.setattr(
+        service,
+        "current_user_scope",
+        lambda conn, username: service.EnhancedSearchScope(
+            "user", 7, service.USER_SCOPE_LABEL
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "current_sync_states",
+        lambda scopes: [{"scope_key": "user:7", "status": "idle"}],
+    )
+    assert service.ensure_user_index_sync(
+        object(),
+        "alice",
+        settings_payload={"acquisition_metadata_enabled": False},
+    ) == ([{"scope_key": "user:7", "status": "idle"}], False, "")
+    monkeypatch.setattr(
+        service,
+        "current_sync_states",
+        lambda scopes: [{"scope_key": "user:7", "status": "idle"}],
+    )
+    assert service.sync_states_for_user(object(), "alice") == [
+        {"scope_key": "user:7", "status": "idle"}
+    ]
+
+
+def test_visible_group_ids_range_math_and_row_merging_boundaries(monkeypatch):
+    monkeypatch.setattr(service, "_current_user_id", lambda conn: 9)
+    monkeypatch.setattr(service, "get_id", lambda obj: obj)
+    conn = SimpleNamespace(
+        getAdminService=lambda: SimpleNamespace(
+            containedGroups=lambda user_id: [5, "bad", 5, None]
+        )
+    )
+    assert service._visible_group_ids(conn) == [5]
+    monkeypatch.setattr(service, "_current_user_id", lambda conn: None)
+    assert service._visible_group_ids(conn) is None
+    monkeypatch.setattr(service, "_current_user_id", lambda conn: 9)
+    assert (
+        service._visible_group_ids(
+            SimpleNamespace(
+                getAdminService=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+            )
+        )
+        is None
+    )
+
+    monkeypatch.setattr(service, "rtime", lambda milliseconds: ("rtime", milliseconds))
+    search_range = service._omero_search_created_range(
+        service.SearchQuery(
+            acquisition_date_from=datetime(2026, 4, 12, tzinfo=timezone.utc),
+            acquisition_date_to=datetime(2026, 4, 13, tzinfo=timezone.utc),
+        )
+    )
+    assert search_range[0][0] == "rtime"
+    assert service._omero_search_created_range(service.SearchQuery()) is None
+    assert service._normalized_sort_datetime("bad") is None
+    assert service._merge_indexed_sources(
+        ["Acquisition metadata"],
+        ["OMERO index", "Other source"],
+    ) == ["OMERO index", "Acquisition metadata", "Other source"]
+
+    acquisition_rows = [
+        {
+            "image_id": 3,
+            "image_name": "",
+            "dataset_name": "",
+            "acquisition_date": datetime(2026, 4, 12, tzinfo=timezone.utc),
+        }
+    ]
+    omero_rows = [
+        {
+            "image_id": 3,
+            "image_name": "img-3",
+            "dataset_name": "Dataset A",
+            "indexed_sources": ["OMERO index"],
+            "acquisition_date": datetime(2026, 4, 12, tzinfo=timezone.utc),
+        },
+        {
+            "image_id": 1,
+            "image_name": "img-1",
+            "dataset_name": "",
+            "indexed_sources": ["OMERO index"],
+            "acquisition_date": None,
+        },
+    ]
+
+    merged = service._merge_result_rows(acquisition_rows, omero_rows)
+
+    assert [row["image_id"] for row in merged] == [3, 1]
+    assert merged[0]["indexed_sources"] == ["OMERO index", "Acquisition metadata"]
+    assert merged[0]["image_name"] == "img-3"
+    assert merged[0]["dataset_name"] == "Dataset A"
+
+
+def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
+    monkeypatch.setattr(
+        service,
+        "_document_for_image",
+        lambda image, schema_version: (
+            {"image_id": 17, "image_name": "img-17"},
+            [],
+            [],
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "runtime_config",
+        lambda: SimpleNamespace(schema_version=5, max_results=3),
+    )
+    assert service._result_row_from_image(object()) == {
+        "image_id": 17,
+        "image_name": "img-17",
+    }
+
+    class _BrokenDatasetHit:
+        OMERO_CLASS = "Dataset"
+
+        def listChildren(self):
+            raise RuntimeError("boom")
+
+    class _UnknownHit:
+        OMERO_CLASS = "Plate"
+
+    assert service._images_from_builtin_search_hit(_BrokenDatasetHit()) == []
+    assert service._images_from_builtin_search_hit(_UnknownHit()) == []
+
+    assert (
+        service._search_omero_builtin_rows(
+            object(),
+            service.SearchQuery(query_text=""),
+        )
+        == []
+    )
+    monkeypatch.setattr(service, "build_omero_fulltext_query", lambda query_text: "")
+    assert (
+        service._search_omero_builtin_rows(
+            object(),
+            service.SearchQuery(query_text="lsm"),
+        )
+        == []
+    )
+
+    search_calls = []
+    fake_image = SimpleNamespace(_id=17)
+    monkeypatch.setattr(
+        service, "build_omero_fulltext_query", lambda query_text: "lsm:*"
+    )
+    monkeypatch.setattr(
+        service,
+        "_result_row_from_image",
+        lambda image: {"image_id": 17, "image_name": "img-17"},
+    )
+    monkeypatch.setattr(
+        service, "_images_from_builtin_search_hit", lambda hit: [fake_image]
+    )
+    monkeypatch.setattr(service, "get_id", lambda obj: getattr(obj, "_id", obj))
+
+    class _SearchConn:
+        def __init__(self):
+            self.calls = 0
+
+        def searchObjects(self, object_types, fulltext_query, **kwargs):
+            search_calls.append(kwargs["searchGroup"])
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("all-groups unavailable")
+            if self.calls == 2:
+                return [SimpleNamespace()]
+            return []
+
+    rows = service._search_omero_builtin_rows(
+        _SearchConn(),
+        service.SearchQuery(query_text="lsm"),
+    )
+
+    assert rows == [
+        {"image_id": 17, "image_name": "img-17", "indexed_sources": ["OMERO index"]}
+    ]
+    assert search_calls[:2] == ["-1", None]
+    assert service._accessible_images_by_id(object(), []) == {}
+
+    retry_calls = []
+
+    class _AlwaysFailSearchConn:
+        def __init__(self):
+            self.calls = 0
+
+        def searchObjects(self, object_types, fulltext_query, **kwargs):
+            retry_calls.append(kwargs["searchGroup"])
+            raise RuntimeError("still failing")
+
+    assert (
+        service._search_omero_builtin_rows(
+            _AlwaysFailSearchConn(),
+            service.SearchQuery(query_text="lsm"),
+        )
+        == []
+    )
+    assert retry_calls == ["-1", None]
+
+    paged_calls = []
+    dense_hits = []
+    for index in range(100):
+        if index == 0:
+            dense_hits.append(SimpleNamespace(images=[SimpleNamespace(_id=None)]))
+        elif index == 1:
+            dense_hits.append(SimpleNamespace(images=[SimpleNamespace(_id="bad")]))
+        elif index == 2:
+            dense_hits.append(SimpleNamespace(images=[SimpleNamespace(_id=17)]))
+        elif index == 3:
+            dense_hits.append(SimpleNamespace(images=[SimpleNamespace(_id=17)]))
+        else:
+            dense_hits.append(SimpleNamespace(images=[]))
+
+    monkeypatch.setattr(
+        service, "_images_from_builtin_search_hit", lambda hit: hit.images
+    )
+
+    class _PagedSearchConn:
+        def __init__(self):
+            self.calls = 0
+
+        def searchObjects(self, object_types, fulltext_query, **kwargs):
+            paged_calls.append(kwargs["page"])
+            self.calls += 1
+            if self.calls == 1:
+                return dense_hits
+            return []
+
+    paged_rows = service._search_omero_builtin_rows(
+        _PagedSearchConn(),
+        service.SearchQuery(query_text="lsm"),
+    )
+    assert paged_rows == [
+        {"image_id": 17, "image_name": "img-17", "indexed_sources": ["OMERO index"]}
+    ]
+    assert paged_calls == [0, 1]
+
+
+def test_image_helpers_owner_context_and_document_conversion(monkeypatch):
+    class _ImageHit:
+        OMERO_CLASS = "Image"
+
+    class _DatasetHit:
+        OMERO_CLASS = "Dataset"
+
+        def listChildren(self):
+            return ["image-a"]
+
+    class _ProjectHit:
+        OMERO_CLASS = "Project"
+
+        def listChildren(self):
+            return [SimpleNamespace(listChildren=lambda: ["image-b"])]
+
+    class _BrokenProjectHit:
+        OMERO_CLASS = "Project"
+
+        def listChildren(self):
+            raise RuntimeError("boom")
+
+    image_hit = _ImageHit()
+    assert service._images_from_builtin_search_hit(image_hit) == [image_hit]
+    assert service._images_from_builtin_search_hit(_DatasetHit()) == ["image-a"]
+    assert service._images_from_builtin_search_hit(_ProjectHit()) == ["image-b"]
+    assert service._images_from_builtin_search_hit(_BrokenProjectHit()) == []
+
+    monkeypatch.setattr(service, "get_id", lambda obj: getattr(obj, "_id", obj))
+    monkeypatch.setattr(
+        service,
+        "get_text",
+        lambda value: value.getValue() if hasattr(value, "getValue") else value,
+    )
+    fallback_images = [SimpleNamespace(_id=17)]
+    fallback_conn = SimpleNamespace(
+        getObjects=lambda model, ids=None, obj_ids=None: (
+            (_ for _ in ()).throw(TypeError("use obj_ids"))
+            if ids is not None
+            else fallback_images
+        )
+    )
+    assert service._accessible_images_by_id(fallback_conn, [17]) == {
+        17: fallback_images[0]
+    }
+    assert (
+        service._accessible_images_by_id(
+            SimpleNamespace(
+                getObjects=lambda *args, **kwargs: (_ for _ in ()).throw(
+                    RuntimeError("boom")
+                )
+            ),
+            [17],
+        )
+        == {}
+    )
+
+    group = SimpleNamespace(
+        getName=lambda: "Research",
+        getDetails=lambda: SimpleNamespace(
+            getPermissions=lambda: SimpleNamespace(isGroupRead=lambda: True)
+        ),
+    )
+    assert service._group_context(group) == ("Research", True)
+    assert service._group_context(None) == ("", False)
+    broken_group = SimpleNamespace(
+        getName=lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+        getDetails=lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    assert service._group_context(broken_group) == ("", False)
+
+    owner = SimpleNamespace(
+        getName=lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+        getOmeName=lambda: "alice",
+        getFirstName=lambda: "Alice",
+        _id=9,
+    )
+    image = SimpleNamespace(getOwner=lambda: owner)
+    assert service._owner_name(image) == "alice"
+    owner_with_only_id = SimpleNamespace(
+        getName=lambda: "",
+        getOmeName=lambda: "",
+        getFirstName=lambda: "",
+        _id=11,
+    )
+    assert (
+        service._owner_name(SimpleNamespace(getOwner=lambda: owner_with_only_id))
+        == "11"
+    )
+    assert service._owner_name(SimpleNamespace(getOwner=lambda: None)) == ""
+    assert (
+        service._owner_name(
+            SimpleNamespace(
+                getOwner=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+            )
+        )
+        == ""
+    )
+    assert (
+        service._owner_name(SimpleNamespace(getOwner=lambda: SimpleNamespace(_id=12)))
+        == "12"
+    )
+
+    image_a = SimpleNamespace(_id=None)
+    image_b = SimpleNamespace(_id="bad")
+    image_c = SimpleNamespace(_id=3)
+    image_dup = SimpleNamespace(_id=7)
+    image_dup_again = SimpleNamespace(_id=7)
+    original_images_for_scope = service._images_for_scope
+    monkeypatch.setattr(
+        service,
+        "_images_for_scope",
+        lambda admin_conn, scope: [
+            image_a,
+            image_b,
+            image_c,
+            image_dup,
+            image_dup_again,
+        ],
+    )
+    scope = service.EnhancedSearchScope("user", 9, service.USER_SCOPE_LABEL)
+    assert [image._id for image in service._scope_image_rows(object(), scope)] == [3, 7]
+    monkeypatch.setattr(service, "_images_for_scope", original_images_for_scope)
+    assert (
+        service._images_for_scope(
+            SimpleNamespace(
+                getObjects=lambda *args, **kwargs: (_ for _ in ()).throw(
+                    RuntimeError("boom")
+                )
+            ),
+            scope,
+        )
+        == []
+    )
+
+    search_document = metadata.SearchDocument(
+        acquisition_date=datetime(2026, 4, 12, tzinfo=timezone.utc),
+        instrument_manufacturer="Zeiss",
+        instrument_model="LSM 980",
+        objective_model="Plan-Apochromat",
+        objective_magnification=63.0,
+        objective_na=1.4,
+        detector_model="Airyscan 2",
+        detector_binning="2x2",
+        detector_gain=1.5,
+        pixel_size_x_um=0.108,
+        pixel_size_y_um=0.108,
+        z_step_um=0.4,
+        search_document="Zeiss LSM 980 GFP",
+        channel_summary="GFP / Ex 488 nm / Em 525 nm",
+        channels=(
+            metadata.SearchChannel(
+                channel_index=0,
+                label="GFP",
+                excitation_nm=488.0,
+                emission_nm=525.0,
+            ),
+        ),
+        attributes=(
+            metadata.SearchAttribute(
+                attribute_key="laser_line_nm",
+                attribute_text="488 nm",
+                attribute_numeric=488.0,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "extract_search_document",
+        lambda image: (
+            search_document,
+            {
+                "dataset_id": 101,
+                "dataset_name": "Dataset A",
+                "project_id": 201,
+                "project_name": "Project A",
+            },
+        ),
+    )
+    monkeypatch.setattr(service, "get_owner_id", lambda image: 9)
+    details = SimpleNamespace(getGroup=lambda: SimpleNamespace(_id=5, **group.__dict__))
+    image_for_document = SimpleNamespace(
+        _id=17,
+        getDetails=lambda: details,
+        getName=lambda: "img-17",
+        getOwner=lambda: owner,
+    )
+    row, channels, attributes = service._document_for_image(image_for_document, 3)
+    assert row["image_id"] == 17
+    assert row["group_id"] == 5
+    assert row["owner_id"] == 9
+    assert row["dataset_id"] == 101
+    assert channels == [
+        {
+            "channel_index": 0,
+            "label": "GFP",
+            "excitation_nm": 488.0,
+            "emission_nm": 525.0,
+        }
+    ]
+    assert attributes == [
+        {
+            "attribute_key": "laser_line_nm",
+            "attribute_text": "488 nm",
+            "attribute_numeric": 488.0,
+        }
+    ]
+    broken_image = SimpleNamespace(
+        _id=19,
+        getDetails=lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+        getName=lambda: "img-19",
+        getOwner=lambda: owner,
+    )
+    broken_row, _channels, _attributes = service._document_for_image(broken_image, 3)
+    assert broken_row["group_id"] == 0
+
+
+def test_search_skips_inaccessible_images_and_handles_current_name_errors(monkeypatch):
+    monkeypatch.setattr(
+        service, "runtime_config", lambda: SimpleNamespace(max_results=50)
+    )
+    monkeypatch.setattr(
+        service,
+        "_merge_result_rows",
+        lambda acquisition_rows, omero_rows: [
+            {"image_id": 7, "image_name": "stored-7"},
+            {"image_id": 8, "image_name": "stored-8"},
+        ],
+    )
+    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
+    monkeypatch.setattr(service, "search_index_rows", lambda *args, **kwargs: ([], 0))
+    monkeypatch.setattr(service, "_visible_group_ids", lambda conn: [5])
+    monkeypatch.setattr(service, "_current_user_id", lambda conn: 9)
+    monkeypatch.setattr(service, "_search_omero_builtin_rows", lambda conn, query: [])
+    monkeypatch.setattr(
+        service,
+        "_accessible_images_by_id",
+        lambda conn, image_ids: {
+            8: SimpleNamespace(
+                getName=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+            )
+        },
+    )
+    monkeypatch.setattr(
+        service, "reverse", lambda name, args=(): f"/{name}/{'/'.join(map(str, args))}"
+    )
+
+    payload = service.search(
+        object(),
+        service.SearchQuery(
+            query_text="lsm",
+            indexed_scope=service.SEARCH_SCOPE_ALL_INDEXED,
+        ),
+        acquisition_metadata_enabled=True,
+    )
+
+    assert payload["results"] == [
+        {
+            "image_id": 8,
+            "image_name": "stored-8",
+            "image_url": "/webindex/?show=image-8",
+            "thumbnail_url": "/render_thumbnail/8",
+            "dataset_url": "",
+            "project_url": "",
+        }
+    ]
+
+
+def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
+    monkeypatch,
+):
+    monkeypatch.delenv("ROOTPASS", raising=False)
+    with pytest.raises(RuntimeError, match="ROOTPASS is missing"):
+        with service._root_connection():
+            raise AssertionError("unreachable")
+
+    monkeypatch.setenv("ROOTPASS", "secret")
+    monkeypatch.setattr(
+        service,
+        "get_env",
+        lambda name, env_file=None: {"OMEROHOST": "host.example", "OMERO_PORT": "4064"}[
+            name
+        ],
+    )
+    monkeypatch.setattr(service, "get_bool_env", lambda name, env_file=None: False)
+
+    class _FailingGateway:
+        def __init__(self, *args, **kwargs):
+            self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
+
+        def connect(self):
+            return False
+
+    monkeypatch.setattr(service, "BlitzGateway", _FailingGateway)
+    with pytest.raises(RuntimeError, match="Failed to connect as root"):
+        with service._root_connection():
+            raise AssertionError("unreachable")
+
+    closed = []
+
+    class _WorkingGateway:
+        def __init__(self, *args, **kwargs):
+            self.SERVICE_OPTS = SimpleNamespace(
+                setOmeroGroup=lambda value: (_ for _ in ()).throw(RuntimeError("boom"))
+            )
+
+        def connect(self):
+            return True
+
+        def close(self):
+            closed.append(True)
+            raise RuntimeError("close boom")
+
+    monkeypatch.setattr(service, "BlitzGateway", _WorkingGateway)
+    with service._root_connection() as conn:
+        assert conn.connect() is True
+    assert closed == [True]
+
+
+def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
+    scope = service.EnhancedSearchScope("user", 9, service.USER_SCOPE_LABEL)
+    original_process_sync_batch = service._process_sync_batch
+    original_scope_from_key = service.scope_from_key
+    sync_events = []
+    db_context = _DbConn()
+    monkeypatch.setattr(
+        service,
+        "runtime_config",
+        lambda: SimpleNamespace(batch_size=2, schema_version=5),
+    )
+
+    @contextmanager
+    def _root_connection():
+        yield object()
+
+    monkeypatch.setattr(service, "_root_connection", _root_connection)
+    monkeypatch.setattr(service, "_scope_image_rows", lambda admin_conn, scope: [])
+    monkeypatch.setattr(service, "db_connect", lambda: db_context)
+    monkeypatch.setattr(
+        service,
+        "prune_scope_membership",
+        lambda conn, scope_type, scope_id, run_token: (
+            sync_events.append(("prune_scope", scope_type, scope_id, run_token)) or 2
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "prune_orphan_documents",
+        lambda conn: sync_events.append(("prune_orphans",)) or 1,
+    )
+    monkeypatch.setattr(
+        service,
+        "mark_sync_complete",
+        lambda conn, scope_type, scope_id, **kwargs: sync_events.append(
+            ("complete", scope_type, scope_id, kwargs)
+        ),
+    )
+    service._SYNC_THREADS[scope.scope_key] = object()
+    assert service._sync_scope(scope, "token") == {
+        "status": "idle",
+        "indexed_image_count": 0,
+    }
+    assert sync_events[0] == ("prune_scope", "user", 9, "token")
+    assert scope.scope_key not in service._SYNC_THREADS
+
+    error_calls = []
+
+    @contextmanager
+    def _failing_root_connection():
+        raise RuntimeError("boom")
+        yield object()
+
+    monkeypatch.setattr(service, "_root_connection", _failing_root_connection)
+    monkeypatch.setattr(
+        service,
+        "mark_sync_error",
+        lambda conn, scope_type, scope_id, **kwargs: error_calls.append(
+            (scope_type, scope_id, kwargs)
+        ),
+    )
+    service._SYNC_THREADS[scope.scope_key] = object()
+    with pytest.raises(RuntimeError, match="boom"):
+        service._sync_scope(scope, "token-2")
+    assert error_calls[0][0:2] == ("user", 9)
+    assert scope.scope_key not in service._SYNC_THREADS
+
+    with pytest.raises(RuntimeError, match="Selected search scope is not valid."):
+        service.run_scope_sync_task("bad-scope", "token")
+
+    processed = []
+
+    @contextmanager
+    def _working_root_connection():
+        yield object()
+
+    monkeypatch.setattr(service, "_root_connection", _working_root_connection)
+    monkeypatch.setattr(
+        service,
+        "_scope_image_rows",
+        lambda admin_conn, scope: [
+            SimpleNamespace(_id=1),
+            SimpleNamespace(_id=2),
+            SimpleNamespace(_id=3),
+        ],
+    )
+    monkeypatch.setattr(
+        service,
+        "_process_sync_batch",
+        lambda scope, run_token, images, processed_count, schema_version: (
+            processed.append([image._id for image in images])
+            or (processed_count + len(images))
+        ),
+    )
+    service._SYNC_THREADS[scope.scope_key] = object()
+    assert service._sync_scope(scope, "token-3") == {
+        "status": "idle",
+        "indexed_image_count": 3,
+    }
+    assert processed == [[1, 2], [3]]
+
+    monkeypatch.setattr(
+        service,
+        "_process_sync_batch",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            service.ScopeSyncCancelledError("cancelled")
+        ),
+    )
+    service._SYNC_THREADS[scope.scope_key] = object()
+    assert service._sync_scope(scope, "token-4") == {
+        "status": "idle",
+        "indexed_image_count": 0,
+        "cancelled": True,
+    }
+    monkeypatch.setattr(service, "_process_sync_batch", original_process_sync_batch)
+
+    monkeypatch.setattr(
+        service,
+        "_document_for_image",
+        lambda image, schema_version: (
+            {"image_id": image._id},
+            [{"channel_index": image._id}],
+            [{"attribute_key": f"key-{image._id}"}],
+        ),
+    )
+    upserts = []
+    monkeypatch.setattr(
+        service,
+        "sync_run_is_active",
+        lambda conn, scope_type, scope_id, run_token: True,
+    )
+    monkeypatch.setattr(
+        service,
+        "upsert_search_document",
+        lambda conn, **kwargs: upserts.append(kwargs),
+    )
+    monkeypatch.setattr(
+        service,
+        "update_sync_progress",
+        lambda conn, scope_type, scope_id, **kwargs: upserts.append(
+            {"progress": kwargs}
+        ),
+    )
+    processed_count = service._process_sync_batch(
+        scope,
+        "token-5",
+        [SimpleNamespace(_id=7), SimpleNamespace(_id=8)],
+        0,
+        5,
+    )
+    assert processed_count == 2
+    assert upserts[-1]["progress"]["last_cursor_image_id"] == 8
+
+    monkeypatch.setattr(service, "scope_from_key", lambda scope_key: scope)
+    monkeypatch.setattr(
+        service, "_sync_scope", lambda scope_obj, run_token: {"ok": True}
+    )
+    assert service.run_scope_sync_task("user:9", "token-6") == {"ok": True}
+    monkeypatch.setattr(service, "scope_from_key", original_scope_from_key)
+
+    started = []
+
+    class _FakeThread:
+        def __init__(self, target, args, daemon, name):
+            started.append(
+                {
+                    "target": target,
+                    "args": args,
+                    "daemon": daemon,
+                    "name": name,
+                }
+            )
+
+        def start(self):
+            started.append("started")
+
+    monkeypatch.setattr(service.threading, "Thread", _FakeThread)
+    service._start_threaded_sync(scope, "thread-token")
+    assert started[0]["args"] == ("user:9", "thread-token")
+    assert started[0]["daemon"] is True
+    assert started[1] == "started"
+
+    assert service.request_scope_sync("bad-scope", "alice") == (
+        False,
+        "Selected search scope is not valid.",
+    )
+
+    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
+    monkeypatch.setattr(
+        service,
+        "runtime_config",
+        lambda: SimpleNamespace(schema_version=5, sync_stale_seconds=600),
+    )
+    monkeypatch.setattr(service, "try_start_scope_sync", lambda *args, **kwargs: False)
+    assert service.request_scope_sync("user:9", "alice") == (
+        False,
+        "Indexing is already running for this scope.",
+    )
+    monkeypatch.setattr(
+        service,
+        "try_start_scope_sync",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            service.EnhancedSearchStoreError("store unavailable")
+        ),
+    )
+    assert service.request_scope_sync("user:9", "alice") == (
+        False,
+        "Could not schedule enhanced-search indexing.",
+    )
+
+    assert service.saved_queries("") == []
+    monkeypatch.setattr(
+        service, "list_saved_queries", lambda conn, username: [{"id": 1}]
+    )
+    assert service.saved_queries("alice") == [{"id": 1}]
+    saved = []
+    monkeypatch.setattr(
+        service,
+        "save_saved_query",
+        lambda conn, username, query_name, query_payload: saved.append(
+            (username, query_name, query_payload)
+        ),
+    )
+    service.save_query("alice", "My query", {"query_text": "lsm"})
+    monkeypatch.setattr(
+        service,
+        "delete_saved_query",
+        lambda conn, username, query_id: username == "alice" and query_id == 3,
+    )
+    assert service.remove_saved_query("alice", 3) is True
+    assert saved == [("alice", "My query", {"query_text": "lsm"})]
+    monkeypatch.setattr(
+        service,
+        "get_bool_env",
+        lambda name, env_file=None: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    assert service._admin_secure_flag() is True

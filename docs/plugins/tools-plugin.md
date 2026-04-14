@@ -99,6 +99,11 @@ Dedicated worker controls:
 - `TOOLS_ENHANCED_SEARCH_CELERY_MAX_RETRIES`
 - `TOOLS_ENHANCED_SEARCH_CELERY_PREFETCH`
 
+`TOOLS_ENHANCED_SEARCH_CELERY_BROKER_URL` and
+`TOOLS_ENHANCED_SEARCH_CELERY_BACKEND_URL` take precedence. If either is unset,
+the plugin reuses `OMERO_IMS_CELERY_BROKER_URL` or
+`OMERO_IMS_CELERY_BACKEND_URL` before falling back to an empty value.
+
 When celery mode is enabled, `supervisord.conf` starts
 `tools-celery-worker`. When it is disabled, the plugin falls back to a local
 background thread inside the `omeroweb` process.

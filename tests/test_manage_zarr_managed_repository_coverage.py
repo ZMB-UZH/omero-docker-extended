@@ -567,3 +567,340 @@ def test_manage_script_handles_prefix_not_directory_and_main_entrypoint(
                 sys.modules[name] = original
 
     assert ("closed", True) in output_calls
+
+
+def test_manage_script_repository_helper_edges_cover_proxy_and_cleanup_failures(
+    tmp_path: Path,
+):
+    module = _load_manage_script_module()
+    config = _server_config(tmp_path)
+    managed_root = tmp_path / "data" / "ManagedRepository"
+    managed_root.mkdir(parents=True)
+
+    assert (
+        module._repo_model_attr(types.SimpleNamespace(path="direct"), "path")
+        == "direct"
+    )
+    assert module._repo_model_attr(types.SimpleNamespace(_path="fallback"), "path") == (
+        "fallback"
+    )
+    assert module._repo_text(None) == ""
+    assert module._repo_text(types.SimpleNamespace(_val=" wrapped ")) == "wrapped"
+    assert module._repo_text(" raw ") == "raw"
+    assert (
+        module._repo_description_root(
+            types.SimpleNamespace(
+                path=types.SimpleNamespace(val=""),
+                name=types.SimpleNamespace(val="leaf"),
+            )
+        )
+        == "/leaf"
+    )
+    assert (
+        module._repo_description_root(
+            types.SimpleNamespace(
+                path=types.SimpleNamespace(val="/data/root"),
+                name=types.SimpleNamespace(val=""),
+            )
+        )
+        == "/data/root"
+    )
+
+    with pytest.raises(RuntimeError, match="Missing OMERO connection"):
+        module._managed_repository_proxy(None, config)
+
+    broken_conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(
+                sharedResources=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+            )
+        )
+    )
+    with pytest.raises(RuntimeError, match="managed-repository proxy"):
+        module._managed_repository_proxy(broken_conn, config)
+
+    unresolved_mapping_description_conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(
+                sharedResources=lambda: types.SimpleNamespace(
+                    repositories=lambda: types.SimpleNamespace(
+                        descriptions=[
+                            types.SimpleNamespace(
+                                path=types.SimpleNamespace(
+                                    val=str(managed_root.parent)
+                                ),
+                                name=types.SimpleNamespace(val=managed_root.name),
+                                hash=types.SimpleNamespace(val="managed-repo-hash"),
+                            )
+                        ],
+                        proxies={"other": object()},
+                    )
+                )
+            )
+        )
+    )
+    with pytest.raises(
+        RuntimeError, match="Failed to resolve the managed-repository proxy"
+    ):
+        module._managed_repository_proxy(unresolved_mapping_description_conn, config)
+
+    managed_proxy = object()
+    managed_conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(
+                sharedResources=lambda: types.SimpleNamespace(
+                    repositories=lambda: types.SimpleNamespace(
+                        descriptions=[],
+                        proxies={"ManagedRepository": managed_proxy},
+                    )
+                )
+            )
+        )
+    )
+    assert module._managed_repository_proxy(managed_conn, config) is managed_proxy
+
+    single_mapping_proxy = object()
+    single_mapping_conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(
+                sharedResources=lambda: types.SimpleNamespace(
+                    repositories=lambda: types.SimpleNamespace(
+                        descriptions=[],
+                        proxies={"only": single_mapping_proxy},
+                    )
+                )
+            )
+        )
+    )
+    assert (
+        module._managed_repository_proxy(single_mapping_conn, config)
+        is single_mapping_proxy
+    )
+
+    single_sequence_proxy = object()
+    single_sequence_conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(
+                sharedResources=lambda: types.SimpleNamespace(
+                    repositories=lambda: types.SimpleNamespace(
+                        descriptions=[],
+                        proxies=[single_sequence_proxy],
+                    )
+                )
+            )
+        )
+    )
+    assert (
+        module._managed_repository_proxy(single_sequence_conn, config)
+        is single_sequence_proxy
+    )
+
+    unresolved_conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(
+                sharedResources=lambda: types.SimpleNamespace(
+                    repositories=lambda: types.SimpleNamespace(
+                        descriptions=[],
+                        proxies={},
+                    )
+                )
+            )
+        )
+    )
+    with pytest.raises(
+        RuntimeError, match="Failed to resolve the managed-repository proxy"
+    ):
+        module._managed_repository_proxy(unresolved_conn, config)
+
+    target_dir = managed_root / "users_private" / "alice" / "2026-03-22" / "09-51-15"
+    failing_proxy = types.SimpleNamespace(
+        makeDir=lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("mkdir boom")
+        )
+    )
+    with pytest.raises(
+        RuntimeError,
+        match="Failed to create registered managed-repository directory",
+    ):
+        module._register_managed_directory(failing_proxy, managed_root, target_dir)
+
+    failing_exists_proxy = types.SimpleNamespace(
+        fileExists=lambda path: (_ for _ in ()).throw(RuntimeError("exists boom"))
+    )
+    with pytest.raises(
+        RuntimeError,
+        match="Failed to query managed-repository registration state",
+    ):
+        module._repository_directory_registered(
+            failing_exists_proxy,
+            managed_root,
+            target_dir,
+        )
+
+    failing_wait_conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            waitOnCmd=lambda *args, **kwargs: (_ for _ in ()).throw(
+                RuntimeError("wait boom")
+            )
+        )
+    )
+    deleting_proxy = types.SimpleNamespace(
+        deletePaths=lambda *args, **kwargs: "delete-handle"
+    )
+    with pytest.raises(RuntimeError, match="Failed to delete managed-repository path"):
+        module._delete_registered_managed_path(
+            failing_wait_conn,
+            deleting_proxy,
+            managed_root,
+            target_dir / "sample.zarr",
+        )
+
+
+def test_manage_script_relative_path_and_cleanup_root_guards_cover_remaining_edges(
+    tmp_path: Path,
+):
+    module = _load_manage_script_module()
+    config = _server_config(tmp_path)
+    managed_root = tmp_path / "data" / "ManagedRepository"
+    managed_root.mkdir(parents=True)
+    (tmp_path / "shared").mkdir(parents=True)
+
+    outside_target = tmp_path / "outside" / "sample.zarr"
+    with pytest.raises(RuntimeError, match="Managed-repository path escaped its root"):
+        module._repo_relative_path(managed_root, outside_target, directory=True)
+
+    with pytest.raises(RuntimeError, match="relative path must not be empty"):
+        module._repo_relative_path(managed_root, managed_root, directory=True)
+
+    with pytest.raises(RuntimeError, match="outside the managed repository"):
+        module._cleanup_zarr(
+            object(),
+            config,
+            str(outside_target),
+            "users_private",
+            "alice",
+        )
+
+    missing_staged_dir = (
+        managed_root
+        / "users_private"
+        / "alice"
+        / "2026-03-22"
+        / "09-51-15"
+        / "sample.zarr"
+    )
+    assert (
+        module._cleanup_zarr(
+            object(),
+            config,
+            str(missing_staged_dir),
+            "users_private",
+            "alice",
+        )
+        == missing_staged_dir
+    )
+
+
+def test_manage_script_stage_and_cleanup_cover_remaining_registered_path_guards(
+    tmp_path: Path,
+):
+    module = _load_manage_script_module()
+    config = _server_config(tmp_path)
+    managed_root = tmp_path / "data" / "ManagedRepository"
+    managed_root.mkdir(parents=True)
+    source = tmp_path / "shared" / "job-1" / "sample.zarr"
+    (source / "0").mkdir(parents=True)
+    (source / "0" / "0").write_text("pixels", encoding="utf-8")
+
+    conn, repo_proxy, _wait_calls = _managed_repo_conn(managed_root)
+    fixed_now = datetime(2026, 3, 22, 9, 51, 15)
+
+    class _FixedDatetime:
+        @staticmethod
+        def now():
+            return fixed_now
+
+    original_datetime = module.datetime
+    original_prefix_directories = module._prefix_directories
+    module.datetime = _FixedDatetime
+    broken_prefix = managed_root / "broken-prefix"
+    broken_prefix.write_text("not-a-directory", encoding="utf-8")
+    module._prefix_directories = lambda managed_root, leaf_parent: [broken_prefix]
+    try:
+        with pytest.raises(RuntimeError, match="prefix path is not a directory"):
+            module._stage_zarr(
+                conn,
+                config,
+                str(source),
+                "users_private",
+                "alice",
+            )
+    finally:
+        module.datetime = original_datetime
+        module._prefix_directories = original_prefix_directories
+
+    staged_dir = (
+        managed_root
+        / "users_private"
+        / "alice"
+        / "2026-03-22"
+        / "09-51-15"
+        / "sample.zarr"
+    )
+    unregistered_dir = (
+        managed_root
+        / "users_private"
+        / "alice"
+        / "2026-03-22"
+        / "09-51-16"
+        / "other.zarr"
+    )
+    unregistered_dir.mkdir(parents=True)
+
+    with pytest.raises(RuntimeError, match="only supports staged .zarr directories"):
+        module._cleanup_zarr(
+            conn,
+            config,
+            str(staged_dir.with_name("sample.txt")),
+            "users_private",
+            "alice",
+        )
+
+    with pytest.raises(
+        RuntimeError, match="path exists on disk but is not registered in OMERO"
+    ):
+        module._cleanup_zarr(
+            conn,
+            config,
+            str(unregistered_dir),
+            "users_private",
+            "alice",
+        )
+
+    _register_repo_path(repo_proxy, managed_root, staged_dir)
+    shutil.rmtree(staged_dir)
+    staged_dir.write_text("not-a-directory", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="path is not a directory"):
+        module._cleanup_zarr(
+            conn,
+            config,
+            str(staged_dir),
+            "users_private",
+            "alice",
+        )
+
+    staged_dir.unlink()
+    nested_dir = staged_dir / "0"
+    nested_dir.mkdir(parents=True)
+    _register_repo_path(repo_proxy, managed_root, staged_dir)
+    with pytest.raises(
+        RuntimeError,
+        match="directly under the configured managed-repository template",
+    ):
+        module._cleanup_zarr(
+            conn,
+            config,
+            str(nested_dir),
+            "users_private",
+            "alice",
+        )

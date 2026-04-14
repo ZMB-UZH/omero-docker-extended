@@ -29,6 +29,8 @@ def test_build_enhanced_search_celery_config_uses_defaults(monkeypatch):
         "get_optional_env",
         lambda name, env_file=None: {
             tools_config.ENHANCED_SEARCH_USE_CELERY_ENV: "false",
+            tools_config.OMERO_IMS_CELERY_BROKER_ENV: "redis://redis-host:6390/2",
+            tools_config.OMERO_IMS_CELERY_BACKEND_ENV: "redis://redis-host:6390/2",
             tools_config.ENHANCED_SEARCH_CELERY_QUEUE_ENV: "enhanced-search-q",
         }.get(name),
     )
@@ -37,7 +39,7 @@ def test_build_enhanced_search_celery_config_uses_defaults(monkeypatch):
 
     assert celery_config.enabled is False
     assert celery_config.queue == "enhanced-search-q"
-    assert celery_config.broker_url == "redis://redis:6379/3"
-    assert celery_config.backend_url == "redis://redis:6379/3"
+    assert celery_config.broker_url == "redis://redis-host:6390/2"
+    assert celery_config.backend_url == "redis://redis-host:6390/2"
     assert celery_config.result_expires == tools_config.DEFAULT_CELERY_RESULT_EXPIRES
     assert celery_config.time_limit == tools_config.DEFAULT_CELERY_TIME_LIMIT
