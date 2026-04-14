@@ -70,6 +70,7 @@ SEARCH_SOURCE_DISPLAY_ORDER = (
 )
 USER_SCOPE_TYPE = "user"
 USER_SCOPE_LABEL = "Your acquisition metadata"
+_SUPPORTED_DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d--%m--%Y")
 
 
 class ScopeSyncCancelledError(RuntimeError):
@@ -212,10 +213,21 @@ def _parse_date(raw_value: Any, *, end_of_day: bool = False) -> datetime | None:
     text = str(raw_value).strip()
     if not text:
         return None
+    parsed = None
     try:
         parsed = datetime.fromisoformat(text)
     except ValueError:
-        parsed = datetime.fromisoformat(f"{text}T00:00:00")
+        try:
+            parsed = datetime.fromisoformat(f"{text}T00:00:00")
+        except ValueError:
+            for date_format in _SUPPORTED_DATE_FORMATS:
+                try:
+                    parsed = datetime.strptime(text, date_format)
+                    break
+                except ValueError:
+                    continue
+    if parsed is None:
+        raise ValueError(f"Unsupported date value: {text!r}")
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     else:
@@ -1108,6 +1120,7 @@ def _process_sync_batch(
             last_image_id = image_row["image_id"]
             upsert_search_document(
                 db_conn,
+                commit=False,
                 image_row=image_row,
                 channels=channels,
                 attributes=attributes,
@@ -1120,11 +1133,15 @@ def _process_sync_batch(
             db_conn,
             scope.scope_type,
             scope.scope_id,
+            commit=False,
             run_token=run_token,
             indexed_image_count=processed_count,
             current_message=f"Indexed {processed_count} image(s)…",
             last_cursor_image_id=last_image_id,
         )
+        commit_fn = getattr(db_conn, "commit", None)
+        if callable(commit_fn):
+            commit_fn()
     return processed_count
 
 

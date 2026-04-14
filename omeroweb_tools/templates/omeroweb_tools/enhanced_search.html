@@ -84,27 +84,58 @@
                             </select>
                         </div>
                         <div class="tools-search-field tools-search-field--date">
-                            <label for="acquisition_date_from">Acquired from</label>
-                            <input type="date"
+                            <label for="acquisition_date_from">Start date</label>
+                            <input type="text"
                                    id="acquisition_date_from"
+                                   class="tools-search-date-input"
                                    name="acquisition_date_from"
-                                   value="{{ query.acquisition_date_from|date:'Y-m-d' }}"
-                                   placeholder="dd--mm--yyyy">
+                                   value="{{ query.acquisition_date_from|date:'d--m--Y' }}"
+                                   placeholder="dd--mm--yyyy"
+                                   inputmode="numeric"
+                                   autocomplete="off"
+                                   spellcheck="false"
+                                   aria-describedby="acquisition-date-format-note"
+                                   title="Format: dd--mm--yyyy">
                         </div>
                         <div class="tools-search-field tools-search-field--date">
-                            <label for="acquisition_date_to">Acquired to</label>
-                            <input type="date"
+                            <label for="acquisition_date_to">End date</label>
+                            <input type="text"
                                    id="acquisition_date_to"
+                                   class="tools-search-date-input"
                                    name="acquisition_date_to"
-                                   value="{{ query.acquisition_date_to|date:'Y-m-d' }}"
-                                   placeholder="dd--mm--yyyy">
+                                   value="{{ query.acquisition_date_to|date:'d--m--Y' }}"
+                                   placeholder="dd--mm--yyyy"
+                                   inputmode="numeric"
+                                   autocomplete="off"
+                                   spellcheck="false"
+                                   aria-describedby="acquisition-date-format-note"
+                                   title="Format: dd--mm--yyyy">
                         </div>
                     </div>
+                    <p class="tools-search-format-note" id="acquisition-date-format-note">
+                        Date format: dd--mm--yyyy
+                    </p>
                 </form>
             </section>
 
             <section class="admin-tools-card admin-tools-card--wide tools-search-card">
-                <h2 class="tools-search-heading">Acquisition metadata index</h2>
+                <div class="tools-search-index-heading">
+                    <div class="tools-search-index-heading__copy">
+                        <h2 class="tools-search-heading">Acquisition metadata index</h2>
+                        <p class="tools-page-note tools-page-note--tight" id="acquisition-index-status">
+                            {% if user_settings.acquisition_metadata_enabled %}
+                            Acquisition metadata indexing is enabled for your account. All images you own will be indexed automatically in the background.
+                            {% else %}
+                            Acquisition metadata indexing is disabled for your account. No acquisition metadata is stored for your account.
+                            {% endif %}
+                        </p>
+                    </div>
+                    <span class="tools-search-pill tools-search-pill--feature"
+                          id="acquisition-index-enabled-pill"
+                          data-index-enabled="{{ user_settings.acquisition_metadata_enabled|yesno:'true,false' }}">
+                        {% if user_settings.acquisition_metadata_enabled %}Enabled{% else %}Disabled{% endif %}
+                    </span>
+                </div>
                 <div class="tools-search-inline-form tools-search-inline-form--settings">
                     <label class="tools-search-checkbox" for="acquisition_metadata_enabled">
                         <input type="checkbox"
@@ -120,22 +151,11 @@
                         Save setting
                     </button>
                 </div>
-                <p class="tools-page-note tools-page-note--tight" id="acquisition-index-status">
-                    {% if user_settings.acquisition_metadata_enabled %}
-                    Acquisition metadata indexing is enabled for your account. All images you own will be indexed automatically in the background.
-                    {% else %}
-                    Acquisition metadata indexing is disabled for your account. No acquisition metadata is stored for your account.
-                    {% endif %}
+                <p class="tools-page-note tools-page-note--tight"
+                   id="acquisition-index-disabled-note"
+                   {% if user_settings.acquisition_metadata_enabled %}hidden{% endif %}>
+                    Enable acquisition metadata indexing to start indexing acquisition metadata for all images you own.
                 </p>
-            </section>
-
-            <section class="admin-tools-card admin-tools-card--wide tools-search-card">
-                <h2 class="tools-search-heading">Index status</h2>
-                {% if not user_settings.acquisition_metadata_enabled %}
-                <p class="tools-page-note tools-page-note--tight">
-                    Enable acquisition metadata indexing above to start indexing acquisition metadata for all images you own.
-                </p>
-                {% endif %}
                 {% if sync_states %}
                 <table class="tools-search-status-table">
                     <thead>
@@ -521,10 +541,19 @@
         const updateAcquisitionIndexUi = (enabled) => {
             acquisitionMetadataEnabled = Boolean(enabled);
             const status = document.getElementById('acquisition-index-status');
+            const pill = document.getElementById('acquisition-index-enabled-pill');
+            const disabledNote = document.getElementById('acquisition-index-disabled-note');
             if (status) {
                 status.textContent = acquisitionMetadataEnabled
                     ? 'Acquisition metadata indexing is enabled for your account. All images you own will be indexed automatically in the background.'
                     : 'Acquisition metadata indexing is disabled for your account. No acquisition metadata is stored for your account.';
+            }
+            if (pill) {
+                pill.dataset.indexEnabled = acquisitionMetadataEnabled ? 'true' : 'false';
+                pill.textContent = acquisitionMetadataEnabled ? 'Enabled' : 'Disabled';
+            }
+            if (disabledNote) {
+                disabledNote.hidden = acquisitionMetadataEnabled;
             }
             const toggle = document.getElementById('acquisition_metadata_enabled');
             if (toggle) {

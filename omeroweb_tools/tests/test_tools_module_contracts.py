@@ -78,11 +78,20 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "Free text" not in template_text
     assert "Search box" in template_text
     assert "Indexed scope" in template_text
-    assert "Acquired from" in template_text
-    assert "Acquired to" in template_text
+    assert "Start date" in template_text
+    assert "End date" in template_text
     assert 'placeholder="dd--mm--yyyy"' in template_text
     assert "tools-search-field--actions" in template_text
     assert "tools-search-inline-action--primary" in template_text
+    assert "Date format: dd--mm--yyyy" in template_text
+    assert (
+        template_text.count(
+            '<h2 class="tools-search-heading">Acquisition metadata index</h2>'
+        )
+        == 1
+    )
+    assert ">Index status<" not in template_text
+    assert 'id="acquisition-index-enabled-pill"' in template_text
     assert "tools-search-page-loader" in template_text
     assert "Loading search results" in template_text
     assert "Please wait while the search results are being queried." in template_text

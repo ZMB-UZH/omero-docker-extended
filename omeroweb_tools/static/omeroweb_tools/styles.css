@@ -43,7 +43,7 @@
 }
 
 .tools-search-grid--primary {
-    grid-template-columns: minmax(430px, 2.35fr) max-content minmax(210px, 228px) minmax(156px, 166px) minmax(156px, 166px);
+    grid-template-columns: minmax(430px, 2.35fr) max-content minmax(210px, 228px) minmax(178px, 188px) minmax(178px, 188px);
     max-width: 1220px;
     align-items: end;
 }
@@ -103,14 +103,25 @@
 }
 
 .tools-search-field--date {
-    max-width: 166px;
+    max-width: 188px;
 }
 
 .tools-search-field--date input {
     min-width: 0;
-    padding-right: 0.55rem;
-    min-width: 9.75rem;
+    padding-right: 0.8rem;
+    min-width: 11rem;
     font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.tools-search-date-input {
+    text-transform: none;
+}
+
+.tools-search-format-note {
+    margin: 0.55rem 0 0;
+    color: #64748b;
+    font-size: 0.82rem;
 }
 
 .tools-search-actions {
@@ -142,9 +153,9 @@
     min-width: 94px;
     min-height: 2.5rem;
     padding: 0.68rem 1.08rem;
-    border: 1px solid #d6deea;
+    border: 1px solid transparent;
     border-radius: 8px;
-    background: #f9fbff;
+    background: #d1d5db;
     color: #1f2937;
     box-shadow: none;
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -155,9 +166,9 @@
 
 .tools-search-card .tools-search-inline-action:hover,
 .tools-search-card .tools-search-inline-action:focus-visible {
-    border-color: #93b4f4;
-    background: #eef4ff;
-    color: #1d4ed8;
+    border-color: transparent;
+    background: #c7ced6;
+    color: #1f2937;
 }
 
 .tools-search-card .tools-search-inline-action:focus-visible {
@@ -176,6 +187,18 @@
     border-color: #0056b3;
     background: #0056b3;
     color: #ffffff;
+}
+
+.tools-search-index-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.9rem;
+    margin-bottom: 0.85rem;
+}
+
+.tools-search-index-heading__copy {
+    min-width: 0;
 }
 
 .tools-search-status-table,
@@ -347,6 +370,16 @@
 .tools-search-pill[data-status="running"] {
     background: #e0f2fe;
     color: #0369a1;
+}
+
+.tools-search-pill--feature[data-index-enabled="true"] {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.tools-search-pill--feature[data-index-enabled="false"] {
+    background: #f3f4f6;
+    color: #374151;
 }
 
 .tools-search-empty {
@@ -528,7 +561,8 @@
 @media (max-width: 900px) {
     .tools-search-pagination,
     .tools-search-saved-item,
-    .tools-search-inline-form--settings {
+    .tools-search-inline-form--settings,
+    .tools-search-index-heading {
         flex-direction: column;
         align-items: stretch;
     }

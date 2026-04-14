@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import weakref
 from contextlib import contextmanager
 from typing import Any, Iterable
 
@@ -29,10 +30,35 @@ ENV_PORT = "OMP_DATA_PORT"
 _psycopg2_mod = None
 _psycopg2_extras = None
 _psycopg2_sql = None
+_SCHEMA_READY_CONNECTIONS: weakref.WeakKeyDictionary[object, bool] = (
+    weakref.WeakKeyDictionary()
+)
+_SCHEMA_READY_CONNECTION_IDS: set[int] = set()
 
 
 class EnhancedSearchStoreError(Exception):
     """Raised when Tools enhanced-search persistence fails."""
+
+
+def _schema_ready(conn) -> bool:
+    try:
+        return bool(_SCHEMA_READY_CONNECTIONS.get(conn))
+    except TypeError:
+        return id(conn) in _SCHEMA_READY_CONNECTION_IDS
+
+
+def _mark_schema_ready(conn) -> None:
+    try:
+        _SCHEMA_READY_CONNECTIONS[conn] = True
+    except TypeError:
+        _SCHEMA_READY_CONNECTION_IDS.add(id(conn))
+
+
+def _clear_schema_ready(conn) -> None:
+    try:
+        _SCHEMA_READY_CONNECTIONS.pop(conn, None)
+    except TypeError:
+        _SCHEMA_READY_CONNECTION_IDS.discard(id(conn))
 
 
 def _load_psycopg2():
@@ -88,6 +114,7 @@ def _db_params():
 @contextmanager
 def connect():
     psycopg2, _ = _load_psycopg2()
+    conn = None
     try:
         conn = psycopg2.connect(**_db_params())
     except EnhancedSearchStoreError:
@@ -105,6 +132,7 @@ def connect():
         yield conn
     finally:
         if conn is not None:
+            _clear_schema_ready(conn)
             try:
                 conn.close()
             except Exception:
@@ -115,6 +143,8 @@ def connect():
 
 
 def ensure_schema(conn) -> None:
+    if _schema_ready(conn):
+        return
     _load_psycopg2_sql()
     with conn.cursor() as cur:
         cur.execute(
@@ -285,6 +315,7 @@ def ensure_schema(conn) -> None:
             )
         )
     conn.commit()
+    _mark_schema_ready(conn)
 
 
 def ensure_sync_state_rows(
@@ -542,6 +573,7 @@ def update_sync_progress(
     scope_type: str,
     scope_id: int,
     *,
+    commit: bool = True,
     run_token: str,
     indexed_image_count: int,
     current_message: str,
@@ -571,7 +603,8 @@ def update_sync_progress(
                 run_token,
             ),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def mark_sync_complete(
@@ -653,6 +686,7 @@ def mark_sync_error(
 def upsert_search_document(
     conn,
     *,
+    commit: bool = True,
     image_row: dict[str, Any],
     channels: Iterable[dict[str, Any]],
     attributes: Iterable[dict[str, Any]],
@@ -833,7 +867,8 @@ def upsert_search_document(
                 run_token,
             ),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def prune_scope_membership(conn, scope_type: str, scope_id: int, run_token: str) -> int:
