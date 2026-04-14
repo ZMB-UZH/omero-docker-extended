@@ -222,6 +222,12 @@ Related `env/omero-celery.env` controls:
 - `TOOLS_ENHANCED_SEARCH_CELERY_MAX_RETRIES`
 - `TOOLS_ENHANCED_SEARCH_CELERY_PREFETCH`
 
+`TOOLS_ENHANCED_SEARCH_CELERY_BROKER_URL` and
+`TOOLS_ENHANCED_SEARCH_CELERY_BACKEND_URL` are preferred when set. If either is
+unset, the plugin reuses the corresponding Imaris connector value from
+`OMERO_IMS_CELERY_BROKER_URL` or `OMERO_IMS_CELERY_BACKEND_URL` before falling
+back to an empty value.
+
 When celery is enabled, `supervisord.conf` starts a dedicated
 `tools-celery-worker` process in the `omeroweb` container. If celery is
 disabled, refresh requests fall back to an in-process background thread.

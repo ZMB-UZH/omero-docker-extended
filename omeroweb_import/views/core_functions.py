@@ -2721,6 +2721,23 @@ def _sanitize_cli_output_for_logging(text: str) -> str:
     )
 
 
+def _summarize_cli_error_text(
+    stdout: str,
+    stderr: str,
+    *,
+    max_lines: int = 10,
+    max_chars: int = 500,
+) -> str:
+    raw_text = stderr or stdout or ""
+    if not raw_text:
+        return "bioformats2raw reported no details"
+    lines = [line.strip() for line in str(raw_text).splitlines() if line.strip()]
+    if not lines:
+        return "bioformats2raw reported no details"
+    summary = "\n".join(lines[:max_lines])
+    return _sanitize_cli_output_for_logging(summary[:max_chars])
+
+
 def _extract_imported_object_ids(output: str) -> list[str]:
     if not output:
         return []
@@ -7609,8 +7626,9 @@ def _process_import_job(job_id: str):
                         stderr_text = result.stderr or ""
 
                         if result.returncode != 0:
-                            error_summary = summarize_process_output(
-                                stderr_text or stdout_text, max_lines=10
+                            error_summary = _summarize_cli_error_text(
+                                stdout_text,
+                                stderr_text,
                             )
                             entry["status"] = "error"
                             entry.setdefault("errors", []).append(
