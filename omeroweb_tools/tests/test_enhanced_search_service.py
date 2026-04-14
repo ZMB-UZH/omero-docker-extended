@@ -127,7 +127,9 @@ def test_search_runs_with_one_sided_date_filters(
             return False
 
     captured_filters = []
-    monkeypatch.setattr(service, "runtime_config", lambda: SimpleNamespace(max_results=10))
+    monkeypatch.setattr(
+        service, "runtime_config", lambda: SimpleNamespace(max_results=10)
+    )
     monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
     monkeypatch.setattr(service, "_visible_group_ids", lambda conn: [5])
     monkeypatch.setattr(service, "_current_user_id", lambda conn: 21)
@@ -167,9 +169,7 @@ def test_search_runs_with_one_sided_date_filters(
     monkeypatch.setattr(
         service,
         "_accessible_images_by_id",
-        lambda conn, image_ids: {
-            17: SimpleNamespace(getName=lambda: "img-17")
-        },
+        lambda conn, image_ids: {17: SimpleNamespace(getName=lambda: "img-17")},
     )
     monkeypatch.setattr(
         service,
