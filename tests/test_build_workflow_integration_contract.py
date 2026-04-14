@@ -754,6 +754,60 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             with self.subTest(relative_path=relative_path):
                 self.assertEqual(expected, actual)
 
+    def test_python_dependency_jobs_enable_setup_python_pip_cache(self) -> None:
+        import yaml  # noqa: F811  — available in CI
+
+        expected_cache_paths = {
+            ".github/workflows/tests.yml": (
+                "test-with-coverage",
+                ".github/requirements/tests-ci.txt",
+            ),
+            ".github/workflows/vulture.yml": (
+                "vulture",
+                ".github/requirements/vulture-ci.txt",
+            ),
+            ".github/workflows/security-code-scanning.yml": (
+                "bandit",
+                ".github/requirements/security-code-scanning.txt",
+            ),
+        }
+
+        for relative_path, (job_name, dependency_path) in expected_cache_paths.items():
+            workflow = yaml.safe_load(
+                (self.repo_root / relative_path).read_text(encoding="utf-8")
+            )
+            setup_step = next(
+                step
+                for step in workflow["jobs"][job_name]["steps"]
+                if step.get("name") == "Setup Python"
+            )
+            with self.subTest(relative_path=relative_path):
+                self.assertEqual("pip", setup_step["with"]["cache"])
+                self.assertEqual(
+                    dependency_path,
+                    setup_step["with"]["cache-dependency-path"],
+                )
+
+    def test_security_codeql_uses_build_free_interpreted_language_mode(self) -> None:
+        import yaml  # noqa: F811  — available in CI
+
+        workflow_path = (
+            self.repo_root / ".github" / "workflows" / "security-code-scanning.yml"
+        )
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        steps = workflow["jobs"]["codeql"]["steps"]
+
+        init_step = next(step for step in steps if step.get("name") == "Initialize CodeQL")
+        self.assertEqual("none", init_step["with"]["build-mode"])
+        self.assertEqual("true", str(init_step["with"]["dependency-caching"]).lower())
+        self.assertFalse(
+            any(
+                step.get("uses")
+                == "github/codeql-action/autobuild@c10b8064de6f491fea524254123dbe5e09572f13"
+                for step in steps
+            )
+        )
+
     def test_super_linter_workflow_is_pinned_and_covers_repo_hygiene_surfaces(
         self,
     ) -> None:
