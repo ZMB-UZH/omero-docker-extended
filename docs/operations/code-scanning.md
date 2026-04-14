@@ -27,6 +27,7 @@ The current advanced CodeQL setup uses `build-mode: none` for the Python and Jav
 - **Pull requests** targeting `main`: full scan.
 - **Weekly schedule** (Monday 03:23 UTC): catches newly disclosed CVEs.
 - **Manual dispatch**: incident response or post-remediation verification.
+- Every job in `.github/workflows/security-code-scanning.yml` is additionally gated with the current default-branch context, so non-default refs can create workflow runs but do not consume runner minutes.
 
 ## Repository requirements
 

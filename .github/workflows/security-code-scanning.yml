@@ -21,6 +21,7 @@ concurrency:
 jobs:
   codeql:
     name: CodeQL (${{ matrix.language }})
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -54,6 +55,7 @@ jobs:
 
   trivy-filesystem:
     name: Trivy filesystem scan (SARIF)
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -100,6 +102,7 @@ jobs:
 
   semgrep:
     name: Semgrep SAST
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -143,6 +146,7 @@ jobs:
 
   bandit:
     name: Bandit Python security scan
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -327,6 +331,7 @@ jobs:
 
   hadolint-discover:
     name: Discover Dockerfiles
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     outputs:
       dockerfiles: ${{ steps.find.outputs.dockerfiles }}
@@ -347,7 +352,7 @@ jobs:
   hadolint:
     name: Hadolint (${{ matrix.dockerfile }})
     needs: hadolint-discover
-    if: needs.hadolint-discover.outputs.dockerfiles != '[]'
+    if: github.ref_name == github.event.repository.default_branch && needs.hadolint-discover.outputs.dockerfiles != '[]'
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -390,6 +395,7 @@ jobs:
 
   devskim:
     name: DevSkim security lint
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -437,6 +443,7 @@ jobs:
 
   osv-scanner-audit:
     name: OSV scan scope audit
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -460,6 +467,7 @@ jobs:
 
   osv-scanner:
     name: OSV dependency vulnerability scan
+    if: github.ref_name == github.event.repository.default_branch
     permissions:
       contents: read
       security-events: write
@@ -473,7 +481,7 @@ jobs:
   scorecard:
     name: OSSF Scorecard supply-chain security
     runs-on: ubuntu-24.04
-    if: github.event_name != 'pull_request'
+    if: github.ref_name == github.event.repository.default_branch && github.event_name != 'pull_request'
     permissions:
       contents: read
       security-events: write
@@ -523,7 +531,7 @@ jobs:
       - osv-scanner-audit
       - osv-scanner
       - scorecard
-    if: always()
+    if: always() && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
       actions: read
