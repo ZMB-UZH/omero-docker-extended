@@ -32,6 +32,8 @@ ENHANCED_SEARCH_CELERY_WORKER_CONCURRENCY_ENV = (
 )
 ENHANCED_SEARCH_CELERY_MAX_RETRIES_ENV = "TOOLS_ENHANCED_SEARCH_CELERY_MAX_RETRIES"
 ENHANCED_SEARCH_CELERY_PREFETCH_ENV = "TOOLS_ENHANCED_SEARCH_CELERY_PREFETCH"
+OMERO_IMS_CELERY_BROKER_ENV = "OMERO_IMS_CELERY_BROKER_URL"
+OMERO_IMS_CELERY_BACKEND_ENV = "OMERO_IMS_CELERY_BACKEND_URL"
 
 DEFAULT_BATCH_SIZE = 100
 DEFAULT_MAX_RESULTS = 50
@@ -123,6 +125,25 @@ def _optional_bool(raw_value: str | None, default: bool) -> bool:
     return default
 
 
+def _env_text(
+    primary_env: str,
+    *,
+    env_file: str,
+    fallback_env: str | None = None,
+    default: str = "",
+) -> str:
+    raw_value = get_optional_env(primary_env, env_file=env_file)
+    text_value = str(raw_value or "").strip()
+    if text_value:
+        return text_value
+    if fallback_env:
+        fallback_value = get_optional_env(fallback_env, env_file=env_file)
+        fallback_text = str(fallback_value or "").strip()
+        if fallback_text:
+            return fallback_text
+    return default
+
+
 def build_enhanced_search_config() -> EnhancedSearchRuntimeConfig:
     return EnhancedSearchRuntimeConfig(
         batch_size=_bounded_int(
@@ -173,27 +194,21 @@ def build_enhanced_search_celery_config() -> EnhancedSearchCeleryConfig:
             ),
             DEFAULT_USE_CELERY,
         ),
-        broker_url=str(
-            get_optional_env(
-                ENHANCED_SEARCH_CELERY_BROKER_ENV,
-                env_file=ENV_FILE_OMERO_CELERY,
-            )
-            or "redis://redis:6379/3"
-        ).strip(),
-        backend_url=str(
-            get_optional_env(
-                ENHANCED_SEARCH_CELERY_BACKEND_ENV,
-                env_file=ENV_FILE_OMERO_CELERY,
-            )
-            or "redis://redis:6379/3"
-        ).strip(),
-        queue=str(
-            get_optional_env(
-                ENHANCED_SEARCH_CELERY_QUEUE_ENV,
-                env_file=ENV_FILE_OMERO_CELERY,
-            )
-            or DEFAULT_CELERY_QUEUE
-        ).strip(),
+        broker_url=_env_text(
+            ENHANCED_SEARCH_CELERY_BROKER_ENV,
+            env_file=ENV_FILE_OMERO_CELERY,
+            fallback_env=OMERO_IMS_CELERY_BROKER_ENV,
+        ),
+        backend_url=_env_text(
+            ENHANCED_SEARCH_CELERY_BACKEND_ENV,
+            env_file=ENV_FILE_OMERO_CELERY,
+            fallback_env=OMERO_IMS_CELERY_BACKEND_ENV,
+        ),
+        queue=_env_text(
+            ENHANCED_SEARCH_CELERY_QUEUE_ENV,
+            env_file=ENV_FILE_OMERO_CELERY,
+            default=DEFAULT_CELERY_QUEUE,
+        ),
         result_expires=_bounded_int(
             get_optional_env(
                 ENHANCED_SEARCH_CELERY_RESULT_EXPIRES_ENV,
@@ -212,14 +227,11 @@ def build_enhanced_search_celery_config() -> EnhancedSearchCeleryConfig:
             60,
             604800,
         ),
-        loglevel=str(
-            get_optional_env(
-                ENHANCED_SEARCH_CELERY_LOGLEVEL_ENV,
-                env_file=ENV_FILE_OMERO_CELERY,
-            )
-            or DEFAULT_CELERY_LOGLEVEL
-        ).strip()
-        or DEFAULT_CELERY_LOGLEVEL,
+        loglevel=_env_text(
+            ENHANCED_SEARCH_CELERY_LOGLEVEL_ENV,
+            env_file=ENV_FILE_OMERO_CELERY,
+            default=DEFAULT_CELERY_LOGLEVEL,
+        ),
         worker_concurrency=_bounded_int(
             get_optional_env(
                 ENHANCED_SEARCH_CELERY_WORKER_CONCURRENCY_ENV,

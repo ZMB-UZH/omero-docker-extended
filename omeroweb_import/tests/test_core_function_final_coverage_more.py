@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import logging
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -584,3 +585,237 @@ def test_import_job_entry_covers_remaining_zarr_routing_paths(
         username="alice",
     )
     assert precomputed_error["entry_error"] == "precomputed failure"
+
+
+def test_core_function_import_name_and_compatibility_edges_cover_remaining_guards(
+    monkeypatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+):
+    managed_dir = tmp_path / "managed"
+    original_directory_is_usable = core_functions._directory_is_usable
+    monkeypatch.setattr(
+        core_functions,
+        "_resolve_managed_directory_path",
+        lambda path: path,
+    )
+    monkeypatch.setattr(core_functions, "_directory_is_usable", lambda path: False)
+    assert core_functions._ensure_dir(managed_dir) is False
+    not_a_directory = tmp_path / "not-a-directory"
+    not_a_directory.write_text("content", encoding="utf-8")
+    assert original_directory_is_usable(not_a_directory) is False
+
+    class _BrokenPath:
+        def is_dir(self):
+            raise OSError("stat failed")
+
+        def __str__(self):
+            return "/broken"
+
+    assert original_directory_is_usable(_BrokenPath()) is False
+    assert core_functions._summarize_cli_error_text("", "") == (
+        "bioformats2raw reported no details"
+    )
+    assert core_functions._summarize_cli_error_text("", " \n\t ") == (
+        "bioformats2raw reported no details"
+    )
+
+    assert core_functions._extract_imported_image_ids_for_normalization(
+        "",
+        fallback_image_ids=[None, " 7 ", "bad", 7, "8"],
+    ) == [7, 8]
+    assert (
+        core_functions._logical_import_entry_source_display_name(
+            {"relative_path": "folder/sample.ome.tif"}
+        )
+        == "sample.ome.tif"
+    )
+    assert core_functions._build_source_aware_image_name("", "Image A") == "Image A"
+    assert core_functions._build_source_aware_image_name("source", "") == "source"
+    assert core_functions._build_source_aware_image_name("source", "source") == "source"
+    assert (
+        core_functions._build_source_aware_image_name(
+            "source",
+            "source [Series A]",
+        )
+        == "source [Series A]"
+    )
+    assert core_functions._coerce_import_name_normalization_context("invalid") is None
+
+    caplog.set_level(logging.WARNING, logger=core_functions.logger.name)
+    monkeypatch.setattr(
+        core_functions,
+        "inspect_ome_zarr_image",
+        lambda file_path: SimpleNamespace(
+            image_node_relative_paths=("0", "1"),
+            image_display_names=("Series A",),
+        ),
+    )
+    (tmp_path / "plate.ome.zarr").mkdir()
+    assert (
+        core_functions._build_ome_zarr_import_name_normalization_context(
+            {"relative_path": "plate.ome.zarr"},
+            tmp_path / "plate.ome.zarr",
+        )
+        is None
+    )
+    assert "Ignoring inconsistent OME-Zarr naming metadata" in caplog.text
+
+    original_extensions = core_functions.DIRECTORY_PACKAGE_EXTENSIONS
+    original_source_display_name = (
+        core_functions._logical_import_entry_source_display_name
+    )
+    core_functions.DIRECTORY_PACKAGE_EXTENSIONS = ("",)
+    core_functions._logical_import_entry_source_display_name = lambda entry: ""
+
+    class _NamelessDir:
+        name = ""
+
+        @staticmethod
+        def is_dir():
+            return True
+
+    monkeypatch.setattr(
+        core_functions,
+        "inspect_ome_zarr_image",
+        lambda file_path: SimpleNamespace(
+            image_node_relative_paths=("0",),
+            image_display_names=("Series A",),
+        ),
+    )
+    try:
+        assert (
+            core_functions._build_ome_zarr_import_name_normalization_context(
+                {},
+                _NamelessDir(),
+            )
+            is None
+        )
+    finally:
+        core_functions.DIRECTORY_PACKAGE_EXTENSIONS = original_extensions
+        core_functions._logical_import_entry_source_display_name = (
+            original_source_display_name
+        )
+
+    assert core_functions._extract_imported_image_ids(
+        "Image:10\nCreated Image 10\nCreated Image 11"
+    ) == [10, 11]
+
+    class _Image:
+        def __init__(self, image_id: int, name: str):
+            self.id = image_id
+            self._name = name
+            self.saved = 0
+
+        def getName(self):
+            return self._name
+
+        def setName(self, name):
+            self._name = name
+
+        def save(self):
+            self.saved += 1
+
+    mismatch_images = {
+        1: _Image(1, "one"),
+        2: _Image(2, "two"),
+    }
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda *args, **kwargs: SimpleNamespace(
+            getObject=lambda object_type, image_id: mismatch_images.get(image_id),
+            close=lambda: None,
+        ),
+    )
+    assert (
+        core_functions._apply_import_name_normalization_context(
+            {"relative_path": "plate.ome.zarr"},
+            core_functions._ImportNameNormalizationContext(
+                expected_image_names=("Series A",),
+            ),
+            [1, 2],
+            "session",
+            "omeroserver",
+            4064,
+            None,
+        )
+        == []
+    )
+
+    blank_target_images = {
+        1: _Image(1, "existing"),
+        2: _Image(2, "Series B"),
+    }
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda *args, **kwargs: SimpleNamespace(
+            getObject=lambda object_type, image_id: blank_target_images.get(image_id),
+            close=lambda: None,
+        ),
+    )
+    assert (
+        core_functions._apply_import_name_normalization_context(
+            {"relative_path": "plate.ome.zarr"},
+            core_functions._ImportNameNormalizationContext(
+                expected_image_names=("", "Series B"),
+            ),
+            [1, 2],
+            "session",
+            "omeroserver",
+            4064,
+            None,
+        )
+        == []
+    )
+    assert blank_target_images[1].saved == 0
+    assert blank_target_images[2].saved == 0
+
+    rename_target_images = {
+        1: _Image(1, "old name"),
+        2: _Image(2, "Series B"),
+    }
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda *args, **kwargs: SimpleNamespace(
+            getObject=lambda object_type, image_id: rename_target_images.get(image_id),
+            close=lambda: None,
+        ),
+    )
+    monkeypatch.setattr(core_functions, "_get_id", lambda obj: obj.id)
+    assert core_functions._apply_import_name_normalization_context(
+        {"relative_path": "plate.ome.zarr"},
+        core_functions._ImportNameNormalizationContext(
+            expected_image_names=("Series A", "Series B"),
+        ),
+        [1, 2],
+        "session",
+        "omeroserver",
+        4064,
+        None,
+    ) == [1]
+    assert rename_target_images[1].getName() == "Series A"
+    assert rename_target_images[1].saved == 1
+    assert rename_target_images[2].getName() == "Series B"
+    assert rename_target_images[2].saved == 0
+
+    assert (
+        core_functions._apply_import_name_normalization_context(
+            {"relative_path": "plate.ome.zarr"},
+            core_functions._ImportNameNormalizationContext(group_header_name="group"),
+            [1],
+            "session",
+            "omeroserver",
+            4064,
+            None,
+        )
+        == []
+    )
+
+    assert core_functions._classify_compatibility_output(
+        0,
+        "",
+        "Permission denied while probing file",
+    ) == ("error", "Permission denied while probing file")
