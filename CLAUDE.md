@@ -46,10 +46,13 @@ python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
-python3 -m ruff check .
-python3 -m ruff format --check .
+ruff check .
+ruff format --check .
 python3 tools/env_safety_guard.py check
 ```
+
+If `ruff` is unavailable as a binary on the active host, use
+`python3 -m ruff check .` and `python3 -m ruff format --check .` instead.
 
 Use the routing doc and `verification-loop` skill to select the smallest correct subset while iterating, then state the exact verification level achieved.
 

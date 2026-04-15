@@ -82,7 +82,7 @@ python3 tools/frontend_preview_tooling.py vite -- \
 
 The preview server listens on `http://127.0.0.1:5173` by default.
 
-The preview strips Django template tags and serves plugin assets through the preview middleware. Use it for layout, spacing, and quick interaction checks before you touch Docker.
+The preview uses the `django-template-strip` middleware to strip Django template tags and serves plugin assets through the preview middleware. Use it for layout, spacing, and quick interaction checks before you touch Docker.
 
 ## Run DOM tests with Vitest
 

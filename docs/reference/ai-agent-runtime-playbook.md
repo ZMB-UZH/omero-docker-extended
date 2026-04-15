@@ -117,9 +117,12 @@ python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
-python3 -m ruff check .
-python3 -m ruff format --check .
+ruff check .
+ruff format --check .
 ```
+
+If the active host exposes Ruff only through the Python module entrypoint, use
+`python3 -m ruff check .` and `python3 -m ruff format --check .` instead.
 
 ## Log triage order
 

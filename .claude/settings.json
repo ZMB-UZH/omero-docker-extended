@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; if [[ \"$f\" == *.py ]] && [[ -f \"$f\" ]]; then python3 -m ruff check --fix --quiet \"$f\" && python3 -m ruff format --quiet \"$f\"; fi; } 2>/dev/null || true",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; if [[ \"$f\" == *.py ]] && [[ -f \"$f\" ]]; then if command -v ruff >/dev/null 2>&1; then ruff check --fix --quiet \"$f\" && ruff format --quiet \"$f\"; elif python3 -m ruff --version >/dev/null 2>&1; then python3 -m ruff check --fix --quiet \"$f\" && python3 -m ruff format --quiet \"$f\"; fi; fi; } 2>/dev/null || true",
             "timeout": 10,
             "statusMessage": "Auto-formatting Python..."
           },

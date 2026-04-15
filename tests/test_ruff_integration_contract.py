@@ -61,6 +61,12 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertIn(
             "Use Ruff as the canonical Python formatter and lint gate.", agents_text
         )
+        self.assertIn("ruff check .", agents_text)
+        self.assertIn("ruff format --check .", agents_text)
+        self.assertIn(
+            "If the active host exposes Ruff only as a Python module",
+            agents_text,
+        )
         self.assertIn("python3 -m ruff check .", agents_text)
         self.assertIn("python3 -m ruff format --check .", agents_text)
 
