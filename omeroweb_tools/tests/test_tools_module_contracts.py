@@ -81,6 +81,12 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "Start date" in template_text
     assert "End date" in template_text
     assert 'placeholder="dd--mm--yyyy"' in template_text
+    assert 'id="settings_menu_btn"' in template_text
+    assert 'id="settings_menu"' in template_text
+    assert 'id="user_settings_btn"' in template_text
+    assert "User settings" in template_text
+    assert "Admin settings" not in template_text
+    assert "&larr; Back to tools" not in template_text
     assert "tools-search-field--actions" in template_text
     assert "tools-search-inline-action--primary" in template_text
     assert "Date format: dd--mm--yyyy" not in template_text
@@ -116,6 +122,9 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "const normalizeSavedQueryName = (value) =>" in template_text
     assert "const syncPrimaryLayoutMinWidth = () => {" in template_text
     assert "const updateSaveQueryButtonState = () => {" in template_text
+    assert "function showSettingsMenu(show) {" in template_text
+    assert "settingsMenuBtn.addEventListener('click'" in template_text
+    assert "if (event.key === 'Escape')" in template_text
     assert (
         "savedQueryNameInput.addEventListener('input', updateSaveQueryButtonState);"
         in template_text
@@ -229,6 +238,7 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     )
     assert ".tools-search-query-name-input {" in styles_text
     assert ".tools-search-status-message {" in styles_text
+    assert "font-size: 0.95rem;" in styles_text
     assert ".tools-search-settings-panel .tools-page-note {" in styles_text
     assert ".tools-search-empty {" in styles_text
     assert "white-space: normal;" in styles_text
@@ -237,6 +247,13 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     assert ".tools-search-card > .tools-search-heading--compact + * {" in styles_text
     assert ".tools-search-index-heading + .tools-search-settings-panel {" in styles_text
     assert "@media (max-width: 1200px) {" in styles_text
+    assert "@media (max-width: 900px) {" in styles_text
+    mobile_styles = styles_text.split("@media (max-width: 900px) {", 1)[1]
+    assert ".tools-search-grid--primary,\n    .tools-search-grid {" not in mobile_styles
+    assert (
+        "    .tools-search-grid {\n        grid-template-columns: 1fr;"
+        not in mobile_styles
+    )
 
 
 def test_tools_landing_template_has_single_enhanced_search_entry_without_descriptive_copy():
