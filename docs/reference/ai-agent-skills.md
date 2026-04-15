@@ -38,7 +38,7 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 | `omero-runtime-verifier` | `.agents/skills/omero-runtime-verifier/SKILL.md` | for live runtime debugging, service checks, or OMERO CLI work | runtime triage follows the documented safe procedure |
 | `env-contract-reviewer` | `.agents/skills/env-contract-reviewer/SKILL.md` | when env files, config loaders, startup scripts, or compose wiring change | env-driven configuration stays template-backed and documented |
 | `security-finding-triager` | `.agents/skills/security-finding-triager/SKILL.md` | for scanner findings or security-sensitive edits | fixes follow the live runbook and canonical prevention rules |
-| `frontend-preview` | `.agents/skills/frontend-preview/SKILL.md` | previewing HTML/CSS/JS changes without Docker rebuild | visual validation via temporary Vite dev server |
+| `frontend-preview` | `.agents/skills/frontend-preview/SKILL.md` | previewing HTML/CSS/JS changes and adding narrow frontend regression checks without a Docker rebuild | visual validation plus pinned Vite/Vitest DOM or browser checks |
 
 ## ECC-derived engineering overlays
 

@@ -116,6 +116,13 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "tools-search-date-control" in template_text
     assert "changeMonth: true" in template_text
     assert "changeYear: true" in template_text
+    assert "const earliestSelectableDate = new Date(2010, 0, 1);" in template_text
+    assert "isBeforeEarliestSelectableDate" in template_text
+    assert "yearRange: '2010:c'" in template_text
+    assert "minDate: earliestSelectableDate" in template_text
+    assert "maxDate: todayDate" in template_text
+    assert "const todayDate = (() => {" in template_text
+    assert "isFutureCalendarDate" in template_text
     assert "selectedDateByInput = new WeakMap()" in template_text
     assert "pendingDateInputSyncTimers = new WeakMap()" in template_text
     assert "datepickerProxyByInput = new WeakMap()" in template_text
@@ -134,6 +141,7 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert (
         "small.textContent = formatStatusTimestamp(item.updated_at);" in template_text
     )
+    assert 'class="tools-search-saved-meta"' in template_text
     assert "<th>Scope</th>" not in template_text
     assert "tools-search-page-loader" in template_text
     assert "Loading search results" in template_text
@@ -171,6 +179,10 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     assert "font-size: 13px;" in styles_text
     assert "padding: 0.62rem 0.56rem;" in styles_text
     assert "padding-top: 0.46rem;" in styles_text
+    assert "grid-template-columns: minmax(0, 1fr) auto;" in styles_text
+    assert "width: min(100%, 48rem);" in styles_text
+    assert ".tools-search-saved-meta {" in styles_text
+    assert ".tools-search-status-table {" in styles_text
     assert ".tools-search-date-picker-proxy {" in styles_text
     assert ".tools-search-card > .tools-search-heading--compact + * {" in styles_text
     assert ".tools-search-index-heading + .tools-search-settings-panel {" in styles_text
