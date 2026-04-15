@@ -80,7 +80,7 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "Indexed scope" in template_text
     assert "Start date" in template_text
     assert "End date" in template_text
-    assert 'placeholder="dd--mm--yyyy"' in template_text
+    assert 'placeholder="dd-mm-yyyy"' in template_text
     assert 'id="settings_menu_btn"' in template_text
     assert 'id="settings_menu"' in template_text
     assert 'id="user_settings_btn"' in template_text
@@ -89,7 +89,7 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "&larr; Back to tools" not in template_text
     assert "tools-search-field--actions" in template_text
     assert "tools-search-inline-action--primary" in template_text
-    assert "Date format: dd--mm--yyyy" not in template_text
+    assert "Date format: dd-mm-yyyy" not in template_text
     assert 'class="tools-search-date-picker-button"' in template_text
     assert 'aria-label="Pick start date"' in template_text
     assert 'aria-label="Pick end date"' in template_text
@@ -122,6 +122,7 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "const normalizeSavedQueryName = (value) =>" in template_text
     assert "const syncPrimaryLayoutMinWidth = () => {" in template_text
     assert "const updateSaveQueryButtonState = () => {" in template_text
+    assert "|| Boolean(searchSubmitButton?.disabled);" in template_text
     assert "function showSettingsMenu(show) {" in template_text
     assert "settingsMenuBtn.addEventListener('click'" in template_text
     assert "if (event.key === 'Escape')" in template_text
@@ -147,6 +148,7 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "changeMonth: true" in template_text
     assert "changeYear: true" in template_text
     assert "showAnim: ''" in template_text
+    assert "const dateFormat = 'dd-mm-yy';" in template_text
     assert "const earliestSelectableDate = new Date(2010, 0, 1);" in template_text
     assert "isBeforeEarliestSelectableDate" in template_text
     assert "yearRange: '2010:c'" in template_text
@@ -175,6 +177,7 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
         "searchSubmitButton.disabled = blockedForRoot || hasInvalidDate || (!hasSearchText && !hasCompleteDate);"
         in template_text
     )
+    assert "updateSaveQueryButtonState();" in template_text
     assert "clearSearchValidationStatus" in template_text
     assert (
         "small.textContent = formatStatusTimestamp(item.updated_at);" in template_text
@@ -194,13 +197,19 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "Indexed by:" in template_text
     assert "Owner:" in template_text
     assert (
-        "Owner: {{ row.owner_name|default:row.owner_id }} &middot; Indexed by:"
-        in template_text
+        "Owner: {{ row.owner_name|default:row.owner_id }}. Indexed by:" in template_text
     )
     assert "No matching images were found." in template_text
     assert "Run a search to see indexed results." in template_text
     assert "X:" in template_text
     assert "Y:" in template_text
+    assert "Page {{ search_payload.page }}" not in template_text
+    assert 'class="tools-search-results-body"' in template_text
+    assert "tools-search-saved-list--empty" in template_text
+    assert "container.classList.add('tools-search-saved-list--empty');" in template_text
+    assert (
+        "container.classList.remove('tools-search-saved-list--empty');" in template_text
+    )
     assert "Optics / Detector" not in template_text
 
 
@@ -219,16 +228,18 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     assert "min-width: var(--tools-search-primary-min-width, 0);" in styles_text
     assert "padding-right: 0;" in styles_text
     assert "padding: 0.68rem 0.8rem;" in styles_text
-    assert "padding: 0.48rem 0.52rem;" in styles_text
-    assert "padding-top: 0.36rem;" in styles_text
-    assert "padding: 0.18rem 0;" in styles_text
+    assert "padding: 0.42rem 0.5rem;" in styles_text
+    assert "padding: 0.36rem 0.52rem;" in styles_text
+    assert "padding: 0.24rem 0;" in styles_text
     assert "color: #000000;" in styles_text
     assert "grid-template-columns: minmax(0, 1fr) auto;" in styles_text
-    assert "width: min(100%, 56rem);" in styles_text
+    assert "width: min(100%, 63rem);" in styles_text
     assert ".tools-search-saved-meta {" in styles_text
     assert ".tools-search-status-table {" in styles_text
     assert ".tools-search-date-picker-proxy {" in styles_text
-    assert "gap: 0.25rem;" in styles_text
+    assert ".tools-search-date-picker-button:active {" in styles_text
+    assert "gap: 0.2rem;" in styles_text
+    assert "vertical-align: top;" in styles_text
     assert "width: 100%;" in styles_text
     assert "height: 2.5rem;" in styles_text
     assert ".tools-search-field--scope.is-select-active select {" in styles_text
@@ -238,15 +249,21 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     )
     assert ".tools-search-query-name-input {" in styles_text
     assert ".tools-search-status-message {" in styles_text
+    assert ".tools-search-results td {" in styles_text
     assert "font-size: 0.95rem;" in styles_text
     assert ".tools-search-settings-panel .tools-page-note {" in styles_text
     assert ".tools-search-empty {" in styles_text
+    assert ".tools-search-card--results {" in styles_text
+    assert ".tools-search-results-body {" in styles_text
+    assert ".tools-search-results-body::-webkit-scrollbar {" in styles_text
+    assert ".tools-search-saved-list--empty .tools-search-empty {" in styles_text
+    assert "max-height: 750px;" in styles_text
     assert "white-space: normal;" in styles_text
     assert "overflow-wrap: anywhere;" in styles_text
     assert "#ui-datepicker-div.ui-widget-content {" in styles_text
+    assert "#ui-datepicker-div table," in styles_text
     assert ".tools-search-card > .tools-search-heading--compact + * {" in styles_text
     assert ".tools-search-index-heading + .tools-search-settings-panel {" in styles_text
-    assert "@media (max-width: 1200px) {" in styles_text
     assert "@media (max-width: 900px) {" in styles_text
     mobile_styles = styles_text.split("@media (max-width: 900px) {", 1)[1]
     assert ".tools-search-grid--primary,\n    .tools-search-grid {" not in mobile_styles
@@ -254,6 +271,8 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
         "    .tools-search-grid {\n        grid-template-columns: 1fr;"
         not in mobile_styles
     )
+    assert ".tools-search-index-heading {" not in mobile_styles
+    assert ".tools-search-saved-list {" not in mobile_styles
 
 
 def test_tools_landing_template_has_single_enhanced_search_entry_without_descriptive_copy():

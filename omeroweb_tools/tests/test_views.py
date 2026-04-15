@@ -56,8 +56,8 @@ def test_enhanced_search_view_blocks_root_without_running_search(monkeypatch):
     assert response["user_settings_available"] is True
     assert (
         response["acquisition_index_status"]
-        == "Acquisition metadata indexing is disabled for your account. "
-        "No acquisition metadata is stored for your account."
+        == "Acquisition metadata indexing is disabled for your user account. "
+        "No acquisition metadata is stored for your user account."
     )
     assert captured["template"] == "omeroweb_tools/enhanced_search.html"
 

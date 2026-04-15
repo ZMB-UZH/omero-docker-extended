@@ -72,12 +72,12 @@ USER_SCOPE_TYPE = "user"
 USER_SCOPE_LABEL = "Your acquisition metadata"
 _SUPPORTED_DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d--%m--%Y")
 ACQUISITION_INDEXING_ENABLED_MESSAGE = (
-    "Acquisition metadata indexing is enabled for your account. "
+    "Acquisition metadata indexing is enabled for your user account. "
     "All images you own will be indexed automatically in the background."
 )
 ACQUISITION_INDEXING_DISABLED_MESSAGE = (
-    "Acquisition metadata indexing is disabled for your account. "
-    "No acquisition metadata is stored for your account."
+    "Acquisition metadata indexing is disabled for your user account. "
+    "No acquisition metadata is stored for your user account."
 )
 USER_SETTINGS_LOAD_ERROR_MESSAGE = (
     "Could not retrieve user setting. Database is not accessible."
