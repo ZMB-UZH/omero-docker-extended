@@ -101,6 +101,25 @@ def test_sync_state_view_returns_current_refresh_state(monkeypatch):
     }
 
 
+def test_sync_state_view_returns_database_error_when_settings_unavailable(monkeypatch):
+    monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(
+        index_view,
+        "user_settings",
+        lambda username: (_ for _ in ()).throw(
+            index_view.EnhancedSearchStoreError("db offline")
+        ),
+    )
+
+    request = RequestFactory().get("/omeroweb_tools/enhanced-search/sync-state/")
+    response = inspect.unwrap(index_view.sync_state_view)(request, conn=object())
+
+    assert response.status_code == 503
+    assert json.loads(response.content.decode("utf-8")) == {
+        "error": "Could not retrieve user setting. Database is not accessible."
+    }
+
+
 def test_save_user_settings_view_rejects_non_post_and_invalid_json(monkeypatch):
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
 
