@@ -531,8 +531,10 @@
                 return;
             }
             const hasQueryName = Boolean(normalizeSavedQueryName(savedQueryNameInput.value));
+            const hasSearchText = Boolean(String(queryTextInput?.value || '').trim());
             saveQueryButton.disabled = blockedForRoot
                 || !hasQueryName
+                || !hasSearchText
                 || Boolean(searchSubmitButton?.disabled);
         };
 
