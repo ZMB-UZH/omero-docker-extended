@@ -75,6 +75,24 @@ def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch
         service.SEARCH_SCOPE_ALL_INDEXED,
     )
     assert service.default_user_settings() == {"acquisition_metadata_enabled": False}
+    assert (
+        service.acquisition_index_status_message(True)
+        == "Acquisition metadata indexing is enabled for your account. "
+        "All images you own will be indexed automatically in the background."
+    )
+    assert (
+        service.acquisition_index_status_message(False)
+        == "Acquisition metadata indexing is disabled for your account. "
+        "No acquisition metadata is stored for your account."
+    )
+    assert (
+        service.user_settings_load_error_message()
+        == "Could not retrieve user setting. Database is not accessible."
+    )
+    assert (
+        service.user_settings_save_error_message()
+        == "Could not save user setting. Database is not accessible."
+    )
     assert service._coerce_bool("yes") is True
     assert service._coerce_bool("off") is False
     assert service._coerce_bool(3) is True

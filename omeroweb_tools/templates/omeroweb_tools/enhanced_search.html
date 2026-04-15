@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <title>Tools - Enhanced search</title>
     <link rel="stylesheet" href="{% static 'omeroweb_admin_tools/styles.css' %}">
+    <link rel="stylesheet" href="{% static '3rdparty/jquery-ui-1.13.2/css/jquery-ui.css' %}">
     <link rel="stylesheet" href="{% static 'omeroweb_tools/styles.css' %}">
 </head>
 <body{% if blocked_for_root %} class="root-user-blocked"{% endif %}>
@@ -63,7 +64,8 @@
                             <div class="tools-search-actions">
                                 <button class="admin-tools-button tools-search-inline-action tools-search-inline-action--primary"
                                         type="submit"
-                                        id="search-submit-btn">
+                                        id="search-submit-btn"
+                                        {% if blocked_for_root or not query.query_text and not query.acquisition_date_from and not query.acquisition_date_to %}disabled{% endif %}>
                                     Search
                                 </button>
                                 <a class="admin-tools-button admin-tools-button-link tools-search-inline-action"
@@ -85,82 +87,62 @@
                         </div>
                         <div class="tools-search-field tools-search-field--date">
                             <label for="acquisition_date_from">Start date</label>
-                            <input type="text"
-                                   id="acquisition_date_from"
-                                   class="tools-search-date-input"
-                                   name="acquisition_date_from"
-                                   value="{{ query.acquisition_date_from|date:'d--m--Y' }}"
-                                   placeholder="dd--mm--yyyy"
-                                   inputmode="numeric"
-                                   autocomplete="off"
-                                   spellcheck="false"
-                                   aria-describedby="acquisition-date-format-note"
-                                   title="Format: dd--mm--yyyy">
+                            <div class="tools-search-date-control">
+                                <input type="text"
+                                       id="acquisition_date_from"
+                                       class="tools-search-date-input"
+                                       name="acquisition_date_from"
+                                       value="{{ query.acquisition_date_from|date:'d--m--Y' }}"
+                                       placeholder="dd--mm--yyyy"
+                                       inputmode="numeric"
+                                       autocomplete="off"
+                                       spellcheck="false">
+                            </div>
                         </div>
                         <div class="tools-search-field tools-search-field--date">
                             <label for="acquisition_date_to">End date</label>
-                            <input type="text"
-                                   id="acquisition_date_to"
-                                   class="tools-search-date-input"
-                                   name="acquisition_date_to"
-                                   value="{{ query.acquisition_date_to|date:'d--m--Y' }}"
-                                   placeholder="dd--mm--yyyy"
-                                   inputmode="numeric"
-                                   autocomplete="off"
-                                   spellcheck="false"
-                                   aria-describedby="acquisition-date-format-note"
-                                   title="Format: dd--mm--yyyy">
+                            <div class="tools-search-date-control">
+                                <input type="text"
+                                       id="acquisition_date_to"
+                                       class="tools-search-date-input"
+                                       name="acquisition_date_to"
+                                       value="{{ query.acquisition_date_to|date:'d--m--Y' }}"
+                                       placeholder="dd--mm--yyyy"
+                                       inputmode="numeric"
+                                       autocomplete="off"
+                                       spellcheck="false">
+                            </div>
                         </div>
                     </div>
-                    <p class="tools-search-format-note" id="acquisition-date-format-note">
-                        Date format: dd--mm--yyyy
-                    </p>
                 </form>
             </section>
 
             <section class="admin-tools-card admin-tools-card--wide tools-search-card">
                 <div class="tools-search-index-heading">
                     <div class="tools-search-index-heading__copy">
-                        <h2 class="tools-search-heading">Acquisition metadata index</h2>
-                        <p class="tools-page-note tools-page-note--tight" id="acquisition-index-status">
-                            {% if user_settings.acquisition_metadata_enabled %}
-                            Acquisition metadata indexing is enabled for your account. All images you own will be indexed automatically in the background.
-                            {% else %}
-                            Acquisition metadata indexing is disabled for your account. No acquisition metadata is stored for your account.
-                            {% endif %}
-                        </p>
+                        <h2 class="tools-search-heading">Acquisition metadata indexing</h2>
                     </div>
                     <span class="tools-search-pill tools-search-pill--feature"
                           id="acquisition-index-enabled-pill"
-                          data-index-enabled="{{ user_settings.acquisition_metadata_enabled|yesno:'true,false' }}">
-                        {% if user_settings.acquisition_metadata_enabled %}Enabled{% else %}Disabled{% endif %}
+                          data-index-enabled="{% if not user_settings_available %}unavailable{% else %}{{ user_settings.acquisition_metadata_enabled|yesno:'true,false' }}{% endif %}">
+                        {% if not user_settings_available %}Unavailable{% elif user_settings.acquisition_metadata_enabled %}Enabled{% else %}Disabled{% endif %}
                     </span>
                 </div>
-                <div class="tools-search-inline-form tools-search-inline-form--settings">
-                    <label class="tools-search-checkbox" for="acquisition_metadata_enabled">
+                <div class="tools-search-settings-panel">
+                    <label class="tools-search-setting-toggle" for="acquisition_metadata_enabled">
                         <input type="checkbox"
                                id="acquisition_metadata_enabled"
                                {% if user_settings.acquisition_metadata_enabled %}checked{% endif %}
-                               {% if blocked_for_root %}disabled{% endif %}>
-                        <span>Enable acquisition metadata indexing for my account</span>
+                               {% if blocked_for_root or not user_settings_available %}disabled{% endif %}>
+                        <span>Enable acquisition metadata indexing</span>
                     </label>
-                    <button type="button"
-                            class="admin-tools-button"
-                            id="save-user-settings-btn"
-                            {% if blocked_for_root %}disabled{% endif %}>
-                        Save setting
-                    </button>
+                    <p class="tools-page-note tools-page-note--tight{% if acquisition_index_status_state == 'error' %} tools-page-note--error{% endif %}"
+                       id="acquisition-index-status">{{ acquisition_index_status }}</p>
                 </div>
-                <p class="tools-page-note tools-page-note--tight"
-                   id="acquisition-index-disabled-note"
-                   {% if user_settings.acquisition_metadata_enabled %}hidden{% endif %}>
-                    Enable acquisition metadata indexing to start indexing acquisition metadata for all images you own.
-                </p>
                 {% if sync_states %}
                 <table class="tools-search-status-table">
                     <thead>
                     <tr>
-                        <th>Scope</th>
                         <th>Status</th>
                         <th>Details</th>
                         <th>Action</th>
@@ -169,12 +151,11 @@
                     <tbody id="sync-state-body">
                     {% for state in sync_states %}
                     <tr data-scope-key="{{ state.scope_key }}">
-                        <td>{{ state.scope_label }}</td>
                         <td><span class="tools-search-pill" data-status="{{ state.status }}">{{ state.status }}</span></td>
                         <td>
                             {{ state.current_message|default:"No sync activity yet." }}
                             {% if state.last_successful_at %}
-                            <small>Last successful sync: {{ state.last_successful_at }}</small>
+                            <small>Last successful sync: {{ state.last_successful_at|date:"j M Y, g:i a" }}</small>
                             {% endif %}
                             {% if state.last_error %}
                             <small>{{ state.last_error }}</small>
@@ -184,7 +165,7 @@
                             <button type="button"
                                     class="admin-tools-button sync-scope-btn"
                                     data-scope-key="{{ state.scope_key }}"
-                                    {% if blocked_for_root or not user_settings.acquisition_metadata_enabled %}disabled{% endif %}>
+                                    {% if blocked_for_root or not user_settings_available or not user_settings.acquisition_metadata_enabled %}disabled{% endif %}>
                                 Refresh index
                             </button>
                         </td>
@@ -263,6 +244,7 @@
                         <td class="tools-search-preview-cell">
                             <a href="{{ row.image_url }}"
                                class="tools-search-preview"
+                               target="omero-web-image-view"
                                data-thumbnail-url="{{ row.thumbnail_url }}"
                                data-preview-state="idle"
                                aria-label="Open image {{ row.image_id }}">
@@ -275,9 +257,8 @@
                             </a>
                         </td>
                         <td>
-                            <a href="{{ row.image_url }}">{{ row.image_name|default:row.image_id }}</a>
-                            <small>ID: {{ row.image_id }} &middot; Owner: {{ row.owner_name|default:row.owner_id }}</small>
-                            <small>Indexed by: {{ row.indexed_sources|join:", " }}</small>
+                            <a href="{{ row.image_url }}" target="omero-web-image-view">{{ row.image_name|default:row.image_id }}</a>
+                            <small>ID: {{ row.image_id }} &middot; Owner: {{ row.owner_name|default:row.owner_id }}. &middot; Indexed by: {{ row.indexed_sources|join:", " }}</small>
                         </td>
                         <td>
                             {% if row.project_url %}
@@ -358,7 +339,10 @@
          aria-atomic="true"
          hidden></div>
     {{ query.to_payload|json_script:"current-query-payload" }}
-    <script defer>
+    {{ acquisition_index_messages|json_script:"acquisition-index-messages" }}
+    <script src="{% static '3rdparty/jquery-3.6.2.min.js' %}"></script>
+    <script src="{% static '3rdparty/jquery-ui-1.13.2/js/jquery-ui.js' %}"></script>
+    <script>
         const blockedForRoot = {{ blocked_for_root|yesno:"true,false" }};
         const rootStatusUrl = new URL('{% url "omeroweb_tools_root_status" %}', window.location.href);
         const syncUrl = new URL('{% url "omeroweb_tools_enhanced_search_sync" %}', window.location.href);
@@ -371,8 +355,15 @@
         const pageLoaderEl = document.getElementById('tools-search-page-loader');
         const pageLoaderTitleEl = document.getElementById('tools-search-page-loader-title');
         const pageLoaderMessageEl = document.getElementById('tools-search-page-loader-message');
+        const queryTextInput = document.getElementById('query_text');
+        const searchSubmitButton = document.getElementById('search-submit-btn');
         const currentQueryPayloadNode = document.getElementById('current-query-payload');
+        const acquisitionIndexMessagesNode = document.getElementById('acquisition-index-messages');
         const queryPayload = currentQueryPayloadNode ? JSON.parse(currentQueryPayloadNode.textContent) : {};
+        const acquisitionIndexMessages = acquisitionIndexMessagesNode
+            ? JSON.parse(acquisitionIndexMessagesNode.textContent)
+            : {};
+        let settingsAccessible = {{ user_settings_available|yesno:"true,false" }};
         let acquisitionMetadataEnabled = {{ user_settings.acquisition_metadata_enabled|yesno:"true,false" }};
         const autoSyncStarted = {{ auto_sync_started|yesno:"true,false" }};
         const autoSyncMessage = '{{ auto_sync_message|escapejs }}';
@@ -444,6 +435,16 @@
             window.setTimeout(() => {
                 showLiveStatus('', '');
             }, 1600);
+        };
+
+        const clearSearchValidationStatus = () => {
+            if (!liveStatusEl || liveStatusEl.dataset.state !== 'error') {
+                return;
+            }
+            const message = String(liveStatusEl.textContent || '').trim();
+            if (message === 'Correct the highlighted date fields before searching.') {
+                showLiveStatus('', '');
+            }
         };
 
         const showPageLoader = (title, message) => {
@@ -538,29 +539,268 @@
             cards.forEach((card) => observer.observe(card));
         };
 
-        const updateAcquisitionIndexUi = (enabled) => {
-            acquisitionMetadataEnabled = Boolean(enabled);
+        const formatStatusTimestamp = (value) => {
+            if (!value) {
+                return '';
+            }
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) {
+                return value;
+            }
+            const parts = new Intl.DateTimeFormat('en-GB', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+            }).formatToParts(parsed);
+            const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+            const period = String(values.dayPeriod || '')
+                .toLowerCase()
+                .replace('am', 'a.m.')
+                .replace('pm', 'p.m.');
+            return `${values.day} ${values.month} ${values.year}, ${values.hour}:${values.minute} ${period}`.trim();
+        };
+
+        const dateFormat = 'dd--mm--yy';
+        const dateInputDigits = 8;
+
+        const digitsOnly = (value) => String(value || '').replace(/\D/g, '').slice(0, dateInputDigits);
+
+        const formatDateDigits = (value) => {
+            const digits = digitsOnly(value);
+            if (digits.length <= 2) {
+                return digits;
+            }
+            if (digits.length <= 4) {
+                return `${digits.slice(0, 2)}--${digits.slice(2)}`;
+            }
+            return `${digits.slice(0, 2)}--${digits.slice(2, 4)}--${digits.slice(4)}`;
+        };
+
+        const parseStrictDateInput = (value) => {
+            const normalized = String(value || '').trim();
+            if (!normalized || !window.jQuery?.datepicker) {
+                return null;
+            }
+            try {
+                return window.jQuery.datepicker.parseDate(dateFormat, normalized);
+            } catch (_error) {
+                return null;
+            }
+        };
+
+        const isPotentiallyValidDateInput = (value) => {
+            const formatted = String(value || '').trim();
+            if (!formatted) {
+                return true;
+            }
+            const digits = digitsOnly(formatted);
+            if (!digits) {
+                return true;
+            }
+            if (digits.length >= 1 && Number(digits[0]) > 3) {
+                return false;
+            }
+            if (digits.length >= 2) {
+                const day = Number(digits.slice(0, 2));
+                if (day < 1 || day > 31) {
+                    return false;
+                }
+            }
+            if (digits.length >= 3 && Number(digits[2]) > 1) {
+                return false;
+            }
+            if (digits.length >= 4) {
+                const month = Number(digits.slice(2, 4));
+                if (month < 1 || month > 12) {
+                    return false;
+                }
+            }
+            if (digits.length === dateInputDigits) {
+                return parseStrictDateInput(formatted) !== null;
+            }
+            return true;
+        };
+
+        const setDateInputValidity = (input, isValid) => {
+            if (!input) {
+                return;
+            }
+            input.classList.toggle('tools-search-date-input--invalid', !isValid);
+            input.setAttribute('aria-invalid', isValid ? 'false' : 'true');
+        };
+
+        const canSafelyUpdateDatepicker = (input) => {
+            if (!input) {
+                return false;
+            }
+            const value = String(input.value || '').trim();
+            if (!value) {
+                return true;
+            }
+            return digitsOnly(value).length === dateInputDigits && parseStrictDateInput(value) !== null;
+        };
+
+        const updateDatepickerBounds = () => {
+            if (!window.jQuery?.datepicker) {
+                return;
+            }
+            const startInput = document.getElementById('acquisition_date_from');
+            const endInput = document.getElementById('acquisition_date_to');
+            const startDate = parseStrictDateInput(startInput?.value);
+            const endDate = parseStrictDateInput(endInput?.value);
+            if (startInput && canSafelyUpdateDatepicker(startInput)) {
+                window.jQuery(startInput).datepicker('option', 'maxDate', endDate || null);
+            }
+            if (endInput && canSafelyUpdateDatepicker(endInput)) {
+                window.jQuery(endInput).datepicker('option', 'minDate', startDate || null);
+            }
+        };
+
+        const validateDateInput = (input, { syncPicker = true } = {}) => {
+            if (!input) {
+                return true;
+            }
+            const value = String(input.value || '').trim();
+            if (!value) {
+                setDateInputValidity(input, true);
+                if (syncPicker && window.jQuery?.datepicker) {
+                    window.jQuery(input).datepicker('setDate', null);
+                }
+                updateDatepickerBounds();
+                return true;
+            }
+            if (!isPotentiallyValidDateInput(value)) {
+                setDateInputValidity(input, false);
+                updateDatepickerBounds();
+                return false;
+            }
+            if (digitsOnly(value).length < dateInputDigits) {
+                setDateInputValidity(input, true);
+                updateDatepickerBounds();
+                return true;
+            }
+            const parsed = parseStrictDateInput(value);
+            if (!parsed) {
+                setDateInputValidity(input, false);
+                updateDatepickerBounds();
+                return false;
+            }
+            setDateInputValidity(input, true);
+            if (syncPicker && window.jQuery?.datepicker) {
+                window.jQuery(input).datepicker('setDate', parsed);
+            }
+            updateDatepickerBounds();
+            return true;
+        };
+
+        const initializeDateInputs = () => {
+            const dateInputs = Array.from(document.querySelectorAll('.tools-search-date-input'));
+            if (!dateInputs.length) {
+                return;
+            }
+            dateInputs.forEach((input) => {
+                input.value = formatDateDigits(input.value);
+                setDateInputValidity(input, true);
+                input.addEventListener('input', () => {
+                    input.value = formatDateDigits(input.value);
+                    validateDateInput(input);
+                    updateSearchSubmitState();
+                });
+                input.addEventListener('blur', () => {
+                    validateDateInput(input);
+                    updateSearchSubmitState();
+                });
+            });
+            if (window.jQuery?.datepicker) {
+                const $ = window.jQuery;
+                dateInputs.forEach((input) => {
+                    $(input).datepicker({
+                        dateFormat,
+                        showOn: 'button',
+                        buttonText: 'Pick',
+                        changeMonth: true,
+                        changeYear: true,
+                        showButtonPanel: true,
+                        yearRange: 'c-100:c+10',
+                        onSelect(selectedDate) {
+                            input.value = selectedDate;
+                            validateDateInput(input, { syncPicker: false });
+                            updateSearchSubmitState();
+                        },
+                        onClose() {
+                            validateDateInput(input, { syncPicker: false });
+                            updateSearchSubmitState();
+                        },
+                    });
+                });
+            }
+            dateInputs.forEach((input) => validateDateInput(input));
+            updateSearchSubmitState();
+        };
+
+        const updateSearchSubmitState = () => {
+            if (!searchSubmitButton) {
+                return;
+            }
+            const dateInputs = Array.from(document.querySelectorAll('.tools-search-date-input'));
+            const hasSearchText = Boolean(String(queryTextInput?.value || '').trim());
+            let hasCompleteDate = false;
+            let hasInvalidDate = false;
+            dateInputs.forEach((input) => {
+                const digitCount = digitsOnly(input.value).length;
+                if (digitCount === 0) {
+                    return;
+                }
+                const isValid = validateDateInput(input);
+                const isComplete = digitCount === dateInputDigits;
+                if (isValid && isComplete) {
+                    hasCompleteDate = true;
+                    return;
+                }
+                hasInvalidDate = true;
+            });
+            searchSubmitButton.disabled = blockedForRoot || hasInvalidDate || (!hasSearchText && !hasCompleteDate);
+            if (!hasInvalidDate) {
+                clearSearchValidationStatus();
+            }
+        };
+
+        const updateAcquisitionIndexUi = ({
+            enabled = acquisitionMetadataEnabled,
+            accessible = settingsAccessible,
+            statusMessage = null,
+            statusState = 'info',
+        } = {}) => {
+            settingsAccessible = Boolean(accessible);
+            acquisitionMetadataEnabled = settingsAccessible && Boolean(enabled);
             const status = document.getElementById('acquisition-index-status');
             const pill = document.getElementById('acquisition-index-enabled-pill');
-            const disabledNote = document.getElementById('acquisition-index-disabled-note');
             if (status) {
-                status.textContent = acquisitionMetadataEnabled
-                    ? 'Acquisition metadata indexing is enabled for your account. All images you own will be indexed automatically in the background.'
-                    : 'Acquisition metadata indexing is disabled for your account. No acquisition metadata is stored for your account.';
+                status.textContent = statusMessage || (
+                    acquisitionMetadataEnabled
+                        ? acquisitionIndexMessages.enabled
+                        : acquisitionIndexMessages.disabled
+                );
+                status.classList.toggle('tools-page-note--error', statusState === 'error');
             }
             if (pill) {
-                pill.dataset.indexEnabled = acquisitionMetadataEnabled ? 'true' : 'false';
-                pill.textContent = acquisitionMetadataEnabled ? 'Enabled' : 'Disabled';
-            }
-            if (disabledNote) {
-                disabledNote.hidden = acquisitionMetadataEnabled;
+                pill.dataset.indexEnabled = settingsAccessible
+                    ? (acquisitionMetadataEnabled ? 'true' : 'false')
+                    : 'unavailable';
+                pill.textContent = settingsAccessible
+                    ? (acquisitionMetadataEnabled ? 'Enabled' : 'Disabled')
+                    : 'Unavailable';
             }
             const toggle = document.getElementById('acquisition_metadata_enabled');
             if (toggle) {
                 toggle.checked = acquisitionMetadataEnabled;
+                toggle.disabled = blockedForRoot || !settingsAccessible;
             }
             document.querySelectorAll('.sync-scope-btn').forEach((button) => {
-                button.disabled = blockedForRoot || !acquisitionMetadataEnabled;
+                button.disabled = blockedForRoot || !settingsAccessible || !acquisitionMetadataEnabled;
             });
         };
 
@@ -575,7 +815,7 @@
                     continue;
                 }
                 const pill = row.querySelector('.tools-search-pill');
-                const detailCell = row.children[2];
+                const detailCell = row.children[1];
                 if (pill) {
                     pill.dataset.status = state.status || 'idle';
                     pill.textContent = state.status || 'idle';
@@ -585,7 +825,7 @@
                     detailCell.append(document.createTextNode(state.current_message || 'No sync activity yet.'));
                     if (state.last_successful_at) {
                         const small = document.createElement('small');
-                        small.textContent = `Last successful sync: ${state.last_successful_at}`;
+                        small.textContent = `Last successful sync: ${formatStatusTimestamp(state.last_successful_at)}`;
                         detailCell.appendChild(small);
                     }
                     if (state.last_error) {
@@ -665,9 +905,22 @@
             }
         };
 
+        bindPageLoadLinks();
+        queryTextInput?.addEventListener('input', () => {
+            updateSearchSubmitState();
+        });
+        initializeDateInputs();
+        initializePreviewLoading();
+
         if (!blockedForRoot) {
-            updateAcquisitionIndexUi(acquisitionMetadataEnabled);
-            bindPageLoadLinks();
+            updateAcquisitionIndexUi({
+                enabled: acquisitionMetadataEnabled,
+                accessible: settingsAccessible,
+                statusMessage: settingsAccessible
+                    ? (acquisitionMetadataEnabled ? acquisitionIndexMessages.enabled : acquisitionIndexMessages.disabled)
+                    : acquisitionIndexMessages.load_error,
+                statusState: settingsAccessible ? 'info' : 'error',
+            });
             if (autoSyncMessage) {
                 showLiveStatus(autoSyncMessage, autoSyncStarted ? 'busy' : 'success');
                 clearLiveStatus();
@@ -680,43 +933,57 @@
                     try {
                         const payload = await postJson(syncUrl, { scope_key: button.dataset.scopeKey });
                         updateSyncTable(payload.sync_states);
-                        showLiveStatus('Acquisition metadata index refresh started.', 'success');
+                        showLiveStatus('Acquisition metadata reindexing started.', 'success');
                     } catch (error) {
                         showLiveStatus(error.message || String(error), 'error');
                         window.alert(error.message || String(error));
                     } finally {
                         setButtonBusy(button, false);
-                        button.disabled = blockedForRoot || !acquisitionMetadataEnabled;
+                        button.disabled = blockedForRoot || !settingsAccessible || !acquisitionMetadataEnabled;
                         clearLiveStatus();
                     }
                 });
             });
 
-            const saveUserSettingsButton = document.getElementById('save-user-settings-btn');
             const acquisitionToggle = document.getElementById('acquisition_metadata_enabled');
-            if (saveUserSettingsButton && acquisitionToggle) {
-                saveUserSettingsButton.addEventListener('click', async () => {
+            if (acquisitionToggle) {
+                acquisitionToggle.addEventListener('change', async () => {
+                    if (!settingsAccessible) {
+                        acquisitionToggle.checked = false;
+                        return;
+                    }
+                    const previousEnabled = acquisitionMetadataEnabled;
+                    const requestedEnabled = acquisitionToggle.checked;
                     showLiveStatus('Saving acquisition metadata indexing setting…');
-                    setButtonBusy(saveUserSettingsButton, true, 'Saving…');
+                    acquisitionToggle.disabled = true;
                     try {
                         const payload = await postJson(settingsUrl, {
-                            acquisition_metadata_enabled: acquisitionToggle.checked,
+                            acquisition_metadata_enabled: requestedEnabled,
                         });
                         updateAcquisitionIndexUi(
-                            payload.user_settings && payload.user_settings.acquisition_metadata_enabled
+                            {
+                                enabled: Boolean(
+                                    payload.user_settings && payload.user_settings.acquisition_metadata_enabled
+                                ),
+                                accessible: true,
+                            }
                         );
                         updateSyncTable(payload.sync_states);
                         showLiveStatus(
                             payload.sync_message
                                 || 'Acquisition metadata indexing setting saved.',
-                            payload.sync_started ? 'success' : 'busy'
+                            'success'
                         );
                     } catch (error) {
-                        showLiveStatus(error.message || String(error), 'error');
-                        window.alert(error.message || String(error));
-                        updateAcquisitionIndexUi(acquisitionMetadataEnabled);
+                        updateAcquisitionIndexUi({
+                            enabled: previousEnabled,
+                            accessible: true,
+                            statusMessage: error.message || acquisitionIndexMessages.save_error,
+                            statusState: 'error',
+                        });
+                        showLiveStatus(error.message || acquisitionIndexMessages.save_error, 'error');
                     } finally {
-                        setButtonBusy(saveUserSettingsButton, false);
+                        acquisitionToggle.disabled = blockedForRoot || !settingsAccessible;
                         clearLiveStatus();
                     }
                 });
@@ -755,27 +1022,53 @@
                 });
             }
 
-            window.setInterval(async () => {
-                try {
-                    const response = await fetch(syncStateUrl, { credentials: 'same-origin' });
-                    if (!response.ok) {
-                        return;
+            if (settingsAccessible) {
+                window.setInterval(async () => {
+                    try {
+                        const response = await fetch(syncStateUrl, { credentials: 'same-origin' });
+                        if (!response.ok) {
+                            return;
+                        }
+                        const payload = await response.json();
+                        updateSyncTable(payload.sync_states);
+                    } catch (_error) {
+                        // Ignore polling failures.
                     }
-                    const payload = await response.json();
-                    updateSyncTable(payload.sync_states);
-                } catch (_error) {
-                    // Ignore polling failures.
-                }
-            }, 5000);
+                }, 5000);
+            }
         }
 
-        document.getElementById('enhanced-search-form')?.addEventListener('submit', () => {
+        document.getElementById('enhanced-search-form')?.addEventListener('submit', (event) => {
+            updateSearchSubmitState();
+            const invalidDateInput = Array.from(document.querySelectorAll('.tools-search-date-input'))
+                .find((input) => {
+                    const isValid = validateDateInput(input);
+                    const digitCount = digitsOnly(input.value).length;
+                    const isComplete = digitCount === 0 || digitCount === dateInputDigits;
+                    if (!isValid || !isComplete) {
+                        if (digitCount > 0 && digitCount < dateInputDigits) {
+                            setDateInputValidity(input, false);
+                        }
+                        return true;
+                    }
+                    return false;
+                });
+            if (invalidDateInput) {
+                event.preventDefault();
+                invalidDateInput.focus();
+                showLiveStatus('Correct the highlighted date fields before searching.', 'error');
+                clearLiveStatus();
+                return;
+            }
+            if (searchSubmitButton?.disabled) {
+                event.preventDefault();
+                return;
+            }
             showPageLoader(
                 'Loading search results…',
                 'Please wait while the search results are being queried.'
             );
         });
-        initializePreviewLoading();
     </script>
 </body>
 </html>

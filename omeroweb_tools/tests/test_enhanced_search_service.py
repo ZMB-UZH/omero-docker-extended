@@ -272,7 +272,7 @@ def test_save_user_settings_clears_current_user_scope_when_disabled(monkeypatch)
         (
             service.USER_SCOPE_TYPE,
             21,
-            "Acquisition metadata indexing is disabled for your account.",
+            service.acquisition_index_status_message(False),
         )
     ]
 

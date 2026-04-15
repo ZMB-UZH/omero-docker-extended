@@ -53,6 +53,12 @@ def test_enhanced_search_view_blocks_root_without_running_search(monkeypatch):
     assert response["blocked_for_root"] is True
     assert response["saved_queries"] == []
     assert response["user_settings"] == {"acquisition_metadata_enabled": False}
+    assert response["user_settings_available"] is True
+    assert (
+        response["acquisition_index_status"]
+        == "Acquisition metadata indexing is disabled for your account. "
+        "No acquisition metadata is stored for your account."
+    )
     assert captured["template"] == "omeroweb_tools/enhanced_search.html"
 
 
@@ -118,9 +124,54 @@ def test_enhanced_search_view_builds_pagination_querystrings(monkeypatch):
         == "query_text=lsm&indexed_scope=omero_builtin&page=3"
     )
     assert captured["blocked_for_root"] is False
+    assert captured["user_settings_available"] is True
     assert captured["sync_states"] == [{"scope_key": "user:3", "status": "running"}]
     assert captured["auto_sync_started"] is True
     assert captured["auto_sync_message"] == "Indexing started."
+
+
+def test_enhanced_search_view_handles_settings_store_failure(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        index_view,
+        "render",
+        lambda request, template, context: captured.update(context) or context,
+    )
+    monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(index_view, "saved_queries", lambda username: [])
+    monkeypatch.setattr(
+        index_view,
+        "user_settings",
+        lambda username: (_ for _ in ()).throw(
+            index_view.EnhancedSearchStoreError("db offline")
+        ),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "ensure_user_index_sync",
+        lambda conn, username, settings_payload=None: pytest.fail(
+            "auto sync must not run when settings are unavailable"
+        ),
+    )
+    monkeypatch.setattr(
+        index_view, "parse_search_query", lambda params: (index_view.SearchQuery(), [])
+    )
+    monkeypatch.setattr(
+        index_view,
+        "runtime_config",
+        lambda: SimpleNamespace(max_results=25),
+    )
+
+    request = RequestFactory().get("/omeroweb_tools/enhanced-search/")
+    response = inspect.unwrap(index_view.enhanced_search_view)(request, conn=object())
+
+    assert response["user_settings"] == {"acquisition_metadata_enabled": False}
+    assert response["user_settings_available"] is False
+    assert response["acquisition_index_status_state"] == "error"
+    assert (
+        response["acquisition_index_status"]
+        == "Could not retrieve user setting. Database is not accessible."
+    )
 
 
 def test_start_scope_sync_view_rejects_root_user(monkeypatch):
@@ -193,6 +244,31 @@ def test_save_user_settings_view_persists_payload(monkeypatch):
         "sync_started": True,
         "sync_message": "Indexing started.",
         "sync_states": [{"scope_key": "user:3"}],
+    }
+
+
+def test_save_user_settings_view_returns_database_error_message(monkeypatch):
+    monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(
+        index_view,
+        "save_user_settings",
+        lambda conn, username, payload: (_ for _ in ()).throw(
+            index_view.EnhancedSearchStoreError("db offline")
+        ),
+    )
+
+    request = RequestFactory().post(
+        "/omeroweb_tools/enhanced-search/settings/",
+        data=json.dumps({"acquisition_metadata_enabled": True}),
+        content_type="application/json",
+    )
+    response = inspect.unwrap(index_view.save_user_settings_view)(
+        request, conn=object()
+    )
+
+    assert response.status_code == 503
+    assert json.loads(response.content.decode("utf-8")) == {
+        "error": "Could not save user setting. Database is not accessible."
     }
 
 
