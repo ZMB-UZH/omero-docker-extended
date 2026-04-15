@@ -18,10 +18,11 @@ plugin database.
 
 - Supports the `OMERO index`, `Acquisition metadata`, and `All indexed
   scopes` search modes.
-- Supports a compact search form with a search box, acquisition-date filters,
-  and async image previews in the results table.
+- Supports a compact search form with a search box, typed `Start date` /
+  `End date` filters, a popup calendar with month/year selectors, and async
+  image previews in the results table.
 - Lets each user opt in to acquisition metadata indexing for all images they
-  own.
+  own; the checkbox saves immediately when it is toggled.
 - Lets each user save and reopen their own searches.
 - Shows acquisition-index status and refresh progress for the current user.
 
@@ -51,6 +52,9 @@ plugin database.
   OMERO API and plugin database are reachable from the `omeroweb` container.
 - **Acquisition results do not appear yet**: enable acquisition metadata
   indexing for your account and wait for the background indexer to finish.
+- **The indexing checkbox is disabled with a database warning**: the plugin
+  database is not currently reachable, so the page cannot safely read or save
+  your per-user indexing setting.
 - **Search returns fewer rows than expected**: OMERO permission revalidation may
   remove indexed matches that are no longer visible to your account.
 - **Root is blocked**: this is intentional; use a normal OMERO user account for
