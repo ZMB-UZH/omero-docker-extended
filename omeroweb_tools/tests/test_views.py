@@ -386,6 +386,27 @@ def test_save_query_view_validates_required_payload(monkeypatch):
     }
 
 
+def test_save_query_view_rejects_overlong_query_names(monkeypatch):
+    monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
+    request = RequestFactory().post(
+        "/omeroweb_tools/enhanced-search/saved-queries/save/",
+        data=json.dumps(
+            {
+                "query_name": "x" * (index_view.SAVED_QUERY_NAME_MAX_LENGTH + 1),
+                "query_payload": {"query_text": "lsm"},
+            }
+        ),
+        content_type="application/json",
+    )
+
+    response = inspect.unwrap(index_view.save_query_view)(request, conn=object())
+
+    assert response.status_code == 400
+    assert json.loads(response.content.decode("utf-8")) == {
+        "error": index_view.SAVED_QUERY_NAME_TOO_LONG_ERROR
+    }
+
+
 def test_apply_saved_query_view_redirects_with_safe_query_string(monkeypatch):
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
