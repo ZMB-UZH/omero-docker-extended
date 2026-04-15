@@ -165,7 +165,7 @@
                     <tr data-scope-key="{{ state.scope_key }}">
                         <td><span class="tools-search-pill" data-status="{{ state.status }}">{{ state.status }}</span></td>
                         <td>
-                            {{ state.current_message|default:"No sync activity yet." }}
+                            <span class="tools-search-status-message">{{ state.current_message|default:"No sync activity yet." }}</span>
                             {% if state.last_successful_at %}
                             <small>Last successful sync: {{ state.last_successful_at|date:"j M Y, g:i a" }}</small>
                             {% endif %}
@@ -175,7 +175,7 @@
                         </td>
                         <td>
                             <button type="button"
-                                    class="admin-tools-button sync-scope-btn"
+                                    class="admin-tools-button tools-search-inline-action tools-search-inline-action--primary sync-scope-btn"
                                     data-scope-key="{{ state.scope_key }}"
                                     {% if blocked_for_root or not user_settings_available or not user_settings.acquisition_metadata_enabled %}disabled{% endif %}>
                                 Refresh index
@@ -191,14 +191,18 @@
             </section>
 
             <section class="admin-tools-card admin-tools-card--wide tools-search-card">
-                <h2 class="tools-search-heading tools-search-heading--compact">Saved queries</h2>
+                <h2 class="tools-search-heading tools-search-heading--compact">Saved search queries</h2>
                 <div class="tools-search-inline-form">
                     <input type="text"
                            id="saved-query-name"
+                           class="tools-search-query-name-input"
                            placeholder="Save current search as…"
+                           maxlength="{{ saved_query_name_max_length }}"
+                           autocomplete="off"
+                           spellcheck="false"
                            {% if blocked_for_root %}disabled{% endif %}>
                     <button type="button"
-                            class="admin-tools-button"
+                            class="admin-tools-button tools-search-inline-action tools-search-inline-action--primary"
                             id="save-query-btn"
                             {% if blocked_for_root %}disabled{% endif %}>
                         Save
@@ -262,12 +266,17 @@
                                     <span class="tools-search-preview__spinner" aria-hidden="true"></span>
                                     <span class="tools-search-preview__label">Preview</span>
                                 </span>
-                                <img class="tools-search-preview__image" alt="" hidden>
+                                <img class="tools-search-preview__image"
+                                     alt=""
+                                     loading="lazy"
+                                     decoding="async"
+                                     fetchpriority="low"
+                                     hidden>
                             </a>
                         </td>
                         <td>
                             <a href="{{ row.image_url }}" target="omero-web-image-view">{{ row.image_name|default:row.image_id }}</a>
-                            <small>ID: {{ row.image_id }} &middot; Owner: {{ row.owner_name|default:row.owner_id }}. &middot; Indexed by: {{ row.indexed_sources|join:", " }}</small>
+                            <small>ID: {{ row.image_id }} &middot; Owner: {{ row.owner_name|default:row.owner_id }} &middot; Indexed by: {{ row.indexed_sources|join:", " }}</small>
                         </td>
                         <td>
                             {% if row.project_url %}
@@ -444,6 +453,8 @@
             }, 1600);
         };
 
+        const normalizeSavedQueryName = (value) => String(value || '').trim().replace(/\s+/g, ' ');
+
         const clearSearchValidationStatus = () => {
             if (!liveStatusEl || liveStatusEl.dataset.state !== 'error') {
                 return;
@@ -495,6 +506,34 @@
             });
         };
 
+        const previewLoadQueue = [];
+        const maxConcurrentPreviewLoads = 4;
+        let activePreviewLoads = 0;
+
+        const flushPreviewLoadQueue = () => {
+            while (activePreviewLoads < maxConcurrentPreviewLoads && previewLoadQueue.length) {
+                const nextCard = previewLoadQueue.shift();
+                if (!nextCard) {
+                    continue;
+                }
+                loadPreviewCard(nextCard);
+            }
+        };
+
+        const queuePreviewCard = (card) => {
+            if (
+                !card
+                || card.dataset.previewQueued === 'true'
+                || card.dataset.previewState === 'loading'
+                || card.dataset.previewState === 'loaded'
+            ) {
+                return;
+            }
+            card.dataset.previewQueued = 'true';
+            previewLoadQueue.push(card);
+            flushPreviewLoadQueue();
+        };
+
         const loadPreviewCard = (card) => {
             if (!card || card.dataset.previewState === 'loading' || card.dataset.previewState === 'loaded') {
                 return;
@@ -505,19 +544,27 @@
             if (!thumbnailUrl || !img || !label) {
                 return;
             }
+            card.dataset.previewQueued = 'false';
             card.dataset.previewState = 'loading';
             label.textContent = 'Loading preview…';
+            activePreviewLoads += 1;
             const preloader = new Image();
             preloader.decoding = 'async';
+            const finalizePreviewLoad = () => {
+                activePreviewLoads = Math.max(0, activePreviewLoads - 1);
+                flushPreviewLoadQueue();
+            };
             preloader.onload = () => {
                 img.src = thumbnailUrl;
                 img.hidden = false;
                 card.dataset.previewState = 'loaded';
                 label.textContent = 'Preview';
+                finalizePreviewLoad();
             };
             preloader.onerror = () => {
                 card.dataset.previewState = 'error';
                 label.textContent = 'Preview unavailable';
+                finalizePreviewLoad();
             };
             preloader.src = thumbnailUrl;
         };
@@ -528,7 +575,7 @@
                 return;
             }
             if (!('IntersectionObserver' in window)) {
-                cards.forEach(loadPreviewCard);
+                cards.forEach(queuePreviewCard);
                 return;
             }
             const observer = new IntersectionObserver(
@@ -538,7 +585,7 @@
                             return;
                         }
                         observer.unobserve(entry.target);
-                        loadPreviewCard(entry.target);
+                        queuePreviewCard(entry.target);
                     });
                 },
                 { rootMargin: '160px 0px' }
@@ -793,6 +840,11 @@
             if (!dateInputs.length) {
                 return;
             }
+            const setDateControlActive = (input, isActive) => {
+                input
+                    ?.closest('.tools-search-date-control')
+                    ?.classList.toggle('is-picker-open', Boolean(isActive));
+            };
             dateInputs.forEach((input) => {
                 input.value = formatDateDigits(input.value);
                 setDateInputValidity(input, true);
@@ -811,8 +863,12 @@
                     pendingDateInputSyncTimers.set(input, timer);
                 });
                 input.addEventListener('blur', () => {
+                    setDateControlActive(input, false);
                     validateDateInput(input);
                     updateSearchSubmitState();
+                });
+                input.addEventListener('focus', () => {
+                    setDateControlActive(input, true);
                 });
             });
             if (window.jQuery?.datepicker) {
@@ -882,6 +938,7 @@
                         maxDate: todayDate,
                         beforeShow() {
                             openDatepickerInput = input;
+                            setDateControlActive(input, true);
                             selectedDateByInput.delete(input);
                             syncDatepickerProxyValue(input, parseStrictDateInput(input.value));
                             updateDatepickerBounds();
@@ -898,11 +955,10 @@
                             if (openDatepickerInput === input) {
                                 openDatepickerInput = null;
                             }
+                            setDateControlActive(input, false);
                             if (selectedDateText) {
                                 input.value = selectedDateText;
                                 selectedDateByInput.delete(input);
-                            } else if (String(dateText || '').trim()) {
-                                input.value = formatDateDigits(dateText);
                             }
                             validateDateInput(input, { syncPicker: false });
                             updateSearchSubmitState();
@@ -920,12 +976,15 @@
                             ) {
                                 $.datepicker._hideDatepicker();
                                 openDatepickerInput = null;
+                                setDateControlActive(input, false);
                                 return;
                             }
                             if ($.datepicker._datepickerShowing) {
+                                setDateControlActive(currentActiveInput, false);
                                 $.datepicker._hideDatepicker();
                             }
                             openDatepickerInput = input;
+                            setDateControlActive(input, true);
                             syncDatepickerProxyValue(input, parseStrictDateInput(input.value));
                             updateDatepickerBounds();
                             $(proxy).datepicker('show');
@@ -1040,7 +1099,10 @@
                 }
                 if (detailCell) {
                     detailCell.innerHTML = '';
-                    detailCell.append(document.createTextNode(state.current_message || 'No sync activity yet.'));
+                    const message = document.createElement('span');
+                    message.className = 'tools-search-status-message';
+                    message.textContent = state.current_message || 'No sync activity yet.';
+                    detailCell.appendChild(message);
                     if (state.last_successful_at) {
                         const small = document.createElement('small');
                         small.textContent = `Last successful sync: ${formatStatusTimestamp(state.last_successful_at)}`;
@@ -1127,6 +1189,21 @@
         bindPageLoadLinks();
         queryTextInput?.addEventListener('input', () => {
             updateSearchSubmitState();
+        });
+        const indexedScopeSelect = document.getElementById('indexed_scope');
+        const indexedScopeField = indexedScopeSelect?.closest('.tools-search-field--scope');
+        const activateIndexedScope = () => indexedScopeField?.classList.add('is-select-active');
+        const deactivateIndexedScope = () => indexedScopeField?.classList.remove('is-select-active');
+        indexedScopeSelect?.addEventListener('focus', activateIndexedScope);
+        indexedScopeSelect?.addEventListener('blur', deactivateIndexedScope);
+        indexedScopeSelect?.addEventListener('pointerdown', activateIndexedScope);
+        indexedScopeSelect?.addEventListener('keydown', activateIndexedScope);
+        indexedScopeSelect?.addEventListener('change', () => {
+            if (document.activeElement === indexedScopeSelect) {
+                activateIndexedScope();
+                return;
+            }
+            deactivateIndexedScope();
         });
         initializeDateInputs();
         initializePreviewLoading();
@@ -1216,11 +1293,12 @@
             const savedQueryNameInput = document.getElementById('saved-query-name');
             if (saveQueryButton && savedQueryNameInput) {
                 saveQueryButton.addEventListener('click', async () => {
-                    const queryName = savedQueryNameInput.value.trim();
+                    const queryName = normalizeSavedQueryName(savedQueryNameInput.value);
                     if (!queryName) {
                         window.alert('Enter a name for the saved query.');
                         return;
                     }
+                    savedQueryNameInput.value = queryName;
                     showLiveStatus('Saving current search…');
                     setButtonBusy(saveQueryButton, true, 'Saving…');
                     try {

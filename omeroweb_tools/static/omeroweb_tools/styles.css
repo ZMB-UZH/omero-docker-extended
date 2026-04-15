@@ -11,6 +11,8 @@
 
 .tools-page-note--section-summary {
     margin-top: 0;
+    font-size: 13px;
+    line-height: 1.35;
 }
 
 .tools-page-note--tight {
@@ -82,6 +84,14 @@
     min-height: 2.5rem;
     background: #f9fbff;
     box-sizing: border-box;
+}
+
+.tools-search-field select:focus,
+.tools-search-field select:focus-visible,
+.tools-search-field--scope.is-select-active select {
+    outline: none;
+    border-color: #3b6df2;
+    box-shadow: 0 0 0 3px rgba(59, 109, 242, 0.2);
 }
 
 .tools-search-field input:disabled,
@@ -192,6 +202,13 @@
     box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.45);
 }
 
+.tools-search-date-control.is-picker-open .tools-search-date-input:not(.tools-search-date-input--invalid),
+.tools-search-date-input:focus:not(.tools-search-date-input--invalid) {
+    border-color: #3b6df2;
+    box-shadow: 0 0 0 3px rgba(59, 109, 242, 0.2);
+    outline: none;
+}
+
 .tools-search-actions {
     display: flex;
     flex-wrap: nowrap;
@@ -218,6 +235,8 @@
 }
 
 .tools-search-card .tools-search-inline-action {
+    display: inline-flex;
+    align-items: center;
     min-width: 94px;
     min-height: 2.5rem;
     padding: 0.68rem 1.08rem;
@@ -230,6 +249,10 @@
     font-size: 14px;
     font-weight: 600;
     justify-content: center;
+    box-sizing: border-box;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
 }
 
 .tools-search-card .tools-search-inline-action:hover,
@@ -292,7 +315,7 @@
 
 .tools-search-status-table {
     table-layout: fixed;
-    width: min(100%, 48rem);
+    width: min(100%, 52rem);
 }
 
 .tools-search-status-table th,
@@ -300,7 +323,7 @@
 .tools-search-results th,
 .tools-search-results td {
     text-align: left;
-    padding: 0.62rem 0.56rem;
+    padding: 0.48rem 0.52rem;
     border-bottom: 1px solid #e5e7eb;
     vertical-align: top;
 }
@@ -313,19 +336,34 @@
 
 .tools-search-status-table th:nth-child(1),
 .tools-search-status-table td:nth-child(1) {
-    width: 7.25rem;
+    width: 6.9rem;
 }
 
 .tools-search-status-table th:nth-child(3),
 .tools-search-status-table td:nth-child(3) {
-    width: 8.5rem;
+    width: 9.1rem;
     white-space: nowrap;
 }
 
 .tools-search-results th,
 .tools-search-results td {
-    padding-top: 0.46rem;
-    padding-bottom: 0.46rem;
+    padding-top: 0.36rem;
+    padding-bottom: 0.36rem;
+}
+
+.tools-search-results th:nth-child(2),
+.tools-search-results td:nth-child(2) {
+    width: 18%;
+}
+
+.tools-search-results th:nth-child(3),
+.tools-search-results td:nth-child(3) {
+    width: 23%;
+}
+
+.tools-search-results td:nth-child(2),
+.tools-search-results td:nth-child(3) {
+    overflow-wrap: anywhere;
 }
 
 .tools-search-preview-cell {
@@ -443,6 +481,13 @@
     color: #64748b;
     display: block;
     margin-top: 0.25rem;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.tools-search-status-message {
+    display: block;
+    white-space: nowrap;
 }
 
 .tools-search-pill {
@@ -614,12 +659,12 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.08rem;
-    margin-bottom: 0.04rem;
+    gap: 0.04rem;
+    margin-bottom: 0;
 }
 
 .tools-search-index-heading + .tools-search-settings-panel {
-    margin-top: -6px;
+    margin-top: -4px;
 }
 
 .tools-search-settings-panel .tools-page-note {
@@ -630,6 +675,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    padding: 0.1rem 0;
 }
 
 .tools-search-setting-toggle input[type="checkbox"] {
@@ -645,7 +691,7 @@
 }
 
 .tools-search-setting-toggle span {
-    font-size: 0.8rem;
+    font-size: 0.9rem;
     color: #374151;
     user-select: none;
 }
@@ -655,7 +701,6 @@
 }
 
 .tools-search-inline-form input {
-    min-width: min(100%, 24rem);
     border: 1px solid #d6deea;
     border-radius: 8px;
     padding: 0.68rem 0.8rem;
@@ -663,6 +708,20 @@
     min-height: 2.5rem;
     background: #f9fbff;
     box-sizing: border-box;
+}
+
+.tools-search-query-name-input {
+    width: min(100%, 21.5rem);
+    max-width: 21.5rem;
+}
+
+.tools-search-inline-form .tools-search-inline-action {
+    min-width: 6.25rem;
+}
+
+.tools-search-status-table .tools-search-inline-action {
+    width: 100%;
+    min-width: 0;
 }
 
 .tools-search-pagination {
@@ -867,5 +926,13 @@
 
     .tools-search-saved-list {
         grid-template-columns: 1fr;
+    }
+
+    .tools-search-status-message {
+        white-space: normal;
+    }
+
+    .tools-search-query-name-input {
+        max-width: none;
     }
 }

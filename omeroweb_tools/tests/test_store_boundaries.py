@@ -457,3 +457,13 @@ def test_user_settings_and_saved_query_writes_use_json_payloads(monkeypatch):
         "loaded": True,
     }
     assert deleted is True
+    assert cursor.executed[0]["params"] == (
+        "alice",
+        {"wrapped": {"acquisition_metadata_enabled": True}},
+    )
+    assert cursor.executed[1]["params"] == (
+        "alice",
+        "My query",
+        {"wrapped": {"query_text": "lsm"}},
+    )
+    assert cursor.executed[2]["params"] == ("alice", 3)

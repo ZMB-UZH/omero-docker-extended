@@ -105,13 +105,19 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "Enable acquisition metadata indexing" not in template_text
     assert "Save current query" not in template_text
     assert 'id="save-query-btn"' in template_text
+    assert 'class="tools-search-query-name-input"' in template_text
+    assert 'maxlength="{{ saved_query_name_max_length }}"' in template_text
     assert "Updated {{ item.updated_at }}" not in template_text
     assert '<small>{{ item.updated_at|date:"j M Y, g:i a" }}</small>' in template_text
+    assert "Saved search queries" in template_text
     assert "Loading saved search…" in template_text
     assert "current-query-payload" not in template_text
     assert "const buildCurrentQueryPayload = () => {" in template_text
+    assert "const normalizeSavedQueryName = (value) =>" in template_text
     assert "const queryPayload = buildCurrentQueryPayload();" in template_text
     assert "open.textContent = 'Load';" in template_text
+    assert "const previewLoadQueue = [];" in template_text
+    assert "const maxConcurrentPreviewLoads = 4;" in template_text
     assert "jquery-ui-1.13.2/js/jquery-ui.js" in template_text
     assert "tools-search-date-control" in template_text
     assert "changeMonth: true" in template_text
@@ -127,11 +133,18 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "pendingDateInputSyncTimers = new WeakMap()" in template_text
     assert "datepickerProxyByInput = new WeakMap()" in template_text
     assert "dateInputByProxy = new WeakMap()" in template_text
+    assert "setDateControlActive = (input, isActive) =>" in template_text
+    assert (
+        "indexedScopeSelect?.addEventListener('pointerdown', activateIndexedScope);"
+        in template_text
+    )
+    assert "else if (String(dateText || '').trim())" not in template_text
     assert "installDatepickerPointerGuard" in template_text
     assert "activeDatepickerInput" in template_text
     assert "ui-datepicker-current" in template_text
     assert "tools-search-date-picker-button" in template_text
     assert "tools-search-date-picker-proxy" in template_text
+    assert 'class="tools-search-status-message"' in template_text
     assert "updateSearchSubmitState" in template_text
     assert (
         "searchSubmitButton.disabled = blockedForRoot || hasInvalidDate || (!hasSearchText && !hasCompleteDate);"
@@ -156,7 +169,7 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "Indexed by:" in template_text
     assert "Owner:" in template_text
     assert (
-        "Owner: {{ row.owner_name|default:row.owner_id }}. &middot; Indexed by:"
+        "Owner: {{ row.owner_name|default:row.owner_id }} &middot; Indexed by:"
         in template_text
     )
     assert "No matching images were found." in template_text
@@ -177,13 +190,20 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     assert ".tools-search-card .tools-search-saved-action--delete {" in styles_text
     assert "padding: 6px 10px;" in styles_text
     assert "font-size: 13px;" in styles_text
-    assert "padding: 0.62rem 0.56rem;" in styles_text
-    assert "padding-top: 0.46rem;" in styles_text
+    assert "padding: 0.48rem 0.52rem;" in styles_text
+    assert "padding-top: 0.36rem;" in styles_text
     assert "grid-template-columns: minmax(0, 1fr) auto;" in styles_text
-    assert "width: min(100%, 48rem);" in styles_text
+    assert "width: min(100%, 52rem);" in styles_text
     assert ".tools-search-saved-meta {" in styles_text
     assert ".tools-search-status-table {" in styles_text
     assert ".tools-search-date-picker-proxy {" in styles_text
+    assert ".tools-search-field--scope.is-select-active select {" in styles_text
+    assert (
+        ".tools-search-date-control.is-picker-open .tools-search-date-input:not(.tools-search-date-input--invalid),"
+        in styles_text
+    )
+    assert ".tools-search-query-name-input {" in styles_text
+    assert ".tools-search-status-message {" in styles_text
     assert ".tools-search-card > .tools-search-heading--compact + * {" in styles_text
     assert ".tools-search-index-heading + .tools-search-settings-panel {" in styles_text
     assert "@media (max-width: 1200px) {" in styles_text

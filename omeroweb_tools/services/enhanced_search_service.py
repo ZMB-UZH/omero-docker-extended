@@ -743,6 +743,8 @@ def search(
         return _empty_search_payload(page=page, page_size=page_size)
 
     acquisition_rows: list[dict[str, Any]] = []
+    acquisition_total_count = 0
+    acquisition_scope_only = query.indexed_scope == SEARCH_SCOPE_ACQUISITION_METADATA
     if (
         query.indexed_scope
         in (
@@ -752,14 +754,14 @@ def search(
         and acquisition_metadata_enabled
     ):
         with db_connect() as db_conn:
-            acquisition_rows, _unused_total = search_index_rows(
+            acquisition_rows, acquisition_total_count = search_index_rows(
                 db_conn,
                 visible_group_ids=_visible_group_ids(conn),
                 current_user_id=_current_user_id(conn),
                 query_text=query.query_text,
                 filters=_query_filters(query),
-                limit=None,
-                offset=0,
+                limit=page_size if acquisition_scope_only else None,
+                offset=offset if acquisition_scope_only else 0,
             )
 
     omero_rows: list[dict[str, Any]] = []
@@ -769,9 +771,13 @@ def search(
     ):
         omero_rows = _search_omero_builtin_rows(conn, query)
 
-    merged_rows = _merge_result_rows(acquisition_rows, omero_rows)
-    total_count = len(merged_rows)
-    page_rows = merged_rows[offset : offset + page_size]
+    if acquisition_scope_only:
+        total_count = acquisition_total_count
+        page_rows = acquisition_rows
+    else:
+        merged_rows = _merge_result_rows(acquisition_rows, omero_rows)
+        total_count = len(merged_rows)
+        page_rows = merged_rows[offset : offset + page_size]
 
     accessible = _accessible_images_by_id(
         conn,

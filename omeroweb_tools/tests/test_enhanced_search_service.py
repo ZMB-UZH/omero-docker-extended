@@ -102,13 +102,15 @@ def test_search_without_query_text_or_date_filters_returns_empty_payload():
     [
         (
             service.SearchQuery(
-                acquisition_date_from=datetime(2026, 4, 12, tzinfo=timezone.utc)
+                indexed_scope=service.SEARCH_SCOPE_ACQUISITION_METADATA,
+                acquisition_date_from=datetime(2026, 4, 12, tzinfo=timezone.utc),
             ),
             "acquisition_date_from",
         ),
         (
             service.SearchQuery(
-                acquisition_date_to=datetime(2026, 4, 12, 23, 59, tzinfo=timezone.utc)
+                indexed_scope=service.SEARCH_SCOPE_ACQUISITION_METADATA,
+                acquisition_date_to=datetime(2026, 4, 12, 23, 59, tzinfo=timezone.utc),
             ),
             "acquisition_date_to",
         ),
@@ -126,7 +128,7 @@ def test_search_runs_with_one_sided_date_filters(
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    captured_filters = []
+    captured_calls = []
     monkeypatch.setattr(
         service, "runtime_config", lambda: SimpleNamespace(max_results=10)
     )
@@ -137,7 +139,7 @@ def test_search_runs_with_one_sided_date_filters(
         service,
         "search_index_rows",
         lambda conn, **kwargs: (
-            captured_filters.append(kwargs["filters"])
+            captured_calls.append(kwargs)
             or (
                 [
                     {
@@ -190,7 +192,9 @@ def test_search_runs_with_one_sided_date_filters(
 
     assert payload["total_count"] == 1
     assert payload["results"][0]["image_id"] == 17
-    assert captured_filters[0][expected_filter_key] is not None
+    assert captured_calls[0]["filters"][expected_filter_key] is not None
+    assert captured_calls[0]["limit"] == 10
+    assert captured_calls[0]["offset"] == 0
 
 
 def test_sync_state_needs_refresh_for_stale_running_state(monkeypatch):
