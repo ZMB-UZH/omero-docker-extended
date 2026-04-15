@@ -122,6 +122,11 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "const normalizeSavedQueryName = (value) =>" in template_text
     assert "const syncPrimaryLayoutMinWidth = () => {" in template_text
     assert "const updateSaveQueryButtonState = () => {" in template_text
+    assert (
+        "const hasSearchText = Boolean(String(queryTextInput?.value || '').trim());"
+        in template_text
+    )
+    assert "|| !hasSearchText" in template_text
     assert "|| Boolean(searchSubmitButton?.disabled);" in template_text
     assert "function showSettingsMenu(show) {" in template_text
     assert "settingsMenuBtn.addEventListener('click'" in template_text
@@ -220,8 +225,14 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     styles_text = styles_path.read_text(encoding="utf-8")
 
     assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in styles_text
-    assert ".tools-search-card .tools-search-saved-action--load {" in styles_text
-    assert ".tools-search-card .tools-search-saved-action--delete {" in styles_text
+    assert (
+        ".admin-tools-page .tools-search-card .tools-search-saved-action--load {"
+        in styles_text
+    )
+    assert (
+        ".admin-tools-page .tools-search-card .tools-search-saved-action--delete {"
+        in styles_text
+    )
     assert "padding: 6px 10px;" in styles_text
     assert "font-size: 13px;" in styles_text
     assert "gap: 1rem;" in styles_text
@@ -231,6 +242,7 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     assert "padding: 0.42rem 0.5rem;" in styles_text
     assert "padding: 0.36rem 0.52rem;" in styles_text
     assert "padding: 0.24rem 0;" in styles_text
+    assert "flex: 0 0 auto;" in styles_text
     assert "color: #000000;" in styles_text
     assert "grid-template-columns: minmax(0, 1fr) auto;" in styles_text
     assert "width: min(100%, 63rem);" in styles_text
@@ -238,6 +250,10 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     assert ".tools-search-status-table {" in styles_text
     assert ".tools-search-date-picker-proxy {" in styles_text
     assert ".tools-search-date-picker-button:active {" in styles_text
+    assert (
+        "transition: background 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease, transform 0.05s ease;"
+        in styles_text
+    )
     assert "gap: 0.2rem;" in styles_text
     assert "vertical-align: top;" in styles_text
     assert "width: 100%;" in styles_text

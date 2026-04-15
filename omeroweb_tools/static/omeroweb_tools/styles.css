@@ -251,9 +251,10 @@
     justify-content: center;
 }
 
-.tools-search-card .tools-search-inline-action {
+.admin-tools-page .tools-search-card .tools-search-inline-action {
     display: inline-flex;
     align-items: center;
+    flex: 0 0 auto;
     min-width: 94px;
     min-height: 2.5rem;
     padding: 0.68rem 0.8rem;
@@ -270,36 +271,37 @@
     text-decoration: none;
     white-space: nowrap;
     cursor: pointer;
+    transition: background 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease, transform 0.05s ease;
 }
 
-.tools-search-card .tools-search-inline-action:hover,
-.tools-search-card .tools-search-inline-action:focus-visible {
+.admin-tools-page .tools-search-card .tools-search-inline-action:hover,
+.admin-tools-page .tools-search-card .tools-search-inline-action:focus-visible {
     border-color: transparent;
     background: #c7ced6;
     color: #1f2937;
 }
 
-.tools-search-card .tools-search-inline-action:focus-visible {
+.admin-tools-page .tools-search-card .tools-search-inline-action:focus-visible {
     outline: 2px solid rgba(37, 99, 235, 0.18);
     outline-offset: 1px;
 }
 
-.tools-search-card .tools-search-inline-action--primary {
+.admin-tools-page .tools-search-card .tools-search-inline-action--primary {
     border-color: #007bff;
     background: #007bff;
     color: #ffffff;
 }
 
-.tools-search-card .tools-search-inline-action--primary:hover,
-.tools-search-card .tools-search-inline-action--primary:focus-visible {
+.admin-tools-page .tools-search-card .tools-search-inline-action--primary:hover,
+.admin-tools-page .tools-search-card .tools-search-inline-action--primary:focus-visible {
     border-color: #0056b3;
     background: #0056b3;
     color: #ffffff;
 }
 
-.tools-search-card .tools-search-inline-action:disabled,
-.tools-search-card .tools-search-inline-action:disabled:hover,
-.tools-search-card .tools-search-inline-action:disabled:focus-visible {
+.admin-tools-page .tools-search-card .tools-search-inline-action:disabled,
+.admin-tools-page .tools-search-card .tools-search-inline-action:disabled:hover,
+.admin-tools-page .tools-search-card .tools-search-inline-action:disabled:focus-visible {
     border-color: #94a3b8;
     background: #94a3b8;
     color: #ffffff;
@@ -636,8 +638,9 @@
     flex-wrap: nowrap;
 }
 
-.tools-search-card .tools-search-saved-action {
+.admin-tools-page .tools-search-card .tools-search-saved-action {
     min-width: auto;
+    flex: 0 0 auto;
     padding: 6px 10px;
     font-size: 13px;
     line-height: normal;
@@ -645,26 +648,26 @@
     border-radius: 8px;
     color: #ffffff;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    transition: all 0.1s ease;
+    transition: background 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease, transform 0.05s ease;
 }
 
-.tools-search-card .tools-search-saved-action:hover,
-.tools-search-card .tools-search-saved-action:focus-visible {
+.admin-tools-page .tools-search-card .tools-search-saved-action:hover,
+.admin-tools-page .tools-search-card .tools-search-saved-action:focus-visible {
     color: #ffffff;
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
     filter: brightness(105%);
 }
 
-.tools-search-card .tools-search-saved-action:active {
+.admin-tools-page .tools-search-card .tools-search-saved-action:active {
     transform: translateY(1px);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     filter: none;
 }
 
-.tools-search-card .tools-search-saved-action:disabled,
-.tools-search-card .tools-search-saved-action:disabled:hover,
-.tools-search-card .tools-search-saved-action:disabled:focus-visible {
+.admin-tools-page .tools-search-card .tools-search-saved-action:disabled,
+.admin-tools-page .tools-search-card .tools-search-saved-action:disabled:hover,
+.admin-tools-page .tools-search-card .tools-search-saved-action:disabled:focus-visible {
     background: #94a3b8;
     box-shadow: none;
     color: #ffffff;
@@ -673,21 +676,21 @@
     transform: none;
 }
 
-.tools-search-card .tools-search-saved-action--load {
+.admin-tools-page .tools-search-card .tools-search-saved-action--load {
     background: #3b6df2;
 }
 
-.tools-search-card .tools-search-saved-action--load:hover,
-.tools-search-card .tools-search-saved-action--load:focus-visible {
+.admin-tools-page .tools-search-card .tools-search-saved-action--load:hover,
+.admin-tools-page .tools-search-card .tools-search-saved-action--load:focus-visible {
     background: #2f5be0;
 }
 
-.tools-search-card .tools-search-saved-action--delete {
+.admin-tools-page .tools-search-card .tools-search-saved-action--delete {
     background: #dc3545;
 }
 
-.tools-search-card .tools-search-saved-action--delete:hover,
-.tools-search-card .tools-search-saved-action--delete:focus-visible {
+.admin-tools-page .tools-search-card .tools-search-saved-action--delete:hover,
+.admin-tools-page .tools-search-card .tools-search-saved-action--delete:focus-visible {
     background: #c82333;
 }
 
