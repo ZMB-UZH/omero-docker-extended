@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from omeroweb_tools.services import enhanced_search_store as store
 
 
@@ -241,6 +243,29 @@ def test_load_user_settings_merges_defaults(monkeypatch):
 
     assert payload == {"acquisition_metadata_enabled": True, "extra": "value"}
     assert cursor.executed[0]["params"] == ("alice",)
+
+
+def test_save_user_settings_raises_when_persistence_cannot_be_verified(monkeypatch):
+    monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
+
+    class _Extras:
+        @staticmethod
+        def Json(payload):
+            return {"wrapped": payload}
+
+    monkeypatch.setattr(store, "_load_psycopg2", lambda: (object(), _Extras()))
+    cursor = _SettingsCursor([({"acquisition_metadata_enabled": False},)])
+    conn = _SettingsConn(cursor)
+
+    with pytest.raises(
+        store.EnhancedSearchStoreError,
+        match="Enhanced-search user settings were not persisted.",
+    ):
+        store.save_user_settings(
+            conn,
+            "alice",
+            {"acquisition_metadata_enabled": True},
+        )
 
 
 def test_clear_scope_index_deletes_only_selected_scope_and_prunes_orphans(monkeypatch):

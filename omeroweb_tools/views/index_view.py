@@ -7,6 +7,7 @@ from omeroweb.decorators import login_required
 
 from ..services.enhanced_search_service import (
     SearchQuery,
+    acquisition_index_status_message,
     current_user_scope,
     default_user_settings,
     ensure_user_index_sync,
@@ -22,7 +23,10 @@ from ..services.enhanced_search_service import (
     remove_saved_query,
     sync_states_for_user,
     user_settings,
+    user_settings_load_error_message,
+    user_settings_save_error_message,
 )
+from ..services.enhanced_search_store import EnhancedSearchStoreError
 from .utils import current_username, load_json_body, require_non_root_user
 
 __all__ = ["SearchQuery"]
@@ -30,6 +34,36 @@ __all__ = ["SearchQuery"]
 
 def _is_root_user(request, conn) -> bool:
     return str(current_username(request, conn) or "").strip() == "root"
+
+
+def _load_user_settings_context(
+    username: str,
+    *,
+    blocked_for_root: bool,
+) -> tuple[dict[str, bool], bool, str, str]:
+    if blocked_for_root:
+        payload = default_user_settings()
+        return (
+            payload,
+            True,
+            acquisition_index_status_message(
+                bool(payload.get("acquisition_metadata_enabled"))
+            ),
+            "info",
+        )
+    try:
+        payload = user_settings(username)
+    except EnhancedSearchStoreError:
+        payload = default_user_settings()
+        return payload, False, user_settings_load_error_message(), "error"
+    return (
+        payload,
+        True,
+        acquisition_index_status_message(
+            bool(payload.get("acquisition_metadata_enabled"))
+        ),
+        "info",
+    )
 
 
 @login_required()
@@ -51,8 +85,14 @@ def root_status(request, conn=None, url=None, **kwargs):
 def enhanced_search_view(request, conn=None, url=None, **kwargs):
     username = str(current_username(request, conn) or "")
     blocked_for_root = username == "root"
-    settings_payload = (
-        default_user_settings() if blocked_for_root else user_settings(username)
+    (
+        settings_payload,
+        settings_available,
+        acquisition_index_status,
+        acquisition_index_status_state,
+    ) = _load_user_settings_context(
+        username,
+        blocked_for_root=blocked_for_root,
     )
     query, query_errors = parse_search_query(request.GET)
     search_payload = {
@@ -66,7 +106,7 @@ def enhanced_search_view(request, conn=None, url=None, **kwargs):
     sync_states = []
     auto_sync_started = False
     auto_sync_message = ""
-    if not blocked_for_root:
+    if not blocked_for_root and settings_available:
         sync_states, auto_sync_started, auto_sync_message = ensure_user_index_sync(
             conn,
             username,
@@ -104,6 +144,15 @@ def enhanced_search_view(request, conn=None, url=None, **kwargs):
             "auto_sync_started": auto_sync_started,
             "auto_sync_message": auto_sync_message,
             "user_settings": settings_payload,
+            "user_settings_available": settings_available,
+            "acquisition_index_status": acquisition_index_status,
+            "acquisition_index_status_state": acquisition_index_status_state,
+            "acquisition_index_messages": {
+                "enabled": acquisition_index_status_message(True),
+                "disabled": acquisition_index_status_message(False),
+                "load_error": user_settings_load_error_message(),
+                "save_error": user_settings_save_error_message(),
+            },
         },
     )
 
@@ -117,7 +166,10 @@ def start_scope_sync_view(request, conn=None, url=None, **kwargs):
     if error:
         return JsonResponse({"error": error}, status=400)
     username = str(current_username(request, conn) or "")
-    settings_payload = user_settings(username)
+    try:
+        settings_payload = user_settings(username)
+    except EnhancedSearchStoreError:
+        return JsonResponse({"error": user_settings_load_error_message()}, status=503)
     if not settings_payload.get("acquisition_metadata_enabled"):
         return JsonResponse(
             {
@@ -152,11 +204,15 @@ def start_scope_sync_view(request, conn=None, url=None, **kwargs):
 @require_non_root_user
 def sync_state_view(request, conn=None, url=None, **kwargs):
     username = str(current_username(request, conn) or "")
-    sync_states, auto_sync_started, auto_sync_message = ensure_user_index_sync(
-        conn,
-        username,
-        settings_payload=user_settings(username),
-    )
+    try:
+        settings_payload = user_settings(username)
+        sync_states, auto_sync_started, auto_sync_message = ensure_user_index_sync(
+            conn,
+            username,
+            settings_payload=settings_payload,
+        )
+    except EnhancedSearchStoreError:
+        return JsonResponse({"error": user_settings_load_error_message()}, status=503)
     return JsonResponse(
         {
             "sync_states": sync_states,
@@ -175,7 +231,10 @@ def save_user_settings_view(request, conn=None, url=None, **kwargs):
     if error:
         return JsonResponse({"error": error}, status=400)
     username = str(current_username(request, conn) or "")
-    saved = save_user_settings(conn, username, payload or {})
+    try:
+        saved = save_user_settings(conn, username, payload or {})
+    except EnhancedSearchStoreError:
+        return JsonResponse({"error": user_settings_save_error_message()}, status=503)
     return JsonResponse({"ok": True, **saved})
 
 
