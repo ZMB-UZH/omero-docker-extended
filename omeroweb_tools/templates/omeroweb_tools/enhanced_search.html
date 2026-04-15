@@ -107,8 +107,8 @@
                                        id="acquisition_date_from"
                                        class="tools-search-date-input"
                                        name="acquisition_date_from"
-                                       value="{{ query.acquisition_date_from|date:'d--m--Y' }}"
-                                       placeholder="dd--mm--yyyy"
+                                       value="{{ query.acquisition_date_from|date:'d-m-Y' }}"
+                                       placeholder="dd-mm-yyyy"
                                        inputmode="numeric"
                                        autocomplete="off"
                                        spellcheck="false">
@@ -127,8 +127,8 @@
                                        id="acquisition_date_to"
                                        class="tools-search-date-input"
                                        name="acquisition_date_to"
-                                       value="{{ query.acquisition_date_to|date:'d--m--Y' }}"
-                                       placeholder="dd--mm--yyyy"
+                                       value="{{ query.acquisition_date_to|date:'d-m-Y' }}"
+                                       placeholder="dd-mm-yyyy"
                                        inputmode="numeric"
                                        autocomplete="off"
                                        spellcheck="false">
@@ -223,7 +223,8 @@
                         Save
                     </button>
                 </div>
-                <div class="tools-search-saved-list" id="saved-query-list">
+                <div class="tools-search-saved-list{% if not saved_queries %} tools-search-saved-list--empty{% endif %}"
+                     id="saved-query-list">
                     {% if saved_queries %}
                         {% for item in saved_queries %}
                         <div class="tools-search-saved-item" data-query-id="{{ item.id }}">
@@ -252,102 +253,105 @@
                 </div>
             </section>
 
-            <section class="admin-tools-card admin-tools-card--wide tools-search-card">
+            <section class="admin-tools-card admin-tools-card--wide tools-search-card tools-search-card--results">
                 <h2 class="tools-search-heading tools-search-heading--compact">Results</h2>
                 <p class="tools-page-note tools-page-note--section-summary">Showing {{ search_payload.results|length }} result(s){% if search_payload.total_count %} from {{ search_payload.total_count }} matching result(s){% endif %}.</p>
-                {% if search_payload.results %}
-                <table class="tools-search-results">
-                    <thead>
-                    <tr>
-                        <th>Preview</th>
-                        <th>Image</th>
-                        <th>Project / Dataset</th>
-                        <th>Acquisition</th>
-                        <th>Channel(s)</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for row in search_payload.results %}
-                    <tr>
-                        <td class="tools-search-preview-cell">
-                            <a href="{{ row.image_url }}"
-                               class="tools-search-preview"
-                               target="omero-web-image-view"
-                               data-thumbnail-url="{{ row.thumbnail_url }}"
-                               data-preview-state="idle"
-                               aria-label="Open image {{ row.image_id }}">
-                                <span class="tools-search-preview__placeholder">
-                                    <span class="tools-search-preview__icon" aria-hidden="true"></span>
-                                    <span class="tools-search-preview__spinner" aria-hidden="true"></span>
-                                    <span class="tools-search-preview__label">Preview</span>
-                                </span>
-                                <img class="tools-search-preview__image"
-                                     alt=""
-                                     loading="lazy"
-                                     decoding="async"
-                                     fetchpriority="low"
-                                     hidden>
-                            </a>
-                        </td>
-                        <td>
-                            <a href="{{ row.image_url }}" target="omero-web-image-view">{{ row.image_name|default:row.image_id }}</a>
-                            <small>ID: {{ row.image_id }} &middot; Owner: {{ row.owner_name|default:row.owner_id }} &middot; Indexed by: {{ row.indexed_sources|join:", " }}</small>
-                        </td>
-                        <td>
-                            {% if row.project_url %}
-                            <a href="{{ row.project_url }}">{{ row.project_name|default:row.project_id }}</a>
-                            {% else %}
-                            No project
-                            {% endif %}
-                            <small>
-                                {% if row.dataset_url %}
-                                <a href="{{ row.dataset_url }}">{{ row.dataset_name|default:row.dataset_id }}</a>
+                <div class="tools-search-results-body">
+                    {% if search_payload.results %}
+                    <table class="tools-search-results">
+                        <thead>
+                        <tr>
+                            <th>Preview</th>
+                            <th>Image</th>
+                            <th>Project / Dataset</th>
+                            <th>Acquisition</th>
+                            <th>Channel(s)</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in search_payload.results %}
+                        <tr>
+                            <td class="tools-search-preview-cell">
+                                <a href="{{ row.image_url }}"
+                                   class="tools-search-preview"
+                                   target="omero-web-image-view"
+                                   data-thumbnail-url="{{ row.thumbnail_url }}"
+                                   data-preview-state="idle"
+                                   aria-label="Open image {{ row.image_id }}">
+                                    <span class="tools-search-preview__placeholder">
+                                        <span class="tools-search-preview__icon" aria-hidden="true"></span>
+                                        <span class="tools-search-preview__spinner" aria-hidden="true"></span>
+                                        <span class="tools-search-preview__label">Preview</span>
+                                    </span>
+                                    <img class="tools-search-preview__image"
+                                         alt=""
+                                         loading="lazy"
+                                         decoding="async"
+                                         fetchpriority="low"
+                                         hidden>
+                                </a>
+                            </td>
+                            <td>
+                                <a href="{{ row.image_url }}" target="omero-web-image-view">{{ row.image_name|default:row.image_id }}</a>
+                                <small>ID: {{ row.image_id }} &middot; Owner: {{ row.owner_name|default:row.owner_id }}. Indexed by: {{ row.indexed_sources|join:", " }}</small>
+                            </td>
+                            <td>
+                                {% if row.project_url %}
+                                <a href="{{ row.project_url }}">{{ row.project_name|default:row.project_id }}</a>
                                 {% else %}
-                                No dataset
+                                No project
                                 {% endif %}
-                            </small>
-                        </td>
-                        <td>
-                            {% if row.acquisition_date %}
-                            {{ row.acquisition_date }}
-                            {% else %}
-                            n/a
+                                <small>
+                                    {% if row.dataset_url %}
+                                    <a href="{{ row.dataset_url }}">{{ row.dataset_name|default:row.dataset_id }}</a>
+                                    {% else %}
+                                    No dataset
+                                    {% endif %}
+                                </small>
+                            </td>
+                            <td>
+                                {% if row.acquisition_date %}
+                                {{ row.acquisition_date }}
+                                {% else %}
+                                n/a
+                                {% endif %}
+                                <small>
+                                    {% if row.pixel_size_x_um %}X: {{ row.pixel_size_x_um|floatformat:4 }} um{% endif %}
+                                    {% if row.pixel_size_y_um %} &middot; Y: {{ row.pixel_size_y_um|floatformat:4 }} um{% endif %}
+                                    {% if row.z_step_um %} &middot; Z: {{ row.z_step_um|floatformat:4 }} um{% endif %}
+                                </small>
+                            </td>
+                            <td>{{ row.channel_summary|default:"n/a" }}</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    {% if previous_page_querystring or next_page_querystring %}
+                    <div class="tools-search-pagination">
+                        <div class="tools-search-saved-actions">
+                            {% if previous_page_querystring %}
+                            <a class="admin-tools-button admin-tools-button-link"
+                               href="{% url 'omeroweb_tools_enhanced_search' %}?{{ previous_page_querystring }}"
+                               data-page-load-message="Loading previous search results…">
+                                Previous
+                            </a>
                             {% endif %}
-                            <small>
-                                {% if row.pixel_size_x_um %}X: {{ row.pixel_size_x_um|floatformat:4 }} um{% endif %}
-                                {% if row.pixel_size_y_um %} &middot; Y: {{ row.pixel_size_y_um|floatformat:4 }} um{% endif %}
-                                {% if row.z_step_um %} &middot; Z: {{ row.z_step_um|floatformat:4 }} um{% endif %}
-                            </small>
-                        </td>
-                        <td>{{ row.channel_summary|default:"n/a" }}</td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-                <div class="tools-search-pagination">
-                    <div>Page {{ search_payload.page }}</div>
-                    <div class="tools-search-saved-actions">
-                        {% if previous_page_querystring %}
-                        <a class="admin-tools-button admin-tools-button-link"
-                           href="{% url 'omeroweb_tools_enhanced_search' %}?{{ previous_page_querystring }}"
-                           data-page-load-message="Loading previous search results…">
-                            Previous
-                        </a>
-                        {% endif %}
-                        {% if next_page_querystring %}
-                        <a class="admin-tools-button admin-tools-button-link"
-                           href="{% url 'omeroweb_tools_enhanced_search' %}?{{ next_page_querystring }}"
-                           data-page-load-message="Loading more search results…">
-                            Next
-                        </a>
-                        {% endif %}
+                            {% if next_page_querystring %}
+                            <a class="admin-tools-button admin-tools-button-link"
+                               href="{% url 'omeroweb_tools_enhanced_search' %}?{{ next_page_querystring }}"
+                               data-page-load-message="Loading more search results…">
+                                Next
+                            </a>
+                            {% endif %}
+                        </div>
                     </div>
+                    {% endif %}
+                    {% elif query.query_text or query.acquisition_date_from or query.acquisition_date_to %}
+                    <p class="tools-search-empty">No matching images were found.</p>
+                    {% else %}
+                    <p class="tools-search-empty">Run a search to see indexed results.</p>
+                    {% endif %}
                 </div>
-                {% elif query.query_text or query.acquisition_date_from or query.acquisition_date_to %}
-                <p class="tools-search-empty">No matching images were found.</p>
-                {% else %}
-                <p class="tools-search-empty">Run a search to see indexed results.</p>
-                {% endif %}
             </section>
         </div>
     </div>
@@ -527,7 +531,9 @@
                 return;
             }
             const hasQueryName = Boolean(normalizeSavedQueryName(savedQueryNameInput.value));
-            saveQueryButton.disabled = blockedForRoot || !hasQueryName;
+            saveQueryButton.disabled = blockedForRoot
+                || !hasQueryName
+                || Boolean(searchSubmitButton?.disabled);
         };
 
         const clearSearchValidationStatus = () => {
@@ -706,7 +712,7 @@
             };
         };
 
-        const dateFormat = 'dd--mm--yy';
+        const dateFormat = 'dd-mm-yy';
         const dateInputDigits = 8;
         const earliestSelectableDate = new Date(2010, 0, 1);
         const todayDate = (() => {
@@ -728,9 +734,9 @@
                 return digits;
             }
             if (digits.length <= 4) {
-                return `${digits.slice(0, 2)}--${digits.slice(2)}`;
+                return `${digits.slice(0, 2)}-${digits.slice(2)}`;
             }
-            return `${digits.slice(0, 2)}--${digits.slice(2, 4)}--${digits.slice(4)}`;
+            return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
         };
 
         const parseStrictDateInput = (value) => {
@@ -757,7 +763,7 @@
             const day = String(date.getDate()).padStart(2, '0');
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const year = String(date.getFullYear()).padStart(4, '0');
-            return `${day}--${month}--${year}`;
+            return `${day}-${month}-${year}`;
         };
 
         const normalizeCalendarDate = (date) => {
@@ -1116,6 +1122,7 @@
                 hasInvalidDate = true;
             }
             searchSubmitButton.disabled = blockedForRoot || hasInvalidDate || (!hasSearchText && !hasCompleteDate);
+            updateSaveQueryButtonState();
             if (!hasInvalidDate) {
                 clearSearchValidationStatus();
             }
@@ -1200,12 +1207,14 @@
             }
             container.innerHTML = '';
             if (!Array.isArray(items) || items.length === 0) {
+                container.classList.add('tools-search-saved-list--empty');
                 const empty = document.createElement('p');
                 empty.className = 'tools-search-empty';
                 empty.textContent = 'No saved queries yet.';
                 container.appendChild(empty);
                 return;
             }
+            container.classList.remove('tools-search-saved-list--empty');
             for (const item of items) {
                 const wrapper = document.createElement('div');
                 wrapper.className = 'tools-search-saved-item';
