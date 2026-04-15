@@ -84,6 +84,9 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "tools-search-field--actions" in template_text
     assert "tools-search-inline-action--primary" in template_text
     assert "Date format: dd--mm--yyyy" not in template_text
+    assert 'class="tools-search-date-picker-button"' in template_text
+    assert 'aria-label="Pick start date"' in template_text
+    assert 'aria-label="Pick end date"' in template_text
     assert (
         template_text.count(
             '<h2 class="tools-search-heading">Acquisition metadata indexing</h2>'
@@ -103,8 +106,11 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "tools-search-date-control" in template_text
     assert "changeMonth: true" in template_text
     assert "changeYear: true" in template_text
-    assert "showOn: 'button'" in template_text
-    assert "buttonText: 'Pick'" in template_text
+    assert "showOn: 'focus'" in template_text
+    assert "pendingDatepickerSelection" in template_text
+    assert "capturePendingPickerSelection" in template_text
+    assert "$(input).datepicker('hide');" in template_text
+    assert "tools-search-date-picker-button" in template_text
     assert "const canSafelyUpdateDatepicker = (input) => {" in template_text
     assert "updateSearchSubmitState" in template_text
     assert (
