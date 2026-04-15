@@ -114,7 +114,22 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "current-query-payload" not in template_text
     assert "const buildCurrentQueryPayload = () => {" in template_text
     assert "const normalizeSavedQueryName = (value) =>" in template_text
+    assert "const syncPrimaryLayoutMinWidth = () => {" in template_text
+    assert "const updateSaveQueryButtonState = () => {" in template_text
+    assert (
+        "savedQueryNameInput.addEventListener('input', updateSaveQueryButtonState);"
+        in template_text
+    )
+    assert (
+        "window.addEventListener('resize', syncPrimaryLayoutMinWidth);" in template_text
+    )
     assert "const queryPayload = buildCurrentQueryPayload();" in template_text
+    assert "window.alert('Enter a name for the saved query.');" not in template_text
+    assert "Acquisition metadata indexing setting saved." not in template_text
+    assert (
+        "showLiveStatus('Saving acquisition metadata indexing setting…');"
+        not in template_text
+    )
     assert "open.textContent = 'Load';" in template_text
     assert "const previewLoadQueue = [];" in template_text
     assert "const maxConcurrentPreviewLoads = 4;" in template_text
@@ -122,6 +137,7 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "tools-search-date-control" in template_text
     assert "changeMonth: true" in template_text
     assert "changeYear: true" in template_text
+    assert "showAnim: ''" in template_text
     assert "const earliestSelectableDate = new Date(2010, 0, 1);" in template_text
     assert "isBeforeEarliestSelectableDate" in template_text
     assert "yearRange: '2010:c'" in template_text
@@ -190,13 +206,22 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     assert ".tools-search-card .tools-search-saved-action--delete {" in styles_text
     assert "padding: 6px 10px;" in styles_text
     assert "font-size: 13px;" in styles_text
+    assert "gap: 1rem;" in styles_text
+    assert "min-width: var(--tools-search-primary-min-width, 0);" in styles_text
+    assert "padding-right: 0;" in styles_text
+    assert "padding: 0.68rem 0.8rem;" in styles_text
     assert "padding: 0.48rem 0.52rem;" in styles_text
     assert "padding-top: 0.36rem;" in styles_text
+    assert "padding: 0.18rem 0;" in styles_text
+    assert "color: #000000;" in styles_text
     assert "grid-template-columns: minmax(0, 1fr) auto;" in styles_text
-    assert "width: min(100%, 52rem);" in styles_text
+    assert "width: min(100%, 56rem);" in styles_text
     assert ".tools-search-saved-meta {" in styles_text
     assert ".tools-search-status-table {" in styles_text
     assert ".tools-search-date-picker-proxy {" in styles_text
+    assert "gap: 0.25rem;" in styles_text
+    assert "width: 100%;" in styles_text
+    assert "height: 2.5rem;" in styles_text
     assert ".tools-search-field--scope.is-select-active select {" in styles_text
     assert (
         ".tools-search-date-control.is-picker-open .tools-search-date-input:not(.tools-search-date-input--invalid),"
@@ -204,6 +229,11 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     )
     assert ".tools-search-query-name-input {" in styles_text
     assert ".tools-search-status-message {" in styles_text
+    assert ".tools-search-settings-panel .tools-page-note {" in styles_text
+    assert ".tools-search-empty {" in styles_text
+    assert "white-space: normal;" in styles_text
+    assert "overflow-wrap: anywhere;" in styles_text
+    assert "#ui-datepicker-div.ui-widget-content {" in styles_text
     assert ".tools-search-card > .tools-search-heading--compact + * {" in styles_text
     assert ".tools-search-index-heading + .tools-search-settings-panel {" in styles_text
     assert "@media (max-width: 1200px) {" in styles_text

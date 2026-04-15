@@ -204,7 +204,7 @@
                     <button type="button"
                             class="admin-tools-button tools-search-inline-action tools-search-inline-action--primary"
                             id="save-query-btn"
-                            {% if blocked_for_root %}disabled{% endif %}>
+                            disabled>
                         Save
                     </button>
                 </div>
@@ -454,6 +454,32 @@
         };
 
         const normalizeSavedQueryName = (value) => String(value || '').trim().replace(/\s+/g, ' ');
+
+        const syncPrimaryLayoutMinWidth = () => {
+            const layout = document.querySelector('.tools-search-layout');
+            const primaryGrid = document.querySelector('.tools-search-grid--primary');
+            const primaryCard = primaryGrid?.closest('.tools-search-card');
+            if (!layout || !primaryGrid || !primaryCard) {
+                return;
+            }
+            const cardStyles = window.getComputedStyle(primaryCard);
+            const paddingLeft = Number.parseFloat(cardStyles.paddingLeft || '0') || 0;
+            const paddingRight = Number.parseFloat(cardStyles.paddingRight || '0') || 0;
+            const gridMinWidth = Math.ceil(primaryGrid.scrollWidth);
+            const minWidth = Math.ceil(gridMinWidth + paddingLeft + paddingRight);
+            primaryGrid.style.minWidth = `${gridMinWidth}px`;
+            layout.style.setProperty('--tools-search-primary-min-width', `${minWidth}px`);
+        };
+
+        const updateSaveQueryButtonState = () => {
+            const saveQueryButton = document.getElementById('save-query-btn');
+            const savedQueryNameInput = document.getElementById('saved-query-name');
+            if (!saveQueryButton || !savedQueryNameInput) {
+                return;
+            }
+            const hasQueryName = Boolean(normalizeSavedQueryName(savedQueryNameInput.value));
+            saveQueryButton.disabled = blockedForRoot || !hasQueryName;
+        };
 
         const clearSearchValidationStatus = () => {
             if (!liveStatusEl || liveStatusEl.dataset.state !== 'error') {
@@ -930,6 +956,7 @@
                     dateInputByProxy.set(proxy, input);
                     $(proxy).datepicker({
                         dateFormat,
+                        showAnim: '',
                         changeMonth: true,
                         changeYear: true,
                         showButtonPanel: true,
@@ -1207,6 +1234,9 @@
         });
         initializeDateInputs();
         initializePreviewLoading();
+        syncPrimaryLayoutMinWidth();
+        window.addEventListener('resize', syncPrimaryLayoutMinWidth);
+        window.setTimeout(syncPrimaryLayoutMinWidth, 0);
 
         if (!blockedForRoot) {
             updateAcquisitionIndexUi({
@@ -1250,7 +1280,6 @@
                     }
                     const previousEnabled = acquisitionMetadataEnabled;
                     const requestedEnabled = acquisitionToggle.checked;
-                    showLiveStatus('Saving acquisition metadata indexing setting…');
                     acquisitionToggle.disabled = true;
                     try {
                         const payload = await postJson(settingsUrl, {
@@ -1262,14 +1291,15 @@
                                     payload.user_settings && payload.user_settings.acquisition_metadata_enabled
                                 ),
                                 accessible: true,
+                                statusMessage: Boolean(
+                                    payload.user_settings && payload.user_settings.acquisition_metadata_enabled
+                                )
+                                    ? acquisitionIndexMessages.enabled
+                                    : acquisitionIndexMessages.disabled,
+                                statusState: 'info',
                             }
                         );
                         updateSyncTable(payload.sync_states);
-                        showLiveStatus(
-                            payload.sync_message
-                                || 'Acquisition metadata indexing setting saved.',
-                            'success'
-                        );
                     } catch (error) {
                         updateAcquisitionIndexUi({
                             enabled: previousEnabled,
@@ -1277,10 +1307,8 @@
                             statusMessage: error.message || acquisitionIndexMessages.save_error,
                             statusState: 'error',
                         });
-                        showLiveStatus(error.message || acquisitionIndexMessages.save_error, 'error');
                     } finally {
                         acquisitionToggle.disabled = blockedForRoot || !settingsAccessible;
-                        clearLiveStatus();
                     }
                 });
             }
@@ -1292,10 +1320,12 @@
             const saveQueryButton = document.getElementById('save-query-btn');
             const savedQueryNameInput = document.getElementById('saved-query-name');
             if (saveQueryButton && savedQueryNameInput) {
+                savedQueryNameInput.addEventListener('input', updateSaveQueryButtonState);
+                updateSaveQueryButtonState();
                 saveQueryButton.addEventListener('click', async () => {
                     const queryName = normalizeSavedQueryName(savedQueryNameInput.value);
                     if (!queryName) {
-                        window.alert('Enter a name for the saved query.');
+                        updateSaveQueryButtonState();
                         return;
                     }
                     savedQueryNameInput.value = queryName;
@@ -1315,6 +1345,7 @@
                         window.alert(error.message || String(error));
                     } finally {
                         setButtonBusy(saveQueryButton, false);
+                        updateSaveQueryButtonState();
                         clearLiveStatus();
                     }
                 });
