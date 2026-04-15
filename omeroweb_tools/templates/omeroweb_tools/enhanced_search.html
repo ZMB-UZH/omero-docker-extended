@@ -97,6 +97,12 @@
                                        inputmode="numeric"
                                        autocomplete="off"
                                        spellcheck="false">
+                                <button type="button"
+                                        class="tools-search-date-picker-button"
+                                        data-date-input="acquisition_date_from"
+                                        aria-label="Pick start date">
+                                    Pick
+                                </button>
                             </div>
                         </div>
                         <div class="tools-search-field tools-search-field--date">
@@ -111,6 +117,12 @@
                                        inputmode="numeric"
                                        autocomplete="off"
                                        spellcheck="false">
+                                <button type="button"
+                                        class="tools-search-date-picker-button"
+                                        data-date-input="acquisition_date_to"
+                                        aria-label="Pick end date">
+                                    Pick
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -222,8 +234,8 @@
             </section>
 
             <section class="admin-tools-card admin-tools-card--wide tools-search-card">
-                <h2 class="tools-search-heading">Results</h2>
-                <p class="tools-page-note">
+                <h2 class="tools-search-heading tools-search-heading--compact">Results</h2>
+                <p class="tools-page-note tools-page-note--section-summary">
                     Showing {{ search_payload.results|length }} result(s)
                     {% if search_payload.total_count %}from {{ search_payload.total_count }} matching result(s){% endif %}.
                 </p>
@@ -565,6 +577,8 @@
 
         const dateFormat = 'dd--mm--yy';
         const dateInputDigits = 8;
+        let activeDatepickerInput = null;
+        let pendingDatepickerSelection = null;
 
         const digitsOnly = (value) => String(value || '').replace(/\D/g, '').slice(0, dateInputDigits);
 
@@ -589,6 +603,37 @@
             } catch (_error) {
                 return null;
             }
+        };
+
+        const formatStrictDateInput = (date) => {
+            if (!date || Number.isNaN(date.getTime())) {
+                return '';
+            }
+            if (window.jQuery?.datepicker) {
+                return window.jQuery.datepicker.formatDate(dateFormat, date);
+            }
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = String(date.getFullYear()).padStart(4, '0');
+            return `${day}--${month}--${year}`;
+        };
+
+        const buildPickerSelectionDate = ({ day, monthIndex, year }) => {
+            if (![day, monthIndex, year].every(Number.isInteger)) {
+                return null;
+            }
+            const parsed = new Date(year, monthIndex, day);
+            if (Number.isNaN(parsed.getTime())) {
+                return null;
+            }
+            if (
+                parsed.getFullYear() !== year
+                || parsed.getMonth() !== monthIndex
+                || parsed.getDate() !== day
+            ) {
+                return null;
+            }
+            return parsed;
         };
 
         const isPotentiallyValidDateInput = (value) => {
@@ -701,6 +746,25 @@
             if (!dateInputs.length) {
                 return;
             }
+            const capturePendingPickerSelection = (event) => {
+                const dateCell = event.target.closest('#ui-datepicker-div td[data-handler="selectDay"]');
+                if (!dateCell || !activeDatepickerInput) {
+                    return;
+                }
+                const dateLink = dateCell.querySelector('a');
+                const day = Number(dateLink?.textContent?.trim());
+                const monthIndex = Number(dateCell.dataset.month);
+                const year = Number(dateCell.dataset.year);
+                const date = buildPickerSelectionDate({ day, monthIndex, year });
+                if (!date) {
+                    pendingDatepickerSelection = null;
+                    return;
+                }
+                pendingDatepickerSelection = {
+                    input: activeDatepickerInput,
+                    date,
+                };
+            };
             dateInputs.forEach((input) => {
                 input.value = formatDateDigits(input.value);
                 setDateInputValidity(input, true);
@@ -716,25 +780,85 @@
             });
             if (window.jQuery?.datepicker) {
                 const $ = window.jQuery;
+                document.addEventListener('mousedown', capturePendingPickerSelection, true);
+                document.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') {
+                        return;
+                    }
+                    capturePendingPickerSelection(event);
+                }, true);
+                document.addEventListener('click', (event) => {
+                    if (!event.target.closest('#ui-datepicker-div td[data-handler="selectDay"]')) {
+                        return;
+                    }
+                    const input = activeDatepickerInput;
+                    if (!input) {
+                        return;
+                    }
+                    window.setTimeout(() => {
+                        $(input).datepicker('hide');
+                    }, 0);
+                }, true);
                 dateInputs.forEach((input) => {
                     $(input).datepicker({
                         dateFormat,
-                        showOn: 'button',
-                        buttonText: 'Pick',
+                        showOn: 'focus',
                         changeMonth: true,
                         changeYear: true,
                         showButtonPanel: true,
                         yearRange: 'c-100:c+10',
+                        beforeShow() {
+                            activeDatepickerInput = input;
+                            pendingDatepickerSelection = null;
+                            updateDatepickerBounds();
+                        },
                         onSelect(selectedDate) {
                             input.value = selectedDate;
+                            pendingDatepickerSelection = null;
                             validateDateInput(input, { syncPicker: false });
                             updateSearchSubmitState();
+                            $(input).datepicker('hide');
                         },
-                        onClose() {
+                        onClose(dateText) {
+                            const hasDateText = Boolean(String(dateText || '').trim());
+                            const pendingSelection = pendingDatepickerSelection?.input === input
+                                ? pendingDatepickerSelection.date
+                                : null;
+                            pendingDatepickerSelection = null;
+                            activeDatepickerInput = null;
+                            if (!hasDateText && pendingSelection) {
+                                input.value = formatStrictDateInput(pendingSelection);
+                                $(input).datepicker('setDate', pendingSelection);
+                            } else if (hasDateText) {
+                                input.value = formatDateDigits(dateText);
+                            }
                             validateDateInput(input, { syncPicker: false });
                             updateSearchSubmitState();
                         },
                     });
+                    input
+                        .closest('.tools-search-date-control')
+                        ?.querySelector('.tools-search-date-picker-button')
+                        ?.addEventListener('click', (event) => {
+                            event.preventDefault();
+                            if (
+                                $.datepicker._datepickerShowing
+                                && $.datepicker._lastInput
+                                && $.datepicker._lastInput[0] === input
+                            ) {
+                                $.datepicker._hideDatepicker();
+                                activeDatepickerInput = null;
+                                pendingDatepickerSelection = null;
+                                return;
+                            }
+                            if ($.datepicker._datepickerShowing) {
+                                $.datepicker._hideDatepicker();
+                            }
+                            activeDatepickerInput = input;
+                            pendingDatepickerSelection = null;
+                            $(input).datepicker('show');
+                            input.focus({ preventScroll: true });
+                        });
                 });
             }
             dateInputs.forEach((input) => validateDateInput(input));
