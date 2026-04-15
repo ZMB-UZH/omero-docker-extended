@@ -40,6 +40,9 @@ class EnhancedSearchStoreError(Exception):
     """Raised when Tools enhanced-search persistence fails."""
 
 
+USER_SETTINGS_NOT_PERSISTED_ERROR = "Enhanced-search user settings were not persisted."
+
+
 def _schema_ready(conn) -> bool:
     try:
         return bool(_SCHEMA_READY_CONNECTIONS.get(conn))
@@ -1158,7 +1161,13 @@ def save_user_settings(
             (username, extras.Json(settings_payload)),
         )
     conn.commit()
-    return load_user_settings(conn, username, defaults=settings_payload)
+    stored = load_user_settings(conn, username)
+    for key, value in settings_payload.items():
+        if stored.get(key) != value:
+            raise EnhancedSearchStoreError(USER_SETTINGS_NOT_PERSISTED_ERROR)
+    verified = dict(settings_payload)
+    verified.update(stored)
+    return verified
 
 
 def clear_scope_index(
