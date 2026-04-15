@@ -294,6 +294,47 @@ def test_save_query_view_returns_saved_queries_after_success(monkeypatch):
     assert saved == [("alice", "My query", {"query_text": "lsm"})]
 
 
+def test_save_query_view_normalizes_name_and_handles_store_failure(monkeypatch):
+    monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
+    saved = []
+    monkeypatch.setattr(
+        index_view,
+        "save_query",
+        lambda username, query_name, query_payload: saved.append(
+            (username, query_name, query_payload)
+        ),
+    )
+    monkeypatch.setattr(index_view, "saved_queries", lambda username: [{"id": 1}])
+
+    request = RequestFactory().post(
+        "/omeroweb_tools/enhanced-search/saved-queries/save/",
+        data=json.dumps(
+            {
+                "query_name": "  My\tquery\nname  ",
+                "query_payload": {"query_text": "lsm"},
+            }
+        ),
+        content_type="application/json",
+    )
+    response = inspect.unwrap(index_view.save_query_view)(request, conn=object())
+
+    assert response.status_code == 200
+    assert saved == [("alice", "My query name", {"query_text": "lsm"})]
+
+    monkeypatch.setattr(
+        index_view,
+        "save_query",
+        lambda username, query_name, query_payload: (_ for _ in ()).throw(
+            index_view.EnhancedSearchStoreError("db offline")
+        ),
+    )
+    failed_response = inspect.unwrap(index_view.save_query_view)(request, conn=object())
+    assert failed_response.status_code == 503
+    assert json.loads(failed_response.content.decode("utf-8")) == {
+        "error": index_view.SAVED_QUERY_SAVE_ERROR
+    }
+
+
 def test_view_utils_cover_json_root_guard_host_resolution_and_validation(monkeypatch):
     monkeypatch.setattr(
         view_utils,

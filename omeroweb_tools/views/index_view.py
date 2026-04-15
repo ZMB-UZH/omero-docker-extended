@@ -31,9 +31,20 @@ from .utils import current_username, load_json_body, require_non_root_user
 
 __all__ = ["SearchQuery"]
 
+SAVED_QUERY_NAME_MAX_LENGTH = 120
+SAVED_QUERY_NAME_REQUIRED_ERROR = "Query name is required."
+SAVED_QUERY_NAME_TOO_LONG_ERROR = (
+    f"Query name must be {SAVED_QUERY_NAME_MAX_LENGTH} characters or fewer."
+)
+SAVED_QUERY_SAVE_ERROR = "Could not save search query. Database is not accessible."
+
 
 def _is_root_user(request, conn) -> bool:
     return str(current_username(request, conn) or "").strip() == "root"
+
+
+def _normalize_saved_query_name(value: object) -> str:
+    return " ".join(str(value or "").split())
 
 
 def _load_user_settings_context(
@@ -153,6 +164,7 @@ def enhanced_search_view(request, conn=None, url=None, **kwargs):
                 "load_error": user_settings_load_error_message(),
                 "save_error": user_settings_save_error_message(),
             },
+            "saved_query_name_max_length": SAVED_QUERY_NAME_MAX_LENGTH,
         },
     )
 
@@ -246,14 +258,19 @@ def save_query_view(request, conn=None, url=None, **kwargs):
     payload, error = load_json_body(request)
     if error:
         return JsonResponse({"error": error}, status=400)
-    query_name = str((payload or {}).get("query_name") or "").strip()
+    query_name = _normalize_saved_query_name((payload or {}).get("query_name"))
     query_payload = (payload or {}).get("query_payload")
     if not query_name:
-        return JsonResponse({"error": "Query name is required."}, status=400)
+        return JsonResponse({"error": SAVED_QUERY_NAME_REQUIRED_ERROR}, status=400)
+    if len(query_name) > SAVED_QUERY_NAME_MAX_LENGTH:
+        return JsonResponse({"error": SAVED_QUERY_NAME_TOO_LONG_ERROR}, status=400)
     if not isinstance(query_payload, dict):
         return JsonResponse({"error": "Query payload is required."}, status=400)
     username = str(current_username(request, conn) or "")
-    save_query(username, query_name, query_payload)
+    try:
+        save_query(username, query_name, query_payload)
+    except EnhancedSearchStoreError:
+        return JsonResponse({"error": SAVED_QUERY_SAVE_ERROR}, status=503)
     return JsonResponse({"ok": True, "saved_queries": saved_queries(username)})
 
 
