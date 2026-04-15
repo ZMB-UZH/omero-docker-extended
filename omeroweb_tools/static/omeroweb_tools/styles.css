@@ -9,6 +9,10 @@
     color: #5f6b7a;
 }
 
+.tools-page-note--section-summary {
+    margin-top: 0;
+}
+
 .tools-page-note--tight {
     margin-top: 0.7rem;
 }
@@ -34,6 +38,10 @@
     margin: 0 0 0.85rem;
     font-size: 1.15rem;
     color: #007bff;
+}
+
+.tools-search-heading--compact {
+    margin-bottom: 0.35rem;
 }
 
 .tools-search-grid {
@@ -125,6 +133,39 @@
     flex: 1 1 auto;
 }
 
+.tools-search-date-picker-button {
+    flex: 0 0 auto;
+    min-width: 3rem;
+    min-height: 2.5rem;
+    padding: 0.68rem 0.8rem;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: #d1d5db;
+    color: #1f2937;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.tools-search-date-picker-button:hover,
+.tools-search-date-picker-button:focus-visible {
+    border-color: transparent;
+    background: #c7ced6;
+    color: #1f2937;
+    outline: 2px solid rgba(37, 99, 235, 0.18);
+    outline-offset: 1px;
+}
+
+.tools-search-date-picker-button:disabled {
+    border-color: #94a3b8;
+    background: #94a3b8;
+    color: #ffffff;
+    cursor: not-allowed;
+    outline: none;
+}
+
 .tools-search-date-input {
     text-transform: none;
 }
@@ -214,11 +255,15 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 0.9rem;
-    margin-bottom: 0.85rem;
+    margin-bottom: 0.35rem;
 }
 
 .tools-search-index-heading__copy {
     min-width: 0;
+}
+
+.tools-search-index-heading .tools-search-heading {
+    margin-bottom: 0;
 }
 
 .tools-search-status-table,
@@ -487,31 +532,6 @@
     font-size: 0.8rem;
     color: #374151;
     user-select: none;
-}
-
-.tools-search-date-control .ui-datepicker-trigger {
-    flex: 0 0 auto;
-    min-width: 3rem;
-    min-height: 2.5rem;
-    padding: 0.68rem 0.8rem;
-    border: 1px solid transparent;
-    border-radius: 8px;
-    background: #d1d5db;
-    color: #1f2937;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 0.82rem;
-    font-weight: 600;
-    line-height: 1;
-    cursor: pointer;
-}
-
-.tools-search-date-control .ui-datepicker-trigger:hover,
-.tools-search-date-control .ui-datepicker-trigger:focus-visible {
-    border-color: transparent;
-    background: #c7ced6;
-    color: #1f2937;
-    outline: 2px solid rgba(37, 99, 235, 0.18);
-    outline-offset: 1px;
 }
 
 .tools-page-note--error {
