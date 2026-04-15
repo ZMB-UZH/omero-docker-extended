@@ -71,6 +71,20 @@ SEARCH_SOURCE_DISPLAY_ORDER = (
 USER_SCOPE_TYPE = "user"
 USER_SCOPE_LABEL = "Your acquisition metadata"
 _SUPPORTED_DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d--%m--%Y")
+ACQUISITION_INDEXING_ENABLED_MESSAGE = (
+    "Acquisition metadata indexing is enabled for your account. "
+    "All images you own will be indexed automatically in the background."
+)
+ACQUISITION_INDEXING_DISABLED_MESSAGE = (
+    "Acquisition metadata indexing is disabled for your account. "
+    "No acquisition metadata is stored for your account."
+)
+USER_SETTINGS_LOAD_ERROR_MESSAGE = (
+    "Could not retrieve user setting. Database is not accessible."
+)
+USER_SETTINGS_SAVE_ERROR_MESSAGE = (
+    "Could not save user setting. Database is not accessible."
+)
 
 
 class ScopeSyncCancelledError(RuntimeError):
@@ -122,6 +136,22 @@ def runtime_config() -> EnhancedSearchRuntimeConfig:
 
 def runtime_celery_config() -> EnhancedSearchCeleryConfig:
     return build_enhanced_search_celery_config()
+
+
+def acquisition_index_status_message(enabled: bool) -> str:
+    return (
+        ACQUISITION_INDEXING_ENABLED_MESSAGE
+        if enabled
+        else ACQUISITION_INDEXING_DISABLED_MESSAGE
+    )
+
+
+def user_settings_load_error_message() -> str:
+    return USER_SETTINGS_LOAD_ERROR_MESSAGE
+
+
+def user_settings_save_error_message() -> str:
+    return USER_SETTINGS_SAVE_ERROR_MESSAGE
 
 
 def _default_scope_label(scope_type: str, scope_id: int) -> str:
@@ -439,7 +469,7 @@ def save_user_settings(
                 db_conn,
                 USER_SCOPE_TYPE,
                 user_id,
-                current_message="Acquisition metadata indexing is disabled for your account.",
+                current_message=acquisition_index_status_message(False),
             )
 
     sync_started = False

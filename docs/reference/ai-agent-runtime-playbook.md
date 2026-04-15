@@ -70,6 +70,11 @@ Examples:
 - Resolve the active virtualenv first if the exact interpreter path is uncertain.
 - For OMERO.web import validation, authenticate as a regular OMERO user; the Import plugin intentionally blocks `root`.
 - If repository modules are missing inside a container, switch to the runtime virtualenv instead of retrying plain `python3`.
+- If you create a disposable OMERO user for live verification, confirm that it
+  can open a real OMERO session before relying on it. On this installation,
+  `omero user add` can succeed while leaving the account without a usable
+  default group, which breaks both BlitzGateway and OMERO.web login until the
+  account is repaired.
 
 ## Multiline container probes
 
