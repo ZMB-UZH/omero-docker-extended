@@ -51,7 +51,7 @@ plugin database.
 - **Refresh index fails**: check the `tools-celery-worker` logs and confirm the
   OMERO API and plugin database are reachable from the `omeroweb` container.
 - **Acquisition results do not appear yet**: enable acquisition metadata
-  indexing for your account and wait for the background indexer to finish.
+  indexing for your user account and wait for the background indexer to finish.
 - **The indexing checkbox is disabled with a database warning**: the plugin
   database is not currently reachable, so the page cannot safely read or save
   your per-user indexing setting.
