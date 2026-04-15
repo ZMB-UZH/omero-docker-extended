@@ -146,7 +146,7 @@
                                id="acquisition_metadata_enabled"
                                {% if user_settings.acquisition_metadata_enabled %}checked{% endif %}
                                {% if blocked_for_root or not user_settings_available %}disabled{% endif %}>
-                        <span>Enable acquisition metadata indexing</span>
+                        <span>Acquisition metadata indexing</span>
                     </label>
                     <p class="tools-page-note tools-page-note--tight{% if acquisition_index_status_state == 'error' %} tools-page-note--error{% endif %}"
                        id="acquisition-index-status">{{ acquisition_index_status }}</p>
@@ -191,7 +191,7 @@
             </section>
 
             <section class="admin-tools-card admin-tools-card--wide tools-search-card">
-                <h2 class="tools-search-heading">Saved queries</h2>
+                <h2 class="tools-search-heading tools-search-heading--compact">Saved queries</h2>
                 <div class="tools-search-inline-form">
                     <input type="text"
                            id="saved-query-name"
@@ -201,7 +201,7 @@
                             class="admin-tools-button"
                             id="save-query-btn"
                             {% if blocked_for_root %}disabled{% endif %}>
-                        Save current query
+                        Save
                     </button>
                 </div>
                 <div class="tools-search-saved-list" id="saved-query-list">
@@ -210,16 +210,16 @@
                         <div class="tools-search-saved-item" data-query-id="{{ item.id }}">
                             <div>
                                 <strong>{{ item.query_name }}</strong>
-                                <small>Updated {{ item.updated_at }}</small>
+                                <small>{{ item.updated_at|date:"j M Y, g:i a" }}</small>
                             </div>
                             <div class="tools-search-saved-actions">
-                                <a class="admin-tools-button admin-tools-button-link"
+                                <a class="admin-tools-button admin-tools-button-link tools-search-saved-action tools-search-saved-action--load"
                                    href="{% url 'omeroweb_tools_enhanced_search_apply_query' item.id %}"
-                                   data-page-load-message="Opening saved search…">
-                                    Open
+                                   data-page-load-message="Loading saved search…">
+                                    Load
                                 </a>
                                 <button type="button"
-                                        class="admin-tools-button delete-query-btn"
+                                        class="admin-tools-button delete-query-btn tools-search-saved-action tools-search-saved-action--delete"
                                         data-query-id="{{ item.id }}"
                                         {% if blocked_for_root %}disabled{% endif %}>
                                     Delete
@@ -235,10 +235,7 @@
 
             <section class="admin-tools-card admin-tools-card--wide tools-search-card">
                 <h2 class="tools-search-heading tools-search-heading--compact">Results</h2>
-                <p class="tools-page-note tools-page-note--section-summary">
-                    Showing {{ search_payload.results|length }} result(s)
-                    {% if search_payload.total_count %}from {{ search_payload.total_count }} matching result(s){% endif %}.
-                </p>
+                <p class="tools-page-note tools-page-note--section-summary">Showing {{ search_payload.results|length }} result(s){% if search_payload.total_count %} from {{ search_payload.total_count }} matching result(s){% endif %}.</p>
                 {% if search_payload.results %}
                 <table class="tools-search-results">
                     <thead>
@@ -350,7 +347,6 @@
          aria-live="polite"
          aria-atomic="true"
          hidden></div>
-    {{ query.to_payload|json_script:"current-query-payload" }}
     {{ acquisition_index_messages|json_script:"acquisition-index-messages" }}
     <script src="{% static '3rdparty/jquery-3.6.2.min.js' %}"></script>
     <script src="{% static '3rdparty/jquery-ui-1.13.2/js/jquery-ui.js' %}"></script>
@@ -368,10 +364,9 @@
         const pageLoaderTitleEl = document.getElementById('tools-search-page-loader-title');
         const pageLoaderMessageEl = document.getElementById('tools-search-page-loader-message');
         const queryTextInput = document.getElementById('query_text');
+        const enhancedSearchForm = document.getElementById('enhanced-search-form');
         const searchSubmitButton = document.getElementById('search-submit-btn');
-        const currentQueryPayloadNode = document.getElementById('current-query-payload');
         const acquisitionIndexMessagesNode = document.getElementById('acquisition-index-messages');
-        const queryPayload = currentQueryPayloadNode ? JSON.parse(currentQueryPayloadNode.textContent) : {};
         const acquisitionIndexMessages = acquisitionIndexMessagesNode
             ? JSON.parse(acquisitionIndexMessagesNode.textContent)
             : {};
@@ -575,10 +570,27 @@
             return `${values.day} ${values.month} ${values.year}, ${values.hour}:${values.minute} ${period}`.trim();
         };
 
+        const buildCurrentQueryPayload = () => {
+            if (!enhancedSearchForm) {
+                return { page: 1 };
+            }
+            const formData = new FormData(enhancedSearchForm);
+            return {
+                query_text: String(formData.get('query_text') || '').trim(),
+                indexed_scope: String(formData.get('indexed_scope') || '').trim(),
+                acquisition_date_from: formatDateDigits(formData.get('acquisition_date_from') || ''),
+                acquisition_date_to: formatDateDigits(formData.get('acquisition_date_to') || ''),
+                page: 1,
+            };
+        };
+
         const dateFormat = 'dd--mm--yy';
         const dateInputDigits = 8;
-        let activeDatepickerInput = null;
-        let pendingDatepickerSelection = null;
+        let openDatepickerInput = null;
+        const selectedDateByInput = new WeakMap();
+        const pendingDateInputSyncTimers = new WeakMap();
+        const datepickerProxyByInput = new WeakMap();
+        const dateInputByProxy = new WeakMap();
 
         const digitsOnly = (value) => String(value || '').replace(/\D/g, '').slice(0, dateInputDigits);
 
@@ -599,7 +611,9 @@
                 return null;
             }
             try {
-                return window.jQuery.datepicker.parseDate(dateFormat, normalized);
+                const parsed = window.jQuery.datepicker.parseDate(dateFormat, normalized);
+                const normalizedParsed = window.jQuery.datepicker.formatDate(dateFormat, parsed);
+                return normalizedParsed === normalized ? parsed : null;
             } catch (_error) {
                 return null;
             }
@@ -616,24 +630,6 @@
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const year = String(date.getFullYear()).padStart(4, '0');
             return `${day}--${month}--${year}`;
-        };
-
-        const buildPickerSelectionDate = ({ day, monthIndex, year }) => {
-            if (![day, monthIndex, year].every(Number.isInteger)) {
-                return null;
-            }
-            const parsed = new Date(year, monthIndex, day);
-            if (Number.isNaN(parsed.getTime())) {
-                return null;
-            }
-            if (
-                parsed.getFullYear() !== year
-                || parsed.getMonth() !== monthIndex
-                || parsed.getDate() !== day
-            ) {
-                return null;
-            }
-            return parsed;
         };
 
         const isPotentiallyValidDateInput = (value) => {
@@ -677,15 +673,23 @@
             input.setAttribute('aria-invalid', isValid ? 'false' : 'true');
         };
 
-        const canSafelyUpdateDatepicker = (input) => {
-            if (!input) {
-                return false;
+        const syncDatepickerProxyValue = (input, dateValue) => {
+            if (!window.jQuery?.datepicker) {
+                return;
             }
-            const value = String(input.value || '').trim();
-            if (!value) {
-                return true;
+            const proxy = datepickerProxyByInput.get(input);
+            if (!proxy) {
+                return;
             }
-            return digitsOnly(value).length === dateInputDigits && parseStrictDateInput(value) !== null;
+            window.jQuery(proxy).datepicker('setDate', dateValue || null);
+        };
+
+        const activeDatepickerInput = () => {
+            if (openDatepickerInput) {
+                return openDatepickerInput;
+            }
+            const lastInput = window.jQuery?.datepicker?._lastInput?.[0];
+            return dateInputByProxy.get(lastInput) || null;
         };
 
         const updateDatepickerBounds = () => {
@@ -694,13 +698,15 @@
             }
             const startInput = document.getElementById('acquisition_date_from');
             const endInput = document.getElementById('acquisition_date_to');
+            const startProxy = datepickerProxyByInput.get(startInput);
+            const endProxy = datepickerProxyByInput.get(endInput);
             const startDate = parseStrictDateInput(startInput?.value);
             const endDate = parseStrictDateInput(endInput?.value);
-            if (startInput && canSafelyUpdateDatepicker(startInput)) {
-                window.jQuery(startInput).datepicker('option', 'maxDate', endDate || null);
+            if (startProxy) {
+                window.jQuery(startProxy).datepicker('option', 'maxDate', endDate || null);
             }
-            if (endInput && canSafelyUpdateDatepicker(endInput)) {
-                window.jQuery(endInput).datepicker('option', 'minDate', startDate || null);
+            if (endProxy) {
+                window.jQuery(endProxy).datepicker('option', 'minDate', startDate || null);
             }
         };
 
@@ -711,8 +717,8 @@
             const value = String(input.value || '').trim();
             if (!value) {
                 setDateInputValidity(input, true);
-                if (syncPicker && window.jQuery?.datepicker) {
-                    window.jQuery(input).datepicker('setDate', null);
+                if (syncPicker) {
+                    syncDatepickerProxyValue(input, null);
                 }
                 updateDatepickerBounds();
                 return true;
@@ -734,8 +740,8 @@
                 return false;
             }
             setDateInputValidity(input, true);
-            if (syncPicker && window.jQuery?.datepicker) {
-                window.jQuery(input).datepicker('setDate', parsed);
+            if (syncPicker) {
+                syncDatepickerProxyValue(input, parsed);
             }
             updateDatepickerBounds();
             return true;
@@ -746,32 +752,22 @@
             if (!dateInputs.length) {
                 return;
             }
-            const capturePendingPickerSelection = (event) => {
-                const dateCell = event.target.closest('#ui-datepicker-div td[data-handler="selectDay"]');
-                if (!dateCell || !activeDatepickerInput) {
-                    return;
-                }
-                const dateLink = dateCell.querySelector('a');
-                const day = Number(dateLink?.textContent?.trim());
-                const monthIndex = Number(dateCell.dataset.month);
-                const year = Number(dateCell.dataset.year);
-                const date = buildPickerSelectionDate({ day, monthIndex, year });
-                if (!date) {
-                    pendingDatepickerSelection = null;
-                    return;
-                }
-                pendingDatepickerSelection = {
-                    input: activeDatepickerInput,
-                    date,
-                };
-            };
             dateInputs.forEach((input) => {
                 input.value = formatDateDigits(input.value);
                 setDateInputValidity(input, true);
                 input.addEventListener('input', () => {
-                    input.value = formatDateDigits(input.value);
-                    validateDateInput(input);
-                    updateSearchSubmitState();
+                    const formattedValue = formatDateDigits(input.value);
+                    const pendingTimer = pendingDateInputSyncTimers.get(input);
+                    if (pendingTimer) {
+                        window.clearTimeout(pendingTimer);
+                    }
+                    const timer = window.setTimeout(() => {
+                        pendingDateInputSyncTimers.delete(input);
+                        input.value = formattedValue;
+                        validateDateInput(input);
+                        updateSearchSubmitState();
+                    }, 0);
+                    pendingDateInputSyncTimers.set(input, timer);
                 });
                 input.addEventListener('blur', () => {
                     validateDateInput(input);
@@ -780,56 +776,89 @@
             });
             if (window.jQuery?.datepicker) {
                 const $ = window.jQuery;
-                document.addEventListener('mousedown', capturePendingPickerSelection, true);
-                document.addEventListener('keydown', (event) => {
-                    if (event.key !== 'Enter' && event.key !== ' ') {
-                        return;
-                    }
-                    capturePendingPickerSelection(event);
-                }, true);
-                document.addEventListener('click', (event) => {
-                    if (!event.target.closest('#ui-datepicker-div td[data-handler="selectDay"]')) {
-                        return;
-                    }
-                    const input = activeDatepickerInput;
-                    if (!input) {
-                        return;
-                    }
-                    window.setTimeout(() => {
-                        $(input).datepicker('hide');
-                    }, 0);
-                }, true);
+                const installDatepickerPointerGuard = () => {
+                    document.addEventListener('mousedown', (event) => {
+                        const target = event.target instanceof Element
+                            ? event.target
+                            : event.target?.parentElement;
+                        if (!target) {
+                            return;
+                        }
+                        if (
+                            target.closest('#ui-datepicker-div td[data-handler="selectDay"]')
+                            || target.closest('#ui-datepicker-div .ui-datepicker-current')
+                        ) {
+                            event.preventDefault();
+                        }
+                    }, true);
+                    document.addEventListener('click', (event) => {
+                        const target = event.target instanceof Element
+                            ? event.target
+                            : event.target?.parentElement;
+                        if (!target?.closest('#ui-datepicker-div .ui-datepicker-current')) {
+                            return;
+                        }
+                        event.preventDefault();
+                        const input = activeDatepickerInput();
+                        if (!input) {
+                            return;
+                        }
+                        const today = new Date();
+                        const todayValue = formatStrictDateInput(today);
+                        selectedDateByInput.set(input, todayValue);
+                        syncDatepickerProxyValue(input, today);
+                        input.value = todayValue;
+                        validateDateInput(input, { syncPicker: false });
+                        updateSearchSubmitState();
+                        window.setTimeout(() => {
+                            const proxy = datepickerProxyByInput.get(input);
+                            if (proxy) {
+                                $(proxy).datepicker('hide');
+                            }
+                        }, 0);
+                    }, true);
+                };
                 dateInputs.forEach((input) => {
-                    $(input).datepicker({
+                    const dateControl = input.closest('.tools-search-date-control');
+                    if (!dateControl) {
+                        return;
+                    }
+                    const proxy = document.createElement('input');
+                    proxy.type = 'text';
+                    proxy.className = 'tools-search-date-picker-proxy';
+                    proxy.tabIndex = -1;
+                    proxy.setAttribute('aria-hidden', 'true');
+                    dateControl.appendChild(proxy);
+                    datepickerProxyByInput.set(input, proxy);
+                    dateInputByProxy.set(proxy, input);
+                    $(proxy).datepicker({
                         dateFormat,
-                        showOn: 'focus',
                         changeMonth: true,
                         changeYear: true,
                         showButtonPanel: true,
                         yearRange: 'c-100:c+10',
                         beforeShow() {
-                            activeDatepickerInput = input;
-                            pendingDatepickerSelection = null;
+                            openDatepickerInput = input;
+                            selectedDateByInput.delete(input);
+                            syncDatepickerProxyValue(input, parseStrictDateInput(input.value));
                             updateDatepickerBounds();
                         },
                         onSelect(selectedDate) {
-                            input.value = selectedDate;
-                            pendingDatepickerSelection = null;
+                            const normalizedSelectedDate = formatDateDigits(selectedDate);
+                            selectedDateByInput.set(input, normalizedSelectedDate);
+                            input.value = normalizedSelectedDate;
                             validateDateInput(input, { syncPicker: false });
                             updateSearchSubmitState();
-                            $(input).datepicker('hide');
                         },
                         onClose(dateText) {
-                            const hasDateText = Boolean(String(dateText || '').trim());
-                            const pendingSelection = pendingDatepickerSelection?.input === input
-                                ? pendingDatepickerSelection.date
-                                : null;
-                            pendingDatepickerSelection = null;
-                            activeDatepickerInput = null;
-                            if (!hasDateText && pendingSelection) {
-                                input.value = formatStrictDateInput(pendingSelection);
-                                $(input).datepicker('setDate', pendingSelection);
-                            } else if (hasDateText) {
+                            const selectedDateText = selectedDateByInput.get(input);
+                            if (openDatepickerInput === input) {
+                                openDatepickerInput = null;
+                            }
+                            if (selectedDateText) {
+                                input.value = selectedDateText;
+                                selectedDateByInput.delete(input);
+                            } else if (String(dateText || '').trim()) {
                                 input.value = formatDateDigits(dateText);
                             }
                             validateDateInput(input, { syncPicker: false });
@@ -841,25 +870,28 @@
                         ?.querySelector('.tools-search-date-picker-button')
                         ?.addEventListener('click', (event) => {
                             event.preventDefault();
+                            const currentActiveInput = activeDatepickerInput();
                             if (
                                 $.datepicker._datepickerShowing
-                                && $.datepicker._lastInput
-                                && $.datepicker._lastInput[0] === input
+                                && currentActiveInput === input
                             ) {
                                 $.datepicker._hideDatepicker();
-                                activeDatepickerInput = null;
-                                pendingDatepickerSelection = null;
+                                openDatepickerInput = null;
                                 return;
                             }
                             if ($.datepicker._datepickerShowing) {
                                 $.datepicker._hideDatepicker();
                             }
-                            activeDatepickerInput = input;
-                            pendingDatepickerSelection = null;
-                            $(input).datepicker('show');
-                            input.focus({ preventScroll: true });
+                            openDatepickerInput = input;
+                            syncDatepickerProxyValue(input, parseStrictDateInput(input.value));
+                            $(proxy).datepicker('show');
                         });
                 });
+                if (document.readyState === 'complete') {
+                    installDatepickerPointerGuard();
+                } else {
+                    window.addEventListener('load', installDatepickerPointerGuard, { once: true });
+                }
             }
             dateInputs.forEach((input) => validateDateInput(input));
             updateSearchSubmitState();
@@ -984,21 +1016,21 @@
                 strong.textContent = item.query_name;
                 labelBlock.appendChild(strong);
                 const small = document.createElement('small');
-                small.textContent = `Updated ${item.updated_at}`;
+                small.textContent = formatStatusTimestamp(item.updated_at);
                 labelBlock.appendChild(small);
 
                 const actions = document.createElement('div');
                 actions.className = 'tools-search-saved-actions';
                 const open = document.createElement('a');
-                open.className = 'admin-tools-button admin-tools-button-link';
+                open.className = 'admin-tools-button admin-tools-button-link tools-search-saved-action tools-search-saved-action--load';
                 open.href = `${window.location.pathname}saved-queries/${item.id}/`;
-                open.dataset.pageLoadMessage = 'Opening saved search…';
-                open.textContent = 'Open';
+                open.dataset.pageLoadMessage = 'Loading saved search…';
+                open.textContent = 'Load';
                 actions.appendChild(open);
 
                 const remove = document.createElement('button');
                 remove.type = 'button';
-                remove.className = 'admin-tools-button delete-query-btn';
+                remove.className = 'admin-tools-button delete-query-btn tools-search-saved-action tools-search-saved-action--delete';
                 remove.dataset.queryId = String(item.id);
                 remove.textContent = 'Delete';
                 remove.disabled = blockedForRoot;
@@ -1129,6 +1161,7 @@
                     showLiveStatus('Saving current search…');
                     setButtonBusy(saveQueryButton, true, 'Saving…');
                     try {
+                        const queryPayload = buildCurrentQueryPayload();
                         const payload = await postJson(saveQueryUrl, {
                             query_name: queryName,
                             query_payload: queryPayload,
