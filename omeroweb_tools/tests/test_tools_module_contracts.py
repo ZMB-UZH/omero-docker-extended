@@ -102,26 +102,46 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert 'json_script:"acquisition-index-messages"' in template_text
     assert "acquisitionIndexMessages" in template_text
     assert "Save setting" not in template_text
+    assert "Enable acquisition metadata indexing" not in template_text
+    assert "Save current query" not in template_text
+    assert 'id="save-query-btn"' in template_text
+    assert "Updated {{ item.updated_at }}" not in template_text
+    assert '<small>{{ item.updated_at|date:"j M Y, g:i a" }}</small>' in template_text
+    assert "Loading saved search…" in template_text
+    assert "current-query-payload" not in template_text
+    assert "const buildCurrentQueryPayload = () => {" in template_text
+    assert "const queryPayload = buildCurrentQueryPayload();" in template_text
+    assert "open.textContent = 'Load';" in template_text
     assert "jquery-ui-1.13.2/js/jquery-ui.js" in template_text
     assert "tools-search-date-control" in template_text
     assert "changeMonth: true" in template_text
     assert "changeYear: true" in template_text
-    assert "showOn: 'focus'" in template_text
-    assert "pendingDatepickerSelection" in template_text
-    assert "capturePendingPickerSelection" in template_text
-    assert "$(input).datepicker('hide');" in template_text
+    assert "selectedDateByInput = new WeakMap()" in template_text
+    assert "pendingDateInputSyncTimers = new WeakMap()" in template_text
+    assert "datepickerProxyByInput = new WeakMap()" in template_text
+    assert "dateInputByProxy = new WeakMap()" in template_text
+    assert "installDatepickerPointerGuard" in template_text
+    assert "activeDatepickerInput" in template_text
+    assert "ui-datepicker-current" in template_text
     assert "tools-search-date-picker-button" in template_text
-    assert "const canSafelyUpdateDatepicker = (input) => {" in template_text
+    assert "tools-search-date-picker-proxy" in template_text
     assert "updateSearchSubmitState" in template_text
     assert (
         "searchSubmitButton.disabled = blockedForRoot || hasInvalidDate || (!hasSearchText && !hasCompleteDate);"
         in template_text
     )
     assert "clearSearchValidationStatus" in template_text
+    assert (
+        "small.textContent = formatStatusTimestamp(item.updated_at);" in template_text
+    )
     assert "<th>Scope</th>" not in template_text
     assert "tools-search-page-loader" in template_text
     assert "Loading search results" in template_text
     assert "Please wait while the search results are being queried." in template_text
+    assert (
+        '<p class="tools-page-note tools-page-note--section-summary">Showing {{ search_payload.results|length }} result(s){% if search_payload.total_count %} from {{ search_payload.total_count }} matching result(s){% endif %}.</p>'
+        in template_text
+    )
     assert "<th>Preview</th>" in template_text
     assert "<th>Channel(s)</th>" in template_text
     assert 'target="omero-web-image-view"' in template_text
@@ -136,6 +156,25 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert "X:" in template_text
     assert "Y:" in template_text
     assert "Optics / Detector" not in template_text
+
+
+def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
+    styles_path = (
+        Path(__file__).resolve().parents[1] / "static" / "omeroweb_tools" / "styles.css"
+    )
+    styles_text = styles_path.read_text(encoding="utf-8")
+
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in styles_text
+    assert ".tools-search-card .tools-search-saved-action--load {" in styles_text
+    assert ".tools-search-card .tools-search-saved-action--delete {" in styles_text
+    assert "padding: 6px 10px;" in styles_text
+    assert "font-size: 13px;" in styles_text
+    assert "padding: 0.62rem 0.56rem;" in styles_text
+    assert "padding-top: 0.46rem;" in styles_text
+    assert ".tools-search-date-picker-proxy {" in styles_text
+    assert ".tools-search-card > .tools-search-heading--compact + * {" in styles_text
+    assert ".tools-search-index-heading + .tools-search-settings-panel {" in styles_text
+    assert "@media (max-width: 1200px) {" in styles_text
 
 
 def test_tools_landing_template_has_single_enhanced_search_entry_without_descriptive_copy():
