@@ -1,7 +1,7 @@
 interface:
   display_name: "Frontend Preview"
-  short_description: "Preview HTML/CSS/JS changes via temporary Vite dev server"
+  short_description: "Preview and validate plugin frontend changes with the pinned Vite/Vitest host toolchain"
   brand_color: "#646CFF"
-  default_prompt: "Start a Vite preview server for the target plugin and validate visual changes"
+  default_prompt: "Bootstrap the pinned frontend tooling, start a Vite preview for the target plugin, and add Vitest checks for risky UI interactions"
 policy:
   allow_implicit_invocation: true
