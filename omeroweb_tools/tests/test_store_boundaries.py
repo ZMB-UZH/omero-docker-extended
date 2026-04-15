@@ -425,7 +425,11 @@ def test_user_settings_and_saved_query_writes_use_json_payloads(monkeypatch):
     monkeypatch.setattr(
         store,
         "load_user_settings",
-        lambda conn, username, defaults=None: {**(defaults or {}), "loaded": True},
+        lambda conn, username, defaults=None: {
+            **({"acquisition_metadata_enabled": True}),
+            **(defaults or {}),
+            "loaded": True,
+        },
     )
     cursor = _RecordingCursor(fetchall_rows=[[()]])
     conn = _RecordingConn(cursor)
