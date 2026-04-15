@@ -23,6 +23,10 @@ Use this skill for live runtime debugging, service-health checks, and container-
 - Do not trust host-shell `localhost` probes from a sandboxed agent shell.
 - Do not use plain container `python3` when the code is installed inside a virtualenv.
 - Prefer `docker exec -i ... <<'EOF'` patterns over heavily escaped nested heredocs.
+- If you create a disposable OMERO user for live testing, verify that it can
+  actually open a session before using it in browser automation. On this
+  installation, `omero user add` can leave the user with group membership but no
+  usable default group, which causes login failures until that account is fixed.
 
 ## Correct runtime patterns
 

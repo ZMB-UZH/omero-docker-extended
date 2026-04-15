@@ -12,10 +12,11 @@ results.
 
 - `Tools` landing page that mirrors the Admin Tools layout pattern for future
   expansion.
-- `Enhanced search` UI with a compact search row, async image previews, and
-  OMERO-built-in plus acquisition-index search scopes.
+- `Enhanced search` UI with a compact search row, typed `Start date` /
+  `End date` filters backed by a jQuery UI datepicker, async image previews,
+  and OMERO-built-in plus acquisition-index search scopes.
 - Per-user opt-in acquisition indexing for all images owned by the current
-  user.
+  user, saved immediately when the checkbox is toggled.
 - Per-user saved queries.
 - Sync-state tracking for the current user's acquisition index.
 - OMERO permission revalidation before search results are displayed.
@@ -76,6 +77,9 @@ Acquisition indexing is opt-in per OMERO user. Once enabled in the UI, the
 plugin automatically indexes acquisition metadata for all images owned by that
 user. The indexed rows remain private to the plugin database and search results
 are revalidated through OMERO before display.
+If the plugin database is unavailable while the page loads, the acquisition
+indexing checkbox is rendered disabled and unchecked, and the UI shows an
+explicit database-access error instead of guessing the saved state.
 
 Related runtime variables:
 
@@ -111,7 +115,9 @@ background thread inside the `omeroweb` process.
 ## Indexing and query flow
 
 1. A user opens `Tools > Enhanced search`.
-2. The user enables acquisition metadata indexing for their account.
+2. The user enables acquisition metadata indexing for their account; the
+   setting is written immediately to the plugin database and verified with a
+   read-after-write check.
 3. The worker reads OMERO metadata for images owned by that user through a root gateway session and extracts
    selective search attributes.
 4. The worker writes only to the plugin database tables for indexed documents,

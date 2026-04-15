@@ -83,22 +83,48 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
     assert 'placeholder="dd--mm--yyyy"' in template_text
     assert "tools-search-field--actions" in template_text
     assert "tools-search-inline-action--primary" in template_text
-    assert "Date format: dd--mm--yyyy" in template_text
+    assert "Date format: dd--mm--yyyy" not in template_text
     assert (
         template_text.count(
-            '<h2 class="tools-search-heading">Acquisition metadata index</h2>'
+            '<h2 class="tools-search-heading">Acquisition metadata indexing</h2>'
         )
         == 1
     )
+    assert (
+        '<h2 class="tools-search-heading">Acquisition metadata index</h2>'
+        not in template_text
+    )
     assert ">Index status<" not in template_text
     assert 'id="acquisition-index-enabled-pill"' in template_text
+    assert 'json_script:"acquisition-index-messages"' in template_text
+    assert "acquisitionIndexMessages" in template_text
+    assert "Save setting" not in template_text
+    assert "jquery-ui-1.13.2/js/jquery-ui.js" in template_text
+    assert "tools-search-date-control" in template_text
+    assert "changeMonth: true" in template_text
+    assert "changeYear: true" in template_text
+    assert "showOn: 'button'" in template_text
+    assert "buttonText: 'Pick'" in template_text
+    assert "const canSafelyUpdateDatepicker = (input) => {" in template_text
+    assert "updateSearchSubmitState" in template_text
+    assert (
+        "searchSubmitButton.disabled = blockedForRoot || hasInvalidDate || (!hasSearchText && !hasCompleteDate);"
+        in template_text
+    )
+    assert "clearSearchValidationStatus" in template_text
+    assert "<th>Scope</th>" not in template_text
     assert "tools-search-page-loader" in template_text
     assert "Loading search results" in template_text
     assert "Please wait while the search results are being queried." in template_text
     assert "<th>Preview</th>" in template_text
     assert "<th>Channel(s)</th>" in template_text
+    assert 'target="omero-web-image-view"' in template_text
     assert "Indexed by:" in template_text
     assert "Owner:" in template_text
+    assert (
+        "Owner: {{ row.owner_name|default:row.owner_id }}. &middot; Indexed by:"
+        in template_text
+    )
     assert "No matching images were found." in template_text
     assert "Run a search to see indexed results." in template_text
     assert "X:" in template_text
