@@ -77,13 +77,13 @@ def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch
     assert service.default_user_settings() == {"acquisition_metadata_enabled": False}
     assert (
         service.acquisition_index_status_message(True)
-        == "Acquisition metadata indexing is enabled for your account. "
+        == "Acquisition metadata indexing is enabled for your user account. "
         "All images you own will be indexed automatically in the background."
     )
     assert (
         service.acquisition_index_status_message(False)
-        == "Acquisition metadata indexing is disabled for your account. "
-        "No acquisition metadata is stored for your account."
+        == "Acquisition metadata indexing is disabled for your user account. "
+        "No acquisition metadata is stored for your user account."
     )
     assert (
         service.user_settings_load_error_message()
