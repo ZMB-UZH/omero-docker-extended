@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs';
-import { basename, extname, resolve } from 'node:path';
+import { basename, dirname, extname, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 
 const requireFromPreviewDir = createRequire(resolve(process.cwd(), 'package.json'));
@@ -13,6 +13,26 @@ const OMERO_STATIC_ROOT = process.env.OMERO_STATIC_ROOT
 const PREVIEW_TEMPLATE = process.env.PREVIEW_TEMPLATE || 'index.html';
 const PLUGIN_NAME = basename(PLUGIN_ROOT);
 const TEMPLATE_ROOT = resolve(PLUGIN_ROOT, 'templates', PLUGIN_NAME);
+const EXTRA_FS_ALLOW = Array.from(
+  new Set(
+    [
+      ...(process.env.PREVIEW_EXTRA_FS_ALLOW || '')
+        .split(':')
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+      ...(process.env.VITEST_INCLUDE || '')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => {
+          const wildcardIndex = entry.search(/[*?[{]/);
+          const concretePath = wildcardIndex === -1 ? entry : entry.slice(0, wildcardIndex);
+          return concretePath ? dirname(resolve(concretePath)) : '';
+        })
+        .filter(Boolean),
+    ].map((entry) => resolve(entry)),
+  ),
+);
 
 const MIME_TYPES = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -79,7 +99,8 @@ const transformTemplateHtml = (html) =>
     .replace(/\{\{\s*[^}]+\|default_if_none:''[^}]*\}\}/g, '')
     .replace(/\{\{\s*[^}]+\|date:'[^']*'\s*\}\}/g, '')
     .replace(/\{\{\s*[^}]+\}\}/g, '')
-    .replace(/\{%[^%]*%\}/g, '');
+    .replace(/\{%[^%]*%\}/g, '')
+    .replace(/\sclass="root-user-blocked"/g, '');
 
 const sendFile = async (response, filePath) => {
   const fileBuffer = await fs.readFile(filePath);
@@ -96,7 +117,12 @@ export default defineConfig({
     port: 5173,
     open: false,
     fs: {
-      allow: [REPO_ROOT, PLUGIN_ROOT, ...(OMERO_STATIC_ROOT ? [OMERO_STATIC_ROOT] : [])],
+      allow: [
+        REPO_ROOT,
+        PLUGIN_ROOT,
+        ...(OMERO_STATIC_ROOT ? [OMERO_STATIC_ROOT] : []),
+        ...EXTRA_FS_ALLOW,
+      ],
     },
     watch: {
       ignored: ['!**/*.html', '!**/*.css', '!**/*.js'],

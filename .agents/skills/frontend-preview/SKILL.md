@@ -1,143 +1,139 @@
 ---
 name: frontend-preview
-description: Spin up a temporary Vite dev server to preview HTML/CSS/JS changes in Django plugin templates without rebuilding Docker. AI-agent-only skill for visual validation.
-origin: repo-local skill for AI agent visual validation
+description: Preview HTML/CSS/JS changes in Django plugin templates with the pinned host-side Vite/Vitest toolchain, then validate live in OMERO.web.
+origin: repo-local skill for AI agent frontend preview and DOM/browser validation
 ---
 
-# Frontend Preview (Vite)
+# Frontend Preview (Vite + Vitest)
 
-Use this skill when you need to **visually validate** HTML, CSS, or JavaScript changes in plugin templates before committing. This avoids blind edits and eliminates the Docker rebuild cycle for frontend-only iterations.
+Use this skill when you need to **visually validate** HTML, CSS, or JavaScript changes in plugin templates before committing, and when you need a **repeatable DOM or browser test lane** for frontend regressions.
+
+The repo now exposes a pinned host-side wrapper:
+
+```bash
+python3 tools/frontend_preview_tooling.py bootstrap
+python3 tools/frontend_preview_tooling.py vite -- ...
+python3 tools/frontend_preview_tooling.py vitest -- ...
+python3 tools/frontend_preview_tooling.py playwright -- ...
+```
+
+Do not install ad-hoc frontend tooling inside the repository. The wrapper installs the pinned toolchain into a cache-backed host directory.
 
 ## Related docs
 
-- `docs/plugins/import-plugin.md` for the import plugin UI structure
 - `docs/reference/ai-agent-runtime-playbook.md` for Docker rebuild guidance
+- `docs/reference/ai-agent-skills.md` for the shared skill catalog
 
 ## When to activate
 
 - Editing `styles.css`, `upload.js`, or `index.html` in any plugin's `static/` or `templates/` directory
-- Adjusting layout, spacing, colors, or responsive behavior
-- Adding new UI panels, modals, or form controls (e.g. the NGFF converter settings panel)
-- Debugging CSS specificity or visibility issues
+- Adjusting layout, spacing, colors, interactions, or responsive behavior
+- Adding or debugging form controls, datepickers, modals, or saved-state UI
+- Adding narrow DOM/browser regressions before a live browser check
 
 ## When NOT to use
 
 - Backend-only changes (Python views, services, tests)
-- Changes that require a running OMERO server or Django session (authentication, CSRF, API calls)
-- Final validation (always rebuild Docker and test live for that)
+- Changes that require a real OMERO session for the primary validation
+- Final validation on their own: always rebuild or redeploy and test the live page afterward
 
-## Prerequisites
+## Tooling contract
 
-Node.js 18+ must be available on the host. If not installed:
+- Host Node.js must satisfy the pinned toolchain minimum. The wrapper checks that automatically.
+- The wrapper reads `tools/frontend_preview_tooling_manifest.json` and installs the exact pinned versions into a cache-backed host directory.
+- The default install location is `${XDG_CACHE_HOME:-$HOME/.cache}/omero-agent-frontend-preview`.
+- Override that location with `OMERO_AGENT_FRONTEND_TOOLING_DIR=/path/to/cache`.
+- The wrapper does **not** install dependencies into the repository.
 
-```bash
-# Check
-node --version 2>/dev/null || echo "Node.js not installed"
-
-# Install via nvm (does not require root)
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-source ~/.bashrc
-nvm install 20
-```
-
-Do not assume `corepack` is available just because `node`, `npm`, and `npx`
-are. Use plain `npm` commands unless you have already verified `corepack
---version` on the host.
-
-## Setup (one-time per session)
-
-Create a minimal Vite project in a temporary directory. Do NOT install Vite inside the repository.
-Use a Vite version that matches the host's Node runtime:
+Bootstrap and inspect the installed versions:
 
 ```bash
-PREVIEW_DIR=$(mktemp -d /tmp/vite-preview-XXXXXX)
-cd "$PREVIEW_DIR"
-npm init -y
-VITE_VERSION=$(node - <<'NODE'
-const [major, minor] = process.versions.node.split('.').map(Number);
-if (major > 22 || (major === 22 && minor >= 12) || (major === 20 && minor >= 19)) {
-  process.stdout.write('8.0.7');
-} else {
-  process.stdout.write('5.4.19');
-}
-NODE
-)
-npm install "vite@${VITE_VERSION}"
+python3 tools/frontend_preview_tooling.py bootstrap --json
 ```
 
-## Usage
+## Repo-provided config assets
 
-Start the preview server pointing at the plugin you're editing.
-Do **not** point Vite directly at raw Django templates; instead use the repo-local middleware config that preprocesses Django tags before Vite sees the HTML. It replaces the old inline `django-template-strip` transform with a reusable middleware path:
+- `.agents/skills/frontend-preview/agents/vite_django_preview.config.mjs`
+- `.agents/skills/frontend-preview/agents/vitest_django_preview.config.mjs`
+
+Both configs assume the wrapper is running from its cache-backed tool directory.
+
+## Required environment variables
+
+Set these before running Vite or Vitest:
 
 ```bash
-cd "$PREVIEW_DIR"
-REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-PLUGIN_ROOT="${PLUGIN_ROOT:-$REPO_ROOT/omeroweb_import}"
-PLUGIN_NAME="$(basename "$PLUGIN_ROOT")"
-PREVIEW_TEMPLATE="${PREVIEW_TEMPLATE:-index.html}"
-if [[ "$PREVIEW_TEMPLATE" == "auto" ]]; then
-  PREVIEW_TEMPLATE="$(find "$PLUGIN_ROOT/templates/$PLUGIN_NAME" -maxdepth 1 -name '*.html' | sort | head -n 1 | xargs basename)"
-fi
-npx vite \
-  --config "$REPO_ROOT/.agents/skills/frontend-preview/agents/vite_django_preview.config.mjs" \
-  2>&1 &
-VITE_PID=$!
-echo "Vite preview running on http://localhost:5173 (PID: $VITE_PID)"
+export REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+export PLUGIN_ROOT="$REPO_ROOT/omeroweb_tools"
+export OMERO_STATIC_ROOT="${OMERO_STATIC_ROOT:-$REPO_ROOT/omero-web/omero/static}"
+export PREVIEW_TEMPLATE="enhanced_search.html"
 ```
 
-The preview middleware reads the live template file on each request, resolves `{% static %}` assets from the repo, and strips Django control tags before Vite parses the page. CSS/JS edits in the source plugin update immediately. For template edits, reload the page after saving.
+`PLUGIN_ROOT` may point at any plugin directory such as `omeroweb_import`, `omeroweb_omp_plugin`, or `omeroweb_admin_tools`.
 
-If the page depends on built shared assets under `3rdparty/`, export `OMERO_STATIC_ROOT` explicitly before starting Vite so the preview can serve them from the live installation's static tree:
+## Preview with Vite
+
+Start the temporary preview server with the repo-provided config:
 
 ```bash
-export OMERO_STATIC_ROOT="/path/to/omero_web_var/static"
+python3 tools/frontend_preview_tooling.py vite -- \
+  --config "$REPO_ROOT/.agents/skills/frontend-preview/agents/vite_django_preview.config.mjs"
 ```
 
-For plugins with multiple HTML files, set `PREVIEW_TEMPLATE` explicitly, for example:
+The preview server listens on `http://127.0.0.1:5173` by default.
+
+The preview strips Django template tags and serves plugin assets through the preview middleware. Use it for layout, spacing, and quick interaction checks before you touch Docker.
+
+## Run DOM tests with Vitest
+
+Create or point to narrow test files and run them through the repo-provided Vitest config:
 
 ```bash
-PREVIEW_TEMPLATE=enhanced_search.html
+python3 tools/frontend_preview_tooling.py vitest -- \
+  --run \
+  --config "$REPO_ROOT/.agents/skills/frontend-preview/agents/vitest_django_preview.config.mjs"
 ```
 
-## Available plugins
+Optional environment knobs:
 
-| Plugin | PLUGIN_ROOT |
-| --- | --- |
-| Import | `$REPO_ROOT/omeroweb_import` |
-| OMP | `$REPO_ROOT/omeroweb_omp_plugin` |
-| Admin Tools | `$REPO_ROOT/omeroweb_admin_tools` |
-| Imaris Connector | `$REPO_ROOT/omeroweb_imaris_connector` |
-| Web Zarr | `$REPO_ROOT/omero_web_zarr` |
+- `VITEST_INCLUDE=/absolute/or/glob/**/*.vitest.mjs` to point at a narrow temporary test file
+- `VITEST_BROWSER=1` to enable Vitest Browser Mode
+- `VITEST_BROWSER_NAME=chromium` to pick the Playwright browser instance
+- `VITEST_BROWSER_HEADLESS=0` to run browser mode visibly while debugging
+
+## Browser Mode
+
+The Vitest config supports Browser Mode through `@vitest/browser-playwright`.
+
+Example:
+
+```bash
+export VITEST_BROWSER=1
+export VITEST_INCLUDE="/tmp/enhanced-search.browser.vitest.mjs"
+python3 tools/frontend_preview_tooling.py vitest -- \
+  --run \
+  --config "$REPO_ROOT/.agents/skills/frontend-preview/agents/vitest_django_preview.config.mjs"
+```
+
+If Playwright browsers are missing on the host, install them explicitly before relying on browser mode:
+
+```bash
+python3 tools/frontend_preview_tooling.py playwright -- install chromium
+```
+
+If you need a real authenticated OMERO session, fall back to the live browser workflow after the Docker or runtime update.
+
+## Recommended workflow
+
+1. Bootstrap the pinned host-side tooling once per host or after version changes.
+2. Use Vite preview for fast layout and spacing checks.
+3. Add narrow Vitest DOM or Browser Mode checks for the risky interaction logic you are changing.
+4. Rebuild or redeploy the affected runtime.
+5. Verify the live OMERO.web page in a real browser session.
 
 ## Limitations
 
-- Django template logic (`{% if %}`, `{% for %}`, login checks) is stripped. The preview is for layout and interaction wiring, not authoritative data rendering.
-- CSRF-protected POST endpoints will not work. Use this for layout and styling only.
-- Server-rendered data (project lists, user settings, job status) is replaced with empty placeholders unless you inject sample state manually in the browser.
-- The preview runs outside Docker, so container-only paths and OMERO connections are unavailable.
-- Ready-made widgets that bind directly to focused inputs, especially datepickers,
-  can look fine in preview while still breaking manual typing in the live app.
-  When typed input is part of the requirement, follow preview with a real browser
-  check against the rebuilt container and test the actual keyboard path, not only
-  click selection.
-- Compound controls that combine a text field with an adjacent trigger button can
-  also fail only in the live layout if CSS min-width or overflow causes the
-  input hitbox to overlap the trigger. In the live browser, always test both
-  that keyboard typing persists and that the trigger button is actually
-  clickable without forced clicks.
-
-## Cleanup
-
-```bash
-kill $VITE_PID 2>/dev/null
-rm -rf "$PREVIEW_DIR"
-```
-
-## Relationship to Docker rebuild
-
-This skill is for **rapid iteration** on visual changes. Once satisfied with the preview, always:
-
-1. Rebuild Docker: `docker compose build omeroweb`
-2. Recreate container: `docker compose up -d omeroweb`
-3. Verify in the live environment with a real browser session
+- Django template logic is still stripped in preview mode.
+- CSRF-protected POST endpoints and OMERO-backed data do not work in preview mode by themselves.
+- Browser Mode still validates the preview environment, not the fully authenticated live OMERO page.
+- Final acceptance still requires a live browser check against the served page.

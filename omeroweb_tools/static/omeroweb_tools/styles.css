@@ -269,9 +269,10 @@
 
 .tools-search-index-heading {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.9rem;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.55rem;
+    flex-wrap: wrap;
     margin-bottom: 0;
 }
 
@@ -289,6 +290,11 @@
     border-collapse: collapse;
 }
 
+.tools-search-status-table {
+    table-layout: fixed;
+    width: min(100%, 48rem);
+}
+
 .tools-search-status-table th,
 .tools-search-status-table td,
 .tools-search-results th,
@@ -303,6 +309,17 @@
 .tools-search-results th {
     color: #1d4ed8;
     font-size: 0.92rem;
+}
+
+.tools-search-status-table th:nth-child(1),
+.tools-search-status-table td:nth-child(1) {
+    width: 7.25rem;
+}
+
+.tools-search-status-table th:nth-child(3),
+.tools-search-status-table td:nth-child(3) {
+    width: 8.5rem;
+    white-space: nowrap;
 }
 
 .tools-search-results th,
@@ -488,29 +505,42 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.6rem;
-    margin-top: 0.5rem;
+    margin-top: 0.25rem;
 }
 
 .tools-search-saved-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.55rem;
     padding: 0.6rem 0.7rem;
     border: 1px solid #d6deea;
     border-radius: 10px;
     background: #f9fbff;
 }
 
-.tools-search-saved-item strong,
-.tools-search-saved-item small {
+.tools-search-saved-meta {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.tools-search-saved-meta strong,
+.tools-search-saved-meta small {
     display: block;
+}
+
+.tools-search-saved-meta strong {
+    overflow-wrap: anywhere;
+    margin-bottom: 0.08rem;
 }
 
 .tools-search-saved-actions {
     display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 0 0 auto;
     gap: 0.45rem;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .tools-search-card .tools-search-saved-action {
@@ -584,12 +614,16 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.35rem;
-    margin-bottom: 0.95rem;
+    gap: 0.08rem;
+    margin-bottom: 0.04rem;
 }
 
 .tools-search-index-heading + .tools-search-settings-panel {
-    margin-top: -8px;
+    margin-top: -6px;
+}
+
+.tools-search-settings-panel .tools-page-note {
+    margin: 0;
 }
 
 .tools-search-setting-toggle {

@@ -208,7 +208,7 @@
                     {% if saved_queries %}
                         {% for item in saved_queries %}
                         <div class="tools-search-saved-item" data-query-id="{{ item.id }}">
-                            <div>
+                            <div class="tools-search-saved-meta">
                                 <strong>{{ item.query_name }}</strong>
                                 <small>{{ item.updated_at|date:"j M Y, g:i a" }}</small>
                             </div>
@@ -586,6 +586,12 @@
 
         const dateFormat = 'dd--mm--yy';
         const dateInputDigits = 8;
+        const earliestSelectableDate = new Date(2010, 0, 1);
+        const todayDate = (() => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            return today;
+        })();
         let openDatepickerInput = null;
         const selectedDateByInput = new WeakMap();
         const pendingDateInputSyncTimers = new WeakMap();
@@ -632,6 +638,25 @@
             return `${day}--${month}--${year}`;
         };
 
+        const normalizeCalendarDate = (date) => {
+            if (!date || Number.isNaN(date.getTime())) {
+                return null;
+            }
+            return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        };
+
+        const isFutureCalendarDate = (date) => {
+            const normalizedDate = normalizeCalendarDate(date);
+            return Boolean(normalizedDate && normalizedDate.getTime() > todayDate.getTime());
+        };
+
+        const isBeforeEarliestSelectableDate = (date) => {
+            const normalizedDate = normalizeCalendarDate(date);
+            return Boolean(
+                normalizedDate && normalizedDate.getTime() < earliestSelectableDate.getTime()
+            );
+        };
+
         const isPotentiallyValidDateInput = (value) => {
             const formatted = String(value || '').trim();
             if (!formatted) {
@@ -660,7 +685,10 @@
                 }
             }
             if (digits.length === dateInputDigits) {
-                return parseStrictDateInput(formatted) !== null;
+                const parsed = parseStrictDateInput(formatted);
+                return Boolean(parsed)
+                    && !isFutureCalendarDate(parsed)
+                    && !isBeforeEarliestSelectableDate(parsed);
             }
             return true;
         };
@@ -702,11 +730,20 @@
             const endProxy = datepickerProxyByInput.get(endInput);
             const startDate = parseStrictDateInput(startInput?.value);
             const endDate = parseStrictDateInput(endInput?.value);
+            const boundedEndDate = endDate && !isFutureCalendarDate(endDate)
+                ? endDate
+                : todayDate;
             if (startProxy) {
-                window.jQuery(startProxy).datepicker('option', 'maxDate', endDate || null);
+                window.jQuery(startProxy).datepicker('option', 'minDate', earliestSelectableDate);
+                window.jQuery(startProxy).datepicker('option', 'maxDate', boundedEndDate);
             }
             if (endProxy) {
-                window.jQuery(endProxy).datepicker('option', 'minDate', startDate || null);
+                window.jQuery(endProxy).datepicker(
+                    'option',
+                    'minDate',
+                    startDate || earliestSelectableDate
+                );
+                window.jQuery(endProxy).datepicker('option', 'maxDate', todayDate);
             }
         };
 
@@ -734,7 +771,11 @@
                 return true;
             }
             const parsed = parseStrictDateInput(value);
-            if (!parsed) {
+            if (
+                !parsed
+                || isFutureCalendarDate(parsed)
+                || isBeforeEarliestSelectableDate(parsed)
+            ) {
                 setDateInputValidity(input, false);
                 updateDatepickerBounds();
                 return false;
@@ -836,7 +877,9 @@
                         changeMonth: true,
                         changeYear: true,
                         showButtonPanel: true,
-                        yearRange: 'c-100:c+10',
+                        yearRange: '2010:c',
+                        minDate: earliestSelectableDate,
+                        maxDate: todayDate,
                         beforeShow() {
                             openDatepickerInput = input;
                             selectedDateByInput.delete(input);
@@ -884,6 +927,7 @@
                             }
                             openDatepickerInput = input;
                             syncDatepickerProxyValue(input, parseStrictDateInput(input.value));
+                            updateDatepickerBounds();
                             $(proxy).datepicker('show');
                         });
                 });
@@ -908,6 +952,7 @@
             dateInputs.forEach((input) => {
                 const digitCount = digitsOnly(input.value).length;
                 if (digitCount === 0) {
+                    setDateInputValidity(input, true);
                     return;
                 }
                 const isValid = validateDateInput(input);
@@ -918,6 +963,23 @@
                 }
                 hasInvalidDate = true;
             });
+            const startInput = document.getElementById('acquisition_date_from');
+            const endInput = document.getElementById('acquisition_date_to');
+            const startDate = parseStrictDateInput(startInput?.value);
+            const endDate = parseStrictDateInput(endInput?.value);
+            if (
+                startInput
+                && endInput
+                && startDate
+                && endDate
+                && !isFutureCalendarDate(startDate)
+                && !isFutureCalendarDate(endDate)
+                && startDate.getTime() > endDate.getTime()
+            ) {
+                setDateInputValidity(startInput, false);
+                setDateInputValidity(endInput, false);
+                hasInvalidDate = true;
+            }
             searchSubmitButton.disabled = blockedForRoot || hasInvalidDate || (!hasSearchText && !hasCompleteDate);
             if (!hasInvalidDate) {
                 clearSearchValidationStatus();
@@ -1012,6 +1074,7 @@
                 wrapper.dataset.queryId = String(item.id);
 
                 const labelBlock = document.createElement('div');
+                labelBlock.className = 'tools-search-saved-meta';
                 const strong = document.createElement('strong');
                 strong.textContent = item.query_name;
                 labelBlock.appendChild(strong);
