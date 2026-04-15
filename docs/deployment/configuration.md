@@ -5,6 +5,7 @@
 This repository uses environment variables as the primary configuration surface.
 
 Tracked files in git are templates (`*_example*`). Deployments must create runtime copies without `_example`.
+The tracked example env inventory and active assignment keys are locked by `tests/test_example_env_contracts.py`; update that contract in the same change when intentionally changing those templates.
 
 For OMERO configuration property names, defaults, and semantics, use the official OMERO config glossary as the single source of truth:
 

@@ -22,8 +22,9 @@ Use this skill whenever a change touches env files, config loaders, startup scri
 1. Add the variable to the correct tracked example env file.
 2. Load it in the correct `config.py` or startup script using the existing helper pattern.
 3. Reference the correct env file constant in validation or error messages.
-4. Update `docs/deployment/configuration.md` when the contract changes.
-5. Keep `docker-compose.yml` minimal; do not duplicate env defaults inline.
+4. Update `tests/test_example_env_contracts.py` when you intentionally add, remove, or rename an active assignment in a tracked example env file.
+5. Update `docs/deployment/configuration.md` when the contract changes.
+6. Keep `docker-compose.yml` minimal; do not duplicate env defaults inline.
 
 ## Drift to catch
 
