@@ -518,8 +518,10 @@ class AgentSkillContractTests(unittest.TestCase):
         )
         self.assertNotIn("/home/itservice/.local/bin/ruff", settings_text)
         self.assertNotIn("/opt/omero/tools/env_safety_guard.py", settings_text)
-        self.assertIn("python3 -m ruff check --fix --quiet", settings_text)
-        self.assertIn("python3 -m ruff format --quiet", settings_text)
+        self.assertIn("command -v ruff", settings_text)
+        self.assertIn("ruff check --fix --quiet", settings_text)
+        self.assertIn("ruff format --quiet", settings_text)
+        self.assertIn("python3 -m ruff --version", settings_text)
         self.assertIn("git rev-parse --show-toplevel", settings_text)
         self.assertIn("tools/env_safety_guard.py", settings_text)
 
