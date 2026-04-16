@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Enhanced search help</title>
+    <title>Tools help</title>
     <link rel="stylesheet" href="{% static 'omeroweb_admin_tools/styles.css' %}">
     <link rel="stylesheet" href="{% static 'omeroweb_tools/styles.css' %}">
 </head>
@@ -13,91 +13,155 @@
         <header class="admin-tools-header tools-help-header">
             <div class="admin-tools-header-left tools-help-header-copy">
                 <a class="admin-tools-back-link"
-                   href="{% url 'omeroweb_tools_enhanced_search' %}">
+                   href="{% url 'omeroweb_tools_enhanced_search' %}"
+                   id="tools-help-close-window">
                     ← Back to Enhanced search
                 </a>
-                <h1 class="admin-tools-title">Enhanced search help</h1>
-                <p class="tools-help-lead">
-                    Use the controls shown below to search OMERO data and opt-in
-                    universal metadata from one page.
-                </p>
+                <h1 class="admin-tools-title">Tools help</h1>
             </div>
         </header>
 
-        <main class="tools-help-layout">
-            <section class="tools-help-panel"
-                     aria-labelledby="tools-help-run-search">
-                <div class="tools-help-copy">
-                    <h2 id="tools-help-run-search">Run a search</h2>
-                    <ul class="tools-help-list">
-                        <li>Type terms, choose an indexed scope, and optionally set dates.</li>
-                        <li><span class="tools-help-code">All searchable sources</span> merges OMERO and universal metadata matches.</li>
-                        <li>Use <span class="tools-help-code">Clear</span> to empty the search fields and current results.</li>
-                    </ul>
-                </div>
-                <figure class="tools-help-screenshot">
-                    <img src="{% static 'omeroweb_tools/help/enhanced-search-controls.png' %}"
-                         alt="Enhanced search controls with search box, scope, dates, Search, and Clear.">
-                </figure>
-            </section>
+        <main>
+            <section class="tools-help-tool-section"
+                     data-tools-help-section
+                     aria-labelledby="tools-help-enhanced-search">
+                <h2 class="tools-help-tool-heading">
+                    <button type="button"
+                            class="tools-search-section-toggle tools-help-tool-toggle"
+                            data-tools-help-toggle
+                            aria-expanded="true"
+                            aria-controls="tools-help-enhanced-search-body">
+                        <span class="tools-search-section-toggle__indicator"
+                              aria-hidden="true"></span>
+                        <span id="tools-help-enhanced-search">Enhanced search</span>
+                    </button>
+                </h2>
 
-            <section class="tools-help-panel"
-                     aria-labelledby="tools-help-index">
-                <div class="tools-help-copy">
-                    <h2 id="tools-help-index">Universal metadata index</h2>
-                    <ul class="tools-help-list">
-                        <li>Turn indexing on to include metadata OMERO does not normally search.</li>
-                        <li>Click <span class="tools-help-code">Refresh index</span> after imports or metadata edits.</li>
-                        <li>The setting and indexed data are scoped to your user account.</li>
-                    </ul>
-                </div>
-                <figure class="tools-help-screenshot">
-                    <img src="{% static 'omeroweb_tools/help/enhanced-search-index.png' %}"
-                         alt="Universal metadata index panel with enable checkbox, status, and Refresh index action.">
-                </figure>
-            </section>
+                <div class="tools-help-tool-body"
+                     id="tools-help-enhanced-search-body"
+                     data-tools-help-body>
+                    <p class="tools-help-lead">
+                        Use the controls shown below to search OMERO data and opt-in
+                        universal metadata from one page.
+                    </p>
 
-            <section class="tools-help-panel"
-                     aria-labelledby="tools-help-results">
-                <div class="tools-help-copy">
-                    <h2 id="tools-help-results">Read results</h2>
-                    <ul class="tools-help-list">
-                        <li>Open image, project, or dataset links directly in OMERO.web.</li>
-                        <li>Previews, acquisition values, and channels appear when available.</li>
-                    </ul>
-                </div>
-                <figure class="tools-help-screenshot">
-                    <img src="{% static 'omeroweb_tools/help/enhanced-search-results.png' %}"
-                         alt="Enhanced search results with thumbnails, links, acquisition values, and channels.">
-                </figure>
-            </section>
+                    <div class="tools-help-layout">
+                        <section class="tools-help-panel"
+                                 aria-labelledby="tools-help-run-search">
+                            <div class="tools-help-copy">
+                                <h3 id="tools-help-run-search">Run a search</h3>
+                                <ul class="tools-help-list">
+                                    <li>Type terms, choose an indexed scope, and optionally set dates.</li>
+                                    <li><span class="tools-help-code">All searchable sources</span> merges OMERO and universal metadata matches.</li>
+                                    <li>Use <span class="tools-help-code">Clear</span> to empty the search fields and current results.</li>
+                                </ul>
+                            </div>
+                            <figure class="tools-help-screenshot">
+                                <img src="{% static 'omeroweb_tools/help/enhanced-search-controls.png' %}"
+                                     alt="Enhanced search controls with search box, scope, dates, Search, and Clear.">
+                            </figure>
+                        </section>
 
-            <section class="tools-help-panel"
-                     aria-labelledby="tools-help-saved">
-                <div class="tools-help-copy">
-                    <h2 id="tools-help-saved">Saved search queries</h2>
-                    <ul class="tools-help-list">
-                        <li>Name the current search and click <span class="tools-help-code">Save</span>.</li>
-                        <li>Saved searches belong to your user account.</li>
-                    </ul>
-                </div>
-                <figure class="tools-help-screenshot">
-                    <img src="{% static 'omeroweb_tools/help/enhanced-search-saved-queries.png' %}"
-                         alt="Saved search queries panel.">
-                </figure>
-            </section>
+                        <section class="tools-help-panel"
+                                 aria-labelledby="tools-help-index">
+                            <div class="tools-help-copy">
+                                <h3 id="tools-help-index">Universal metadata index</h3>
+                                <ul class="tools-help-list">
+                                    <li>Turn indexing on to include metadata OMERO does not normally search.</li>
+                                    <li>Click <span class="tools-help-code">Refresh index</span> after imports or metadata edits.</li>
+                                    <li>The setting and indexed data are scoped to your user account.</li>
+                                </ul>
+                            </div>
+                            <figure class="tools-help-screenshot">
+                                <img src="{% static 'omeroweb_tools/help/enhanced-search-index.png' %}"
+                                     alt="Universal metadata index panel with enable checkbox, status, and Refresh index action.">
+                            </figure>
+                        </section>
 
-            <section class="tools-help-panel tools-help-panel--troubleshooting"
-                     aria-labelledby="tools-help-tips">
-                <h2 id="tools-help-tips">Troubleshooting</h2>
-                <ul class="tools-help-tip-list">
-                    <li>Check the selected indexed scope.</li>
-                    <li>Refresh the universal metadata index after imports or edits.</li>
-                    <li>Use fewer terms if the query is too narrow.</li>
-                    <li>Confirm that you can still view the image in OMERO.web.</li>
-                </ul>
+                        <section class="tools-help-panel"
+                                 aria-labelledby="tools-help-results">
+                            <div class="tools-help-copy">
+                                <h3 id="tools-help-results">Read results</h3>
+                                <ul class="tools-help-list">
+                                    <li>Open image, project, or dataset links directly in OMERO.web.</li>
+                                    <li>Previews, acquisition values, and channels appear when available.</li>
+                                </ul>
+                            </div>
+                            <figure class="tools-help-screenshot">
+                                <img src="{% static 'omeroweb_tools/help/enhanced-search-results.png' %}"
+                                     alt="Enhanced search results with thumbnails, links, acquisition values, and channels.">
+                            </figure>
+                        </section>
+
+                        <section class="tools-help-panel"
+                                 aria-labelledby="tools-help-saved">
+                            <div class="tools-help-copy">
+                                <h3 id="tools-help-saved">Saved search queries</h3>
+                                <ul class="tools-help-list">
+                                    <li>Name the current search and click <span class="tools-help-code">Save</span>.</li>
+                                    <li>Saved searches belong to your user account.</li>
+                                </ul>
+                            </div>
+                            <figure class="tools-help-screenshot">
+                                <img src="{% static 'omeroweb_tools/help/enhanced-search-saved-queries.png' %}"
+                                     alt="Saved search queries panel.">
+                            </figure>
+                        </section>
+
+                        <section class="tools-help-panel tools-help-panel--troubleshooting"
+                                 aria-labelledby="tools-help-tips">
+                            <h3 id="tools-help-tips">Troubleshooting</h3>
+                            <ul class="tools-help-tip-list">
+                                <li>Check the selected indexed scope.</li>
+                                <li>Refresh the universal metadata index after imports or edits.</li>
+                                <li>Use fewer terms if the query is too narrow.</li>
+                                <li>Confirm that you can still view the image in OMERO.web.</li>
+                            </ul>
+                        </section>
+                    </div>
+                </div>
             </section>
         </main>
     </div>
+    <script>
+        (() => {
+            const closeButton = document.getElementById("tools-help-close-window");
+            closeButton?.addEventListener("click", (event) => {
+                event.preventDefault();
+                window.close();
+            });
+
+            const section = document.querySelector("[data-tools-help-section]");
+            const toggle = document.querySelector("[data-tools-help-toggle]");
+            const body = document.querySelector("[data-tools-help-body]");
+
+            if (!section || !toggle || !body) {
+                return;
+            }
+
+            const updateBodyHeight = () => {
+                body.style.setProperty(
+                    "--tools-help-section-height",
+                    `${body.scrollHeight}px`,
+                );
+            };
+
+            const setExpanded = (expanded) => {
+                updateBodyHeight();
+                section.classList.toggle(
+                    "tools-help-tool-section--collapsed",
+                    !expanded,
+                );
+                toggle.setAttribute("aria-expanded", String(expanded));
+                body.setAttribute("aria-hidden", String(!expanded));
+            };
+
+            updateBodyHeight();
+            toggle.addEventListener("click", () => {
+                setExpanded(toggle.getAttribute("aria-expanded") !== "true");
+            });
+            window.addEventListener("resize", updateBodyHeight);
+        })();
+    </script>
 </body>
 </html>

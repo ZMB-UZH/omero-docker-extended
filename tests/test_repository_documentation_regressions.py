@@ -167,7 +167,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             "omeroweb_tools/templates/omeroweb_tools/help.html"
         )
         self.assertIn("omeroweb_tools/templates/omeroweb_tools/help.html", docs_index)
-        self.assertIn("<title>Enhanced search help</title>", template_text)
+        self.assertIn("<title>Tools help</title>", template_text)
         self.assertIn("tools-help-screenshot", template_text)
         self.assertIn("Troubleshooting", template_text)
         self.assertNotIn("Open Enhanced search", template_text)

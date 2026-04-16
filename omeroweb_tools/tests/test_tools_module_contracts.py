@@ -64,11 +64,21 @@ def test_tools_help_template_is_registered_html_user_help():
     template_text = template_path.read_text(encoding="utf-8")
 
     assert template_text.startswith("{% load static %}\n<!DOCTYPE html>")
-    assert "<title>Enhanced search help</title>" in template_text
+    assert "<title>Tools help</title>" in template_text
     assert "{% static 'omeroweb_admin_tools/styles.css' %}" in template_text
     assert "{% static 'omeroweb_tools/styles.css' %}" in template_text
+    assert '<a class="admin-tools-back-link"' in template_text
     assert "{% url 'omeroweb_tools_enhanced_search' %}" in template_text
     assert "← Back to Enhanced search" in template_text
+    assert 'id="tools-help-close-window"' in template_text
+    assert "event.preventDefault();" in template_text
+    assert "window.close();" in template_text
+    assert "data-tools-help-section" in template_text
+    assert "data-tools-help-toggle" in template_text
+    assert 'aria-expanded="true"' in template_text
+    assert "tools-help-tool-section--collapsed" in template_text
+    assert "localStorage" not in template_text
+    assert "sessionStorage" not in template_text
     assert "Open Enhanced search" not in template_text
     assert template_text.count("tools-help-screenshot") == 4
     assert "omeroweb_tools/help/enhanced-search-controls.png" in template_text
@@ -79,8 +89,6 @@ def test_tools_help_template_is_registered_html_user_help():
     assert "Saved search queries" in template_text
     assert "Troubleshooting" in template_text
     assert "user account" in template_text
-    assert "<button" not in template_text
-    assert 'type="button"' not in template_text
     assert "password" not in template_text.lower()
     assert "ghp_" not in template_text
     assert "FileResponse" not in inspect.getsource(help_view.help_page)
@@ -373,6 +381,8 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     assert "width: min(1180px, calc(100vw - 48px));" in styles_text
     assert ".tools-help-panel {" in styles_text
     assert "grid-template-columns: 1fr;" in styles_text
+    assert ".tools-help-tool-section {" in styles_text
+    assert ".tools-help-tool-section--collapsed .tools-help-tool-body {" in styles_text
     assert ".tools-help-screenshot {" in styles_text
     assert ".tools-help-screenshot img {" in styles_text
     assert ".tools-help-panel--troubleshooting {" in styles_text
