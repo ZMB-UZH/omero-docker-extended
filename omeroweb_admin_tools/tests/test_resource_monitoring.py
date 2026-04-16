@@ -1548,7 +1548,7 @@ def test_proxy_http_request_forwards_extra_headers(monkeypatch) -> None:
 
     response = _proxy_http_request(
         DummyDjangoRequest(),
-        "http://grafana:3000",
+        "https://grafana:3000",
         "login",
         extra_forwarded_headers=("X-Grafana-Csrf-Token",),
     )
@@ -1583,7 +1583,7 @@ def test_proxy_http_request_ignores_absent_extra_headers(monkeypatch) -> None:
 
     _proxy_http_request(
         DummyDjangoRequest(),
-        "http://grafana:3000",
+        "https://grafana:3000",
         "login",
         extra_forwarded_headers=("X-Grafana-Csrf-Token",),
     )
