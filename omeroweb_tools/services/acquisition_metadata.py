@@ -797,7 +797,7 @@ def _collect_universal_metadata_attributes(
                 microscope,
                 (("getMicroscopeType", "type"),),
             )
-        for name, getter_name, fields in (
+        for name, collection_getter_name, fields in (
             (
                 "instrument_objective",
                 "getObjectives",
@@ -843,7 +843,9 @@ def _collect_universal_metadata_attributes(
                 ("manufacturer", "model", "serialNumber", "lotNumber", "power"),
             ),
         ):
-            for index, obj in enumerate(_safe_iter_call(instrument, getter_name)):
+            for index, obj in enumerate(
+                _safe_iter_call(instrument, collection_getter_name)
+            ):
                 _append_named_fields(bucket, f"{name}_{index + 1}", obj, fields)
 
     try:
@@ -931,12 +933,12 @@ def _collect_universal_metadata_attributes(
                         dichroic,
                         ("manufacturer", "model", "serialNumber", "lotNumber"),
                     )
-                for filter_label, getter_name in (
+                for filter_label, filter_getter_name in (
                     ("emission_filter", "getEmissionFilters"),
                     ("excitation_filter", "getExcitationFilters"),
                 ):
                     for filter_index, filter_obj in enumerate(
-                        _safe_iter_call(light_path, getter_name)
+                        _safe_iter_call(light_path, filter_getter_name)
                     ):
                         _append_named_fields(
                             bucket,

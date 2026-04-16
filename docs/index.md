@@ -77,6 +77,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `reference/ai-agent-integrations.md` -- platform adapter map for Copilot, Cursor, Claude, Gemini, and shared skill loaders
 - `reference/ai-agent-upstream-sources.md` -- pinned upstream provenance for ECC-derived local skills and vendored caveman prompt references
 - `reference/ai-agent-security-prevention-playbook.md` -- canonical anti-regression security playbook for AI agents; external best-practice links, concrete examples, and document ownership rules
+- `reference/plugin-help-page-style-guide.md` -- canonical user-help formatting, screenshot, collapse, and verification rules for plugin help pages
 - `reference/service-endpoints.md` -- infrastructure ports, plugin routes, proxy forwarding
 - `reference/release-notes.md` -- release history and change documentation template
 - `reference/python-style-and-linting.md` -- Ruff formatter/lint policy, Vulture dead-code gate, CI workflow, pre-commit usage

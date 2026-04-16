@@ -232,9 +232,14 @@ class _OriginalFile:
         raise AssertionError("private file paths must not be indexed")
 
 
+class _UsedFile:
+    def getOriginalFile(self):
+        return _OriginalFile()
+
+
 class _Fileset:
     def copyUsedFiles(self):
-        return [SimpleNamespace(getOriginalFile=lambda: _OriginalFile())]
+        return [_UsedFile()]
 
 
 class _MapAnnotation:

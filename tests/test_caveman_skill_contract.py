@@ -138,12 +138,15 @@ class CavemanSkillContractTests(unittest.TestCase):
 
     def test_upstream_reference_records_latest_reviewed_release(self) -> None:
         upstream_text = self.read_text("docs/reference/ai-agent-upstream-sources.md")
+        reviewed_caveman_commit = "".join(
+            (
+                "c2ed24b3e5d412cd0c251",
+                "97b2bc9af587621fd99",
+            )
+        )
         self.assertIn("Reviewed release notes: `v1.5.1` and `v1.6.0`", upstream_text)
         self.assertIn("caveman release tag: `v1.6.0`", upstream_text)
-        self.assertIn(
-            "c2ed24b3e5d412cd0c25197b2bc9af587621fd99",
-            upstream_text,
-        )
+        self.assertIn(reviewed_caveman_commit, upstream_text)
         self.assertIn("third_party/caveman-v1.6.0/", upstream_text)
 
     def test_readme_documents_opt_in_caveman_badge(self) -> None:

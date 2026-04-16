@@ -172,6 +172,34 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("Troubleshooting", template_text)
         self.assertNotIn("Open Enhanced search", template_text)
 
+    def test_plugin_help_style_guide_is_agent_routed(self) -> None:
+        guide_path = self.repo_root / "docs/reference/plugin-help-page-style-guide.md"
+        self.assertTrue(guide_path.exists(), "Plugin help style guide is missing")
+
+        guide_text = guide_path.read_text(encoding="utf-8")
+        for phrase in [
+            "use an `<a>` element, not a `<button>`",
+            "the expanded state keeps the unrotated horizontal indicator",
+            "crop rectangles consistently",
+            "keep the full blue border",
+            "no persisted state",
+        ]:
+            self.assertIn(phrase, guide_text)
+
+        expected_references = {
+            "AGENTS.md": "docs/reference/plugin-help-page-style-guide.md",
+            "docs/index.md": "reference/plugin-help-page-style-guide.md",
+            "docs/reference/ai-agent-context-routing.md": (
+                "docs/reference/plugin-help-page-style-guide.md"
+            ),
+        }
+        for relative_path, expected_reference in expected_references.items():
+            self.assertIn(
+                expected_reference,
+                self.read_text(relative_path),
+                f"{relative_path} does not route agents to the help-page guide.",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
