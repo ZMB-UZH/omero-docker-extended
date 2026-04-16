@@ -2,12 +2,8 @@ from __future__ import annotations
 
 import ast
 import inspect
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-
-import pytest
-from django.http import Http404
 
 from omeroweb_tools import apps, urls
 from omeroweb_tools.views import help_view
@@ -42,27 +38,52 @@ def test_tools_urls_expose_expected_routes():
     assert route_map["omeroweb_tools_help"] == "help/"
 
 
-def test_tools_help_page_serves_expected_file_and_404s_when_missing(monkeypatch):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp_path = Path(tmpdir)
-        docs_root = tmp_path / "docs" / "help"
-        docs_root.mkdir(parents=True)
-        help_file = docs_root / "omeroweb_tools_help.md"
-        help_file.write_text("# Help\n", encoding="utf-8")
+def test_tools_help_page_renders_html_template(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        help_view,
+        "render",
+        lambda request, template, context: (
+            captured.update({"template": template, "context": context}) or context
+        ),
+    )
 
-        fake_module_path = tmp_path / "pkg" / "views" / "help_view.py"
-        fake_module_path.parent.mkdir(parents=True)
-        fake_module_path.write_text("", encoding="utf-8")
-        monkeypatch.setattr(help_view, "__file__", str(fake_module_path))
+    response = inspect.unwrap(help_view.help_page)(SimpleNamespace())
 
-        unwrapped = inspect.unwrap(help_view.help_page)
-        response = unwrapped(SimpleNamespace())
-        assert response["Content-Type"] == "text/markdown"
-        response.close()
+    assert response == {}
+    assert captured == {"template": "omeroweb_tools/help.html", "context": {}}
 
-        help_file.unlink()
-        with pytest.raises(Http404):
-            unwrapped(SimpleNamespace())
+
+def test_tools_help_template_is_registered_html_user_help():
+    template_path = (
+        Path(__file__).resolve().parents[1]
+        / "templates"
+        / "omeroweb_tools"
+        / "help.html"
+    )
+    template_text = template_path.read_text(encoding="utf-8")
+
+    assert template_text.startswith("{% load static %}\n<!DOCTYPE html>")
+    assert "<title>Enhanced search help</title>" in template_text
+    assert "{% static 'omeroweb_admin_tools/styles.css' %}" in template_text
+    assert "{% static 'omeroweb_tools/styles.css' %}" in template_text
+    assert "{% url 'omeroweb_tools_enhanced_search' %}" in template_text
+    assert "← Back to Enhanced search" in template_text
+    assert "Open Enhanced search" not in template_text
+    assert template_text.count("tools-help-screenshot") == 4
+    assert "omeroweb_tools/help/enhanced-search-controls.png" in template_text
+    assert "omeroweb_tools/help/enhanced-search-index.png" in template_text
+    assert "omeroweb_tools/help/enhanced-search-results.png" in template_text
+    assert "omeroweb_tools/help/enhanced-search-saved-queries.png" in template_text
+    assert "Universal metadata index" in template_text
+    assert "Saved search queries" in template_text
+    assert "Troubleshooting" in template_text
+    assert "user account" in template_text
+    assert "<button" not in template_text
+    assert 'type="button"' not in template_text
+    assert "password" not in template_text.lower()
+    assert "ghp_" not in template_text
+    assert "FileResponse" not in inspect.getsource(help_view.help_page)
 
 
 def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
@@ -348,6 +369,16 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     styles_text = styles_path.read_text(encoding="utf-8")
 
     assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in styles_text
+    assert ".admin-tools-page.tools-help-page {" in styles_text
+    assert "width: min(1180px, calc(100vw - 48px));" in styles_text
+    assert ".tools-help-panel {" in styles_text
+    assert "grid-template-columns: 1fr;" in styles_text
+    assert ".tools-help-screenshot {" in styles_text
+    assert ".tools-help-screenshot img {" in styles_text
+    assert ".tools-help-panel--troubleshooting {" in styles_text
+    assert "border-left-color: #d97706;" in styles_text
+    assert ".tools-help-open-action" not in styles_text
+    assert ".tools-help-interface-shot" not in styles_text
     assert (
         ".admin-tools-page .tools-search-card .tools-search-saved-action--load {"
         in styles_text
@@ -470,7 +501,7 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     assert ".tools-search-results-body::-webkit-scrollbar {" in styles_text
     assert ".tools-search-results-body::-webkit-scrollbar-button {" in styles_text
     assert ".tools-search-saved-list--empty .tools-search-empty {" in styles_text
-    assert "max-height: 750px;" in styles_text
+    assert "max-height: 670px;" in styles_text
     assert "white-space: normal;" in styles_text
     assert "overflow-wrap: anywhere;" in styles_text
     assert "width: 18.75rem;" in styles_text

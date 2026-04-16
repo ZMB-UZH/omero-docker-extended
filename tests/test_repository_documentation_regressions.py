@@ -112,11 +112,6 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
 
     def test_plugin_help_pages_are_concise_user_help(self) -> None:
         expected_phrases = {
-            "docs/help/omeroweb_tools_help.md": [
-                "Choose an `Indexed scope`.",
-                "Search terms use prefix matching.",
-                "belong to your user account.",
-            ],
             "docs/help/omeroweb_omp_plugin_help.md": [
                 "Select and Prepare",
                 "Preview and Apply",
@@ -159,6 +154,23 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                     text,
                     f"{relative_path} drifted into admin/runbook language: {term}",
                 )
+
+    def test_tools_help_is_canonical_html_help(self) -> None:
+        stale_markdown = self.repo_root / "docs/help/omeroweb_tools_help.md"
+        self.assertFalse(
+            stale_markdown.exists(),
+            "Enhanced search help should be the HTML template, not stale Markdown.",
+        )
+
+        docs_index = self.read_text("docs/index.md")
+        template_text = self.read_text(
+            "omeroweb_tools/templates/omeroweb_tools/help.html"
+        )
+        self.assertIn("omeroweb_tools/templates/omeroweb_tools/help.html", docs_index)
+        self.assertIn("<title>Enhanced search help</title>", template_text)
+        self.assertIn("tools-help-screenshot", template_text)
+        self.assertIn("Troubleshooting", template_text)
+        self.assertNotIn("Open Enhanced search", template_text)
 
 
 if __name__ == "__main__":
