@@ -399,7 +399,9 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     )
     assert "padding: 6px 10px;" in styles_text
     assert "font-size: 13px;" in styles_text
-    assert "gap: 1rem;" in styles_text
+    assert (
+        ".tools-search-layout {\n    display: grid;\n    gap: 0.875rem;" in styles_text
+    )
     assert "column-gap: 0.65rem;" in styles_text
     assert "gap: 0.65rem;" in styles_text
     assert (
@@ -511,7 +513,7 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     assert ".tools-search-results-body::-webkit-scrollbar {" in styles_text
     assert ".tools-search-results-body::-webkit-scrollbar-button {" in styles_text
     assert ".tools-search-saved-list--empty .tools-search-empty {" in styles_text
-    assert "max-height: 670px;" in styles_text
+    assert "max-height: 640px;" in styles_text
     assert "white-space: normal;" in styles_text
     assert "overflow-wrap: anywhere;" in styles_text
     assert "width: 18.75rem;" in styles_text

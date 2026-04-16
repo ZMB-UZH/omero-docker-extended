@@ -44,6 +44,9 @@ Do not start coding until you can name the helper boundary you will harden and t
   clearly. Drop compression for destructive actions, security guidance,
   multi-step runbooks, or unresolved ambiguity.
 - Update `docs/` whenever behavior or operating assumptions change.
+- When creating or editing plugin help pages, follow
+  `docs/reference/plugin-help-page-style-guide.md` for user-facing copy,
+  screenshots, collapse behavior, and button/link consistency.
 - Run `python3 tools/lint_docs_structure.py` after documentation or instruction-surface edits.
 - Use Ruff as the canonical Python formatter and lint gate.
 - Run `ruff check .`
@@ -73,6 +76,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - `docs/reference/ai-agent-integrations.md`: Copilot, Cursor, Claude, Gemini, and ECC adapter map.
 - `docs/reference/ai-agent-upstream-sources.md` and `third_party/ecc-v1.10.0/`: pinned ECC provenance.
 - `docs/reference/ai-agent-security-prevention-playbook.md`: canonical anti-regression security guide.
+- `docs/reference/plugin-help-page-style-guide.md`: canonical plugin help page formatting and verification rules.
 
 ## Domain roots
 
