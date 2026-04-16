@@ -127,6 +127,7 @@ celerybeat.pid
 .env
 installation_paths.env
 .env_backups/
+.codex
 .venv
 /logo/logo.png
 !env/
@@ -137,6 +138,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+node_modules/
 
 # Spyder project settings
 .spyderproject

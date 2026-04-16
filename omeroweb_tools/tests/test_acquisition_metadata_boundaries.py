@@ -44,7 +44,7 @@ class _BadChannelIndex:
         return "525 nm"
 
 
-class _FallbackPixelImage:
+class _LegacyPixelImage:
     def loadOriginalMetadata(self):
         long_value = "Zeiss " + ("alpha " * 2500)
         return (
@@ -153,7 +153,7 @@ def test_metadata_helpers_cover_units_caps_and_empty_values():
         is None
     )
     capped = metadata._build_search_text(["alpha"] * 5000)
-    assert len(capped) <= 8000
+    assert len(capped) <= metadata._SEARCH_TEXT_CAP
 
     class _RaisingGetter:
         def getLabel(self):
@@ -163,6 +163,52 @@ def test_metadata_helpers_cover_units_caps_and_empty_values():
     assert metadata._safe_details_value(object(), "missing") is None
     assert metadata._safe_channel_value(_RaisingGetter(), "getLabel") is None
     assert metadata._safe_details_value(_RaisingGetter(), "getLabel") is None
+
+
+def test_plane_info_collection_keeps_legacy_targeted_copy_plane_info_path():
+    class _Value:
+        def __init__(self, value):
+            self._value = value
+
+        def getValue(self):
+            return self._value
+
+    class _PlaneInfo:
+        theT = 0
+
+        def getDeltaT(self, units="SECOND"):
+            assert units == "SECOND"
+            return _Value(3.5)
+
+    class _Pixels:
+        def __init__(self):
+            self.copy_plane_info_calls = []
+
+        def getSizeZ(self):
+            return 1
+
+        def getSizeC(self):
+            return 1
+
+        def copyPlaneInfo(self, theC, theZ):
+            self.copy_plane_info_calls.append((theC, theZ))
+            return [_PlaneInfo()]
+
+    pixels = _Pixels()
+
+    attributes = metadata._collect_all_plane_info_attributes(
+        SimpleNamespace(getPrimaryPixels=lambda: pixels),
+        (metadata.SearchChannel(channel_index=4),),
+    )
+
+    assert pixels.copy_plane_info_calls == [(0, 0)]
+    assert attributes == (
+        metadata.SearchAttribute(
+            attribute_key="channel_4_z1_delta_t_seconds",
+            attribute_text="t1 3.5 seconds",
+            attribute_numeric=None,
+        ),
+    )
 
 
 def test_metadata_collection_helpers_tolerate_broken_omero_objects():
@@ -239,7 +285,7 @@ def test_metadata_collection_helpers_tolerate_broken_omero_objects():
         metadata.get_id = original_get_id
 
 
-def test_metadata_attributes_and_extract_search_document_cover_fallback_paths(
+def test_metadata_attributes_and_extract_search_document_cover_legacy_omero_shapes(
     monkeypatch,
 ):
     monkeypatch.setattr(
@@ -247,12 +293,9 @@ def test_metadata_attributes_and_extract_search_document_cover_fallback_paths(
         "get_text",
         lambda value: value.getValue() if hasattr(value, "getValue") else value,
     )
-    original_metadata = {
-        f"Key {index}": f"value {index}"
-        for index in range(metadata._METADATA_ATTRIBUTE_CAP + 10)
-    }
+    original_metadata = {f"Key {index}": f"value {index}" for index in range(150)}
     attributes = metadata._metadata_attributes(original_metadata)
-    assert len(attributes) == metadata._METADATA_ATTRIBUTE_CAP
+    assert len(attributes) == len(original_metadata)
     original_attribute_key = metadata._attribute_key
     metadata._attribute_key = lambda raw_key: "duplicate-key"
     try:
@@ -284,7 +327,7 @@ def test_metadata_attributes_and_extract_search_document_cover_fallback_paths(
     )
     assert list(bucket) == ["only_numeric"]
 
-    document, context = metadata.extract_search_document(_FallbackPixelImage())
+    document, context = metadata.extract_search_document(_LegacyPixelImage())
 
     assert document.instrument_manufacturer == "Zeiss"
     assert document.objective_model == ""
@@ -301,7 +344,7 @@ def test_metadata_attributes_and_extract_search_document_cover_fallback_paths(
         ),
     )
     assert document.channel_summary == "Ex 488 nm / Em 525 nm"
-    assert len(document.search_document) <= 8000
+    assert len(document.search_document) <= metadata._SEARCH_TEXT_CAP
     assert any(
         attribute.attribute_key == "laser_line_nm"
         and attribute.attribute_numeric == 488.0
@@ -314,7 +357,7 @@ def test_metadata_attributes_and_extract_search_document_cover_fallback_paths(
         "project_name": "",
     }
 
-    class _FailingPixelImage(_FallbackPixelImage):
+    class _FailingPixelImage(_LegacyPixelImage):
         def getPixelSizeX(self, units=None):
             if units is True:
                 raise TypeError("legacy signature")

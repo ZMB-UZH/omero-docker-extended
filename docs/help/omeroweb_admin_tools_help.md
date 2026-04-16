@@ -1,78 +1,40 @@
-# OMERO.web Help — Admin Tools (`omeroweb_admin_tools`)
+# Admin Tools Help
 
-## Overview
+Admin Tools is for OMERO administrators. Use it to inspect logs, monitor
+service health, review storage usage, manage quotas, and run diagnostics from
+one OMERO.web page.
 
-Admin Tools provides operational interfaces for OMERO platform administrators, including aggregated logs, infrastructure monitoring, storage/quota analytics, and diagnostic script execution.
+## Logs
 
-## Access model
+Use Logs to inspect recent service messages during troubleshooting. Filter the
+view before copying or sharing log output.
 
-- Intended for the **OMERO root/admin user**.
-- Non-root users are intentionally blocked in the UI.
-- Treat all actions as production-impacting.
+## Monitoring
 
-## Main sections
+Use Monitoring to check service health, resource usage, and linked dashboards.
+Refresh the view when you need current status.
 
-### 1) Logs
+## Storage and Quotas
 
-Purpose: inspect service logs in one place (OMERO.server, OMERO.web, databases, Redis, and related components).
+Use Storage to review usage by user, group, or project context. When quota
+editing is available, change quotas deliberately and confirm the target before
+saving.
 
-Use cases:
+## Server and Database Tests
 
-- incident triage,
-- verifying deployment changes,
-- validating service recoveries.
+Use the testing page to run packaged checks from OMERO.web. Review the result
+badge, message, and details before running another test.
 
-### 2) Resource monitoring
+## Working Safely
 
-Purpose: live operational view of host and service health.
+- Confirm you are on the intended OMERO installation.
+- Make one operational change at a time.
+- Keep request IDs or result details when reporting a problem.
+- Avoid quota changes while users are actively importing large data.
 
-Capabilities include:
+## If a Panel Fails
 
-- host CPU/memory/disk indicators,
-- Grafana and Prometheus reachability,
-- scrape target health summary,
-- Docker compose service-health diagnostics.
-
-### 3) Storage viewer & quotas
-
-Purpose: visualize storage usage and manage per-group quotas.
-
-Capabilities include:
-
-- user/group/top-N storage distribution views,
-- quota editing with minimum thresholds (disabled if ext4 `prjquota` or `project` features are missing),
-- CSV template export/import for quota management,
-- quota enforcement log visibility.
-
-### 4) OMERO.server and database testing
-
-Purpose: run packaged diagnostics against server and PostgreSQL services.
-
-Capabilities include:
-
-- script selection and execution,
-- Docker runtime state inspection through the mounted engine socket,
-- direct PostgreSQL `SELECT 1` sanity checks from the OMERO.web runtime,
-- PASS/WARN/FAIL result badges,
-- response metadata and request identifiers.
-
-## Operational guardrails
-
-- Apply quota changes deliberately and in maintenance-aware windows.
-- Capture request IDs and result payloads for auditability.
-- For severe failures, preserve diagnostics before rerunning scripts.
-
-## Troubleshooting
-
-- **No data loaded**: confirm backend services and plugin API endpoints are reachable.
-- **Monitoring links unauthorized/not found**: use documented Grafana navigation guidance in UI subtitle.
-- **Quota updates fail**: verify repository compatibility and permissions.
-- **Diagnostics fail broadly**: investigate shared infrastructure dependencies first (database, network, Docker health).
-- **Docker runtime inspection failed**: verify that `/var/run/docker.sock` is mounted read-only into `omeroweb` and that the runtime user can read it.
-- **Direct SQL sanity test failed**: verify database host/user/name/password env values in `env/omeroweb.env`, `env/omeroserver.env`, and `env/omero_secrets.env`, and confirm `psycopg2-binary` is present in the OMERO.web image.
-
-## Best practices
-
-- Use Logs + Monitoring together during incidents.
-- Establish recurring quota reviews for top-consuming groups.
-- Run diagnostics after major upgrades and before release sign-off.
+- Reload the panel once.
+- Check whether the affected service is running.
+- Use Logs and Monitoring together to narrow the cause.
+- Escalate with the visible error message and request ID when available.

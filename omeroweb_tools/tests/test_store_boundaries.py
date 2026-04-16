@@ -199,6 +199,11 @@ def test_ensure_schema_bootstraps_tables_indexes_and_commit(monkeypatch):
     assert "CREATE TABLE IF NOT EXISTS acquisition_search_saved_query" in combined_sql
     assert "CREATE TABLE IF NOT EXISTS acquisition_search_user_settings" in combined_sql
     assert "USING GIN (to_tsvector('simple', search_document))" in combined_sql
+    assert "replace(attribute_key, '_', ' ') || ' ' || attribute_text" in combined_sql
+    assert (
+        "CREATE INDEX IF NOT EXISTS acquisition_search_attribute_image_idx"
+        in combined_sql
+    )
     assert conn.commits == 1
 
 
@@ -211,14 +216,14 @@ def test_list_sync_states_and_saved_queries_map_store_rows(monkeypatch):
                 (
                     "user",
                     7,
-                    "Your acquisition metadata",
+                    "Your universal metadata index",
                     3,
                     "running",
                     "alice",
                     run_marker,
                     99,
                     5,
-                    "Indexing scope...",
+                    "Indexing...",
                     "",
                     datetime(2026, 4, 12, 10, 0, tzinfo=timezone.utc),
                     None,
@@ -246,14 +251,14 @@ def test_list_sync_states_and_saved_queries_map_store_rows(monkeypatch):
         {
             "scope_type": "user",
             "scope_id": 7,
-            "scope_label": "Your acquisition metadata",
+            "scope_label": "Your universal metadata index",
             "schema_version": 3,
             "status": "running",
             "requested_by": "alice",
             "run_token": run_marker,
             "last_cursor_image_id": 99,
             "indexed_image_count": 5,
-            "current_message": "Indexing scope...",
+            "current_message": "Indexing...",
             "last_error": "",
             "last_started_at": datetime(2026, 4, 12, 10, 0, tzinfo=timezone.utc),
             "last_finished_at": None,
@@ -323,7 +328,7 @@ def test_sync_markers_and_document_upsert_cover_write_paths(monkeypatch):
         7,
         run_token=run_marker,
         indexed_image_count=4,
-        current_message="Indexed 4 image(s)...",
+        current_message="Indexed 4 image(s).",
         last_cursor_image_id=99,
     )
     store.mark_sync_complete(
