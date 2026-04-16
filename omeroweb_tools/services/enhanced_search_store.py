@@ -317,6 +317,28 @@ def ensure_schema(conn) -> None:
                 TABLE_IMAGE,
             )
         )
+        cur.execute(
+            _safe_query(
+                """
+                CREATE INDEX IF NOT EXISTS {} ON {}
+                USING GIN (
+                    to_tsvector(
+                        'simple',
+                        replace(attribute_key, '_', ' ') || ' ' || attribute_text
+                    )
+                );
+                """,
+                f"{TABLE_ATTRIBUTE}_text_idx",
+                TABLE_ATTRIBUTE,
+            )
+        )
+        cur.execute(
+            _safe_query(
+                "CREATE INDEX IF NOT EXISTS {} ON {} (image_id);",
+                f"{TABLE_ATTRIBUTE}_image_idx",
+                TABLE_ATTRIBUTE,
+            )
+        )
     conn.commit()
     _mark_schema_ready(conn)
 
@@ -523,7 +545,7 @@ def try_start_scope_sync(
                 schema_version,
                 requested_by,
                 run_token,
-                "Indexing scope…",
+                "Indexing…",
                 stale_after_seconds,
                 stale_after_seconds,
                 stale_after_seconds,
@@ -919,6 +941,8 @@ def search_index_rows(
     *,
     visible_group_ids: list[int] | None,
     current_user_id: int | None,
+    scope_type: str | None = None,
+    scope_id: int | None = None,
     query_text: str,
     filters: dict[str, Any],
     limit: int | None = None,
@@ -936,6 +960,8 @@ def search_index_rows(
         resolved_current_user_id: int | None = int(current_user_id)
     else:
         resolved_current_user_id = None
+    resolved_scope_type = str(scope_type or "").strip() or None
+    resolved_scope_id = int(scope_id) if scope_id is not None else None
 
     if query_text:
         tsquery = build_postgres_prefix_tsquery(query_text)
@@ -945,11 +971,16 @@ def search_index_rows(
         tsquery = ""
 
     base_params: list[Any] = [
+        resolved_scope_type,
+        resolved_scope_type,
+        resolved_scope_id,
+        resolved_scope_id,
         resolved_visible_group_ids,
         resolved_visible_group_ids,
         resolved_current_user_id,
         resolved_current_user_id,
         resolved_current_user_id,
+        tsquery,
         tsquery,
         tsquery,
         filters.get("acquisition_date_from"),
@@ -959,9 +990,13 @@ def search_index_rows(
     ]
     count_sql = _safe_query(
         """
-        SELECT COUNT(images.image_id)
+        SELECT COUNT(DISTINCT images.image_id)
         FROM {} images
+        JOIN {} scope_items ON scope_items.image_id = images.image_id
         WHERE
+            (%s::text IS NULL OR scope_items.scope_type = %s)
+            AND (%s::bigint IS NULL OR scope_items.scope_id = %s)
+            AND
             (%s::bigint[] IS NULL OR images.group_id = ANY(%s::bigint[]))
             AND (
                 (%s::bigint IS NULL AND images.group_can_read = TRUE)
@@ -972,16 +1007,28 @@ def search_index_rows(
             )
             AND (
                 %s = ''
-                OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', %s)
+                OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', NULLIF(%s, ''))
+                OR images.image_id IN (
+                    SELECT attributes.image_id
+                    FROM {} attributes
+                    WHERE to_tsvector(
+                            'simple',
+                            replace(attributes.attribute_key, '_', ' ')
+                            || ' '
+                            || attributes.attribute_text
+                          ) @@ to_tsquery('simple', NULLIF(%s, ''))
+                )
             )
             AND (%s::timestamptz IS NULL OR images.acquisition_date >= %s)
             AND (%s::timestamptz IS NULL OR images.acquisition_date <= %s)
         """,
         TABLE_IMAGE,
+        TABLE_SCOPE_ITEM,
+        TABLE_ATTRIBUTE,
     )
     rows_sql = _safe_query(
         """
-        SELECT
+        SELECT DISTINCT
             images.image_id,
             images.group_id,
             images.group_name,
@@ -1007,7 +1054,11 @@ def search_index_rows(
             images.channel_summary,
             images.indexed_at
         FROM {} images
+        JOIN {} scope_items ON scope_items.image_id = images.image_id
         WHERE
+            (%s::text IS NULL OR scope_items.scope_type = %s)
+            AND (%s::bigint IS NULL OR scope_items.scope_id = %s)
+            AND
             (%s::bigint[] IS NULL OR images.group_id = ANY(%s::bigint[]))
             AND (
                 (%s::bigint IS NULL AND images.group_can_read = TRUE)
@@ -1018,20 +1069,32 @@ def search_index_rows(
             )
             AND (
                 %s = ''
-                OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', %s)
+                OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', NULLIF(%s, ''))
+                OR images.image_id IN (
+                    SELECT attributes.image_id
+                    FROM {} attributes
+                    WHERE to_tsvector(
+                            'simple',
+                            replace(attributes.attribute_key, '_', ' ')
+                            || ' '
+                            || attributes.attribute_text
+                          ) @@ to_tsquery('simple', NULLIF(%s, ''))
+                )
             )
             AND (%s::timestamptz IS NULL OR images.acquisition_date >= %s)
             AND (%s::timestamptz IS NULL OR images.acquisition_date <= %s)
         ORDER BY images.acquisition_date DESC NULLS LAST, images.image_id DESC
         """,
         TABLE_IMAGE,
+        TABLE_SCOPE_ITEM,
+        TABLE_ATTRIBUTE,
     )
     paged_rows_sql = rows_sql
     paged_params = list(base_params)
     if limit is not None:
         paged_rows_sql = _safe_query(
             """
-            SELECT
+            SELECT DISTINCT
                 images.image_id,
                 images.group_id,
                 images.group_name,
@@ -1057,7 +1120,11 @@ def search_index_rows(
                 images.channel_summary,
                 images.indexed_at
             FROM {} images
+            JOIN {} scope_items ON scope_items.image_id = images.image_id
             WHERE
+                (%s::text IS NULL OR scope_items.scope_type = %s)
+                AND (%s::bigint IS NULL OR scope_items.scope_id = %s)
+                AND
                 (%s::bigint[] IS NULL OR images.group_id = ANY(%s::bigint[]))
                 AND (
                     (%s::bigint IS NULL AND images.group_can_read = TRUE)
@@ -1068,7 +1135,17 @@ def search_index_rows(
                 )
                 AND (
                     %s = ''
-                    OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', %s)
+                    OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', NULLIF(%s, ''))
+                    OR images.image_id IN (
+                        SELECT attributes.image_id
+                        FROM {} attributes
+                        WHERE to_tsvector(
+                                'simple',
+                                replace(attributes.attribute_key, '_', ' ')
+                                || ' '
+                                || attributes.attribute_text
+                              ) @@ to_tsquery('simple', NULLIF(%s, ''))
+                    )
                 )
                 AND (%s::timestamptz IS NULL OR images.acquisition_date >= %s)
                 AND (%s::timestamptz IS NULL OR images.acquisition_date <= %s)
@@ -1076,6 +1153,8 @@ def search_index_rows(
             LIMIT %s OFFSET %s
             """,
             TABLE_IMAGE,
+            TABLE_SCOPE_ITEM,
+            TABLE_ATTRIBUTE,
         )
         paged_params.extend([limit, offset])
 

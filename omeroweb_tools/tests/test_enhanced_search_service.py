@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 from django.test import override_settings
+from django.template import Context, Engine
+from django.utils import timezone as django_timezone
 
 from omeroweb_tools.services import enhanced_search_service as service
 
@@ -45,6 +47,30 @@ def test_parse_search_query_accepts_display_date_formats():
         999999,
         tzinfo=timezone.utc,
     )
+
+
+def test_search_query_display_dates_do_not_localize_end_of_day_forward():
+    query = service.SearchQuery(
+        acquisition_date_from=datetime(2026, 4, 13, tzinfo=timezone.utc),
+        acquisition_date_to=datetime(
+            2026,
+            4,
+            13,
+            23,
+            59,
+            59,
+            999999,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    template = Engine().from_string('{{ value|date:"d-m-Y" }}')
+    with django_timezone.override("Europe/Zurich"):
+        assert template.render(Context({"value": query.acquisition_date_to})) == (
+            "14-04-2026"
+        )
+        assert query.acquisition_date_from_display == "13-04-2026"
+        assert query.acquisition_date_to_display == "13-04-2026"
 
 
 def test_saved_query_redirect_url_urlencodes_payload():
@@ -95,6 +121,29 @@ def test_search_without_query_text_or_date_filters_returns_empty_payload():
         "has_previous": False,
         "has_next": False,
     }
+
+
+def test_search_does_not_query_user_index_without_current_user(monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        service, "runtime_config", lambda: SimpleNamespace(max_results=10)
+    )
+    monkeypatch.setattr(service, "_current_user_id", lambda conn: None)
+    monkeypatch.setattr(service, "db_connect", lambda: called.append("db"))
+    monkeypatch.setattr(service, "_search_omero_builtin_rows", lambda conn, query: [])
+
+    payload = service.search(
+        object(),
+        service.SearchQuery(
+            query_text="delta",
+            indexed_scope=service.SEARCH_SCOPE_ACQUISITION_METADATA,
+        ),
+        acquisition_metadata_enabled=True,
+    )
+
+    assert called == []
+    assert payload["results"] == []
+    assert payload["total_count"] == 0
 
 
 @pytest.mark.parametrize(
@@ -160,7 +209,7 @@ def test_search_runs_with_one_sided_date_filters(
                         "pixel_size_x_um": 0.1,
                         "pixel_size_y_um": 0.1,
                         "z_step_um": 0.4,
-                        "indexed_sources": ["Acquisition metadata"],
+                        "indexed_sources": ["Universal metadata index"],
                     }
                 ],
                 1,
@@ -192,6 +241,8 @@ def test_search_runs_with_one_sided_date_filters(
 
     assert payload["total_count"] == 1
     assert payload["results"][0]["image_id"] == 17
+    assert captured_calls[0]["scope_type"] == service.USER_SCOPE_TYPE
+    assert captured_calls[0]["scope_id"] == 21
     assert captured_calls[0]["filters"][expected_filter_key] is not None
     assert captured_calls[0]["limit"] == 10
     assert captured_calls[0]["offset"] == 0
@@ -245,7 +296,10 @@ def test_save_user_settings_clears_current_user_scope_when_disabled(monkeypatch)
     monkeypatch.setattr(
         service,
         "user_settings",
-        lambda username: {"acquisition_metadata_enabled": True},
+        lambda username: {
+            "acquisition_metadata_enabled": True,
+            "collapsed_sections": ["saved-queries"],
+        },
     )
     monkeypatch.setattr(
         service,
@@ -271,12 +325,15 @@ def test_save_user_settings_clears_current_user_scope_when_disabled(monkeypatch)
         {"acquisition_metadata_enabled": False},
     )
 
-    assert saved["user_settings"] == {"acquisition_metadata_enabled": False}
+    assert saved["user_settings"] == {
+        "acquisition_metadata_enabled": False,
+        "collapsed_sections": ["saved-queries"],
+    }
     assert cleared == [
         (
             service.USER_SCOPE_TYPE,
             21,
-            service.acquisition_index_status_message(False),
+            service.acquisition_index_disabled_detail_message(),
         )
     ]
 
@@ -298,7 +355,10 @@ def test_save_user_settings_auto_starts_indexing_for_enabled_user(monkeypatch):
     monkeypatch.setattr(
         service,
         "user_settings",
-        lambda username: {"acquisition_metadata_enabled": False},
+        lambda username: {
+            "acquisition_metadata_enabled": False,
+            "collapsed_sections": ["metadata-index"],
+        },
     )
     monkeypatch.setattr(service, "_current_user_id", lambda conn: 21)
     monkeypatch.setattr(
@@ -330,7 +390,10 @@ def test_save_user_settings_auto_starts_indexing_for_enabled_user(monkeypatch):
     )
 
     assert started == [("user:21", "alice", service.USER_SCOPE_LABEL)]
-    assert saved["user_settings"] == {"acquisition_metadata_enabled": True}
+    assert saved["user_settings"] == {
+        "acquisition_metadata_enabled": True,
+        "collapsed_sections": ["metadata-index"],
+    }
     assert saved["sync_started"] is True
     assert saved["sync_message"] == "Indexing started."
 
@@ -453,39 +516,43 @@ def test_search_merges_omero_and_acquisition_results(monkeypatch):
             return False
 
     monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
+    captured_index_calls = []
     monkeypatch.setattr(
         service,
         "search_index_rows",
         lambda *args, **kwargs: (
-            [
-                {
-                    "image_id": 17,
-                    "image_name": "Indexed image",
-                    "dataset_id": 101,
-                    "dataset_name": "Dataset A",
-                    "project_id": 201,
-                    "project_name": "Project A",
-                    "owner_id": 11,
-                    "owner_name": "alice",
-                    "group_id": 5,
-                    "group_name": "Group A",
-                    "acquisition_date": None,
-                    "instrument_manufacturer": "",
-                    "instrument_model": "",
-                    "objective_model": "",
-                    "objective_magnification": None,
-                    "objective_na": None,
-                    "detector_model": "",
-                    "detector_binning": "",
-                    "detector_gain": None,
-                    "pixel_size_x_um": None,
-                    "pixel_size_y_um": None,
-                    "z_step_um": None,
-                    "channel_summary": "",
-                    "indexed_at": None,
-                }
-            ],
-            1,
+            captured_index_calls.append(kwargs)
+            or (
+                [
+                    {
+                        "image_id": 17,
+                        "image_name": "Indexed image",
+                        "dataset_id": 101,
+                        "dataset_name": "Dataset A",
+                        "project_id": 201,
+                        "project_name": "Project A",
+                        "owner_id": 11,
+                        "owner_name": "alice",
+                        "group_id": 5,
+                        "group_name": "Group A",
+                        "acquisition_date": None,
+                        "instrument_manufacturer": "",
+                        "instrument_model": "",
+                        "objective_model": "",
+                        "objective_magnification": None,
+                        "objective_na": None,
+                        "detector_model": "",
+                        "detector_binning": "",
+                        "detector_gain": None,
+                        "pixel_size_x_um": None,
+                        "pixel_size_y_um": None,
+                        "z_step_um": None,
+                        "channel_summary": "",
+                        "indexed_at": None,
+                    }
+                ],
+                1,
+            )
         ),
     )
     monkeypatch.setattr(
@@ -578,11 +645,84 @@ def test_search_merges_omero_and_acquisition_results(monkeypatch):
     results_by_id = {row["image_id"]: row for row in payload["results"]}
     assert results_by_id[17]["indexed_sources"] == [
         "OMERO index",
-        "Acquisition metadata",
+        "Universal metadata index",
     ]
     assert results_by_id[18]["indexed_sources"] == ["OMERO index"]
     assert results_by_id[17]["image_name"] == "Current 17"
     assert results_by_id[17]["thumbnail_url"] == "/render-thumbnail/17/"
+    assert captured_index_calls[0]["scope_type"] == service.USER_SCOPE_TYPE
+    assert captured_index_calls[0]["scope_id"] == 11
+
+
+def test_all_indexed_search_dispatches_independent_sources_concurrently(monkeypatch):
+    events = []
+    executor_inits = []
+
+    class _Future:
+        def __init__(self, func, kwargs):
+            self._func = func
+            self._kwargs = kwargs
+
+        def result(self):
+            events.append("future-result")
+            return self._func(**self._kwargs)
+
+    class _Executor:
+        def __init__(self, max_workers, thread_name_prefix):
+            executor_inits.append(
+                {
+                    "max_workers": max_workers,
+                    "thread_name_prefix": thread_name_prefix,
+                }
+            )
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def submit(self, func, **kwargs):
+            events.append("submit-acquisition")
+            return _Future(func, kwargs)
+
+    monkeypatch.setattr(service, "ThreadPoolExecutor", _Executor)
+    monkeypatch.setattr(
+        service, "runtime_config", lambda: SimpleNamespace(max_results=10)
+    )
+    monkeypatch.setattr(service, "_current_user_id", lambda conn: 11)
+    monkeypatch.setattr(service, "_visible_group_ids", lambda conn: [5])
+    monkeypatch.setattr(
+        service,
+        "_search_acquisition_index_rows",
+        lambda **kwargs: events.append(("acquisition", kwargs)) or ([], 0),
+    )
+    monkeypatch.setattr(
+        service,
+        "_search_omero_builtin_rows",
+        lambda conn, query: events.append("omero") or [],
+    )
+
+    payload = service.search(
+        object(),
+        service.SearchQuery(
+            query_text="delta",
+            indexed_scope=service.SEARCH_SCOPE_ALL_INDEXED,
+        ),
+        acquisition_metadata_enabled=True,
+    )
+
+    assert payload["results"] == []
+    assert executor_inits == [
+        {
+            "max_workers": 2,
+            "thread_name_prefix": "enhanced-search-source",
+        }
+    ]
+    assert events[0:3] == ["submit-acquisition", "omero", "future-result"]
+    assert events[3][0] == "acquisition"
+    assert events[3][1]["scope_type"] == service.USER_SCOPE_TYPE
+    assert events[3][1]["scope_id"] == 11
 
 
 def test_search_omero_builtin_rows_uses_prefix_query_for_partial_matching(monkeypatch):
@@ -628,7 +768,7 @@ def test_search_omero_builtin_rows_drops_single_letter_noise_terms(monkeypatch):
 
 
 def test_request_scope_sync_dispatches_celery_task(monkeypatch):
-    scope = service.EnhancedSearchScope("user", 7, "Your acquisition metadata")
+    scope = service.EnhancedSearchScope("user", 7, "Your universal metadata index")
     monkeypatch.setattr(service, "scope_from_key", lambda scope_key, label=None: scope)
     celery_config = SimpleNamespace(
         enabled=True,
@@ -691,7 +831,7 @@ def test_request_scope_sync_dispatches_celery_task(monkeypatch):
 
 
 def test_request_scope_sync_marks_error_when_celery_dispatch_fails(monkeypatch):
-    scope = service.EnhancedSearchScope("user", 9, "Your acquisition metadata")
+    scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
     monkeypatch.setattr(service, "scope_from_key", lambda scope_key, label=None: scope)
     celery_config = SimpleNamespace(
         enabled=True,
@@ -819,7 +959,7 @@ def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
 
 
 def test_request_scope_sync_uses_thread_fallback_when_celery_is_disabled(monkeypatch):
-    scope = service.EnhancedSearchScope("user", 9, "Your acquisition metadata")
+    scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
     monkeypatch.setattr(service, "scope_from_key", lambda scope_key, label=None: scope)
     monkeypatch.setattr(
         service,
@@ -864,7 +1004,7 @@ def test_request_scope_sync_uses_thread_fallback_when_celery_is_disabled(monkeyp
 
 
 def test_process_sync_batch_stops_when_sync_lease_is_not_active(monkeypatch):
-    scope = service.EnhancedSearchScope("user", 9, "Your acquisition metadata")
+    scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
 
     class _Conn:
         def __enter__(self):

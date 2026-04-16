@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import inspect
 import json
 from types import SimpleNamespace
@@ -52,12 +53,20 @@ def test_enhanced_search_view_blocks_root_without_running_search(monkeypatch):
 
     assert response["blocked_for_root"] is True
     assert response["saved_queries"] == []
-    assert response["user_settings"] == {"acquisition_metadata_enabled": False}
+    assert response["user_settings"] == {
+        "acquisition_metadata_enabled": False,
+        "collapsed_sections": [],
+    }
+    assert response["metadata_index_collapsed"] is False
+    assert response["saved_queries_collapsed"] is False
     assert response["user_settings_available"] is True
+    assert response["indexed_scope_storage_key"] == (
+        "omeroweb_tools:enhanced_search:indexed_scope:"
+        f"{hashlib.sha256(b'root').hexdigest()}"
+    )
     assert (
         response["acquisition_index_status"]
-        == "Acquisition metadata indexing is disabled for your user account. "
-        "No acquisition metadata is stored for your user account."
+        == "Universal metadata indexing is disabled for your user account."
     )
     assert captured["template"] == "omeroweb_tools/enhanced_search.html"
 
@@ -74,7 +83,10 @@ def test_enhanced_search_view_builds_pagination_querystrings(monkeypatch):
     monkeypatch.setattr(
         index_view,
         "user_settings",
-        lambda username: {"acquisition_metadata_enabled": True},
+        lambda username: {
+            "acquisition_metadata_enabled": True,
+            "collapsed_sections": ["metadata-index", "saved-queries"],
+        },
     )
     monkeypatch.setattr(
         index_view,
@@ -125,9 +137,15 @@ def test_enhanced_search_view_builds_pagination_querystrings(monkeypatch):
     )
     assert captured["blocked_for_root"] is False
     assert captured["user_settings_available"] is True
+    assert captured["metadata_index_collapsed"] is True
+    assert captured["saved_queries_collapsed"] is True
     assert captured["sync_states"] == [{"scope_key": "user:3", "status": "running"}]
     assert captured["auto_sync_started"] is True
     assert captured["auto_sync_message"] == "Indexing started."
+    assert captured["indexed_scope_storage_key"] == (
+        "omeroweb_tools:enhanced_search:indexed_scope:"
+        f"{hashlib.sha256(b'alice').hexdigest()}"
+    )
 
 
 def test_enhanced_search_view_handles_settings_store_failure(monkeypatch):
@@ -165,7 +183,12 @@ def test_enhanced_search_view_handles_settings_store_failure(monkeypatch):
     request = RequestFactory().get("/omeroweb_tools/enhanced-search/")
     response = inspect.unwrap(index_view.enhanced_search_view)(request, conn=object())
 
-    assert response["user_settings"] == {"acquisition_metadata_enabled": False}
+    assert response["user_settings"] == {
+        "acquisition_metadata_enabled": False,
+        "collapsed_sections": [],
+    }
+    assert response["metadata_index_collapsed"] is False
+    assert response["saved_queries_collapsed"] is False
     assert response["user_settings_available"] is False
     assert response["acquisition_index_status_state"] == "error"
     assert (
@@ -209,8 +232,8 @@ def test_start_scope_sync_view_requires_acquisition_indexing(monkeypatch):
     assert response.status_code == 409
     assert json.loads(response.content.decode("utf-8")) == {
         "error": (
-            "Enable acquisition metadata indexing in Tools settings before "
-            "refreshing the acquisition index."
+            "Enable universal metadata indexing in Tools settings before "
+            "refreshing the metadata index."
         )
     }
 
@@ -221,7 +244,10 @@ def test_save_user_settings_view_persists_payload(monkeypatch):
         index_view,
         "save_user_settings",
         lambda conn, username, payload: {
-            "user_settings": {"acquisition_metadata_enabled": True},
+            "user_settings": {
+                "acquisition_metadata_enabled": True,
+                "collapsed_sections": ["metadata-index"],
+            },
             "sync_started": True,
             "sync_message": "Indexing started.",
             "sync_states": [{"scope_key": "user:3"}],
@@ -240,7 +266,10 @@ def test_save_user_settings_view_persists_payload(monkeypatch):
     assert response.status_code == 200
     assert json.loads(response.content.decode("utf-8")) == {
         "ok": True,
-        "user_settings": {"acquisition_metadata_enabled": True},
+        "user_settings": {
+            "acquisition_metadata_enabled": True,
+            "collapsed_sections": ["metadata-index"],
+        },
         "sync_started": True,
         "sync_message": "Indexing started.",
         "sync_states": [{"scope_key": "user:3"}],
@@ -283,7 +312,7 @@ def test_start_scope_sync_view_targets_current_user_scope(monkeypatch):
         index_view,
         "current_user_scope",
         lambda conn, username: SimpleNamespace(
-            scope_key="user:3", label="Your acquisition metadata"
+            scope_key="user:3", label="Your universal metadata index"
         ),
     )
     monkeypatch.setattr(
@@ -292,7 +321,7 @@ def test_start_scope_sync_view_targets_current_user_scope(monkeypatch):
         lambda scope_key, requested_by, scope_label=None: (
             scope_key == "user:3"
             and requested_by == "alice"
-            and scope_label == "Your acquisition metadata",
+            and scope_label == "Your universal metadata index",
             "Indexing started.",
         ),
     )
@@ -331,7 +360,7 @@ def test_start_scope_sync_view_ignores_requested_scope_key(monkeypatch):
         index_view,
         "current_user_scope",
         lambda conn, username: SimpleNamespace(
-            scope_key="user:3", label="Your acquisition metadata"
+            scope_key="user:3", label="Your universal metadata index"
         ),
     )
     requested = {}
@@ -367,7 +396,7 @@ def test_start_scope_sync_view_ignores_requested_scope_key(monkeypatch):
     assert requested == {
         "scope_key": "user:3",
         "requested_by": "alice",
-        "scope_label": "Your acquisition metadata",
+        "scope_label": "Your universal metadata index",
     }
 
 

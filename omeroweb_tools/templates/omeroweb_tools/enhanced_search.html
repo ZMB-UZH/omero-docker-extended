@@ -72,7 +72,9 @@
                                    id="query_text"
                                    name="query_text"
                                    value="{{ query.query_text }}"
-                                   placeholder="Search indexed OMERO data and acquisition metadata">
+                                   autocomplete="off"
+                                   spellcheck="false"
+                                   placeholder="Search indexed OMERO data and image metadata">
                         </div>
                         <div class="tools-search-field tools-search-field--actions">
                             <span class="tools-search-field__spacer" aria-hidden="true">Actions</span>
@@ -84,8 +86,9 @@
                                     Search
                                 </button>
                                 <a class="admin-tools-button admin-tools-button-link tools-search-inline-action"
+                                   id="clear-search-btn"
                                    href="{% url 'omeroweb_tools_enhanced_search' %}"
-                                   data-page-load-message="Resetting search…">
+                                   role="button">
                                     Clear
                                 </a>
                             </div>
@@ -100,14 +103,14 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="tools-search-field tools-search-field--date">
+                        <div class="tools-search-field tools-search-field--date tools-search-field--start-date">
                             <label for="acquisition_date_from">Start date</label>
                             <div class="tools-search-date-control">
                                 <input type="text"
                                        id="acquisition_date_from"
                                        class="tools-search-date-input"
                                        name="acquisition_date_from"
-                                       value="{{ query.acquisition_date_from|date:'d-m-Y' }}"
+                                       value="{{ query.acquisition_date_from_display }}"
                                        placeholder="dd-mm-yyyy"
                                        inputmode="numeric"
                                        autocomplete="off"
@@ -120,14 +123,14 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="tools-search-field tools-search-field--date">
+                        <div class="tools-search-field tools-search-field--date tools-search-field--end-date">
                             <label for="acquisition_date_to">End date</label>
                             <div class="tools-search-date-control">
                                 <input type="text"
                                        id="acquisition_date_to"
                                        class="tools-search-date-input"
                                        name="acquisition_date_to"
-                                       value="{{ query.acquisition_date_to|date:'d-m-Y' }}"
+                                       value="{{ query.acquisition_date_to_display }}"
                                        placeholder="dd-mm-yyyy"
                                        inputmode="numeric"
                                        autocomplete="off"
@@ -144,10 +147,20 @@
                 </form>
             </section>
 
-            <section class="admin-tools-card admin-tools-card--wide tools-search-card">
+            <section class="admin-tools-card admin-tools-card--wide tools-search-card tools-search-card--collapsible{% if metadata_index_collapsed %} tools-search-card--collapsed tools-search-card--precollapsed{% endif %}"
+                     data-collapsible-section="metadata-index">
                 <div class="tools-search-index-heading">
                     <div class="tools-search-index-heading__copy">
-                        <h2 class="tools-search-heading">Acquisition metadata indexing</h2>
+                        <h2 class="tools-search-heading">
+                            <button type="button"
+                                    class="tools-search-section-toggle"
+                                    aria-expanded="{% if metadata_index_collapsed %}false{% else %}true{% endif %}"
+                                    aria-controls="tools-search-metadata-index-body"
+                                    data-collapsible-toggle="metadata-index">
+                                <span class="tools-search-section-toggle__indicator" aria-hidden="true"></span>
+                                <span>Universal metadata index</span>
+                            </button>
+                        </h2>
                     </div>
                     <span class="tools-search-pill tools-search-pill--feature"
                           id="acquisition-index-enabled-pill"
@@ -155,110 +168,138 @@
                         {% if not user_settings_available %}Unavailable{% elif user_settings.acquisition_metadata_enabled %}Enabled{% else %}Disabled{% endif %}
                     </span>
                 </div>
-                <div class="tools-search-settings-panel">
-                    <label class="tools-search-setting-toggle" for="acquisition_metadata_enabled">
-                        <input type="checkbox"
-                               id="acquisition_metadata_enabled"
-                               {% if user_settings.acquisition_metadata_enabled %}checked{% endif %}
-                               {% if blocked_for_root or not user_settings_available %}disabled{% endif %}>
-                        <span>Acquisition metadata indexing</span>
-                    </label>
-                    <p class="tools-page-note tools-page-note--tight{% if acquisition_index_status_state == 'error' %} tools-page-note--error{% endif %}"
-                       id="acquisition-index-status">{{ acquisition_index_status }}</p>
+                <div class="tools-search-collapsible-body"
+                     id="tools-search-metadata-index-body"
+                     aria-hidden="{% if metadata_index_collapsed %}true{% else %}false{% endif %}">
+                    <div class="tools-search-settings-panel">
+                        <label class="tools-search-setting-toggle" for="acquisition_metadata_enabled">
+                            <input type="checkbox"
+                                   id="acquisition_metadata_enabled"
+                                   {% if user_settings.acquisition_metadata_enabled %}checked{% endif %}
+                                   {% if blocked_for_root or not user_settings_available %}disabled{% endif %}>
+                            <span>Universal metadata indexing</span>
+                        </label>
+                        <p class="tools-page-note tools-page-note--tight{% if acquisition_index_status_state == 'error' %} tools-page-note--error{% endif %}"
+                           id="acquisition-index-status">{{ acquisition_index_status }}</p>
+                    </div>
+                    {% if sync_states %}
+                    <table class="tools-search-status-table">
+                        <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Details</th>
+                            <th>Action</th>
+                        </tr>
+                        </thead>
+                        <tbody id="sync-state-body">
+                        {% for state in sync_states %}
+                        <tr data-scope-key="{{ state.scope_key }}">
+                            <td><span class="tools-search-pill" data-status="{{ state.status }}">{{ state.status }}</span></td>
+                            <td>
+                                <span class="tools-search-status-message">{{ state.current_message|default:"No sync activity yet." }}</span>
+                                {% if state.last_successful_at %}
+                                <small>Last successful sync: {{ state.last_successful_at|date:"j M Y, g:i a" }}</small>
+                                {% endif %}
+                                {% if state.last_error %}
+                                <small>{{ state.last_error }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button type="button"
+                                        class="admin-tools-button tools-search-inline-action tools-search-inline-action--primary sync-scope-btn{% if state.status == 'running' %} is-busy{% endif %}"
+                                        data-scope-key="{{ state.scope_key }}"
+                                        data-sync-running="{% if state.status == 'running' %}true{% else %}false{% endif %}"
+                                        data-default-label="Refresh index"
+                                        {% if blocked_for_root or not user_settings_available or not user_settings.acquisition_metadata_enabled or state.status == 'running' %}disabled{% endif %}>
+                                    {% if state.status == 'running' %}Refreshing…{% else %}Refresh index{% endif %}
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="tools-search-empty">No metadata indexing status is available yet.</p>
+                    {% endif %}
                 </div>
-                {% if sync_states %}
-                <table class="tools-search-status-table">
-                    <thead>
-                    <tr>
-                        <th>Status</th>
-                        <th>Details</th>
-                        <th>Action</th>
-                    </tr>
-                    </thead>
-                    <tbody id="sync-state-body">
-                    {% for state in sync_states %}
-                    <tr data-scope-key="{{ state.scope_key }}">
-                        <td><span class="tools-search-pill" data-status="{{ state.status }}">{{ state.status }}</span></td>
-                        <td>
-                            <span class="tools-search-status-message">{{ state.current_message|default:"No sync activity yet." }}</span>
-                            {% if state.last_successful_at %}
-                            <small>Last successful sync: {{ state.last_successful_at|date:"j M Y, g:i a" }}</small>
-                            {% endif %}
-                            {% if state.last_error %}
-                            <small>{{ state.last_error }}</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <button type="button"
-                                    class="admin-tools-button tools-search-inline-action tools-search-inline-action--primary sync-scope-btn"
-                                    data-scope-key="{{ state.scope_key }}"
-                                    {% if blocked_for_root or not user_settings_available or not user_settings.acquisition_metadata_enabled %}disabled{% endif %}>
-                                Refresh index
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-                {% else %}
-                <p class="tools-search-empty">No acquisition indexing status is available yet.</p>
-                {% endif %}
             </section>
 
-            <section class="admin-tools-card admin-tools-card--wide tools-search-card">
-                <h2 class="tools-search-heading tools-search-heading--compact">Saved search queries</h2>
-                <div class="tools-search-inline-form">
-                    <input type="text"
-                           id="saved-query-name"
-                           class="tools-search-query-name-input"
-                           placeholder="Save current search as…"
-                           maxlength="{{ saved_query_name_max_length }}"
-                           autocomplete="off"
-                           spellcheck="false"
-                           {% if blocked_for_root %}disabled{% endif %}>
+            <section class="admin-tools-card admin-tools-card--wide tools-search-card tools-search-card--collapsible{% if saved_queries_collapsed %} tools-search-card--collapsed tools-search-card--precollapsed{% endif %}"
+                     data-collapsible-section="saved-queries">
+                <h2 class="tools-search-heading tools-search-heading--compact">
                     <button type="button"
-                            class="admin-tools-button tools-search-inline-action tools-search-inline-action--primary"
-                            id="save-query-btn"
-                            disabled>
-                        Save
+                            class="tools-search-section-toggle"
+                            aria-expanded="{% if saved_queries_collapsed %}false{% else %}true{% endif %}"
+                            aria-controls="tools-search-saved-queries-body"
+                            data-collapsible-toggle="saved-queries">
+                        <span class="tools-search-section-toggle__indicator" aria-hidden="true"></span>
+                        <span>Saved search queries</span>
                     </button>
-                </div>
-                <div class="tools-search-saved-list{% if not saved_queries %} tools-search-saved-list--empty{% endif %}"
-                     id="saved-query-list">
-                    {% if saved_queries %}
-                        {% for item in saved_queries %}
-                        <div class="tools-search-saved-item" data-query-id="{{ item.id }}">
-                            <div class="tools-search-saved-meta">
-                                <strong>{{ item.query_name }}</strong>
-                                <small>{{ item.updated_at|date:"j M Y, g:i a" }}</small>
+                </h2>
+                <div class="tools-search-collapsible-body"
+                     id="tools-search-saved-queries-body"
+                     aria-hidden="{% if saved_queries_collapsed %}true{% else %}false{% endif %}">
+                    <div class="tools-search-inline-form">
+                        <input type="text"
+                               id="saved-query-name"
+                               class="tools-search-query-name-input"
+                               placeholder="Save current search as…"
+                               maxlength="{{ saved_query_name_max_length }}"
+                               autocomplete="off"
+                               spellcheck="false"
+                               {% if blocked_for_root %}disabled{% endif %}>
+                        <button type="button"
+                                class="admin-tools-button tools-search-inline-action tools-search-inline-action--primary"
+                                id="save-query-btn"
+                                disabled>
+                            Save
+                        </button>
+                    </div>
+                    <div class="tools-search-saved-list{% if not saved_queries %} tools-search-saved-list--empty{% endif %}"
+                         id="saved-query-list">
+                        {% if saved_queries %}
+                            {% for item in saved_queries %}
+                            <div class="tools-search-saved-item" data-query-id="{{ item.id }}">
+                                <div class="tools-search-saved-meta">
+                                    <strong>{{ item.query_name }}</strong>
+                                    <small>{{ item.updated_at|date:"j M Y, g:i a" }}</small>
+                                </div>
+                                <div class="tools-search-saved-actions">
+                                    <a class="admin-tools-button admin-tools-button-link tools-search-saved-action tools-search-saved-action--load"
+                                       href="{% url 'omeroweb_tools_enhanced_search_apply_query' item.id %}"
+                                       data-page-load-message="Loading saved search…">
+                                        Load
+                                    </a>
+                                    <button type="button"
+                                            class="admin-tools-button delete-query-btn tools-search-saved-action tools-search-saved-action--delete"
+                                            data-query-id="{{ item.id }}"
+                                            {% if blocked_for_root %}disabled{% endif %}>
+                                        Delete
+                                    </button>
+                                </div>
                             </div>
-                            <div class="tools-search-saved-actions">
-                                <a class="admin-tools-button admin-tools-button-link tools-search-saved-action tools-search-saved-action--load"
-                                   href="{% url 'omeroweb_tools_enhanced_search_apply_query' item.id %}"
-                                   data-page-load-message="Loading saved search…">
-                                    Load
-                                </a>
-                                <button type="button"
-                                        class="admin-tools-button delete-query-btn tools-search-saved-action tools-search-saved-action--delete"
-                                        data-query-id="{{ item.id }}"
-                                        {% if blocked_for_root %}disabled{% endif %}>
-                                    Delete
-                                </button>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    {% else %}
-                        <p class="tools-search-empty">No saved queries yet.</p>
-                    {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <p class="tools-search-empty">No saved queries yet.</p>
+                        {% endif %}
+                    </div>
                 </div>
             </section>
 
             <section class="admin-tools-card admin-tools-card--wide tools-search-card tools-search-card--results">
                 <h2 class="tools-search-heading tools-search-heading--compact">Results</h2>
-                <p class="tools-page-note tools-page-note--section-summary">Showing {{ search_payload.results|length }} result(s){% if search_payload.total_count %} from {{ search_payload.total_count }} matching result(s){% endif %}.</p>
-                <div class="tools-search-results-body">
+                <p class="tools-page-note tools-page-note--section-summary"
+                   id="tools-search-results-summary">Showing {{ search_payload.results|length }} result(s){% if search_payload.total_count %} from {{ search_payload.total_count }} matching result(s){% endif %}.</p>
+                <div class="tools-search-results-body" id="tools-search-results-body">
                     {% if search_payload.results %}
                     <table class="tools-search-results">
+                        <colgroup>
+                            <col class="tools-search-results__col tools-search-results__col--preview">
+                            <col class="tools-search-results__col tools-search-results__col--image">
+                            <col class="tools-search-results__col tools-search-results__col--context">
+                            <col class="tools-search-results__col tools-search-results__col--acquisition">
+                            <col class="tools-search-results__col tools-search-results__col--channels">
+                        </colgroup>
                         <thead>
                         <tr>
                             <th>Preview</th>
@@ -376,8 +417,11 @@
          aria-atomic="true"
          hidden></div>
     {{ acquisition_index_messages|json_script:"acquisition-index-messages" }}
+    {{ user_settings|json_script:"tools-search-user-settings" }}
+    {{ indexed_scope_storage_key|json_script:"tools-search-indexed-scope-storage-key" }}
     <script src="{% static '3rdparty/jquery-3.6.2.min.js' %}"></script>
     <script src="{% static '3rdparty/jquery-ui-1.13.2/js/jquery-ui.js' %}"></script>
+    <script src="{% static 'omeroweb_tools/enhanced_search_indexed_scope.js' %}"></script>
     <script>
         const blockedForRoot = {{ blocked_for_root|yesno:"true,false" }};
         const rootStatusUrl = new URL('{% url "omeroweb_tools_root_status" %}', window.location.href);
@@ -394,14 +438,19 @@
         const queryTextInput = document.getElementById('query_text');
         const enhancedSearchForm = document.getElementById('enhanced-search-form');
         const searchSubmitButton = document.getElementById('search-submit-btn');
+        const clearSearchButton = document.getElementById('clear-search-btn');
+        const resultsSummaryEl = document.getElementById('tools-search-results-summary');
+        const resultsBodyEl = document.getElementById('tools-search-results-body');
         const acquisitionIndexMessagesNode = document.getElementById('acquisition-index-messages');
         const acquisitionIndexMessages = acquisitionIndexMessagesNode
             ? JSON.parse(acquisitionIndexMessagesNode.textContent)
             : {};
+        const userSettingsNode = document.getElementById('tools-search-user-settings');
+        let userSettingsPayload = userSettingsNode
+            ? JSON.parse(userSettingsNode.textContent)
+            : {};
         let settingsAccessible = {{ user_settings_available|yesno:"true,false" }};
         let acquisitionMetadataEnabled = {{ user_settings.acquisition_metadata_enabled|yesno:"true,false" }};
-        const autoSyncStarted = {{ auto_sync_started|yesno:"true,false" }};
-        const autoSyncMessage = '{{ auto_sync_message|escapejs }}';
         const csrfToken = document.cookie
             .split(';')
             .map((chunk) => chunk.trim())
@@ -522,6 +571,30 @@
             const minWidth = Math.ceil(gridMinWidth + paddingLeft + paddingRight);
             primaryGrid.style.minWidth = `${gridMinWidth}px`;
             layout.style.setProperty('--tools-search-primary-min-width', `${minWidth}px`);
+            syncIndexSettingToggleAlignment();
+        };
+
+        const syncIndexSettingToggleAlignment = () => {
+            const body = document.getElementById('tools-search-metadata-index-body');
+            const panel = body?.querySelector('.tools-search-settings-panel');
+            if (!body || !panel) {
+                return;
+            }
+            const targetCell = document.querySelector('#sync-state-body td:nth-child(1)')
+                || document.querySelector('.tools-search-status-table th:nth-child(1)');
+            if (!targetCell || body.getAttribute('aria-hidden') === 'true') {
+                panel.style.removeProperty('--tools-search-settings-panel-offset');
+                return;
+            }
+            const targetStyles = window.getComputedStyle(targetCell);
+            const targetTextLeft = targetCell.getBoundingClientRect().left
+                + (Number.parseFloat(targetStyles.paddingLeft || '0') || 0);
+            const bodyLeft = body.getBoundingClientRect().left;
+            const offset = Math.max(0, targetTextLeft - bodyLeft);
+            panel.style.setProperty(
+                '--tools-search-settings-panel-offset',
+                `${offset.toFixed(3)}px`
+            );
         };
 
         const updateSaveQueryButtonState = () => {
@@ -562,6 +635,14 @@
             pageLoaderEl.setAttribute('aria-hidden', 'false');
         };
 
+        const hidePageLoader = () => {
+            if (!pageLoaderEl) {
+                return;
+            }
+            pageLoaderEl.classList.remove('is-visible');
+            pageLoaderEl.setAttribute('aria-hidden', 'true');
+        };
+
         const setButtonBusy = (button, isBusy, busyText) => {
             if (!button) {
                 return;
@@ -572,6 +653,29 @@
             button.classList.toggle('is-busy', Boolean(isBusy));
             button.disabled = Boolean(isBusy);
             button.textContent = isBusy ? busyText : button.dataset.defaultLabel;
+        };
+
+        const isSyncStateRunning = (state) => (
+            String(state?.status || '').toLowerCase() === 'running'
+        );
+
+        const setSyncButtonAvailability = (button, isRunning = null) => {
+            if (!button) {
+                return;
+            }
+            if (!button.dataset.defaultLabel) {
+                button.dataset.defaultLabel = button.textContent.trim() || 'Refresh index';
+            }
+            const running = isRunning === null
+                ? button.dataset.syncRunning === 'true'
+                : Boolean(isRunning);
+            button.dataset.syncRunning = running ? 'true' : 'false';
+            button.classList.toggle('is-busy', running);
+            button.textContent = running ? 'Refreshing…' : button.dataset.defaultLabel;
+            button.disabled = blockedForRoot
+                || !settingsAccessible
+                || !acquisitionMetadataEnabled
+                || running;
         };
 
         const bindPageLoadLinks = (root = document) => {
@@ -587,6 +691,109 @@
                     );
                 });
             });
+        };
+
+        const supportedCollapsibleSections = ['metadata-index', 'saved-queries'];
+        const collapsedSections = new Set(
+            Array.isArray(userSettingsPayload.collapsed_sections)
+                ? userSettingsPayload.collapsed_sections
+                    .filter((section) => supportedCollapsibleSections.includes(section))
+                : []
+        );
+
+        const collapsedSectionsPayload = () => supportedCollapsibleSections
+            .filter((section) => collapsedSections.has(section));
+
+        const updateCollapsibleBodyHeight = (body) => {
+            if (!body || body.getAttribute('aria-hidden') === 'true') {
+                return;
+            }
+            body.style.setProperty(
+                '--tools-search-collapse-height',
+                `${Math.max(1, body.scrollHeight)}px`
+            );
+        };
+
+        const persistCollapsedSections = async () => {
+            if (blockedForRoot || !settingsAccessible) {
+                return;
+            }
+            try {
+                const payload = await postJson(settingsUrl, {
+                    ...userSettingsPayload,
+                    acquisition_metadata_enabled: acquisitionMetadataEnabled,
+                    collapsed_sections: collapsedSectionsPayload(),
+                });
+                if (payload.user_settings) {
+                    userSettingsPayload = payload.user_settings;
+                }
+            } catch (_error) {
+                // Keep the local visual state; persistence will be retried on the next toggle.
+            }
+        };
+
+        const setCollapsibleSectionState = (button, collapsed, { persist = false } = {}) => {
+            const sectionKey = button?.dataset.collapsibleToggle;
+            const bodyId = button?.getAttribute('aria-controls');
+            const body = bodyId ? document.getElementById(bodyId) : null;
+            const card = button?.closest('.tools-search-card--collapsible');
+            if (!sectionKey || !body || !card) {
+                return;
+            }
+            if (collapsed) {
+                collapsedSections.add(sectionKey);
+                updateCollapsibleBodyHeight(body);
+                body.style.setProperty('--tools-search-collapse-height', `${body.scrollHeight}px`);
+                if ('inert' in body) {
+                    body.inert = true;
+                }
+                window.requestAnimationFrame(() => {
+                    body.setAttribute('aria-hidden', 'true');
+                    card.classList.add('tools-search-card--collapsed');
+                });
+            } else {
+                collapsedSections.delete(sectionKey);
+                if ('inert' in body) {
+                    body.inert = false;
+                }
+                body.setAttribute('aria-hidden', 'false');
+                card.classList.remove('tools-search-card--collapsed');
+                updateCollapsibleBodyHeight(body);
+                window.requestAnimationFrame(syncIndexSettingToggleAlignment);
+            }
+            button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            if (persist) {
+                persistCollapsedSections();
+            }
+        };
+
+        const releasePrecollapsedCard = (card) => {
+            card?.classList.remove('tools-search-card--precollapsed');
+        };
+
+        const releasePrecollapsedCards = () => {
+            document
+                .querySelectorAll('.tools-search-card--precollapsed')
+                .forEach(releasePrecollapsedCard);
+        };
+
+        const initializeCollapsibleSections = () => {
+            document.querySelectorAll('.tools-search-section-toggle').forEach((button) => {
+                const sectionKey = button.dataset.collapsibleToggle;
+                const bodyId = button.getAttribute('aria-controls');
+                const body = bodyId ? document.getElementById(bodyId) : null;
+                if (!sectionKey || !body) {
+                    return;
+                }
+                updateCollapsibleBodyHeight(body);
+                setCollapsibleSectionState(button, collapsedSections.has(sectionKey));
+                button.addEventListener('click', () => {
+                    releasePrecollapsedCard(button.closest('.tools-search-card--collapsible'));
+                    const isCollapsed = button.getAttribute('aria-expanded') === 'false';
+                    setCollapsibleSectionState(button, !isCollapsed, { persist: true });
+                });
+            });
+            window.setTimeout(releasePrecollapsedCards, 500);
         };
 
         const previewLoadQueue = [];
@@ -1130,6 +1337,48 @@
             }
         };
 
+        const handleClearSearchClick = (event) => {
+            event.preventDefault();
+            hidePageLoader();
+            if (window.jQuery?.datepicker?._datepickerShowing) {
+                window.jQuery.datepicker._hideDatepicker();
+            }
+            openDatepickerInput = null;
+            if (queryTextInput) {
+                queryTextInput.value = '';
+            }
+            document.querySelectorAll('.tools-search-date-input').forEach((input) => {
+                input.value = '';
+                selectedDateByInput.delete(input);
+                const pendingTimer = pendingDateInputSyncTimers.get(input);
+                if (pendingTimer) {
+                    window.clearTimeout(pendingTimer);
+                    pendingDateInputSyncTimers.delete(input);
+                }
+                syncDatepickerProxyValue(input, null);
+                setDateInputValidity(input, true);
+                input
+                    .closest('.tools-search-date-control')
+                    ?.classList.remove('is-picker-open');
+            });
+            updateDatepickerBounds();
+            if (resultsSummaryEl) {
+                resultsSummaryEl.textContent = 'Showing 0 result(s).';
+            }
+            if (resultsBodyEl) {
+                resultsBodyEl.innerHTML = '<p class="tools-search-empty">Run a search to see indexed results.</p>';
+            }
+            if (clearSearchButton?.href) {
+                window.history.replaceState({}, document.title, clearSearchButton.href);
+            }
+            showLiveStatus('', '');
+            updateSearchSubmitState();
+            updateSaveQueryButtonState();
+            queryTextInput?.focus();
+        };
+
+        clearSearchButton?.addEventListener('click', handleClearSearchClick);
+
         const updateAcquisitionIndexUi = ({
             enabled = acquisitionMetadataEnabled,
             accessible = settingsAccessible,
@@ -1162,7 +1411,7 @@
                 toggle.disabled = blockedForRoot || !settingsAccessible;
             }
             document.querySelectorAll('.sync-scope-btn').forEach((button) => {
-                button.disabled = blockedForRoot || !settingsAccessible || !acquisitionMetadataEnabled;
+                setSyncButtonAvailability(button);
             });
         };
 
@@ -1172,12 +1421,18 @@
                 return;
             }
             for (const state of states) {
-                const row = body.querySelector(`tr[data-scope-key="${state.scope_key || `${state.scope_type}:${state.scope_id}`}"]`);
+                const scopeKey = String(
+                    state.scope_key || `${state.scope_type}:${state.scope_id}`
+                );
+                const row = Array.from(
+                    body.querySelectorAll('tr[data-scope-key]')
+                ).find((candidate) => candidate.dataset.scopeKey === scopeKey);
                 if (!row) {
                     continue;
                 }
                 const pill = row.querySelector('.tools-search-pill');
                 const detailCell = row.children[1];
+                const syncButton = row.querySelector('.sync-scope-btn');
                 if (pill) {
                     pill.dataset.status = state.status || 'idle';
                     pill.textContent = state.status || 'idle';
@@ -1199,7 +1454,22 @@
                         detailCell.appendChild(small);
                     }
                 }
+                setSyncButtonAvailability(syncButton, isSyncStateRunning(state));
             }
+            syncIndexSettingToggleAlignment();
+            updateCollapsibleBodyHeight(
+                document.getElementById('tools-search-metadata-index-body')
+            );
+        };
+
+        const refreshSyncState = async () => {
+            const response = await fetch(syncStateUrl, { credentials: 'same-origin' });
+            if (!response.ok) {
+                return false;
+            }
+            const payload = await response.json();
+            updateSyncTable(payload.sync_states);
+            return true;
         };
 
         const updateSavedQueryList = (items) => {
@@ -1214,6 +1484,9 @@
                 empty.className = 'tools-search-empty';
                 empty.textContent = 'No saved queries yet.';
                 container.appendChild(empty);
+                updateCollapsibleBodyHeight(
+                    document.getElementById('tools-search-saved-queries-body')
+                );
                 return;
             }
             container.classList.remove('tools-search-saved-list--empty');
@@ -1254,6 +1527,9 @@
                 container.appendChild(wrapper);
             }
             bindPageLoadLinks(container);
+            updateCollapsibleBodyHeight(
+                document.getElementById('tools-search-saved-queries-body')
+            );
         };
 
         const handleDeleteQueryClick = async (event) => {
@@ -1274,6 +1550,8 @@
         };
 
         bindPageLoadLinks();
+        initializeCollapsibleSections();
+        syncIndexSettingToggleAlignment();
         queryTextInput?.addEventListener('input', () => {
             updateSearchSubmitState();
         });
@@ -1281,6 +1559,9 @@
         const indexedScopeField = indexedScopeSelect?.closest('.tools-search-field--scope');
         const activateIndexedScope = () => indexedScopeField?.classList.add('is-select-active');
         const deactivateIndexedScope = () => indexedScopeField?.classList.remove('is-select-active');
+        window.OmeroEnhancedSearchIndexedScope?.init({
+            onStoredScopeApplied: updateSearchSubmitState,
+        });
         indexedScopeSelect?.addEventListener('focus', activateIndexedScope);
         indexedScopeSelect?.addEventListener('blur', deactivateIndexedScope);
         indexedScopeSelect?.addEventListener('pointerdown', activateIndexedScope);
@@ -1296,7 +1577,9 @@
         initializePreviewLoading();
         syncPrimaryLayoutMinWidth();
         window.addEventListener('resize', syncPrimaryLayoutMinWidth);
+        window.addEventListener('resize', syncIndexSettingToggleAlignment);
         window.setTimeout(syncPrimaryLayoutMinWidth, 0);
+        window.setTimeout(syncIndexSettingToggleAlignment, 0);
 
         if (!blockedForRoot) {
             updateAcquisitionIndexUi({
@@ -1307,27 +1590,26 @@
                     : acquisitionIndexMessages.load_error,
                 statusState: settingsAccessible ? 'info' : 'error',
             });
-            if (autoSyncMessage) {
-                showLiveStatus(autoSyncMessage, autoSyncStarted ? 'busy' : 'success');
-                clearLiveStatus();
-            }
 
             document.querySelectorAll('.sync-scope-btn').forEach((button) => {
                 button.addEventListener('click', async () => {
-                    showLiveStatus('Refreshing acquisition metadata index…');
-                    setButtonBusy(button, true, 'Refreshing…');
+                    if (button.disabled || button.dataset.syncRunning === 'true') {
+                        return;
+                    }
+                    setSyncButtonAvailability(button, true);
                     try {
                         const payload = await postJson(syncUrl, { scope_key: button.dataset.scopeKey });
-                        updateSyncTable(payload.sync_states);
-                        showLiveStatus('Acquisition metadata reindexing started.', 'success');
-                    } catch (error) {
-                        showLiveStatus(error.message || String(error), 'error');
-                        window.alert(error.message || String(error));
-                    } finally {
-                        setButtonBusy(button, false);
-                        button.disabled = blockedForRoot || !settingsAccessible || !acquisitionMetadataEnabled;
-                        clearLiveStatus();
+                        if (Array.isArray(payload.sync_states)) {
+                            updateSyncTable(payload.sync_states);
+                            return;
+                        }
+                    } catch (_error) {
+                        const refreshed = await refreshSyncState().catch(() => false);
+                        if (refreshed) {
+                            return;
+                        }
                     }
+                    setSyncButtonAvailability(button, false);
                 });
             });
 
@@ -1343,8 +1625,13 @@
                     acquisitionToggle.disabled = true;
                     try {
                         const payload = await postJson(settingsUrl, {
+                            ...userSettingsPayload,
                             acquisition_metadata_enabled: requestedEnabled,
+                            collapsed_sections: collapsedSectionsPayload(),
                         });
+                        if (payload.user_settings) {
+                            userSettingsPayload = payload.user_settings;
+                        }
                         updateAcquisitionIndexUi(
                             {
                                 enabled: Boolean(
@@ -1428,6 +1715,7 @@
         }
 
         document.getElementById('enhanced-search-form')?.addEventListener('submit', (event) => {
+            queryTextInput?.blur();
             updateSearchSubmitState();
             const invalidDateInput = Array.from(document.querySelectorAll('.tools-search-date-input'))
                 .find((input) => {

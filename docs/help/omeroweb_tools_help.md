@@ -1,68 +1,53 @@
-# OMERO.web Help — Tools (`omeroweb_tools`)
+# Enhanced Search Help
 
-## Overview
+Enhanced Search helps you find images from one compact page. It can search
+OMERO's normal index, your opt-in universal metadata index, or both together.
 
-Tools is the user-facing utility area in OMERO.web. The first available tool is
-`Enhanced search`, which lets regular users search OMERO's built-in search
-results together with a selective acquisition-metadata index stored in the
-plugin database.
+## Search
 
-## Access model
+1. Type a word, number, image name fragment, project name, dataset name, tag, or
+   metadata value.
+2. Choose an `Indexed scope`.
+3. Optionally add a start date, an end date, or both.
+4. Click `Search`.
 
-- Intended for **regular OMERO users**.
-- Root is intentionally blocked from running searches, saving queries, or
-  refreshing the index.
-- Search results are always rechecked through OMERO before they are shown.
+Search terms use prefix matching. For example, `Ze` can match `Zeiss`, and
+`488` can match values beginning with `488`. Quoted text searches as a phrase.
 
-## What Enhanced search does
+## Indexed Scope
 
-- Supports the `OMERO index`, `Acquisition metadata`, and `All indexed
-  scopes` search modes.
-- Supports a compact search form with a search box, typed `Start date` /
-  `End date` filters, a popup calendar with month/year selectors, and async
-  image previews in the results table.
-- Lets each user opt in to acquisition metadata indexing for all images they
-  own; the checkbox saves immediately when it is toggled.
-- Lets each user save and reopen their own searches.
-- Shows acquisition-index status and refresh progress for the current user.
+- `OMERO index`: searches OMERO's built-in searchable content.
+- `Universal metadata index`: searches the extra metadata index for images in
+  your account.
+- `All searchable sources`: searches both and merges duplicate image results.
 
-## Data handling
+## Universal Metadata Index
 
-- Indexed rows, sync state, and saved queries are written only to the plugin
-  database.
-- The core OMERO PostgreSQL database is not used as a write target for this
-  feature.
-- OMERO itself is queried only to read metadata during indexing and to
-  revalidate result visibility during search.
+Enable `Universal metadata indexing` when you want Enhanced Search to include
+metadata that OMERO's normal search does not cover. The setting is per user.
 
-## Typical workflow
+Click `Refresh index` to update your metadata index. The button is disabled
+while a refresh is already running.
 
-1. Open `Tools` from the OMERO.web top navigation.
-2. Open `Enhanced search`.
-3. Enable acquisition metadata indexing if you want acquisition metadata for
-   your images to be indexed in the background.
-4. Choose an indexed scope, then add a search term or acquisition-date filter.
-5. Run the search and open matching Project, Dataset, or Image links in
-   OMERO.web.
-6. Save useful queries for repeat use.
+## Results
 
-## Troubleshooting
+Results show a preview, image name, project/dataset context, acquisition
+metadata, and channels when available. Click an image, project, or dataset link
+to open it in OMERO.web.
 
-- **Refresh index fails**: check the `tools-celery-worker` logs and confirm the
-  OMERO API and plugin database are reachable from the `omeroweb` container.
-- **Acquisition results do not appear yet**: enable acquisition metadata
-  indexing for your user account and wait for the background indexer to finish.
-- **The indexing checkbox is disabled with a database warning**: the plugin
-  database is not currently reachable, so the page cannot safely read or save
-  your per-user indexing setting.
-- **Search returns fewer rows than expected**: OMERO permission revalidation may
-  remove indexed matches that are no longer visible to your account.
-- **Root is blocked**: this is intentional; use a normal OMERO user account for
-  this plugin.
+## Saved Search Queries
 
-## Best practices
+Use `Save current search as...` to store searches you run often. Saved searches
+belong to your user account.
 
-- Enable acquisition metadata indexing only for accounts that actually need it.
-- Use saved queries for common acquisition searches.
-- Use `All indexed scopes` when you want OMERO-index and acquisition-index
-  results together.
+## Clear
+
+Click `Clear` to empty the search box, date fields, and current results without
+leaving the page.
+
+## If Results Look Missing
+
+- Check that you selected the intended `Indexed scope`.
+- Refresh your universal metadata index after new imports or metadata changes.
+- Use fewer terms if the query is too narrow.
+- Confirm that you still have OMERO permission to view the image.

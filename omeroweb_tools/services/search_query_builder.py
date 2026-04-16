@@ -10,7 +10,7 @@ _TOKEN_PATTERN = re.compile(r"[^\W_]+", re.UNICODE)
 def _phrase_tokens(raw_text: str) -> list[str]:
     tokens: list[str] = []
     for token in _TOKEN_PATTERN.findall(str(raw_text or "")):
-        if len(token) == 1 and token.isalpha():
+        if len(token) == 1:
             continue
         tokens.append(token)
     return tokens

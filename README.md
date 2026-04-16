@@ -204,10 +204,10 @@ Operational observability interfaces embedded in OMERO.web.
 User-facing utilities that share the Admin Tools layout pattern without admin-only access.
 
 - Landing page for future user tools inside OMERO.web
-- Enhanced search over the OMERO index plus a selective PostgreSQL acquisition index stored only in the plugin database
-- Fielded search UI for acquisition metadata with async image previews
+- Enhanced search over the OMERO index plus a user-scoped PostgreSQL metadata index stored only in the plugin database
+- Fielded search UI for indexed image metadata with async image previews
 - Saved queries per user in the plugin database
-- Per-user opt-in acquisition indexing with automatic background sync for that user's images
+- Per-user opt-in metadata indexing with automatic background sync for that user's images
 - Regular-user access only; root is intentionally blocked from running searches and refreshes
 
 ### Imaris Connector Plugin (`omeroweb_imaris_connector`)
@@ -386,8 +386,10 @@ Both operations are designed for online use. They may briefly acquire locks; the
 <details open>
 <summary><h2>Documentation</h2></summary>
 
-Optional AI-agent compression is available via the opt-in
-[`caveman`](https://github.com/JuliusBrussee/caveman) overlay for internal AI communication only. Repository documentation, comments, docstrings, function descriptions, and user-facing text stay in standard prose.
+Optional AI-agent compression is available to all supported agents via the
+opt-in [`caveman`](https://github.com/JuliusBrussee/caveman) overlay for
+internal AI communication only. Repository documentation, comments, docstrings,
+function descriptions, and user-facing text stay in standard prose.
 
 | Entry point | Purpose |
 | --- | --- |

@@ -90,7 +90,12 @@ Each plugin follows a standard layout: `apps.py` (AppConfig), `config.py` (env-d
 
 - **OMP Plugin**: user selects project/dataset -> filenames fetched from OMERO -> regex/AI parsing -> preview -> background job writes MapAnnotations with hash-based ownership tracking. Per-user data (variable sets, AI credentials, settings) persisted in the OMERO plugin database (`database_plugin`) via psycopg2.
 - **Import Plugin**: user starts upload session -> files transferred to tmpfs job directory -> OMERO CLI import with batching -> file attachments linked -> confirm/prune lifecycle. SEM-EDX files parsed (EMSA format) with matplotlib visualization. Settings persisted in the OMERO plugin database (`database_plugin`).
-- **Tools Plugin**: user opens Tools -> Enhanced search -> plugin DB index prefilters fielded/full-text queries -> OMERO API rehydrates and rechecks visible images before results are shown. Scope sync reads OMERO metadata through a root gateway session but writes only to the OMERO plugin database (`database_plugin`) for indexed rows, sync state, and saved queries.
+- **Tools Plugin**: user opens Tools -> Enhanced search -> plugin DB prefilters
+  fielded/full-text queries against the current user's metadata scope -> OMERO
+  API rehydrates and rechecks visible images before results are shown. Scope
+  sync reads OMERO metadata through a root gateway session but writes only to
+  the OMERO plugin database (`database_plugin`) for indexed rows, scope
+  membership, sync state, and saved queries.
 - **Admin Tools**: proxies Loki LogQL queries, Grafana dashboards, Prometheus metrics. Queries Docker socket for container stats. Computes storage usage from OMERO API. Root-only diagnostic scripts.
 - **Imaris Connector**: export request -> Celery task dispatched to Redis queue -> worker opens OMERO session (user session or job-service account) -> finds and runs IMS export script -> polls for completion -> returns result with download path.
 

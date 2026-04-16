@@ -74,16 +74,29 @@ def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch
         service.SEARCH_SCOPE_ACQUISITION_METADATA,
         service.SEARCH_SCOPE_ALL_INDEXED,
     )
-    assert service.default_user_settings() == {"acquisition_metadata_enabled": False}
+    assert service.default_user_settings() == {
+        "acquisition_metadata_enabled": False,
+        "collapsed_sections": [],
+    }
     assert (
         service.acquisition_index_status_message(True)
-        == "Acquisition metadata indexing is enabled for your user account. "
+        == "Universal metadata indexing is enabled for your user account. "
         "All images you own will be indexed automatically in the background."
     )
     assert (
         service.acquisition_index_status_message(False)
-        == "Acquisition metadata indexing is disabled for your user account. "
-        "No acquisition metadata is stored for your user account."
+        == "Universal metadata indexing is disabled for your user account."
+    )
+    assert (
+        service.acquisition_index_disabled_detail_message()
+        == "Universal metadata indexing is disabled."
+    )
+    assert (
+        service._normalized_sync_detail_message(
+            "Universal metadata indexing is disabled for your user account. "
+            "No indexed image metadata is stored for your user account."
+        )
+        == "Universal metadata indexing is disabled."
     )
     assert (
         service.user_settings_load_error_message()
@@ -98,8 +111,24 @@ def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch
     assert service._coerce_bool(3) is True
     assert service._normalized_user_settings(
         {"acquisition_metadata_enabled": "yes"}
-    ) == {"acquisition_metadata_enabled": True}
-    assert service.user_settings("") == {"acquisition_metadata_enabled": False}
+    ) == {"acquisition_metadata_enabled": True, "collapsed_sections": []}
+    assert service._normalized_user_settings(
+        {
+            "acquisition_metadata_enabled": True,
+            "collapsed_sections": [
+                "saved-queries",
+                "unknown-section",
+                "metadata-index",
+            ],
+        }
+    ) == {
+        "acquisition_metadata_enabled": True,
+        "collapsed_sections": ["metadata-index", "saved-queries"],
+    }
+    assert service.user_settings("") == {
+        "acquisition_metadata_enabled": False,
+        "collapsed_sections": [],
+    }
 
     monkeypatch.setattr(service, "db_connect", _db_connect)
 
@@ -108,7 +137,10 @@ def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch
         return {"acquisition_metadata_enabled": "true"}
 
     monkeypatch.setattr(service, "load_user_settings_row", _load_user_settings_row)
-    assert service.user_settings("alice") == {"acquisition_metadata_enabled": True}
+    assert service.user_settings("alice") == {
+        "acquisition_metadata_enabled": True,
+        "collapsed_sections": [],
+    }
 
 
 def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
@@ -146,7 +178,7 @@ def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
             "scope_type": "user",
             "scope_id": 7,
             "scope_key": "user:7",
-            "scope_label": "Your acquisition metadata",
+            "scope_label": "Your universal metadata index",
             "status": "running",
             "requested_by": "",
             "indexed_image_count": 0,
@@ -269,9 +301,9 @@ def test_visible_group_ids_range_math_and_row_merging_boundaries(monkeypatch):
     assert service._omero_search_created_range(service.SearchQuery()) is None
     assert service._normalized_sort_datetime("bad") is None
     assert service._merge_indexed_sources(
-        ["Acquisition metadata"],
+        ["Universal metadata index"],
         ["OMERO index", "Other source"],
-    ) == ["OMERO index", "Acquisition metadata", "Other source"]
+    ) == ["OMERO index", "Universal metadata index", "Other source"]
 
     acquisition_rows = [
         {
@@ -301,7 +333,10 @@ def test_visible_group_ids_range_math_and_row_merging_boundaries(monkeypatch):
     merged = service._merge_result_rows(acquisition_rows, omero_rows)
 
     assert [row["image_id"] for row in merged] == [3, 1]
-    assert merged[0]["indexed_sources"] == ["OMERO index", "Acquisition metadata"]
+    assert merged[0]["indexed_sources"] == [
+        "OMERO index",
+        "Universal metadata index",
+    ]
     assert merged[0]["image_name"] == "img-3"
     assert merged[0]["dataset_name"] == "Dataset A"
 

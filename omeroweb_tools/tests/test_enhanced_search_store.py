@@ -193,6 +193,8 @@ def test_search_index_rows_builds_permission_and_date_aware_sql(monkeypatch):
         conn,
         visible_group_ids=[5, 7],
         current_user_id=21,
+        scope_type="user",
+        scope_id=21,
         query_text="lsm zeiss",
         filters={
             "acquisition_date_from": datetime(2026, 4, 1, tzinfo=timezone.utc),
@@ -213,18 +215,30 @@ def test_search_index_rows_builds_permission_and_date_aware_sql(monkeypatch):
     rows_params = rows_call["params"]
 
     assert "images.group_id = ANY(%s::bigint[])" in count_sql
+    assert "JOIN" in count_sql
+    assert "acquisition_search_scope_item" in count_sql
+    assert "scope_items.scope_type = %s" in count_sql
+    assert "scope_items.scope_id = %s" in count_sql
     assert "(%s::bigint IS NULL AND images.group_can_read = TRUE)" in count_sql
     assert "(images.group_can_read = TRUE OR images.owner_id = %s)" in count_sql
-    assert "to_tsquery('simple', %s)" in count_sql
+    assert "to_tsquery('simple', NULLIF(%s, ''))" in count_sql
+    assert "acquisition_search_attribute" in count_sql
+    assert "images.image_id IN (" in count_sql
+    assert "replace(attributes.attribute_key, '_', ' ')" in count_sql
+    assert "attributes.image_id = images.image_id" not in count_sql
     assert "(%s::timestamptz IS NULL OR images.acquisition_date >= %s)" in count_sql
     assert "(%s::timestamptz IS NULL OR images.acquisition_date <= %s)" in count_sql
     assert "LIMIT %s OFFSET %s" in rows_sql
-    assert "JOIN" not in count_sql
 
-    assert count_params[0] == [5, 7]
-    assert count_params[1] == [5, 7]
-    assert count_params[2:5] == [21, 21, 21]
-    assert count_params[5:7] == ["lsm:* | zeiss:*", "lsm:* | zeiss:*"]
+    assert count_params[0:4] == ["user", "user", 21, 21]
+    assert count_params[4] == [5, 7]
+    assert count_params[5] == [5, 7]
+    assert count_params[6:9] == [21, 21, 21]
+    assert count_params[9:12] == [
+        "lsm:* | zeiss:*",
+        "lsm:* | zeiss:*",
+        "lsm:* | zeiss:*",
+    ]
     assert rows_params[-2:] == [25, 25]
     assert count_call["raw_sql"].__class__.__name__ != "str"
     assert rows_call["raw_sql"].__class__.__name__ != "str"
@@ -318,7 +332,13 @@ def test_ensure_sync_state_rows_does_not_refresh_updated_at_for_existing_rows(
 
     store.ensure_sync_state_rows(
         conn,
-        [{"scope_type": "user", "scope_id": 21, "label": "Your acquisition metadata"}],
+        [
+            {
+                "scope_type": "user",
+                "scope_id": 21,
+                "label": "Your universal metadata index",
+            }
+        ],
         schema_version=3,
     )
 
@@ -327,7 +347,12 @@ def test_ensure_sync_state_rows_does_not_refresh_updated_at_for_existing_rows(
     assert "scope_label = EXCLUDED.scope_label" in sql_text
     assert "schema_version = EXCLUDED.schema_version" in sql_text
     assert "updated_at = NOW()" not in sql_text.split("DO UPDATE SET", 1)[1]
-    assert cursor.executed[0]["params"] == ("user", 21, "Your acquisition metadata", 3)
+    assert cursor.executed[0]["params"] == (
+        "user",
+        21,
+        "Your universal metadata index",
+        3,
+    )
     assert conn.commits == 1
 
 
@@ -340,7 +365,7 @@ def test_try_start_scope_sync_placeholder_count_matches_params(monkeypatch):
         conn,
         "user",
         21,
-        "Your acquisition metadata",
+        "Your universal metadata index",
         3,
         "alice",
         "run-token",

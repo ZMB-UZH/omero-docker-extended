@@ -5,7 +5,6 @@
 This repository uses environment variables as the primary configuration surface.
 
 Tracked files in git are templates (`*_example*`). Deployments must create runtime copies without `_example`.
-The tracked example env inventory and active assignment keys are locked by `tests/test_example_env_contracts.py`; update that contract in the same change when intentionally changing those templates.
 
 For OMERO configuration property names, defaults, and semantics, use the official OMERO config glossary as the single source of truth:
 
@@ -197,11 +196,14 @@ The tracked `omeroweb` env places the `Tools` shortcut between `Import` and
   database via the existing `OMP_DATA_*` connection variables.
 - No enhanced-search data is written into the core OMERO PostgreSQL database.
 
-Acquisition indexing is opt-in per OMERO user. Once a user enables acquisition
+Metadata indexing is opt-in per OMERO user. Once a user enables universal
 metadata indexing from `Tools > Enhanced search`, the plugin automatically
-indexes acquisition metadata for all images owned by that user. Search results
-remain OMERO-permission-safe because candidate rows are revalidated through
-OMERO before display.
+indexes OMERO.web-visible metadata for all images owned by that user. Plugin
+index searches are restricted to the current user's scope membership and
+candidate rows are revalidated through OMERO before display.
+Combined-source searches run the plugin-index lookup and OMERO built-in lookup
+concurrently while keeping separate plugin-database and OMERO connection
+boundaries.
 
 Related `env/omeroweb.env` controls:
 

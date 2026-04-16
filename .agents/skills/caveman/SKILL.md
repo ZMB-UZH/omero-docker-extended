@@ -1,7 +1,7 @@
 ---
 name: caveman
-description: Lower output token usage on demand without sacrificing technical accuracy, safety, or repo-specific clarity.
-origin: repo-local caveman overlay adapted from caveman v1.5.0 for OMERO Docker Extended
+description: Lower output token usage on demand for all AI agents without sacrificing technical accuracy, safety, or repo-specific clarity.
+origin: repo-local caveman overlay adapted from caveman v1.6.0 for OMERO Docker Extended
 ---
 
 # caveman
@@ -12,10 +12,11 @@ Use this skill only when the user explicitly asks for lower-token replies, terse
 
 - Keep `AGENTS.md`, `docs/reference/ai-agent-context-routing.md`, and `docs/reference/ai-agent-skills.md` as the primary contract.
 - Use `context-budget` to cut input/context cost first; use `caveman` to cut output tokens second.
-- The upstream reference lives in `third_party/caveman-v1.5.0/skills/caveman/SKILL.md`.
+- The upstream reference lives in `third_party/caveman-v1.6.0/skills/caveman/SKILL.md`.
+- All supported agents use this same `.agents/skills/caveman/SKILL.md`; adapters may point here but must not duplicate the rules.
 - `caveman` is for internal AI reply/prompting only. Never use caveman prose in repo docs, comments, docstrings, function descriptions, commit messages, or user-facing copy.
 - It changes response style only. It must not change context selection, tool choice, verification scope, or the decision to ask clarifying questions.
-- This repo does not import upstream auto-activation, `CAVEMAN_DEFAULT_MODE`, `off`, `caveman-help`, or `/compress` rewriting.
+- This repo does not import upstream hooks, plugin auto-loading, `.codex` hook config, natural-language auto-activation, `CAVEMAN_DEFAULT_MODE`, `off`, `caveman-help`, or `/compress` rewriting.
 
 ## Compression rules
 

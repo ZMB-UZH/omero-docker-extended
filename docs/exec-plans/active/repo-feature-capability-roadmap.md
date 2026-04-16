@@ -33,13 +33,13 @@ The roadmap below builds on those foundations rather than replacing them.
 
 ## Recommended Features
 
-### 1. Acquisition metadata search inside OMERO.web
+### 1. Universal metadata search inside OMERO.web
 
-Why it fits: the repo already has an acquisition-mode OMP job, metadata extraction code, and a prior design study in `docs/design-docs/acquisition-metadata-search-options.md`.
+Status: implemented in the Tools plugin as `Enhanced search`.
 
-Enabling building blocks already present: `omeroweb_omp_plugin/services/omero/metadata_service.py`, `omeroweb_omp_plugin/views/job_view.py`, `omero_mapr` in `CONFIG_omero_web_apps`, and the Mapr top link in `env/omeroweb_example.env`.
+Why it fits: regular users can opt in to a user-scoped metadata index for their own images, while OMERO visibility is rechecked before results are shown.
 
-Main dependency or risk: schema curation. The search schema must stay small, stable, and permission-aware or it will become noisy and hard to maintain.
+Main dependency or risk: keep extraction explicit, compact, and scope-filtered so indexed metadata stays searchable without cross-user leakage.
 
 ### 2. Saveable and shareable import profiles
 
@@ -157,8 +157,8 @@ Main dependency or risk: stale instructions. Any guided flow must remain synchro
 
 These are the highest-confidence ideas because they line up most directly with code that already exists:
 
-1. Acquisition metadata search inside OMERO.web.
-   The repo already has the design study, extraction path, acquisition-mode OMP job, and MAPR wiring. This is the clearest "next real product feature" rather than a speculative expansion.
+1. Universal metadata search inside OMERO.web.
+   The Tools plugin now provides the first implementation; remaining work should focus on verification, performance, and operator visibility.
 2. Import preflight report before upload commit.
    The import path already performs grouping, compatibility scanning, and timeout-aware planning. Exposing that work as a user-visible report would create immediate value without inventing a new subsystem.
 3. Import job replay and retry controls.
@@ -176,7 +176,7 @@ These are the highest-confidence ideas because they line up most directly with c
 
 ## Recommended Sequencing
 
-1. Prioritize features that reduce current pain in the core workflows: acquisition metadata search, better import preflight, and import outcome verification.
+1. Prioritize features that reduce current pain in the core workflows: metadata search hardening, better import preflight, and import outcome verification.
 2. Next, tighten operator visibility with structured metrics, health explanations, and quota guidance.
 3. Then expand user-facing quality of life features around import profiles, OMP provenance, and AI-assisted parsing review.
 4. Finally, push the broader repo-quality and supply-chain improvements, including CI quality gates and action/dependency hygiene.

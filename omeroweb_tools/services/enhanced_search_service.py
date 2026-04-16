@@ -4,6 +4,7 @@ import logging
 import os
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -61,23 +62,31 @@ SEARCH_SCOPE_ACQUISITION_METADATA = "acquisition_metadata"
 SEARCH_SCOPE_ALL_INDEXED = "all_indexed_scopes"
 SEARCH_SCOPE_LABELS = {
     SEARCH_SCOPE_OMERO_BUILTIN: "OMERO index",
-    SEARCH_SCOPE_ACQUISITION_METADATA: "Acquisition metadata",
-    SEARCH_SCOPE_ALL_INDEXED: "All indexed scopes",
+    SEARCH_SCOPE_ACQUISITION_METADATA: "Universal metadata index",
+    SEARCH_SCOPE_ALL_INDEXED: "All searchable sources",
 }
 SEARCH_SOURCE_DISPLAY_ORDER = (
     SEARCH_SCOPE_LABELS[SEARCH_SCOPE_OMERO_BUILTIN],
     SEARCH_SCOPE_LABELS[SEARCH_SCOPE_ACQUISITION_METADATA],
 )
 USER_SCOPE_TYPE = "user"
-USER_SCOPE_LABEL = "Your acquisition metadata"
+USER_SCOPE_LABEL = "Your universal metadata index"
+COLLAPSIBLE_SECTION_METADATA_INDEX = "metadata-index"
+COLLAPSIBLE_SECTION_SAVED_QUERIES = "saved-queries"
+SUPPORTED_COLLAPSIBLE_SECTIONS = (
+    COLLAPSIBLE_SECTION_METADATA_INDEX,
+    COLLAPSIBLE_SECTION_SAVED_QUERIES,
+)
 _SUPPORTED_DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d--%m--%Y")
 ACQUISITION_INDEXING_ENABLED_MESSAGE = (
-    "Acquisition metadata indexing is enabled for your user account. "
+    "Universal metadata indexing is enabled for your user account. "
     "All images you own will be indexed automatically in the background."
 )
 ACQUISITION_INDEXING_DISABLED_MESSAGE = (
-    "Acquisition metadata indexing is disabled for your user account. "
-    "No acquisition metadata is stored for your user account."
+    "Universal metadata indexing is disabled for your user account."
+)
+ACQUISITION_INDEXING_DISABLED_DETAIL_MESSAGE = (
+    "Universal metadata indexing is disabled."
 )
 USER_SETTINGS_LOAD_ERROR_MESSAGE = (
     "Could not retrieve user setting. Database is not accessible."
@@ -98,6 +107,20 @@ class SearchQuery:
     acquisition_date_from: datetime | None = None
     acquisition_date_to: datetime | None = None
     page: int = 1
+
+    @staticmethod
+    def _display_date(value: datetime | None) -> str:
+        if value is None:
+            return ""
+        return value.astimezone(timezone.utc).strftime("%d-%m-%Y")
+
+    @property
+    def acquisition_date_from_display(self) -> str:
+        return self._display_date(self.acquisition_date_from)
+
+    @property
+    def acquisition_date_to_display(self) -> str:
+        return self._display_date(self.acquisition_date_to)
 
     def to_payload(self) -> dict[str, Any]:
         payload = {
@@ -144,6 +167,10 @@ def acquisition_index_status_message(enabled: bool) -> str:
         if enabled
         else ACQUISITION_INDEXING_DISABLED_MESSAGE
     )
+
+
+def acquisition_index_disabled_detail_message() -> str:
+    return ACQUISITION_INDEXING_DISABLED_DETAIL_MESSAGE
 
 
 def user_settings_load_error_message() -> str:
@@ -216,25 +243,40 @@ def current_sync_states(
     }
     merged: list[dict[str, Any]] = []
     for scope in tuple(scopes or ()):
-        merged.append(
-            {
-                "scope_type": scope.scope_type,
-                "scope_id": scope.scope_id,
-                "scope_key": scope.scope_key,
-                "scope_label": scope.label,
-                "status": "idle",
-                "requested_by": "",
-                "indexed_image_count": 0,
-                "current_message": "",
-                "last_error": "",
-                "last_started_at": None,
-                "last_finished_at": None,
-                "last_successful_at": None,
-                "updated_at": None,
-                **(by_key.get(scope.scope_key) or {}),
-            }
+        state = {
+            "scope_type": scope.scope_type,
+            "scope_id": scope.scope_id,
+            "scope_key": scope.scope_key,
+            "scope_label": scope.label,
+            "status": "idle",
+            "requested_by": "",
+            "indexed_image_count": 0,
+            "current_message": "",
+            "last_error": "",
+            "last_started_at": None,
+            "last_finished_at": None,
+            "last_successful_at": None,
+            "updated_at": None,
+            **(by_key.get(scope.scope_key) or {}),
+        }
+        state["current_message"] = _normalized_sync_detail_message(
+            state.get("current_message")
         )
+        merged.append(state)
     return merged
+
+
+def _normalized_sync_detail_message(raw_message: Any) -> str:
+    message = str(raw_message or "")
+    if message in {
+        ACQUISITION_INDEXING_DISABLED_MESSAGE,
+        (
+            "Universal metadata indexing is disabled for your user account. "
+            "No indexed image metadata is stored for your user account."
+        ),
+    }:
+        return ACQUISITION_INDEXING_DISABLED_DETAIL_MESSAGE
+    return message
 
 
 def _parse_date(raw_value: Any, *, end_of_day: bool = False) -> datetime | None:
@@ -349,7 +391,10 @@ def search_scope_options() -> tuple[dict[str, str], ...]:
 
 
 def default_user_settings() -> dict[str, Any]:
-    return {"acquisition_metadata_enabled": False}
+    return {
+        "acquisition_metadata_enabled": False,
+        "collapsed_sections": [],
+    }
 
 
 def _coerce_bool(raw_value: Any) -> bool:
@@ -367,10 +412,19 @@ def _coerce_bool(raw_value: Any) -> bool:
 def _normalized_user_settings(
     settings_payload: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    raw_payload = settings_payload or {}
     payload = dict(default_user_settings())
     payload["acquisition_metadata_enabled"] = _coerce_bool(
-        (settings_payload or {}).get("acquisition_metadata_enabled")
+        raw_payload.get("acquisition_metadata_enabled")
     )
+    raw_sections = raw_payload.get("collapsed_sections")
+    if not isinstance(raw_sections, (list, tuple, set)):
+        raw_sections = []
+    supported = set(SUPPORTED_COLLAPSIBLE_SECTIONS)
+    requested = {str(section) for section in raw_sections if str(section) in supported}
+    payload["collapsed_sections"] = [
+        section for section in SUPPORTED_COLLAPSIBLE_SECTIONS if section in requested
+    ]
     return payload
 
 
@@ -457,9 +511,9 @@ def ensure_user_index_sync(
 def save_user_settings(
     conn, username: str, settings_payload: dict[str, Any]
 ) -> dict[str, Any]:
-    normalized = _normalized_user_settings(settings_payload)
     user_id = _current_user_id(conn)
     previous = user_settings(username)
+    normalized = _normalized_user_settings({**previous, **(settings_payload or {})})
     with db_connect() as db_conn:
         stored = _normalized_user_settings(
             save_user_settings_row(db_conn, username, normalized)
@@ -469,7 +523,7 @@ def save_user_settings(
                 db_conn,
                 USER_SCOPE_TYPE,
                 user_id,
-                current_message=acquisition_index_status_message(False),
+                current_message=acquisition_index_disabled_detail_message(),
             )
 
     sync_started = False
@@ -664,6 +718,31 @@ def _search_omero_builtin_rows(conn, query: SearchQuery) -> list[dict[str, Any]]
     return results
 
 
+def _search_acquisition_index_rows(
+    *,
+    visible_group_ids: list[int] | None,
+    current_user_id: int,
+    scope_type: str,
+    scope_id: int,
+    query_text: str,
+    filters: dict[str, Any],
+    limit: int | None,
+    offset: int,
+) -> tuple[list[dict[str, Any]], int]:
+    with db_connect() as db_conn:
+        return search_index_rows(
+            db_conn,
+            visible_group_ids=visible_group_ids,
+            current_user_id=current_user_id,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            query_text=query_text,
+            filters=filters,
+            limit=limit,
+            offset=offset,
+        )
+
+
 def _merge_result_rows(
     acquisition_rows: list[dict[str, Any]],
     omero_rows: list[dict[str, Any]],
@@ -745,31 +824,55 @@ def search(
     acquisition_rows: list[dict[str, Any]] = []
     acquisition_total_count = 0
     acquisition_scope_only = query.indexed_scope == SEARCH_SCOPE_ACQUISITION_METADATA
-    if (
+    should_search_omero = query.indexed_scope in (
+        SEARCH_SCOPE_OMERO_BUILTIN,
+        SEARCH_SCOPE_ALL_INDEXED,
+    )
+    should_search_acquisition = (
         query.indexed_scope
         in (
             SEARCH_SCOPE_ACQUISITION_METADATA,
             SEARCH_SCOPE_ALL_INDEXED,
         )
         and acquisition_metadata_enabled
-    ):
-        with db_connect() as db_conn:
-            acquisition_rows, acquisition_total_count = search_index_rows(
-                db_conn,
-                visible_group_ids=_visible_group_ids(conn),
-                current_user_id=_current_user_id(conn),
-                query_text=query.query_text,
-                filters=_query_filters(query),
-                limit=page_size if acquisition_scope_only else None,
-                offset=offset if acquisition_scope_only else 0,
-            )
+    )
+    current_user_id = _current_user_id(conn) if should_search_acquisition else None
+    acquisition_kwargs = None
+    if should_search_acquisition and current_user_id is not None:
+        acquisition_kwargs = {
+            "visible_group_ids": _visible_group_ids(conn),
+            "current_user_id": current_user_id,
+            "scope_type": USER_SCOPE_TYPE,
+            "scope_id": current_user_id,
+            "query_text": query.query_text,
+            "filters": _query_filters(query),
+            "limit": page_size if acquisition_scope_only else None,
+            "offset": offset if acquisition_scope_only else 0,
+        }
 
     omero_rows: list[dict[str, Any]] = []
-    if query.indexed_scope in (
-        SEARCH_SCOPE_OMERO_BUILTIN,
-        SEARCH_SCOPE_ALL_INDEXED,
+    if (
+        acquisition_kwargs is not None
+        and should_search_omero
+        and not acquisition_scope_only
     ):
-        omero_rows = _search_omero_builtin_rows(conn, query)
+        with ThreadPoolExecutor(
+            max_workers=2,
+            thread_name_prefix="enhanced-search-source",
+        ) as executor:
+            acquisition_future = executor.submit(
+                _search_acquisition_index_rows,
+                **acquisition_kwargs,
+            )
+            omero_rows = _search_omero_builtin_rows(conn, query)
+            acquisition_rows, acquisition_total_count = acquisition_future.result()
+    else:
+        if acquisition_kwargs is not None:
+            acquisition_rows, acquisition_total_count = _search_acquisition_index_rows(
+                **acquisition_kwargs
+            )
+        if should_search_omero:
+            omero_rows = _search_omero_builtin_rows(conn, query)
 
     if acquisition_scope_only:
         total_count = acquisition_total_count
@@ -778,6 +881,16 @@ def search(
         merged_rows = _merge_result_rows(acquisition_rows, omero_rows)
         total_count = len(merged_rows)
         page_rows = merged_rows[offset : offset + page_size]
+
+    if not page_rows:
+        return {
+            "results": [],
+            "page": page,
+            "page_size": page_size,
+            "total_count": total_count,
+            "has_previous": page > 1,
+            "has_next": False,
+        }
 
     accessible = _accessible_images_by_id(
         conn,
@@ -1172,7 +1285,7 @@ def _process_sync_batch(
             commit=False,
             run_token=run_token,
             indexed_image_count=processed_count,
-            current_message=f"Indexed {processed_count} image(s)…",
+            current_message=f"Indexed {processed_count} image(s).",
             last_cursor_image_id=last_image_id,
         )
         commit_fn = getattr(db_conn, "commit", None)

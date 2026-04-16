@@ -45,21 +45,22 @@ This avoids importing ECC hooks, commands, multi-agent orchestration, or platfor
 
 This repository also carries an opt-in `caveman` communication overlay:
 
-- vendored upstream prompt reference material under `third_party/caveman-v1.5.0/`
+- vendored upstream prompt reference material under `third_party/caveman-v1.6.0/`
 - a repo-local overlay at `.agents/skills/caveman/`
-- small adapter reminders in `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md`
+- shared-skill catalog routing in `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, and `.cursor/rules/00-omero-core.mdc`
 
 Compression stays opt-in and quality-first:
 
 - use `context-budget` to reduce input/context cost first
 - use `caveman` only when the user explicitly asks for lower-token replies
+- expose `caveman` through the same shared `.agents/skills/` catalog as every other skill; do not make it Codex-only
 - start at lite compression in this repo and return to normal detail whenever safety, sequencing, or ambiguity matters
 - keep `caveman` limited to internal AI communication and prompting; repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text stay in normal prose
 - keep routing, tool use, verification scope, and uncertainty handling identical to normal mode
 
-Upstream `caveman` `v1.5.0` adds configurable default-mode resolution (`CAVEMAN_DEFAULT_MODE` / `~/.config/caveman/config.json`), `off`, and `caveman-help`. This repo does not import those activation or configuration surfaces.
+Upstream `caveman` `v1.6.0` adds hook hardening, current Codex hook configuration, natural-language activation, per-turn reinforcement, expanded intensity levels, `caveman-help`, and a compression tool surface. This repo does not import those activation, hook, configuration, or context-rewrite surfaces.
 
-The upstream `caveman` hooks, plugin auto-loading, and compression-tool context rewriting are not activated in this repo.
+The upstream `caveman` hooks, plugin auto-loading, `.codex` hook config, natural-language auto-activation, and compression-tool context rewriting are not activated in this repo.
 
 ## What is intentionally imported
 
@@ -74,7 +75,7 @@ The upstream `caveman` hooks, plugin auto-loading, and compression-tool context 
 - ECC command shims
 - ECC multi-agent orchestration and loop automation
 - ECC MCP server configs
-- `caveman` hook runtime, plugin auto-loading, default-mode config resolution, `off`, `caveman-help`, and `/compress` context-rewrite automation
+- `caveman` hook runtime, plugin auto-loading, `.codex` hook config, natural-language auto-activation, per-turn reinforcement, default-mode config resolution, `off`, `caveman-help`, and `/compress` context-rewrite automation
 - unrelated domain skills such as business-content, media-generation, or social-distribution
 
 ## Token and speed guidance
@@ -86,6 +87,7 @@ The adapter set is designed to improve accuracy first, then reduce wasted contex
 - expose reusable workflows through `.agents/skills/`
 - prefer `context-budget` for input reduction and the opt-in `caveman` overlay for output reduction
 - add path-specific Copilot and Cursor guidance so agents do not rediscover the same rules every time
+- keep skills in `.agents/skills/` as the all-agent source of truth; adapter files may point to the catalog but should not duplicate full skill bodies
 - keep `AGENTS.md`, Claude, Gemini, Copilot, and Cursor core rules concise so they do not bloat always-on context
 
 ## Claude Code hooks

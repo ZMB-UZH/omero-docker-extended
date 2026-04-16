@@ -18,15 +18,15 @@ class CavemanSkillContractTests(unittest.TestCase):
 
     def test_vendored_caveman_reference_exists(self) -> None:
         self.assertTrue(
-            (self.repo_root / "third_party/caveman-v1.5.0/LICENSE").is_file()
+            (self.repo_root / "third_party/caveman-v1.6.0/LICENSE").is_file()
         )
         self.assertTrue(
             (
-                self.repo_root / "third_party/caveman-v1.5.0/skills/caveman/SKILL.md"
+                self.repo_root / "third_party/caveman-v1.6.0/skills/caveman/SKILL.md"
             ).is_file()
         )
         self.assertFalse(
-            (self.repo_root / "third_party/caveman-v1.5.0/README.md").exists()
+            (self.repo_root / "third_party/caveman-v1.6.0/README.md").exists()
         )
 
     def test_active_caveman_skill_is_guarded_and_repo_specific(self) -> None:
@@ -41,7 +41,10 @@ class CavemanSkillContractTests(unittest.TestCase):
         self.assertIn("Never use caveman prose", skill_text)
         self.assertIn("CAVEMAN_DEFAULT_MODE", skill_text)
         self.assertIn("caveman-help", skill_text)
-        self.assertIn("third_party/caveman-v1.5.0/skills/caveman/SKILL.md", skill_text)
+        self.assertIn("All supported agents", skill_text)
+        self.assertIn(".codex", skill_text)
+        self.assertIn("natural-language auto-activation", skill_text)
+        self.assertIn("third_party/caveman-v1.6.0/skills/caveman/SKILL.md", skill_text)
 
     def test_caveman_adapter_disables_implicit_invocation(self) -> None:
         adapter = yaml.safe_load(
@@ -53,6 +56,7 @@ class CavemanSkillContractTests(unittest.TestCase):
             adapter["interface"]["default_prompt"],
         )
         self.assertIn("normal prose", adapter["interface"]["default_prompt"])
+        self.assertIn("across agents", adapter["interface"]["default_prompt"])
 
     def test_cross_agent_surfaces_present_caveman_as_opt_in(self) -> None:
         tracked_surfaces = (
@@ -80,6 +84,22 @@ class CavemanSkillContractTests(unittest.TestCase):
                     or "verification scope" in text_lower
                 )
 
+    def test_supported_agent_adapters_route_to_shared_skill_catalog(self) -> None:
+        tracked_surfaces = (
+            "AGENTS.md",
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md",
+            ".cursor/rules/00-omero-core.mdc",
+        )
+        for relative_path in tracked_surfaces:
+            with self.subTest(relative_path=relative_path):
+                text = self.read_text(relative_path)
+                self.assertIn(".agents/skills", text)
+                self.assertTrue(
+                    "docs/reference/ai-agent-skills.md" in text or "AGENTS.md" in text
+                )
+
     def test_public_docs_keep_caveman_prompt_only(self) -> None:
         tracked_docs = (
             "README.md",
@@ -105,11 +125,26 @@ class CavemanSkillContractTests(unittest.TestCase):
 
     def test_repo_does_not_activate_upstream_caveman_runtime(self) -> None:
         integrations_text = self.read_text("docs/reference/ai-agent-integrations.md")
+        self.assertIn("shared `.agents/skills/` catalog", integrations_text)
+        self.assertIn("do not make it Codex-only", integrations_text)
+        self.assertIn(".codex` hook config", integrations_text)
         self.assertIn("plugin auto-loading", integrations_text)
         self.assertIn("not activated in this repo", integrations_text)
         self.assertIn("verification scope", integrations_text)
         self.assertFalse((self.repo_root / ".codex-plugin").exists())
+        self.assertFalse((self.repo_root / ".codex" / "hooks.json").exists())
+        self.assertFalse((self.repo_root / ".codex" / "config.toml").exists())
         self.assertNotIn("caveman", self.read_text(".claude/settings.json").lower())
+
+    def test_upstream_reference_records_latest_reviewed_release(self) -> None:
+        upstream_text = self.read_text("docs/reference/ai-agent-upstream-sources.md")
+        self.assertIn("Reviewed release notes: `v1.5.1` and `v1.6.0`", upstream_text)
+        self.assertIn("caveman release tag: `v1.6.0`", upstream_text)
+        self.assertIn(
+            "c2ed24b3e5d412cd0c25197b2bc9af587621fd99",
+            upstream_text,
+        )
+        self.assertIn("third_party/caveman-v1.6.0/", upstream_text)
 
     def test_readme_documents_opt_in_caveman_badge(self) -> None:
         readme_text = self.read_text("README.md")

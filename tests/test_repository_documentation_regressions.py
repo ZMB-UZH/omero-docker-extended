@@ -110,6 +110,56 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             for phrase in expected_phrases:
                 self.assertIn(phrase, text, f"{relative_path} is missing: {phrase}")
 
+    def test_plugin_help_pages_are_concise_user_help(self) -> None:
+        expected_phrases = {
+            "docs/help/omeroweb_tools_help.md": [
+                "Choose an `Indexed scope`.",
+                "Search terms use prefix matching.",
+                "belong to your user account.",
+            ],
+            "docs/help/omeroweb_omp_plugin_help.md": [
+                "Select and Prepare",
+                "Preview and Apply",
+                "Apply metadata only when the preview matches the filenames.",
+            ],
+            "docs/help/omeroweb_import_help.md": [
+                "Choose the target project.",
+                "Upload and import are separate steps.",
+                "Read the latest message before retrying.",
+            ],
+            "docs/help/omeroweb_admin_tools_help.md": [
+                "Admin Tools is for OMERO administrators.",
+                "Make one operational change at a time.",
+                "Use Logs and Monitoring together to narrow the cause.",
+            ],
+        }
+        runbook_terms = [
+            "docker compose",
+            "env/",
+            "psycopg2",
+            "container",
+            "mounted",
+            "supervisor",
+            "Loki",
+            "Prometheus reachability",
+        ]
+        for relative_path, phrases in expected_phrases.items():
+            text = self.read_text(relative_path)
+            nonempty_lines = [line for line in text.splitlines() if line.strip()]
+            self.assertLessEqual(
+                len(nonempty_lines),
+                55,
+                f"{relative_path} should stay compact end-user help.",
+            )
+            for phrase in phrases:
+                self.assertIn(phrase, text, f"{relative_path} is missing: {phrase}")
+            for term in runbook_terms:
+                self.assertNotIn(
+                    term,
+                    text,
+                    f"{relative_path} drifted into admin/runbook language: {term}",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

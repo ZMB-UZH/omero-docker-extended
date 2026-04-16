@@ -1,90 +1,50 @@
-# OMERO.web Help — Filename & Metadata Manager (`omeroweb_omp_plugin`)
+# Filename & Metadata Manager Help
 
-## Overview
+Use this plugin to turn structured filenames into OMERO key-value metadata.
+The usual workflow has two pages: choose what to process, then preview and
+apply the parsed metadata.
 
-The Filename & Metadata Manager parses image filenames into structured variables and writes those values as OMERO MapAnnotations. It is designed for repeatable metadata ingestion workflows at dataset scale.
+## Select and Prepare
 
-## Who should use this plugin
+1. Choose a project.
+2. Select one or more datasets.
+3. Choose how filenames should be split or parsed.
+4. Name the variables you want to create.
+5. Continue to preview before writing anything to OMERO.
 
-- Scientists or data stewards who need to convert naming conventions into searchable metadata.
-- Users who process many images and want consistent key/value annotations.
-- Teams that need reusable parsing templates (variable sets) and controlled deletion behavior.
+Use stable variable names such as `sample`, `condition`, `channel`, or `time`
+when your team will search or reuse the metadata later.
 
-## Access and permissions
+## Preview and Apply
 
-- This plugin is intended for **regular (non-root) users**.
-- You can only process projects/datasets/images that your OMERO account can access.
-- The plugin applies user-scoped rate limiting on major actions.
+Review the preview table carefully. It shows what values will be written for
+each image.
 
-## Main workflow
+If the preview is wrong, go back and adjust the separator, regex, or variable
+order. Apply metadata only when the preview matches the filenames.
 
-1. Open the plugin and select a project.
-2. Choose one or more datasets.
-3. Configure filename parsing:
-   - separator strategy,
-   - variable names,
-   - optional regex assistance.
-4. Run a preview and verify extracted values.
-5. Start an annotation job.
-6. Monitor progress until completion.
-7. Save variable sets for reuse.
+## Variable Sets
 
-## Core UI areas
+Save a variable set when you use the same filename pattern repeatedly. Reuse it
+for later datasets to keep metadata consistent.
 
-### Dataset and filename scope
+## AI-Assisted Parsing
 
-- Project selection loads accessible datasets.
-- Dataset selection defines the processing scope.
-- Preview parses representative filenames before any write operation.
+AI parsing is optional. Use it to suggest a filename pattern, then verify the
+preview yourself before applying metadata. You can save your own provider keys
+in settings.
 
-### Variable definitions
+## Deleting Metadata
 
-- Define ordered variable names that map to parsed filename parts.
-- Use deterministic separators/regex where possible.
-- Keep variable names stable over time to simplify downstream queries.
+- `Delete plugin annotations` removes metadata created by this plugin.
+- `Delete all annotations` removes all selected key-value annotations from the
+  target images.
 
-### AI-assisted parsing (optional)
+Use deletion only after checking the selected project, datasets, and images.
 
-- You may configure provider-specific API keys in **Settings → AI API credentials**.
-- AI output should always be validated in preview mode before writing metadata.
-- API keys are stored per user in the plugin database.
+## If Something Looks Wrong
 
-### Jobs and progress
-
-- Write/delete operations run as background jobs.
-- Progress polling surfaces status and completion/failure messages.
-- Retry only after reviewing the reported failure cause.
-
-## Safe deletion options
-
-- **Delete plugin annotations**: removes only annotations created by this plugin (hash-verified ownership).
-- **Delete all annotations**: destructive operation that removes all target MapAnnotations from selected images.
-
-Use delete-all only when the impact is fully understood.
-
-## Collaboration mode
-
-- Collaboration mode is intended for coordinated team usage.
-- Ensure naming conventions and variable definitions are agreed before large batch writes.
-
-## User settings and stored data
-
-You can manage and delete plugin-scoped user data from Settings:
-
-- API keys,
-- saved variable sets,
-- complete plugin user data.
-
-## Troubleshooting
-
-- **No datasets/images shown**: confirm OMERO permissions and project selection.
-- **Preview extraction is wrong**: adjust separators/regex and re-run preview.
-- **Job fails**: inspect job error details, then retry with smaller scope.
-- **AI model listing/test fails**: verify provider key validity and outbound connectivity.
-
-## Operational recommendations
-
-- Start with one dataset and a small sample.
-- Lock variable naming conventions early.
-- Save validated variable sets for repeat use.
-- Prefer plugin-owned deletion over global deletion.
+- No projects or datasets: check that your OMERO account can access them.
+- Wrong preview values: adjust the parser and preview again.
+- Job failed: reduce the selected scope and retry after reading the message.
+- AI suggestions are poor: use manual parsing or clearer custom instructions.

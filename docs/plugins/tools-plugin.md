@@ -4,8 +4,8 @@
 
 The Tools plugin provides a user-facing launcher for OMERO.web utilities that
 should be available to ordinary users instead of root administrators. Its first
-feature is `Enhanced search`, a selective PostgreSQL-backed search engine for
-indexed acquisition metadata that is merged with OMERO's own built-in search
+feature is `Enhanced search`, a PostgreSQL-backed, user-scoped search engine
+for OMERO image metadata that is merged with OMERO's own built-in search
 results.
 
 ## Main capabilities
@@ -14,12 +14,17 @@ results.
   expansion.
 - `Enhanced search` UI with a compact search row, typed `Start date` /
   `End date` filters backed by a jQuery UI datepicker, async image previews,
-  and OMERO-built-in plus acquisition-index search scopes.
-- Per-user opt-in acquisition indexing for all images owned by the current
+  and OMERO-built-in plus universal-metadata search scopes.
+- Combined-source searches run the plugin-index query and OMERO built-in
+  search concurrently, using separate database and OMERO connection boundaries.
+- Per-user opt-in metadata indexing for all images owned by the current
   user, saved immediately when the checkbox is toggled.
-- Per-user saved queries.
-- Sync-state tracking for the current user's acquisition index.
+- Per-user saved queries, plus persisted per-user open/closed state for the
+  metadata-index and saved-query panels.
+- Sync-state tracking for the current user's metadata index.
 - OMERO permission revalidation before search results are displayed.
+- Scope filtering in the plugin database so one user's indexed metadata is not
+  searched through another user's account.
 - Regular-user access only; root is intentionally blocked from running the
   workflow.
 
@@ -42,8 +47,9 @@ This plugin has a strict write boundary:
 | `/omeroweb_tools/` | GET | Tools landing page |
 | `/omeroweb_tools/root-status/` | GET | Check whether the current user is root |
 | `/omeroweb_tools/enhanced-search/` | GET | Search UI and results page |
-| `/omeroweb_tools/enhanced-search/sync/` | POST | Trigger index refresh for the current user's acquisition index |
-| `/omeroweb_tools/enhanced-search/sync-state/` | GET | Fetch current acquisition-index sync state |
+| `/omeroweb_tools/enhanced-search/sync/` | POST | Trigger index refresh for the current user's metadata index |
+| `/omeroweb_tools/enhanced-search/sync-state/` | GET | Fetch current metadata-index sync state |
+| `/omeroweb_tools/enhanced-search/settings/` | POST | Save current user's enhanced-search UI and indexing settings |
 | `/omeroweb_tools/enhanced-search/saved-queries/save/` | POST | Save current query for the user |
 | `/omeroweb_tools/enhanced-search/saved-queries/delete/` | POST | Delete a saved query |
 | `/omeroweb_tools/enhanced-search/saved-queries/<query_id>/` | GET | Re-open a saved query |
@@ -73,11 +79,12 @@ omeroweb_tools/
 
 ### `env/omeroweb.env`
 
-Acquisition indexing is opt-in per OMERO user. Once enabled in the UI, the
-plugin automatically indexes acquisition metadata for all images owned by that
-user. The indexed rows remain private to the plugin database and search results
-are revalidated through OMERO before display.
-If the plugin database is unavailable while the page loads, the acquisition
+Metadata indexing is opt-in per OMERO user. Once enabled in the UI, the plugin
+automatically indexes OMERO.web-visible metadata for all images owned by that
+user. Indexed rows remain in the plugin database, search queries are restricted
+to the current user's scope membership, and search results are revalidated
+through OMERO before display.
+If the plugin database is unavailable while the page loads, the metadata
 indexing checkbox is rendered disabled and unchecked, and the UI shows an
 explicit database-access error instead of guessing the saved state.
 
@@ -115,17 +122,24 @@ background thread inside the `omeroweb` process.
 ## Indexing and query flow
 
 1. A user opens `Tools > Enhanced search`.
-2. The user enables acquisition metadata indexing for their account; the
+2. The user enables universal metadata indexing for their account; the
    setting is written immediately to the plugin database and verified with a
-   read-after-write check.
-3. The worker reads OMERO metadata for images owned by that user through a root gateway session and extracts
-   selective search attributes.
+   read-after-write check. The same per-user settings row stores the
+   open/closed state of the metadata-index and saved-query panels.
+3. The worker reads OMERO metadata for images owned by that user through a root
+   gateway session and extracts normalized image, project/dataset, channel,
+   instrument, objective, detector, PlaneInfo, annotation, original-metadata,
+   and original-file-name attributes. PlaneInfo is read in bulk when supported
+   by the installed OMERO gateway. Private file paths are not indexed.
 4. The worker writes only to the plugin database tables for indexed documents,
    scope membership, sync state, and saved queries.
-5. Search queries combine OMERO-index matches with plugin-database
-   acquisition matches according to the selected indexed scope.
+5. Search queries combine OMERO-index matches with plugin-database metadata
+   matches from the current user's own scope according to the selected indexed
+   source. In `All searchable sources`, the two source lookups run concurrently.
 6. Matching image IDs are rehydrated through OMERO and filtered again by actual
    OMERO visibility before the UI renders the results.
+7. The `Clear` control resets the search text, date filters, and rendered
+   results in place without issuing a full browser navigation.
 
 ## Operator checklist
 
@@ -134,5 +148,5 @@ background thread inside the `omeroweb` process.
   `omeroweb` container for indexing reads.
 - Verify `tools-celery-worker` is healthy when celery mode is enabled.
 - Keep `TOOLS_ENHANCED_SEARCH_SYNC_STALE_SECONDS` aligned with how quickly
-  newly imported acquisition metadata should become searchable after a user
+  newly imported image metadata should become searchable after a user
   revisits the page.

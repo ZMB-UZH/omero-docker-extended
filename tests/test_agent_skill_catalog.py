@@ -287,18 +287,15 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
     ),
     "frontend-preview": SkillScenario(
         scenario=(
-            "An AI agent needs to preview a Django plugin UI change, add a narrow "
-            "frontend regression test, and avoid rebuilding Docker until the live "
-            "runtime check."
+            "An AI agent needs to visually validate HTML, CSS, or JavaScript changes "
+            "in plugin templates without rebuilding the Docker container."
         ),
         skill_phrases=(
             "vite",
-            "vitest",
-            "tools/frontend_preview_tooling.py",
-            "vite_django_preview.config.mjs",
-            "vitest_django_preview.config.mjs",
+            "PLUGIN_ROOT",
+            "django-template-strip",
         ),
-        adapter_phrases=("preview", ("vite", "vitest")),
+        adapter_phrases=("preview", "vite"),
     ),
     "omero-runtime-verifier": SkillScenario(
         scenario=(

@@ -19,6 +19,10 @@
     margin-top: 0.7rem;
 }
 
+.admin-tools-page.admin-tools-page--wide {
+    min-width: 1400px;
+}
+
 .tools-search-layout {
     display: grid;
     gap: 1rem;
@@ -54,6 +58,55 @@
     margin-bottom: 0.15rem;
 }
 
+.tools-search-section-toggle {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-height: 1.65rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.tools-search-section-toggle:focus-visible {
+    outline: none;
+    border-radius: 6px;
+    box-shadow: 0 0 0 3px rgba(59, 109, 242, 0.2);
+}
+
+.tools-search-section-toggle__indicator {
+    width: 0;
+    height: 0;
+    border-top: 0.34rem solid transparent;
+    border-bottom: 0.34rem solid transparent;
+    border-left: 0.46rem solid currentColor;
+    transform: rotate(0deg);
+    transform-origin: 50% 50%;
+    transition: transform 0.16s ease;
+}
+
+.tools-search-card--collapsed .tools-search-section-toggle__indicator {
+    transform: rotate(90deg);
+}
+
+.tools-search-card--collapsed {
+    gap: 0;
+}
+
+.tools-search-card--collapsed .tools-search-heading {
+    margin-bottom: 0;
+}
+
+.tools-search-card--precollapsed .tools-search-section-toggle__indicator,
+.tools-search-card--precollapsed .tools-search-collapsible-body {
+    transition: none;
+}
+
 .tools-search-card > .tools-search-heading--compact + * {
     margin-top: -8px;
 }
@@ -65,7 +118,8 @@
 }
 
 .tools-search-grid--primary {
-    grid-template-columns: minmax(430px, 2.35fr) max-content minmax(210px, 228px) minmax(214px, 228px) minmax(214px, 228px);
+    grid-template-columns: minmax(430px, 2.35fr) max-content minmax(222px, 240px) minmax(214px, 228px) minmax(214px, 228px);
+    column-gap: 0.65rem;
     max-width: 1220px;
     align-items: end;
 }
@@ -86,17 +140,40 @@
 .tools-search-field select {
     border: 1px solid #d6deea;
     border-radius: 8px;
-    padding: 0.68rem 0.8rem;
+    padding: 0 0.8rem;
     font-size: 0.95rem;
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    line-height: 2.5rem;
     height: 2.5rem;
     min-height: 2.5rem;
     background: #f9fbff;
     box-sizing: border-box;
+    vertical-align: middle;
 }
 
+.tools-search-field select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image:
+        linear-gradient(45deg, transparent 50%, #64748b 50%),
+        linear-gradient(135deg, #64748b 50%, transparent 50%);
+    background-position:
+        calc(100% - 16px) 50%,
+        calc(100% - 11px) 50%;
+    background-repeat: no-repeat;
+    background-size: 5px 5px, 5px 5px;
+    line-height: 2.5rem;
+    padding-top: 0;
+    padding-right: 2.1rem;
+    padding-bottom: 0;
+}
+
+.tools-search-field input:focus,
+.tools-search-field input:focus-visible,
 .tools-search-field select:focus,
 .tools-search-field select:focus-visible,
+.tools-search-inline-form input:focus,
+.tools-search-inline-form input:focus-visible,
 .tools-search-field--scope.is-select-active select {
     outline: none;
     border-color: #3b6df2;
@@ -130,11 +207,16 @@
 }
 
 .tools-search-field--scope {
-    max-width: 14.25rem;
+    max-width: 15rem;
+    margin-right: 0.35rem;
 }
 
 .tools-search-field--date {
     max-width: 228px;
+}
+
+.tools-search-field--start-date {
+    margin-right: 0.35rem;
 }
 
 .tools-search-field--date input {
@@ -142,14 +224,14 @@
     padding-right: 0.8rem;
     width: 100%;
     font-variant-numeric: tabular-nums;
-    letter-spacing: 0.01em;
+    letter-spacing: 0;
 }
 
 .tools-search-date-control {
     position: relative;
     display: flex;
     align-items: stretch;
-    gap: 0.45rem;
+    gap: 0.65rem;
     width: 100%;
     box-sizing: border-box;
     min-width: 0;
@@ -199,6 +281,7 @@
 }
 
 .tools-search-date-input {
+    line-height: 2.5rem;
     text-transform: none;
 }
 
@@ -335,15 +418,55 @@
     margin-bottom: 0;
 }
 
+.tools-search-collapsible-body {
+    max-height: var(--tools-search-collapse-height, 1200px);
+    opacity: 1;
+    overflow: hidden;
+    transition: max-height 0.2s ease, opacity 0.16s ease, margin-top 0.2s ease;
+}
+
+.tools-search-card--collapsed .tools-search-collapsible-body {
+    max-height: 0;
+    margin-top: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
 .tools-search-status-table,
 .tools-search-results {
     width: 100%;
     border-collapse: collapse;
 }
 
+.tools-search-results {
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
 .tools-search-status-table {
     table-layout: fixed;
     width: min(100%, 63rem);
+}
+
+.tools-search-results__col--preview {
+    width: 6.75rem;
+}
+
+.tools-search-results__col--image {
+    width: 37%;
+}
+
+.tools-search-results__col--context {
+    width: 29%;
+}
+
+.tools-search-results__col--acquisition {
+    width: 19%;
+}
+
+.tools-search-results__col--channels {
+    width: 15%;
 }
 
 .tools-search-status-table th,
@@ -356,6 +479,7 @@
 
 .tools-search-results th,
 .tools-search-results td {
+    box-sizing: border-box;
     text-align: left;
     padding: 0.36rem 0.52rem;
     border-bottom: 1px solid #e5e7eb;
@@ -368,6 +492,25 @@
     font-size: 0.92rem;
 }
 
+.tools-search-results thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #ffffff;
+    border-bottom-color: transparent;
+}
+
+.tools-search-results thead th::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 1px;
+    background: #e5e7eb;
+    pointer-events: none;
+}
+
 .tools-search-status-table th:nth-child(1),
 .tools-search-status-table td:nth-child(1) {
     width: 6.9rem;
@@ -375,22 +518,14 @@
 
 .tools-search-status-table th:nth-child(3),
 .tools-search-status-table td:nth-child(3) {
-    width: 8.75rem;
+    width: 7.25rem;
     white-space: nowrap;
 }
 
-.tools-search-results th:nth-child(2),
-.tools-search-results td:nth-child(2) {
-    width: 18%;
-}
-
-.tools-search-results th:nth-child(3),
-.tools-search-results td:nth-child(3) {
-    width: 23%;
-}
-
 .tools-search-results td:nth-child(2),
-.tools-search-results td:nth-child(3) {
+.tools-search-results td:nth-child(3),
+.tools-search-results td:nth-child(4),
+.tools-search-results td:nth-child(5) {
     overflow-wrap: anywhere;
 }
 
@@ -404,7 +539,9 @@
 }
 
 .tools-search-preview-cell {
-    width: 96px;
+    width: 6.75rem;
+    min-width: 6.75rem;
+    max-width: 6.75rem;
 }
 
 .tools-search-preview {
@@ -414,8 +551,10 @@
     justify-content: center;
     width: 80px;
     height: 80px;
+    box-sizing: border-box;
+    contain: strict;
     border: 1px solid #d6deea;
-    border-radius: 14px;
+    border-radius: 0;
     background: linear-gradient(180deg, #f9fbff 0%, #eef4ff 100%);
     overflow: hidden;
     text-decoration: none;
@@ -423,10 +562,13 @@
 }
 
 .tools-search-preview__image {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     display: block;
+    border-radius: 0;
 }
 
 .tools-search-preview__placeholder {
@@ -439,6 +581,7 @@
     height: 100%;
     padding: 0.25rem;
     box-sizing: border-box;
+    border-radius: 0;
     color: #1d4ed8;
 }
 
@@ -447,7 +590,7 @@
     width: 26px;
     height: 20px;
     border: 2px solid #93b4f4;
-    border-radius: 6px;
+    border-radius: 0;
     background: rgba(255, 255, 255, 0.72);
 }
 
@@ -469,15 +612,20 @@
     top: 3px;
     width: 5px;
     height: 5px;
-    border-radius: 999px;
+    border-radius: 0;
     background: #93b4f4;
 }
 
 .tools-search-preview__label {
+    width: 100%;
+    min-width: 0;
     font-size: 0.7rem;
     font-weight: 600;
     text-align: center;
     line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .tools-search-preview__spinner {
@@ -712,10 +860,11 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 0.04rem;
+    margin-left: var(--tools-search-settings-panel-offset, 0);
     margin-bottom: 0;
 }
 
-.tools-search-index-heading + .tools-search-settings-panel {
+.tools-search-index-heading + .tools-search-collapsible-body .tools-search-settings-panel {
     margin-top: -4px;
 }
 
@@ -735,6 +884,7 @@
 .tools-search-setting-toggle input[type="checkbox"] {
     width: 14px;
     height: 14px;
+    margin: 0;
     accent-color: #007bff;
     cursor: pointer;
 }
@@ -758,8 +908,11 @@
 .tools-search-inline-form input {
     border: 1px solid #d6deea;
     border-radius: 8px;
-    padding: 0.68rem 0.8rem;
+    padding: 0 0.8rem;
     font-size: 0.95rem;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    line-height: 2.5rem;
+    height: 2.5rem;
     min-height: 2.5rem;
     background: #f9fbff;
     box-sizing: border-box;
@@ -768,6 +921,13 @@
 .tools-search-query-name-input {
     width: min(100%, 21.5rem);
     max-width: 21.5rem;
+}
+
+.tools-search-query-name-input:focus,
+.tools-search-query-name-input:focus-visible {
+    outline: none;
+    border-color: #3b6df2;
+    box-shadow: 0 0 0 3px rgba(59, 109, 242, 0.2);
 }
 
 .tools-search-inline-form .tools-search-inline-action {
@@ -792,6 +952,7 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    scrollbar-gutter: stable;
     scrollbar-width: thin;
     scrollbar-color: #93c5fd transparent;
     border-radius: 12px;
@@ -799,6 +960,12 @@
 
 .tools-search-results-body::-webkit-scrollbar {
     width: 8px;
+}
+
+.tools-search-results-body::-webkit-scrollbar-button {
+    width: 0;
+    height: 0;
+    display: none;
 }
 
 .tools-search-results-body::-webkit-scrollbar-thumb {
@@ -918,6 +1085,7 @@
 #ui-datepicker-div.ui-datepicker,
 #ui-datepicker-div.ui-widget,
 #ui-datepicker-div.ui-widget-content {
+    width: 18.75rem;
     background: #ffffff;
     opacity: 1;
 }
@@ -932,6 +1100,13 @@
 }
 
 #ui-datepicker-div .ui-datepicker-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.65rem;
+    box-sizing: border-box;
+    padding: 0.35rem 2.4rem;
     border: 0;
     background: #f8fafc;
     color: #1f2937;
@@ -943,9 +1118,38 @@
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
+    margin: 0;
+}
+
+#ui-datepicker-div .ui-datepicker-prev,
+#ui-datepicker-div .ui-datepicker-next {
+    top: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    transform: translateY(-50%);
+}
+
+#ui-datepicker-div .ui-datepicker-prev {
+    left: 0.35rem;
+}
+
+#ui-datepicker-div .ui-datepicker-next {
+    right: 0.35rem;
+}
+
+#ui-datepicker-div .ui-datepicker-prev span,
+#ui-datepicker-div .ui-datepicker-next span {
+    position: static;
+    margin: 0;
 }
 
 #ui-datepicker-div .ui-datepicker-title select {
+    box-sizing: border-box;
+    width: 6.75rem;
+    min-width: 6.75rem;
     min-height: 28px;
     border: 1px solid #d6deea;
     border-radius: 6px;
@@ -975,19 +1179,46 @@
     color: #1d4ed8;
 }
 
+#ui-datepicker-div td.ui-state-disabled,
+#ui-datepicker-div td.ui-datepicker-unselectable {
+    opacity: 1;
+}
+
+#ui-datepicker-div td.ui-state-disabled .ui-state-default,
+#ui-datepicker-div td.ui-datepicker-unselectable .ui-state-default {
+    border-color: transparent;
+    background: #f8fafc;
+    color: #94a3b8;
+    cursor: not-allowed;
+}
+
 #ui-datepicker-div .ui-datepicker-buttonpane {
     border-top: 1px solid #e5e7eb;
     background: #ffffff;
 }
 
 #ui-datepicker-div .ui-datepicker-buttonpane button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-width: 84px;
+    min-height: 2.25rem;
+    box-sizing: border-box;
     border: 1px solid #d1d5db;
     border-radius: 8px;
     background: #f3f4f6;
     color: #1f2937;
     font-size: 12px;
     font-weight: 600;
+    line-height: 1;
+    padding: 0 0.85rem;
+}
+
+#ui-datepicker-div .ui-datepicker-buttonpane button.ui-datepicker-current {
+    border-color: #d1d5db;
+    background: #f3f4f6;
+    color: #1f2937;
+    opacity: 1;
 }
 
 @media (max-width: 900px) {
@@ -999,6 +1230,11 @@
     .tools-search-field--actions,
     .tools-search-field--scope {
         max-width: none;
+    }
+
+    .tools-search-field--scope,
+    .tools-search-field--start-date {
+        margin-right: 0;
     }
 
     .tools-search-field--date {

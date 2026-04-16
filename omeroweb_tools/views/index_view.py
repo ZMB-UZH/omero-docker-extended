@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+from typing import Any
+
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -39,6 +42,11 @@ SAVED_QUERY_NAME_TOO_LONG_ERROR = (
 SAVED_QUERY_SAVE_ERROR = "Could not save search query. Database is not accessible."
 
 
+def _indexed_scope_storage_key(username: str) -> str:
+    digest = hashlib.sha256(str(username or "").strip().encode("utf-8")).hexdigest()
+    return f"omeroweb_tools:enhanced_search:indexed_scope:{digest}"
+
+
 def _is_root_user(request, conn) -> bool:
     return str(current_username(request, conn) or "").strip() == "root"
 
@@ -51,7 +59,7 @@ def _load_user_settings_context(
     username: str,
     *,
     blocked_for_root: bool,
-) -> tuple[dict[str, bool], bool, str, str]:
+) -> tuple[dict[str, Any], bool, str, str]:
     if blocked_for_root:
         payload = default_user_settings()
         return (
@@ -139,6 +147,10 @@ def enhanced_search_view(request, conn=None, url=None, **kwargs):
     if search_payload["has_next"]:
         next_page_querystring = query.to_querystring(page=query.page + 1)
 
+    collapsed_sections = settings_payload.get("collapsed_sections")
+    if not isinstance(collapsed_sections, list):
+        collapsed_sections = []
+
     return render(
         request,
         "omeroweb_tools/enhanced_search.html",
@@ -150,11 +162,14 @@ def enhanced_search_view(request, conn=None, url=None, **kwargs):
             "query": query,
             "query_errors": query_errors,
             "saved_queries": [] if blocked_for_root else saved_queries(username),
+            "indexed_scope_storage_key": _indexed_scope_storage_key(username),
             "search_payload": search_payload,
             "sync_states": sync_states,
             "auto_sync_started": auto_sync_started,
             "auto_sync_message": auto_sync_message,
             "user_settings": settings_payload,
+            "metadata_index_collapsed": "metadata-index" in collapsed_sections,
+            "saved_queries_collapsed": "saved-queries" in collapsed_sections,
             "user_settings_available": settings_available,
             "acquisition_index_status": acquisition_index_status,
             "acquisition_index_status_state": acquisition_index_status_state,
@@ -186,8 +201,8 @@ def start_scope_sync_view(request, conn=None, url=None, **kwargs):
         return JsonResponse(
             {
                 "error": (
-                    "Enable acquisition metadata indexing in Tools settings before "
-                    "refreshing the acquisition index."
+                    "Enable universal metadata indexing in Tools settings before "
+                    "refreshing the metadata index."
                 )
             },
             status=409,

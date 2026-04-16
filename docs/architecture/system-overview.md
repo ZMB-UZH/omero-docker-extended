@@ -124,10 +124,10 @@ Staged file upload and OMERO import:
 User-facing tools surface with an Admin-Tools-style layout:
 
 - Landing page for future regular-user tools inside OMERO.web.
-- Current feature: `Enhanced search`, backed by a selective PostgreSQL index in `database_plugin`.
-- Users opt in to acquisition indexing individually; once enabled, OMERO metadata for images they own is indexed in the background.
+- Current feature: `Enhanced search`, backed by a user-scoped PostgreSQL metadata index in `database_plugin`.
+- Users opt in to metadata indexing individually; once enabled, OMERO.web-visible metadata for images they own is indexed in the background.
 - Index refresh reads OMERO metadata through the OMERO API, then writes indexed rows, scope membership, sync state, and saved queries only to the plugin database.
-- Search results are revalidated through OMERO before display so plugin-database matches do not bypass current OMERO visibility rules.
+- Plugin-index searches are restricted to the current user's scope membership and then revalidated through OMERO before display.
 - Access: intended for regular users; root is intentionally blocked from running searches or refreshes.
 
 ### OMERO.web Zarr Plugin (`omero_web_zarr`)
