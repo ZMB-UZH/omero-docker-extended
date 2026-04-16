@@ -53,7 +53,7 @@ This plugin has a strict write boundary:
 | `/omeroweb_tools/enhanced-search/saved-queries/save/` | POST | Save current query for the user |
 | `/omeroweb_tools/enhanced-search/saved-queries/delete/` | POST | Delete a saved query |
 | `/omeroweb_tools/enhanced-search/saved-queries/<query_id>/` | GET | Re-open a saved query |
-| `/omeroweb_tools/help/` | GET | Serve Markdown help |
+| `/omeroweb_tools/help/` | GET | Render Enhanced search HTML help |
 
 ## Code structure
 
@@ -61,7 +61,7 @@ This plugin has a strict write boundary:
 omeroweb_tools/
 ├── views/
 │   ├── index_view.py      # Landing page, enhanced-search UI, sync/query APIs
-│   └── help_view.py       # Markdown help response
+│   └── help_view.py       # HTML help response
 ├── services/
 │   ├── acquisition_metadata.py    # Metadata extraction for indexed documents
 │   ├── enhanced_search_service.py # Query parsing, OMERO revalidation, sync flow
@@ -71,7 +71,8 @@ omeroweb_tools/
 ├── tasks.py               # Celery task wrapper
 ├── templates/omeroweb_tools/
 │   ├── index.html
-│   └── enhanced_search.html
+│   ├── enhanced_search.html
+│   └── help.html
 └── static/omeroweb_tools/styles.css
 ```
 
