@@ -39,7 +39,7 @@
 .tools-search-card--results {
     display: flex;
     flex-direction: column;
-    max-height: 750px;
+    max-height: 670px;
     overflow: hidden;
 }
 
@@ -1221,6 +1221,100 @@
     opacity: 1;
 }
 
+.admin-tools-page.tools-help-page {
+    width: min(1180px, calc(100vw - 48px));
+    min-width: 0;
+    margin-bottom: 32px;
+}
+
+.tools-help-page .admin-tools-header {
+    align-items: flex-start;
+    justify-content: flex-start;
+    width: 100%;
+    max-width: none;
+    margin-bottom: 14px;
+}
+
+.tools-help-header-copy {
+    max-width: 780px;
+}
+
+.tools-help-page .admin-tools-title {
+    line-height: 1.12;
+}
+
+.tools-help-lead {
+    margin: 0.35rem 0 0;
+    color: #4b5563;
+    font-size: 0.98rem;
+    line-height: 1.45;
+}
+
+.tools-help-layout {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.tools-help-panel {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.72rem;
+    align-items: start;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 0.95rem;
+    border: 1px solid #d6deea;
+    border-left: 4px solid #007bff;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.tools-help-panel h2 {
+    margin: 0 0 0.55rem;
+    color: #1d4ed8;
+    font-size: 1.08rem;
+    line-height: 1.25;
+}
+
+.tools-help-list,
+.tools-help-tip-list {
+    margin: 0;
+    padding-left: 1.2rem;
+    color: #1f2937;
+    font-size: 0.94rem;
+    line-height: 1.5;
+}
+
+.tools-help-list li + li,
+.tools-help-tip-list li + li {
+    margin-top: 0.32rem;
+}
+
+.tools-help-code {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 700;
+}
+
+.tools-help-screenshot {
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    box-shadow: 0 1px 1px rgba(15, 23, 42, 0.05);
+}
+
+.tools-help-screenshot img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.tools-help-panel--troubleshooting {
+    border-left-color: #d97706;
+}
+
 @media (max-width: 900px) {
     .tools-search-inline-form--settings {
         flex-direction: column;
@@ -1247,5 +1341,17 @@
 
     .tools-search-status-message {
         white-space: normal;
+    }
+
+    .admin-tools-page.tools-help-page {
+        width: min(100%, calc(100vw - 24px));
+    }
+
+    .tools-help-page .admin-tools-header {
+        flex-direction: column;
+    }
+
+    .tools-help-panel {
+        grid-template-columns: 1fr;
     }
 }

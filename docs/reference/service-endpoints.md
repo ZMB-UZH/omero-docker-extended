@@ -85,7 +85,7 @@ Base: `/omeroweb_tools/`
 | `/enhanced-search/saved-queries/save/` | Save current query for the logged-in user |
 | `/enhanced-search/saved-queries/delete/` | Delete a saved query |
 | `/enhanced-search/saved-queries/<query_id>/` | Re-open a saved query |
-| `/help/` | Help Markdown document download |
+| `/help/` | Enhanced search HTML help |
 
 ### OMERO.web Zarr Plugin
 
