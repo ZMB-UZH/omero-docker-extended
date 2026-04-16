@@ -1,5 +1,11 @@
 # Acquisition Metadata Search Options
 
+Status: historical design study. The implemented Tools plugin now provides a
+regular-user `Enhanced search` workflow backed by a user-scoped universal
+metadata index in `database_plugin`; see
+[`docs/plugins/tools-plugin.md`](../plugins/tools-plugin.md) for current
+operator behavior.
+
 Exploratory design document for making acquisition metadata searchable from inside OMERO.web without falling back to `MapAnnotation`/key-value-pair mirroring as the primary product design.
 
 ## Problem Statement

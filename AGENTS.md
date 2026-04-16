@@ -26,9 +26,14 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Never use background agents or subagents unless the user explicitly asks for them.
 - All configuration is environment-driven. Never hard-code paths, credentials, or endpoints.
 - In committed code and tests, do not hard-code installation-specific clone paths or host paths unless the product intentionally guarantees that runtime path.
-- The tracked example env inventory and active assignment keys are locked by `tests/test_example_env_contracts.py`. When intentionally adding, removing, or renaming an active assignment in any `*_example.env` file or in `installation_paths_example.env`, update that test in the same change.
 - Custom import workflows must keep upload and conversion work in tmp/shared-transfer space and move data into `ManagedRepository` only at the final persistent import handoff.
 - Do not assume any Dataset, Project, Screen, or other OMERO object already exists in a live installation unless the current task explicitly provisions it first.
+- When tests or live verification need OMERO images, files, annotations,
+  acquisition metadata, users, groups, or plugin index rows, create deterministic
+  disposable fixtures inside the test or verification flow and clean or isolate
+  them by unique names. A user-named live object may be inspected as a
+  diagnostic target, but it must not become a product assumption, regression
+  fixture, or required test precondition.
 - Keep changes deterministic, explicit, and reproducible across environments.
 - If the user explicitly asks for lower-token replies, use the opt-in
   `caveman` skill at the lowest compression level that preserves clarity;

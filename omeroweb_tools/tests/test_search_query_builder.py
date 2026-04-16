@@ -40,3 +40,14 @@ def test_build_query_helpers_ignore_non_search_punctuation():
     assert search_query_builder.build_postgres_prefix_tsquery("___") == ""
     assert search_query_builder.build_omero_fulltext_query("a") == ""
     assert search_query_builder.build_postgres_prefix_tsquery("a") == ""
+
+
+def test_build_query_helpers_drop_single_numeric_fragments_from_decimals():
+    assert (
+        search_query_builder.build_postgres_prefix_tsquery("0.6240005493164062")
+        == "6240005493164062:*"
+    )
+    assert (
+        search_query_builder.build_omero_fulltext_query("0.6240005493164062")
+        == "6240005493164062*"
+    )

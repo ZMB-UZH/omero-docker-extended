@@ -6,7 +6,7 @@ This document records the pinned upstream AI-agent material vendored into this r
 
 - Upstream repository: `affaan-m/everything-claude-code`
 - Release tag: `v1.10.0`
-- Release commit: `29277ac273f294fd4804c35e43af9c8a5fc5ba9d`
+- Release commit: `846ffb75da9a5f4e677d927af1ad4a1951652267`
 - Local vendor path: `third_party/ecc-v1.10.0/`
 - License: MIT (`third_party/ecc-v1.10.0/LICENSE`)
 
@@ -41,16 +41,17 @@ Do not replace the local overlays with the upstream files verbatim unless the re
 ## caveman reference snapshot
 
 - Repository: `JuliusBrussee/caveman`
-- Reviewed release notes: `v1.4.0`, `v1.4.1`, and `v1.5.0` for the upgrade path from the prior `v1.3.5` pin
-- caveman release tag: `v1.5.0`
-- caveman release commit: `c80f8d7fe1cf5a7536020db15b7ab8620e0c90f3`
-- caveman vendor path: `third_party/caveman-v1.5.0/`
-- License: MIT (`third_party/caveman-v1.5.0/LICENSE`)
+- Reviewed release notes: `v1.5.1` and `v1.6.0` for the upgrade path from the prior `v1.5.0` pin
+- caveman release tag: `v1.6.0`
+- caveman release commit: `c2ed24b3e5d412cd0c25197b2bc9af587621fd99`
+- caveman vendor path: `third_party/caveman-v1.6.0/`
+- License: MIT (`third_party/caveman-v1.6.0/LICENSE`)
 - Vendored files: `LICENSE` and `skills/caveman/SKILL.md` only. Upstream README/install docs stay upstream-only so repo docs remain standard prose.
-- Selected upstream reference: `third_party/caveman-v1.5.0/skills/caveman/SKILL.md`
+- Selected upstream reference: `third_party/caveman-v1.6.0/skills/caveman/SKILL.md`
 - Integration rule: the active repo surface is `.agents/skills/caveman/`; it
-  is an opt-in overlay for lower-token replies and internal AI prompting only.
-  Upstream auto-activation hooks, `CAVEMAN_DEFAULT_MODE`/config resolution,
+  is an all-agent, opt-in overlay for lower-token replies and internal AI
+  prompting only. Upstream hooks, plugin auto-loading, `.codex` hook config,
+  natural-language auto-activation, `CAVEMAN_DEFAULT_MODE`/config resolution,
   `off`, `caveman-help`, and compression-tool context rewriting stay disabled,
   and the local overlay starts at lite compression without changing routing,
   tool choice, verification scope, or uncertainty handling.
