@@ -84,7 +84,6 @@ def _scalar_text(value) -> str:
     if value is None:
         return ""
 
-    raw_value = value
     try:
         raw_value = value.getValue()
     except Exception:
