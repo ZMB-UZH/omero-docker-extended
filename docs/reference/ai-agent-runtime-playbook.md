@@ -70,11 +70,6 @@ Examples:
 - Resolve the active virtualenv first if the exact interpreter path is uncertain.
 - For OMERO.web import validation, authenticate as a regular OMERO user; the Import plugin intentionally blocks `root`.
 - If repository modules are missing inside a container, switch to the runtime virtualenv instead of retrying plain `python3`.
-- If you create a disposable OMERO user for live verification, confirm that it
-  can open a real OMERO session before relying on it. On this installation,
-  `omero user add` can succeed while leaving the account without a usable
-  default group, which breaks both BlitzGateway and OMERO.web login until the
-  account is repaired.
 
 ## Multiline container probes
 
@@ -101,6 +96,12 @@ Avoid deeply nested heredocs inside `docker exec ... bash -lc "..."`.
 - Fix production code instead of weakening tests.
 - Run each test directory as a separate `pytest` invocation.
 - In root-owned clones, keep `-p no:cacheprovider -W error`.
+- Tests and live verification must not assume pre-existing OMERO images,
+  datasets, users, groups, files, acquisition metadata, plugin index rows, or
+  host-specific paths. If a test needs image data or metadata, create
+  deterministic disposable fixtures in that test or verification flow and
+  isolate them by unique names. User-specified live objects are allowed only as
+  diagnostic probes, not as reusable regression fixtures.
 - If host `pytest` cannot import Django, switch to the dependency-complete runtime first.
 - If full runtime verification is blocked, use direct-module or syntax validation only as an explicit fallback and report that limitation accurately.
 - After rebuilding `omeroweb`, verify existing plugin temp subtrees under `OMERO_TMP_PATH` inside the live container. `startup/10-web-bootstrap.sh` is expected to repair non-server top-level plugin trees such as `omeroweb-import/` back to the OMERO.web runtime UID before supervisord drops privileges.

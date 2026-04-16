@@ -4,6 +4,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from inspect import signature
 from typing import Iterable
 
 from omero_plugin_common.omero_helpers import get_id, get_text
@@ -18,9 +19,7 @@ _NUMBER_WITH_UNIT_RE = re.compile(
     r"(?P<unit>nm|nanometer(?:s)?|µm|um|micrometer(?:s)?|micron(?:s)?|mm|millimeter(?:s)?)?",
     re.IGNORECASE,
 )
-_SEARCH_TEXT_CAP = 8000
-_ATTRIBUTE_TEXT_CAP = 512
-_METADATA_ATTRIBUTE_CAP = 128
+_SEARCH_TEXT_CAP = 64000
 _ATTRIBUTE_KEY_CAP = 120
 
 
@@ -67,10 +66,49 @@ def _normalized_key(raw_key: str) -> str:
     return _NON_ALNUM_RE.sub(" ", lowered).strip()
 
 
+def _metadata_key_is_indexable(raw_key: str) -> bool:
+    return bool(_normalized_key(raw_key))
+
+
 def _normalized_text(value) -> str:
     if value is None:
         return ""
     return str(get_text(value)).strip()
+
+
+def _is_scalar_index_value(value) -> bool:
+    return isinstance(value, str | int | float | bool | datetime)
+
+
+def _scalar_text(value) -> str:
+    if value is None:
+        return ""
+
+    raw_value = value
+    try:
+        raw_value = value.getValue()
+    except Exception:
+        raw_value = value
+
+    if hasattr(raw_value, "value") and _is_scalar_index_value(raw_value.value):
+        raw_value = raw_value.value
+
+    if not _is_scalar_index_value(raw_value):
+        return ""
+
+    text = _normalized_text(raw_value)
+    if not text or text == "N/A":
+        return ""
+
+    try:
+        symbol = value.getSymbol()
+    except Exception:
+        symbol = None
+    if symbol:
+        symbol_text = _normalized_text(symbol)
+        if symbol_text and symbol_text not in text:
+            text = f"{text} {symbol_text}"
+    return text
 
 
 def _parse_datetime(value) -> datetime | None:
@@ -232,8 +270,12 @@ def _collect_original_metadata(image) -> dict[str, str]:
         except Exception:
             logger.debug("Original metadata entry parsing failed.", exc_info=True)
             continue
-        if key and value and key not in metadata:
-            metadata[f"BF_{key}"] = value
+        if key and value and _metadata_key_is_indexable(key):
+            metadata_key = f"BF_{key}"
+            metadata[metadata_key] = _merge_index_text(
+                metadata.get(metadata_key, ""),
+                value,
+            )
     return metadata
 
 
@@ -323,6 +365,16 @@ def _attribute_key(raw_key: str) -> str:
     return normalized[:_ATTRIBUTE_KEY_CAP]
 
 
+def _merge_index_text(existing: str, incoming: str) -> str:
+    existing_text = _normalized_text(existing)
+    incoming_text = _normalized_text(incoming)
+    if not existing_text:
+        return incoming_text
+    if not incoming_text or incoming_text in existing_text.split("; "):
+        return existing_text
+    return f"{existing_text}; {incoming_text}"
+
+
 def _append_attribute(
     bucket: dict[str, SearchAttribute],
     attribute: SearchAttribute,
@@ -331,7 +383,20 @@ def _append_attribute(
         return
     if not attribute.attribute_text and attribute.attribute_numeric is None:
         return
-    bucket.setdefault(attribute.attribute_key, attribute)
+    existing = bucket.get(attribute.attribute_key)
+    if existing is None:
+        bucket[attribute.attribute_key] = attribute
+        return
+    merged_text = _merge_index_text(existing.attribute_text, attribute.attribute_text)
+    bucket[attribute.attribute_key] = SearchAttribute(
+        attribute_key=existing.attribute_key,
+        attribute_text=merged_text,
+        attribute_numeric=(
+            existing.attribute_numeric
+            if existing.attribute_numeric is not None
+            else attribute.attribute_numeric
+        ),
+    )
 
 
 def _metadata_attributes(
@@ -340,11 +405,13 @@ def _metadata_attributes(
     attributes: list[SearchAttribute] = []
     seen: set[str] = set()
     for raw_key, raw_value in original_metadata.items():
+        if not _metadata_key_is_indexable(raw_key):
+            continue
         attribute_key = _attribute_key(raw_key)
         if not attribute_key or attribute_key in seen:
             continue
         seen.add(attribute_key)
-        text_value = _normalized_text(raw_value)[:_ATTRIBUTE_TEXT_CAP]
+        text_value = _normalized_text(raw_value)
         if not text_value:
             continue
         attributes.append(
@@ -354,9 +421,668 @@ def _metadata_attributes(
                 attribute_numeric=_parse_float(text_value),
             )
         )
-        if len(attributes) >= _METADATA_ATTRIBUTE_CAP:
-            break
     return tuple(attributes)
+
+
+def _quantity_to_float(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        raw_value = value.getValue()
+    except Exception:
+        raw_value = value
+    return _parse_float(raw_value)
+
+
+def _plane_quantity(
+    plane_info, getter_name: str, *, units: str | None = None
+) -> float | None:
+    getter = getattr(plane_info, getter_name, None)
+    if not callable(getter):
+        return None
+    try:
+        if units is None:
+            return _quantity_to_float(getter())
+        return _quantity_to_float(getter(units=units))
+    except TypeError:
+        try:
+            return _quantity_to_float(getter())
+        except Exception:
+            logger.debug("PlaneInfo getter %s failed.", getter_name, exc_info=True)
+            return None
+    except Exception:
+        logger.debug("PlaneInfo getter %s failed.", getter_name, exc_info=True)
+        return None
+
+
+def _plane_time_index(plane_info, sequence_index: int) -> int:
+    value = _plane_axis_index(plane_info, "theT")
+    return sequence_index if value is None else value
+
+
+def _plane_axis_index(plane_info, attr_name: str) -> int | None:
+    raw_value = getattr(plane_info, attr_name, None)
+    if raw_value is None:
+        getter = getattr(
+            plane_info,
+            f"get{attr_name[:1].upper()}{attr_name[1:]}",
+            None,
+        )
+        if callable(getter):
+            try:
+                raw_value = getter()
+            except Exception:
+                raw_value = None
+    try:
+        return int(get_text(raw_value))
+    except Exception:
+        return None
+
+
+def _callable_accepts_no_args(func) -> bool:
+    try:
+        signature(func).bind()
+    except TypeError:
+        return False
+    except (ValueError, AttributeError):
+        return True
+    return True
+
+
+def _seconds_text(value: float) -> str:
+    return f"{value} seconds"
+
+
+def _attribute_from_text(key: str, value: str) -> SearchAttribute | None:
+    attribute_key = _attribute_key(key)
+    attribute_text = _normalized_text(value)
+    if not attribute_key or not attribute_text:
+        return None
+    return SearchAttribute(
+        attribute_key=attribute_key,
+        attribute_text=attribute_text,
+        attribute_numeric=_parse_float(attribute_text),
+    )
+
+
+def _append_text_attribute(
+    bucket: dict[str, SearchAttribute],
+    key: str,
+    value,
+    *,
+    trust_generated_key: bool = True,
+) -> None:
+    if not trust_generated_key and not _metadata_key_is_indexable(key):
+        return
+    text_value = _scalar_text(value)
+    if not text_value:
+        return
+    attribute = _attribute_from_text(key, text_value)
+    if attribute is not None:
+        _append_attribute(bucket, attribute)
+
+
+def _annotation_value_pairs(annotation) -> Iterable[tuple[str, str]]:
+    annotation_type = str(
+        getattr(annotation, "OMERO_CLASS", annotation.__class__.__name__)
+        or annotation.__class__.__name__
+    )
+    normalized_type = _attribute_key(annotation_type) or "annotation"
+
+    if "map" in normalized_type:
+        values = None
+        for getter_name in ("getValue", "getMapValue"):
+            getter = getattr(annotation, getter_name, None)
+            if callable(getter):
+                try:
+                    values = getter()
+                    break
+                except Exception:
+                    logger.debug("Map annotation value loading failed.", exc_info=True)
+        for entry in values or ():
+            key = getattr(entry, "name", None)
+            value = getattr(entry, "value", None)
+            if key is None:
+                getter = getattr(entry, "getName", None)
+                if callable(getter):
+                    try:
+                        key = getter()
+                    except Exception:
+                        key = None
+            if value is None:
+                getter = getattr(entry, "getValue", None)
+                if callable(getter):
+                    try:
+                        value = getter()
+                    except Exception:
+                        value = None
+            key_text = _scalar_text(key)
+            value_text = _scalar_text(value)
+            if key_text and value_text:
+                yield f"annotation_map_{key_text}", value_text
+        return
+
+    for getter_name, label in (
+        ("getTextValue", normalized_type),
+        ("getDescription", f"{normalized_type}_description"),
+        ("getFileName", f"{normalized_type}_file_name"),
+        ("getFileSize", f"{normalized_type}_file_size"),
+        ("getNs", f"{normalized_type}_namespace"),
+    ):
+        getter = getattr(annotation, getter_name, None)
+        if not callable(getter):
+            continue
+        try:
+            value_text = _scalar_text(getter())
+        except Exception:
+            logger.debug(
+                "Annotation getter %s failed.",
+                getter_name,
+                exc_info=True,
+            )
+            continue
+        if value_text:
+            yield label, value_text
+
+
+def _collect_annotation_attributes(image) -> tuple[SearchAttribute, ...]:
+    try:
+        annotations = list(image.listAnnotations())
+    except Exception:
+        logger.debug("Image annotation loading failed.", exc_info=True)
+        return ()
+
+    bucket: dict[str, SearchAttribute] = {}
+    for annotation in annotations:
+        for raw_key, raw_value in _annotation_value_pairs(annotation):
+            _append_text_attribute(
+                bucket,
+                raw_key,
+                raw_value,
+                trust_generated_key=False,
+            )
+    return tuple(bucket.values())
+
+
+def _safe_call(obj, getter_name: str, *args, **kwargs):
+    getter = getattr(obj, getter_name, None)
+    if not callable(getter):
+        return None
+    try:
+        return getter(*args, **kwargs)
+    except Exception:
+        logger.debug("OMERO metadata getter %s failed.", getter_name, exc_info=True)
+        return None
+
+
+def _safe_iter_call(obj, getter_name: str) -> tuple:
+    value = _safe_call(obj, getter_name)
+    if value is None:
+        return ()
+    try:
+        return tuple(value)
+    except TypeError:
+        return (value,)
+    except Exception:
+        logger.debug("OMERO metadata iterator %s failed.", getter_name, exc_info=True)
+        return ()
+
+
+def _append_named_fields(
+    bucket: dict[str, SearchAttribute],
+    prefix: str,
+    obj,
+    field_names: tuple[str, ...],
+) -> None:
+    for field_name in field_names:
+        value = None
+        try:
+            value = getattr(obj, field_name)
+        except Exception:
+            value = None
+        if value is None:
+            getter_name = f"get{field_name[:1].upper()}{field_name[1:]}"
+            value = _safe_call(obj, getter_name)
+        _append_text_attribute(bucket, f"{prefix}_{field_name}", value)
+
+
+def _append_getter_fields(
+    bucket: dict[str, SearchAttribute],
+    prefix: str,
+    obj,
+    getters: tuple[tuple[str, str], ...],
+) -> None:
+    for getter_name, label in getters:
+        value = _safe_call(obj, getter_name)
+        _append_text_attribute(bucket, f"{prefix}_{label}", value)
+
+
+def _append_fileset_attributes(
+    bucket: dict[str, SearchAttribute],
+    image,
+) -> None:
+    fileset = _safe_call(image, "getFileset")
+    if fileset is None:
+        return
+    for index, used_file in enumerate(_safe_iter_call(fileset, "copyUsedFiles")):
+        original_file = _safe_call(used_file, "getOriginalFile") or used_file
+        prefix = f"original_file_{index + 1}"
+        _append_getter_fields(
+            bucket,
+            prefix,
+            original_file,
+            (
+                ("getName", "name"),
+                ("getMimetype", "mimetype"),
+                ("getSize", "size"),
+            ),
+        )
+
+
+def _pixel_axis_size(pixels, getter_name: str, default_size: int) -> int:
+    value = _safe_call(pixels, getter_name)
+    try:
+        return max(1, int(get_text(value)))
+    except Exception:
+        return default_size
+
+
+def _collect_universal_metadata_attributes(
+    image,
+    channels: tuple[SearchChannel, ...],
+    context: dict[str, int | str | None],
+) -> tuple[SearchAttribute, ...]:
+    bucket: dict[str, SearchAttribute] = {}
+    _append_text_attribute(bucket, "image_name", _safe_details_value(image, "getName"))
+    _append_text_attribute(
+        bucket,
+        "image_description",
+        _safe_details_value(image, "getDescription"),
+    )
+    _append_text_attribute(
+        bucket,
+        "image_acquisition_date",
+        _safe_details_value(image, "getAcquisitionDate"),
+    )
+    _append_text_attribute(bucket, "dataset_name", context.get("dataset_name"))
+    _append_text_attribute(bucket, "project_name", context.get("project_name"))
+
+    pixels = _safe_call(image, "getPrimaryPixels")
+    if pixels is not None:
+        _append_getter_fields(
+            bucket,
+            "pixels",
+            pixels,
+            (
+                ("getSizeX", "size_x"),
+                ("getSizeY", "size_y"),
+                ("getSizeZ", "size_z"),
+                ("getSizeC", "size_c"),
+                ("getSizeT", "size_t"),
+                ("getPhysicalSizeX", "physical_size_x"),
+                ("getPhysicalSizeY", "physical_size_y"),
+                ("getPhysicalSizeZ", "physical_size_z"),
+            ),
+        )
+
+    objective_settings = _safe_call(image, "getObjectiveSettings")
+    if objective_settings is not None:
+        _append_named_fields(
+            bucket,
+            "objective_settings",
+            objective_settings,
+            ("correctionCollar", "refractiveIndex"),
+        )
+        _append_getter_fields(
+            bucket,
+            "objective_settings",
+            objective_settings,
+            (("getMedium", "medium"),),
+        )
+        objective = _safe_call(objective_settings, "getObjective")
+        if objective is not None:
+            _append_named_fields(
+                bucket,
+                "objective_settings_objective",
+                objective,
+                (
+                    "manufacturer",
+                    "model",
+                    "serialNumber",
+                    "lotNumber",
+                    "nominalMagnification",
+                    "calibratedMagnification",
+                    "lensNA",
+                    "workingDistance",
+                ),
+            )
+            _append_getter_fields(
+                bucket,
+                "objective_settings_objective",
+                objective,
+                (
+                    ("getImmersion", "immersion"),
+                    ("getCorrection", "correction"),
+                ),
+            )
+
+    environment = _safe_call(image, "getImagingEnvironment")
+    if environment is not None:
+        _append_named_fields(
+            bucket,
+            "imaging_environment",
+            environment,
+            ("temperature", "airPressure", "humidity", "co2percent"),
+        )
+
+    stage_label = _safe_call(image, "getStageLabel")
+    if stage_label is not None:
+        _append_named_fields(
+            bucket, "stage_label", stage_label, ("name", "x", "y", "z")
+        )
+
+    instrument = _safe_call(image, "getInstrument")
+    if instrument is not None:
+        microscope = _safe_call(instrument, "getMicroscope")
+        if microscope is not None:
+            _append_named_fields(
+                bucket,
+                "microscope",
+                microscope,
+                ("manufacturer", "model", "serialNumber", "lotNumber"),
+            )
+            _append_getter_fields(
+                bucket,
+                "microscope",
+                microscope,
+                (("getMicroscopeType", "type"),),
+            )
+        for name, getter_name, fields in (
+            (
+                "instrument_objective",
+                "getObjectives",
+                (
+                    "manufacturer",
+                    "model",
+                    "serialNumber",
+                    "lotNumber",
+                    "nominalMagnification",
+                    "calibratedMagnification",
+                    "lensNA",
+                    "workingDistance",
+                ),
+            ),
+            (
+                "instrument_filter",
+                "getFilters",
+                ("manufacturer", "model", "serialNumber", "lotNumber"),
+            ),
+            (
+                "instrument_dichroic",
+                "getDichroics",
+                ("manufacturer", "model", "serialNumber", "lotNumber"),
+            ),
+            (
+                "instrument_detector",
+                "getDetectors",
+                (
+                    "manufacturer",
+                    "model",
+                    "serialNumber",
+                    "lotNumber",
+                    "gain",
+                    "voltage",
+                    "offsetValue",
+                    "zoom",
+                    "amplificationGain",
+                ),
+            ),
+            (
+                "instrument_light_source",
+                "getLightSources",
+                ("manufacturer", "model", "serialNumber", "lotNumber", "power"),
+            ),
+        ):
+            for index, obj in enumerate(_safe_iter_call(instrument, getter_name)):
+                _append_named_fields(bucket, f"{name}_{index + 1}", obj, fields)
+
+    try:
+        raw_channels = list(image.getChannels())
+    except Exception:
+        raw_channels = []
+    for channel_position, raw_channel in enumerate(raw_channels):
+        channel_index = (
+            channels[channel_position].channel_index
+            if channel_position < len(channels)
+            else channel_position
+        )
+        channel_prefix = f"channel_{channel_index}"
+        logical_channel = _safe_call(raw_channel, "getLogicalChannel")
+        if logical_channel is not None:
+            _append_named_fields(
+                bucket,
+                channel_prefix,
+                logical_channel,
+                (
+                    "name",
+                    "fluor",
+                    "ndFilter",
+                    "pinHoleSize",
+                    "pockelCellSetting",
+                ),
+            )
+            _append_getter_fields(
+                bucket,
+                channel_prefix,
+                logical_channel,
+                (
+                    ("getIllumination", "illumination"),
+                    ("getContrastMethod", "contrast_method"),
+                    ("getMode", "mode"),
+                ),
+            )
+            detector_settings = _safe_call(logical_channel, "getDetectorSettings")
+            if detector_settings is not None:
+                _append_named_fields(
+                    bucket,
+                    f"{channel_prefix}_detector_settings",
+                    detector_settings,
+                    ("gain", "offsetValue", "readOutRate", "voltage", "zoom"),
+                )
+                _append_getter_fields(
+                    bucket,
+                    f"{channel_prefix}_detector_settings",
+                    detector_settings,
+                    (("getBinning", "binning"),),
+                )
+                detector = _safe_call(detector_settings, "getDetector")
+                if detector is not None:
+                    _append_named_fields(
+                        bucket,
+                        f"{channel_prefix}_detector",
+                        detector,
+                        ("manufacturer", "model", "serialNumber", "lotNumber"),
+                    )
+            light_source_settings = _safe_call(
+                logical_channel, "getLightSourceSettings"
+            )
+            if light_source_settings is not None:
+                _append_named_fields(
+                    bucket,
+                    f"{channel_prefix}_light_source_settings",
+                    light_source_settings,
+                    ("attenuation", "wavelength"),
+                )
+                light_source = _safe_call(light_source_settings, "getLightSource")
+                if light_source is not None:
+                    _append_named_fields(
+                        bucket,
+                        f"{channel_prefix}_light_source",
+                        light_source,
+                        ("manufacturer", "model", "serialNumber", "lotNumber"),
+                    )
+            light_path = _safe_call(logical_channel, "getLightPath")
+            if light_path is not None:
+                dichroic = _safe_call(light_path, "getDichroic")
+                if dichroic is not None:
+                    _append_named_fields(
+                        bucket,
+                        f"{channel_prefix}_dichroic",
+                        dichroic,
+                        ("manufacturer", "model", "serialNumber", "lotNumber"),
+                    )
+                for filter_label, getter_name in (
+                    ("emission_filter", "getEmissionFilters"),
+                    ("excitation_filter", "getExcitationFilters"),
+                ):
+                    for filter_index, filter_obj in enumerate(
+                        _safe_iter_call(light_path, getter_name)
+                    ):
+                        _append_named_fields(
+                            bucket,
+                            f"{channel_prefix}_{filter_label}_{filter_index + 1}",
+                            filter_obj,
+                            ("manufacturer", "model", "serialNumber", "lotNumber"),
+                        )
+    _append_fileset_attributes(bucket, image)
+
+    for attribute in _collect_annotation_attributes(image):
+        _append_attribute(bucket, attribute)
+    return tuple(bucket.values())
+
+
+def _collect_all_plane_info_attributes(
+    image,
+    channels: tuple[SearchChannel, ...],
+) -> tuple[SearchAttribute, ...]:
+    try:
+        pixels = image.getPrimaryPixels()
+    except Exception:
+        logger.debug("Primary pixels lookup failed.", exc_info=True)
+        return ()
+    copy_plane_info = getattr(pixels, "copyPlaneInfo", None)
+    if not callable(copy_plane_info):
+        return ()
+
+    size_z = _pixel_axis_size(pixels, "getSizeZ", 1)
+    size_c = max(
+        _pixel_axis_size(pixels, "getSizeC", len(channels) or 1),
+        len(channels),
+    )
+    channel_indices = {
+        position: (
+            channels[position].channel_index if position < len(channels) else position
+        )
+        for position in range(size_c)
+    }
+
+    if not _callable_accepts_no_args(copy_plane_info):
+        return _collect_plane_info_attributes_by_plane(
+            copy_plane_info,
+            channel_indices,
+            size_z,
+        )
+
+    try:
+        plane_infos = tuple(copy_plane_info())
+    except TypeError:
+        return _collect_plane_info_attributes_by_plane(
+            copy_plane_info,
+            channel_indices,
+            size_z,
+        )
+    except Exception:
+        logger.debug("Bulk PlaneInfo collection failed.", exc_info=True)
+        return ()
+
+    grouped: dict[tuple[int, int], list] = {}
+    for plane_info in plane_infos:
+        channel_position = _plane_axis_index(plane_info, "theC")
+        z_index = _plane_axis_index(plane_info, "theZ")
+        if channel_position is None or z_index is None:
+            continue
+        group_key = (channel_position, z_index)
+        grouped.setdefault(group_key, []).append(plane_info)
+
+    attributes: list[SearchAttribute] = []
+    for channel_position, z_index in sorted(grouped):
+        channel_index = channel_indices.get(channel_position, channel_position)
+        prefix = f"channel_{channel_index}_z{z_index + 1}"
+        attributes.extend(
+            _plane_group_attributes(prefix, grouped[(channel_position, z_index)])
+        )
+    return tuple(attributes)
+
+
+def _collect_plane_info_attributes_by_plane(
+    copy_plane_info,
+    channel_indices: dict[int, int],
+    size_z: int,
+) -> tuple[SearchAttribute, ...]:
+    attributes: list[SearchAttribute] = []
+    for channel_position, channel_index in channel_indices.items():
+        for z_index in range(size_z):
+            try:
+                plane_infos = tuple(
+                    copy_plane_info(theC=channel_position, theZ=z_index)
+                )
+            except Exception:
+                logger.debug(
+                    "PlaneInfo collection failed for channel %s z %s.",
+                    channel_position,
+                    z_index,
+                    exc_info=True,
+                )
+                continue
+
+            prefix = f"channel_{channel_index}_z{z_index + 1}"
+            attributes.extend(_plane_group_attributes(prefix, plane_infos))
+    return tuple(attributes)
+
+
+def _plane_group_attributes(
+    prefix: str,
+    plane_infos: Iterable,
+) -> list[SearchAttribute]:
+    values_by_suffix: dict[str, list[str]] = {}
+    for sequence_t, plane_info in enumerate(plane_infos or ()):
+        time_index = _plane_time_index(plane_info, sequence_t)
+        delta_t = _plane_quantity(plane_info, "getDeltaT", units="SECOND")
+        exposure_time = _plane_quantity(
+            plane_info,
+            "getExposureTime",
+            units="SECOND",
+        )
+        position_x = _plane_quantity(plane_info, "getPositionX")
+        position_y = _plane_quantity(plane_info, "getPositionY")
+        position_z = _plane_quantity(plane_info, "getPositionZ")
+        for suffix, value in (
+            ("delta_t_seconds", delta_t),
+            ("exposure_time_seconds", exposure_time),
+            ("position_x", position_x),
+            ("position_y", position_y),
+            ("position_z", position_z),
+        ):
+            if value is None:
+                continue
+            value_text = (
+                _seconds_text(value) if suffix.endswith("_seconds") else str(value)
+            )
+            values_by_suffix.setdefault(suffix, []).append(
+                f"t{time_index + 1} {value_text}"
+            )
+
+    attributes: list[SearchAttribute] = []
+    for suffix, values in values_by_suffix.items():
+        if values:
+            attributes.append(
+                SearchAttribute(
+                    attribute_key=f"{prefix}_{suffix}",
+                    attribute_text="; ".join(values),
+                    attribute_numeric=None,
+                )
+            )
+    return attributes
 
 
 def _build_search_text(parts: Iterable[str]) -> str:
@@ -477,9 +1203,15 @@ def extract_search_document(
         include_groups=(("laser",), ("line", "wavelength")),
     )
 
+    scope_context_tuple = _extract_dataset_project_context(image)
+    scope_context = {
+        "dataset_id": scope_context_tuple[0],
+        "dataset_name": scope_context_tuple[1],
+        "project_id": scope_context_tuple[2],
+        "project_name": scope_context_tuple[3],
+    }
+
     attribute_map: dict[str, SearchAttribute] = {}
-    for attribute in _metadata_attributes(original_metadata):
-        _append_attribute(attribute_map, attribute)
     for attribute in (
         SearchAttribute("objective_collar", attribute_numeric=objective_collar),
         SearchAttribute("objective_id", attribute_text=objective_id),
@@ -488,10 +1220,22 @@ def extract_search_document(
         SearchAttribute("laser_line_nm", attribute_numeric=laser_line_nm),
     ):
         _append_attribute(attribute_map, attribute)
+    for attribute in _collect_universal_metadata_attributes(
+        image,
+        channels,
+        scope_context,
+    ):
+        _append_attribute(attribute_map, attribute)
+    for attribute in _collect_all_plane_info_attributes(image, channels):
+        _append_attribute(attribute_map, attribute)
+    for attribute in _metadata_attributes(original_metadata):
+        _append_attribute(attribute_map, attribute)
     attributes = tuple(attribute_map.values())
 
-    scope_context = _extract_dataset_project_context(image)
     search_text_parts = [
+        _safe_details_value(image, "getName"),
+        scope_context["dataset_name"],
+        scope_context["project_name"],
         instrument_manufacturer,
         instrument_model,
         objective_model,
@@ -499,7 +1243,7 @@ def extract_search_document(
         detector_binning,
         _channel_summary(channels),
     ]
-    for attribute in attributes[:48]:
+    for attribute in attributes:
         search_text_parts.append(attribute.attribute_key.replace("_", " "))
         if attribute.attribute_text:
             search_text_parts.append(attribute.attribute_text)
@@ -526,8 +1270,8 @@ def extract_search_document(
         raw_metadata=original_metadata,
     )
     return document, {
-        "dataset_id": scope_context[0],
-        "dataset_name": scope_context[1],
-        "project_id": scope_context[2],
-        "project_name": scope_context[3],
+        "dataset_id": scope_context["dataset_id"],
+        "dataset_name": scope_context["dataset_name"],
+        "project_id": scope_context["project_id"],
+        "project_name": scope_context["project_name"],
     }

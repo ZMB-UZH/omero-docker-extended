@@ -9,13 +9,13 @@ from omeroweb_tools.task_names import ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME
 
 
 def test_config_helpers_cover_invalid_values_and_scope_serialization():
-    scope = tools_config.EnhancedSearchScope("user", 7, "Your acquisition metadata")
+    scope = tools_config.EnhancedSearchScope("user", 7, "Your universal metadata index")
 
     assert scope.to_dict() == {
         "scope_type": "user",
         "scope_id": 7,
         "scope_key": "user:7",
-        "label": "Your acquisition metadata",
+        "label": "Your universal metadata index",
     }
     assert tools_config._bounded_int("bad", 5, 1, 10) == 5
     assert tools_config._optional_bool(None, True) is True
