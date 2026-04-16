@@ -120,4 +120,22 @@ describe('Enhanced Search indexed-scope browser persistence', () => {
     document.body.innerHTML = '<p class="tools-search-empty">No matching images were found.</p>';
     expect(document.querySelector('.tools-search-results thead')).toBeNull();
   });
+
+  it('uses the compact card gap and constrained results height', async () => {
+    await loadStyles();
+    document.body.innerHTML = `
+      <main class="tools-search-layout">
+        <section class="tools-search-card">Search</section>
+        <section class="tools-search-card">Index</section>
+        <section class="tools-search-card tools-search-card--results">
+          <div class="tools-search-results-body"></div>
+        </section>
+      </main>
+    `;
+
+    expect(getComputedStyle(document.querySelector('.tools-search-layout')).gap)
+      .toBe('14px');
+    expect(getComputedStyle(document.querySelector('.tools-search-card--results')).maxHeight)
+      .toBe('640px');
+  });
 });
