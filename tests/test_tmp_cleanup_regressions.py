@@ -192,7 +192,7 @@ class TmpCleanupRegressionTests(TestCase):
                 )
                 self.assertTrue(
                     (root / ns / "tmp").is_dir(),
-                    f"Structural tmp dir {ns}/tmp/ was deleted by cleaner",
+                    f"Structural namespace child directory under {ns}/ was deleted",
                 )
 
     def test_tmp_cleaner_still_deletes_deep_empty_subdirectories(self):

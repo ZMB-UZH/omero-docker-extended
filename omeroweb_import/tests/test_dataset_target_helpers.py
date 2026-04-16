@@ -778,8 +778,8 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
         finally:
             try:
                 user_conn.close()
-            except RuntimeError:
-                pass
+            except RuntimeError as exc:
+                assert str(exc) == "user close exploded"
 
     monkeypatch.setattr(
         core_functions,
