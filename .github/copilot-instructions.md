@@ -2,6 +2,10 @@
 
 Use [AGENTS.md](../AGENTS.md) as the universal project contract, [docs/reference/ai-agent-context-routing.md](../docs/reference/ai-agent-context-routing.md) as the narrow-context router, and [docs/reference/ai-agent-skills.md](../docs/reference/ai-agent-skills.md) as the skill catalog.
 
+## Single-session rule
+
+- AI agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
+
 ## Core rules
 
 - Start with `AGENTS.md`, then load the smallest correct task slice from the routing doc.
@@ -15,7 +19,6 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract, [docs/reference
   security guidance, or unresolved ambiguity.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.
 - Do not edit `env/omero_secrets.env`.
-- Do not use background agents or subagents unless the user explicitly asks for them.
 - Prefer existing helpers, tests, docs, and `*_example*` files over new abstractions.
 - Open one domain doc and one nearest test module before broadening context.
 

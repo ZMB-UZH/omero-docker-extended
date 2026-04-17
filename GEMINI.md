@@ -2,6 +2,10 @@
 
 Use [AGENTS.md](AGENTS.md) as the universal project contract, [docs/reference/ai-agent-context-routing.md](docs/reference/ai-agent-context-routing.md) for the smallest correct context, and [docs/reference/ai-agent-skills.md](docs/reference/ai-agent-skills.md) as the skill catalog.
 
+## Single-session rule
+
+- AI agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
+
 ## Core rules
 
 - Start with `AGENTS.md`, then the routing doc.
@@ -9,7 +13,6 @@ Use [AGENTS.md](AGENTS.md) as the universal project contract, [docs/reference/ai
 - Use `.agents/skills/` when a skill matches the task.
 - If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill. It is for internal AI communication only, never for repo docs/comments/docstrings/function descriptions or user-facing copy, and it changes reply style only without changing routing, tool choice, verification scope, or uncertainty handling. Fall back to normal detail when safety or clarity is at risk.
 - Keep configuration environment-driven and never edit `env/omero_secrets.env`.
-- Do not use background agents or subagents unless the user explicitly asks for them.
 - Prefer repo-native docs, tests, helpers, and `*_example*` files over new abstractions.
 - Load one domain doc and one nearest test module before broadening scope.
 
