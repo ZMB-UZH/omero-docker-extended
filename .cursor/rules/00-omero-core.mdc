@@ -5,11 +5,13 @@ alwaysApply: true
 
 # OMERO Core Rules
 
+## Single-session rule
+
+- AI agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
 - Start with `AGENTS.md` before proposing code changes.
 - Treat `AGENTS.md` as the universal contract. Use `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, and this ruleset only as additive adapters.
 - Use `docs/reference/ai-agent-context-routing.md` to keep the loaded context narrow.
 - Honor the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
-- Never use background agents or subagents unless the user explicitly asks for them.
 - Keep configuration environment-driven and never edit `env/omero_secrets.env`.
 - Prefer existing repo helpers, tests, docs, and `*_example*` files over new abstractions.

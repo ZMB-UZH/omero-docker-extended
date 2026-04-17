@@ -44,6 +44,8 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
     "AGENTS.md": ContextSurfaceContract(
         max_nonempty_lines=110,
         required_tokens=(
+            "Single-session rule",
+            "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
             "docs/reference/ai-agent-runtime-playbook.md",
             "docs/reference/ai-agent-skills.md",
@@ -55,6 +57,8 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
     "CLAUDE.md": ContextSurfaceContract(
         max_nonempty_lines=60,
         required_tokens=(
+            "Single-session rule",
+            "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
             "docs/reference/ai-agent-runtime-playbook.md",
             "docs/reference/ai-agent-skills.md",
@@ -64,6 +68,8 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
     "GEMINI.md": ContextSurfaceContract(
         max_nonempty_lines=25,
         required_tokens=(
+            "Single-session rule",
+            "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
             "docs/reference/ai-agent-runtime-playbook.md",
             "numeric caps",
@@ -72,6 +78,8 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
     ".github/copilot-instructions.md": ContextSurfaceContract(
         max_nonempty_lines=30,
         required_tokens=(
+            "Single-session rule",
+            "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
             "docs/reference/ai-agent-runtime-playbook.md",
             "numeric caps",
@@ -80,6 +88,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
     ".cursor/rules/00-omero-core.mdc": ContextSurfaceContract(
         max_nonempty_lines=15,
         required_tokens=(
+            "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
             "numeric caps",
         ),

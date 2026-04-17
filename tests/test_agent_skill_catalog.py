@@ -547,17 +547,34 @@ class AgentSkillCatalogTests(unittest.TestCase):
                     surface_text,
                     (
                         "AGENTS.md",
+                        "Single-session rule",
                         "docs/reference/ai-agent-context-routing.md",
                         ("docs/reference/ai-agent-skills.md", ".agents/skills/"),
-                        (
-                            "Never use background agents or subagents unless the user explicitly asks for them.",
-                            "Do not use background agents or subagents unless the user explicitly asks for them.",
-                        ),
+                        "Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session.",
+                        "must not be bypassed",
                         "env/omero_secrets.env",
                         "environment-driven",
                     ),
                     f"{surface_name} drifted from the shared cross-agent contract",
                 )
+
+    def test_agent_entrypoints_do_not_allow_subagent_escape_hatches(self) -> None:
+        forbidden_phrases = (
+            "Never use background agents or subagents unless the user explicitly asks for them.",
+            "Do not use background agents or subagents unless the user explicitly asks for them.",
+            "unless the user explicitly asks for them",
+        )
+        entrypoints = {
+            "AGENTS.md": self.agents_text,
+            "CLAUDE.md": self.claude_text,
+            "GEMINI.md": self.gemini_text,
+            ".github/copilot-instructions.md": self.copilot_text,
+            ".cursor/rules/00-omero-core.mdc": self.cursor_core_text,
+        }
+        for surface_name, surface_text in entrypoints.items():
+            with self.subTest(surface=surface_name):
+                for phrase in forbidden_phrases:
+                    self.assertNotIn(phrase, surface_text)
 
     def test_all_skill_directories_are_present_and_match_expected_inventory(
         self,
