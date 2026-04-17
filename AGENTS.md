@@ -3,6 +3,10 @@
 This file is the repository entrypoint for coding agents. It must stay small.
 Load only the smallest correct context for the current task, then stop expanding.
 
+## Single-session rule
+
+- AI agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
+
 ## Mandatory security read order
 
 Before writing or rewriting code or tests that touch filesystem paths, file I/O, logs, HTTP responses, outbound HTTP, SQL, subprocesses, Dockerfiles, workflows, secrets, authentication, or authorization, read these documents in order:
@@ -23,7 +27,6 @@ Do not start coding until you can name the helper boundary you will harden and t
 
 ## Working contract
 
-- Never use background agents or subagents unless the user explicitly asks for them.
 - All configuration is environment-driven. Never hard-code paths, credentials, or endpoints.
 - In committed code and tests, do not hard-code installation-specific clone paths or host paths unless the product intentionally guarantees that runtime path.
 - Custom import workflows must keep upload and conversion work in tmp/shared-transfer space and move data into `ManagedRepository` only at the final persistent import handoff.

@@ -35,7 +35,7 @@ Start from `third_party/ecc-v1.10.0/skills/search-first/SKILL.md` for the generi
 - Search `docs/`, `README.md`, `ARCHITECTURE.md`, and `CLAUDE.md` for existing operating rules.
 - Treat `env/*_example.env` and `installation_paths_example.env` as canonical contracts.
 - Adopt when the existing pattern is already correct, extend when a thin repo wrapper is enough, and build custom only when the repo needs a stricter contract.
-- Do not use background agents or subagents for research in this repo.
+- Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session for research in this repo.
 - Do not leak PATs, tokens, passwords, or internal URLs into web queries or docs tools.
 - For security-sensitive facts, use primary sources only.
 - For version-sensitive facts, cite the exact version, release tag, or document page used.
