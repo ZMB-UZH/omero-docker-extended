@@ -208,10 +208,10 @@ class ReadmeBadgeGenerationTests(TestCase):
                 "ZMB-UZH",
                 "omero-docker-extended",
             ),
-            "https://example-token@github.com/example-org/example-repo.git": (
+            "https://example-token@github.com/strmt7/omero-docker-extended.git": (
                 "github.com",
-                "example-org",
-                "example-repo",
+                "strmt7",
+                "omero-docker-extended",
             ),
         }
 

@@ -54,7 +54,7 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 | `postgres-patterns` | `.agents/skills/postgres-patterns/SKILL.md` | changing SQL, persistence, indexes, or maintenance behavior | database changes respect the repo's dual-Postgres model |
 | `security-review` | `.agents/skills/security-review/SKILL.md` | reviewing sensitive code or designs before implementation | security review follows the repo's boundary-focused rules |
 | `tdd-workflow` | `.agents/skills/tdd-workflow/SKILL.md` | features, bug fixes, and refactors that need tests first | done-ness includes narrow tests and docs updates |
-| `ai-regression-testing` | `.agents/skills/ai-regression-testing/SKILL.md` | validating candidate fixes for path mismatches or partial fixes | regressions are locked with narrow, explicit checks |
+| `ai-regression-testing` | `.agents/skills/ai-regression-testing/SKILL.md` | validating AI-generated fixes for path mismatches or partial fixes | regressions are locked with narrow, explicit checks |
 | `context-budget` | `.agents/skills/context-budget/SKILL.md` | reducing token usage and repeated repo rediscovery | agents stay faster by loading only the smallest correct context |
 
 ## Usage notes
