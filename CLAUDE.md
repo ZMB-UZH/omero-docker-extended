@@ -2,6 +2,10 @@
 
 Project-specific instructions for Claude Code sessions working on this repository.
 
+## Single-session rule
+
+- AI agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
+
 ## Fast load order
 
 1. `AGENTS.md`
@@ -17,7 +21,6 @@ Project-specific instructions for Claude Code sessions working on this repositor
 - Follow the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
 - If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill. It is for internal AI communication only, never for repo docs/comments/docstrings/function descriptions or user-facing copy, and it changes reply style only without changing routing, tool choice, verification scope, or uncertainty handling. Drop back to normal detail whenever safety, sequencing, or ambiguity matters.
-- Never use background agents or subagents unless the user explicitly asks for them.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.
 - Never edit `env/omero_secrets.env`.
 - Update `docs/` when behavior or operating assumptions change.

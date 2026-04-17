@@ -16,7 +16,7 @@ Apply guidance in this order:
 4. the relevant skill in `.agents/skills/`
 5. harness-specific files such as `CLAUDE.md`
 
-The skill surface is additive. It must not override the repo's no-subagent rule, security read order, split-pytest policy, or environment-driven configuration model.
+The skill surface is additive. It must not override the repo's absolute single-session rule, security read order, split-pytest policy, or environment-driven configuration model.
 
 Opt-in compression skills are advisory only. They never override risk handling, safety warnings, exact dates, or clarity-first explanations.
 
@@ -61,6 +61,7 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 
 - Start with `AGENTS.md` and `docs/reference/ai-agent-context-routing.md` to find the right domain docs.
 - Use the nearest skill before falling back to a generic workflow.
+- Keep every skill workflow in one session only; skills must not introduce background agents, subagents, spawned agents, delegated agents, or any separate agent session.
 - When a skill references live or version-sensitive behavior, verify with official upstream docs or releases.
 - Never paste secrets, PATs, passwords, or internal-only URLs into external research tools.
 - `caveman` is opt-in and available through the shared `.agents/skills/` catalog like every other skill. Use it only when the user asks for terseness or lower token usage, and drop it immediately if clarity or safety would suffer.

@@ -17,7 +17,7 @@ Apply guidance in this order:
 7. `docs/reference/ai-agent-skills.md` and `.agents/skills/`
 8. harness-specific adapter files
 
-Harness-specific files are additive. They must not override the repo's security read order, no-subagent rule, environment-driven configuration model, or split-pytest policy.
+Harness-specific files are additive. They must not override the repo's security read order, absolute single-session rule, environment-driven configuration model, or split-pytest policy. The single-session rule prohibits background agents, subagents, spawned agents, delegated agents, and any separate agent session.
 
 ## Supported instruction surfaces
 
@@ -73,7 +73,7 @@ The upstream `caveman` hooks, plugin auto-loading, `.codex` hook config, natural
 
 - ECC hook runtime
 - ECC command shims
-- ECC multi-agent orchestration and loop automation
+- ECC multi-agent orchestration, delegated loops, and separate agent sessions
 - ECC MCP server configs
 - `caveman` hook runtime, plugin auto-loading, `.codex` hook config, natural-language auto-activation, per-turn reinforcement, default-mode config resolution, `off`, `caveman-help`, and `/compress` context-rewrite automation
 - unrelated domain skills such as business-content, media-generation, or social-distribution
@@ -88,6 +88,7 @@ The adapter set is designed to improve accuracy first, then reduce wasted contex
 - prefer `context-budget` for input reduction and the opt-in `caveman` overlay for output reduction
 - add path-specific Copilot and Cursor guidance so agents do not rediscover the same rules every time
 - keep skills in `.agents/skills/` as the all-agent source of truth; adapter files may point to the catalog but should not duplicate full skill bodies
+- keep all workflows single-session; skills and adapters must not introduce delegated or spawned agent work
 - keep `AGENTS.md`, Claude, Gemini, Copilot, and Cursor core rules concise so they do not bloat always-on context
 
 ## Claude Code hooks
