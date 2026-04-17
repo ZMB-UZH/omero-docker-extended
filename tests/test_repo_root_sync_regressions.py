@@ -29,7 +29,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             managed_root = Path(tmpdir) / "ManagedRepository"
             (managed_root / "users_legacy" / "alice").mkdir(parents=True)
             (managed_root / ".omero").mkdir(parents=True)
-            (managed_root / "native-zarr-20260322live" / "alice").mkdir(parents=True)
+            (managed_root / "codex-zarr-20260322live" / "alice").mkdir(parents=True)
 
             result = self._run_helper(
                 "plan",
