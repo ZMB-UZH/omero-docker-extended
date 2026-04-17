@@ -73,7 +73,7 @@ class SkillScenario:
 SKILL_SCENARIOS: dict[str, SkillScenario] = {
     "ai-regression-testing": SkillScenario(
         scenario=(
-            "An AI-generated fix touched a startup script and a helper, and the "
+            "A candidate fix touched a startup script and a helper, and the "
             "reviewer wants narrow regression tests that catch partial fixes and "
             "path mismatches."
         ),
