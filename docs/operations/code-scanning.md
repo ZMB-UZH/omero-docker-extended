@@ -37,9 +37,9 @@ The current advanced CodeQL setup uses `build-mode: none` for the Python and Jav
 
 ## Alert inventory
 
-Last live API refresh: **2026-04-16**.
+Last live API refresh: **2026-04-20**.
 
-GitHub reported **22 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
+GitHub reported **13 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
 These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
 
@@ -66,12 +66,11 @@ To prevent documentation drift:
 
 | Scanner     | Open alerts |
 | ----------- | ----------: |
-| Bandit      | 2           |
 | Hadolint    | 2           |
-| Scorecard   | 5           |
-| Semgrep OSS | 8           |
-| Trivy       | 5           |
-| **Total**   | **22**      |
+| Scorecard   | 4           |
+| Semgrep OSS | 5           |
+| Trivy       | 2           |
+| **Total**   | **13**      |
 
 ### Historical snapshots below
 
