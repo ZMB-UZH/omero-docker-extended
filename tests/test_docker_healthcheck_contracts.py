@@ -89,6 +89,35 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertIn("adduser -S -D -H -G firewallbouncer", dockerfile_text)
         self.assertIn("USER firewallbouncer", dockerfile_text)
 
+    def test_crowdsec_image_defaults_to_named_non_root_user(self) -> None:
+        dockerfile_text = self.dockerfiles["crowdsec"]
+        self.assertIn("addgroup -S crowdsec-runtime", dockerfile_text)
+        self.assertIn("adduser -S -D -H -G crowdsec-runtime", dockerfile_text)
+        self.assertIn("USER crowdsec-runtime", dockerfile_text)
+        self.assertNotIn("USER root", dockerfile_text)
+
+    def test_pg_maintenance_image_defaults_to_postgres_user(self) -> None:
+        dockerfile_text = self.dockerfiles["pg-maintenance"]
+        self.assertIn("USER postgres", dockerfile_text)
+        self.assertNotIn("USER root", dockerfile_text)
+
+    def test_root_required_helper_services_are_explicit_compose_handoffs(
+        self,
+    ) -> None:
+        compose_lines = self.compose_text.splitlines(keepends=True)
+        root_required_services = ("crowdsec", "pg-maintenance", "redis-sysctl-init")
+        for service_name in root_required_services:
+            service_header = f"  {service_name}:\n"
+            service_start = compose_lines.index(service_header)
+            service_end = len(compose_lines)
+            for index in range(service_start + 1, len(compose_lines)):
+                line = compose_lines[index]
+                if line.startswith("  ") and not line.startswith("    "):
+                    service_end = index
+                    break
+            service_text = "".join(compose_lines[service_start:service_end])
+            self.assertIn("    user: root\n", service_text)
+
     def test_redis_sysctl_init_image_defaults_to_named_non_root_user(self) -> None:
         dockerfile_text = self.dockerfiles["redis-sysctl-init"]
         self.assertIn("addgroup -S redis-sysctl", dockerfile_text)

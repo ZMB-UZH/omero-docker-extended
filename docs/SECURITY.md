@@ -19,11 +19,12 @@ Security practices and controls for this deployment.
 - The `omero-celery-worker` container runs as a dedicated `celery` user (uid/gid 10001).
 - Redis runs with `maxmemory 512mb` and `allkeys-lru` eviction on tmpfs (no persistent state).
 - `cadvisor` runs privileged because it inspects host/container runtime state for metrics.
-- The `redis-sysctl-init` image defaults to a named non-root user, but the
-  profile-gated (`sysctl-init`) Compose sidecar runs as `root` with
-  `privileged: true` because applying `vm.overcommit_memory=1` is a host kernel
-  sysctl write. It is only needed for non-standard deployments; the installation
-  script persists the sysctl on the host.
+- The `crowdsec`, `pg-maintenance`, and `redis-sysctl-init` helper images
+  default to non-root users. Compose explicitly runs these helper services as
+  `root` only where the runtime boundary requires it: CrowdSec manipulates the
+  host firewall with `NET_ADMIN`, pg-maintenance starts system cron and writes
+  its cron environment under `/etc`, and redis-sysctl-init applies the
+  host-kernel `vm.overcommit_memory=1` sysctl with `privileged: true`.
 
 ## Post-build vulnerability scanning
 

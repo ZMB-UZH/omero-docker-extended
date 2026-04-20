@@ -248,13 +248,13 @@ def _match_repo_template(
         cursor = 0
         for token_match in _TOKEN_PATTERN.finditer(raw_part):
             matcher_parts.append(re.escape(raw_part[cursor : token_match.start()]))
-            token = token_match.group(0)
-            if token == "%group%":
+            template_marker = token_match.group(0)
+            if template_marker == "%group%":
                 matcher_parts.append(re.escape(group_component))
-            elif token == "%user%":
+            elif template_marker == "%user%":
                 matcher_parts.append(re.escape(user_component))
             else:
-                matcher_parts.append(_VOLATILE_TEMPLATE_PATTERNS[token])
+                matcher_parts.append(_VOLATILE_TEMPLATE_PATTERNS[template_marker])
             cursor = token_match.end()
         matcher_parts.append(re.escape(raw_part[cursor:]))
         matcher_parts.append("$")
