@@ -36,6 +36,9 @@ class DockerHealthcheckContractTests(unittest.TestCase):
                 REPO_ROOT / "docker" / "redis-sysctl-init.Dockerfile"
             ).read_text(encoding="utf-8"),
         }
+        cls.redis_sysctl_script = (
+            REPO_ROOT / "docker" / "redis-sysctl-init.sh"
+        ).read_text(encoding="utf-8")
 
     def test_image_level_healthchecks_exist_for_hardened_auxiliary_images(self) -> None:
         expected_checks = {
@@ -85,6 +88,27 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertIn("addgroup -S firewallbouncer", dockerfile_text)
         self.assertIn("adduser -S -D -H -G firewallbouncer", dockerfile_text)
         self.assertIn("USER firewallbouncer", dockerfile_text)
+
+    def test_redis_sysctl_init_image_defaults_to_named_non_root_user(self) -> None:
+        dockerfile_text = self.dockerfiles["redis-sysctl-init"]
+        self.assertIn("addgroup -S redis-sysctl", dockerfile_text)
+        self.assertIn("adduser -S -D -H -G redis-sysctl", dockerfile_text)
+        self.assertIn("USER redis-sysctl", dockerfile_text)
+        self.assertNotIn("USER root", dockerfile_text)
+
+    def test_redis_sysctl_init_script_fails_closed_on_sysctl_errors(self) -> None:
+        self.assertIn(
+            'SYSCTL_KEY="${SYSCTL_KEY:-vm.overcommit_memory}"', self.redis_sysctl_script
+        )
+        self.assertIn('SYSCTL_VALUE="${SYSCTL_VALUE:-1}"', self.redis_sysctl_script)
+        self.assertIn(
+            'if [ "${SYSCTL_KEY}" != "vm.overcommit_memory" ]; then',
+            self.redis_sysctl_script,
+        )
+        self.assertIn(
+            'sysctl -w "${SYSCTL_KEY}=${SYSCTL_VALUE}"', self.redis_sysctl_script
+        )
+        self.assertNotIn("|| true", self.redis_sysctl_script)
 
 
 if __name__ == "__main__":

@@ -1,18 +1,23 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import importlib.util
 import os
 import stat
 import sys
 import tempfile
 import types
-import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, main, mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HELPER_PATH = REPO_ROOT / "startup" / "dropbox_user_dir_sync.py"
+DROPBOX_EXTERNAL_WRITE_MODE = (
+    stat.S_ISGID | stat.S_IRWXU | stat.S_IRWXG | stat.S_IROTH | stat.S_IXOTH
+)
+TEST_AUTH_ENV_VAR = "OMERO_TEST_AUTH_ENV"
+TEST_AUTH_VALUE = "unused-auth-value"
 
 
 def load_helper():
@@ -64,26 +69,25 @@ class _Conn:
 
 
 def _config(**overrides: object):
-    values = {
-        "host": "unused",
-        "port": 4064,
-        "secure": True,
-        "username": "root",
-        "password_env": "ROOTPASS",
-        "create_root": True,
-        "owner": "",
-        "group": "",
-        "mode": 0o2775,
-        "allow_world_writable": False,
-        "status_file": None,
-        "connect_retries": 1,
-        "connect_retry_delay_seconds": 0,
-    }
-    values.update(overrides)
-    return helper.SyncConfig(**values)
+    config = helper.SyncConfig(
+        host="unused",
+        port=4064,
+        secure=True,
+        username="root",
+        password_env=TEST_AUTH_ENV_VAR,
+        create_root=True,
+        owner="",
+        group="",
+        mode=DROPBOX_EXTERNAL_WRITE_MODE,
+        allow_world_writable=False,
+        status_file=None,
+        connect_retries=1,
+        connect_retry_delay_seconds=0,
+    )
+    return replace(config, **overrides)
 
 
-class DropBoxUserDirSyncTests(unittest.TestCase):
+class DropBoxUserDirSyncTests(TestCase):
     def test_resolves_default_root_from_omero_config(self) -> None:
         conn = _Conn(
             {
@@ -141,7 +145,10 @@ class DropBoxUserDirSyncTests(unittest.TestCase):
             self.assertEqual(2, result.skipped)
             self.assertTrue((root / "alice").is_dir())
             self.assertTrue((root / "bob").is_dir())
-            self.assertEqual(0o2775, stat.S_IMODE((root / "alice").stat().st_mode))
+            self.assertEqual(
+                DROPBOX_EXTERNAL_WRITE_MODE,
+                stat.S_IMODE((root / "alice").stat().st_mode),
+            )
 
     def test_new_dropbox_root_inherits_parent_owner_group_and_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -149,7 +156,11 @@ class DropBoxUserDirSyncTests(unittest.TestCase):
             parent.mkdir()
             root = parent / "DropBox"
 
-            root_state = helper.ensure_root(root, create_root=True, mode=0o2775)
+            root_state = helper.ensure_root(
+                root,
+                create_root=True,
+                mode=DROPBOX_EXTERNAL_WRITE_MODE,
+            )
 
             parent_stat = parent.stat()
             root_stat = root.stat()
@@ -158,14 +169,20 @@ class DropBoxUserDirSyncTests(unittest.TestCase):
                 (parent_stat.st_uid, parent_stat.st_gid),
                 (root_stat.st_uid, root_stat.st_gid),
             )
-            self.assertEqual(0o2775, stat.S_IMODE(root_stat.st_mode))
+            self.assertEqual(
+                DROPBOX_EXTERNAL_WRITE_MODE, stat.S_IMODE(root_stat.st_mode)
+            )
 
     def test_new_dropbox_root_requires_existing_parent(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "missing" / "DropBox"
 
             with self.assertRaisesRegex(helper.SyncError, "parent does not exist"):
-                helper.ensure_root(root, create_root=True, mode=0o2775)
+                helper.ensure_root(
+                    root,
+                    create_root=True,
+                    mode=DROPBOX_EXTERNAL_WRITE_MODE,
+                )
 
     def test_sync_rejects_existing_username_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -197,9 +214,15 @@ class DropBoxUserDirSyncTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "dropbox"
             root.mkdir()
-            user_dir = root / "alice"
-            user_dir.mkdir()
-            os.chmod(user_dir, 0o2775)
+            root_stat = root.stat()
+            helper.ensure_user_directory(
+                root,
+                root.resolve(strict=True),
+                "alice",
+                _config(create_root=False),
+                root_stat.st_uid,
+                root_stat.st_gid,
+            )
             conn = _Conn(
                 {
                     "omero.fs.importUsers": "default",
@@ -275,7 +298,7 @@ class DropBoxUserDirSyncTests(unittest.TestCase):
         config = _config(connect_retries=2)
 
         with (
-            mock.patch.dict(os.environ, {"ROOTPASS": "unused"}),
+            mock.patch.dict(os.environ, {TEST_AUTH_ENV_VAR: TEST_AUTH_VALUE}),
             mock.patch.object(helper, "import_omero_gateway", return_value=FakeGateway),
             self.assertRaisesRegex(helper.SyncError, "could not connect"),
         ):
@@ -286,6 +309,21 @@ class DropBoxUserDirSyncTests(unittest.TestCase):
             [True, True], [conn.closed_with for conn in FakeGateway.instances]
         )
 
+    def test_close_connection_logs_unexpected_close_failures(self) -> None:
+        class FailingClose:
+            def close(self, hard: bool = True) -> None:
+                raise RuntimeError("close failed")
+
+        with self.assertLogs(helper.LOGGER, level="DEBUG") as captured:
+            helper.close_connection(FailingClose())
+
+        self.assertTrue(
+            any(
+                "Failed to close OMERO connection cleanly." in message
+                for message in captured.output
+            )
+        )
+
     def test_helper_does_not_encode_installation_specific_ids_or_paths(self) -> None:
         helper_text = HELPER_PATH.read_text(encoding="utf-8")
         self.assertNotIn("65534", helper_text)
@@ -293,4 +331,4 @@ class DropBoxUserDirSyncTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()

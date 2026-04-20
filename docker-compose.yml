@@ -407,6 +407,7 @@ services:
     container_name: redis-sysctl-init
     profiles:
       - sysctl-init
+    user: root
     privileged: true
     restart: "no"
     command: []

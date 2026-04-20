@@ -86,6 +86,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertEqual(21, len(self.services))
         self.assertIn("redis-sysctl-init", self.services)
         self.assertEqual("no", str(self.services["redis-sysctl-init"].get("restart")))
+        self.assertEqual("root", self.services["redis-sysctl-init"].get("user"))
         self.assertEqual(
             ["sysctl-init"], self.services["redis-sysctl-init"].get("profiles")
         )
