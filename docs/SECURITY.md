@@ -19,7 +19,11 @@ Security practices and controls for this deployment.
 - The `omero-celery-worker` container runs as a dedicated `celery` user (uid/gid 10001).
 - Redis runs with `maxmemory 512mb` and `allkeys-lru` eviction on tmpfs (no persistent state).
 - `cadvisor` runs privileged because it inspects host/container runtime state for metrics.
-- The `redis-sysctl-init` sidecar is also privileged, but it is profile-gated (`sysctl-init`) and only needed for non-standard deployments. The installation script persists the sysctl on the host.
+- The `redis-sysctl-init` image defaults to a named non-root user, but the
+  profile-gated (`sysctl-init`) Compose sidecar runs as `root` with
+  `privileged: true` because applying `vm.overcommit_memory=1` is a host kernel
+  sysctl write. It is only needed for non-standard deployments; the installation
+  script persists the sysctl on the host.
 
 ## Post-build vulnerability scanning
 

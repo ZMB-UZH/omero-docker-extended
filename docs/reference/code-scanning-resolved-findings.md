@@ -192,6 +192,7 @@ These files have historically generated the most scanning alerts. Extra review a
 | 2026-03-31 | 123 | 7 | Code fixes | Managed upload path hardening, atomic job-file writes, and generic import/upload server-error responses |
 | 2026-04-01 | 56 | 8 | Code fixes | Added image-level Dockerfile healthchecks for reusable images, removed the last bare `except`/`continue` normalization path, and moved Zarr toolbar selection bootstrap out of inline JS expressions |
 | 2026-04-16 | 27 | 5 | Code fixes | Removed an unnecessary acquisition metadata assignment, replaced a test-only empty `except`, removed a hardcoded temp-path assertion message, and switched proxy test URLs to HTTPS fixtures |
+| 2026-04-20 | 7 | 7 | Regression fixes | Logged DropBox connection-close failures, cleaned test import and permission fixtures, made the Redis sysctl helper image non-root by default while documenting the root-only Compose handoff, and fixed DropBox IceGrid template editing without shell-lint suppression |
 
 ---
 
