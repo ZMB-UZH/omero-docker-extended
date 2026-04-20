@@ -282,7 +282,7 @@ class GeneticLabelPlacer:
         self.elite_size = elite_size
 
         # Store for line crossing checks
-        self.peak_positions = {}
+        self.peak_positions: dict[Any, list[tuple[float, float]]] = {}
         for spec in label_specs:
             self.peak_positions[spec["id"]] = []
             for peak_e in spec["peak_energies"]:

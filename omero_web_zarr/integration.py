@@ -4,6 +4,7 @@ import logging
 import time
 import traceback
 from functools import wraps
+from typing import Any
 
 from django.conf import settings
 from django.http import Http404
@@ -136,7 +137,7 @@ def _store_backed_render_response(image, request, z=None, t=None, download=False
 def _store_backed_pixel_range(node):
     metadata = getattr(node, "metadata", {}) or {}
     contrast_limits = metadata.get("contrast_limits") or []
-    values = []
+    values: list[float] = []
     for limits in contrast_limits:
         if isinstance(limits, (list, tuple)) and len(limits) >= 2:
             values.extend((float(limits[0]), float(limits[1])))
@@ -512,26 +513,26 @@ def _install_safe_image_marshal_overrides(webgateway_marshal):
     webgateway_marshal._omero_web_zarr_original_image_marshal = original_image_marshal
     webgateway_marshal._omero_web_zarr_safe_image_marshal_installed = True
 
-    candidate_modules = []
+    candidate_modules: list[Any] = []
     from omeroweb.webgateway import views as webgateway_views
 
     candidate_modules.append(webgateway_views)
     try:
         import omero_iviewer.views as iviewer_views
     except ImportError:
-        iviewer_views = None
-    if iviewer_views is not None:
+        pass
+    else:
         candidate_modules.append(iviewer_views)
     try:
         import omero_figure.views as figure_views
     except ImportError:
-        figure_views = None
-    if figure_views is not None:
+        pass
+    else:
         candidate_modules.append(figure_views)
 
     for module in candidate_modules:
         if getattr(module, "imageMarshal", None) is not None:
-            module.imageMarshal = safe_image_marshal
+            setattr(module, "imageMarshal", safe_image_marshal)
 
     return safe_image_marshal
 
@@ -541,7 +542,7 @@ def _load_metadata_preview_with_safe_rendering(
 ):
     from omeroweb.webclient import views as webclient_views
 
-    context = {}
+    context: dict[str, Any] = {}
     index = webclient_views.getIntOrDefault(request, "index", 0)
     manager = webclient_views.BaseContainer(conn, **{str(c_type): int(c_id)})
     if share_id:
@@ -549,8 +550,8 @@ def _load_metadata_preview_with_safe_rendering(
     if c_type == "well":
         manager.image = manager.well.getImage(index)
 
-    rdefs = []
-    rdef_queries = []
+    rdefs: list[Any] = []
+    rdef_queries: list[dict[str, Any]] = []
     try:
         all_rdefs = manager.image.getAllRenderingDefs()
         current_rdef_id = manager.image.getRenderingDefId()
@@ -562,7 +563,7 @@ def _load_metadata_preview_with_safe_rendering(
             getattr(manager.image, "id", c_id),
         )
     else:
-        deduped_rdefs = {}
+        deduped_rdefs: dict[Any, dict[str, Any]] = {}
         for rendering_def in all_rdefs:
             owner_id = rendering_def["owner"]["id"]
             rendering_def["current"] = rendering_def["id"] == current_rdef_id
@@ -573,7 +574,7 @@ def _load_metadata_preview_with_safe_rendering(
                 deduped_rdefs[owner_id] = rendering_def
         rdefs = list(deduped_rdefs.values())
         for rendering_def in rdefs:
-            channels = []
+            channels: list[str] = []
             for index, channel in enumerate(rendering_def["c"]):
                 active_prefix = "" if channel["active"] else "-"
                 color = channel["lut"] if "lut" in channel else channel["color"]
@@ -918,8 +919,8 @@ def install_webgateway_overrides():
                 "Max %s thumbnails at a time." % settings.THUMBNAILS_BATCH
             )
 
-        response = {}
-        regular_ids = []
+        response: dict[Any, str | None] = {}
+        regular_ids: list[Any] = []
         z_index = webgateway_views.getIntOrDefault(request, "z", None)
         t_index = webgateway_views.getIntOrDefault(request, "t", None)
 
@@ -1081,13 +1082,13 @@ def install_webgateway_overrides():
         webclient_views.render_response()(load_metadata_preview_override)
     )
 
-    webclient_gateway.ImageWrapper.getChannels = get_channels_override
-    webgateway_views.imageData_json = decorated_image_data_json
-    webgateway_views._render_thumbnail = render_thumbnail_override
-    webgateway_views.get_thumbnails_json = decorated_get_thumbnails_json
-    webgateway_views.render_image = decorated_render_image
-    webgateway_views.render_image_region = decorated_render_image_region
-    webclient_views.load_metadata_preview = decorated_load_metadata_preview
+    setattr(webclient_gateway.ImageWrapper, "getChannels", get_channels_override)
+    setattr(webgateway_views, "imageData_json", decorated_image_data_json)
+    setattr(webgateway_views, "_render_thumbnail", render_thumbnail_override)
+    setattr(webgateway_views, "get_thumbnails_json", decorated_get_thumbnails_json)
+    setattr(webgateway_views, "render_image", decorated_render_image)
+    setattr(webgateway_views, "render_image_region", decorated_render_image_region)
+    setattr(webclient_views, "load_metadata_preview", decorated_load_metadata_preview)
 
     _patch_urlpatterns(
         webgateway_urls.urlpatterns,

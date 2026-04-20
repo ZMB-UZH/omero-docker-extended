@@ -1,6 +1,7 @@
 import json
 import logging
 import urllib.parse
+from typing import Any
 
 import requests
 
@@ -48,7 +49,7 @@ _MODEL_PREFERENCES = {
 
 _OPENAI_STYLE_PROVIDERS = {"groq", "xai", "perplexity"}
 
-_MODEL_ENDPOINTS = {
+_MODEL_ENDPOINTS: dict[str, dict[str, Any]] = {
     "groq": {
         "url": "https://api.groq.com/openai/v1/models",
         "headers": lambda key: {

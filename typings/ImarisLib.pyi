@@ -1,0 +1,6 @@
+from typing import Any
+
+class ImarisLib:
+    def __getattr__(self, name: str) -> Any: ...
+
+def GetApplication(*args: Any, **kwargs: Any) -> Any: ...

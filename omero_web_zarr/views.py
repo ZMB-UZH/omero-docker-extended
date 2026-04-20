@@ -9,6 +9,7 @@ import zipfile
 from functools import lru_cache
 from itertools import product
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote, urljoin, urlsplit
 
 import numpy as np
@@ -51,6 +52,26 @@ from .utils import resolve_image_backing_zarr_store
 from .utils import resolve_local_zarr_file
 
 LOGGER = logging.getLogger(__name__)
+
+
+class _UnlinkOnCloseFile:
+    def __init__(self, stream: Any, path: Path) -> None:
+        self._stream = stream
+        self._path = path
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._stream, name)
+
+    def read(self, *args: Any, **kwargs: Any) -> Any:
+        return self._stream.read(*args, **kwargs)
+
+    def close(self) -> None:
+        try:
+            self._stream.close()
+        finally:
+            self._path.unlink(missing_ok=True)
+
+
 _APP_BASE_URLS = {
     "vizarr": "https://hms-dbmi.github.io/vizarr/",
     "validator": "https://ome.github.io/ome-ngff-validator/",
@@ -164,7 +185,7 @@ def image_zattrs(request, iid, version, conn=None, **kwargs):
     if image.requiresPixelsPyramid():
         image.getZoomLevelScaling()
         res_descs = image._re.getResolutionDescriptions()
-        levels = range(len(res_descs))
+        levels = list(range(len(res_descs)))
 
     datasets = [{"path": str(level)} for level in levels]
 
@@ -303,12 +324,12 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
             level = max_level - level
             pix.setPixelsId(pid, False)
             pix.setResolutionLevel(level)
-            tile = pix.getTile(z, c, t, tile_x, tile_y, tile_w, tile_h)
+            tile_bytes = pix.getTile(z, c, t, tile_x, tile_y, tile_w, tile_h)
         finally:
             pix.close()
 
-        tile = np.frombuffer(tile, dtype=np_type)
-        plane = tile.reshape((tile_h, tile_w))
+        tile_array = np.frombuffer(tile_bytes, dtype=np_type)
+        plane = tile_array.reshape((tile_h, tile_w))
     else:
         plane = image.getPrimaryPixels().getTile(z, c, t, tile)
     if chunks[-1] != tile_w or chunks[-2] != tile_h:
@@ -462,8 +483,10 @@ def _store_backed_ome_tiff_metadata(image, node, axes):
 @login_required()
 def download_store_original(request, iid, conn=None, **kwargs):
     image = conn.getObject("Image", iid)
-    store_root = image is not None and resolve_image_backing_zarr_store(image)
-    if image is None or store_root is None:
+    if image is None:
+        raise Http404("store-backed image not found")
+    store_root = resolve_image_backing_zarr_store(image)
+    if store_root is None:
         raise Http404("store-backed image not found")
 
     archive = tempfile.TemporaryFile()
@@ -491,8 +514,10 @@ def download_store_original(request, iid, conn=None, **kwargs):
 @login_required()
 def download_store_metadata(request, iid, conn=None, **kwargs):
     image = conn.getObject("Image", iid)
-    store_root = image is not None and resolve_image_backing_zarr_store(image)
-    if image is None or store_root is None:
+    if image is None:
+        raise Http404("store-backed image not found")
+    store_root = resolve_image_backing_zarr_store(image)
+    if store_root is None:
         raise Http404("store-backed image not found")
 
     payload = {
@@ -546,17 +571,8 @@ def download_store_ome_tiff(request, iid, conn=None, **kwargs):
 
     stream = open(target_path, "rb")
     size = target_path.stat().st_size
-    original_close = stream.close
-
-    def _close_and_unlink():
-        try:
-            original_close()
-        finally:
-            target_path.unlink(missing_ok=True)
-
-    stream.close = _close_and_unlink
     response = FileResponse(
-        stream,
+        _UnlinkOnCloseFile(stream, target_path),
         as_attachment=True,
         filename=_store_backed_download_name(image, ".ome.tif"),
     )

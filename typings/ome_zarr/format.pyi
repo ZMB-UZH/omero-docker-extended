@@ -1,0 +1,9 @@
+from typing import Any
+
+class CurrentFormat:
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+
+class FormatV04:
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+
+def detect_format(*args: Any, **kwargs: Any) -> Any: ...

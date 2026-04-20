@@ -6,7 +6,7 @@ import threading
 import time
 import uuid
 import omero
-from typing import Callable, Iterator
+from typing import Any, Callable, Iterator, TypedDict
 
 from omero.rtypes import rint
 
@@ -48,7 +48,14 @@ PROCESSOR_CONFIG_CACHE_TTL = get_int_env(
 
 _PROCESS_JOBS = {}
 _PROCESS_JOBS_LOCK = threading.Lock()
-_PROCESSOR_CONFIG_CACHE = {"value": None, "checked_at": 0.0}
+
+
+class _ProcessorConfigCache(TypedDict):
+    value: str | None
+    checked_at: float
+
+
+_PROCESSOR_CONFIG_CACHE: _ProcessorConfigCache = {"value": None, "checked_at": 0.0}
 
 
 def _process_job_path(job_id):
@@ -231,7 +238,7 @@ def _unwrap_rtype(v):
 
 
 def _get_script_services(conn):
-    services = []
+    services: list[Any] = []
     if conn is None:
         return services
     try:
@@ -462,7 +469,7 @@ def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
         logger.debug(
             "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
         )
-    last_type_error = None
+    last_type_error: Exception | None = None
     for args in args_to_try:
         try:
             return meth(*args)
@@ -599,10 +606,8 @@ def _get_script_processor_config(conn):
         logger.debug("Skipping omero.scripts.processors lookup for non-admin session.")
         return None
     now = time.time()
-    if (
-        _PROCESSOR_CONFIG_CACHE["checked_at"]
-        and now - _PROCESSOR_CONFIG_CACHE["checked_at"] < PROCESSOR_CONFIG_CACHE_TTL
-    ):
+    checked_at = _PROCESSOR_CONFIG_CACHE["checked_at"]
+    if checked_at and now - checked_at < PROCESSOR_CONFIG_CACHE_TTL:
         return _PROCESSOR_CONFIG_CACHE["value"]
     try:
         config_service = conn.c.sf.getConfigService()
@@ -720,7 +725,7 @@ def _is_no_processor_available(exc: Exception) -> bool:
 
 def _iter_exception_chain(exc: Exception) -> Iterator[BaseException]:
     seen = set()
-    current = exc
+    current: BaseException | None = exc
     while current and id(current) not in seen:
         seen.add(id(current))
         yield current

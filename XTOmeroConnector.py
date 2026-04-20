@@ -31,6 +31,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import http.cookiejar
+from typing import Any
 
 # Default timeout/poll values for client-side export polling.
 # These must NOT depend on server-side packages (omero_plugin_common)
@@ -39,8 +40,8 @@ EXPORT_TIMEOUT = 3600  # seconds
 EXPORT_POLL_INTERVAL = 2.0  # seconds
 IMARIS_HANDLE_RETRY_ATTEMPTS = 10
 IMARIS_HANDLE_RETRY_INTERVAL = 0.25
-_XT_LOG_PATH = None
-_XT_DLL_DIR_HANDLES = []
+_XT_LOG_PATH: str | None = None
+_XT_DLL_DIR_HANDLES: list[Any] = []
 
 
 def _xt_debug(message):
@@ -136,26 +137,27 @@ def _iter_imaris_executable_candidates():
     if env_candidate:
         yield from _yield_candidate(env_candidate)
 
+    winreg_module: Any = None
     try:
-        import winreg
+        import winreg as winreg_module
     except Exception:
-        winreg = None
+        pass
 
-    if winreg is not None:
+    if winreg_module is not None:
         reg_locations = [
             (
-                winreg.HKEY_LOCAL_MACHINE,
+                winreg_module.HKEY_LOCAL_MACHINE,
                 r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe",
             ),
             (
-                winreg.HKEY_LOCAL_MACHINE,
+                winreg_module.HKEY_LOCAL_MACHINE,
                 r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe",
             ),
         ]
         for hive, subkey in reg_locations:
             try:
-                with winreg.OpenKey(hive, subkey) as key:
-                    value, _ = winreg.QueryValueEx(key, None)
+                with winreg_module.OpenKey(hive, subkey) as key:
+                    value, _ = winreg_module.QueryValueEx(key, None)
                 if value:
                     yield from _yield_candidate(value)
             except Exception:
@@ -451,7 +453,7 @@ class OMEROWebClient:
         self.scheme = scheme
         # Initialize cookie/session attributes
         self.cookie_jar = None
-        self.opener = None
+        self.opener: Any = None
         self.csrf_token = None
         self.session_id = None
         self.session_key = None
@@ -1175,11 +1177,12 @@ class OMEROBrowserDialog:
     def __init__(self, imaris, imaris_id=None):
         self.imaris = imaris
         self.imaris_id = imaris_id
-        self.client = None
+        self.client: Any = None
         self.projects_data = []
         self.datasets_data = []
         self.images_data = []
         self.temp_files = []
+        self._pid = None
 
         # Get export directory
         self.export_dir = self._get_export_dir()
@@ -1341,7 +1344,7 @@ class OMEROBrowserDialog:
 
     def _invoke_on_ui_thread(self, callback, wait=True):
         """Run a callback on Tk's UI thread and optionally wait for the result."""
-        result = {"value": None, "error": None}
+        result: dict[str, Any] = {"value": None, "error": None}
         completed = threading.Event()
 
         def runner():
@@ -1435,7 +1438,7 @@ class OMEROBrowserDialog:
         if not sel:
             return
         p = self.projects_data[sel[0]]
-        if not hasattr(self, "_pid") or self._pid != p["id"]:
+        if self._pid != p["id"]:
             self._pid = p["id"]
             self._load_ds()
 

@@ -122,7 +122,7 @@ def enhanced_search_view(request, conn=None, url=None, **kwargs):
         "has_previous": False,
         "has_next": False,
     }
-    sync_states = []
+    sync_states: list[dict[str, Any]] = []
     auto_sync_started = False
     auto_sync_message = ""
     if not blocked_for_root and settings_available:
@@ -297,8 +297,12 @@ def delete_query_view(request, conn=None, url=None, **kwargs):
     payload, error = load_json_body(request)
     if error:
         return JsonResponse({"error": error}, status=400)
+    payload_dict = payload if isinstance(payload, dict) else {}
     try:
-        query_id = int((payload or {}).get("query_id"))
+        query_id_value = payload_dict.get("query_id")
+        if query_id_value is None:
+            raise ValueError
+        query_id = int(query_id_value)
     except (TypeError, ValueError):
         return JsonResponse({"error": "Query id is required."}, status=400)
     username = str(current_username(request, conn) or "")

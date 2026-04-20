@@ -460,7 +460,7 @@ def main(argv: list[str] | None = None) -> int:
         status_values: dict[str, str | int] = {
             "status": status,
             "last_success_epoch": now if status == "ok" else 0,
-            "dropbox_root": result.root,
+            "dropbox_root": str(result.root),
             "eligible_user_count": result.eligible_users,
             "created_count": result.created,
             "existing_count": result.existing,

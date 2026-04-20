@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def _normalize_special_method_settings(settings_payload):
     if not isinstance(settings_payload, dict):
         return {}
-    normalized = {}
+    normalized: dict[str, object] = {}
     for key, value in settings_payload.items():
         if isinstance(value, bool):
             normalized[key] = value

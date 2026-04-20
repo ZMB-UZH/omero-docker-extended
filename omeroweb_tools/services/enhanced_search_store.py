@@ -27,9 +27,9 @@ ENV_HOST = "OMP_DATA_HOST"
 ENV_DB = "OMP_DATA_DB"
 ENV_PORT = "OMP_DATA_PORT"
 
-_psycopg2_mod = None
-_psycopg2_extras = None
-_psycopg2_sql = None
+_psycopg2_mod: Any | None = None
+_psycopg2_extras: Any | None = None
+_psycopg2_sql: Any | None = None
 _SCHEMA_READY_CONNECTIONS: weakref.WeakKeyDictionary[object, bool] = (
     weakref.WeakKeyDictionary()
 )
@@ -69,8 +69,8 @@ def _load_psycopg2():
     if _psycopg2_mod is not None and _psycopg2_extras is not None:
         return _psycopg2_mod, _psycopg2_extras
     try:
-        import psycopg2  # type: ignore
-        from psycopg2 import extras  # type: ignore
+        import psycopg2
+        from psycopg2 import extras
     except ImportError as exc:
         raise EnhancedSearchStoreError(
             "psycopg2 is required for enhanced search."
@@ -85,7 +85,7 @@ def _load_psycopg2_sql():
     if _psycopg2_sql is not None:
         return _psycopg2_sql
     try:
-        from psycopg2 import sql  # type: ignore
+        from psycopg2 import sql
     except ImportError as exc:
         raise EnhancedSearchStoreError(
             "psycopg2 is required for enhanced search."

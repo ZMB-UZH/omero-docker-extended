@@ -1,0 +1,8 @@
+FAILURE: str
+IGNORED: str
+PENDING: str
+RECEIVED: str
+RETRY: str
+REVOKED: str
+STARTED: str
+SUCCESS: str

@@ -10,8 +10,8 @@ from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 logger = logging.getLogger(__name__)
 
-_UPLOAD_ROOT_CACHE = None
-_JOBS_ROOT_CACHE = None
+_UPLOAD_ROOT_CACHE: Path | None = None
+_JOBS_ROOT_CACHE: Path | None = None
 
 
 def resolve_upload_root() -> Path:
@@ -72,6 +72,8 @@ def get_upload_root() -> Path:
     global _UPLOAD_ROOT_CACHE
     if _UPLOAD_ROOT_CACHE is None:
         initialize_directories()
+    if _UPLOAD_ROOT_CACHE is None:
+        raise RuntimeError("Upload root was not initialized.")
     return _UPLOAD_ROOT_CACHE
 
 
@@ -80,6 +82,8 @@ def get_jobs_root() -> Path:
     global _JOBS_ROOT_CACHE
     if _JOBS_ROOT_CACHE is None:
         initialize_directories()
+    if _JOBS_ROOT_CACHE is None:
+        raise RuntimeError("Jobs root was not initialized.")
     return _JOBS_ROOT_CACHE
 
 

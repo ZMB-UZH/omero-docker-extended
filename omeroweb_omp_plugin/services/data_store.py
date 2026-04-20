@@ -1,6 +1,7 @@
 import logging
 import re
 from contextlib import contextmanager
+from typing import Any
 
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
@@ -36,9 +37,9 @@ class UserDataStoreError(Exception):
     """Raised when user data deletion fails."""
 
 
-_psycopg2_mod = None
-_psycopg2_extras = None
-_psycopg2_sql = None
+_psycopg2_mod: Any | None = None
+_psycopg2_extras: Any | None = None
+_psycopg2_sql: Any | None = None
 
 
 def _load_psycopg2():
@@ -48,8 +49,8 @@ def _load_psycopg2():
         return _psycopg2_mod, _psycopg2_extras
 
     try:
-        import psycopg2  # type: ignore
-        from psycopg2 import extras  # type: ignore
+        import psycopg2
+        from psycopg2 import extras
     except ImportError:
         raise VariableStoreError(errors.psycopg2_missing())
 
@@ -65,7 +66,7 @@ def _load_psycopg2_sql():
         return _psycopg2_sql
 
     try:
-        from psycopg2 import sql  # type: ignore
+        from psycopg2 import sql
     except ImportError:
         raise VariableStoreError(errors.psycopg2_missing())
 

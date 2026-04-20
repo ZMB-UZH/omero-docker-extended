@@ -12,7 +12,7 @@ from functools import lru_cache
 from importlib import metadata as importlib_metadata
 from itertools import product
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 LOGGER = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ def normalize_native_ome_zarr_copy(store_root: Path) -> Optional[str]:
 
 def _load_root_ome_zarr_metadata(
     store_root: Path,
-) -> tuple[Optional[dict], Optional[OMEZarrImageInspection]]:
+) -> tuple[Optional[dict[str, Any]], Optional[OMEZarrImageInspection]]:
     if not store_root.is_dir():
         return None, OMEZarrImageInspection()
 
@@ -322,9 +322,9 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
         )
 
     first_supported = None
-    dataset_relative_paths = []
-    image_node_relative_paths = []
-    image_display_names = []
+    dataset_relative_paths: list[str] = []
+    image_node_relative_paths: list[str] = []
+    image_display_names: list[str] = []
     for series_dir in series_dirs:
         series_metadata, inspection = _load_root_ome_zarr_metadata(series_dir)
         if inspection is not None:
@@ -334,6 +334,11 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
             return OMEZarrImageInspection(
                 recognized=True,
                 support_error=f"Series {series_dir.name} is not a supported OME-Zarr image: {error_text}",
+            )
+        if series_metadata is None:
+            return OMEZarrImageInspection(
+                recognized=True,
+                support_error=f"Series {series_dir.name} did not expose OME-Zarr metadata.",
             )
         series_inspection = _inspect_single_ome_zarr_image(series_dir, series_metadata)
         if not series_inspection.supported:
@@ -380,7 +385,7 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
 
 def _read_store_metadata_payload(
     store_root: Path,
-) -> tuple[Optional[dict], Optional[str]]:
+) -> tuple[object | None, Optional[str]]:
     metadata_path = None
     for candidate_name in (".zattrs", "zarr.json"):
         candidate = store_root / candidate_name
@@ -960,7 +965,7 @@ def _write_zarr_v2_level(
         total_chunks *= g
 
     for flat_idx in range(total_chunks):
-        coords = []
+        coords: list[int] = []
         remainder = flat_idx
         for dim in range(ndim - 1, -1, -1):
             coords.insert(0, remainder % chunk_grid[dim])

@@ -2,14 +2,18 @@ import logging
 import threading
 import time
 from math import ceil
+from typing import Any
 
 from django.core.cache import cache
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
+DummyCache: Any = None
 try:
-    from django.core.cache.backends.dummy import DummyCache
+    from django.core.cache.backends.dummy import DummyCache as _ImportedDummyCache
 except Exception:  # pragma: no cover - fallback for unexpected cache setups
-    DummyCache = None
+    pass
+else:
+    DummyCache = _ImportedDummyCache
 
 from ..constants import (
     MAJOR_ACTION_BLOCK_SECONDS,

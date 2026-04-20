@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -475,7 +477,11 @@ def index(request, conn=None, url=None, **kwargs):
     """
     OMP filename+metadata harverster UI
     """
-    projects = {"owned": [], "read_annotate": [], "read_only": []}
+    projects: dict[str, list[Any]] = {
+        "owned": [],
+        "read_annotate": [],
+        "read_only": [],
+    }
     user_id = None
 
     def build_index_context(extra=None):

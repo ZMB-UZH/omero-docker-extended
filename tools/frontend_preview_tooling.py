@@ -165,18 +165,21 @@ def print_bootstrap_status(
     tool_dir: Path, manifest: dict[str, object], as_json: bool
 ) -> None:
     """Emit the resolved tooling status after bootstrap."""
+    dependencies = manifest.get("dependencies", {})
+    if not isinstance(dependencies, dict):
+        raise RuntimeError("Frontend tooling manifest dependencies must be a mapping.")
     payload = {
         "tool_dir": str(tool_dir),
         "repo_root": str(REPO_ROOT),
         "manifest_path": str(MANIFEST_PATH),
-        "dependencies": manifest["dependencies"],
+        "dependencies": dependencies,
     }
     if as_json:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return
     print(f"Tool dir: {payload['tool_dir']}")
     print(f"Manifest: {payload['manifest_path']}")
-    for dependency_name, version in payload["dependencies"].items():
+    for dependency_name, version in dependencies.items():
         print(f"{dependency_name}: {version}")
 
 

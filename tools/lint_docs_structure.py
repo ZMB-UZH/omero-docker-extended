@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 from typing import Iterable, Sequence
 
-try:
-    from tools.agent_context_policy import CONTEXT_SURFACE_CONTRACTS
-except ModuleNotFoundError:  # pragma: no cover - direct script execution path
-    from agent_context_policy import CONTEXT_SURFACE_CONTRACTS
+if __package__ in (None, ""):  # pragma: no cover - direct script execution path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from tools.agent_context_policy import CONTEXT_SURFACE_CONTRACTS
 
 
 @dataclass(frozen=True)

@@ -132,9 +132,11 @@ async def _run_async(
             process.kill()
         await process.wait()
         await asyncio.gather(stdout_task, stderr_task)
+        if timeout is None:
+            raise RuntimeError("Subprocess timed out without a timeout value.") from exc
         raise TimeoutExpired(
             command,
-            timeout,
+            float(timeout),
             stdout="".join(stdout_lines),
             stderr="".join(stderr_lines),
         ) from exc

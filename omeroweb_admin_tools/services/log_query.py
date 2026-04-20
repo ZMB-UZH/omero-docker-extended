@@ -14,7 +14,7 @@ import socket
 import threading
 import time
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 import urllib.parse
 import requests
@@ -616,18 +616,21 @@ def fetch_loki_logs(
         since_ns=since_ns,
         text_query=text_query,
     )
-    cached_entries = _LOG_RESULT_CACHE.get_or_load(
-        cache_key,
-        lambda: tuple(
-            _fetch_loki_logs_uncached(
-                config,
-                containers,
-                lookback_seconds,
-                max_entries,
-                internal_files=internal_files,
-                since_ns=since_ns,
-                text_query=text_query,
-            )
+    cached_entries = cast(
+        tuple[LogEntry, ...],
+        _LOG_RESULT_CACHE.get_or_load(
+            cache_key,
+            lambda: tuple(
+                _fetch_loki_logs_uncached(
+                    config,
+                    containers,
+                    lookback_seconds,
+                    max_entries,
+                    internal_files=internal_files,
+                    since_ns=since_ns,
+                    text_query=text_query,
+                )
+            ),
         ),
     )
     return list(cached_entries)
@@ -995,9 +998,12 @@ def fetch_internal_log_labels(
     """
     del config
     cache_key = f"internal-labels:{_normalize_internal_service(compose_service)}"
-    cached = _INTERNAL_LABELS_CACHE.get_or_load(
-        cache_key,
-        lambda: _fetch_internal_log_labels_uncached(compose_service),
+    cached = cast(
+        tuple[tuple[str, ...], str],
+        _INTERNAL_LABELS_CACHE.get_or_load(
+            cache_key,
+            lambda: _fetch_internal_log_labels_uncached(compose_service),
+        ),
     )
     labels, label_key = cached
     return list(labels), label_key

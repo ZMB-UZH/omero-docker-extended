@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, TypedDict
 from urllib.parse import urlencode
 
 from django.urls import reverse
@@ -50,6 +50,17 @@ from .enhanced_search_store import (
     upsert_search_document,
 )
 from .search_query_builder import build_omero_fulltext_query
+
+
+class _AcquisitionSearchKwargs(TypedDict):
+    visible_group_ids: list[int] | None
+    current_user_id: int
+    scope_type: str
+    scope_id: int
+    query_text: str
+    filters: dict[str, Any]
+    limit: int | None
+    offset: int
 
 
 logger = logging.getLogger(__name__)
@@ -837,7 +848,7 @@ def search(
         and acquisition_metadata_enabled
     )
     current_user_id = _current_user_id(conn) if should_search_acquisition else None
-    acquisition_kwargs = None
+    acquisition_kwargs: _AcquisitionSearchKwargs | None = None
     if should_search_acquisition and current_user_id is not None:
         acquisition_kwargs = {
             "visible_group_ids": _visible_group_ids(conn),

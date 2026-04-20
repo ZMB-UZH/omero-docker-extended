@@ -6,6 +6,7 @@ import json
 import time
 import uuid
 from pathlib import PurePosixPath
+from typing import Any
 
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -205,7 +206,7 @@ def _start_upload(request, conn):
             invalid.append(str(entry))
             continue
         raw_name = entry.get("relative_path") or entry.get("name")
-        size = entry.get("size")
+        raw_size = entry.get("size")
         rel_path, rel_error = _normalize_upload_relative_path(raw_name or "")
         if rel_error:
             invalid.append(rel_error)
@@ -232,7 +233,9 @@ def _start_upload(request, conn):
         for depth in range(1, len(rel_parts)):
             seen_parent_paths.add(PurePosixPath(*rel_parts[:depth]).as_posix())
         try:
-            size = int(size)
+            if raw_size is None:
+                raise ValueError
+            size = int(raw_size)
         except (TypeError, ValueError):
             size = 0
         if size < 0:
@@ -303,7 +306,7 @@ def _start_upload(request, conn):
         else {}
     )
 
-    dataset_map = {}
+    dataset_map: dict[str, str] = {}
     orphan_dataset_name = None
     if any(
         _dataset_name_for_path(entry["relative_path"]) is None for entry in normalized
@@ -800,10 +803,10 @@ def _upload_files(request, job_id, conn):
         logger.warning("Upload payload mismatch for job %s.", safe_job_id)
         return json_error(errors.upload_payload_mismatch())
 
-    saved = []
-    upload_errors = []
-    entries_by_path = {}
-    updates = []
+    saved: list[dict[str, Any]] = []
+    upload_errors: list[str] = []
+    entries_by_path: dict[str, list[dict[str, Any]]] = {}
+    updates: list[dict[str, Any]] = []
     for file_entry in job["files"]:
         if file_entry.get("status") in ("pending", "error"):
             entries_by_path.setdefault(file_entry["relative_path"], []).append(
