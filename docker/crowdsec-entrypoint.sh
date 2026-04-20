@@ -118,6 +118,67 @@ validate_firewall_access() {
     return 0
 }
 
+list_nft_sets_with_prefix() {
+    _family="$1"
+    _table="$2"
+    _prefix="$3"
+
+    nft -t list table "${_family}" "${_table}" 2>/dev/null | \
+        awk -v prefix="${_prefix}" '$1 == "set" && index($2, prefix) == 1 { print $2 }'
+}
+
+wait_for_nft_sets() {
+    _family="$1"
+    _table="$2"
+    _prefix="$3"
+    _sets=""
+    _attempts=0
+    _max_attempts=30
+
+    while [ "${_attempts}" -lt "${_max_attempts}" ]; do
+        _sets="$(list_nft_sets_with_prefix "${_family}" "${_table}" "${_prefix}")"
+        if [ -n "${_sets}" ]; then
+            printf '%s\n' "${_sets}"
+            return 0
+        fi
+        _attempts=$((_attempts + 1))
+        sleep 1
+    done
+
+    return 1
+}
+
+ensure_nft_forward_chain() {
+    _family="$1"
+    _table="$2"
+    _chain="$3"
+    _sets="$4"
+
+    if nft list chain "${_family}" "${_table}" "${_chain}" >/dev/null 2>&1; then
+        nft flush chain "${_family}" "${_table}" "${_chain}"
+    else
+        nft add chain "${_family}" "${_table}" "${_chain}" \
+            '{ type filter hook forward priority -10 ; policy accept ; }'
+    fi
+
+    for _set in ${_sets}; do
+        case "${_family}" in
+            ip)
+                nft add rule "${_family}" "${_table}" "${_chain}" \
+                    ip saddr "@${_set}" drop
+                ;;
+            ip6)
+                nft add rule "${_family}" "${_table}" "${_chain}" \
+                    ip6 saddr "@${_set}" drop
+                ;;
+        esac
+    done
+}
+
+count_lines() {
+    awk 'NF { count++ } END { print count + 0 }'
+}
+
 # ---------------------------------------------------------------------------
 # Generate bouncer configuration for the detected firewall backend
 # ---------------------------------------------------------------------------
@@ -231,46 +292,32 @@ add_nftables_forward_chains() {
     fi
 
     # --- IPv4 FORWARD chain ------------------------------------------------
-    _ipv4_set=""
-    for _candidate in crowdsec-blacklists crowdsec_blacklists blacklists; do
-        if nft list set ip crowdsec "${_candidate}" >/dev/null 2>&1; then
-            _ipv4_set="${_candidate}"
-            break
-        fi
-    done
+    _ipv4_sets="$(wait_for_nft_sets ip crowdsec crowdsec-blacklists || true)"
 
-    if [ -n "${_ipv4_set}" ]; then
+    if [ -n "${_ipv4_sets}" ]; then
         # Create a FORWARD-hook chain at the same priority as the INPUT chain
         # so that forwarded packets (Docker bridge traffic) are also checked
-        # against the banned-IP set.
-        nft add chain ip crowdsec crowdsec-chain-forward \
-            '{ type filter hook forward priority -10 ; policy accept ; }'
-        nft add rule ip crowdsec crowdsec-chain-forward \
-            ip saddr "@${_ipv4_set}" drop
-        echo "Added IPv4 FORWARD chain in table 'ip crowdsec' (set=${_ipv4_set})"
+        # against every banned-IP set managed by the bouncer.  Bouncer 0.0.31
+        # creates one set per decision origin, so a single hard-coded set name
+        # is not sufficient.
+        ensure_nft_forward_chain ip crowdsec crowdsec-chain-forward "${_ipv4_sets}"
+        _ipv4_set_count="$(printf '%s\n' "${_ipv4_sets}" | count_lines)"
+        echo "Added IPv4 FORWARD chain in table 'ip crowdsec' (sets=${_ipv4_set_count})"
     else
-        echo "WARNING: Could not discover IPv4 blacklist set in table 'ip crowdsec'." >&2
+        echo "WARNING: Timed out waiting for IPv4 blacklist sets in table 'ip crowdsec'." >&2
         echo "  IPv4 FORWARD-hook chain NOT added." >&2
     fi
 
     # --- IPv6 FORWARD chain ------------------------------------------------
     if nft list table ip6 crowdsec6 >/dev/null 2>&1; then
-        _ipv6_set=""
-        for _candidate in crowdsec6-blacklists crowdsec6_blacklists blacklists; do
-            if nft list set ip6 crowdsec6 "${_candidate}" >/dev/null 2>&1; then
-                _ipv6_set="${_candidate}"
-                break
-            fi
-        done
+        _ipv6_sets="$(wait_for_nft_sets ip6 crowdsec6 crowdsec6-blacklists || true)"
 
-        if [ -n "${_ipv6_set}" ]; then
-            nft add chain ip6 crowdsec6 crowdsec6-chain-forward \
-                '{ type filter hook forward priority -10 ; policy accept ; }'
-            nft add rule ip6 crowdsec6 crowdsec6-chain-forward \
-                ip6 saddr "@${_ipv6_set}" drop
-            echo "Added IPv6 FORWARD chain in table 'ip6 crowdsec6' (set=${_ipv6_set})"
+        if [ -n "${_ipv6_sets}" ]; then
+            ensure_nft_forward_chain ip6 crowdsec6 crowdsec6-chain-forward "${_ipv6_sets}"
+            _ipv6_set_count="$(printf '%s\n' "${_ipv6_sets}" | count_lines)"
+            echo "Added IPv6 FORWARD chain in table 'ip6 crowdsec6' (sets=${_ipv6_set_count})"
         else
-            echo "WARNING: Could not discover IPv6 blacklist set in table 'ip6 crowdsec6'." >&2
+            echo "WARNING: Timed out waiting for IPv6 blacklist sets in table 'ip6 crowdsec6'." >&2
             echo "  IPv6 FORWARD-hook chain NOT added." >&2
         fi
     fi

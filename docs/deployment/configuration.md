@@ -44,16 +44,22 @@ This repository expresses those OMERO properties in env files with the existing 
   (Trixie), which use nftables natively, the bouncer starts in
   `mode: nftables`, creating its own nftables tables (`crowdsec` / `crowdsec6`)
   with INPUT-hook chains at priority -10 and supplementary FORWARD-hook chains
-  for Docker bridge traffic protection. On older hosts with iptables-legacy the
-  bouncer falls back to `mode: iptables` with `INPUT` and `DOCKER-USER`
-  chains. Set `CROWDSEC_REQUIRE_BOUNCERS=true` to enforce fail-fast behavior
-  when bouncers are mandatory. CrowdSec installs the `crowdsecurity/linux` and
+  for Docker bridge traffic protection. The entrypoint waits for the
+  bouncer-created per-origin nftables sets before installing these FORWARD
+  chains so Docker bridge protection is not skipped during startup races. On
+  older hosts with iptables-legacy the bouncer falls back to `mode: iptables`
+  with `INPUT` and `DOCKER-USER` chains. Set
+  `CROWDSEC_REQUIRE_BOUNCERS=true` to enforce fail-fast behavior when bouncers
+  are mandatory. CrowdSec installs the `crowdsecurity/linux` and
   `crowdsecurity/sshd` collections plus `crowdsecurity/docker-logs` and
   `crowdsecurity/cri-logs` parsers for Docker log analysis. Log acquisition
-  sources are defined in `monitoring/crowdsec/acquis.yaml`. CrowdSec UID/GID is
-  auto-detected from the built image and used to chown `CROWDSEC_DB_PATH` and
-  `CROWDSEC_CONFIG_PATH` during installation. The CrowdSec service healthcheck
-  uses `GET http://localhost:8080/health` to avoid repeated authenticated
+  sources are defined in `monitoring/crowdsec/acquis.yaml`. The CrowdSec image
+  defaults to a named non-root user for image hygiene, while Compose explicitly
+  runs the service as `root` because host firewall changes require
+  `NET_ADMIN` plus root privileges. CrowdSec UID/GID is auto-detected from the
+  built image and used to chown `CROWDSEC_DB_PATH` and `CROWDSEC_CONFIG_PATH`
+  during installation. The CrowdSec service healthcheck uses
+  `GET http://localhost:8080/health` to avoid repeated authenticated
   watcher-login noise from `cscli lapi status` polling. Set
   `CROWDSEC_ENGINE_NAME` in `env/omero_secrets.env` to a fixed name (for
   example the hostname) if you want installation-time enrollment requests to

@@ -720,6 +720,28 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIn("--overwrite", entrypoint_text)
 
+    def test_crowdsec_forward_chains_wait_for_bouncer_sets(self) -> None:
+        entrypoint_text = (
+            self.repo_root / "docker" / "crowdsec-entrypoint.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("wait_for_nft_sets()", entrypoint_text)
+        self.assertIn("ensure_nft_forward_chain()", entrypoint_text)
+        self.assertIn('nft -t list table "${_family}" "${_table}"', entrypoint_text)
+        self.assertIn(
+            "creates one set per decision origin",
+            entrypoint_text,
+        )
+        self.assertIn("nft flush chain", entrypoint_text)
+        self.assertIn(
+            "wait_for_nft_sets ip crowdsec crowdsec-blacklists",
+            entrypoint_text,
+        )
+        self.assertIn(
+            "wait_for_nft_sets ip6 crowdsec6 crowdsec6-blacklists",
+            entrypoint_text,
+        )
+        self.assertNotIn("for _candidate in crowdsec-blacklists", entrypoint_text)
+
     def test_docker_compose_defaults_crowdsec_install_bootstrap_enroll_to_disabled(
         self,
     ) -> None:
