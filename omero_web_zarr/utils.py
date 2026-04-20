@@ -3,6 +3,7 @@ import logging
 import warnings
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 from urllib.parse import unquote, urlparse
 
 import numpy as np
@@ -48,7 +49,7 @@ def marshal_pixel_sizes(image):
 
 def marshal_axes_v3(image):
     dims = ["t", "c", "z", "y", "x"]
-    axes = []
+    axes: list[Any] = []
     for dim in dims:
         if getattr(image, "getSize" + dim.upper())() > 1:
             axes.append(dim)
@@ -353,7 +354,7 @@ def _channel_limits_from_omero_channel(channel):
 
 def _build_store_backed_metadata(attrs):
     multiscales = attrs.get("multiscales") or []
-    axes = []
+    axes: list[Any] = []
     if multiscales:
         axes = multiscales[0].get("axes") or []
 
@@ -495,7 +496,7 @@ def load_store_backed_image_node(image):
 
 def get_store_backed_channel_overrides(image, channels=None):
     cached = getattr(image, "_omero_web_zarr_channel_overrides", _MISSING)
-    if cached is not _MISSING:
+    if cached is not _MISSING and isinstance(cached, list):
         if channels is None or len(cached) == len(channels):
             return cached
 
@@ -583,7 +584,7 @@ def get_store_backed_level_count(node):
 def get_store_backed_datasets(node):
     metadata = getattr(node, "metadata", {}) or {}
     multiscales = metadata.get("multiscales") or []
-    datasets = []
+    datasets: list[Any] = []
     if multiscales:
         datasets = multiscales[0].get("datasets") or []
     if len(datasets) == len(getattr(node, "data", None) or ()):

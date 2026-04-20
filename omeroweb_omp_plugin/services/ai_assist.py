@@ -79,7 +79,7 @@ def _suggest_separator_regex(filenames):
 
 
 def _summarize_separators(filenames):
-    counts = Counter()
+    counts: Counter[str] = Counter()
     for name in filenames:
         base = extract_base_name(name)
         for char in base:
@@ -92,7 +92,7 @@ def _summarize_separators(filenames):
 
 
 def _separator_candidates(filenames):
-    counts = Counter()
+    counts: Counter[str] = Counter()
     for name in filenames:
         base = extract_base_name(name)
         for char in base:

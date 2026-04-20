@@ -3,6 +3,8 @@ OMERO image collection and retrieval services.
 """
 
 import logging
+from typing import Any
+
 from omero_plugin_common.logging_utils import sanitize_log_value
 
 from ...utils.omero_helpers import get_id, get_text, is_owned_by_user
@@ -55,7 +57,7 @@ def collect_images_by_dataset_sorted(conn, project_id, limit=None, owner_id=None
     Dataset ordering is preserved as OMERO returns it.
     Image ordering is strictly numeric ascending by image ID.
     """
-    out = []
+    out: list[tuple[Any, list[Any]]] = []
     total = 0
     try:
         prj = conn.getObject("Project", int(project_id))
@@ -96,7 +98,7 @@ def collect_images_by_selected_datasets(
         [(dataset_obj, [image_obj_sorted_by_ID]), ...]
     Only includes datasets from dataset_ids, preserving project dataset order.
     """
-    out = []
+    out: list[tuple[Any, list[Any]]] = []
     total = 0
     if not dataset_ids:
         return out
@@ -159,7 +161,7 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
     Returns list of dataset summaries for a project.
     Each summary includes the Bio-Formats reader name.
     """
-    summaries = []
+    summaries: list[dict[str, Any]] = []
 
     def _get_bioformat_from_image(img):
         """
@@ -367,7 +369,7 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
 
 def collect_images_in_project(conn, project_id, limit=None):
     """Legacy collector that returns flat list of images."""
-    images = []
+    images: list[Any] = []
     try:
         project = conn.getObject("Project", int(project_id))
         if project is None:

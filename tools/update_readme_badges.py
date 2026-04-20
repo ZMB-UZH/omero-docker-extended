@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
-try:
-    from tools import agent_skill_provenance
-except ImportError:  # pragma: no cover - supports direct script execution
-    import agent_skill_provenance
+if __package__ in (None, ""):  # pragma: no cover - supports direct script execution
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from tools import agent_skill_provenance
 
 BADGE_BLOCK_BEGIN = "<!-- BEGIN GENERATED BADGES -->"
 BADGE_BLOCK_END = "<!-- END GENERATED BADGES -->"
@@ -202,6 +202,7 @@ def render_badge_block(
         f"[![security-code-scanning](https://img.shields.io/github/actions/workflow/status/{github_path}/security-code-scanning.yml?branch={branch}&label=security-code-scanning)](https://github.com/{github_path}/actions/workflows/security-code-scanning.yml)",
         f"[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/{github_path})](https://github.com/{github_path}/commits/{branch})",
         f"[![Codecov](https://img.shields.io/codecov/c/github/{github_path}?label=Codecov&logo=codecov)](https://codecov.io/gh/{github_path})",
+        f"[![Mypy](https://img.shields.io/github/actions/workflow/status/{github_path}/mypy.yml?branch={branch}&logo=python&label=Mypy)](https://github.com/{github_path}/actions/workflows/mypy.yml)",
         f"[![super-linter](https://img.shields.io/github/actions/workflow/status/{github_path}/super-linter.yml?branch={branch}&label=super-linter&logo=github)](https://github.com/{github_path}/actions/workflows/super-linter.yml)",
         f"[![Ruff](https://img.shields.io/github/actions/workflow/status/{github_path}/ruff.yml?branch={branch}&logo=ruff&label=Ruff)](https://github.com/{github_path}/actions/workflows/ruff.yml)",
         f"[![Vulture](https://img.shields.io/github/actions/workflow/status/{github_path}/vulture.yml?branch={branch}&logo=python&label=Vulture)](https://github.com/{github_path}/actions/workflows/vulture.yml)",

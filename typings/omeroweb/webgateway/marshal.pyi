@@ -1,0 +1,6 @@
+from typing import Any
+
+imageMarshal: Any
+
+def channelMarshal(*args: Any, **kwargs: Any) -> Any: ...
+def __getattr__(name: str) -> Any: ...

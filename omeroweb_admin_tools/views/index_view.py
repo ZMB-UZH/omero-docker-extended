@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 from urllib.parse import urlencode
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import urllib.parse
 import requests
@@ -24,7 +24,6 @@ from django.http import JsonResponse
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.template.backends.django import DjangoTemplates
-from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from omeroweb.decorators import login_required
@@ -196,7 +195,7 @@ def _normalize_proxy_request_target(subpath: str) -> Tuple[str, str]:
     decoded = urllib.parse.unquote(raw_target or "")
     if "\x00" in decoded:
         raise ValueError("Invalid proxy target")
-    segments = []
+    segments: list[str] = []
     for segment in decoded.split("/"):
         if not segment or segment == ".":
             continue
@@ -580,19 +579,20 @@ def _grafana_unavailable_response(
   </body>
 </html>"""
     )
-    response = TemplateResponse(
-        None,
-        template,
-        {
-            "status_code": status_code,
-            "attempted_targets": attempted_targets,
-            "refreshed_path": refreshed_path,
-        },
+    response = HttpResponse(
+        template.render(
+            {
+                "status_code": status_code,
+                "attempted_targets": attempted_targets,
+                "refreshed_path": refreshed_path,
+            }
+        ),
         status=503,
+        content_type="text/html; charset=utf-8",
     )
     response["Cache-Control"] = "no-store"
     response["Retry-After"] = "30"
-    return response.render()
+    return response
 
 
 def _is_internal_hostname(hostname: str) -> bool:
@@ -766,11 +766,11 @@ def _list_omero_group_names(conn) -> List[str]:
 
 def _list_all_users_and_groups(conn):
     """Collect all OMERO users and groups to keep zero-usage rows visible."""
-    users = {}
-    groups = set()
-    group_permissions = {}
-    groups_by_user = {}
-    users_by_group = {}
+    users: dict[str, str] = {}
+    groups: set[str] = set()
+    group_permissions: dict[str, str] = {}
+    groups_by_user: dict[str, set[str]] = {}
+    users_by_group: dict[str, set[str]] = {}
     try:
         admin_service = conn.getAdminService()
         experimenters = []
@@ -1011,7 +1011,7 @@ def logs_data(request, conn=None, url=None, **kwargs):
     if level and level not in {"debug", "info", "warn", "error", "fatal"}:
         return JsonResponse({"error": "Invalid log level."}, status=400)
     try:
-        internal_files = {}
+        internal_files: dict[str, set[str]] = {}
         for value in internal_files_raw:
             if not value or "/" not in value:
                 continue
@@ -1301,8 +1301,11 @@ def _diagnose_docker_health() -> Dict[str, object]:
                 f"mode={oct(stat_info.st_mode)}"
             )
             diag["socket_gid"] = int(stat_info.st_gid)
+            current_gids = diag.get("current_gids", [])
+            if not isinstance(current_gids, list):
+                current_gids = []
             diag["process_in_socket_group"] = int(stat_info.st_gid) in {
-                int(gid) for gid in list(diag.get("current_gids", []))
+                int(gid) for gid in current_gids
             }
         except Exception as exc:
             logger.warning("Unable to stat Docker socket %s: %s", docker_socket, exc)
@@ -1526,8 +1529,12 @@ def _build_target_service_status(
     }
 
     for target in active_targets:
-        labels = target.get("labels", {}) or {}
-        discovered_labels = target.get("discoveredLabels", {}) or {}
+        raw_labels = target.get("labels", {}) or {}
+        raw_discovered_labels = target.get("discoveredLabels", {}) or {}
+        labels = raw_labels if isinstance(raw_labels, dict) else {}
+        discovered_labels = (
+            raw_discovered_labels if isinstance(raw_discovered_labels, dict) else {}
+        )
         candidates = [
             str(labels.get("container_label_com_docker_compose_service", "")).strip(),
             str(
@@ -1757,7 +1764,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     expected_services = _load_compose_service_names()
     system_metrics = _collect_system_metrics(prometheus_base_url)
 
-    targets_overview = {
+    targets_overview: dict[str, Any] = {
         "active": 0,
         "up": 0,
         "down": 0,
@@ -1770,7 +1777,15 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
             timeout=5.0,
         )
         payload = response.json()
-        active_targets = payload.get("data", {}).get("activeTargets", [])
+        data_payload = payload.get("data", {}) if isinstance(payload, dict) else {}
+        raw_active_targets = (
+            data_payload.get("activeTargets", {})
+            if isinstance(data_payload, dict)
+            else []
+        )
+        active_targets = [
+            target for target in raw_active_targets if isinstance(target, dict)
+        ]
         targets_overview["active"] = len(active_targets)
         targets_overview["up"] = sum(
             1

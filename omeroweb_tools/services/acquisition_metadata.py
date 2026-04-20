@@ -1215,8 +1215,8 @@ def extract_search_document(
     attribute_map: dict[str, SearchAttribute] = {}
     for attribute in (
         SearchAttribute("objective_collar", attribute_numeric=objective_collar),
-        SearchAttribute("objective_id", attribute_text=objective_id),
-        SearchAttribute("detector_binning", attribute_text=detector_binning),
+        SearchAttribute("objective_id", attribute_text=objective_id or ""),
+        SearchAttribute("detector_binning", attribute_text=detector_binning or ""),
         SearchAttribute("detector_gain", attribute_numeric=detector_gain),
         SearchAttribute("laser_line_nm", attribute_numeric=laser_line_nm),
     ):

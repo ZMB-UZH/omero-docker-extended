@@ -104,8 +104,8 @@ def _extract_separator_fragments(pattern):
 
 
 def _split_on_separator_fragments(value, fragments, match_whitespace):
-    parts = []
-    current = []
+    parts: list[str] = []
+    current: list[str] = []
     index = 0
     sorted_fragments = sorted(fragments, key=len, reverse=True)
 

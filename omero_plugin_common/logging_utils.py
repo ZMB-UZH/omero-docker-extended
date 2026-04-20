@@ -6,6 +6,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 _OMERO_GATEWAY_UTILS_LOGGER = "omero.gateway.utils"
+_OMERO_GATEWAY_LOGGING_CONFIGURED = False
 
 
 def sanitize_log_value(value: Any) -> str:
@@ -95,11 +96,9 @@ def configure_omero_gateway_logging() -> None:
     logger to ``INFO`` removes repeated noise while preserving warning/error
     signals from the same module.
     """
-    if getattr(configure_omero_gateway_logging, "_configured", False):
+    global _OMERO_GATEWAY_LOGGING_CONFIGURED
+    if _OMERO_GATEWAY_LOGGING_CONFIGURED:
         return
 
     logging.getLogger(_OMERO_GATEWAY_UTILS_LOGGER).setLevel(logging.INFO)
-    configure_omero_gateway_logging._configured = True
-
-
-configure_omero_gateway_logging._configured = False
+    _OMERO_GATEWAY_LOGGING_CONFIGURED = True

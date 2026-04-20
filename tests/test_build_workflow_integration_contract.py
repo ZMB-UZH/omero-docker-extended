@@ -993,6 +993,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         expected_versions = {
             ".github/workflows/docs-knowledge-base.yml": ["3.14.4"],
+            ".github/workflows/mypy.yml": ["3.14.4"],
             ".github/workflows/tests.yml": ["3.14.4"],
             ".github/workflows/vulture.yml": ["3.14.4"],
             ".github/workflows/security-code-scanning.yml": ["3.14.4", "3.14.4"],
@@ -1018,19 +1019,26 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         expected_cache_paths = {
             ".github/workflows/tests.yml": (
                 "test-with-coverage",
-                ".github/requirements/tests-ci.txt",
+                [".github/requirements/tests-ci.txt"],
+            ),
+            ".github/workflows/mypy.yml": (
+                "mypy",
+                [
+                    ".github/requirements/tests-ci.txt",
+                    ".github/requirements/mypy-ci.txt",
+                ],
             ),
             ".github/workflows/vulture.yml": (
                 "vulture",
-                ".github/requirements/vulture-ci.txt",
+                [".github/requirements/vulture-ci.txt"],
             ),
             ".github/workflows/security-code-scanning.yml": (
                 "bandit",
-                ".github/requirements/security-code-scanning.txt",
+                [".github/requirements/security-code-scanning.txt"],
             ),
         }
 
-        for relative_path, (job_name, dependency_path) in expected_cache_paths.items():
+        for relative_path, (job_name, dependency_paths) in expected_cache_paths.items():
             workflow = yaml.safe_load(
                 (self.repo_root / relative_path).read_text(encoding="utf-8")
             )
@@ -1042,8 +1050,8 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             with self.subTest(relative_path=relative_path):
                 self.assertEqual("pip", setup_step["with"]["cache"])
                 self.assertEqual(
-                    dependency_path,
-                    setup_step["with"]["cache-dependency-path"],
+                    dependency_paths,
+                    setup_step["with"]["cache-dependency-path"].splitlines(),
                 )
 
     def test_security_codeql_uses_build_free_interpreted_language_mode(self) -> None:
@@ -1063,7 +1071,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertFalse(
             any(
                 step.get("uses")
-                == "github/codeql-action/autobuild@c10b8064de6f491fea524254123dbe5e09572f13"
+                == "github/codeql-action/autobuild@7fc6561ed893d15cec696e062df840b21db27eb0"
                 for step in steps
             )
         )
@@ -1195,7 +1203,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertEqual({"contents": "read"}, workflow["permissions"])
         self.assertEqual(
-            "semgrep/semgrep:1.159.0@sha256:d7d67e1e0c0ed26278ab35f0be082f0afdfd7a880f4927aee86f8127fdbce617",
+            "semgrep/semgrep:1.160.0@sha256:7810f1d7884974ab6dda7bef8f4a2c8e165ea2142fd8260515d380e4f1407263",
             workflow["jobs"]["semgrep"]["container"]["image"],
         )
 

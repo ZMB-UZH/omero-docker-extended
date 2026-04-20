@@ -9,36 +9,36 @@ from omero_plugin_common import logging_utils
 def test_configure_omero_gateway_logging_sets_info_level() -> None:
     logger = logging.getLogger("omero.gateway.utils")
     previous_level = logger.level
-    previous_flag = logging_utils.configure_omero_gateway_logging._configured
+    previous_flag = logging_utils._OMERO_GATEWAY_LOGGING_CONFIGURED
 
     try:
         logger.setLevel(logging.NOTSET)
-        logging_utils.configure_omero_gateway_logging._configured = False
+        logging_utils._OMERO_GATEWAY_LOGGING_CONFIGURED = False
 
         logging_utils.configure_omero_gateway_logging()
 
         assert logger.level == logging.INFO
-        assert logging_utils.configure_omero_gateway_logging._configured is True
+        assert logging_utils._OMERO_GATEWAY_LOGGING_CONFIGURED is True
     finally:
         logger.setLevel(previous_level)
-        logging_utils.configure_omero_gateway_logging._configured = previous_flag
+        logging_utils._OMERO_GATEWAY_LOGGING_CONFIGURED = previous_flag
 
 
 def test_configure_omero_gateway_logging_is_idempotent() -> None:
     logger = logging.getLogger("omero.gateway.utils")
     previous_level = logger.level
-    previous_flag = logging_utils.configure_omero_gateway_logging._configured
+    previous_flag = logging_utils._OMERO_GATEWAY_LOGGING_CONFIGURED
 
     try:
         logger.setLevel(logging.WARNING)
-        logging_utils.configure_omero_gateway_logging._configured = True
+        logging_utils._OMERO_GATEWAY_LOGGING_CONFIGURED = True
 
         logging_utils.configure_omero_gateway_logging()
 
         assert logger.level == logging.WARNING
     finally:
         logger.setLevel(previous_level)
-        logging_utils.configure_omero_gateway_logging._configured = previous_flag
+        logging_utils._OMERO_GATEWAY_LOGGING_CONFIGURED = previous_flag
 
 
 def test_sanitize_log_value_escapes_newlines_and_carriage_returns() -> None:
