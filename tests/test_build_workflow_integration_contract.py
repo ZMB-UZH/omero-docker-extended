@@ -334,10 +334,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertNotIn("52-configure-dropbox-ice.sh", dockerfile_text)
-        self.assertIn(
-            'activation="manual"',
-            dockerfile_text,
-        )
+        self.assertIn('exe=\\"[$][{]exe[}]\\" activation=', dockerfile_text)
+        self.assertIn('activation=\\"manual\\"', dockerfile_text)
+        self.assertIn("grep -Fq", dockerfile_text)
         self.assertIn(
             "Failed to set DropBox IceGrid activation to manual",
             dockerfile_text,
