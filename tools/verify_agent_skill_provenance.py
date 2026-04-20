@@ -6,10 +6,10 @@ import argparse
 import sys
 from pathlib import Path
 
-try:
-    from tools import agent_skill_provenance
-except ImportError:  # pragma: no cover - supports direct script execution
-    import agent_skill_provenance
+if __package__ in (None, ""):  # pragma: no cover - supports direct script execution
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from tools import agent_skill_provenance
 
 
 def build_parser() -> argparse.ArgumentParser:

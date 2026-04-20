@@ -28,9 +28,9 @@ def detect_label_value_pairs(filenames):
             has_pairs: bool - True if >30% of parts are label-value pairs
             detected_labels: set - Set of detected label tokens
     """
-    all_pairs = []
+    all_pairs: list[tuple[str, str]] = []
     total_parts = 0
-    label_counts = Counter()
+    label_counts: Counter[str] = Counter()
 
     for filename in filenames[:30]:  # Sample first 30 files
         base = extract_base_name(filename)
@@ -139,7 +139,7 @@ def regex_for_separators(separators, filenames=None):
 
 
 def suggest_separator_regex(filenames, allowed_separators=None):
-    counts = Counter()
+    counts: Counter[str] = Counter()
     for name in filenames:
         base = extract_base_name(name)
         for char in base:

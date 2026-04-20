@@ -106,7 +106,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
             uses_values,
         )
         self.assertIn(
-            "astral-sh/ruff-action@4919ec5cf1f49eff0871dbcea0da843445b837e6",
+            "astral-sh/ruff-action@0ce1b0bf8b818ef400413f810f8a11cdbda0034b",
             uses_values,
         )
         self.assertIn("ruff check .", run_values)

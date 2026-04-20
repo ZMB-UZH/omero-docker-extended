@@ -1,0 +1,6 @@
+from typing import Any
+
+class ImageWrapper:
+    def getChannels(self, *args: Any, **kwargs: Any) -> Any: ...
+
+def __getattr__(name: str) -> Any: ...

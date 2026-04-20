@@ -190,7 +190,11 @@ def delete_existing_annotations(
             )
         image_id = args[0]
         if _supports_legacy_annotation_kwargs():
-            return _annotation_service.delete_existing_annotations(
+            legacy_delete_existing_annotations = getattr(
+                _annotation_service,
+                "delete_existing_annotations",
+            )
+            return legacy_delete_existing_annotations(
                 conn,
                 image_id,
                 annotation_ids=annotation_ids,

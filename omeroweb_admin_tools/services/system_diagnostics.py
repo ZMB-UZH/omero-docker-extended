@@ -26,14 +26,16 @@ _DOCKER_RUNTIME_ERROR_SUMMARY = "Docker runtime inspection failed"
 _DIRECT_SQL_ERROR_SUMMARY = "Direct SQL sanity test failed"
 
 _PSYCOPG2_UNSET = object()
+_PSYCOPG2_CACHED_MODULE: Any = _PSYCOPG2_UNSET
 
 
 def _get_cached_psycopg2_module():
-    return getattr(_load_psycopg2, "_cached_module", _PSYCOPG2_UNSET)
+    return _PSYCOPG2_CACHED_MODULE
 
 
 def _set_cached_psycopg2_module(module) -> None:
-    _load_psycopg2._cached_module = module
+    global _PSYCOPG2_CACHED_MODULE
+    _PSYCOPG2_CACHED_MODULE = module
 
 
 @dataclass(frozen=True)
@@ -105,7 +107,7 @@ def _load_psycopg2():
         return cached_module
 
     try:
-        import psycopg2  # type: ignore
+        import psycopg2
     except ImportError as exc:
         _set_cached_psycopg2_module(None)
         raise RuntimeError(
@@ -276,7 +278,9 @@ def _inspect_docker_service_runtime(
     if not isinstance(payload, list) or not payload:
         return None, f"No container found for compose service {service!r}."
 
-    containers = [item for item in payload if isinstance(item, dict)]
+    containers: list[dict[str, Any]] = [
+        item for item in payload if isinstance(item, dict)
+    ]
     if not containers:
         return (
             None,
@@ -284,8 +288,11 @@ def _inspect_docker_service_runtime(
         )
 
     def _created_key(item: dict[str, object]) -> int:
+        created = item.get("Created")
+        if not isinstance(created, (str, int, float)):
+            return 0
         try:
-            return int(item.get("Created") or 0)
+            return int(created)
         except (TypeError, ValueError):
             return 0
 
@@ -303,8 +310,10 @@ def _inspect_docker_service_runtime(
     if not isinstance(inspect_payload, dict):
         return None, f"Docker inspect payload was invalid for service {service!r}."
 
-    state_payload = inspect_payload.get("State", {}) or {}
-    health_payload = state_payload.get("Health", {}) or {}
+    raw_state_payload = inspect_payload.get("State", {}) or {}
+    state_payload = raw_state_payload if isinstance(raw_state_payload, dict) else {}
+    raw_health_payload = state_payload.get("Health", {}) or {}
+    health_payload = raw_health_payload if isinstance(raw_health_payload, dict) else {}
     names = container.get("Names") or []
     container_name = ""
     if isinstance(names, list) and names:
@@ -376,7 +385,7 @@ def _resolve_hostname(check_id: str, label: str, host: str) -> DiagnosticCheckRe
             summary=f"Unable to resolve host {host}",
             details="DNS resolution failed.",
         )
-    unique_ips = sorted({entry[4][0] for entry in addresses if entry and entry[4]})
+    unique_ips = sorted({str(entry[4][0]) for entry in addresses if entry and entry[4]})
     return DiagnosticCheckResult(
         check_id=check_id,
         label=label,

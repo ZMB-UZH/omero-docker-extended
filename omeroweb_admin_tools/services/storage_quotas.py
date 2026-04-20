@@ -379,6 +379,8 @@ def _normalize_quota_gb(value: object) -> Optional[float]:
         return None
     if isinstance(value, str) and not value.strip():
         return None
+    if not isinstance(value, (str, int, float)):
+        raise QuotaError(f"Invalid quota value: {value!r}")
     try:
         number = float(value)
     except (TypeError, ValueError) as exc:

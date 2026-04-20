@@ -35,7 +35,7 @@ from omero.gateway import BlitzGateway
 from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
 from omero.rtypes import rstring
 from omeroweb.decorators import login_required
-from typing import Optional
+from typing import Any, Optional
 from ..constants import (
     BIOFORMATS2RAW_CLI,
     MAX_UPLOAD_BATCH_BYTES,
@@ -224,7 +224,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-_IMPORT_LOCKS = {}
+_IMPORT_LOCKS: dict[str, threading.Lock] = {}
 _IMPORT_LOCKS_GUARD = threading.Lock()
 
 UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
@@ -629,12 +629,12 @@ def _normalize_ngff_converter_settings(raw_settings):
         return dict(NGFF_CONVERTER_SETTINGS_DEFAULTS)
 
     defaults = NGFF_CONVERTER_SETTINGS_DEFAULTS
-    normalized = dict(defaults)
+    normalized: dict[str, Any] = dict(defaults)
 
     # String fields with allowed values
     compression = str(raw_settings.get("compression", defaults["compression"])).lower()
     if compression not in ("blosc", "zlib", "null"):
-        compression = defaults["compression"]
+        compression = str(defaults["compression"])
     normalized["compression"] = compression
 
     downsampling = str(
@@ -648,7 +648,7 @@ def _normalize_ngff_converter_settings(raw_settings):
         "CUBIC",
         "LANCZOS",
     ):
-        downsampling = defaults["downsampling"]
+        downsampling = str(defaults["downsampling"])
     normalized["downsampling"] = downsampling
 
     # Integer fields with bounds
@@ -663,10 +663,14 @@ def _normalize_ngff_converter_settings(raw_settings):
         "target_min_size": (1, 65536),
     }
     for field, (low, high) in int_fields.items():
+        default_value = defaults[field]
+        default_int = (
+            default_value if isinstance(default_value, int) else int(str(default_value))
+        )
         try:
-            val = int(raw_settings.get(field, defaults[field]))
+            val = int(raw_settings.get(field, default_int))
         except (TypeError, ValueError):
-            val = defaults[field]
+            val = default_int
         normalized[field] = max(low, min(high, val))
 
     # Boolean fields
@@ -690,13 +694,13 @@ def _normalize_ngff_converter_settings(raw_settings):
 
 def _build_bioformats2raw_command(
     input_path: str, output_path: str, settings: dict
-) -> list:
+) -> list[str]:
     """Build the bioformats2raw CLI command from normalized settings."""
-    cmd = [BIOFORMATS2RAW_CLI]
+    cmd: list[str] = [BIOFORMATS2RAW_CLI]
 
-    s = settings or NGFF_CONVERTER_SETTINGS_DEFAULTS
+    s: dict[str, Any] = dict(settings or NGFF_CONVERTER_SETTINGS_DEFAULTS)
 
-    compression = s.get("compression", "blosc")
+    compression = str(s.get("compression", "blosc"))
     if compression != "null":
         cmd.extend(["--compression", compression])
     else:
@@ -705,13 +709,16 @@ def _build_bioformats2raw_command(
     cmd.extend(["--tile-width", str(s.get("tile_width", 1024))])
     cmd.extend(["--tile-height", str(s.get("tile_height", 1024))])
 
-    resolutions = s.get("resolutions", 0)
+    try:
+        resolutions = int(s.get("resolutions", 0))
+    except (TypeError, ValueError):
+        resolutions = 0
     if resolutions and resolutions > 0:
         cmd.extend(["--resolutions", str(resolutions)])
 
     cmd.extend(["--max-workers", str(s.get("max_workers", 4))])
     cmd.extend(["--chunk-depth", str(s.get("chunk_depth", 1))])
-    cmd.extend(["--downsample-type", s.get("downsampling", "SIMPLE")])
+    cmd.extend(["--downsample-type", str(s.get("downsampling", "SIMPLE"))])
     cmd.extend(["--fill-value", str(s.get("fill_value", 0))])
     cmd.extend(["--max-cached-tiles", str(s.get("max_cached_tiles", 64))])
     cmd.extend(["--target-min-size", str(s.get("target_min_size", 256))])
@@ -731,7 +738,7 @@ def _build_bioformats2raw_command(
     if s.get("progress", True):
         cmd.append("--progress")
 
-    series = s.get("series", "")
+    series = str(s.get("series", "") or "")
     if series:
         cmd.extend(["--series", series])
 
@@ -1063,7 +1070,7 @@ def _managed_upload_error_message(error) -> str:
 
 
 def _resolve_root_relative_path(
-    root: Path, relative_path: str, *, max_bytes: int = None
+    root: Path, relative_path: str, *, max_bytes: int | None = None
 ):
     normalized_path, normalize_error = _normalize_upload_relative_path(relative_path)
     if normalize_error:
@@ -1407,7 +1414,7 @@ def _build_sem_edx_associations_from_entries(entries):
     if not isinstance(entries, list) or not entries:
         return {}
 
-    grouped = {}
+    grouped: dict[str, dict[str, list[str]]] = {}
     for entry in entries:
         if not isinstance(entry, dict):
             continue
@@ -2073,7 +2080,7 @@ def _collect_project_payload(conn, user_id):
     return {"owned": owned_projects, "collab": collab_projects}
 
 
-def _dataset_name_for_path(relative_path: str, orphan_dataset_name: str = None):
+def _dataset_name_for_path(relative_path: str, orphan_dataset_name: str | None = None):
     parts = PurePosixPath(relative_path).parts
     if len(parts) <= 1:
         return orphan_dataset_name
@@ -2098,7 +2105,7 @@ def _directory_package_root_for_relative_path(relative_path: str) -> Optional[st
 
 
 def _dataset_name_for_upload_relative_path(
-    relative_path: str, orphan_dataset_name: str = None
+    relative_path: str, orphan_dataset_name: str | None = None
 ):
     package_root = _directory_package_root_for_relative_path(relative_path)
     if package_root:
@@ -2130,7 +2137,7 @@ def _logical_unit_is_directory_package_root(entry: dict) -> bool:
     return False
 
 
-def _dataset_name_for_import_entry(entry: dict, orphan_dataset_name: str = None):
+def _dataset_name_for_import_entry(entry: dict, orphan_dataset_name: str | None = None):
     dataset_relative_path = (
         entry.get("dataset_relative_path") or entry.get("relative_path") or ""
     )
@@ -2218,7 +2225,18 @@ def _get_session_key(conn):
     return None
 
 
-def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int = None):
+def _optional_int(value) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _get_or_create_dataset(
+    conn, name: str, dataset_map: dict, project_id: int | None = None
+):
     if not name:
         return None
     if name in dataset_map:
@@ -2262,6 +2280,8 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
 
 def _plan_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
     orphan_dataset_name = job_dict.get("orphan_dataset_name")
+    if orphan_dataset_name is not None:
+        orphan_dataset_name = str(orphan_dataset_name)
     if any(
         _dataset_name_for_import_entry(entry) is None for entry in entries_to_import
     ):
@@ -2345,6 +2365,8 @@ def _plan_request_job_dataset_targets(job_dict: dict):
     planned_units = _planned_import_units_for_request(job_dict)
     if planned_units:
         orphan_dataset_name = job_dict.get("orphan_dataset_name")
+        if orphan_dataset_name is not None:
+            orphan_dataset_name = str(orphan_dataset_name)
         if any(_dataset_name_for_import_entry(unit) is None for unit in planned_units):
             orphan_dataset_name = orphan_dataset_name or _generate_orphan_dataset_name()
 
@@ -2357,6 +2379,8 @@ def _plan_request_job_dataset_targets(job_dict: dict):
         return orphan_dataset_name, sorted(set(dataset_names))
 
     orphan_dataset_name = job_dict.get("orphan_dataset_name")
+    if orphan_dataset_name is not None:
+        orphan_dataset_name = str(orphan_dataset_name)
     entries = job_dict.get("files") or []
     requires_orphan_dataset = False
 
@@ -2424,7 +2448,7 @@ def _prepare_request_job_import_datasets(
                     conn,
                     dataset_name,
                     dataset_map,
-                    project_id=job_dict.get("project_id"),
+                    project_id=_optional_int(job_dict.get("project_id")),
                 )
                 if dataset_id is None:
                     logger.warning(
@@ -2524,7 +2548,7 @@ def _ensure_job_dataset_targets(
                     conn,
                     dataset_name,
                     dataset_map,
-                    project_id=job_dict.get("project_id"),
+                    project_id=_optional_int(job_dict.get("project_id")),
                 )
                 if dataset_id is None:
                     logger.warning(
@@ -2572,7 +2596,7 @@ def _ensure_job_dataset_targets(
                 user_conn,
                 dataset_name,
                 dataset_map,
-                project_id=job_dict.get("project_id"),
+                project_id=_optional_int(job_dict.get("project_id")),
             )
             if dataset_id is None:
                 logger.warning(
@@ -4429,7 +4453,7 @@ def _invalid_managed_path(display_path: str) -> _ManagedPathValidationError:
 
 
 def _managed_relative_path_validation_error(
-    root: Path, relative_parts: tuple[str, ...], *, max_bytes: int = None
+    root: Path, relative_parts: tuple[str, ...], *, max_bytes: int | None = None
 ) -> str | None:
     if not relative_parts:
         return errors.invalid_filename("")
@@ -4453,7 +4477,7 @@ def _managed_relative_path_validation_error(
 
 
 def _validate_managed_relative_parts(
-    root: Path, relative_parts: tuple[str, ...], *, max_bytes: int = None
+    root: Path, relative_parts: tuple[str, ...], *, max_bytes: int | None = None
 ) -> tuple[Path, tuple[str, ...]]:
     validation_error = _managed_relative_path_validation_error(
         root,
@@ -4593,7 +4617,7 @@ def _managed_parent_directory_fd(
     root: Path,
     relative_parts: tuple[str, ...],
     *,
-    max_bytes: int = None,
+    max_bytes: int | None = None,
     create_parents: bool = False,
 ) -> tuple[int, str]:
     root_path, normalized_parts = _validate_managed_relative_parts(
@@ -4636,7 +4660,7 @@ def _managed_child_path(root_path: Path, normalized_parts: tuple[str, ...]) -> P
 
 
 def _managed_runtime_validation_error(
-    root: Path, relative_parts: tuple[str, ...], *, max_bytes: int = None
+    root: Path, relative_parts: tuple[str, ...], *, max_bytes: int | None = None
 ) -> str | None:
     validation_error = _managed_relative_path_validation_error(
         root,
@@ -4658,7 +4682,7 @@ def _managed_parent_runtime_error(
     root: Path,
     relative_parts: tuple[str, ...],
     *,
-    max_bytes: int = None,
+    max_bytes: int | None = None,
     create_parents: bool = False,
 ) -> str | None:
     validation_error = _managed_relative_path_validation_error(
@@ -4685,7 +4709,7 @@ def _managed_parent_runtime_error(
 
 
 def _resolve_managed_child_parts(
-    root: Path, relative_parts: tuple[str, ...], *, max_bytes: int = None
+    root: Path, relative_parts: tuple[str, ...], *, max_bytes: int | None = None
 ) -> Path:
     root_path, normalized_parts = _validate_managed_relative_parts(
         root,
@@ -4697,7 +4721,7 @@ def _resolve_managed_child_parts(
 
 
 def _resolve_managed_child_path(
-    root: Path, relative_path: str, *, max_bytes: int = None
+    root: Path, relative_path: str, *, max_bytes: int | None = None
 ) -> Path:
     normalized_path, normalize_error = _normalize_upload_relative_path(relative_path)
     if normalize_error:
@@ -5007,8 +5031,8 @@ def _parse_candidate_path_line(line: str) -> Optional[Path]:
 
 
 def _parse_import_groups(output: str):
-    groups = []
-    current_group = None
+    groups: list[dict[str, Any]] = []
+    current_group: dict[str, Any] | None = None
 
     for line in (output or "").splitlines():
         stripped = line.strip()
@@ -5295,10 +5319,10 @@ def _build_import_units(
 
     entry_by_relative_path = {entry["relative_path"]: entry for entry in active_entries}
     staged_root = upload_root / "_staged"
-    probe_cache = {}
+    probe_cache: dict[str, Any] = {}
 
-    covered_relative_paths = set()
-    units = []
+    covered_relative_paths: set[str] = set()
+    units: list[dict[str, Any]] = []
 
     for rel_path in active_relative_paths:
         if rel_path in covered_relative_paths:
@@ -5497,7 +5521,7 @@ def _check_import_compatibility(
         result = _run_local_import_scan(file_path)
     except process_utils.TimeoutExpired:
         timeout_seconds = _get_local_import_scan_timeout_seconds()
-        response = {
+        response: dict[str, Any] = {
             "status": "error",
             "relative_path": relative_path,
             "stdout": "",
@@ -5696,6 +5720,9 @@ def _run_compatibility_check_inner(job_id: str):
 
     batch_size = _resolve_job_batch_size(job)
     units_to_check = planned_units[:batch_size]
+    orphan_dataset_name = job.get("orphan_dataset_name")
+    if orphan_dataset_name is not None:
+        orphan_dataset_name = str(orphan_dataset_name)
 
     max_workers = min(4, len(units_to_check), os.cpu_count() or 2)
     results = []
@@ -5728,9 +5755,7 @@ def _run_compatibility_check_inner(job_id: str):
                     }
                 )
                 continue
-            dataset_name = _dataset_name_for_import_entry(
-                unit, job.get("orphan_dataset_name")
-            )
+            dataset_name = _dataset_name_for_import_entry(unit, orphan_dataset_name)
             dataset_id = (job.get("dataset_map") or {}).get(dataset_name)
             future = executor.submit(
                 _check_import_compatibility,
@@ -6366,7 +6391,7 @@ def _import_zarr_via_cli(
 
     managed_zarr = None
     stage_message = None
-    stage_outputs = {}
+    stage_outputs: dict[str, Any] = {}
     try:
         try:
             stage_success, stage_outputs, stage_message = _run_zarr_managed_repo_script(
@@ -6698,7 +6723,7 @@ def _verify_zarr_import_via_api(
         if expected_lsid or expected_lsid_prefix:
             params = omero.sys.ParametersI()
             query_parts = ["SELECT i.id FROM Image i"]
-            where_parts = []
+            where_parts: list[str] = []
             if dataset_id is not None:
                 query_parts.append("JOIN i.datasetLinks dl")
                 params.addId(int(dataset_id))
@@ -7752,6 +7777,8 @@ def _process_import_job(job_id: str):
 
             dataset_map = job.get("dataset_map") or {}
             orphan_dataset_name = job.get("orphan_dataset_name")
+            if orphan_dataset_name is not None:
+                orphan_dataset_name = str(orphan_dataset_name)
             _save_job(job)
 
             logger.info(
@@ -8004,9 +8031,9 @@ def _process_import_job(job_id: str):
                                 len(all_image_names),
                             )
 
-                            plot_cache = {}
-                            plot_rel_cache = {}
-                            imported_plots = set()
+                            plot_cache: dict[str, Path | None] = {}
+                            plot_rel_cache: dict[str, str] = {}
+                            imported_plots: set[str] = set()
                             if create_figures_attachments or create_figures_images:
                                 from ..services.omero.sem_edx_parser import (
                                     create_edx_spectrum_plot,
@@ -8381,7 +8408,8 @@ def _process_import_job(job_id: str):
 
                         finally:
                             try:
-                                conn.close()
+                                if conn is not None:
+                                    conn.close()
                             except Exception as exc:
                                 logger.warning(
                                     "Error closing connection: %s",

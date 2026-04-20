@@ -1,0 +1,3 @@
+from django.http import HttpResponse
+
+class HttpJavascriptResponseServerError(HttpResponse): ...
