@@ -137,8 +137,9 @@ the database.
 
 ### Health-check enforcement
 
-The `omeroserver` healthcheck now verifies both of the following on every health
-probe:
+The `omeroserver` healthcheck runs `/startup/healthcheck-omeroserver.sh` with
+the same env-driven OMERO CLI temp contract used by startup. It verifies both
+of the following on every health probe:
 
 - persisted `omero.managed.dir` equals the expected absolute configured path,
 - no image-local `ManagedRepository` exists anywhere under `/opt/omero/server`.

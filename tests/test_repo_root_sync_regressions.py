@@ -229,6 +229,97 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             "Skipping managed-repository shared-prefix readiness wait", result.stdout
         )
 
+    def test_installation_wait_accepts_current_dropbox_user_dir_sync_status(
+        self,
+    ) -> None:
+        function_text = self._slice_function(
+            self.installation_script,
+            "repo_root_sync_stable_prefix_depth() {",
+            "stop_old_installation_containers() {",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            server_var_dir = Path(tmpdir) / "server-var"
+            server_var_dir.mkdir(parents=True, exist_ok=True)
+            status_file = server_var_dir / "dropbox-user-dir-sync.status"
+            status_file.write_text(
+                textwrap.dedent(
+                    """\
+                    status=ok
+                    last_success_epoch=200
+                    dropbox_root=/configured/dropbox
+                    eligible_user_count=2
+                    created_count=1
+                    existing_count=1
+                    skipped_count=0
+                    failed_count=0
+                    """
+                ),
+                encoding="utf-8",
+            )
+            script = textwrap.dedent(
+                f"""\
+                set -euo pipefail
+                START_CONTAINERS=1
+                ROOTPASS=secret
+                REPO_ROOT_DIR="{self.repo_root}"
+                OMERO_SERVER_VAR_PATH="{server_var_dir}"
+                OMERO_DROPBOX_USER_DIR_SYNC_ENABLED=1
+                OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES=1
+                OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS=1
+                OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS=1
+                {function_text}
+                wait_for_dropbox_user_dir_sync_ready 100
+                """
+            )
+
+            result = self._run_bash(script)
+
+        self.assertIn("DropBox user directory synchronization is ready", result.stdout)
+
+    def test_installation_wait_accepts_current_dropbox_ice_bootstrap_status(
+        self,
+    ) -> None:
+        function_text = self._slice_function(
+            self.installation_script,
+            "repo_root_sync_stable_prefix_depth() {",
+            "stop_old_installation_containers() {",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            server_var_dir = Path(tmpdir) / "server-var"
+            server_var_dir.mkdir(parents=True, exist_ok=True)
+            status_file = server_var_dir / "dropbox-ice-bootstrap.status"
+            status_file.write_text(
+                textwrap.dedent(
+                    """\
+                    status=ok
+                    action=enable-start
+                    message=ready
+                    last_success_epoch=200
+                    updated_epoch=200
+                    """
+                ),
+                encoding="utf-8",
+            )
+            script = textwrap.dedent(
+                f"""\
+                set -euo pipefail
+                START_CONTAINERS=1
+                REPO_ROOT_DIR="{self.repo_root}"
+                OMERO_SERVER_VAR_PATH="{server_var_dir}"
+                OMERO_DROPBOX_ENABLED=1
+                OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS=1
+                OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS=1
+                {function_text}
+                wait_for_dropbox_ice_bootstrap_ready 100
+                """
+            )
+
+            result = self._run_bash(script)
+
+        self.assertIn("DropBox Ice bootstrap is ready", result.stdout)
+
     def test_repo_root_bootstrap_retries_lookup_before_marking_failure(self) -> None:
         function_text = self._slice_function(
             self.server_bootstrap_script,
@@ -294,6 +385,12 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
                 }}
 
                 {function_text}
+                resolve_cli_home() {{
+                    printf '%s\\n' "{tmpdir}"
+                }}
+                resolve_omero_cli_tmpdir() {{
+                    printf '%s\\n' "{tmpdir}"
+                }}
                 run_repo_root_bootstrap_once secret
                 printf 'lookup_calls=%s\\n' "$(cat "{lookup_state_file}")"
                 cat "{status_file}"

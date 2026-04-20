@@ -45,22 +45,22 @@ Both use a `pgdata` subdirectory inside bind mounts to avoid ext4 `lost+found` i
 
 Cache backend and Celery message broker:
 
-- Version 8.4.0-alpine with in-memory only configuration (`--save ""` `--appendonly no`).
+- Version 8.6.2-alpine with in-memory only configuration (`--save ""` `--appendonly no`).
 - 512MB max memory with LRU eviction, backed by tmpfs.
 - Requires `vm.overcommit_memory=1`, persisted on the host by the installation script (`/etc/sysctl.d/99-redis-overcommit.conf`). The profile-gated `redis-sysctl-init` one-shot sidecar is available as a fallback.
 - Used as: OMERO.web session cache (db 1), Imaris Celery broker/result backend (db 2), Tools enhanced-search broker/result backend (db 3).
 
 ### Monitoring stack
 
-- **Prometheus** (v3.5.1): scrapes 9 metric sources plus blackbox HTTP probes for 12 endpoints and TCP probes for 4 ports.
-- **Grafana** (12.3.3): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
-- **Loki** (3.2.0): log aggregation backend with TSDB storage and 5000 max entries per query.
-- **Alloy** (v1.12.2): collects Docker container logs and OMERO server/web internal log files, pushes to Loki.
+- **Prometheus** (v3.11.2): scrapes 9 metric sources plus blackbox HTTP probes for 12 endpoints and TCP probes for 4 ports.
+- **Grafana** (13.0.1): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
+- **Loki** (3.7.1): log aggregation backend with TSDB storage and 5000 max entries per query.
+- **Alloy** (v1.15.1): collects Docker container logs and OMERO server/web internal log files, pushes to Loki.
 - **Blackbox exporter** (v0.28.0): HTTP 2xx and TCP connect probes.
-- **Node exporter** (v1.10.2): host-level metrics.
-- **cAdvisor** (v0.55.1): container resource metrics.
-- **Postgres exporters** (v0.19.0, x2): one per PostgreSQL instance.
-- **Redis exporter** (v1.81.0): Redis metrics.
+- **Node exporter** (v1.11.1): host-level metrics.
+- **cAdvisor** (v0.56.2): container resource metrics.
+- **Postgres exporters** (v0.19.1, x2): one per PostgreSQL instance.
+- **Redis exporter** (v1.82.0): Redis metrics.
 - **Path usage exporter** (custom Python 3.12 image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs host `df -P -B1` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
 - **CrowdSec** (v1.7.6): host-wide cybersecurity engine analyzing host syslog,
   SSH auth logs, and Docker container logs. The firewall bouncer auto-detects
@@ -88,7 +88,7 @@ Custom image based on postgres:16.12 with cron:
 
 ### Container management (`portainer`)
 
-Portainer CE (2.39.0) for Docker container management UI, exposed on ports 9000 and 9443.
+Portainer CE (2.40.0) for Docker container management UI, exposed on ports 9000 and 9443.
 
 ## Plugin architecture
 
@@ -174,7 +174,7 @@ Five utility modules shared across all plugins:
 
 Configuration is environment-driven and consumed at three levels:
 
-1. **Host paths** (`installation_paths.env`): 17 variables for OMERO data, databases, logs, monitoring state, and CrowdSec.
+1. **Host paths** (`installation_paths.env`): variables for OMERO data, databases, logs, monitoring state, and CrowdSec.
 2. **Service parameters** (`env/*.env`): database credentials, Java heap, OMERO settings, plugin config, Celery settings, monitoring endpoints.
 3. **Docker Compose** (`docker-compose.yml`): maps env files to containers, defines dependencies with health conditions, networks, and volume mounts.
 

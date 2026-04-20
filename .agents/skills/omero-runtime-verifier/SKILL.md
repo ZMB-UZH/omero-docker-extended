@@ -19,6 +19,10 @@ Use this skill for live runtime debugging, service-health checks, and container-
 ## Hard rules
 
 - Never run OMERO CLI as `root` inside `omeroserver` or `omeroweb`.
+- Do not use `su - <service-user>` for OMERO CLI checks. It drops the OMERO
+  temp environment and can cause plugin-loading errors before the command runs.
+- Pass `HOME`, `TMPDIR`, `OMERO_TMPDIR`, and `OMERO_TEMPDIR` explicitly when
+  switching to the service account, matching `startup/10-server-bootstrap.sh`.
 - Do not repeat a Docker-socket permission error as if it were a product failure.
 - Do not trust host-shell `localhost` probes from a sandboxed agent shell.
 - Do not use plain container `python3` when the code is installed inside a virtualenv.
@@ -33,7 +37,7 @@ SH
 ```
 
 ```bash
-docker exec <container> bash -lc 'su <service-user> -s /bin/bash -c "HOME=/tmp <command>"'
+docker exec <container> runuser -u <service-user> -- env HOME=<home> TMPDIR=<tmp> OMERO_TMPDIR=<tmp> OMERO_TEMPDIR=<tmp> <command>
 ```
 
 ## Verification targets

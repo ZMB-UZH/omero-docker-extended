@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply OMERO.web config files and CONFIG_ environment overrides."""
+"""Apply OMERO config files and CONFIG_ environment overrides."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 LEGACY_CONFIG_ALIASES = {
@@ -43,7 +44,7 @@ def resolve_omero_bin() -> str:
     raise RuntimeError("Could not resolve an OMERO CLI binary for OMERO.web startup")
 
 
-def resolve_web_python_bin(omero_bin: str) -> str:
+def resolve_python_bin(omero_bin: str) -> str:
     explicit = os.environ.get("OMERO_WEB_PYTHON_BIN") or os.environ.get("PYTHON_BIN")
     if explicit:
         return explicit
@@ -67,8 +68,23 @@ def resolve_web_python_bin(omero_bin: str) -> str:
             return str(candidate)
 
     raise RuntimeError(
-        "Could not resolve an OMERO.web Python binary for startup validation"
+        "Could not resolve a Python binary next to the OMERO CLI for startup validation"
     )
+
+
+def resolve_config_glob(omero_bin: str) -> str:
+    explicit = os.environ.get("OMERO_CONFIG_GLOB") or os.environ.get(
+        "OMERO_WEB_CONFIG_GLOB"
+    )
+    if explicit:
+        return explicit
+
+    for ancestor in Path(omero_bin).resolve().parents:
+        config_dir = ancestor / "config"
+        if config_dir.is_dir():
+            return str(config_dir / "*.omero")
+
+    return ""
 
 
 def config_env_to_property(env_name: str) -> str:
@@ -80,6 +96,30 @@ def config_env_to_property(env_name: str) -> str:
 
 def run_omero_command(omero_bin: str, *args: str) -> None:
     subprocess.run([omero_bin, *args], check=True)
+
+
+def run_omero_config_set(omero_bin: str, property_name: str, value: str) -> None:
+    if value == "":
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as empty_value:
+            empty_value.flush()
+            run_omero_command(
+                omero_bin,
+                "config",
+                "set",
+                property_name,
+                "-f",
+                empty_value.name,
+            )
+        return
+
+    run_omero_command(
+        omero_bin,
+        "config",
+        "set",
+        "--",
+        property_name,
+        value,
+    )
 
 
 def _normalize_aliases(value: object) -> object:
@@ -166,10 +206,8 @@ if missing:
 
 def main() -> int:
     omero_bin = resolve_omero_bin()
-    python_bin = resolve_web_python_bin(omero_bin)
-    config_glob = os.environ.get(
-        "OMERO_WEB_CONFIG_GLOB", "/opt/omero/web/config/*.omero"
-    )
+    python_bin = resolve_python_bin(omero_bin)
+    config_glob = resolve_config_glob(omero_bin)
 
     normalized_config: dict[str, str] = {}
     for key in sorted(os.environ):
@@ -181,17 +219,12 @@ def main() -> int:
     if additional_apps is not None:
         validate_additional_apps(python_bin, parse_additional_apps(additional_apps))
 
-    if glob.glob(config_glob):
+    if config_glob and glob.glob(config_glob):
         run_omero_command(omero_bin, "load", "--glob", config_glob)
 
     for key in sorted(normalized_config):
-        run_omero_command(
-            omero_bin,
-            "config",
-            "set",
-            "--",
-            config_env_to_property(key),
-            normalized_config[key],
+        run_omero_config_set(
+            omero_bin, config_env_to_property(key), normalized_config[key]
         )
 
     return 0
