@@ -18,7 +18,8 @@ Security practices and controls for this deployment.
 - The `omeroserver` container drops to the `omero-server` user at runtime (non-root).
 - The `omero-celery-worker` container runs as a dedicated `celery` user (uid/gid 10001).
 - Redis runs with `maxmemory 512mb` and `allkeys-lru` eviction on tmpfs (no persistent state).
-- The `redis-sysctl-init` sidecar is the only privileged container; it is profile-gated (`sysctl-init`) and only needed for non-standard deployments. The installation script persists the sysctl on the host.
+- `cadvisor` runs privileged because it inspects host/container runtime state for metrics.
+- The `redis-sysctl-init` sidecar is also privileged, but it is profile-gated (`sysctl-init`) and only needed for non-standard deployments. The installation script persists the sysctl on the host.
 
 ## Post-build vulnerability scanning
 
@@ -50,7 +51,7 @@ Locale data is intentionally preserved across the hardened images for compatibil
 
 ## Image pinning
 
-- All Docker images in `docker-compose.yml` use explicit version tags (e.g., `postgres:16.12`, `redis:8.4.0-alpine`).
+- All Docker images in `docker-compose.yml` use explicit version tags (e.g., `postgres:16.12`, `redis:8.6.2-alpine`).
 - Dockerfiles pin base images and key package versions (e.g., `omero-py==5.22.0`, `celery==5.3.6`).
 - Dependabot monitors pip and Docker dependencies weekly and opens PRs for updates.
 

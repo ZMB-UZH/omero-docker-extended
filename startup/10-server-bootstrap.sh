@@ -31,6 +31,30 @@ require_positive_integer_env_var() {
     fi
 }
 
+require_nonempty_env_var() {
+    local var_name="$1"
+    local value="${!var_name-}"
+
+    if [[ -z "${value+x}" ]]; then
+        echo "ERROR: Required environment variable '${var_name}' is not set." >&2
+        exit 1
+    fi
+
+    if [[ -z "${value}" ]]; then
+        echo "ERROR: Required environment variable '${var_name}' is empty." >&2
+        exit 1
+    fi
+}
+
+require_set_env_var() {
+    local var_name="$1"
+
+    if [[ -z "${!var_name+x}" ]]; then
+        echo "ERROR: Required environment variable '${var_name}' is not set." >&2
+        exit 1
+    fi
+}
+
 OMERO_DIR="${OMERO_DIR:-/OMERO}"
 CERTS_DIR="${CERTS_DIR:-${OMERO_DIR}/certs}"
 SERVER_HOME="${SERVER_HOME:-/opt/omero/server/OMERO.server}"
@@ -38,6 +62,9 @@ SERVER_VAR_DIR="${SERVER_VAR_DIR:-${SERVER_HOME}/var}"
 SERVER_LOG_DIR="${SERVER_LOG_DIR:-${SERVER_VAR_DIR}/log}"
 REPO_ROOT_SYNC_STATUS_FILE="${SERVER_VAR_DIR}/repo-root-sync.status"
 REPO_ROOT_SYNC_HELPER="${SCRIPT_DIR}/repo_root_sync_helper.py"
+DROPBOX_USER_DIR_SYNC_STATUS_FILE="${SERVER_VAR_DIR}/dropbox-user-dir-sync.status"
+DROPBOX_USER_DIR_SYNC_HELPER="${SCRIPT_DIR}/dropbox_user_dir_sync.py"
+DROPBOX_ICE_BOOTSTRAP_STATUS_FILE="${SERVER_VAR_DIR}/dropbox-ice-bootstrap.status"
 resolve_omero_bin() {
     local configured_bin="${OMERO_BIN:-}"
     if [[ -n "${configured_bin}" ]]; then
@@ -59,13 +86,6 @@ resolve_omero_bin() {
         fi
     done
 
-    for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do
-        if [[ -x "${candidate}" ]]; then
-            printf "%s\n" "${candidate}"
-            return 0
-        fi
-    done
-
     if command -v omero >/dev/null 2>&1; then
         command -v omero
         return 0
@@ -76,7 +96,18 @@ resolve_omero_bin() {
 }
 
 OMERO_BIN="$(resolve_omero_bin)"
-OMERO_CLI_USER="${OMERO_CLI_USER:-omero-server}"
+require_nonempty_env_var "OMERO_CLI_USER"
+
+resolve_omero_cli_tmpdir() {
+    local candidate="${OMERO_TMPDIR:-${TMPDIR:-${OMERO_TEMPDIR:-}}}"
+
+    if [[ -z "${candidate}" ]]; then
+        echo "ERROR: OMERO CLI temp directory is not set. Configure OMERO_TMP_PATH so Compose exports OMERO_TMPDIR/TMPDIR." >&2
+        return 1
+    fi
+
+    printf "%s\n" "${candidate}"
+}
 
 resolve_server_venv_python() {
     local server_root=""
@@ -241,29 +272,18 @@ run_omero() {
         exit 1
     fi
 
-    # Resolve HOME for the CLI user.  runuser without --login does NOT
-    # change HOME, so the OMERO CLI would inherit root's HOME (/root) and
-    # try to write session files to /root/omero/sessions/ — which the
-    # omero-server user cannot access.  The installation script avoids this
-    # by explicitly exporting HOME="/tmp".  We replicate that here so that
-    # runtime sync commands behave identically to installation-time ones.
     local cli_home=""
-    cli_home="$(getent passwd "${OMERO_CLI_USER}" | cut -d: -f6 2>/dev/null || echo "/tmp")"
-    if [[ -z "${cli_home}" ]] || [[ ! -d "${cli_home}" ]]; then
-        cli_home="/tmp"
-    fi
+    cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")" || exit 1
+
+    local cli_tmpdir=""
+    cli_tmpdir="$(resolve_omero_cli_tmpdir)" || exit 1
 
     local -a env_args=(
         HOME="${cli_home}"
+        TMPDIR="${cli_tmpdir}"
+        OMERO_TMPDIR="${cli_tmpdir}"
+        OMERO_TEMPDIR="${cli_tmpdir}"
     )
-
-    if [[ -n "${TMPDIR:-}" ]]; then
-        env_args+=(
-            TMPDIR="${TMPDIR}"
-            OMERO_TMPDIR="${OMERO_TMPDIR:-}"
-            OMERO_TEMPDIR="${OMERO_TEMPDIR:-}"
-        )
-    fi
 
     if [[ -n "${ICE_CONFIG:-}" ]]; then
         env_args+=(
@@ -280,7 +300,7 @@ run_omero() {
 write_cli_keepalive_config() {
     local keepalive_seconds="${1:?BUG: write_cli_keepalive_config requires keepalive seconds}"
     local base_config="${ICE_CONFIG:-}"
-    local target_dir="${TMPDIR:-/tmp}"
+    local target_dir=""
     local config_path=""
     local owner_uid=""
     local owner_gid=""
@@ -294,6 +314,7 @@ write_cli_keepalive_config() {
         return 1
     fi
 
+    target_dir="$(resolve_omero_cli_tmpdir)" || return 1
     mkdir -p "${target_dir}" || {
         echo "ERROR: Could not prepare CLI keepalive directory: ${target_dir}" >&2
         return 1
@@ -815,6 +836,157 @@ validate_repo_root_sync_configuration() {
     fi
 }
 
+validate_dropbox_user_dir_sync_configuration() {
+    require_nonempty_env_var "OMERO_DROPBOX_ENABLED"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_SYNC_ENABLED"
+
+    local dropbox_enabled="${OMERO_DROPBOX_ENABLED}"
+    local enabled="${OMERO_DROPBOX_USER_DIR_SYNC_ENABLED}"
+    local ice_startup_wait=""
+    local ice_poll_interval=""
+    local interval=""
+    local jitter=""
+    local startup_wait=""
+    local poll_interval=""
+    local retries=""
+    local port=""
+    local secure=""
+    local password_env=""
+    local create_root=""
+    local mode=""
+    local allow_world_writable=""
+    local venv_py=""
+
+    case "${dropbox_enabled}" in
+        1|0|true|false|yes|no|on|off) ;;
+        *)
+            echo "ERROR: OMERO_DROPBOX_ENABLED must be a boolean value, got: '${dropbox_enabled}'" >&2
+            exit 1
+            ;;
+    esac
+
+    if [[ "${dropbox_enabled}" =~ ^(1|true|yes|on)$ ]]; then
+        require_nonempty_env_var "OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS"
+        require_nonempty_env_var "OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS"
+
+        ice_startup_wait="${OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS}"
+        ice_poll_interval="${OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS}"
+
+        if ! [[ "${ice_startup_wait}" =~ ^[0-9]+$ ]] || [ "${ice_startup_wait}" -lt 1 ]; then
+            echo "ERROR: OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS must be a positive integer, got: '${ice_startup_wait}'" >&2
+            exit 1
+        fi
+
+        if ! [[ "${ice_poll_interval}" =~ ^[0-9]+$ ]] || [ "${ice_poll_interval}" -lt 1 ]; then
+            echo "ERROR: OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS must be a positive integer, got: '${ice_poll_interval}'" >&2
+            exit 1
+        fi
+    fi
+
+    if [[ "${enabled}" != "1" && "${enabled}" != "0" ]]; then
+        echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_ENABLED must be 0 or 1, got: '${enabled}'" >&2
+        exit 1
+    fi
+
+    if [[ "${dropbox_enabled}" =~ ^(0|false|no|off)$ && "${enabled}" == "1" ]]; then
+        echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_ENABLED=1 requires OMERO_DROPBOX_ENABLED=1." >&2
+        exit 1
+    fi
+
+    if [[ "${enabled}" != "1" ]]; then
+        return
+    fi
+
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_SYNC_INTERVAL_SECONDS"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_SYNC_JITTER_SECONDS"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_SYNC_OMERO_HOST"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PORT"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_SYNC_OMERO_SECURE"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_SYNC_OMERO_USERNAME"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PASSWORD_ENV"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_CREATE_ROOT"
+    require_set_env_var "OMERO_DROPBOX_USER_DIR_OWNER"
+    require_set_env_var "OMERO_DROPBOX_USER_DIR_GROUP"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_MODE"
+    require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_ALLOW_WORLD_WRITABLE"
+
+    interval="${OMERO_DROPBOX_USER_DIR_SYNC_INTERVAL_SECONDS}"
+    jitter="${OMERO_DROPBOX_USER_DIR_SYNC_JITTER_SECONDS}"
+    startup_wait="${OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS}"
+    poll_interval="${OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS}"
+    retries="${OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES}"
+    port="${OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PORT}"
+    secure="${OMERO_DROPBOX_USER_DIR_SYNC_OMERO_SECURE}"
+    password_env="${OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PASSWORD_ENV}"
+    create_root="${OMERO_DROPBOX_USER_DIR_CREATE_ROOT}"
+    mode="${OMERO_DROPBOX_USER_DIR_MODE}"
+    allow_world_writable="${OMERO_DROPBOX_USER_DIR_ALLOW_WORLD_WRITABLE}"
+
+    if [[ ! -r "${DROPBOX_USER_DIR_SYNC_HELPER}" ]]; then
+        echo "ERROR: Missing DropBox user directory sync helper: ${DROPBOX_USER_DIR_SYNC_HELPER}" >&2
+        exit 1
+    fi
+
+    if ! [[ "${interval}" =~ ^[0-9]+$ ]] || [ "${interval}" -lt 1 ]; then
+        echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_INTERVAL_SECONDS must be a positive integer, got: '${interval}'" >&2
+        exit 1
+    fi
+
+    if ! [[ "${jitter}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_JITTER_SECONDS must be a non-negative integer, got: '${jitter}'" >&2
+        exit 1
+    fi
+
+    if ! [[ "${startup_wait}" =~ ^[0-9]+$ ]] || [ "${startup_wait}" -lt 1 ]; then
+        echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS must be a positive integer, got: '${startup_wait}'" >&2
+        exit 1
+    fi
+
+    if ! [[ "${poll_interval}" =~ ^[0-9]+$ ]] || [ "${poll_interval}" -lt 1 ]; then
+        echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS must be a positive integer, got: '${poll_interval}'" >&2
+        exit 1
+    fi
+
+    if ! [[ "${retries}" =~ ^[0-9]+$ ]] || [ "${retries}" -lt 1 ]; then
+        echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES must be a positive integer, got: '${retries}'" >&2
+        exit 1
+    fi
+
+    if ! [[ "${port}" =~ ^[0-9]+$ ]] || [ "${port}" -lt 1 ]; then
+        echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PORT must be a positive integer, got: '${port}'" >&2
+        exit 1
+    fi
+
+    case "${secure}" in
+        1|0|true|false|yes|no|on|off) ;;
+        *)
+            echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_OMERO_SECURE must be a boolean value, got: '${secure}'" >&2
+            exit 1
+            ;;
+    esac
+
+    case "${create_root}" in
+        1|0|true|false|yes|no|on|off) ;;
+        *)
+            echo "ERROR: OMERO_DROPBOX_USER_DIR_CREATE_ROOT must be a boolean value, got: '${create_root}'" >&2
+            exit 1
+            ;;
+    esac
+
+    if ! [[ "${password_env}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PASSWORD_ENV must be an environment variable name, got: '${password_env}'" >&2
+        exit 1
+    fi
+
+    venv_py="$(resolve_server_venv_python)"
+    "${venv_py}" "${DROPBOX_USER_DIR_SYNC_HELPER}" validate \
+        --mode "${mode}" \
+        --allow-world-writable "${allow_world_writable}" || exit 1
+}
+
 cleanup_stale_repository_lock_files() {
     local enabled="${OMERO_REPOSITORY_LOCK_CLEANUP_ON_START:-1}"
     local repository_lock_root="${OMERO_DIR%/}/.omero/repository"
@@ -1266,6 +1438,7 @@ repo_root_sync_stable_prefix_depth() {
 run_repo_root_sync_helper() {
     local python_bin="${1:?BUG: run_repo_root_sync_helper requires a python path}"
     local cli_home="${2:?BUG: run_repo_root_sync_helper requires a CLI home}"
+    local cli_tmpdir=""
     shift 2
 
     if [[ ! -r "${REPO_ROOT_SYNC_HELPER}" ]]; then
@@ -1273,11 +1446,13 @@ run_repo_root_sync_helper() {
         return 1
     fi
 
+    cli_tmpdir="$(resolve_omero_cli_tmpdir)" || return 1
+
     runuser -u "${OMERO_CLI_USER}" -- env \
         HOME="${cli_home}" \
-        TMPDIR="${TMPDIR:-/tmp}" \
-        OMERO_TMPDIR="${TMPDIR:-/tmp}" \
-        OMERO_TEMPDIR="${TMPDIR:-/tmp}" \
+        TMPDIR="${cli_tmpdir}" \
+        OMERO_TMPDIR="${cli_tmpdir}" \
+        OMERO_TEMPDIR="${cli_tmpdir}" \
         "${python_bin}" "${REPO_ROOT_SYNC_HELPER}" "$@"
 }
 
@@ -1312,7 +1487,8 @@ resolve_cli_home() {
 
     cli_home="$(getent passwd "${cli_user}" | cut -d: -f6 2>/dev/null || true)"
     if [[ -z "${cli_home}" ]] || [[ ! -d "${cli_home}" ]]; then
-        cli_home="/tmp"
+        echo "ERROR: Could not resolve an existing HOME directory for OMERO CLI user '${cli_user}'." >&2
+        return 1
     fi
     printf "%s\n" "${cli_home}"
 }
@@ -1382,7 +1558,7 @@ run_repo_root_bootstrap_once() {
     fi
 
     venv_py="$(resolve_server_venv_python)"
-    cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")"
+    cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")" || return 1
     managed_repo_root="$(expected_managed_repository_root)"
     set +e
     path_list="$(build_repo_root_sync_plan "${venv_py}" "${cli_home}" 2>&1)"
@@ -1545,6 +1721,344 @@ schedule_repo_root_sync() {
     log "Scheduled background managed-repository shared-prefix sync (interval=${interval}s)"
 }
 
+write_dropbox_ice_bootstrap_status() {
+    local status="$1"
+    local action="$2"
+    local message="$3"
+    local last_success_epoch="$4"
+    local tmp_status_file="${DROPBOX_ICE_BOOTSTRAP_STATUS_FILE}.tmp.$$"
+
+    mkdir -p "$(dirname "${DROPBOX_ICE_BOOTSTRAP_STATUS_FILE}")"
+    cat > "${tmp_status_file}" <<EOF
+status=${status}
+action=${action}
+message=${message}
+last_success_epoch=${last_success_epoch}
+updated_epoch=$(date +%s)
+EOF
+    mv "${tmp_status_file}" "${DROPBOX_ICE_BOOTSTRAP_STATUS_FILE}"
+}
+
+wait_for_dropbox_ice_admin() {
+    local wait_seconds="$1"
+    local poll_interval="$2"
+    local deadline=$(( $(date +%s) + wait_seconds ))
+
+    while [[ "$(date +%s)" -lt "${deadline}" ]]; do
+        if dropbox_ice_admin_ready; then
+            return 0
+        fi
+        sleep "${poll_interval}"
+    done
+
+    return 1
+}
+
+dropbox_ice_admin_ready() {
+    local internal_cfg="${SERVER_HOME}/etc/internal.cfg"
+
+    [[ -r "${internal_cfg}" ]] \
+        && pgrep -f 'icegridnode .*internal\.cfg' >/dev/null 2>&1 \
+        && run_dropbox_ice_command server list >/dev/null 2>&1
+}
+
+wait_for_dropbox_user_dir_sync_api() {
+    local wait_seconds="$1"
+    local poll_interval="$2"
+    local host="$3"
+    local port="$4"
+    local username="$5"
+    local password_env="$6"
+    local password="${!password_env-}"
+    local deadline=$(( $(date +%s) + wait_seconds ))
+    local cli_home=""
+    local cli_tmpdir=""
+
+    if [[ -z "${password}" ]]; then
+        return 1
+    fi
+
+    cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")" || return 1
+    cli_tmpdir="$(resolve_omero_cli_tmpdir)" || return 1
+    while [[ "$(date +%s)" -lt "${deadline}" ]]; do
+        if dropbox_ice_admin_ready \
+            && runuser -u "${OMERO_CLI_USER}" -- env \
+                HOME="${cli_home}" \
+                TMPDIR="${cli_tmpdir}" \
+                OMERO_TMPDIR="${cli_tmpdir}" \
+                OMERO_TEMPDIR="${cli_tmpdir}" \
+                OMERO_PASSWORD="${password}" \
+                "${OMERO_BIN}" login -q -C -t 60 \
+                    -s "${host}" -p "${port}" -u "${username}" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep "${poll_interval}"
+    done
+
+    return 1
+}
+
+run_dropbox_ice_command() {
+    local out=""
+    local rc=0
+
+    out="$(run_omero admin ice "$@" 2>&1)" || rc=$?
+    if [[ -n "${out}" ]]; then
+        printf "%s\n" "${out}"
+    fi
+
+    return "${rc}"
+}
+
+start_dropbox_ice_server() {
+    local server_name="$1"
+    local out=""
+    local rc=0
+
+    out="$(run_omero admin ice server start "${server_name}" 2>&1)" || rc=$?
+    if [[ "${rc}" -eq 0 ]]; then
+        if [[ -n "${out}" ]]; then
+            printf "%s\n" "${out}"
+        fi
+        return 0
+    fi
+
+    if printf "%s" "${out}" | grep -Eiq 'already|is active|ServerActiveException'; then
+        echo "[$(date -u)] ${server_name} already active"
+        return 0
+    fi
+
+    if [[ -n "${out}" ]]; then
+        printf "%s\n" "${out}"
+    fi
+    return "${rc}"
+}
+
+run_dropbox_ice_bootstrap_once() {
+    local startup_wait="${OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS}"
+    local poll_interval="${OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS}"
+    local last_success_epoch=""
+    local api_host="${OMERO_DROPBOX_USER_DIR_SYNC_OMERO_HOST}"
+    local api_port="${OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PORT}"
+    local api_username="${OMERO_DROPBOX_USER_DIR_SYNC_OMERO_USERNAME}"
+    local api_password_env="${OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PASSWORD_ENV}"
+
+    write_dropbox_ice_bootstrap_status "running" "enable-start" "waiting-for-omero-admin" "0"
+
+    if ! wait_for_dropbox_ice_admin "${startup_wait}" "${poll_interval}"; then
+        write_dropbox_ice_bootstrap_status "error" "enable" "omero-admin-not-ready" "0"
+        echo "[$(date -u)] ERROR: OMERO IceGrid did not become ready after ${startup_wait}s"
+        return 1
+    fi
+
+    if [[ "${OMERO_DROPBOX_USER_DIR_SYNC_ENABLED}" == "1" ]]; then
+        write_dropbox_ice_bootstrap_status "running" "enable-start" "waiting-for-omero-api" "0"
+        if [[ -z "${api_password_env}" || -z "${!api_password_env-}" ]]; then
+            write_dropbox_ice_bootstrap_status "error" "enable" "omero-api-password-missing" "0"
+            echo "[$(date -u)] ERROR: OMERO API readiness check cannot run because DropBox password env is missing"
+            return 1
+        fi
+        if ! wait_for_dropbox_user_dir_sync_api \
+            "${startup_wait}" \
+            "${poll_interval}" \
+            "${api_host}" \
+            "${api_port}" \
+            "${api_username}" \
+            "${api_password_env}"; then
+            write_dropbox_ice_bootstrap_status "error" "enable" "omero-api-not-ready" "0"
+            echo "[$(date -u)] ERROR: OMERO API did not become ready before DropBox Ice server start after ${startup_wait}s"
+            return 1
+        fi
+    fi
+
+    if ! run_dropbox_ice_command server enable MonitorServer; then
+        write_dropbox_ice_bootstrap_status "error" "enable" "monitor-enable-failed" "0"
+        return 1
+    fi
+    if ! run_dropbox_ice_command server enable DropBox; then
+        write_dropbox_ice_bootstrap_status "error" "enable" "dropbox-enable-failed" "0"
+        return 1
+    fi
+    if ! start_dropbox_ice_server MonitorServer; then
+        write_dropbox_ice_bootstrap_status "error" "start" "monitor-start-failed" "0"
+        return 1
+    fi
+    if ! start_dropbox_ice_server DropBox; then
+        write_dropbox_ice_bootstrap_status "error" "start" "dropbox-start-failed" "0"
+        return 1
+    fi
+
+    last_success_epoch="$(date +%s)"
+    write_dropbox_ice_bootstrap_status "ok" "enable-start" "ready" "${last_success_epoch}"
+    echo "[$(date -u)] DropBox Ice servers are enabled and started"
+}
+
+schedule_dropbox_ice_bootstrap() {
+    local enabled="${OMERO_DROPBOX_ENABLED}"
+    local startup_wait="${OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS}"
+    local poll_interval="${OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS}"
+
+    if [[ "${enabled}" =~ ^(0|false|no|off)$ ]]; then
+        log "Skipping DropBox Ice bootstrap (OMERO_DROPBOX_ENABLED=${enabled})."
+        return
+    fi
+
+    (
+        set -u -o pipefail
+        mkdir -p "${SERVER_LOG_DIR}" "${SERVER_VAR_DIR}"
+
+        local lockdir="${SERVER_VAR_DIR}/dropbox-ice-bootstrap.lock"
+        if ! acquire_lockdir "${lockdir}" "" "dropbox-ice-bootstrap"; then
+            exit 0
+        fi
+        trap 'release_lockdir "${lockdir}" ""' EXIT
+
+        echo "[$(date -u)] DropBox Ice bootstrap waiting for OMERO admin readiness (startup_wait=${startup_wait}s, poll=${poll_interval}s)"
+        if ! run_dropbox_ice_bootstrap_once; then
+            echo "[$(date -u)] WARN: DropBox Ice bootstrap finished with errors"
+            exit 1
+        fi
+    ) >>"${SERVER_LOG_DIR}/dropbox-ice-bootstrap.log" 2>&1 &
+
+    log "Scheduled background DropBox Ice bootstrap"
+}
+
+write_dropbox_user_dir_sync_status() {
+    local status="$1"
+    local message="$2"
+    local last_success_epoch="$3"
+    local failed_count="$4"
+    local tmp_status_file="${DROPBOX_USER_DIR_SYNC_STATUS_FILE}.tmp.$$"
+
+    mkdir -p "$(dirname "${DROPBOX_USER_DIR_SYNC_STATUS_FILE}")"
+    cat > "${tmp_status_file}" <<EOF
+status=${status}
+last_success_epoch=${last_success_epoch}
+dropbox_root=
+eligible_user_count=0
+created_count=0
+existing_count=0
+skipped_count=0
+failed_count=${failed_count}
+message=${message}
+updated_epoch=$(date +%s)
+EOF
+    mv "${tmp_status_file}" "${DROPBOX_USER_DIR_SYNC_STATUS_FILE}"
+}
+
+run_dropbox_user_dir_sync_once() {
+    local wait_seconds="${1:-0}"
+    local venv_py=""
+    local status_file="${DROPBOX_USER_DIR_SYNC_STATUS_FILE}"
+    local host="${OMERO_DROPBOX_USER_DIR_SYNC_OMERO_HOST}"
+    local port="${OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PORT}"
+    local secure="${OMERO_DROPBOX_USER_DIR_SYNC_OMERO_SECURE}"
+    local username="${OMERO_DROPBOX_USER_DIR_SYNC_OMERO_USERNAME}"
+    local password_env="${OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PASSWORD_ENV}"
+    local create_root="${OMERO_DROPBOX_USER_DIR_CREATE_ROOT}"
+    local owner="${OMERO_DROPBOX_USER_DIR_OWNER}"
+    local group="${OMERO_DROPBOX_USER_DIR_GROUP}"
+    local mode="${OMERO_DROPBOX_USER_DIR_MODE}"
+    local allow_world_writable="${OMERO_DROPBOX_USER_DIR_ALLOW_WORLD_WRITABLE}"
+    local retries="${OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES}"
+    local retry_delay="${OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS}"
+    local cli_tmpdir=""
+
+    write_dropbox_user_dir_sync_status "running" "waiting-for-omero-admin" "0" "0"
+
+    if [[ -z "${!password_env-}" ]]; then
+        local missing_password_message="missing-password-env"
+        if [[ "${password_env}" == "ROOTPASS" ]]; then
+            missing_password_message="missing-rootpass"
+        fi
+        write_dropbox_user_dir_sync_status "error" "${missing_password_message}" "0" "1"
+        echo "[$(date -u)] ERROR: ${password_env} is required for DropBox user directory sync"
+        return 1
+    fi
+
+    if [[ "${wait_seconds}" =~ ^[0-9]+$ ]] && [ "${wait_seconds}" -gt 0 ]; then
+        if ! wait_for_dropbox_user_dir_sync_api \
+            "${wait_seconds}" \
+            "${retry_delay}" \
+            "${host}" \
+            "${port}" \
+            "${username}" \
+            "${password_env}"; then
+            write_dropbox_user_dir_sync_status "error" "omero-admin-not-ready" "0" "1"
+            echo "[$(date -u)] ERROR: OMERO API did not become ready before DropBox user directory sync after ${wait_seconds}s"
+            return 1
+        fi
+    fi
+
+    if ! venv_py="$(resolve_server_venv_python)"; then
+        write_dropbox_user_dir_sync_status "error" "server-venv-python-not-found" "0" "1"
+        return 1
+    fi
+
+    local cli_home=""
+    cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")" || return 1
+    cli_tmpdir="$(resolve_omero_cli_tmpdir)" || return 1
+    if ! env "${password_env}=${!password_env-}" HOME="${cli_home}" \
+        TMPDIR="${cli_tmpdir}" OMERO_TMPDIR="${cli_tmpdir}" OMERO_TEMPDIR="${cli_tmpdir}" \
+        "${venv_py}" "${DROPBOX_USER_DIR_SYNC_HELPER}" sync \
+        --host "${host}" \
+        --port "${port}" \
+        --secure "${secure}" \
+        --username "${username}" \
+        --password-env "${password_env}" \
+        --create-root "${create_root}" \
+        --owner "${owner}" \
+        --group "${group}" \
+        --mode "${mode}" \
+        --allow-world-writable "${allow_world_writable}" \
+        --status-file "${status_file}" \
+        --connect-retries "${retries}" \
+        --connect-retry-delay-seconds "${retry_delay}"; then
+        if [[ ! -r "${status_file}" ]] || grep -q '^status=running$' "${status_file}"; then
+            write_dropbox_user_dir_sync_status "error" "helper-command-failed" "0" "1"
+        fi
+        return 1
+    fi
+}
+
+schedule_dropbox_user_dir_sync() {
+    local enabled="${OMERO_DROPBOX_USER_DIR_SYNC_ENABLED}"
+    local interval="${OMERO_DROPBOX_USER_DIR_SYNC_INTERVAL_SECONDS}"
+    local jitter_max="${OMERO_DROPBOX_USER_DIR_SYNC_JITTER_SECONDS}"
+    local startup_wait="${OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS}"
+
+    if [[ "${enabled}" != "1" ]]; then
+        log "Skipping DropBox user directory sync (OMERO_DROPBOX_USER_DIR_SYNC_ENABLED != 1)."
+        return
+    fi
+
+    (
+        set -u -o pipefail
+        mkdir -p "${SERVER_LOG_DIR}" "${SERVER_VAR_DIR}"
+
+        local lockdir="${SERVER_VAR_DIR}/dropbox-user-dir-sync.lock"
+        if ! acquire_lockdir "${lockdir}" "" "dropbox-user-dir-sync"; then
+            exit 0
+        fi
+        trap 'release_lockdir "${lockdir}" ""' EXIT
+
+        local first_cycle="1"
+        while true; do
+            local cycle_wait="0"
+            if [[ "${first_cycle}" == "1" ]]; then
+                cycle_wait="${startup_wait}"
+                first_cycle="0"
+            fi
+            if ! run_dropbox_user_dir_sync_once "${cycle_wait}"; then
+                echo "[$(date -u)] WARN: DropBox user directory sync cycle finished with errors"
+            fi
+            sleep $((interval + (RANDOM % (jitter_max + 1))))
+        done
+    ) >>"${SERVER_LOG_DIR}/dropbox-user-dir-sync.log" 2>&1 &
+
+    log "Scheduled background DropBox user directory sync (interval=${interval}s)"
+}
+
 schedule_binary_repository_cleanse() {
     local enabled="${OMERO_BINARY_REPO_CLEANSE_ON_START:-1}"
     local root_pass="${ROOTPASS:-}"
@@ -1633,7 +2147,8 @@ install_figure_script() {
 
     local script_dir="${SERVER_HOME}/lib/scripts/omero/figure_scripts"
     local script_path="${script_dir}/Figure_To_Pdf.py"
-    local tmp_dir="/tmp/omero-figure-${figure_version}"
+    local tmp_root=""
+    local tmp_dir=""
 
     mkdir -p "${script_dir}"
 
@@ -1647,8 +2162,11 @@ install_figure_script() {
         log "OMERO.Figure script version mismatch (${current_version} != ${figure_version}); attempting upgrade"
     fi
 
-    rm -rf "${tmp_dir}"
-    mkdir -p "${tmp_dir}"
+    tmp_root="$(resolve_omero_cli_tmpdir)" || exit 1
+    tmp_dir="$(mktemp -d "${tmp_root%/}/omero-figure-${figure_version}.XXXXXX")" || {
+        echo "ERROR: Could not create OMERO.Figure staging directory under ${tmp_root}" >&2
+        exit 1
+    }
 
     # Download the requested version into a staging file.
     # CRITICAL: Do NOT delete the existing script until the new one is confirmed.
@@ -1822,10 +2340,17 @@ EOF
         local venv_py
         venv_py="$(resolve_server_venv_python)"
         local cli_home
-        cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")"
+        cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")" || exit 1
+        local cli_tmpdir
+        cli_tmpdir="$(resolve_omero_cli_tmpdir)" || exit 1
 
         # Run the idempotent sync script (output goes to the log file via the subshell redirect)
-        runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${script_sync_py}" "${root_pass}" "${scripts_dir}" 2>&1 || true
+        runuser -u "${OMERO_CLI_USER}" -- env \
+            HOME="${cli_home}" \
+            TMPDIR="${cli_tmpdir}" \
+            OMERO_TMPDIR="${cli_tmpdir}" \
+            OMERO_TEMPDIR="${cli_tmpdir}" \
+            "${venv_py}" "${script_sync_py}" "${root_pass}" "${scripts_dir}" 2>&1 || true
 
         rm -f "${script_sync_py}"
     ) >>"${SERVER_LOG_DIR}/register-official-scripts.log" 2>&1 &
@@ -1998,6 +2523,7 @@ main() {
     validate_rendering_cache_cleanup_configuration
     validate_zarr_pixel_buffer_configuration
     validate_repo_root_sync_configuration
+    validate_dropbox_user_dir_sync_configuration
     apply_ldap_runtime_configuration
     reset_runtime_if_requested
     configure_script_python
@@ -2011,6 +2537,8 @@ main() {
     schedule_job_service_bootstrap
     schedule_ldap_group_bootstrap
     schedule_repo_root_sync
+    schedule_dropbox_ice_bootstrap
+    schedule_dropbox_user_dir_sync
     schedule_binary_repository_cleanse
 
     log "Startup flow finished"

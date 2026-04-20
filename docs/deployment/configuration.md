@@ -96,14 +96,16 @@ This repository expresses those OMERO properties in env files with the existing 
   exist. Bootstrap resolves a valid OMERO CLI path inside the running
   `omeroserver` container (`/opt/omero/server/venv*/bin/omero` preferred, with
   `/opt/omero/server/OMERO.server/bin/omero` fallback), then executes login
-  and group-creation commands as user `omero-server` with explicit
+  and group-creation commands as `OMERO_CLI_USER` with explicit
   `HOME`/`TMPDIR`/`OMERO_TMPDIR`/`OMERO_TEMPDIR` to match the runtime
   temp-directory model and avoid root-owned temp artifacts. The same list is
   also the authoritative source for managed-repository shared-prefix
   normalization when `CONFIG_omero_fs_repo_path` contains `%group%`, so every
   non-default group prefix that should be normalized by startup must appear
   here, or come from the static LDAP new-user group setting.
-- Runtime startup wrappers and healthchecks resolve the active OMERO virtualenv from `/opt/omero/server/venv*` at execution time, then fail fast with explicit errors when expected executables (`bin/omero`, `bin/activate`) are missing.
+- Runtime startup wrappers and the `omeroserver` healthcheck resolve the active
+  OMERO virtualenv from the container's `OMERODIR` at execution time, then fail
+  fast with explicit errors when required env values or executables are missing.
 - When `OMERO_JOB_SERVICE_JOIN_ALL_GROUPS=1` (in `env/omeroserver.env`) and
   both `OMERO_JOB_SERVICE_PASS` and `ROOTPASS` are set, the installation script
   automatically adds the job-service account
@@ -256,7 +258,7 @@ Paths declared in `installation_paths.env` map host storage into containers for:
 - databases,
 - temporary/working data (`OMERO_TMP_PATH`),
 - OMERO server/web logs,
-- monitoring state,
+- monitoring state, including Prometheus, Loki, Alloy, and Grafana data,
 - host-side installation/update transcripts under `${OMERO_DATA_PATH}/installation_logs`.
 
 Ensure host paths exist and are writable by container runtime users before startup.
@@ -289,14 +291,27 @@ All plugin paths are controlled exclusively by `OMERO_TMP_PATH`. There are no pe
 
 `OMERO_TMP_PATH` is also used by `startup/10-server-bootstrap.sh` for OMERO CLI
 bootstrap operations, but the bootstrap script uses a dedicated server-only
-subpath `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` as `TMPDIR` to avoid
-collisions with plugin folders and permission churn on the shared root. During
+subpath `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` as `TMPDIR`, `OMERO_TMPDIR`,
+and `OMERO_TEMPDIR` to avoid collisions with plugin folders and permission
+churn on the shared root. During
 installation, `installation/installation_script.sh` pre-creates this namespace
 and sets ownership to the OMERO.server runtime UID/GID with `0700` permissions
 while preserving root traversal (`x`) so OMERO.web-owned temp roots remain
 accessible for server namespace creation.
 
-The bootstrap script also derives the OMERO internal lock-file temp path from the OMERO.server installation root (`$(dirname "${SERVER_HOME}")/omero/tmp`) and attempts to prepare it for OMERO lock-file compatibility. If this legacy path cannot be created or is not writable, bootstrap logs a warning and continues using the dedicated `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` namespace as `TMPDIR`.
+`OMERO_CLI_USER` controls the in-container service account used for OMERO CLI
+startup jobs, installation group bootstrap, and the `omeroserver` healthcheck.
+For manual in-container OMERO CLI diagnostics, do not use `su - omero-server`.
+That login shell resets the OMERO temp environment before plugin discovery.
+Use the same service-account handoff pattern as startup: `runuser -- env` with
+explicit `HOME`, `TMPDIR`, `OMERO_TMPDIR`, and `OMERO_TEMPDIR`.
+
+The bootstrap script also derives the OMERO internal lock-file temp path from the
+OMERO.server installation root (`$(dirname "${SERVER_HOME}")/omero/tmp`) and
+attempts to prepare it for OMERO lock-file compatibility. If this legacy path
+cannot be created or is not writable, bootstrap logs a warning; the active
+OMERO CLI temp variables remain the env-derived
+`${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp/runtime*` namespace.
 
 At image build time, `docker/omero-server.Dockerfile` now also enforces writable permissions on `${SERVER_HOME}/etc/grid` for the runtime `omero-server` account so `omero config set ...` can always persist updates to `config.xml` during bootstrap.
 
@@ -345,6 +360,67 @@ The pull/update helpers store full visible terminal transcripts under
 only after the installation paths are resolved, so changes to `OMERO_DATA_PATH`
 during the run still place the log in the selected data root.
 
+### OMERO.dropbox User Directories
+
+`env/omeroserver.env` exposes the DropBox `omero.fs.*` properties used by the
+installed OMERO server template as `CONFIG_omero_fs_*` entries. The env-name
+mapping is the standard repo mapping: `.` becomes `_`, and a literal `_` in an
+OMERO property becomes `__`. The upstream DropBox admin reference is
+`https://omero.readthedocs.io/en/stable/sysadmins/dropbox.html`.
+The server image installs the pinned `OMERO_DROPBOX_VERSION` package, and
+`OMERO_DROPBOX_ENABLED=1` schedules a one-shot in-container bootstrap that waits
+for the running OMERO admin interface and a real OMERO API login before
+enabling and starting the required `MonitorServer` and `DropBox` Ice servers.
+The image sets the DropBox IceGrid template activation to `manual` so DropBox
+does not auto-start before Blitz accepts sessions; the bootstrap remains the
+single place that starts DropBox. The wait and poll cadence are controlled by
+`OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS` and
+`OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS`; the latest result is
+written to `${SERVER_VAR_DIR}/dropbox-ice-bootstrap.status`.
+
+The supported DropBox layout is the OMERO default convention:
+
+```text
+<DropBox root>/<omero username>/...
+```
+
+The acceptor root is auto-detected from live OMERO config. A single
+`CONFIG_omero_fs_watchDir` value wins when set; otherwise OMERO uses
+`CONFIG_omero_fs_defaultDropBoxDir` below `omero.data.dir`. Keep
+`CONFIG_omero_fs_importUsers=default` for this username-directory convention.
+The startup sync rejects multi-root `watchDir` values and non-default
+`importUsers` values so it cannot silently switch to the advanced
+semicolon-list layout.
+
+`CONFIG_omero_fs_dirImportWait=600` is the tracked default so DropBox waits 10
+minutes after a file event before starting import. This is deliberately longer
+than upstream's 60-second default for large multi-file datasets.
+
+`startup/10-server-bootstrap.sh` schedules one lightweight background loop in
+the existing OMERO.server container when `OMERO_DROPBOX_USER_DIR_SYNC_ENABLED=1`.
+The loop interval is controlled by
+`OMERO_DROPBOX_USER_DIR_SYNC_INTERVAL_SECONDS` and the loop uses the same
+lockdir/status-file pattern as the managed-repository prefix sync. It reads the
+current OMERO experimenter list, creates missing first-level username
+directories only, and does not walk or modify payload trees.
+
+Directory ownership and mode are controlled by
+`OMERO_DROPBOX_USER_DIR_OWNER`, `OMERO_DROPBOX_USER_DIR_GROUP`, and
+`OMERO_DROPBOX_USER_DIR_MODE`. Empty owner/group values inherit the resolved
+DropBox root UID/GID, which keeps host-specific filesystem mappings out of the
+repo. If the DropBox root must be created, the leaf directory inherits the
+parent directory UID/GID and configured mode. The sync only calls `chown` or
+`chmod` when a user directory differs from the configured state.
+
+External acquisition or transfer hosts do not get a separate OMERO permission
+layer. They must write through the host filesystem export or mount that backs
+the same DropBox root visible inside the `omeroserver` container, and the OS
+UID/GID/ACL mapping on that export decides whether they can create payload
+files. For multiple external hosts, present the same DropBox root and the same
+identity/ACL policy to every writer. Writers must target exactly
+`<DropBox root>/<omero username>/...`; this deployment does not create or use a
+`<group>/<user>` DropBox layout.
+
 The Import plugin's OME-Zarr path handling uses the same managed repository.
 It stages `.zarr` directories into `${CONFIG_omero_managed_dir}` through a
 server-side OMERO script and renders the destination with
@@ -368,10 +444,11 @@ expected absolute path and no second repository has appeared under the server
 tree.
 
 The native OME-Zarr parser/runtime baked into `omeroweb` is also environment
-driven. `OMERO_CLI_ZARR_VERSION`, `OME_ZARR_PY_VERSION`, and
-`BIOFORMATS2RAW_VERSION` are defined in `env/omeroserver.env` and are required
-for manual or installer-driven image builds; there are no Compose or Dockerfile
-fallback defaults. `OMERO_WEB_UPLOAD_NATIVE_ZARR_GZIP_LEVEL` controls the gzip
+driven. `OMERO_DROPBOX_VERSION`, `OMERO_CLI_ZARR_VERSION`,
+`OME_ZARR_PY_VERSION`, and `BIOFORMATS2RAW_VERSION` are defined in
+`env/omeroserver.env` and are required for manual or installer-driven image
+builds; there are no Compose or Dockerfile fallback defaults.
+`OMERO_WEB_UPLOAD_NATIVE_ZARR_GZIP_LEVEL` controls the gzip
 level used when the disposable managed-repository handoff copy must rewrite
 Blosc-backed image arrays for render-safe native import. Those normalizations
 apply only to the ephemeral handoff copy, never to the browser-staged source

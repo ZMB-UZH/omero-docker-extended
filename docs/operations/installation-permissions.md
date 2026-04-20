@@ -50,6 +50,7 @@ Host-side installer:
 Server bootstrap:
 
 - `startup/10-server-bootstrap.sh`
+  - uses `OMERO_CLI_USER` from `env/omeroserver.env`,
   - creates `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp`,
   - sets it writable for runtime use,
   - prepares `runtime*` temp slots,
@@ -79,6 +80,23 @@ Host-side installer:
 - `installation/installation_script.sh`
   - `chown_tree_or_die "${OMERO_USER_DATA_PATH}" ... "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"`
   - explicitly normalizes `${OMERO_USER_DATA_PATH}/certs` to the same owner.
+
+DropBox external writers:
+
+- OMERO.dropbox watches the server-visible DropBox root below
+  `OMERO_USER_DATA_PATH` unless `CONFIG_omero_fs_watchDir` points to a single
+  alternative acceptor root.
+- External hosts that transfer acquisition data write through the host
+  filesystem export or mount; OMERO does not grant extra filesystem write
+  permission for them.
+- The recurring DropBox user-dir sync creates only
+  `<DropBox root>/<omero username>` directories. Ownership and mode come from
+  `OMERO_DROPBOX_USER_DIR_OWNER`, `OMERO_DROPBOX_USER_DIR_GROUP`, and
+  `OMERO_DROPBOX_USER_DIR_MODE`; empty owner/group values inherit the DropBox
+  root UID/GID.
+- For multiple external hosts, keep UID/GID/ACL mapping consistent on the
+  shared export. Do not introduce a `<group>/<user>` DropBox convention; that
+  layout belongs to `CONFIG_omero_fs_repo_path`, not the DropBox acceptor.
 
 Quota helper:
 

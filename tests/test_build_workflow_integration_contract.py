@@ -103,10 +103,16 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
+        self.assertIn("resolve_omero_bin() {", script_text)
         self.assertIn(
-            'resolve_omero_bin() { local candidate=""; for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "${candidate}" ] || continue; printf "%s" "${candidate}"; return 0; done; return 1; }',
-            script_text,
+            'OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"', script_text
         )
+        self.assertIn('OMERO_CLI_HOME="$(resolve_cli_home)"', script_text)
+        self.assertIn('runuser -u "${OMERO_CLI_USER}" -- env', script_text)
+        self.assertIn('OMERO_PASSWORD="${ROOTPASS}"', script_text)
+        self.assertNotIn('OMERO_TMPDIR_VALUE="/tmp"', script_text)
+        self.assertNotIn('HOME="/tmp"', script_text)
+        self.assertNotIn("su omero-server", script_text)
 
     def test_server_bootstrap_job_service_uses_cli_autodetection_and_hosted_login(
         self,
@@ -123,7 +129,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             'for candidate in "${server_root}"/venv*/bin/omero "${SERVER_HOME}"/bin/omero; do',
             script_text,
         )
-        self.assertIn(
+        self.assertNotIn(
             "for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do",
             script_text,
         )
@@ -176,13 +182,47 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIn('venv_py="$(resolve_server_venv_python)"', script_text)
         self.assertIn("resolve_cli_home()", script_text)
+        self.assertIn("resolve_omero_cli_tmpdir()", script_text)
         self.assertIn("run_repo_root_sync_helper()", script_text)
         self.assertIn(
-            'runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}"',
+            'TMPDIR="${cli_tmpdir}"',
             script_text,
         )
+        self.assertIn('OMERO_TMPDIR="${cli_tmpdir}"', script_text)
+        self.assertIn('OMERO_TEMPDIR="${cli_tmpdir}"', script_text)
         self.assertIn('"${python_bin}" "${REPO_ROOT_SYNC_HELPER}"', script_text)
         self.assertNotIn("repo-root-lookup.XXXXXX.py", script_text)
+
+    def test_server_bootstrap_keeps_omero_tmpdir_for_service_user_cli(self) -> None:
+        script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("resolve_omero_cli_tmpdir() {", script_text)
+        self.assertIn('require_nonempty_env_var "OMERO_CLI_USER"', script_text)
+        self.assertIn(
+            'local candidate="${OMERO_TMPDIR:-${TMPDIR:-${OMERO_TEMPDIR:-}}}"',
+            script_text,
+        )
+        self.assertIn(
+            "ERROR: OMERO CLI temp directory is not set. Configure OMERO_TMP_PATH",
+            script_text,
+        )
+        self.assertIn(
+            "ERROR: Could not resolve an existing HOME directory for OMERO CLI user",
+            script_text,
+        )
+        self.assertGreaterEqual(script_text.count('TMPDIR="${cli_tmpdir}"'), 4)
+        self.assertGreaterEqual(script_text.count('OMERO_TMPDIR="${cli_tmpdir}"'), 4)
+        self.assertGreaterEqual(script_text.count('OMERO_TEMPDIR="${cli_tmpdir}"'), 4)
+        self.assertNotIn('candidate="/tmp"', script_text)
+        self.assertNotIn('cli_home="/tmp"', script_text)
+        self.assertNotIn(
+            'OMERO_CLI_USER="${OMERO_CLI_USER:-omero-server}"', script_text
+        )
+        self.assertNotIn('OMERO_TMPDIR="${OMERO_TMPDIR:-}"', script_text)
+        self.assertNotIn('OMERO_TEMPDIR="${OMERO_TEMPDIR:-}"', script_text)
+        self.assertNotIn('OMERO_TMPDIR="${TMPDIR:-/tmp}"', script_text)
+        self.assertNotIn('OMERO_TEMPDIR="${TMPDIR:-/tmp}"', script_text)
 
     def test_omeroserver_image_copies_repo_root_sync_helper(self) -> None:
         dockerfile_text = (
@@ -195,6 +235,196 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             dockerfile_text,
         )
         self.assertIn(f"/startup/{helper_name}", dockerfile_text)
+
+    def test_omeroserver_image_copies_dropbox_user_dir_sync_helper(self) -> None:
+        dockerfile_text = (
+            self.repo_root / "docker" / "omero-server.Dockerfile"
+        ).read_text(encoding="utf-8")
+        helper_rel = self.repo_root.joinpath("startup", "dropbox_user_dir_sync.py")
+        helper_name = helper_rel.name
+        self.assertIn(
+            f"COPY startup/{helper_name} /startup/{helper_name}",
+            dockerfile_text,
+        )
+        self.assertIn(f"/startup/{helper_name}", dockerfile_text)
+
+    def test_omeroserver_image_copies_healthcheck_helper(self) -> None:
+        dockerfile_text = (
+            self.repo_root / "docker" / "omero-server.Dockerfile"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "COPY startup/healthcheck-omeroserver.sh /startup/healthcheck-omeroserver.sh",
+            dockerfile_text,
+        )
+        self.assertIn("/startup/healthcheck-omeroserver.sh", dockerfile_text)
+
+    def test_omeroserver_image_replaces_inherited_config_loader(self) -> None:
+        dockerfile_text = (
+            self.repo_root / "docker" / "omero-server.Dockerfile"
+        ).read_text(encoding="utf-8")
+        config_script_text = (self.repo_root / "startup" / "50-config.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "COPY startup/50-config.py /startup/50-config.py",
+            dockerfile_text,
+        )
+        self.assertIn("/startup/50-config.py", dockerfile_text)
+        self.assertIn("def run_omero_config_set", config_script_text)
+        self.assertIn("NamedTemporaryFile", config_script_text)
+        self.assertNotIn("/opt/omero/server/venv3/bin/omero", config_script_text)
+
+    def test_server_bootstrap_schedules_dropbox_user_dir_sync(self) -> None:
+        script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'DROPBOX_USER_DIR_SYNC_HELPER="${SCRIPT_DIR}/dropbox_user_dir_sync.py"',
+            script_text,
+        )
+        self.assertIn("validate_dropbox_user_dir_sync_configuration()", script_text)
+        self.assertIn("write_dropbox_user_dir_sync_status()", script_text)
+        self.assertIn("wait_for_dropbox_user_dir_sync_api()", script_text)
+        self.assertIn("run_dropbox_user_dir_sync_once()", script_text)
+        self.assertIn("schedule_dropbox_user_dir_sync()", script_text)
+        self.assertIn("dropbox-user-dir-sync.lock", script_text)
+        self.assertIn("dropbox-user-dir-sync.status", script_text)
+        self.assertIn(
+            'DROPBOX_USER_DIR_SYNC_STATUS_FILE="${SERVER_VAR_DIR}/dropbox-user-dir-sync.status"',
+            script_text,
+        )
+        self.assertNotIn("OMERO_DROPBOX_USER_DIR_SYNC_STATUS_FILE", script_text)
+        self.assertIn(
+            'write_dropbox_user_dir_sync_status "running" "waiting-for-omero-admin" "0" "0"',
+            script_text,
+        )
+        self.assertIn(
+            'write_dropbox_user_dir_sync_status "error" "omero-admin-not-ready" "0" "1"',
+            script_text,
+        )
+        self.assertIn(
+            'missing_password_message="missing-rootpass"',
+            script_text,
+        )
+        self.assertIn(
+            'write_dropbox_user_dir_sync_status "error" "${missing_password_message}" "0" "1"',
+            script_text,
+        )
+        self.assertIn(
+            'local startup_wait="${OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS}"',
+            script_text,
+        )
+        self.assertIn('run_dropbox_user_dir_sync_once "${cycle_wait}"', script_text)
+        self.assertIn(
+            "wait_for_dropbox_user_dir_sync_api \\",
+            script_text,
+        )
+        self.assertIn('OMERO_PASSWORD="${password}"', script_text)
+        self.assertIn('"${OMERO_BIN}" login -q -C -t 60', script_text)
+        self.assertIn("schedule_dropbox_user_dir_sync", script_text)
+        self.assertNotIn("OMERO_DROPBOX_USER_DIR_SYNC_ENABLED:-0", script_text)
+        self.assertNotIn("65534", script_text)
+        self.assertNotIn("/opt/omero/omero_data", script_text)
+
+    def test_server_bootstrap_schedules_dropbox_ice_after_server_start(self) -> None:
+        dockerfile_text = (
+            self.repo_root / "docker" / "omero-server.Dockerfile"
+        ).read_text(encoding="utf-8")
+        script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("52-configure-dropbox-ice.sh", dockerfile_text)
+        self.assertIn(
+            'activation="manual"',
+            dockerfile_text,
+        )
+        self.assertIn(
+            "Failed to set DropBox IceGrid activation to manual",
+            dockerfile_text,
+        )
+        self.assertIn("schedule_dropbox_ice_bootstrap()", script_text)
+        self.assertIn("run_dropbox_ice_bootstrap_once()", script_text)
+        self.assertIn(
+            'DROPBOX_ICE_BOOTSTRAP_STATUS_FILE="${SERVER_VAR_DIR}/dropbox-ice-bootstrap.status"',
+            script_text,
+        )
+        self.assertNotIn("OMERO_DROPBOX_ICE_BOOTSTRAP_STATUS_FILE", script_text)
+        self.assertIn(
+            'write_dropbox_ice_bootstrap_status "running" "enable-start" "waiting-for-omero-admin" "0"',
+            script_text,
+        )
+        self.assertIn(
+            'write_dropbox_ice_bootstrap_status "running" "enable-start" "waiting-for-omero-api" "0"',
+            script_text,
+        )
+        self.assertIn(
+            'write_dropbox_ice_bootstrap_status "error" "enable" "omero-api-not-ready" "0"',
+            script_text,
+        )
+        self.assertIn(
+            "wait_for_dropbox_user_dir_sync_api \\",
+            script_text,
+        )
+        self.assertIn(
+            'local internal_cfg="${SERVER_HOME}/etc/internal.cfg"', script_text
+        )
+        self.assertIn("pgrep -f 'icegridnode .*internal\\.cfg'", script_text)
+        self.assertIn("run_dropbox_ice_command server list", script_text)
+        self.assertNotIn("run_omero admin diagnostics", script_text)
+        self.assertIn(
+            "run_dropbox_ice_command server enable MonitorServer", script_text
+        )
+        self.assertIn("run_dropbox_ice_command server enable DropBox", script_text)
+        self.assertIn("start_dropbox_ice_server MonitorServer", script_text)
+        self.assertIn("start_dropbox_ice_server DropBox", script_text)
+        self.assertIn("OMERO_DROPBOX_ENABLED", script_text)
+        self.assertNotIn(
+            "OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS:-", script_text
+        )
+        self.assertNotIn(
+            "OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS:-",
+            script_text,
+        )
+
+    def test_installation_dropbox_readiness_waits_do_not_use_hidden_defaults(
+        self,
+    ) -> None:
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'local enabled="${OMERO_DROPBOX_ENABLED:?OMERO_DROPBOX_ENABLED is required}"',
+            script_text,
+        )
+        self.assertIn(
+            'local status_file="${server_var_path%/}/dropbox-ice-bootstrap.status"',
+            script_text,
+        )
+        self.assertIn(
+            'local enabled="${OMERO_DROPBOX_USER_DIR_SYNC_ENABLED:?OMERO_DROPBOX_USER_DIR_SYNC_ENABLED is required}"',
+            script_text,
+        )
+        self.assertIn(
+            'local status_file="${server_var_path%/}/dropbox-user-dir-sync.status"',
+            script_text,
+        )
+        self.assertNotIn("OMERO_DROPBOX_ENABLED:-0", script_text)
+        self.assertNotIn("OMERO_DROPBOX_USER_DIR_SYNC_ENABLED:-0", script_text)
+        self.assertNotIn(
+            "OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS:-300", script_text
+        )
+        self.assertNotIn(
+            "OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS:-10", script_text
+        )
+        self.assertNotIn("OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES:-3", script_text)
+        self.assertNotIn(
+            "OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS:-10",
+            script_text,
+        )
+        self.assertNotIn(
+            "OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS:-300",
+            script_text,
+        )
 
     def test_server_bootstrap_uses_dedicated_runtime_tmp_slot(self) -> None:
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(

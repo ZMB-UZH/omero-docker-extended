@@ -32,7 +32,7 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 
 **Files:** `docker-compose.yml`, `docker/`, `env/`, `installation_paths.env`
 
-Defines the complete topology: 20 Compose services on a single `omero` bridge network. In steady state, the stack runs 18 long-running runtime containers by default or 19 when the profile-gated `crowdsec` service is enabled. The
+Defines the complete topology: 21 Compose services on a single `omero` bridge network. In steady state, the stack runs 19 long-running runtime containers by default or 20 when the profile-gated `crowdsec` service is enabled. The
 one-shot `redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the
 installation script persists the required sysctl on the host. Every service has
 explicit health checks, pinned image versions, `no-new-privileges` security,
@@ -144,7 +144,7 @@ Rules:
 
 Configuration flows through environment variables at three levels:
 
-1. **Host paths** (`installation_paths.env`): 15 variables defining where data, databases, logs, and monitoring state live on the host filesystem.
+1. **Host paths** (`installation_paths.env`): variables defining where data, databases, logs, and monitoring state live on the host filesystem.
 2. **Service config** (`env/*.env`): database credentials, Java heap, OMERO settings, plugin parameters, Celery broker/queue config, monitoring endpoints.
 3. **Docker Compose** (`docker-compose.yml`): maps env files to containers, defines service dependencies, health checks, networks, and volume mounts.
 

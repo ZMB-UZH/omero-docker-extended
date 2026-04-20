@@ -94,6 +94,71 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             self.assertIn("config set -- omero.web.public.enabled false", calls)
             self.assertFalse(python_calls_file.exists())
 
+    def test_50_config_sets_empty_values_from_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            fake_omero, calls_file = self._make_fake_omero(workspace)
+            fake_python, python_calls_file = self._make_fake_python_validator(workspace)
+
+            env = {
+                "PATH": os.environ.get("PATH", ""),
+                "OMERO_CALLS_FILE": str(calls_file),
+                "OMERO_WEB_OMERO_BIN": str(fake_omero),
+                "OMERO_WEB_PYTHON_BIN": str(fake_python),
+                "PYTHON_CALLS_FILE": str(python_calls_file),
+                "CONFIG_omero_fs_importArgs": "",
+            }
+
+            subprocess.run(
+                [sys.executable, str(self.config_script)], check=True, env=env
+            )
+
+            calls = calls_file.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(calls), 1)
+            self.assertRegex(
+                calls[0],
+                r"^config set omero\.fs\.importArgs -f /tmp/",
+            )
+            self.assertFalse(python_calls_file.exists())
+
+    def test_50_config_auto_detects_config_glob_from_omero_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            fake_bin_dir = workspace / "runtime" / "venv" / "bin"
+            fake_bin_dir.mkdir(parents=True)
+            fake_omero = fake_bin_dir / "omero"
+            calls_file = workspace / "omero-calls.log"
+            fake_omero.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                'printf \'%s\\n\' "$*" >> "$OMERO_CALLS_FILE"\n',
+                encoding="utf-8",
+            )
+            fake_omero.chmod(fake_omero.stat().st_mode | stat.S_IXUSR)
+            fake_python = fake_bin_dir / "python3"
+            fake_python.write_text(
+                "#!/usr/bin/env python3\n",
+                encoding="utf-8",
+            )
+            fake_python.chmod(fake_python.stat().st_mode | stat.S_IXUSR)
+            config_dir = workspace / "runtime" / "config"
+            config_dir.mkdir()
+            (config_dir / "site.omero").write_text("# test\n", encoding="utf-8")
+
+            env = {
+                "PATH": os.environ.get("PATH", ""),
+                "OMERO_CALLS_FILE": str(calls_file),
+                "OMERO_WEB_OMERO_BIN": str(fake_omero),
+                "OMERO_WEB_PYTHON_BIN": str(fake_python),
+            }
+
+            subprocess.run(
+                [sys.executable, str(self.config_script)], check=True, env=env
+            )
+
+            calls = calls_file.read_text(encoding="utf-8").splitlines()
+            self.assertIn(f"load --glob {config_dir}/*.omero", calls)
+
     def test_50_config_normalizes_legacy_plugin_aliases_before_apply(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)

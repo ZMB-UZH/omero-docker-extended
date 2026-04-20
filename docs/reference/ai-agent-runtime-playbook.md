@@ -48,7 +48,10 @@ Examples:
 
 - `docker compose build <service>` uses the layer cache. This is fast but will NOT pick up changes to build ARGs that are already baked into a cached layer. Use this for code-only changes (Python files, templates, static assets) where the COPY layers invalidate naturally.
 - `docker compose build --no-cache <service>` rebuilds every layer from scratch. Use this when changing build ARGs (package versions like `BIOFORMATS2RAW_VERSION`, `OME_ZARR_PY_VERSION`), base image digests, or OS-level package lists.
-- Build ARGs such as `BIOFORMATS2RAW_VERSION` come from `env/omeroserver.env`. `docker-compose.yml` and `docker/<service>.Dockerfile` fail closed when those values are absent instead of silently falling back to in-code defaults.
+- Build ARGs such as `OMERO_DROPBOX_VERSION` and `BIOFORMATS2RAW_VERSION`
+  come from `env/omeroserver.env`. `docker-compose.yml` and
+  `docker/<service>.Dockerfile` fail closed when those values are absent
+  instead of silently falling back to in-code defaults.
 
 ## bioformats2raw version compatibility
 
@@ -66,6 +69,11 @@ Examples:
 ## OMERO CLI and container Python
 
 - Never run OMERO CLI as `root` inside `omeroserver` or `omeroweb`.
+- Do not use `su - <service-user>` for OMERO CLI diagnostics. The login shell
+  drops the container's OMERO temp environment and can trigger plugin-loading
+  errors such as `Could not find lockable tmp dir`.
+- Use the service account with explicit `HOME`, `TMPDIR`, `OMERO_TMPDIR`, and
+  `OMERO_TEMPDIR`, matching the startup scripts' `runuser -- env ...` pattern.
 - Put OMERO auth flags before the subcommand.
 - Resolve the active virtualenv first if the exact interpreter path is uncertain.
 - For OMERO.web import validation, authenticate as a regular OMERO user; the Import plugin intentionally blocks `root`.

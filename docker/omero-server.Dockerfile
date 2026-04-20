@@ -193,6 +193,50 @@ RUN set -euo pipefail; \
             omero-rdf; \
     done
 
+# Install OMERO.dropbox into the OMERO.server virtualenv
+# ------------------------------------------------------
+ARG OMERO_DROPBOX_VERSION
+RUN set -euo pipefail; \
+    if [[ -z "${OMERO_DROPBOX_VERSION:-}" ]]; then \
+        echo "ERROR: OMERO_DROPBOX_VERSION must be provided from env/omeroserver.env" >&2; \
+        exit 1; \
+    fi; \
+    mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 -type d -name 'venv*' | sort -V); \
+    if [[ "${#VENV_DIRS[@]}" -eq 0 ]]; then \
+        echo "ERROR: No OMERO.server virtual environments found under /opt/omero/server" >&2; \
+        exit 1; \
+    fi; \
+    for VENV_DIR in "${VENV_DIRS[@]}"; do \
+        if [[ ! -x "${VENV_DIR}/bin/python" ]]; then \
+            echo "ERROR: Invalid OMERO.server virtual environment: ${VENV_DIR}" >&2; \
+            exit 1; \
+        fi; \
+        "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
+            "omero-dropbox==${OMERO_DROPBOX_VERSION}"; \
+        "${VENV_DIR}/bin/python" -c "import fsDropBox, fsMonitorServer"; \
+    done
+
+# Prevent DropBox from auto-starting before Blitz accepts sessions. The
+# startup bootstrap enables and starts DropBox explicitly after API readiness.
+RUN set -euo pipefail; \
+    SERVER_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${SERVER_DIR}" ]]; then \
+        echo "ERROR: Could not find OMERO.server directory" >&2; \
+        exit 1; \
+    fi; \
+    mapfile -t TEMPLATE_FILES < <(find "${SERVER_DIR}/etc" -type f -path '*/grid/templates.xml' | sort -u); \
+    if [[ "${#TEMPLATE_FILES[@]}" -eq 0 ]]; then \
+        echo "ERROR: No OMERO grid templates.xml files found below ${SERVER_DIR}/etc" >&2; \
+        exit 1; \
+    fi; \
+    for template_file in "${TEMPLATE_FILES[@]}"; do \
+        sed -i -E 's/(<server id="DropBox" exe="\$\{exe\}" activation=)"always"/\1"manual"/' "${template_file}"; \
+        grep -q '<server id="DropBox" exe="${exe}" activation="manual"' "${template_file}" || { \
+            echo "ERROR: Failed to set DropBox IceGrid activation to manual in ${template_file}" >&2; \
+            exit 1; \
+        }; \
+    done
+
 # Ensure packaging tooling exists in every OMERO.server venv and is writable by runtime user
 # ------------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
@@ -380,13 +424,19 @@ RUN set -euo pipefail; \
 # Consolidated OMERO.server startup flow
 # --------------------------------------
 COPY startup/10-server-bootstrap.sh /startup/10-server-bootstrap.sh
+COPY startup/healthcheck-omeroserver.sh /startup/healthcheck-omeroserver.sh
+COPY startup/50-config.py /startup/50-config.py
 COPY startup/repo_root_sync_helper.py /startup/repo_root_sync_helper.py
+COPY startup/dropbox_user_dir_sync.py /startup/dropbox_user_dir_sync.py
 COPY startup/50-install-omero-downloader.sh /startup/50-install-omero-downloader.sh
 COPY startup/51-install-imarisconvert.sh /startup/51-install-imarisconvert.sh
 RUN set -euo pipefail; \
     for startup_script in \
         /startup/10-server-bootstrap.sh \
+        /startup/healthcheck-omeroserver.sh \
+        /startup/50-config.py \
         /startup/repo_root_sync_helper.py \
+        /startup/dropbox_user_dir_sync.py \
         /startup/50-install-omero-downloader.sh \
         /startup/51-install-imarisconvert.sh; do \
         chown root:root "${startup_script}"; \

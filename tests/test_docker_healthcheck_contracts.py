@@ -64,6 +64,22 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertIn(probe, dockerfile_text)
         self.assertIn(probe, self.compose_text)
 
+    def test_omeroserver_healthcheck_uses_env_driven_helper(self) -> None:
+        helper_text = (REPO_ROOT / "startup" / "healthcheck-omeroserver.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("/startup/healthcheck-omeroserver.sh", self.compose_text)
+        self.assertIn("OMERO_CLI_USER is required", helper_text)
+        self.assertIn("OMERO_TMPDIR is required", helper_text)
+        self.assertIn("OMERODIR is required", helper_text)
+        self.assertIn('OMERO_PASSWORD="${ROOTPASS}"', helper_text)
+        self.assertIn('OMERO_PASSWORD="${OMERO_PASSWORD}"', helper_text)
+        self.assertIn('runuser -u "${OMERO_CLI_USER}" -- env', helper_text)
+        self.assertIn('TMPDIR="${OMERO_TMPDIR}"', helper_text)
+        self.assertNotIn("HOME=/tmp", self.compose_text)
+        self.assertNotIn("HOME=/tmp", helper_text)
+        self.assertNotIn('-w "$$ROOTPASS"', self.compose_text)
+
     def test_firewall_bouncer_runs_as_non_root_placeholder_image(self) -> None:
         dockerfile_text = self.dockerfiles["firewall-bouncer"]
         self.assertIn("addgroup -S firewallbouncer", dockerfile_text)
