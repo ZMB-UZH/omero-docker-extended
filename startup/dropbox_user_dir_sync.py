@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import grp
+import logging
 import os
 import pwd
 import re
@@ -24,6 +25,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class SyncError(RuntimeError):
@@ -146,8 +150,8 @@ def close_connection(conn) -> None:
         conn.close(hard=True)
     except TypeError:  # pragma: no cover - compatibility with older gateways
         conn.close()
-    except Exception:
-        pass
+    except Exception:  # pragma: no cover - depends on gateway shutdown state
+        LOGGER.debug("Failed to close OMERO connection cleanly.", exc_info=True)
 
 
 def connect(config: SyncConfig):

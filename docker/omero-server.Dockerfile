@@ -230,8 +230,8 @@ RUN set -euo pipefail; \
         exit 1; \
     fi; \
     for template_file in "${TEMPLATE_FILES[@]}"; do \
-        sed -i -E 's/(<server id="DropBox" exe="\$\{exe\}" activation=)"always"/\1"manual"/' "${template_file}"; \
-        grep -q '<server id="DropBox" exe="${exe}" activation="manual"' "${template_file}" || { \
+        sed -i -E "s/(<server id=\"DropBox\" exe=\"[$][{]exe[}]\" activation=)\"always\"/\1\"manual\"/" "${template_file}"; \
+        grep -Fq "<server id=\"DropBox\" exe=\"\${exe}\" activation=\"manual\"" "${template_file}" || { \
             echo "ERROR: Failed to set DropBox IceGrid activation to manual in ${template_file}" >&2; \
             exit 1; \
         }; \
