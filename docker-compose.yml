@@ -5,7 +5,7 @@
 services:
 
   portainer:
-    image: "portainer/portainer-ce:2.39.0-alpine"
+    image: "portainer/portainer-ce:2.40.0-alpine"
     container_name: portainer
     restart: unless-stopped
     networks:
@@ -29,7 +29,7 @@ services:
       - no-new-privileges:true
 
   loki:
-    image: "grafana/loki:3.6.7"
+    image: "grafana/loki:3.7.1"
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
     networks:
@@ -51,11 +51,12 @@ services:
       - no-new-privileges:true
 
   alloy:
-    image: "grafana/alloy:v1.13.2"
+    image: "grafana/alloy:v1.15.1"
     restart: unless-stopped
     command:
       - "run"
       - "--server.http.listen-addr=0.0.0.0:12345"
+      - "--storage.path=/data-alloy"
       - "/etc/alloy/alloy-config.alloy"
     networks:
       omero:
@@ -63,6 +64,7 @@ services:
           - alloy
     volumes:
       - ./monitoring/alloy/alloy-config.alloy:/etc/alloy/alloy-config.alloy:ro
+      - ${ALLOY_DATA_PATH:?Set ALLOY_DATA_PATH (run installation/installation_script.sh)}:/data-alloy:rw
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:ro
       - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var/log:ro
@@ -80,7 +82,7 @@ services:
       - no-new-privileges:true
 
   prometheus:
-    image: "prom/prometheus:v3.10.0"
+    image: "prom/prometheus:v3.11.2"
     restart: unless-stopped
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -130,7 +132,7 @@ services:
       - no-new-privileges:true
 
   node-exporter:
-    image: "prom/node-exporter:v1.10.2"
+    image: "prom/node-exporter:v1.11.1"
     restart: unless-stopped
     command:
       - "--path.rootfs=/host"
@@ -176,7 +178,7 @@ services:
       - no-new-privileges:true
 
   cadvisor:
-    image: "gcr.io/cadvisor/cadvisor:v0.55.1"
+    image: "ghcr.io/google/cadvisor:0.56.2"
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     privileged: true
@@ -254,7 +256,7 @@ services:
       - no-new-privileges:true
 
   redis-exporter:
-    image: "oliver006/redis_exporter:v1.81.0-alpine"
+    image: "oliver006/redis_exporter:v1.82.0-alpine"
     restart: unless-stopped
     environment:
       REDIS_ADDR: "redis://redis:6379"
@@ -275,7 +277,7 @@ services:
       - no-new-privileges:true
 
   grafana:
-    image: "grafana/grafana:12.4.1"
+    image: "grafana/grafana:13.0.1"
     restart: unless-stopped
     networks:
       omero:
@@ -345,6 +347,8 @@ services:
     build:
       context: .
       dockerfile: docker/omero-server.Dockerfile
+      args:
+        OMERO_DROPBOX_VERSION: "${OMERO_DROPBOX_VERSION:?Set OMERO_DROPBOX_VERSION in env/omeroserver.env}"
     restart: unless-stopped
     depends_on:
       database:
@@ -386,10 +390,8 @@ services:
         hard: 12000
     healthcheck:
       test:
-        - CMD-SHELL
-        - >-
-          runuser -p -m -u omero-server -- sh -c
-          'set -eu; resolve_omero_bin() { for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "$${candidate}" ] || continue; printf "%s" "$${candidate}"; return 0; done; return 1; }; normalize_dir_path() { path="$${1:-}"; while [ "$${path}" != "/" ] && [ "$${path%/}" != "$${path}" ]; do path="$${path%/}"; done; printf "%s" "$${path}"; }; omero_bin="$$(resolve_omero_bin || true)"; [ -n "$${omero_bin}" ] || { echo "FATAL: OMERO CLI executable not found under /opt/omero/server/venv*/bin/omero or /opt/omero/server/OMERO.server/bin/omero" >&2; exit 127; }; HOME=/tmp "$${omero_bin}" -s 127.0.0.1 -p 4064 login -u root -w "$$ROOTPASS" >/dev/null; expected_root="$$(normalize_dir_path "$$CONFIG_omero_managed_dir")"; actual_root="$$(HOME=/tmp "$${omero_bin}" config get omero.managed.dir 2>/dev/null | tr -d "\r\n")"; actual_root="$$(normalize_dir_path "$${actual_root}")"; [ "$${actual_root}" = "$${expected_root}" ] || { echo "FATAL: omero.managed.dir drifted from expected value: expected=$${expected_root} actual=$${actual_root}" >&2; exit 1; }; bad_root="$$(find /opt/omero/server -type d -name ManagedRepository -print -quit 2>/dev/null || true)"; [ -z "$${bad_root}" ] || { echo "FATAL: unexpected image-local ManagedRepository detected at $${bad_root}" >&2; exit 1; }'
+        - CMD
+        - /startup/healthcheck-omeroserver.sh
       interval: 10s
       timeout: 10s
       retries: 30
@@ -416,7 +418,7 @@ services:
       - no-new-privileges:true
 
   redis:
-    image: "redis:8.6.1-alpine"
+    image: "redis:8.6.2-alpine"
     restart: unless-stopped
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
     environment:
@@ -600,7 +602,7 @@ services:
 
 
   ollama:
-    image: ollama/ollama:latest
+    image: "ollama/ollama:0.21.0"
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: "24h"

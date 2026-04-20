@@ -93,9 +93,9 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertEqual(["crowdsec"], self.services["crowdsec"].get("profiles"))
 
         expected_phrases = [
-            "20 Compose services",
-            "18 long-running runtime containers by default",
-            "19 when the profile-gated",
+            "21 Compose services",
+            "19 long-running runtime containers by default",
+            "20 when the profile-gated",
             "crowdsec",
             "redis-sysctl-init",
         ]

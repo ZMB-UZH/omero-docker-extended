@@ -91,9 +91,9 @@ Do not start coding until you can name the helper boundary you will harden and t
 
 ## Topology facts
 
-- This deployment has `20 Compose services` total.
-- It runs `18 long-running runtime containers by default`.
-- It runs `19 when the profile-gated` `crowdsec` service is enabled.
+- This deployment has `21 Compose services` total.
+- It runs `19 long-running runtime containers by default`.
+- It runs `20 when the profile-gated` `crowdsec` service is enabled.
 - The `redis-sysctl-init` helper is a one-shot profile-gated service, not a long-running runtime container.
 - The `omeroweb` container runs OMERO.web plus the Imaris Celery worker under `supervisord`.
 

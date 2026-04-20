@@ -4,16 +4,16 @@
 
 | Service                    | Version              | Purpose                                                                 | Internal endpoint                          |
 | -------------------------- | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------ |
-| Prometheus                 | v3.10.0              | Metrics scraping and storage                                            | `http://prometheus:9090`                   |
-| Grafana                    | 12.4.1               | Dashboards and visualization                                            | `http://grafana:3000`                      |
-| Loki                       | 3.6.7                | Log aggregation backend                                                 | `http://loki:3100`                         |
-| Alloy                      | v1.13.2              | Log collection pipeline (Docker + files)                                | `http://alloy:12345`                       |
+| Prometheus                 | v3.11.2              | Metrics scraping and storage                                            | `http://prometheus:9090`                   |
+| Grafana                    | 13.0.1               | Dashboards and visualization                                            | `http://grafana:3000`                      |
+| Loki                       | 3.7.1                | Log aggregation backend                                                 | `http://loki:3100`                         |
+| Alloy                      | v1.15.1              | Log collection pipeline (Docker + files)                                | `http://alloy:12345`                       |
 | Blackbox exporter          | v0.28.0              | HTTP/TCP endpoint probing                                               | `http://blackbox-exporter:9115`            |
-| Node exporter              | v1.10.2              | Host-level metrics                                                      | `http://node-exporter:9100`                |
-| cAdvisor                   | v0.55.1              | Container resource metrics                                              | `http://cadvisor:8080`                     |
+| Node exporter              | v1.11.1              | Host-level metrics                                                      | `http://node-exporter:9100`                |
+| cAdvisor                   | v0.56.2              | Container resource metrics                                              | `http://cadvisor:8080`                     |
 | Postgres exporter          | v0.19.1              | OMERO database metrics                                                  | `http://postgres-exporter:9187`            |
 | Postgres exporter (plugin) | v0.19.1              | Plugin database metrics                                                 | `http://postgres-exporter-plugin:9187`     |
-| Redis exporter             | v1.81.0              | Redis metrics                                                           | `http://redis-exporter:9121`               |
+| Redis exporter             | v1.82.0              | Redis metrics                                                           | `http://redis-exporter:9121`               |
 | Path usage exporter        | custom (Python 3.12) | OMERO volume disk usage via textfile collector                          | writes to node-exporter textfile directory |
 | CrowdSec                   | v1.7.6               | Host-wide cybersecurity engine (host syslog/auth + Docker log analysis) | `http://crowdsec:8080`                     |
 
@@ -27,8 +27,8 @@ falls back to reading UID/GID from `/proc/1/status` in a started probe
 container. If both probes fail, installation now exits with a clear error
 instead of silently defaulting to root ownership, and operators must set
 explicit overrides such as `PROMETHEUS_UID` / `PROMETHEUS_GID`. `LOKI_UID` /
-`LOKI_GID` and other `*_UID` / `*_GID` variables remain optional explicit
-overrides when required by host policy.
+`LOKI_GID`, `ALLOY_UID` / `ALLOY_GID`, and other `*_UID` / `*_GID` variables
+remain optional explicit overrides when required by host policy.
 
 ## Configuration sources
 
@@ -141,6 +141,12 @@ Alloy collects logs from two sources:
 All logs are pushed to Loki at `http://loki:3100/loki/api/v1/push`.
 
 The internal OMERO file tails start from the current end-of-file (`tail_from_end = true`). This avoids replaying historical log backlogs into Loki during restarts, which previously caused startup-time ingestion-rate errors on single-node deployments. Docker container logs are still collected continuously after startup.
+
+Alloy stores Docker and file-tail positions under `/data-alloy`, backed by
+`ALLOY_DATA_PATH` from `installation_paths.env`. That path must persist across
+container restarts so `loki.source.docker` and `loki.source.file` resume at the
+recorded offsets instead of replaying historical container logs that Loki would
+reject as stale.
 
 ## CrowdSec log expectations
 

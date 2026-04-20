@@ -27,6 +27,8 @@ GRAFANA_UID="${GRAFANA_UID:-}"
 GRAFANA_GID="${GRAFANA_GID:-}"
 LOKI_UID="${LOKI_UID:-}"
 LOKI_GID="${LOKI_GID:-}"
+ALLOY_UID="${ALLOY_UID:-}"
+ALLOY_GID="${ALLOY_GID:-}"
 DATABASE_UID="${DATABASE_UID:-}"
 DATABASE_GID="${DATABASE_GID:-}"
 DATABASE_PLUGIN_UID="${DATABASE_PLUGIN_UID:-}"
@@ -43,6 +45,7 @@ OMERO_WEB_IMAGE="${OMERO_WEB_IMAGE:-omeroweb:custom}"
 PROMETHEUS_IMAGE="${PROMETHEUS_IMAGE:-}"
 GRAFANA_IMAGE="${GRAFANA_IMAGE:-}"
 LOKI_IMAGE="${LOKI_IMAGE:-}"
+ALLOY_IMAGE="${ALLOY_IMAGE:-}"
 DATABASE_IMAGE="${DATABASE_IMAGE:-}"
 DATABASE_PLUGIN_IMAGE="${DATABASE_PLUGIN_IMAGE:-}"
 PATH_USAGE_EXPORTER_IMAGE="${PATH_USAGE_EXPORTER_IMAGE:-path-usage-exporter:custom}"
@@ -419,6 +422,11 @@ run_image_build() {
         return 1
     fi
 
+    if [ -z "${OMERO_DROPBOX_VERSION:-}" ]; then
+        echo "ERROR: Missing required configuration variable OMERO_DROPBOX_VERSION in ${server_env_source}" >&2
+        return 1
+    fi
+
     if [ -z "${OME_ZARR_PY_VERSION:-}" ]; then
         echo "ERROR: Missing required configuration variable OME_ZARR_PY_VERSION in ${server_env_source}" >&2
         return 1
@@ -610,6 +618,7 @@ export_compose_interpolation_env() {
         PROMETHEUS_DATA_PATH
         GRAFANA_DATA_PATH
         LOKI_DATA_PATH
+        ALLOY_DATA_PATH
         PG_MAINTENANCE_DATA_PATH
         BUILDX_DATA_PATH
         NODE_EXPORTER_TEXTFILE_PATH
@@ -979,11 +988,64 @@ create_omero_groups_from_list() {
             # Use docker exec explicitly with non-interactive flags and without pseudo-TTY (-T)
             # The < /dev/null redirect ensures if any prompt triggers it fails instead of hanging forever
             add_output="$(compose_with_installation_env "${compose_file}" exec -T \
-                -e HOME="/tmp" \
                 -e ROOTPASS="${ROOTPASS}" \
                 -e TARGET_GROUP_NAME="${group_name}" \
                 -e TARGET_GROUP_PERMISSION="${group_permission}" \
-                omeroserver bash -c 'set -euo pipefail; resolve_omero_bin() { local candidate=""; for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "${candidate}" ] || continue; printf "%s" "${candidate}"; return 0; done; return 1; }; OMERO_BIN="$(resolve_omero_bin || true)"; if [ -z "${OMERO_BIN}" ]; then echo "OMERO CLI executable not found under /opt/omero/server/venv*/bin/omero or /opt/omero/server/OMERO.server/bin/omero"; exit 127; fi; OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"; if [ -z "${OMERO_TMP_PATH:-}" ]; then OMERO_TMPDIR_VALUE="/tmp"; fi; mkdir -p "${OMERO_TMPDIR_VALUE}"; chmod 0777 "${OMERO_TMPDIR_VALUE}" || true; export HOME="/tmp" TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}"; if ! su omero-server -c "\"${OMERO_BIN}\" -C -s localhost -p 4064 login -u root -w \"${ROOTPASS}\"" </dev/null >/dev/null 2>&1; then echo "Failed to login or ICE not ready"; exit 1; fi; su omero-server -c "\"${OMERO_BIN}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\" group add \"${TARGET_GROUP_NAME}\" --type=\"${TARGET_GROUP_PERMISSION}\"" </dev/null' 2>&1)"
+                omeroserver bash -s 2>&1 <<'EOS_GROUP_BOOTSTRAP'
+set -euo pipefail
+
+: "${OMERO_CLI_USER:?OMERO_CLI_USER is required}"
+: "${OMERO_TMP_PATH:?OMERO_TMP_PATH is required}"
+
+resolve_omero_bin() {
+    local candidate=""
+    for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do
+        [ -x "${candidate}" ] || continue
+        printf "%s" "${candidate}"
+        return 0
+    done
+    return 1
+}
+
+resolve_cli_home() {
+    local cli_home=""
+    cli_home="$(getent passwd "${OMERO_CLI_USER}" | cut -d: -f6 2>/dev/null || true)"
+    if [ -z "${cli_home}" ] || [ ! -d "${cli_home}" ]; then
+        echo "OMERO CLI user home not found for ${OMERO_CLI_USER}" >&2
+        return 1
+    fi
+    printf "%s" "${cli_home}"
+}
+
+OMERO_BIN="$(resolve_omero_bin || true)"
+if [ -z "${OMERO_BIN}" ]; then
+    echo "OMERO CLI executable not found under /opt/omero/server/venv*/bin/omero or /opt/omero/server/OMERO.server/bin/omero"
+    exit 127
+fi
+
+OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"
+OMERO_CLI_HOME="$(resolve_cli_home)"
+mkdir -p "${OMERO_TMPDIR_VALUE}"
+chown "$(id -u "${OMERO_CLI_USER}")":"$(id -g "${OMERO_CLI_USER}")" "${OMERO_TMPDIR_VALUE}"
+chmod 0700 "${OMERO_TMPDIR_VALUE}"
+
+run_omero_cli() {
+    runuser -u "${OMERO_CLI_USER}" -- env \
+        HOME="${OMERO_CLI_HOME}" \
+        TMPDIR="${OMERO_TMPDIR_VALUE}" \
+        OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" \
+        OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}" \
+        OMERO_PASSWORD="${ROOTPASS}" \
+        "${OMERO_BIN}" "$@"
+}
+
+if ! run_omero_cli -C -s localhost -p 4064 login -u root </dev/null >/dev/null 2>&1; then
+    echo "Failed to login or ICE not ready"
+    exit 1
+fi
+run_omero_cli -s localhost -p 4064 -u root group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}" </dev/null
+EOS_GROUP_BOOTSTRAP
+            )"
             add_exit_code=$?
             set -e
 
@@ -1050,12 +1112,14 @@ add_job_service_to_install_groups() {
     for attempt in $(seq 1 "${retry_limit}"); do
         set +e
         output="$(compose_with_installation_env "${compose_file}" exec -T \
-            -e HOME="/tmp" \
             -e ROOTPASS="${ROOTPASS}" \
             -e JOB_USER="${job_user}" \
             -e JOB_PASS="${job_pass}" \
-            omeroserver bash -s <<'EOS_JOB_SERVICE'
+            omeroserver bash -s 2>&1 <<'EOS_JOB_SERVICE'
 set -uo pipefail
+
+: "${OMERO_CLI_USER:?OMERO_CLI_USER is required}"
+: "${OMERO_TMP_PATH:?OMERO_TMP_PATH is required}"
 
 resolve_omero_bin() {
     local candidate=""
@@ -1078,9 +1142,29 @@ parse_group_names() {
     fi
 }
 
+resolve_cli_home() {
+    local cli_home=""
+    cli_home="$(getent passwd "${OMERO_CLI_USER}" | cut -d: -f6 2>/dev/null || true)"
+    if [ -z "${cli_home}" ] || [ ! -d "${cli_home}" ]; then
+        echo "OMERO CLI user home not found for ${OMERO_CLI_USER}" >&2
+        return 1
+    fi
+    printf "%s" "${cli_home}"
+}
+
+run_omero_cli() {
+    runuser -u "${OMERO_CLI_USER}" -- env \
+        HOME="${OMERO_CLI_HOME}" \
+        TMPDIR="${OMERO_TMPDIR_VALUE}" \
+        OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" \
+        OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}" \
+        OMERO_PASSWORD="${ROOTPASS}" \
+        "${OMERO_BIN}" "$@"
+}
+
 omero_user_exists() {
     local users_out=""
-    users_out="$(su omero-server -c "\"${OMERO_BIN}\" user list -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>/dev/null || true)"
+    users_out="$(run_omero_cli -s localhost -p 4064 -u root user list </dev/null 2>/dev/null || true)"
     printf '%s\n' "${users_out}" \
         | awk '{for (i = 1; i <= NF; i++) if ($i == ENVIRON["JOB_USER"]) found = 1} END {exit(found ? 0 : 1)}'
 }
@@ -1092,20 +1176,18 @@ if [ -z "${OMERO_BIN}" ]; then
 fi
 
 OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"
-if [ -z "${OMERO_TMP_PATH:-}" ]; then
-    OMERO_TMPDIR_VALUE="/tmp"
-fi
+OMERO_CLI_HOME="$(resolve_cli_home)"
 mkdir -p "${OMERO_TMPDIR_VALUE}"
-chmod 0777 "${OMERO_TMPDIR_VALUE}" || true
-export HOME="/tmp" TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}"
+chown "$(id -u "${OMERO_CLI_USER}")":"$(id -g "${OMERO_CLI_USER}")" "${OMERO_TMPDIR_VALUE}"
+chmod 0700 "${OMERO_TMPDIR_VALUE}"
 
-if ! su omero-server -c "\"${OMERO_BIN}\" -C -s localhost -p 4064 login -u root -w \"${ROOTPASS}\"" </dev/null >/dev/null 2>&1; then
+if ! run_omero_cli -C -s localhost -p 4064 login -u root </dev/null >/dev/null 2>&1; then
     echo "ICE not ready"
     exit 1
 fi
 
 if ! omero_user_exists >/dev/null 2>&1; then
-    create_out="$(su omero-server -c "\"${OMERO_BIN}\" user add \"${JOB_USER}\" Job Service --group-name user -P \"${JOB_PASS}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>&1)"
+    create_out="$(run_omero_cli -s localhost -p 4064 -u root user add "${JOB_USER}" Job Service --group-name user -P "${JOB_PASS}" </dev/null 2>&1)"
     create_rc=$?
     if [ "${create_rc}" -ne 0 ] && ! printf '%s' "${create_out}" | grep -qiE 'already exists|User exists|name already in use'; then
         echo "Failed to create ${JOB_USER}: ${create_out}"
@@ -1114,7 +1196,7 @@ if ! omero_user_exists >/dev/null 2>&1; then
     echo "Ensured user ${JOB_USER} exists"
 fi
 
-group_out="$(su omero-server -c "\"${OMERO_BIN}\" group list -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>&1 || true)"
+group_out="$(run_omero_cli -s localhost -p 4064 -u root group list </dev/null 2>&1 || true)"
 eligible_groups="$(parse_group_names "${group_out}" | grep -v -E '^(root|system|user)$' | sort -u || true)"
 if [ -z "${eligible_groups}" ]; then
     echo "No eligible groups found"
@@ -1124,7 +1206,7 @@ fi
 failed=0
 for group_name in ${eligible_groups}; do
     [ -z "${group_name}" ] && continue
-    out="$(su omero-server -c "\"${OMERO_BIN}\" user joingroup \"${group_name}\" --name=\"${JOB_USER}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>&1)" && {
+    out="$(run_omero_cli -s localhost -p 4064 -u root user joingroup "${group_name}" --name="${JOB_USER}" </dev/null 2>&1)" && {
         echo "Added ${JOB_USER} to ${group_name}"
         continue
     }
@@ -1140,7 +1222,7 @@ done
 
 exit "${failed}"
 EOS_JOB_SERVICE
-        2>&1)"
+        )"
         exit_code=$?
         set -e
 
@@ -1251,6 +1333,142 @@ wait_for_repo_root_sync_ready() {
     done
 }
 
+wait_for_dropbox_ice_bootstrap_ready() {
+    local started_epoch="${1:?BUG: wait_for_dropbox_ice_bootstrap_ready requires a start epoch}"
+    local enabled="${OMERO_DROPBOX_ENABLED:?OMERO_DROPBOX_ENABLED is required}"
+    local server_var_path="${OMERO_SERVER_VAR_PATH:?OMERO_SERVER_VAR_PATH is required}"
+    local status_file="${server_var_path%/}/dropbox-ice-bootstrap.status"
+    local startup_wait_seconds="${OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS:?OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS is required}"
+    local poll_interval_seconds="${OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS:?OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS is required}"
+    local max_wait_seconds=0
+    local deadline_epoch=0
+    local now_epoch=0
+    local status=""
+    local last_success_epoch=""
+    local status_line=""
+
+    if [ "${START_CONTAINERS}" -ne 1 ]; then
+        return 0
+    fi
+
+    case "${enabled}" in
+        1|true|yes|on) ;;
+        *)
+            echo "Skipping DropBox Ice bootstrap readiness wait (OMERO_DROPBOX_ENABLED=${enabled})."
+            return 0
+            ;;
+    esac
+
+    if ! [[ "${startup_wait_seconds}" =~ ^[0-9]+$ ]] || [ "${startup_wait_seconds}" -lt 1 ]; then
+        echo "ERROR: OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS must be a positive integer, got: ${startup_wait_seconds}" >&2
+        return 1
+    fi
+    if ! [[ "${poll_interval_seconds}" =~ ^[0-9]+$ ]] || [ "${poll_interval_seconds}" -lt 1 ]; then
+        echo "ERROR: OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS must be a positive integer, got: ${poll_interval_seconds}" >&2
+        return 1
+    fi
+
+    max_wait_seconds=$((startup_wait_seconds + 60))
+    deadline_epoch=$((started_epoch + max_wait_seconds))
+
+    echo "Waiting for DropBox Ice bootstrap to complete..."
+
+    while true; do
+        if [ -r "${status_file}" ]; then
+            status="$(sed -n 's/^status=//p' "${status_file}" | tail -n 1)"
+            last_success_epoch="$(sed -n 's/^last_success_epoch=//p' "${status_file}" | tail -n 1)"
+            if [ "${status}" = "ok" ] && [[ "${last_success_epoch}" =~ ^[0-9]+$ ]] && [ "${last_success_epoch}" -ge "${started_epoch}" ]; then
+                echo "DropBox Ice bootstrap is ready."
+                return 0
+            fi
+        fi
+
+        now_epoch="$(date +%s)"
+        if [ "${now_epoch}" -ge "${deadline_epoch}" ]; then
+            echo "ERROR: Timed out waiting for DropBox Ice bootstrap status at ${status_file}" >&2
+            if [ -r "${status_file}" ]; then
+                status_line="$(tr '\n' ' ' < "${status_file}" | sed 's/[[:space:]]\+/ /g')"
+                echo "ERROR: Last DropBox Ice bootstrap status: ${status_line}" >&2
+            fi
+            return 1
+        fi
+
+        sleep "${poll_interval_seconds}"
+    done
+}
+
+wait_for_dropbox_user_dir_sync_ready() {
+    local started_epoch="${1:?BUG: wait_for_dropbox_user_dir_sync_ready requires a start epoch}"
+    local enabled="${OMERO_DROPBOX_USER_DIR_SYNC_ENABLED:?OMERO_DROPBOX_USER_DIR_SYNC_ENABLED is required}"
+    local server_var_path="${OMERO_SERVER_VAR_PATH:?OMERO_SERVER_VAR_PATH is required}"
+    local status_file="${server_var_path%/}/dropbox-user-dir-sync.status"
+    local retry_limit="${OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES:?OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES is required}"
+    local retry_delay_seconds="${OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS:?OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS is required}"
+    local startup_wait_seconds="${OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS:?OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS is required}"
+    local poll_interval_seconds=5
+    local max_wait_seconds=0
+    local deadline_epoch=0
+    local now_epoch=0
+    local status=""
+    local last_success_epoch=""
+    local status_line=""
+
+    if [ "${START_CONTAINERS}" -ne 1 ]; then
+        return 0
+    fi
+
+    if [ "${enabled}" != "1" ]; then
+        echo "Skipping DropBox user directory sync readiness wait (OMERO_DROPBOX_USER_DIR_SYNC_ENABLED=${enabled})."
+        return 0
+    fi
+
+    if [ -z "${ROOTPASS:-}" ]; then
+        echo "ERROR: ROOTPASS is required for DropBox user directory sync readiness." >&2
+        return 1
+    fi
+
+    if ! [[ "${retry_limit}" =~ ^[0-9]+$ ]] || [ "${retry_limit}" -lt 1 ]; then
+        echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES must be a positive integer, got: ${retry_limit}" >&2
+        return 1
+    fi
+    if ! [[ "${retry_delay_seconds}" =~ ^[0-9]+$ ]] || [ "${retry_delay_seconds}" -lt 1 ]; then
+        echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS must be a positive integer, got: ${retry_delay_seconds}" >&2
+        return 1
+    fi
+    if ! [[ "${startup_wait_seconds}" =~ ^[0-9]+$ ]] || [ "${startup_wait_seconds}" -lt 1 ]; then
+        echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS must be a positive integer, got: ${startup_wait_seconds}" >&2
+        return 1
+    fi
+
+    max_wait_seconds=$((startup_wait_seconds + retry_limit * retry_delay_seconds + 60))
+    deadline_epoch=$((started_epoch + max_wait_seconds))
+
+    echo "Waiting for DropBox user directory synchronization to complete..."
+
+    while true; do
+        if [ -r "${status_file}" ]; then
+            status="$(sed -n 's/^status=//p' "${status_file}" | tail -n 1)"
+            last_success_epoch="$(sed -n 's/^last_success_epoch=//p' "${status_file}" | tail -n 1)"
+            if [ "${status}" = "ok" ] && [[ "${last_success_epoch}" =~ ^[0-9]+$ ]] && [ "${last_success_epoch}" -ge "${started_epoch}" ]; then
+                echo "DropBox user directory synchronization is ready."
+                return 0
+            fi
+        fi
+
+        now_epoch="$(date +%s)"
+        if [ "${now_epoch}" -ge "${deadline_epoch}" ]; then
+            echo "ERROR: Timed out waiting for DropBox user directory synchronization status at ${status_file}" >&2
+            if [ -r "${status_file}" ]; then
+                status_line="$(tr '\n' ' ' < "${status_file}" | sed 's/[[:space:]]\+/ /g')"
+                echo "ERROR: Last DropBox user directory sync status: ${status_line}" >&2
+            fi
+            return 1
+        fi
+
+        sleep "${poll_interval_seconds}"
+    done
+}
+
 stop_old_installation_containers() {
     local old_install_path="${1%/}"
     local old_database_path="$2"
@@ -1287,6 +1505,7 @@ PORTAINER_DATA_PATH=${old_data_path}/portainer_data
 PROMETHEUS_DATA_PATH=${old_data_path}/prometheus_data
 GRAFANA_DATA_PATH=${old_data_path}/grafana_data
 LOKI_DATA_PATH=${old_data_path}/loki_data
+ALLOY_DATA_PATH=${old_data_path}/alloy_data
 PG_MAINTENANCE_DATA_PATH=${old_data_path}/pg_maintenance_data
 NODE_EXPORTER_TEXTFILE_PATH=${old_data_path}/node_exporter_textfile
 CROWDSEC_DB_PATH=${old_data_path}/crowdsec_db
@@ -1457,6 +1676,7 @@ collect_bootstrap_sentinel_names() {
             "${PROMETHEUS_DATA_PATH:-}" \
             "${GRAFANA_DATA_PATH:-}" \
             "${LOKI_DATA_PATH:-}" \
+            "${ALLOY_DATA_PATH:-}" \
             "${PG_MAINTENANCE_DATA_PATH:-}" \
             "${NODE_EXPORTER_TEXTFILE_PATH:-}" \
             "${CROWDSEC_DB_PATH:-}" \
@@ -1510,6 +1730,7 @@ collect_repo_data_dir_names() {
             "${PROMETHEUS_DATA_PATH:-}" \
             "${GRAFANA_DATA_PATH:-}" \
             "${LOKI_DATA_PATH:-}" \
+            "${ALLOY_DATA_PATH:-}" \
             "${PG_MAINTENANCE_DATA_PATH:-}" \
             "${NODE_EXPORTER_TEXTFILE_PATH:-}" \
             "${CROWDSEC_DB_PATH:-}" \
@@ -1718,6 +1939,7 @@ PORTAINER_DATA_PATH=${PORTAINER_DATA_PATH}
 PROMETHEUS_DATA_PATH=${PROMETHEUS_DATA_PATH}
 GRAFANA_DATA_PATH=${GRAFANA_DATA_PATH}
 LOKI_DATA_PATH=${LOKI_DATA_PATH}
+ALLOY_DATA_PATH=${ALLOY_DATA_PATH}
 PG_MAINTENANCE_DATA_PATH=${PG_MAINTENANCE_DATA_PATH}
 NODE_EXPORTER_TEXTFILE_PATH=${NODE_EXPORTER_TEXTFILE_PATH}
 CROWDSEC_DB_PATH=${CROWDSEC_DB_PATH}
@@ -1808,6 +2030,7 @@ write_installation_paths_env() {
 #   GRAFANA_DATA_PATH
 #   PORTAINER_DATA_PATH
 #   LOKI_DATA_PATH
+#   ALLOY_DATA_PATH
 #   PG_MAINTENANCE_DATA_PATH
 #   BUILDX_DATA_PATH
 #   NODE_EXPORTER_TEXTFILE_PATH
@@ -1832,6 +2055,7 @@ PROMETHEUS_DATA_PATH=\${OMERO_DATA_PATH}/prometheus_data
 GRAFANA_DATA_PATH=\${OMERO_DATA_PATH}/grafana_data
 PORTAINER_DATA_PATH=\${OMERO_DATA_PATH}/portainer_data
 LOKI_DATA_PATH=\${OMERO_DATA_PATH}/loki_data
+ALLOY_DATA_PATH=\${OMERO_DATA_PATH}/alloy_data
 PG_MAINTENANCE_DATA_PATH=\${OMERO_DATA_PATH}/pg_maintenance_data
 BUILDX_DATA_PATH=\${OMERO_DATA_PATH}/buildx_cache
 NODE_EXPORTER_TEXTFILE_PATH=\${OMERO_DATA_PATH}/node_exporter_textfile
@@ -1869,6 +2093,7 @@ verify_installation_paths_env_content() {
         GRAFANA_DATA_PATH
         PORTAINER_DATA_PATH
         LOKI_DATA_PATH
+        ALLOY_DATA_PATH
         PG_MAINTENANCE_DATA_PATH
         BUILDX_DATA_PATH
         NODE_EXPORTER_TEXTFILE_PATH
@@ -2488,6 +2713,7 @@ PROMETHEUS_DATA_PATH="${OMERO_DATA_PATH%/}/prometheus_data"
 GRAFANA_DATA_PATH="${OMERO_DATA_PATH%/}/grafana_data"
 PORTAINER_DATA_PATH="${OMERO_DATA_PATH%/}/portainer_data"
 LOKI_DATA_PATH="${OMERO_DATA_PATH%/}/loki_data"
+ALLOY_DATA_PATH="${OMERO_DATA_PATH%/}/alloy_data"
 PG_MAINTENANCE_DATA_PATH="${OMERO_DATA_PATH%/}/pg_maintenance_data"
 NODE_EXPORTER_TEXTFILE_PATH="${OMERO_DATA_PATH%/}/node_exporter_textfile"
 CROWDSEC_DB_PATH="${OMERO_DATA_PATH%/}/crowdsec_db"
@@ -2547,6 +2773,12 @@ if [ -n "${LOKI_UID}" ]; then
 fi
 if [ -n "${LOKI_GID}" ]; then
     if ! validate_numeric_id "LOKI_GID" "${LOKI_GID}"; then exit 1; fi
+fi
+if [ -n "${ALLOY_UID}" ]; then
+    if ! validate_numeric_id "ALLOY_UID" "${ALLOY_UID}"; then exit 1; fi
+fi
+if [ -n "${ALLOY_GID}" ]; then
+    if ! validate_numeric_id "ALLOY_GID" "${ALLOY_GID}"; then exit 1; fi
 fi
 if is_crowdsec_enabled; then
     if [ -n "${CROWDSEC_UID}" ]; then
@@ -2618,6 +2850,7 @@ if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH}" "OMERO user data d
 if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO certificate directory"; then exit 1; fi
 if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${LOKI_DATA_PATH}" "Loki data directory"; then exit 1; fi
+if ! ensure_container_writable_path "${ALLOY_DATA_PATH}" "Alloy data directory"; then exit 1; fi
 if ! ensure_data_path "${PG_MAINTENANCE_DATA_PATH}" "PG maintenance data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${NODE_EXPORTER_TEXTFILE_PATH}" "Node exporter textfile directory"; then exit 1; fi
 if is_crowdsec_enabled; then
@@ -3499,6 +3732,7 @@ if [ -z "${OMERO_WEB_GID}" ]; then OMERO_WEB_GID="$(discover_uid_gid_or_die "${O
 if [ -z "${PROMETHEUS_IMAGE}" ]; then PROMETHEUS_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "prometheus")"; fi
 if [ -z "${GRAFANA_IMAGE}" ]; then GRAFANA_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "grafana")"; fi
 if [ -z "${LOKI_IMAGE}" ]; then LOKI_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "loki")"; fi
+if [ -z "${ALLOY_IMAGE}" ]; then ALLOY_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "alloy")"; fi
 if [ -z "${DATABASE_IMAGE}" ]; then DATABASE_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "database")"; fi
 if [ -z "${DATABASE_PLUGIN_IMAGE}" ]; then DATABASE_PLUGIN_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "database_plugin")"; fi
 
@@ -3508,6 +3742,8 @@ if [ -z "${GRAFANA_UID}" ]; then GRAFANA_UID="$(discover_container_default_id_or
 if [ -z "${GRAFANA_GID}" ]; then GRAFANA_GID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-g")"; fi
 if [ -z "${LOKI_UID}" ]; then LOKI_UID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-u" "loki")"; fi
 if [ -z "${LOKI_GID}" ]; then LOKI_GID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-g" "loki")"; fi
+if [ -z "${ALLOY_UID}" ]; then ALLOY_UID="$(discover_container_default_id_or_die "${ALLOY_IMAGE}" "-u")"; fi
+if [ -z "${ALLOY_GID}" ]; then ALLOY_GID="$(discover_container_default_id_or_die "${ALLOY_IMAGE}" "-g")"; fi
 if [ -z "${DATABASE_UID}" ]; then DATABASE_UID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-u")"; fi
 if [ -z "${DATABASE_GID}" ]; then DATABASE_GID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-g")"; fi
 if [ -z "${DATABASE_PLUGIN_UID}" ]; then DATABASE_PLUGIN_UID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-u")"; fi
@@ -3529,6 +3765,7 @@ echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WE
 echo "Prometheus   UID:GID = ${PROMETHEUS_UID}:${PROMETHEUS_GID} (image=${PROMETHEUS_IMAGE})"
 echo "Grafana      UID:GID = ${GRAFANA_UID}:${GRAFANA_GID} (image=${GRAFANA_IMAGE})"
 echo "Loki         UID:GID = ${LOKI_UID}:${LOKI_GID} (image=${LOKI_IMAGE})"
+echo "Alloy        UID:GID = ${ALLOY_UID}:${ALLOY_GID} (image=${ALLOY_IMAGE})"
 echo "Database     UID:GID = ${DATABASE_UID}:${DATABASE_GID} (image=${DATABASE_IMAGE})"
 echo "DB Plugin    UID:GID = ${DATABASE_PLUGIN_UID}:${DATABASE_PLUGIN_GID} (image=${DATABASE_PLUGIN_IMAGE})"
 echo "Path export  UID:GID = ${PATH_USAGE_EXPORTER_UID}:${PATH_USAGE_EXPORTER_GID} (image=${PATH_USAGE_EXPORTER_IMAGE})"
@@ -3643,6 +3880,7 @@ if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database di
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${LOKI_DATA_PATH}" "Loki data directory" "${LOKI_UID}" "${LOKI_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${ALLOY_DATA_PATH}" "Alloy data directory" "${ALLOY_UID}" "${ALLOY_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${NODE_EXPORTER_TEXTFILE_PATH}" "Node exporter textfile directory" "${PATH_USAGE_EXPORTER_UID}" "${PATH_USAGE_EXPORTER_GID}"; then exit 1; fi
 if is_crowdsec_enabled; then
     if ! chown_tree_or_die "${CROWDSEC_DB_PATH}" "CrowdSec data directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
@@ -3899,7 +4137,7 @@ if [ "${START_CONTAINERS}" -eq 1 ]; then
     echo "Set vm.overcommit_memory=1 (persisted to /etc/sysctl.d/99-redis-overcommit.conf)"
     echo ""
 
-    repo_root_sync_started_epoch="$(date +%s)"
+    startup_sync_started_epoch="$(date +%s)"
     compose_up_with_retries "${COMPOSE_FILE}"
     schedule_crowdsec_install_auto_restart
 
@@ -3907,7 +4145,15 @@ if [ "${START_CONTAINERS}" -eq 1 ]; then
         exit 1
     fi
 
-    if ! wait_for_repo_root_sync_ready "${repo_root_sync_started_epoch}"; then
+    if ! wait_for_repo_root_sync_ready "${startup_sync_started_epoch}"; then
+        exit 1
+    fi
+
+    if ! wait_for_dropbox_ice_bootstrap_ready "${startup_sync_started_epoch}"; then
+        exit 1
+    fi
+
+    if ! wait_for_dropbox_user_dir_sync_ready "${startup_sync_started_epoch}"; then
         exit 1
     fi
 

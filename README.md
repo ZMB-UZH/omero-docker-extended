@@ -69,7 +69,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── CLAUDE.md                          # Claude Code working instructions
 ├── GEMINI.md                          # Gemini CLI project context
 ├── README.md                          # This file
-├── docker-compose.yml                 # Full service orchestration (20 Compose services total: 18 default long-running containers, 19 with crowdsec; redis-sysctl-init is profile-gated)
+├── docker-compose.yml                 # Full service orchestration (21 Compose services total: 19 default long-running containers, 20 with crowdsec; redis-sysctl-init is profile-gated)
 ├── docker/                            # Dockerfiles
 │   ├── omero-server.Dockerfile        #   OMERO.server with CLI plugins, scripts, ImarisConvert
 │   ├── omero-web.Dockerfile           #   OMERO.web with all plugins, supervisord, Celery workers
@@ -130,9 +130,9 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <details>
 <summary><h2>Service topology</h2></summary>
 
-`docker-compose.yml` declares **20 Compose services total** on a single Docker
-bridge network (`omero`): **18 long-running runtime containers by default**,
-**19 when the profile-gated `crowdsec` service is enabled**. The one-shot
+`docker-compose.yml` declares **21 Compose services total** on a single Docker
+bridge network (`omero`): **19 long-running runtime containers by default**,
+**20 when the profile-gated `crowdsec` service is enabled**. The one-shot
 `redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the
 installation script persists `vm.overcommit_memory=1` on the host so it is not
 needed during normal `docker compose up` cycles.
@@ -145,19 +145,19 @@ The table below lists the long-running services available in the full profile se
 | `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery workers (supervisord) | 4090 |
 | `database` | postgres:16.12 | Primary OMERO PostgreSQL database | 5432 (internal) |
 | `database_plugin` | postgres:16.12 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
-| `redis` | redis:8.4.0-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
+| `redis` | redis:8.6.2-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
 | `pg-maintenance` | Custom (postgres:16.12) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
-| `portainer` | portainer-ce:2.39.0 | Docker container management UI | 9000, 9443 |
-| `prometheus` | prom/prometheus:v3.5.1 | Metrics scraping and storage | 9090 |
-| `grafana` | grafana/grafana:12.3.3 | Dashboards and visualization | 3000 |
-| `loki` | grafana/loki:3.2.0 | Log aggregation backend | 3100 |
-| `alloy` | grafana/alloy:v1.12.2 | Log collection pipeline (Docker + file-based) | 12345 (internal) |
+| `portainer` | portainer/portainer-ce:2.40.0-alpine | Docker container management UI | 9000, 9443 |
+| `prometheus` | prom/prometheus:v3.11.2 | Metrics scraping and storage | 9090 |
+| `grafana` | grafana/grafana:13.0.1 | Dashboards and visualization | 3000 |
+| `loki` | grafana/loki:3.7.1 | Log aggregation backend | 3100 |
+| `alloy` | grafana/alloy:v1.15.1 | Log collection pipeline (Docker + file-based) | 12345 (internal) |
 | `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
-| `node-exporter` | prom/node-exporter:v1.10.2 | Host-level metrics | 9100 (internal) |
-| `cadvisor` | gcr.io/cadvisor/cadvisor:v0.55.1 | Container resource metrics | 8080 (internal) |
-| `postgres-exporter` | postgres-exporter:v0.19.0 | OMERO database metrics | 9187 (internal) |
-| `postgres-exporter-plugin` | postgres-exporter:v0.19.0 | Plugin database metrics | 9187 (internal) |
-| `redis-exporter` | redis_exporter:v1.81.0 | Redis metrics | 9121 (internal) |
+| `node-exporter` | prom/node-exporter:v1.11.1 | Host-level metrics | 9100 (internal) |
+| `cadvisor` | ghcr.io/google/cadvisor:0.56.2 | Container resource metrics | 8080 (internal) |
+| `postgres-exporter` | prometheuscommunity/postgres-exporter:v0.19.1 | OMERO database metrics | 9187 (internal) |
+| `postgres-exporter-plugin` | prometheuscommunity/postgres-exporter:v0.19.1 | Plugin database metrics | 9187 (internal) |
+| `redis-exporter` | oliver006/redis_exporter:v1.82.0-alpine | Redis metrics | 9121 (internal) |
 | `path-usage-exporter` | Custom (python:3.12-slim) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
 | `crowdsec` (profile-gated) | Custom (crowdsecurity/crowdsec:v1.7.6) | Host-wide cybersecurity engine (host syslog, SSH auth, and Docker log analysis) | 8080 |
 
@@ -317,7 +317,7 @@ Log in to OMERO.web using the root credentials configured in `env/omero_secrets.
 
 | File | Scope |
 | --- | --- |
-| `installation_paths_example.env` | Template for all host filesystem paths (15 variables) |
+| `installation_paths_example.env` | Template for all host filesystem paths |
 | `env/omeroserver_example.env` | Template for server DB, Java heap, script processors, security |
 | `env/omeroweb_example.env` | Template for web app registration, plugin config, admin tool endpoints, upload settings |
 | `env/omero-celery_example.env` | Template for Celery broker URL, queue name, timeouts, worker concurrency |

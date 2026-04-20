@@ -10,6 +10,7 @@ Practices and invariants that keep the platform running predictably.
   OMERO CLI binary (with optional `OMERO_BIN` override), explicitly prepares a
   clean OMERO CLI runtime temp namespace under
   `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp/runtime*` before any OMERO CLI call,
+  requires `OMERO_CLI_USER` instead of embedding the service account in code,
   removes stale legacy `omero_${OMERO_CLI_USER}` lock namespaces directly under
   `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp`, normalizes bootstrap lock
   directories under `OMERO.server/var` so OMERO admin commands remain writable
@@ -26,7 +27,8 @@ Practices and invariants that keep the platform running predictably.
   managed repository to the expected absolute path and no second repository has
   appeared. Bootstrap then configures certificates and schedules async
   operations (job-service user creation, script registration, binary-repository
-  `omero admin cleanse`) that do not block server startup.
+  `omero admin cleanse`) that do not block server startup. The `omeroserver`
+  healthcheck uses the same service-user and OMERO temp environment contract.
 - `installation/installation_script.sh` preserves the OMERO.server temp namespace under `OMERO_TMP_PATH` during reinstall/update runs instead of recursively handing the entire temp tree to OMERO.web. This avoids ownership drift in stale OMERO.server lock trees across repeated installation and update workflows.
 - `10-web-bootstrap.sh` validates and repairs the OMERO.web `var/` runtime
   layout (including `var/omero/tmp`, `var/run`, and `var/django_secret_key`

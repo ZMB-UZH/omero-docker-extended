@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -22,12 +23,17 @@ class BuildVersionEnvContractTests(unittest.TestCase):
 
     def test_omeroserver_example_defines_native_zarr_build_versions(self) -> None:
         env_text = self.read_text("env/omeroserver_example.env")
+        self.assertIn("OMERO_DROPBOX_VERSION=5.7.0", env_text)
         self.assertIn("OMERO_CLI_ZARR_VERSION=0.8.0", env_text)
         self.assertIn("OME_ZARR_PY_VERSION=0.15.0", env_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=0.11.0", env_text)
 
     def test_compose_requires_build_versions_from_omeroserver_env(self) -> None:
         compose_text = self.read_text("docker-compose.yml")
+        self.assertIn(
+            'OMERO_DROPBOX_VERSION: "${OMERO_DROPBOX_VERSION:?Set OMERO_DROPBOX_VERSION in env/omeroserver.env}"',
+            compose_text,
+        )
         self.assertIn(
             'OMERO_CLI_ZARR_VERSION: "${OMERO_CLI_ZARR_VERSION:?Set OMERO_CLI_ZARR_VERSION in env/omeroserver.env}"',
             compose_text,
@@ -39,6 +45,97 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn(
             'BIOFORMATS2RAW_VERSION: "${BIOFORMATS2RAW_VERSION:?Set BIOFORMATS2RAW_VERSION in env/omeroserver.env}"',
             compose_text,
+        )
+
+    def test_compose_pins_monitoring_and_management_image_versions(self) -> None:
+        compose_text = self.read_text("docker-compose.yml")
+        self.assertIn('image: "portainer/portainer-ce:2.40.0-alpine"', compose_text)
+        self.assertIn('image: "grafana/alloy:v1.15.1"', compose_text)
+        self.assertIn('image: "prom/prometheus:v3.11.2"', compose_text)
+        self.assertIn('image: "prom/node-exporter:v1.11.1"', compose_text)
+        self.assertIn('image: "oliver006/redis_exporter:v1.82.0-alpine"', compose_text)
+        self.assertIn('image: "redis:8.6.2-alpine"', compose_text)
+        self.assertIn('image: "ghcr.io/google/cadvisor:0.56.2"', compose_text)
+        self.assertIn('image: "grafana/loki:3.7.1"', compose_text)
+        self.assertIn('image: "grafana/grafana:13.0.1"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.21.0"', compose_text)
+        self.assertNotIn("portainer/portainer-ce:2.39.0-alpine", compose_text)
+        self.assertNotIn("grafana/alloy:v1.13.2", compose_text)
+        self.assertNotIn("prom/prometheus:v3.10.0", compose_text)
+        self.assertNotIn("prom/node-exporter:v1.10.2", compose_text)
+        self.assertNotIn("oliver006/redis_exporter:v1.81.0-alpine", compose_text)
+        self.assertNotIn("redis:8.6.1-alpine", compose_text)
+        self.assertNotIn("gcr.io/cadvisor/cadvisor:v0.55.1", compose_text)
+        self.assertNotIn("grafana/loki:3.6.7", compose_text)
+        self.assertNotIn("grafana/grafana:12.4.1", compose_text)
+        self.assertNotIn("ollama/ollama:latest", compose_text)
+
+    def test_alloy_persists_runtime_positions(self) -> None:
+        compose_text = self.read_text("docker-compose.yml")
+        self.assertIn("--storage.path=/data-alloy", compose_text)
+        self.assertIn(
+            "${ALLOY_DATA_PATH:?Set ALLOY_DATA_PATH (run installation/installation_script.sh)}:/data-alloy:rw",
+            compose_text,
+        )
+
+    def test_installation_script_manages_alloy_data_path_contract(self) -> None:
+        script_text = self.read_text("installation/installation_script.sh")
+        self.assertIn('ALLOY_DATA_PATH="${OMERO_DATA_PATH%/}/alloy_data"', script_text)
+        self.assertIn(
+            'ALLOY_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "alloy")',
+            script_text,
+        )
+        self.assertIn(
+            'ALLOY_UID="$(discover_container_default_id_or_die "${ALLOY_IMAGE}" "-u")',
+            script_text,
+        )
+        self.assertIn(
+            'chown_tree_or_die "${ALLOY_DATA_PATH}" "Alloy data directory" "${ALLOY_UID}" "${ALLOY_GID}"',
+            script_text,
+        )
+
+    def test_compose_images_are_explicitly_tagged_and_never_latest(self) -> None:
+        compose_text = self.read_text("docker-compose.yml")
+        image_refs = re.findall(r"^\s*image:\s*[\"']?([^\"'\n#]+)", compose_text, re.M)
+
+        self.assertTrue(image_refs)
+        for image_ref in image_refs:
+            image_ref = image_ref.strip()
+            image_without_digest = image_ref.split("@", 1)[0]
+            tag = image_without_digest.rsplit(":", 1)[-1]
+            self.assertIn(":", image_without_digest, image_ref)
+            self.assertNotEqual("latest", tag, image_ref)
+
+    def test_alpine_323_base_images_use_current_verified_digest(self) -> None:
+        expected_from = (
+            "FROM alpine:3.23@"
+            "sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11"
+        )
+        for relative_path in (
+            "docker/firewall-bouncer.Dockerfile",
+            "docker/path-usage-exporter.Dockerfile",
+            "docker/redis-sysctl-init.Dockerfile",
+        ):
+            with self.subTest(relative_path=relative_path):
+                dockerfile_text = self.read_text(relative_path)
+                self.assertIn(expected_from, dockerfile_text)
+                self.assertNotIn(
+                    "sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659",
+                    dockerfile_text,
+                )
+
+    def test_omeroserver_dockerfile_fails_closed_without_dropbox_version(self) -> None:
+        dockerfile_text = self.read_text("docker/omero-server.Dockerfile")
+        self.assertIn("ARG OMERO_DROPBOX_VERSION\n", dockerfile_text)
+        self.assertNotIn("ARG OMERO_DROPBOX_VERSION=", dockerfile_text)
+        self.assertIn(
+            "OMERO_DROPBOX_VERSION must be provided from env/omeroserver.env",
+            dockerfile_text,
+        )
+        self.assertIn('"omero-dropbox==${OMERO_DROPBOX_VERSION}"', dockerfile_text)
+        self.assertIn(
+            '"${VENV_DIR}/bin/python" -c "import fsDropBox, fsMonitorServer"',
+            dockerfile_text,
         )
 
     def test_omeroweb_dockerfile_fails_closed_without_version_args(self) -> None:
@@ -73,6 +170,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("COMPOSE_PROJECT_NAME=${OMERO_COMPOSE_PROJECT_NAME}", script_text)
         self.assertIn(
             "Missing required configuration variable OMERO_CLI_ZARR_VERSION in ${server_env_source}",
+            script_text,
+        )
+        self.assertIn(
+            "Missing required configuration variable OMERO_DROPBOX_VERSION in ${server_env_source}",
             script_text,
         )
         self.assertIn(
