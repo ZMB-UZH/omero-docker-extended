@@ -18,11 +18,12 @@ concurrency:
 
 jobs:
   test-with-coverage:
+    name: Tests with coverage
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      id-token: write
+      id-token: write # Required for Codecov's OIDC upload token exchange.
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
