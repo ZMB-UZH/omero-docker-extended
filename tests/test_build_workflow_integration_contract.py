@@ -1095,7 +1095,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         job_permissions = workflow["jobs"]["super-linter"]["permissions"]
         self.assertEqual("read", job_permissions["contents"])
         self.assertEqual("read", job_permissions["packages"])
-        self.assertEqual("write", job_permissions["statuses"])
+        self.assertNotIn("statuses", job_permissions)
 
         steps = workflow["jobs"]["super-linter"]["steps"]
         checkout_step = next(step for step in steps if step.get("name") == "Checkout")
@@ -1120,6 +1120,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertEqual(".", lint_step["env"]["LINTER_RULES_PATH"])
         self.assertEqual(".markdownlint.yaml", lint_step["env"]["MARKDOWN_CONFIG_FILE"])
+        self.assertEqual("false", lint_step["env"]["MULTI_STATUS"])
         self.assertEqual(".yamllint", lint_step["env"]["YAML_CONFIG_FILE"])
         self.assertEqual("true", lint_step["env"]["SAVE_SUPER_LINTER_SUMMARY"])
         self.assertEqual("true", lint_step["env"]["VALIDATE_ALL_CODEBASE"])
