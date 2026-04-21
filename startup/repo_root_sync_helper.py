@@ -300,8 +300,11 @@ def lookup_prefix(root_pass: str, repo_dir_path: str, expected_managed_dir: str)
     finally:
         try:
             conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            print(
+                f"WARNING: failed to close OMERO connection: {exc.__class__.__name__}",
+                file=sys.stderr,
+            )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -367,7 +370,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
-    parser.error(f"Unsupported command: {args.command}")
+    print(f"ERROR: Unsupported command: {args.command}", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":

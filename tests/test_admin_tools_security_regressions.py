@@ -63,6 +63,16 @@ class _TemplateResponse(_HttpResponse):
         self.context_data = context or {}
 
 
+class _SimpleTemplateResponse(_HttpResponse):
+    def __init__(self, template, context=None, status=200, **_kwargs):
+        super().__init__("", status=status)
+        self.template_name = template
+        self.context_data = context or {}
+
+    def render(self):
+        return self
+
+
 def _install_import_stubs():
     if "django.http" not in sys.modules:
         django_module = types.ModuleType("django")
@@ -85,6 +95,7 @@ def _install_import_stubs():
         )
         django_template_backends_django.DjangoTemplates = _DjangoTemplates
         django_template_response = types.ModuleType("django.template.response")
+        django_template_response.SimpleTemplateResponse = _SimpleTemplateResponse
         django_template_response.TemplateResponse = _TemplateResponse
         django_urls = types.ModuleType("django.urls")
         django_urls.reverse = lambda name, *args, **kwargs: f"/{name}/"

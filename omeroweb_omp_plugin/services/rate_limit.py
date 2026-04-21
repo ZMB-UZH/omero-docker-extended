@@ -7,11 +7,10 @@ from typing import Any
 from django.core.cache import cache
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
-DummyCache: Any = None
 try:
     from django.core.cache.backends.dummy import DummyCache as _ImportedDummyCache
-except Exception:  # pragma: no cover - fallback for unexpected cache setups
-    pass
+except ImportError:  # pragma: no cover - Django always provides this in supported envs
+    DummyCache: Any = None
 else:
     DummyCache = _ImportedDummyCache
 
