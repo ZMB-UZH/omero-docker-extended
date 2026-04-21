@@ -3,6 +3,11 @@ from __future__ import annotations
 from omero_plugin_common import logging_utils
 
 
+class _UnconstructableError(Exception):
+    def __init__(self):
+        super().__init__("original")
+
+
 def test_logging_utils_cover_empty_url_parse_failures_and_exception_fallbacks(
     monkeypatch,
 ):
@@ -15,19 +20,13 @@ def test_logging_utils_cover_empty_url_parse_failures_and_exception_fallbacks(
     )
     assert logging_utils.sanitize_url_for_logging("line1\nline2") == "line1\\\\nline2"
 
-    class _UnconstructableError(Exception):
-        def __init__(self):
-            super().__init__("original")
+    def sanitized_info_for_test_exception():
+        try:
+            raise _UnconstructableError()
+        except _UnconstructableError as exc:
+            return logging_utils.sanitized_exc_info(exc)
 
-    exc_type, sanitized_exc, tb = None, None, None
-
-    try:
-        raise _UnconstructableError()
-    except _UnconstructableError as exc:
-        exc_type, sanitized_exc, tb = logging_utils.sanitized_exc_info(exc)
-    else:
-        raise AssertionError("Expected _UnconstructableError")
-
+    exc_type, sanitized_exc, tb = sanitized_info_for_test_exception()
     assert exc_type is RuntimeError
     assert "_UnconstructableError" in str(sanitized_exc)
     assert "original" in str(sanitized_exc)
