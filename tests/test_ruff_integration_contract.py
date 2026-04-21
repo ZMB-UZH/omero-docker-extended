@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import tomllib
 import unittest
 from pathlib import Path
@@ -112,7 +114,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertIn("ruff check .", run_values)
         self.assertIn("ruff format --check .", run_values)
 
-        install_step = next(
+        install_step = next_or_fail(
             step for step in steps if step.get("name") == "Install Ruff"
         )
         self.assertEqual("0.15.10", install_step["with"]["version"])

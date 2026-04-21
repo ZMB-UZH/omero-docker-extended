@@ -37,7 +37,8 @@ def test_http_utils_cover_response_and_stream_fallback_paths():
     )
 
     class _UnreadableBody:
-        def read(self):
+        @staticmethod
+        def read():
             raise RuntimeError("unreadable")
 
     assert http_utils.extract_error_details(
@@ -168,14 +169,17 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
             self.id = value
 
     class _Update:
-        def deleteObject(self, obj):
+        @staticmethod
+        def deleteObject(obj):
             deleted.append(obj.id)
 
     class _Conn:
-        def getObject(self, *_args):
+        @staticmethod
+        def getObject(*_args):
             return None
 
-        def getUpdateService(self):
+        @staticmethod
+        def getUpdateService():
             return _Update()
 
     def fake_delete(conn, update, img, var_names, mode):
@@ -318,16 +322,19 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
             self.id = value
 
     class _Update:
-        def deleteObject(self, obj):
+        @staticmethod
+        def deleteObject(obj):
             deleted.append(obj)
 
     class _Conn:
-        def getObject(self, object_type, object_id):
+        @staticmethod
+        def getObject(object_type, object_id):
             if object_type == "ImageAnnotationLink":
                 raise RuntimeError("lookup failed")
             return SimpleNamespace(_obj=("annotation", object_id))
 
-        def getUpdateService(self):
+        @staticmethod
+        def getUpdateService():
             return _Update()
 
     monkeypatch.setattr(core, "MapAnnotationI", _Stub)

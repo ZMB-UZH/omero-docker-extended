@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import sys
 import types
 from contextlib import contextmanager
@@ -72,13 +74,16 @@ def test_find_image_by_name_prefers_dataset_search_and_global_fallback(monkeypat
     params_seen = []
 
     class _Params:
-        def addLong(self, key, value):
+        @staticmethod
+        def addLong(key, value):
             params_seen.append(("long", key, value))
 
-        def addString(self, key, value):
+        @staticmethod
+        def addString(key, value):
             params_seen.append(("string", key, value))
 
-        def page(self, offset, size):
+        @staticmethod
+        def page(offset, size):
             params_seen.append(("page", offset, size))
 
     monkeypatch.setattr(
@@ -963,7 +968,8 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
     update_service = _UpdateService()
 
     class _Image:
-        def linkAnnotation(self, wrapper):
+        @staticmethod
+        def linkAnnotation(wrapper):
             linked_annotations.append(wrapper.annotation)
 
     image = _Image()
@@ -975,15 +981,18 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
                 sf=types.SimpleNamespace(createRawFileStore=self._create_raw_file_store)
             )
 
-        def _create_raw_file_store(self):
+        @staticmethod
+        def _create_raw_file_store():
             store = _RawFileStore()
             stores.append(store)
             return store
 
-        def getUpdateService(self):
+        @staticmethod
+        def getUpdateService():
             return update_service
 
-        def getObject(self, object_type, object_id):
+        @staticmethod
+        def getObject(object_type, object_id):
             assert (object_type, object_id) == ("Image", 99)
             return image
 
@@ -1173,7 +1182,8 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
         def __init__(self):
             self._obj = types.SimpleNamespace(id=types.SimpleNamespace(val=301))
 
-        def listParents(self):
+        @staticmethod
+        def listParents():
             return [types.SimpleNamespace(getId=lambda: 88)]
 
     imported_image = _ImportedImage()
@@ -1418,7 +1428,8 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
         def __init__(self):
             self._obj = types.SimpleNamespace(id=types.SimpleNamespace(val=301))
 
-        def listParents(self):
+        @staticmethod
+        def listParents():
             raise RuntimeError("parents unavailable")
 
     imported_image = _ImportedImage()
@@ -1436,7 +1447,7 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     monkeypatch.setattr(
         core_functions,
         "_open_service_connection",
-        lambda host, port, group_id=None: next(connection_iter),
+        lambda host, port, group_id=None: next_or_fail(connection_iter),
     )
 
     validate_iter = iter((False,))
@@ -1495,7 +1506,9 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     monkeypatch.setattr(core_functions.shutil, "copy2", _copy2)
 
     id_values = iter((None, 301, 301, 301, 301, 301, 301, 301, 301, 301))
-    monkeypatch.setattr(core_functions, "_get_id", lambda image_obj: next(id_values))
+    monkeypatch.setattr(
+        core_functions, "_get_id", lambda image_obj: next_or_fail(id_values)
+    )
 
     attached = []
 

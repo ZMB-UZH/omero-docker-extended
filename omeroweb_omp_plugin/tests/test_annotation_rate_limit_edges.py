@@ -19,7 +19,8 @@ class _BadValue:
     def __init__(self, value):
         self.val = value
 
-    def getValue(self):
+    @staticmethod
+    def getValue():
         raise RuntimeError("bad wrapped value")
 
 
@@ -61,7 +62,8 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     assert annotation_service.is_plugin_annotation(wrapped_ann) is True
 
     class _LookupFailureQS:
-        def projection(self, hql, params, service_opts=None):
+        @staticmethod
+        def projection(hql, params, service_opts=None):
             raise RuntimeError("query failed")
 
     qs_backed_ann = SimpleNamespace(
@@ -78,7 +80,8 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     )
 
     class _UnreadableMapValue:
-        def getValue(self):
+        @staticmethod
+        def getValue():
             raise RuntimeError("map wrapper unavailable")
 
         def __iter__(self):
@@ -88,7 +91,8 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     assert annotation_service.is_plugin_annotation(unreadable_ann) is False
 
     class _QueryService:
-        def projection(self, hql, params, service_opts=None):
+        @staticmethod
+        def projection(hql, params, service_opts=None):
             if "where l.parent.id = :iid and a.ns = :ns" in hql:
                 return [[_Value(1)], [_Value(2)]]
             if "join a.mapValue mv" in hql:
@@ -144,7 +148,8 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     monkeypatch.setattr(annotation_service, "get_id", _get_id)
 
     class _NsWrapper:
-        def getValue(self):
+        @staticmethod
+        def getValue():
             raise RuntimeError("namespace missing")
 
     plugin_cleanup_result = annotation_service.delete_existing_annotations(
@@ -216,7 +221,8 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
             raise RuntimeError("cannot measure pairs")
 
     class _AnnotationQueryService:
-        def projection(self, hql, params, service_opts=None):
+        @staticmethod
+        def projection(hql, params, service_opts=None):
             if "select a.id from MapAnnotation a where a.id = :aid" in hql:
                 aid = params.values["aid"]
                 if aid == 14:
@@ -238,10 +244,12 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     class _Conn:
         SERVICE_OPTS = object()
 
-        def getQueryService(self):
+        @staticmethod
+        def getQueryService():
             return _AnnotationQueryService()
 
-        def getObject(self, kind, obj_id):
+        @staticmethod
+        def getObject(kind, obj_id):
             if kind == "ImageAnnotationLink":
                 raise RuntimeError("link lookup unavailable")
             if kind == "MapAnnotation" and obj_id == 12:
@@ -288,10 +296,12 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
         def __init__(self):
             self.deleted = []
 
-        def get(self, key):
+        @staticmethod
+        def get(key):
             return {"actions": "bad", "blocked_until": "bad"}
 
-        def set(self, key, value, timeout=None):
+        @staticmethod
+        def set(key, value, timeout=None):
             raise AssertionError(
                 "django dummy cache backend should not be used directly"
             )
@@ -361,14 +371,17 @@ def test_rate_limit_non_dummy_cache_and_delete_miss_paths(monkeypatch):
     backend_calls = []
 
     class _CacheBackend:
-        def get(self, key):
+        @staticmethod
+        def get(key):
             backend_calls.append(("get", key))
             return {"cached": key}
 
-        def set(self, key, value, timeout=None):
+        @staticmethod
+        def set(key, value, timeout=None):
             backend_calls.append(("set", key, value, timeout))
 
-        def delete(self, key):
+        @staticmethod
+        def delete(key):
             backend_calls.append(("delete", key))
 
     monkeypatch.setattr(rate_limit, "DummyCache", type("_OtherDummyCache", (), {}))

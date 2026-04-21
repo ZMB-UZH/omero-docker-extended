@@ -67,7 +67,8 @@ def test_data_store_connect_closes_connections_and_wraps_save_failures(monkeypat
     monkeypatch.setenv(import_data_store.ENV_PORT, "5433")
 
     class _ClosingConnection:
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     closing_connection = _ClosingConnection()
@@ -84,7 +85,8 @@ def test_data_store_connect_closes_connections_and_wraps_save_failures(monkeypat
         assert opened is closing_connection
 
     class _ExplodingCursor:
-        def execute(self, query, params=None):
+        @staticmethod
+        def execute(query, params=None):
             raise RuntimeError("write exploded")
 
         def __enter__(self):
@@ -94,13 +96,16 @@ def test_data_store_connect_closes_connections_and_wraps_save_failures(monkeypat
             return False
 
     class _ExplodingConnection:
-        def cursor(self):
+        @staticmethod
+        def cursor():
             return _ExplodingCursor()
 
-        def commit(self):
+        @staticmethod
+        def commit():
             return None
 
-        def close(self):
+        @staticmethod
+        def close():
             return None
 
     @contextmanager

@@ -14,7 +14,8 @@ class _ValueBox:
 
 
 class _BrokenValueBox:
-    def getValue(self):
+    @staticmethod
+    def getValue():
         raise RuntimeError("boom")
 
     def __str__(self) -> str:
@@ -170,7 +171,8 @@ def test_request_and_string_helpers_cover_user_resolution_json_fallbacks_and_pay
     invalid_utf8_request = SimpleNamespace(body=b"\xff")
 
     class FailingConn:
-        def getUser(self):
+        @staticmethod
+        def getUser():
             raise RuntimeError("connection unavailable")
 
     assert request_utils.current_username(request, conn) == "omero-user"

@@ -909,23 +909,28 @@ def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkey
         def getId(self):
             return SimpleNamespace(val=self._owner_id)
 
-        def getOmeName(self):
+        @staticmethod
+        def getOmeName():
             raise RuntimeError("missing ome name")
 
-        def getName(self):
+        @staticmethod
+        def getName():
             return "fallback-name"
 
     class _PermissionText:
         def __str__(self):
             raise RuntimeError("string conversion failed")
 
-        def isGroupRead(self):
+        @staticmethod
+        def isGroupRead():
             return True
 
-        def isGroupWrite(self):
+        @staticmethod
+        def isGroupWrite():
             return False
 
-        def isGroupAnnotate(self):
+        @staticmethod
+        def isGroupAnnotate():
             return True
 
     owner = _OwnerByName(41)
@@ -1191,16 +1196,20 @@ def test_index_ai_provider_and_preview_fallbacks_cover_error_paths(monkeypatch):
 
 def test_index_helper_and_validation_edges_cover_remaining_branch_paths(monkeypatch):
     class _OwnerWithVal:
-        def getOmeName(self):
+        @staticmethod
+        def getOmeName():
             raise RuntimeError("no ome name")
 
-        def getName(self):
+        @staticmethod
+        def getName():
             raise RuntimeError("no display name")
 
-        def getFirstName(self):
+        @staticmethod
+        def getFirstName():
             raise RuntimeError("no first name")
 
-        def getId(self):
+        @staticmethod
+        def getId():
             return SimpleNamespace(val=77)
 
     project = SimpleNamespace(getDetails=lambda: None, getOwner=lambda: _OwnerWithVal())

@@ -572,7 +572,7 @@ def _cleanup_zarr(
             f"Managed Zarr path is outside the managed repository: {target}"
         ) from exc
     try:
-        container_parts, remainder = _match_repo_template(
+        _container_parts, remainder = _match_repo_template(
             config, group_name, username, relative_parts
         )
     except RuntimeError as exc:

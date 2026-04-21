@@ -6842,8 +6842,8 @@ def _verify_imported_zarr_images_renderable(
             )
             if any(size <= 0 for size in sizes):
                 errors_found.append(
-                    "Image:%s has invalid dimensions after import: x=%d y=%d z=%d c=%d t=%d"
-                    % ((image_id,) + sizes)
+                    f"Image:{image_id} has invalid dimensions after import: "
+                    f"x={sizes[0]} y={sizes[1]} z={sizes[2]} c={sizes[3]} t={sizes[4]}"
                 )
                 continue
 

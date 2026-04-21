@@ -141,12 +141,15 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
     assert "inspect payload was invalid" in error
 
     class _Connection:
-        def cursor(self):
+        @staticmethod
+        def cursor():
             class _Cursor:
-                def execute(self, query):
+                @staticmethod
+                def execute(query):
                     return None
 
-                def fetchone(self):
+                @staticmethod
+                def fetchone():
                     return None
 
                 def __enter__(self):
@@ -157,7 +160,8 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
 
             return _Cursor()
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     def _psycopg2_connection():

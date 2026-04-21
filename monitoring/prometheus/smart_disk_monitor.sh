@@ -11,12 +11,14 @@ echo "Starting smart disk monitor..."
 
 while true; do
     # Clear temp file and write headers
-    echo "# HELP omero_volume_bytes_total Total size of the storage volume in bytes" > "$TMP_FILE"
-    echo "# TYPE omero_volume_bytes_total gauge" >> "$TMP_FILE"
-    echo "# HELP omero_volume_bytes_free Free space of the storage volume in bytes" >> "$TMP_FILE"
-    echo "# TYPE omero_volume_bytes_free gauge" >> "$TMP_FILE"
-    echo "# HELP omero_volume_bytes_used Used space of the storage volume in bytes" >> "$TMP_FILE"
-    echo "# TYPE omero_volume_bytes_used gauge" >> "$TMP_FILE"
+    {
+        echo "# HELP omero_volume_bytes_total Total size of the storage volume in bytes"
+        echo "# TYPE omero_volume_bytes_total gauge"
+        echo "# HELP omero_volume_bytes_free Free space of the storage volume in bytes"
+        echo "# TYPE omero_volume_bytes_free gauge"
+        echo "# HELP omero_volume_bytes_used Used space of the storage volume in bytes"
+        echo "# TYPE omero_volume_bytes_used gauge"
+    } > "$TMP_FILE"
 
     # Function to check a path
     check_path() {
@@ -40,14 +42,16 @@ while true; do
         AVAIL_KB=$(echo "$LINE" | awk '{print $4}')
 
         # Convert to bytes
-        TOTAL_BYTES=$(($TOTAL_KB * 1024))
-        USED_BYTES=$(($USED_KB * 1024))
-        AVAIL_BYTES=$(($AVAIL_KB * 1024))
+        TOTAL_BYTES=$((TOTAL_KB * 1024))
+        USED_BYTES=$((USED_KB * 1024))
+        AVAIL_BYTES=$((AVAIL_KB * 1024))
 
         # Write metrics
-        echo "omero_volume_bytes_total{name=\"$NAME\"} $TOTAL_BYTES" >> "$TMP_FILE"
-        echo "omero_volume_bytes_free{name=\"$NAME\"} $AVAIL_BYTES" >> "$TMP_FILE"
-        echo "omero_volume_bytes_used{name=\"$NAME\"} $USED_BYTES" >> "$TMP_FILE"
+        {
+            echo "omero_volume_bytes_total{name=\"$NAME\"} $TOTAL_BYTES"
+            echo "omero_volume_bytes_free{name=\"$NAME\"} $AVAIL_BYTES"
+            echo "omero_volume_bytes_used{name=\"$NAME\"} $USED_BYTES"
+        } >> "$TMP_FILE"
     }
 
     # Check the three critical paths mounted into this container

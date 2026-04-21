@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import importlib.util
 import sys
 from datetime import UTC, datetime
@@ -41,7 +43,7 @@ def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
 
     def fetch_snapshot():
         calls["count"] += 1
-        return next(snapshots)
+        return next_or_fail(snapshots)
 
     result = security_delta_guard.wait_for_stable_snapshot(
         fetch_snapshot,

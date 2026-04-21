@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import math
 import sys
 import types
@@ -84,7 +86,8 @@ class _FakeTable:
             raise RuntimeError("cannot populate table")
         self.added = columns
 
-    def getOriginalFile(self):
+    @staticmethod
+    def getOriginalFile():
         return _FakeOriginalFile(123)
 
     def close(self):
@@ -95,7 +98,8 @@ class _FakeResources:
     def __init__(self, *, table):
         self._table = table
 
-    def repositories(self):
+    @staticmethod
+    def repositories():
         return SimpleNamespace(
             descriptions=[SimpleNamespace(getId=lambda: _FakeId(17))]
         )
@@ -292,7 +296,7 @@ def test_sem_edx_geometry_and_genetic_label_helpers_cover_selection_mutation_and
         mutation_patch.setattr(
             sem_edx_parser.random,
             "uniform",
-            lambda _a, _b: next(offsets),
+            lambda _a, _b: next_or_fail(offsets),
         )
         mutated = placer.mutate(initial)
     for gene, spec in zip(mutated.genes, label_specs):

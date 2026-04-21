@@ -166,16 +166,20 @@ def test_script_service_helpers_cover_discovery_selection_and_introspection(
         def brokenScriptRunner(self):
             raise RuntimeError("broken attribute")
 
-        def runScript(self):
+        @staticmethod
+        def runScript():
             return "run-script"
 
-        def executeCustomScript(self):
+        @staticmethod
+        def executeCustomScript():
             return "execute-script"
 
-        def begin_runScript(self):
+        @staticmethod
+        def begin_runScript():
             raise AssertionError("begin_ methods must be ignored")
 
-        def canRunScript(self):
+        @staticmethod
+        def canRunScript():
             raise AssertionError("canRun methods must be ignored")
 
         def __dir__(self):
@@ -198,19 +202,24 @@ def test_async_and_script_start_helpers_cover_getter_failures_and_retries(
     imaris_service = _import_imaris_service(monkeypatch)
 
     class _AsyncResult:
-        def waitForCompleted(self):
+        @staticmethod
+        def waitForCompleted():
             raise RuntimeError("wait failed")
 
-        def getResponse(self):
+        @staticmethod
+        def getResponse():
             raise RuntimeError("response failed")
 
-        def getResult(self):
+        @staticmethod
+        def getResult():
             raise RuntimeError("result failed")
 
-        def getResults(self):
+        @staticmethod
+        def getResults():
             raise RuntimeError("results failed")
 
-        def get(self):
+        @staticmethod
+        def get():
             return {"job": 5}
 
     resolved = imaris_service._resolve_async_result(
@@ -411,7 +420,8 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
                 raise RuntimeError("poll failed")
             return "done"
 
-        def getResults(self, *_args):
+        @staticmethod
+        def getResults(*_args):
             raise RuntimeError("results failed")
 
     state, outputs = imaris_service._wait_for_process(_WaitingProcess(), timeout=1)
@@ -425,7 +435,8 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
         def val(self):
             raise RuntimeError("val failed")
 
-        def getValue(self):
+        @staticmethod
+        def getValue():
             raise RuntimeError("getValue failed")
 
         @property
@@ -442,7 +453,8 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
     imaris_service._detach_script_process(SimpleNamespace(), reason="no-close")
 
     class _FailingDetach:
-        def close(self, *args):
+        @staticmethod
+        def close(*args):
             raise RuntimeError("detach failed")
 
     imaris_service._detach_script_process(_FailingDetach(), reason="detach failure")
@@ -450,7 +462,8 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
     close_calls = []
 
     class _FallbackClose:
-        def close(self, *args):
+        @staticmethod
+        def close(*args):
             close_calls.append(args)
             if args:
                 raise TypeError("flag unsupported")
@@ -471,7 +484,8 @@ def test_imaris_service_additional_helper_edges_cover_remaining_type_and_config_
     imaris_service = _import_imaris_service(monkeypatch)
 
     class _BadValue:
-        def getValue(self):
+        @staticmethod
+        def getValue():
             raise RuntimeError("getter exploded")
 
         def __str__(self):
@@ -501,7 +515,8 @@ def test_imaris_service_additional_helper_edges_cover_remaining_type_and_config_
         def runScript(self):
             raise RuntimeError("broken preferred method")
 
-        def executeScript(self):
+        @staticmethod
+        def executeScript():
             return "ok"
 
         def __dir__(self):
@@ -582,10 +597,12 @@ def test_imaris_service_remaining_job_state_and_output_paths_are_exercised(
 
     original_import = builtins.__import__
 
-    def _failing_rlong_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def _failing_rlong_import(
+        name, global_vars=None, local_vars=None, fromlist=(), level=0
+    ):
         if name == "omero.rtypes" and tuple(fromlist or ()) == ("rlong",):
             raise ImportError("rlong missing")
-        return original_import(name, globals, locals, fromlist, level)
+        return original_import(name, global_vars, local_vars, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", _failing_rlong_import)
     monkeypatch.setattr(
@@ -685,7 +702,8 @@ def test_imaris_service_covers_remaining_descriptor_and_job_iteration_edges(
         pass
 
     class _BadJobId:
-        def getValue(self):
+        @staticmethod
+        def getValue():
             return _NonNumericValue()
 
     assert imaris_service._extract_job_id(_BadJobId()) is None
@@ -693,7 +711,8 @@ def test_imaris_service_covers_remaining_descriptor_and_job_iteration_edges(
     class _BadAccessorJob:
         job_id = 19
 
-        def getJobId(self):
+        @staticmethod
+        def getJobId():
             return _NonNumericValue()
 
     assert imaris_service._extract_job_id(_BadAccessorJob()) == 19

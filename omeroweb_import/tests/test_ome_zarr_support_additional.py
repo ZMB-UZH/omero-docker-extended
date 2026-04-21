@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import builtins
 import json
 import sys
@@ -348,7 +350,7 @@ def test_normalize_native_ome_zarr_copy_propagates_support_and_transform_failure
     )
     inspections = iter([unsupported, normalized, unsupported])
     monkeypatch.setattr(
-        support, "inspect_ome_zarr_image", lambda _path: next(inspections)
+        support, "inspect_ome_zarr_image", lambda _path: next_or_fail(inspections)
     )
     assert support.normalize_native_ome_zarr_copy(store) == "unsupported runtime"
 
@@ -514,7 +516,7 @@ def test_normalization_and_pyramid_helpers_cover_additional_runtime_failures(
     )
     inspections = iter([supported, unsupported])
     monkeypatch.setattr(
-        support, "inspect_ome_zarr_image", lambda _path: next(inspections)
+        support, "inspect_ome_zarr_image", lambda _path: next_or_fail(inspections)
     )
     monkeypatch.setattr(
         support,
@@ -936,11 +938,11 @@ def test_ome_zarr_support_downscale_and_codec_edges_cover_remaining_branches(
     original_import = builtins.__import__
 
     def _failing_numcodecs_import(
-        name, globals=None, locals=None, fromlist=(), level=0
+        name, global_vars=None, local_vars=None, fromlist=(), level=0
     ):
         if name == "numcodecs":
             raise ImportError("numcodecs missing")
-        return original_import(name, globals, locals, fromlist, level)
+        return original_import(name, global_vars, local_vars, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", _failing_numcodecs_import)
     assert "Failed to load numcodecs" in (
@@ -1119,10 +1121,12 @@ def test_regenerate_xy_only_pyramid_handles_numpy_dependency_and_translation_edg
 
     original_import = builtins.__import__
 
-    def _failing_numpy_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def _failing_numpy_import(
+        name, global_vars=None, local_vars=None, fromlist=(), level=0
+    ):
         if name == "numpy":
             raise ImportError("numpy missing")
-        return original_import(name, globals, locals, fromlist, level)
+        return original_import(name, global_vars, local_vars, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", _failing_numpy_import)
     assert "Missing dependency for pyramid regeneration" in (

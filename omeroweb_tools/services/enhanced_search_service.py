@@ -1299,7 +1299,10 @@ def _process_sync_batch(
             current_message=f"Indexed {processed_count} image(s).",
             last_cursor_image_id=last_image_id,
         )
-        commit_fn = getattr(db_conn, "commit", None)
+        try:
+            commit_fn = db_conn.commit
+        except AttributeError:
+            return processed_count
         if callable(commit_fn):
             commit_fn()
     return processed_count

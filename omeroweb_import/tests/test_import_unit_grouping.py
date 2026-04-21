@@ -491,7 +491,8 @@ def test_start_upload_defers_dataset_creation_until_import(tmp_path: Path, monke
         groupId = 4
 
     class _FakeConn:
-        def getEventContext(self):
+        @staticmethod
+        def getEventContext():
             return _FakeEventContext()
 
     request = RequestFactory().post(
@@ -649,7 +650,8 @@ def test_prepare_request_job_import_datasets_uses_zarr_package_root_without_impo
 
     class _RequestConn:
         class _Opts:
-            def setOmeroGroup(self, value):
+            @staticmethod
+            def setOmeroGroup(value):
                 group_calls.append(value)
 
         SERVICE_OPTS = _Opts()
@@ -698,7 +700,8 @@ def test_prepare_request_job_import_datasets_uses_planned_import_units_for_gener
 
     class _RequestConn:
         class _Opts:
-            def setOmeroGroup(self, value):
+            @staticmethod
+            def setOmeroGroup(value):
                 return None
 
         SERVICE_OPTS = _Opts()
@@ -2357,7 +2360,7 @@ def test_probe_import_path_returns_empty_result_on_scan_timeout(
     """_probe_import_path must NOT crash the caller when _run_local_import_scan
     raises (e.g. command timeout). It should return an empty result."""
     upload_root = tmp_path / "job-root"
-    _, staged_members = _stage_relative_paths(upload_root, ["data.zarr/.zattrs"])
+    _stage_relative_paths(upload_root, ["data.zarr/.zattrs"])
     staged_root = upload_root / "_staged"
 
     def timeout_scan(path: Path, timeout: int = 45):
@@ -2388,7 +2391,7 @@ def test_probe_import_path_returns_empty_result_on_scan_oserror(
 ):
     """Same as above but for OSError (e.g. disk full, permission denied)."""
     upload_root = tmp_path / "job-root"
-    _, staged_members = _stage_relative_paths(upload_root, ["data.zarr/.zattrs"])
+    _stage_relative_paths(upload_root, ["data.zarr/.zattrs"])
     staged_root = upload_root / "_staged"
 
     def oserror_scan(path: Path, timeout: int = 45):
@@ -2416,7 +2419,7 @@ def test_build_import_units_groups_zarr_by_extension_when_scan_fails(
     still group files under a known directory package root (.zarr) into a
     single import unit instead of creating per-file units."""
     upload_root = tmp_path / "job-root"
-    job, staged_members = _stage_relative_paths(
+    job, _ = _stage_relative_paths(
         upload_root,
         [
             "data.zarr/.zattrs",
@@ -2499,7 +2502,7 @@ def test_build_import_units_groups_mixed_zarr_and_regular_files_when_scan_fails(
     """A job with both zarr files and regular files.  The scan fails.
     Zarr files should be grouped; regular files should remain individual."""
     upload_root = tmp_path / "job-root"
-    job, staged_members = _stage_relative_paths(
+    job, _ = _stage_relative_paths(
         upload_root,
         [
             "data.zarr/.zattrs",
@@ -2533,7 +2536,7 @@ def test_build_import_units_groups_multiple_zarrs_when_scan_fails(
     """Two separate zarr directories in one upload.  Both must be grouped
     independently when the scan fails."""
     upload_root = tmp_path / "job-root"
-    job, staged_members = _stage_relative_paths(
+    job, _ = _stage_relative_paths(
         upload_root,
         [
             "a.zarr/.zattrs",
@@ -2756,7 +2759,7 @@ def test_import_file_progress_job_updates_import_progress_bytes(
     # Replace _save_job with a no-op (no job file on disk)
     monkeypatch.setattr(core_functions, "_save_job", lambda j: None)
 
-    success, stdout, stderr = core_functions._import_file(
+    success, _, _ = core_functions._import_file(
         conn=None,
         session_key="test-key",
         host="localhost",

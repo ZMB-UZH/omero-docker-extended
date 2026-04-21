@@ -32,7 +32,8 @@ class _FakeChannel:
         self._label = "base"
 
     class _Color:
-        def getHtml(self):
+        @staticmethod
+        def getHtml():
             return "FFFFFF"
 
     def getLabel(self):
@@ -41,34 +42,44 @@ class _FakeChannel:
     def getColor(self):
         return self._Color()
 
-    def getEmissionWave(self):
+    @staticmethod
+    def getEmissionWave():
         return None
 
-    def getFamily(self):
+    @staticmethod
+    def getFamily():
         return None
 
-    def getCoefficient(self):
+    @staticmethod
+    def getCoefficient():
         return None
 
-    def getLut(self):
+    @staticmethod
+    def getLut():
         return None
 
-    def getWindowStart(self):
+    @staticmethod
+    def getWindowStart():
         return None
 
-    def getWindowEnd(self):
+    @staticmethod
+    def getWindowEnd():
         return None
 
-    def getWindowMin(self):
+    @staticmethod
+    def getWindowMin():
         return 1.0
 
-    def getWindowMax(self):
+    @staticmethod
+    def getWindowMax():
         return 9.0
 
-    def isActive(self):
+    @staticmethod
+    def isActive():
         return False
 
-    def isInverted(self):
+    @staticmethod
+    def isInverted():
         return None
 
 
@@ -88,64 +99,84 @@ class _FakeImageDataImage:
         self._channel_calls.append(noRE)
         return [_FakeChannel()]
 
-    def getProject(self):
+    @staticmethod
+    def getProject():
         return None
 
-    def listParents(self):
+    @staticmethod
+    def listParents():
         return []
 
-    def getAuthor(self):
+    @staticmethod
+    def getAuthor():
         return "Test User"
 
-    def getDate(self):
+    @staticmethod
+    def getDate():
         return datetime(2026, 3, 23, 12, 0, 0)
 
-    def getPixelsType(self):
+    @staticmethod
+    def getPixelsType():
         return "uint16"
 
-    def canAnnotate(self):
+    @staticmethod
+    def canAnnotate():
         return False
 
-    def canEdit(self):
+    @staticmethod
+    def canEdit():
         return True
 
-    def canDelete(self):
+    @staticmethod
+    def canDelete():
         return True
 
-    def canLink(self):
+    @staticmethod
+    def canLink():
         return False
 
-    def getSizeX(self):
+    @staticmethod
+    def getSizeX():
         return 1024
 
-    def getSizeY(self):
+    @staticmethod
+    def getSizeY():
         return 512
 
-    def getSizeZ(self):
+    @staticmethod
+    def getSizeZ():
         return 4
 
-    def getSizeT(self):
+    @staticmethod
+    def getSizeT():
         return 1
 
-    def getSizeC(self):
+    @staticmethod
+    def getSizeC():
         return 1
 
-    def splitChannelDims(self):
+    @staticmethod
+    def splitChannelDims():
         return {"g": {"width": 1026, "height": 514}}
 
-    def getProjection(self):
+    @staticmethod
+    def getProjection():
         return "normal"
 
-    def getPixelSizeX(self, units=None):
+    @staticmethod
+    def getPixelSizeX(units=None):
         return None
 
-    def getPixelSizeY(self, units=None):
+    @staticmethod
+    def getPixelSizeY(units=None):
         return None
 
-    def getPixelSizeZ(self, units=None):
+    @staticmethod
+    def getPixelSizeZ(units=None):
         return None
 
-    def getObjectiveSettings(self):
+    @staticmethod
+    def getObjectiveSettings():
         return None
 
 
@@ -283,7 +314,8 @@ def test_install_webgateway_overrides_preserves_regular_image_data_json(monkeypa
     original_calls = []
 
     class _FakeConn:
-        def getObject(self, object_type, iid):
+        @staticmethod
+        def getObject(object_type, iid):
             assert object_type == "Image"
             assert iid == 7
             return regular_image
@@ -381,7 +413,8 @@ def test_install_webgateway_overrides_preserves_regular_render_image_region(
     original_calls = []
 
     class _FakeConn:
-        def getObject(self, object_type, iid):
+        @staticmethod
+        def getObject(object_type, iid):
             assert object_type == "Image"
             assert iid == 7
             return regular_image
@@ -587,13 +620,15 @@ def test_store_backed_region_response_maps_viewer_tile_level(monkeypatch):
 
 
 class _FakeConfigService:
-    def getConfigValue(self, key):
+    @staticmethod
+    def getConfigValue(key):
         assert key == "omero.pixeldata.max_tile_length"
         return "1024"
 
 
 class _FakeConnForTileSize:
-    def getConfigService(self):
+    @staticmethod
+    def getConfigService():
         return _FakeConfigService()
 
 
@@ -604,19 +639,24 @@ class _FakeResolution:
 
 
 class _FailingResolutionEngine:
-    def getResolutionLevels(self):
+    @staticmethod
+    def getResolutionLevels():
         return 2
 
-    def getTileSize(self):
+    @staticmethod
+    def getTileSize():
         raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
 
-    def getResolutionDescriptions(self):
+    @staticmethod
+    def getResolutionDescriptions():
         return [_FakeResolution(1024, 512), _FakeResolution(512, 256)]
 
-    def getDefaultZ(self):
+    @staticmethod
+    def getDefaultZ():
         return 0
 
-    def getDefaultT(self):
+    @staticmethod
+    def getDefaultT():
         return 0
 
 
@@ -626,16 +666,20 @@ class _FakeRegularTileFailureImage(_FakeImageDataImage):
         self._re = _FailingResolutionEngine()
         self._conn = _FakeConnForTileSize()
 
-    def _prepareRenderingEngine(self):
+    @staticmethod
+    def _prepareRenderingEngine():
         return True
 
-    def getPixelRange(self):
+    @staticmethod
+    def getPixelRange():
         return (0, 65535)
 
-    def isGreyscaleRenderingModel(self):
+    @staticmethod
+    def isGreyscaleRenderingModel():
         return False
 
-    def isInvertedAxis(self):
+    @staticmethod
+    def isInvertedAxis():
         return False
 
 
@@ -644,13 +688,16 @@ class _PreparedRegionImage:
         self._re = _FailingResolutionEngine()
         self.calls = []
 
-    def _prepareRenderingEngine(self):
+    @staticmethod
+    def _prepareRenderingEngine():
         return True
 
-    def getSizeX(self):
+    @staticmethod
+    def getSizeX():
         return 1024
 
-    def getSizeY(self):
+    @staticmethod
+    def getSizeY():
         return 512
 
     def renderJpegRegion(self, z, t, x, y, width, height, level=None, compression=None):
@@ -672,19 +719,23 @@ class _PreparedRegionImage:
 class _FakeMetadataPreviewImage:
     id = 1061
 
-    def getAllRenderingDefs(self):
+    @staticmethod
+    def getAllRenderingDefs():
         raise RuntimeError(
             "Error instantiating pixel buffer: managed/path\n"
             "at com.glencoesoftware.omero.zarr.ZarrPixelsService.getPixelBuffer"
         )
 
-    def getRenderingDefId(self):
+    @staticmethod
+    def getRenderingDefId():
         raise AssertionError("rendering definition lookup should not run after failure")
 
-    def getSizeX(self):
+    @staticmethod
+    def getSizeX():
         return 4096
 
-    def getSizeY(self):
+    @staticmethod
+    def getSizeY():
         return 2048
 
 
@@ -696,7 +747,8 @@ class _FakeMetadataPreviewContainer:
 
 
 class _FakeMetadataPreviewConn:
-    def getMaxPlaneSize(self):
+    @staticmethod
+    def getMaxPlaneSize():
         return (1024, 1024)
 
 
@@ -968,7 +1020,8 @@ def test_install_webgateway_overrides_propagates_tile_failure_when_safe_renderin
     regular_image = type("RegularImage", (), {"store_backed": False})()
 
     class _FakeConn:
-        def getObject(self, object_type, iid):
+        @staticmethod
+        def getObject(object_type, iid):
             return regular_image
 
     def failing_image_data_json(request, conn=None, _internal=False, **kwargs):
@@ -1151,7 +1204,8 @@ def test_render_tile_bad_request_does_not_reflect_user_input():
     class _FakeImage:
         _re = None
 
-        def _prepareRenderingEngine(self):
+        @staticmethod
+        def _prepareRenderingEngine():
             raise ValueError("forced")
 
     import unittest.mock as mock
@@ -1184,7 +1238,8 @@ def test_store_backed_render_response_and_pixel_helpers_cover_download_paths(
     class _Image:
         id = 7
 
-        def getName(self):
+        @staticmethod
+        def getName():
             return "demo image.zarr"
 
     monkeypatch.setattr(
@@ -1257,22 +1312,27 @@ def test_store_backed_metadata_and_rendering_model_cover_parent_resolution():
         description = "Store-backed image"
         archived = True
 
-        def getProject(self):
+        @staticmethod
+        def getProject():
             return _Project()
 
-        def listParents(self):
+        @staticmethod
+        def listParents():
             return [_Dataset(), _WellSample()]
 
         def getName(self):
             return self.name
 
-        def getAuthor(self):
+        @staticmethod
+        def getAuthor():
             return "Alice"
 
-        def getDate(self):
+        @staticmethod
+        def getDate():
             return datetime(2026, 3, 30, 7, 0, 0)
 
-        def getPixelsType(self):
+        @staticmethod
+        def getPixelsType():
             return "uint16"
 
     metadata = integration._store_backed_metadata(_Image())
@@ -1294,7 +1354,8 @@ def test_load_metadata_preview_with_safe_rendering_dedupes_rendering_defs(
     request.session = {}
 
     class _Image:
-        def getAllRenderingDefs(self):
+        @staticmethod
+        def getAllRenderingDefs():
             return [
                 {
                     "id": 1,
@@ -1326,13 +1387,16 @@ def test_load_metadata_preview_with_safe_rendering_dedupes_rendering_defs(
                 },
             ]
 
-        def getRenderingDefId(self):
+        @staticmethod
+        def getRenderingDefId():
             return 2
 
-        def getSizeX(self):
+        @staticmethod
+        def getSizeX():
             return 256
 
-        def getSizeY(self):
+        @staticmethod
+        def getSizeY():
             return 256
 
     class _Manager:
@@ -1539,10 +1603,12 @@ def test_install_webgateway_overrides_renders_store_backed_thumbnails_and_images
     regular_image = type("RegularImage", (), {"store_backed": False, "id": 8})()
 
     class _Conn:
-        def getObject(self, object_type, iid):
+        @staticmethod
+        def getObject(object_type, iid):
             return {7: store_backed_image, 8: regular_image}.get(int(iid))
 
-        def getThumbnailSet(self, ids, width):
+        @staticmethod
+        def getThumbnailSet(ids, width):
             return {8: b"regular-thumb"}
 
     monkeypatch.setattr(integration, "login_required", _identity_decorator)
@@ -1671,7 +1737,8 @@ def test_install_webgateway_overrides_cover_regular_fallback_and_error_paths(
             assert object_type == "Image"
             return self._image_map.get(iid)
 
-        def getThumbnailSet(self, ids, width):
+        @staticmethod
+        def getThumbnailSet(ids, width):
             return _ThumbMap()
 
     thumb_calls = []
@@ -1943,10 +2010,10 @@ def test_install_safe_image_marshal_overrides_handles_optional_import_failures(
 
     real_import = builtins.__import__
 
-    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def fake_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):
         if name in {"omero_iviewer.views", "omero_figure.views"}:
             raise ImportError(f"{name} unavailable")
-        return real_import(name, globals, locals, fromlist, level)
+        return real_import(name, global_vars, local_vars, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
@@ -1963,10 +2030,10 @@ def test_install_webgateway_overrides_returns_when_imports_fail_or_already_insta
 ):
     real_import = builtins.__import__
 
-    def failing_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def failing_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):
         if name == "omeroweb.webgateway":
             raise ImportError("webgateway unavailable")
-        return real_import(name, globals, locals, fromlist, level)
+        return real_import(name, global_vars, local_vars, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", failing_import)
     integration.install_webgateway_overrides()
@@ -2002,7 +2069,8 @@ def test_install_webgateway_overrides_covers_store_backed_region_image_data_and_
     recorded_sizes = []
 
     class _Conn:
-        def getObject(self, object_type, iid):
+        @staticmethod
+        def getObject(object_type, iid):
             return store_backed_image
 
     monkeypatch.setattr(integration, "login_required", _identity_decorator)
@@ -2132,7 +2200,8 @@ def test_install_webgateway_overrides_re_raises_regular_tile_failures_when_safe_
     regular_image = type("RegularImage", (), {"store_backed": False, "id": 3})()
 
     class _Conn:
-        def getObject(self, object_type, iid):
+        @staticmethod
+        def getObject(object_type, iid):
             return regular_image
 
     monkeypatch.setattr(integration, "login_required", _identity_decorator)

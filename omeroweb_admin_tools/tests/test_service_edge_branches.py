@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import builtins
 
 import pytest
@@ -173,7 +175,7 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
     monkeypatch.setattr(
         system_diagnostics,
         "_docker_api_json",
-        lambda path: next(responses),
+        lambda path: next_or_fail(responses),
     )
     assert system_diagnostics._inspect_docker_service_runtime("omeroserver") == (
         None,
@@ -197,7 +199,7 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
     monkeypatch.setattr(
         system_diagnostics,
         "_docker_api_json",
-        lambda path: next(responses),
+        lambda path: next_or_fail(responses),
     )
     runtime, error = system_diagnostics._inspect_docker_service_runtime("omeroserver")
     assert error == ""

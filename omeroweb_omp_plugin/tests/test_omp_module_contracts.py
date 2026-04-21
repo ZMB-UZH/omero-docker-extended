@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 from pathlib import Path
 
 import pytest
@@ -125,9 +127,10 @@ def test_omp_job_storage_load_job_returns_none_if_file_disappears_after_lock(
             self._exists = iter((True, False))
 
         def exists(self):
-            return next(self._exists)
+            return next_or_fail(self._exists)
 
-        def open(self, *_args, **_kwargs):
+        @staticmethod
+        def open(*_args, **_kwargs):
             raise AssertionError("path should not be opened when the job disappears")
 
     job_path = _DisappearingPath()

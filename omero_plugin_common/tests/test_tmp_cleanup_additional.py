@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import os
 from pathlib import Path
 
@@ -75,7 +77,7 @@ def test_tmp_cleanup_marker_helpers_cover_fsync_and_root_validation(
     monkeypatch.setattr(
         tmp_cleanup,
         "is_within_root",
-        lambda path, checked_root: next(root_checks),
+        lambda path, checked_root: next_or_fail(root_checks),
     )
     assert (
         tmp_cleanup.safe_mark_path_for_deferred_cleanup(

@@ -710,7 +710,8 @@ def test_all_indexed_search_dispatches_independent_sources_concurrently(monkeypa
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def submit(self, func, **kwargs):
+        @staticmethod
+        def submit(func, **kwargs):
             events.append("submit-acquisition")
             return _Future(func, kwargs)
 
@@ -757,7 +758,8 @@ def test_search_omero_builtin_rows_uses_prefix_query_for_partial_matching(monkey
     captured = {}
 
     class _Conn:
-        def searchObjects(self, obj_types, text, **kwargs):
+        @staticmethod
+        def searchObjects(obj_types, text, **kwargs):
             captured["obj_types"] = obj_types
             captured["text"] = text
             captured["kwargs"] = kwargs
@@ -778,7 +780,8 @@ def test_search_omero_builtin_rows_drops_single_letter_noise_terms(monkeypatch):
     captured = {}
 
     class _Conn:
-        def searchObjects(self, obj_types, text, **kwargs):
+        @staticmethod
+        def searchObjects(obj_types, text, **kwargs):
             captured["obj_types"] = obj_types
             captured["text"] = text
             captured["kwargs"] = kwargs
@@ -947,7 +950,8 @@ def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
             return False
 
     class _FakeApp:
-        def send_task(self, name, *, args, queue, connection):
+        @staticmethod
+        def send_task(name, *, args, queue, connection):
             send_calls.update(
                 {
                     "name": name,
@@ -1130,3 +1134,45 @@ def test_process_sync_batch_commits_after_progress_update(monkeypatch):
         }
     ]
     assert conn.commits == 1
+
+
+def test_process_sync_batch_skips_non_callable_commit_attribute(monkeypatch):
+    scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
+
+    class _Conn:
+        commit = "not-callable"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(service, "db_connect", lambda: _Conn())
+    monkeypatch.setattr(
+        service,
+        "sync_run_is_active",
+        lambda conn, scope_type, scope_id, run_token: True,
+    )
+    monkeypatch.setattr(
+        service,
+        "_document_for_image",
+        lambda image, schema_version: (
+            {"image_id": image.image_id, "schema_version": schema_version},
+            (),
+            (),
+        ),
+    )
+    monkeypatch.setattr(service, "upsert_search_document", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service, "update_sync_progress", lambda *args, **kwargs: None)
+
+    assert (
+        service._process_sync_batch(
+            scope,
+            "token",
+            [SimpleNamespace(image_id=17)],
+            2,
+            3,
+        )
+        == 3
+    )

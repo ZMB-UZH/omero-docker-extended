@@ -60,7 +60,8 @@ class _DummyRequest:
         self.META = {}
         self.session = types.SimpleNamespace(session_key=None)
 
-    def build_absolute_uri(self, path: str) -> str:
+    @staticmethod
+    def build_absolute_uri(path: str) -> str:
         return f"https://omero.example.org{path}"
 
 
@@ -103,10 +104,12 @@ def _install_celery_stubs() -> None:
         def __init__(self, *_args, **_kwargs):
             self.conf = types.SimpleNamespace(update=lambda **_kwargs: None)
 
-        def autodiscover_tasks(self, *_args, **_kwargs):
+        @staticmethod
+        def autodiscover_tasks(*_args, **_kwargs):
             return None
 
-        def task(self, *args, **kwargs):
+        @staticmethod
+        def task(*args, **kwargs):
             def _decorator(fn):
                 return fn
 

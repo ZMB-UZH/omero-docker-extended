@@ -26,7 +26,8 @@ class _Conn:
     def __init__(self):
         self.getObject = lambda kind, object_id: None
 
-    def getUser(self):
+    @staticmethod
+    def getUser():
         return SimpleNamespace(getName=lambda: "alice")
 
 

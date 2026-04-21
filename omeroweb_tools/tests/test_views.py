@@ -497,11 +497,13 @@ def test_validate_user_password_closes_session_after_success(monkeypatch):
     credential_value = "opaque-value"
 
     class _Client:
-        def createSession(self, username, provided_value):
+        @staticmethod
+        def createSession(username, provided_value):
             assert username == "alice"
             assert provided_value == credential_value
 
-        def closeSession(self):
+        @staticmethod
+        def closeSession():
             closed.append(True)
 
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
@@ -524,11 +526,13 @@ def test_validate_user_password_does_not_close_session_when_login_fails(monkeypa
     credential_value = "opaque-value"
 
     class _Client:
-        def createSession(self, username, provided_value):
+        @staticmethod
+        def createSession(username, provided_value):
             assert provided_value == credential_value
             raise RuntimeError("nope")
 
-        def closeSession(self):
+        @staticmethod
+        def closeSession():
             closed.append(True)
 
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
