@@ -4,6 +4,7 @@ import json
 from http.client import HTTPMessage
 from types import SimpleNamespace
 
+from django.middleware.csrf import CsrfViewMiddleware
 from django.test import RequestFactory
 
 from omeroweb_admin_tools.views.index_view import (
@@ -1591,14 +1592,25 @@ def test_proxy_http_request_ignores_absent_extra_headers(monkeypatch) -> None:
     assert "X-Grafana-Csrf-Token" not in captured["headers"]
 
 
-def test_grafana_proxy_is_csrf_exempt() -> None:
-    """Grafana proxy must be csrf_exempt so Django does not block Grafana login POSTs."""
+def test_grafana_proxy_post_is_protected_by_django_csrf_middleware() -> None:
+    """Grafana proxy POSTs must keep Django CSRF enforcement enabled."""
     from omeroweb_admin_tools.views import index_view
 
     view_func = index_view.grafana_proxy
-    assert getattr(view_func, "csrf_exempt", False) is True, (
-        "grafana_proxy must be decorated with @csrf_exempt"
+    assert getattr(view_func, "csrf_exempt", False) is False
+    assert "POST" in index_view._GRAFANA_PROXY_METHODS
+
+    request = RequestFactory().post(
+        "/admin_tools/resource-monitoring/grafana-proxy/api/login",
+        data=b'{"user":"root"}',
+        content_type="application/json",
     )
+    middleware = CsrfViewMiddleware(lambda _request: None)
+
+    response = middleware.process_view(request, view_func, (), {"subpath": "api/login"})
+
+    assert response is not None
+    assert response.status_code == 403
 
 
 def test_prometheus_proxy_is_not_csrf_exempt() -> None:
