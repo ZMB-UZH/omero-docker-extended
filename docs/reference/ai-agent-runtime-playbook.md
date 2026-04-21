@@ -48,6 +48,10 @@ Examples:
 
 - `docker compose build <service>` uses the layer cache. This is fast but will NOT pick up changes to build ARGs that are already baked into a cached layer. Use this for code-only changes (Python files, templates, static assets) where the COPY layers invalidate naturally.
 - `docker compose build --no-cache <service>` rebuilds every layer from scratch. Use this when changing build ARGs (package versions like `BIOFORMATS2RAW_VERSION`, `OME_ZARR_PY_VERSION`), base image digests, or OS-level package lists.
+- If a live installation build starts transferring GBs of context, stop before
+  `up` and inspect `.dockerignore`; generated runtime roots such as
+  `omero_data/`, `omero_temp/`, `postgresdb/`, `node_modules/`, and
+  `.project-pull.*/` must stay excluded from build contexts.
 - Build ARGs such as `OMERO_DROPBOX_VERSION` and `BIOFORMATS2RAW_VERSION`
   come from `env/omeroserver.env`. `docker-compose.yml` and
   `docker/<service>.Dockerfile` fail closed when those values are absent

@@ -17,6 +17,7 @@ pip-delete-this-directory.txt
 .coverage
 .coverage.*
 .cache
+.ruff_cache/
 nosetests.xml
 coverage.xml
 *.cover
@@ -35,5 +36,10 @@ build/
 # OMERO-specific heavy directories
 OMERO.server-*/
 OMERO.web-*/
+omero_data/
+omero_temp/
+postgresdb/
+node_modules/
+.project-pull.*/
 var/
 static/

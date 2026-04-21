@@ -95,6 +95,25 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
             compose_log = log_path.read_text(encoding="utf-8").strip()
             self.assertIn("build --no-cache --provenance false", compose_log)
 
+    def test_dockerignore_excludes_live_runtime_data_from_build_context(
+        self,
+    ) -> None:
+        dockerignore_text = (self.repo_root / ".dockerignore").read_text(
+            encoding="utf-8"
+        )
+        required_patterns = {
+            ".project-pull.*/",
+            ".ruff_cache/",
+            "node_modules/",
+            "omero_data/",
+            "omero_temp/",
+            "postgresdb/",
+        }
+
+        for pattern in required_patterns:
+            with self.subTest(pattern=pattern):
+                self.assertIn(pattern, dockerignore_text)
+
     def test_buildx_mode_disables_all_cache_knobs_for_no_cache_run(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

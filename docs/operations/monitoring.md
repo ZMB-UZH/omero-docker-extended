@@ -291,5 +291,5 @@ For the `Swap usage` panel specifically, only presentation options (for example 
 - Do not expose Grafana, Prometheus, or Loki publicly without authentication.
 - Restrict Grafana dashboard write access to admin users.
 - Rotate Grafana admin credentials (configured in `env/grafana.env`).
-- Grafana outbound analytics and update checks are disabled in `env/grafana_example.env` for offline or restricted-network deployments; this prevents recurring startup warnings when egress is blocked.
+- Grafana outbound analytics, update checks, and automatic preinstalled-plugin updates are disabled in `env/grafana_example.env` for offline or restricted-network deployments; this prevents recurring startup warnings when egress is blocked and avoids write attempts against bundled plugin directories.
 - Alloy has read-only access to the Docker socket and log files.
