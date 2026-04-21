@@ -24,9 +24,9 @@ jobs:
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
-      actions: read
+      actions: read # Required for CodeQL analysis metadata on workflow runs.
       contents: read
-      security-events: write
+      security-events: write # Required to upload CodeQL results to code scanning.
     strategy:
       fail-fast: false
       matrix:
@@ -58,9 +58,9 @@ jobs:
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
-      actions: read
+      actions: read # Required for SARIF uploads to resolve workflow run metadata.
       contents: read
-      security-events: write
+      security-events: write # Required to upload Trivy results to code scanning.
 
     steps:
       - name: Checkout
@@ -105,9 +105,9 @@ jobs:
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
-      actions: read
+      actions: read # Required for SARIF uploads to resolve workflow run metadata.
       contents: read
-      security-events: write
+      security-events: write # Required to upload Semgrep results to code scanning.
     container:
       image: semgrep/semgrep:1.160.0@sha256:7810f1d7884974ab6dda7bef8f4a2c8e165ea2142fd8260515d380e4f1407263
 
@@ -149,9 +149,9 @@ jobs:
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
-      actions: read
+      actions: read # Required for SARIF uploads to resolve workflow run metadata.
       contents: read
-      security-events: write
+      security-events: write # Required to upload Bandit results to code scanning.
 
     steps:
       - name: Checkout
@@ -355,9 +355,9 @@ jobs:
     if: github.ref_name == github.event.repository.default_branch && needs.hadolint-discover.outputs.dockerfiles != '[]'
     runs-on: ubuntu-24.04
     permissions:
-      actions: read
+      actions: read # Required for SARIF uploads to resolve workflow run metadata.
       contents: read
-      security-events: write
+      security-events: write # Required to upload Hadolint results to code scanning.
     strategy:
       fail-fast: false
       matrix:
@@ -398,9 +398,9 @@ jobs:
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
-      actions: read
+      actions: read # Required for SARIF uploads to resolve workflow run metadata.
       contents: read
-      security-events: write
+      security-events: write # Required to upload DevSkim results to code scanning.
 
     steps:
       - name: Checkout
@@ -470,8 +470,8 @@ jobs:
     if: github.ref_name == github.event.repository.default_branch
     permissions:
       contents: read
-      security-events: write
-      actions: read
+      security-events: write # Required to upload OSV results to code scanning.
+      actions: read # Required for SARIF uploads to resolve workflow run metadata.
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@c51854704019a247608d928f370c98740469d4b5 # v2.3.5
     with:
       scan-args: |-
@@ -484,9 +484,9 @@ jobs:
     if: github.ref_name == github.event.repository.default_branch && github.event_name != 'pull_request'
     permissions:
       contents: read
-      security-events: write
-      id-token: write
-      actions: read
+      security-events: write # Required to upload Scorecard results to code scanning.
+      id-token: write # Required for Scorecard's publish_results provenance token.
+      actions: read # Required for SARIF uploads to resolve workflow run metadata.
 
     steps:
       - name: Checkout
@@ -534,10 +534,10 @@ jobs:
     if: always() && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     permissions:
-      actions: read
+      actions: read # Required to inspect this workflow run's code-scanning uploads.
       contents: read
-      pull-requests: read
-      security-events: read
+      pull-requests: read # Required to compare pull-request security deltas.
+      security-events: read # Required to read current code-scanning alerts.
 
     steps:
       - name: Checkout
