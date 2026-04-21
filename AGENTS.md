@@ -5,7 +5,8 @@ Repository entrypoint for coding agents. Keep it small: load only the smallest c
 ## AI commit identity
 
 - AI agents that create, amend, merge, cherry-pick, squash, or rebase commits must use the Git identity `AI agent <>` for both author and committer. Use command-scoped config such as `git -c user.name='AI agent' -c user.email= commit ...`; never reuse a human, host, GitHub, previous-commit, or global identity.
-- If a tool cannot produce the empty email field shown as `<>`, stop before committing. Human contributors are not restricted by this AI-only rule.
+- If a tool cannot produce the empty email field shown as `<>`, stop before committing. Human contributors are not required to use the AI identity.
+- Non-AI commit identities must be real human GitHub identities or actual human author names with real email addresses. Never use host usernames, computer names, local account names, placeholder domains, generated fake names, or fake emails.
 
 ## Single-session rule
 

@@ -573,7 +573,11 @@ class AgentSkillCatalogTests(unittest.TestCase):
             with self.subTest(surface=surface_name):
                 self.assertContainsAll(
                     surface_text,
-                    ("AI commit identity", "AI agent <>", ("humans", "human")),
+                    (
+                        "AI agent <>",
+                        "real human GitHub",
+                        ("host/local placeholders", "host usernames"),
+                    ),
                     f"{surface_name} does not enforce the AI-only commit identity",
                 )
 

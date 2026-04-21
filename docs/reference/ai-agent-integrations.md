@@ -23,7 +23,9 @@ Harness-specific files are additive. They must not override the repo's security 
 
 Every AI-facing adapter inherits the commit-identity rule from `AGENTS.md`. Any AI tool that creates or rewrites a commit object must set both author and committer to `AI agent <>`, using an empty email field.
 
-AI tools must not infer identity from global Git config, prior commits, GitHub accounts, host users, or human operators. If the active tool cannot create that exact empty-email identity, it must stop before committing. This policy is AI-only and does not restrict human Git authorship.
+AI tools must not infer identity from global Git config, prior commits, GitHub accounts, host users, or human operators. If the active tool cannot create that exact empty-email identity, it must stop before committing. This policy is AI-only and does not require humans to use the AI identity.
+
+Non-AI commit identities must be real human GitHub identities or actual human author names with real email addresses. Host usernames, computer names, local account names, placeholder domains, generated fake names, and fake emails are invalid commit identities.
 
 ## Supported instruction surfaces
 
