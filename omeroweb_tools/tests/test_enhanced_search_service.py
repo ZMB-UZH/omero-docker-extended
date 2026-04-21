@@ -1065,6 +1065,7 @@ def test_process_sync_batch_stops_when_sync_lease_is_not_active(monkeypatch):
 
 def test_process_sync_batch_commits_after_progress_update(monkeypatch):
     scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
+    lease_id = f"{scope.scope_key}:lease"
 
     class _Conn:
         def __init__(self):
@@ -1110,7 +1111,7 @@ def test_process_sync_batch_commits_after_progress_update(monkeypatch):
 
     processed = service._process_sync_batch(
         scope,
-        "token",
+        lease_id,
         [SimpleNamespace(image_id=17)],
         2,
         3,
@@ -1118,11 +1119,11 @@ def test_process_sync_batch_commits_after_progress_update(monkeypatch):
 
     assert processed == 3
     assert upserts[0]["commit"] is False
-    assert upserts[0]["run_token"] == "token"
+    assert upserts[0]["run_token"] == lease_id
     assert progress_updates == [
         {
             "commit": False,
-            "run_token": "token",
+            "run_token": lease_id,
             "indexed_image_count": 3,
             "current_message": "Indexed 3 image(s).",
             "last_cursor_image_id": 17,
