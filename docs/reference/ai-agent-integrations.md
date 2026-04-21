@@ -19,6 +19,12 @@ Apply guidance in this order:
 
 Harness-specific files are additive. They must not override the repo's security read order, absolute single-session rule, environment-driven configuration model, or split-pytest policy. The single-session rule prohibits background agents, subagents, spawned agents, delegated agents, and any separate agent session.
 
+## AI commit identity
+
+Every AI-facing adapter inherits the commit-identity rule from `AGENTS.md`. Any AI tool that creates or rewrites a commit object must set both author and committer to `AI agent <>`, using an empty email field.
+
+AI tools must not infer identity from global Git config, prior commits, GitHub accounts, host users, or human operators. If the active tool cannot create that exact empty-email identity, it must stop before committing. This policy is AI-only and does not restrict human Git authorship.
+
 ## Supported instruction surfaces
 
 | Harness or surface | Files in this repo | Purpose |

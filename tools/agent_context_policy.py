@@ -45,6 +45,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         max_nonempty_lines=110,
         required_tokens=(
             "Single-session rule",
+            "AI agent <>",
             "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
             "docs/reference/ai-agent-runtime-playbook.md",
@@ -58,6 +59,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         max_nonempty_lines=60,
         required_tokens=(
             "Single-session rule",
+            "AI agent <>",
             "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
             "docs/reference/ai-agent-runtime-playbook.md",
@@ -69,6 +71,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         max_nonempty_lines=25,
         required_tokens=(
             "Single-session rule",
+            "AI agent <>",
             "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
             "docs/reference/ai-agent-runtime-playbook.md",
@@ -79,6 +82,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         max_nonempty_lines=30,
         required_tokens=(
             "Single-session rule",
+            "AI agent <>",
             "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
             "docs/reference/ai-agent-runtime-playbook.md",
@@ -89,6 +93,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         max_nonempty_lines=15,
         required_tokens=(
             "separate agent session",
+            "AI agent <>",
             "docs/reference/ai-agent-context-routing.md",
             "numeric caps",
         ),

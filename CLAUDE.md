@@ -17,6 +17,7 @@ Project-specific instructions for Claude Code sessions working on this repositor
 ## Core rules
 
 - Treat `AGENTS.md` as the universal baseline and this file as a Claude-specific adapter.
+- AI commit identity is fixed by `AGENTS.md`: all AI-created or amended commits must use `AI agent <>`; humans keep their own Git identity.
 - Keep context small: load one task class, one code root, one nearest test module, and one matching skill before broadening scope.
 - Follow the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.

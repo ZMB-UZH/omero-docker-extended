@@ -558,6 +558,25 @@ class AgentSkillCatalogTests(unittest.TestCase):
                     f"{surface_name} drifted from the shared cross-agent contract",
                 )
 
+    def test_ai_commit_identity_is_fixed_on_all_agent_entrypoints(self) -> None:
+        entrypoints = {
+            "AGENTS.md": self.agents_text,
+            "CLAUDE.md": self.claude_text,
+            "GEMINI.md": self.gemini_text,
+            ".github/copilot-instructions.md": self.copilot_text,
+            ".cursor/rules/00-omero-core.mdc": self.cursor_core_text,
+            "docs/reference/ai-agent-integrations.md": (
+                self.repo_root / "docs" / "reference" / "ai-agent-integrations.md"
+            ).read_text(encoding="utf-8"),
+        }
+        for surface_name, surface_text in entrypoints.items():
+            with self.subTest(surface=surface_name):
+                self.assertContainsAll(
+                    surface_text,
+                    ("AI commit identity", "AI agent <>", ("humans", "human")),
+                    f"{surface_name} does not enforce the AI-only commit identity",
+                )
+
     def test_agent_entrypoints_do_not_allow_subagent_escape_hatches(self) -> None:
         forbidden_phrases = (
             "Never use background agents or subagents unless the user explicitly asks for them.",
