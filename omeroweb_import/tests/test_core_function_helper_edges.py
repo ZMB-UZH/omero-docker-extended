@@ -11,10 +11,10 @@ from omeroweb_import.views import core_functions
 
 class _Value:
     def __init__(self, value):
-        self._value = value
+        self._raw_value = value
 
     def getValue(self):
-        return self._value
+        return self._raw_value
 
 
 def _raise(exc):
@@ -93,11 +93,13 @@ def test_identity_owner_and_permission_helpers_cover_edge_failures(monkeypatch) 
             return SimpleNamespace(val="")
 
     monkeypatch.setattr(core_functions, "_get_id", lambda owner: 42)
+
+    def _fallback_details():
+        return SimpleNamespace(getOwner=_FallbackOwner)
+
     assert (
         core_functions._get_owner_username(
-            SimpleNamespace(
-                getDetails=lambda: SimpleNamespace(getOwner=lambda: _FallbackOwner())
-            )
+            SimpleNamespace(getDetails=_fallback_details)
         )
         == "42"
     )
@@ -517,7 +519,7 @@ def test_script_service_helpers_cover_deduping_and_selection() -> None:
         getScriptService=lambda: _raise(RuntimeError("primary getter exploded")),
         c=SimpleNamespace(
             sf=SimpleNamespace(
-                getScriptService=lambda: _WorkingService(),
+                getScriptService=_WorkingService,
             )
         ),
     )
@@ -582,9 +584,7 @@ def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_p
     now_values = iter([100.0, 100.0, 100.0, 100.0])
     monkeypatch.setattr(core_functions.time, "time", lambda: next_or_fail(now_values))
     sleeps = []
-    monkeypatch.setattr(
-        core_functions.time, "sleep", lambda seconds: sleeps.append(seconds)
-    )
+    monkeypatch.setattr(core_functions.time, "sleep", sleeps.append)
 
     attempted_cmds = []
     attempted_envs = []

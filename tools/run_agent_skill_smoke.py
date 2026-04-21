@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _run_command(command: list[str]) -> int:
-    completed = subprocess.run(command, cwd=REPO_ROOT)
+    completed = subprocess.run(command, cwd=REPO_ROOT, check=False)
     return completed.returncode
 
 

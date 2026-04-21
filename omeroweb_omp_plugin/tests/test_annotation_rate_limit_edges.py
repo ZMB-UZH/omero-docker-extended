@@ -87,7 +87,7 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
         def __iter__(self):
             raise RuntimeError("cannot iterate wrapped values")
 
-    unreadable_ann = SimpleNamespace(getMapValue=lambda: _UnreadableMapValue())
+    unreadable_ann = SimpleNamespace(getMapValue=_UnreadableMapValue)
     assert annotation_service.is_plugin_annotation(unreadable_ann) is False
 
     class _QueryService:
@@ -107,9 +107,7 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
                 raise RuntimeError("verification failed")
             raise AssertionError(f"Unexpected HQL: {hql}")
 
-    conn = SimpleNamespace(
-        SERVICE_OPTS=object(), getQueryService=lambda: _QueryService()
-    )
+    conn = SimpleNamespace(SERVICE_OPTS=object(), getQueryService=_QueryService)
     assert annotation_service.find_plugin_annotation_ids(
         conn,
         7,
@@ -166,7 +164,7 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
                 SimpleNamespace(
                     id=7,
                     _obj=SimpleNamespace(getMapValue=lambda: []),
-                    getNs=lambda: _NsWrapper(),
+                    getNs=_NsWrapper,
                 ),
                 SimpleNamespace(
                     explode_id=True,
@@ -231,11 +229,11 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
             raise AssertionError(f"Unexpected HQL: {hql}")
 
     deleted_objects = []
-    update = SimpleNamespace(deleteObject=lambda obj: deleted_objects.append(obj))
+    update = SimpleNamespace(deleteObject=deleted_objects.append)
 
     annotations = {
         11: SimpleNamespace(
-            id=11, _obj=("annotation", 11), getMapValue=lambda: _BrokenLenMapValue()
+            id=11, _obj=("annotation", 11), getMapValue=_BrokenLenMapValue
         ),
         13: SimpleNamespace(id=13, _obj=("annotation", 13), getMapValue=lambda: [1]),
         14: SimpleNamespace(id=14, _obj=("annotation", 14), getMapValue=lambda: []),

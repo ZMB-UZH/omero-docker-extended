@@ -70,7 +70,7 @@ from .utils import current_username, json_error, load_json_body, require_non_roo
 
 @login_required()
 @ensure_csrf_cookie
-def index(request, conn=None, url=None, **kwargs):
+def index(request, conn=None, _url=None, **kwargs):
     user_id = _current_user_id(conn)
     upload_root = _get_upload_root()
     upload_enabled = _ensure_dir(upload_root)
@@ -103,21 +103,21 @@ def index(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def list_projects(request, conn=None, url=None, **kwargs):
+def list_projects(request, conn=None, _url=None, **kwargs):
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
     return JsonResponse(payload, safe=False)
 
 
 @login_required()
-def root_status(request, conn=None, url=None, **kwargs):
+def root_status(request, conn=None, _url=None, **kwargs):
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})
 
 
 @login_required()
 @require_non_root_user
-def start_upload(request, conn=None, url=None, **kwargs):
+def start_upload(request, conn=None, _url=None, **kwargs):
     try:
         return _start_upload(request, conn)
     except Exception as exc:
@@ -410,7 +410,7 @@ def _start_upload(request, conn):
 
 @login_required()
 @require_non_root_user
-def upload_files(request, job_id, conn=None, url=None, **kwargs):
+def upload_files(request, job_id, conn=None, _url=None, **kwargs):
     try:
         return _upload_files(request, job_id, conn)
     except Exception as exc:
@@ -813,8 +813,8 @@ def _upload_files(request, job_id, conn):
                 file_entry
             )
 
-    for index, upload in enumerate(files):
-        raw_name = relative_paths[index] if relative_paths else upload.name
+    for file_index, upload in enumerate(files):
+        raw_name = relative_paths[file_index] if relative_paths else upload.name
         rel_path, rel_error = _normalize_upload_relative_path(raw_name)
         if rel_error:
             upload_errors.append(rel_error)
@@ -928,7 +928,7 @@ def _upload_files(request, job_id, conn):
 
 @login_required()
 @require_non_root_user
-def import_step(request, job_id, conn=None, url=None, **kwargs):
+def import_step(request, job_id, conn=None, _url=None, **kwargs):
     try:
         return _import_step(request, job_id, conn)
     except Exception as exc:
@@ -980,7 +980,7 @@ def _import_step(request, job_id, conn):
 
 @login_required()
 @require_non_root_user
-def confirm_import(request, job_id, conn=None, url=None, **kwargs):
+def confirm_import(request, job_id, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return json_error(errors.method_post_required())
 
@@ -1020,7 +1020,7 @@ def confirm_import(request, job_id, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def prune_upload(request, job_id, conn=None, url=None, **kwargs):
+def prune_upload(request, job_id, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return json_error(errors.method_post_required())
 
@@ -1131,7 +1131,7 @@ def prune_upload(request, job_id, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def job_status(request, job_id, conn=None, url=None, **kwargs):
+def job_status(request, job_id, conn=None, _url=None, **kwargs):
     job, error_response = _load_owned_job(
         request,
         conn,

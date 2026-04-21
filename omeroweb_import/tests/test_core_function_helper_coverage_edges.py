@@ -82,7 +82,7 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
         "unlink",
         lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError()),
     )
-    monkeypatch.setattr(core_functions.os, "close", lambda fd: closed_fds.append(fd))
+    monkeypatch.setattr(core_functions.os, "close", closed_fds.append)
     assert core_functions._reset_staged_upload_file(upload_root, "sample.bin") is None
     assert closed_fds == [123]
 

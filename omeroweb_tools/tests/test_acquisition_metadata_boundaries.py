@@ -311,7 +311,7 @@ def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_e
     )
     assert (
         metadata._safe_iter_call(
-            SimpleNamespace(listValues=lambda: _BrokenIterable()), "listValues"
+            SimpleNamespace(listValues=_BrokenIterable), "listValues"
         )
         == ()
     )
@@ -343,10 +343,10 @@ def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_e
 def test_plane_info_collection_keeps_legacy_targeted_copy_plane_info_path():
     class _Value:
         def __init__(self, value):
-            self._value = value
+            self._raw_value = value
 
         def getValue(self):
-            return self._value
+            return self._raw_value
 
     class _PlaneInfo:
         theT = 0
@@ -392,10 +392,10 @@ def test_plane_info_collection_keeps_legacy_targeted_copy_plane_info_path():
 def test_plane_info_collection_covers_unavailable_bulk_and_targeted_failures():
     class _Value:
         def __init__(self, value):
-            self._value = value
+            self._raw_value = value
 
         def getValue(self):
-            return self._value
+            return self._raw_value
 
     class _PlaneInfo:
         theC = 0
@@ -460,28 +460,28 @@ def test_plane_info_collection_covers_unavailable_bulk_and_targeted_failures():
 
     assert (
         metadata._collect_all_plane_info_attributes(
-            SimpleNamespace(getPrimaryPixels=lambda: _NoPlaneInfoPixels()),
+            SimpleNamespace(getPrimaryPixels=_NoPlaneInfoPixels),
             (),
         )
         == ()
     )
     assert (
         metadata._collect_all_plane_info_attributes(
-            SimpleNamespace(getPrimaryPixels=lambda: _BulkFailurePixels()),
+            SimpleNamespace(getPrimaryPixels=_BulkFailurePixels),
             (),
         )
         == ()
     )
     assert (
         metadata._collect_all_plane_info_attributes(
-            SimpleNamespace(getPrimaryPixels=lambda: _BulkMissingAxisPixels()),
+            SimpleNamespace(getPrimaryPixels=_BulkMissingAxisPixels),
             (),
         )
         == ()
     )
 
     fallback_attributes = metadata._collect_all_plane_info_attributes(
-        SimpleNamespace(getPrimaryPixels=lambda: _BulkTypeErrorPixels()),
+        SimpleNamespace(getPrimaryPixels=_BulkTypeErrorPixels),
         (metadata.SearchChannel(channel_index=3),),
     )
     assert fallback_attributes == (

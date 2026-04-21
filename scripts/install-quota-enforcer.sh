@@ -68,7 +68,7 @@ mount_point=""
 fs_type=""
 block_device=""
 while read -r line; do
-    parts=($line)
+    read -r -a parts <<< "$line"
     if [[ ${#parts[@]} -lt 3 ]]; then continue; fi
     mp="${parts[1]}"
     ft="${parts[2]}"
@@ -90,7 +90,7 @@ if [[ "$fs_type" != "ext4" ]]; then
     echo "  Project quotas only work on ext4. Continuing anyway..." >&2
 fi
 
-if [[ "$fs_type" == "ext4" ]]; then
+if [[ "$fs_type" = "ext4" ]]; then
     # Check prjquota mount option
     if mount | grep -qE "on ${mount_point} .*prjquota"; then
         echo "  Filesystem at $mount_point is mounted with prjquota."
@@ -129,7 +129,7 @@ if [[ -f "$enforcer_dst" ]]; then
     dst_sha256="$(sha256sum "$enforcer_dst" | awk '{print $1}')"
 fi
 
-if [[ -f "$enforcer_dst" ]] && [[ "$src_sha256" == "$dst_sha256" ]]; then
+if [[ -f "$enforcer_dst" ]] && [[ "$src_sha256" = "$dst_sha256" ]]; then
     echo "  Enforcer script already installed with matching SHA256; refreshing permissions only."
     chmod 0755 "$enforcer_dst"
 else

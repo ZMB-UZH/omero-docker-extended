@@ -197,13 +197,12 @@ def configured_seed_paths(
 
 
 def planned_paths(
-    managed_root: str,
+    _managed_root: str,
     repo_template: str,
     install_groups: str,
     ldap_enabled: str,
     ldap_group: str,
 ) -> list[str]:
-    del managed_root
     # Only deterministic configured seeds are authoritative here. The raw
     # filesystem root can contain internal OMERO directories, stale test data,
     # or historical group trees that should not block installation-time

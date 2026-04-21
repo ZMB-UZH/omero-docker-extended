@@ -450,7 +450,7 @@ branding_logo_uses_generated_fallback() {
 
 branding_logo_fallback_enabled() {
     local configured_login_logo="${CONFIG_omero_web_login__logo:-}"
-    [[ "${configured_login_logo}" == "/static/branding/logo.png" ]]
+    [[ "${configured_login_logo}" = "/static/branding/logo.png" ]]
 }
 
 install_branding_logo_fallback() {

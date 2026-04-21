@@ -183,9 +183,8 @@ def managed_group_root() -> Path:
     return Path(omero_data_dir).expanduser() / DEFAULT_MANAGED_REPOSITORY_SUBDIR
 
 
-def resolve_managed_group_root(known_groups: Sequence[str]) -> Tuple[Path, str]:
+def resolve_managed_group_root(_known_groups: Sequence[str]) -> Tuple[Path, str]:
     """Return configured managed repository root without fallback resolution."""
-    del known_groups
     group_root = managed_group_root()
     if group_root.exists() and group_root.is_dir():
         return group_root, "using configured managed repository root"

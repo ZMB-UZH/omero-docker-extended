@@ -256,7 +256,7 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
     monkeypatch.setattr(
         core_functions.os,
         "close",
-        lambda fd: close_calls.append(fd),
+        close_calls.append,
     )
     with pytest.raises(core_functions._ManagedPathValidationError):
         core_functions._managed_parent_directory_fd(

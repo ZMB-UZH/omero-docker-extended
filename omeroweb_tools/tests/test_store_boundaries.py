@@ -60,7 +60,7 @@ def test_psycopg_loaders_cover_success_cache_and_missing_driver(monkeypatch):
 
     fake_extras = types.SimpleNamespace(Json=lambda payload: payload)
     fake_sql = types.SimpleNamespace(
-        SQL=lambda template: _FakeSQLTemplate(template),
+        SQL=_FakeSQLTemplate,
         Identifier=lambda value: f"<{value}>",
     )
     fake_psycopg2 = types.ModuleType("psycopg2")
@@ -110,7 +110,7 @@ def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
     db_auth_value = "plugin-auth-value"
 
     def _env_value(name, env_file=None):
-        del env_file
+        assert env_file == store.ENV_FILE_OMEROWEB
         return {
             store.ENV_USER: "plugin-user",
             store.ENV_AUTH: db_auth_value,
