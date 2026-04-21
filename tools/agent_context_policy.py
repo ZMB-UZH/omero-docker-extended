@@ -46,6 +46,8 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         required_tokens=(
             "Single-session rule",
             "AI agent <>",
+            "Co-authored-by: AI agent",
+            "contributors?anon=1",
             "real human GitHub identities",
             "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
@@ -61,6 +63,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         required_tokens=(
             "Single-session rule",
             "AI agent <>",
+            "contributors?anon=1",
             "real human GitHub",
             "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
@@ -74,6 +77,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         required_tokens=(
             "Single-session rule",
             "AI agent <>",
+            "contributors?anon=1",
             "real human GitHub",
             "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
@@ -86,6 +90,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         required_tokens=(
             "Single-session rule",
             "AI agent <>",
+            "contributors?anon=1",
             "real human GitHub",
             "separate agent session",
             "docs/reference/ai-agent-context-routing.md",
@@ -98,6 +103,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         required_tokens=(
             "separate agent session",
             "AI agent <>",
+            "contributors?anon=1",
             "real human GitHub",
             "docs/reference/ai-agent-context-routing.md",
             "numeric caps",

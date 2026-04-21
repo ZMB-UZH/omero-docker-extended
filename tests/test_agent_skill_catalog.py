@@ -575,6 +575,8 @@ class AgentSkillCatalogTests(unittest.TestCase):
                     surface_text,
                     (
                         "AI agent <>",
+                        "Co-authored-by: AI agent",
+                        "contributors?anon=1",
                         "real human GitHub",
                         ("host/local placeholders", "host usernames"),
                     ),
