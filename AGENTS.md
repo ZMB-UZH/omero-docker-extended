@@ -1,7 +1,11 @@
 # AGENTS guide
 
-This file is the repository entrypoint for coding agents. It must stay small.
-Load only the smallest correct context for the current task, then stop expanding.
+Repository entrypoint for coding agents. Keep it small: load only the smallest correct context for the current task, then stop expanding.
+
+## AI commit identity
+
+- AI agents that create, amend, merge, cherry-pick, squash, or rebase commits must use the Git identity `AI agent <>` for both author and committer. Use command-scoped config such as `git -c user.name='AI agent' -c user.email= commit ...`; never reuse a human, host, GitHub, previous-commit, or global identity.
+- If a tool cannot produce the empty email field shown as `<>`, stop before committing. Human contributors are not restricted by this AI-only rule.
 
 ## Single-session rule
 
@@ -31,12 +35,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - In committed code and tests, do not hard-code installation-specific clone paths or host paths unless the product intentionally guarantees that runtime path.
 - Custom import workflows must keep upload and conversion work in tmp/shared-transfer space and move data into `ManagedRepository` only at the final persistent import handoff.
 - Do not assume any Dataset, Project, Screen, or other OMERO object already exists in a live installation unless the current task explicitly provisions it first.
-- When tests or live verification need OMERO images, files, annotations,
-  acquisition metadata, users, groups, or plugin index rows, create deterministic
-  disposable fixtures inside the test or verification flow and clean or isolate
-  them by unique names. A user-named live object may be inspected as a
-  diagnostic target, but it must not become a product assumption, regression
-  fixture, or required test precondition.
+- When tests or live verification need OMERO images, files, annotations, acquisition metadata, users, groups, or plugin index rows, create deterministic disposable fixtures inside the test or verification flow and clean or isolate them by unique names. A user-named live object may be inspected only as a diagnostic target, never as a product assumption or required test precondition.
 - Keep changes deterministic, explicit, and reproducible across environments.
 - If the user explicitly asks for lower-token replies, use the opt-in
   `caveman` skill at the lowest compression level that preserves clarity;
