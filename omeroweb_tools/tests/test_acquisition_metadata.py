@@ -127,6 +127,28 @@ class _DetectorSettings:
     def getGain(self):
         return _Value("1.5")
 
+    def getDetector(self):
+        return SimpleNamespace(manufacturer="Hamamatsu", model="Orca Flash")
+
+
+class _LightSourceSettings:
+    attenuation = _Value("0.5")
+    wavelength = _Value("488")
+
+    def getLightSource(self):
+        return SimpleNamespace(manufacturer="Coherent", model="Sapphire")
+
+
+class _LightPath:
+    def getDichroic(self):
+        return SimpleNamespace(manufacturer="Chroma", model="T495lpxr")
+
+    def getEmissionFilters(self):
+        return [SimpleNamespace(manufacturer="Chroma", model="ET525/50m")]
+
+    def getExcitationFilters(self):
+        return [SimpleNamespace(manufacturer="Chroma", model="ET470/40x")]
+
 
 class _LogicalChannel:
     name = "GFP logical"
@@ -135,6 +157,12 @@ class _LogicalChannel:
 
     def getDetectorSettings(self):
         return _DetectorSettings()
+
+    def getLightSourceSettings(self):
+        return _LightSourceSettings()
+
+    def getLightPath(self):
+        return _LightPath()
 
 
 class _Channel:
@@ -217,6 +245,18 @@ class _Instrument:
             )
         ]
 
+    def getFilters(self):
+        return [SimpleNamespace(manufacturer="Chroma", model="ET525/50m")]
+
+    def getDichroics(self):
+        return [SimpleNamespace(manufacturer="Chroma", model="T495lpxr")]
+
+    def getDetectors(self):
+        return [SimpleNamespace(manufacturer="Hamamatsu", model="Orca Flash")]
+
+    def getLightSources(self):
+        return [SimpleNamespace(manufacturer="Coherent", model="Sapphire")]
+
 
 class _OriginalFile:
     def getName(self):
@@ -298,6 +338,17 @@ class _Image:
     def getInstrument(self):
         return _Instrument()
 
+    def getImagingEnvironment(self):
+        return SimpleNamespace(temperature=_Value("37"), humidity=_Value("40"))
+
+    def getStageLabel(self):
+        return SimpleNamespace(
+            name="Well A1",
+            x=_Value("1.0"),
+            y=_Value("2.0"),
+            z=_Value("3.0"),
+        )
+
     def getFileset(self):
         return _Fileset()
 
@@ -376,6 +427,19 @@ def test_extract_search_document_builds_canonical_fields_and_metadata_attributes
     )
     assert attributes["pixels_size_x"].attribute_numeric == 2048.0
     assert attributes["channel_1_fluor"].attribute_text == "EGFP"
+    assert attributes["channel_1_detector_model"].attribute_text == "Orca Flash"
+    assert attributes["channel_1_light_source_model"].attribute_text == "Sapphire"
+    assert attributes["channel_1_dichroic_model"].attribute_text == "T495lpxr"
+    assert attributes["channel_1_emission_filter_1_model"].attribute_text == "ET525/50m"
+    assert (
+        attributes["channel_1_excitation_filter_1_model"].attribute_text == "ET470/40x"
+    )
+    assert attributes["imaging_environment_temperature"].attribute_text == "37"
+    assert attributes["stage_label_name"].attribute_text == "Well A1"
+    assert attributes["instrument_filter_1_model"].attribute_text == "ET525/50m"
+    assert attributes["instrument_dichroic_1_model"].attribute_text == "T495lpxr"
+    assert attributes["instrument_detector_1_model"].attribute_text == "Orca Flash"
+    assert attributes["instrument_light_source_1_model"].attribute_text == "Sapphire"
     assert attributes["original_file_1_name"].attribute_text == "synthetic-generated.dv"
     assert "original_file_1_path" not in attributes
     assert attributes["annotation_map_treatment"].attribute_text == "DMSO"

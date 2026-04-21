@@ -206,6 +206,24 @@ def test_ensure_schema_bootstraps_tables_indexes_and_commit(monkeypatch):
     )
     assert conn.commits == 1
 
+    executed_count = len(cursor.executed)
+    store.ensure_schema(conn)
+    assert len(cursor.executed) == executed_count
+    assert conn.commits == 1
+
+
+def test_schema_ready_cache_handles_non_weakrefable_connections():
+    conn = ()
+
+    store._clear_schema_ready(conn)
+    assert store._schema_ready(conn) is False
+
+    store._mark_schema_ready(conn)
+    assert store._schema_ready(conn) is True
+
+    store._clear_schema_ready(conn)
+    assert store._schema_ready(conn) is False
+
 
 def test_list_sync_states_and_saved_queries_map_store_rows(monkeypatch):
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)

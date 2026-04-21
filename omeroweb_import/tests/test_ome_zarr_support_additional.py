@@ -209,6 +209,17 @@ def test_inspect_bioformats2raw_layout_covers_empty_and_invalid_series_paths(
     assert invalid.recognized is True
     assert "Series 0 is not a supported OME-Zarr image" in (invalid.support_error or "")
 
+    monkeypatch.setattr(
+        support,
+        "_load_root_ome_zarr_metadata",
+        lambda series_dir: (None, None),
+    )
+    missing_metadata = support._inspect_bioformats2raw_layout(store)
+    assert missing_metadata.recognized is True
+    assert "Series 0 did not expose OME-Zarr metadata" in (
+        missing_metadata.support_error or ""
+    )
+
 
 def test_rewrite_problematic_native_image_arrays_covers_additional_failures(
     tmp_path: Path,
