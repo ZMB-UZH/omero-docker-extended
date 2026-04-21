@@ -35,7 +35,6 @@ jobs:
         uses: super-linter/super-linter@9e863354e3ff62e0727d37183162c4a88873df41 # v8.6.0
         env:
           FILTER_REGEX_EXCLUDE: (^|/)third_party/(ecc-v1\.10\.0|caveman-v1\.6\.0)/
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINTER_RULES_PATH: .
           MARKDOWN_CONFIG_FILE: .markdownlint.yaml
           MULTI_STATUS: 'false'
