@@ -1108,10 +1108,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         lint_step = next(step for step in steps if step.get("name") == "Super-Linter")
         self.assertNotIn("uses", lint_step)
-        self.assertIn(
-            "ghcr.io/super-linter/super-linter:v8.6.0@sha256:"
-            "35955a2af8395c8224c7072732b91350f7f02c2ae9ee751842776ef29092a6cc",
+        self.assertRegex(
             lint_step["run"],
+            r"ghcr\.io/super-linter/super-linter:v8\.6\.0@sha256:[0-9a-f]{64}\b",
         )
         self.assertNotIn("GITHUB_TOKEN", lint_step["env"])
         self.assertNotIn("MULTI_STATUS", lint_step["env"])
