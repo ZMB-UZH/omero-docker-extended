@@ -304,9 +304,7 @@ def test_request_path_dataset_preparation_covers_success_and_failure(
     group_calls = []
 
     class _Conn:
-        SERVICE_OPTS = SimpleNamespace(
-            setOmeroGroup=lambda value: group_calls.append(value)
-        )
+        SERVICE_OPTS = SimpleNamespace(setOmeroGroup=group_calls.append)
 
     monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
     monkeypatch.setattr(

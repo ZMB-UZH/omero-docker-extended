@@ -21,10 +21,10 @@ class _Upload:
 
 class _Value:
     def __init__(self, value):
-        self._value = value
+        self._raw_value = value
 
     def getValue(self):
-        return self._value
+        return self._raw_value
 
 
 def test_directory_helpers_cover_parent_creation_and_permission_failures(
@@ -250,7 +250,7 @@ def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(
         "_managed_parent_directory_fd",
         lambda *args, **kwargs: (91, ""),
     )
-    monkeypatch.setattr(core_functions.os, "close", lambda fd: closed.append(fd))
+    monkeypatch.setattr(core_functions.os, "close", closed.append)
     assert "Invalid filename" in core_functions._managed_parent_runtime_error(
         upload_root, ("dir", "file.txt")
     )
@@ -328,9 +328,7 @@ def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
         raising=False,
     )
     generic_calls = {}
-    params = SimpleNamespace(
-        add=lambda key, value: generic_calls.setdefault(key, value)
-    )
+    params = SimpleNamespace(add=generic_calls.setdefault)
     core_functions._params_add_string(params, "name", "value")
     assert generic_calls == {"name": "wrapped:value"}
 
@@ -345,16 +343,12 @@ def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
     }
 
     generic_calls.clear()
-    long_params = SimpleNamespace(
-        add=lambda key, value: generic_calls.setdefault(key, value)
-    )
+    long_params = SimpleNamespace(add=generic_calls.setdefault)
     core_functions._params_add_long(long_params, "count", 7)
     assert generic_calls == {"count": 7}
 
     generic_calls.clear()
-    list_params = SimpleNamespace(
-        add=lambda key, value: generic_calls.setdefault(key, value)
-    )
+    list_params = SimpleNamespace(add=generic_calls.setdefault)
     core_functions._params_add_string_list(list_params, "names", ["a", 2])
     assert generic_calls == {"names": ["a", "2"]}
 
@@ -569,7 +563,7 @@ def test_import_candidate_and_probe_helpers_cover_remaining_path_edges(
     monkeypatch.setattr(
         core_functions,
         "_parse_candidate_path_line",
-        lambda line: parsed_candidates.get(line),
+        parsed_candidates.get,
     )
     monkeypatch.setattr(
         core_functions,

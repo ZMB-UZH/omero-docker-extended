@@ -446,7 +446,7 @@ def _load_store_backed_image_node_with_reader(store_root):
 
 
 @lru_cache(maxsize=_STORE_BACKED_NODE_CACHE_SIZE)
-def _load_store_backed_image_node_cached(store_root_text, signature):
+def _load_store_backed_image_node_cached(store_root_text, _signature):
     store_root = Path(store_root_text)
     try:
         node = _load_store_backed_image_node_from_metadata(store_root)

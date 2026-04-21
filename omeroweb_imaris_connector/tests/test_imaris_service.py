@@ -463,9 +463,7 @@ def test_get_script_processor_config_caches_admin_lookup(
 
     conn = SimpleNamespace(
         isAdmin=lambda: True,
-        c=SimpleNamespace(
-            sf=SimpleNamespace(getConfigService=lambda: DummyConfigService())
-        ),
+        c=SimpleNamespace(sf=SimpleNamespace(getConfigService=DummyConfigService)),
     )
     monkeypatch.setattr(imaris_service.time, "time", lambda: next_or_fail(time_values))
     monkeypatch.setattr(
@@ -1300,7 +1298,7 @@ def test_imaris_file_and_output_helpers_cover_invalid_annotations_and_cleanup(
         read=lambda _offset, _size: b"",
         close=lambda: None,
     )
-    file_annotation = SimpleNamespace(getFile=lambda: _InvalidSizeFile())
+    file_annotation = SimpleNamespace(getFile=_InvalidSizeFile)
     conn = SimpleNamespace(
         getObject=lambda kind, obj_id: (
             file_annotation if (kind, obj_id) == ("FileAnnotation", 12) else None
@@ -1358,7 +1356,7 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
     monkeypatch.setattr(
         imaris_service,
         "_write_process_job_file",
-        lambda job_id, payload: persisted.setdefault(job_id, payload),
+        persisted.setdefault,
     )
     handle = SimpleNamespace(
         poll=lambda: "FINISHED",
@@ -1474,8 +1472,12 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
         def getId():
             return SimpleNamespace(val=77)
 
+    def _get_original_file_annotation(kind, obj_id):
+        assert (kind, obj_id) == ("FileAnnotation", 12)
+        return SimpleNamespace(getFile=_OriginalFile)
+
     conn = SimpleNamespace(
-        getObject=lambda kind, obj_id: SimpleNamespace(getFile=lambda: _OriginalFile()),
+        getObject=_get_original_file_annotation,
         c=SimpleNamespace(sf=SimpleNamespace(createRawFileStore=lambda: raw_store)),
     )
     response = imaris_service._response_from_file_annotation(conn, "12")

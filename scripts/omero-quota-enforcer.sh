@@ -167,9 +167,31 @@ is_desired_group() {
         return 1
     fi
     while IFS= read -r desired_group; do
-        [[ "$lookup_group" == "$desired_group" ]] && return 0
+        [[ "$lookup_group" = "$desired_group" ]] && return 0
     done <<< "$desired_groups"
     return 1
+}
+
+is_unsigned_integer() {
+    case "$1" in
+        "" | *[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+is_safe_group_name() {
+    case "$1" in
+        "" | *[!A-Za-z0-9._-]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+escape_ere_literal() {
+    printf '%s' "$1" | sed 's/[][(){}.*+?^$|\\]/\\&/g'
+}
+
+escape_sed_basic_literal() {
+    printf '%s' "$1" | sed 's/[][\\/.*^$]/\\&/g'
 }
 
 clear_project_quota() {
@@ -240,18 +262,25 @@ clear_group_project_attributes() {
 # ---------------------------------------------------------------------------
 # Remove stale mappings for groups that no longer have configured quotas
 # ---------------------------------------------------------------------------
-while IFS=: read -r mapped_group mapped_project_id; do
+mapfile -t existing_project_mappings < "$PROJID_FILE"
+for existing_project_mapping in "${existing_project_mappings[@]}"; do
+    IFS=: read -r mapped_group mapped_project_id _extra <<< "$existing_project_mapping"
     if [[ -z "$mapped_group" || -z "$mapped_project_id" ]]; then
+        continue
+    fi
+    if ! is_safe_group_name "$mapped_group"; then
+        echo "SKIP: Unsafe stale group name '$mapped_group'." >&2
         continue
     fi
     if is_desired_group "$mapped_group"; then
         continue
     fi
-    if [[ ! "$mapped_project_id" =~ ^[0-9]+$ ]]; then
+    if ! is_unsigned_integer "$mapped_project_id"; then
         echo "SKIP: Invalid project ID '$mapped_project_id' for stale group '$mapped_group'." >&2
         continue
     fi
 
+    escaped_mapped_group_sed="$(escape_sed_basic_literal "$mapped_group")"
     group_path="${MANAGED_REPO_ROOT}/${mapped_group}"
     if ! clear_project_quota "$mapped_project_id"; then
         echo "FAIL: Unable to clear quota for stale group '$mapped_group' (project_id=$mapped_project_id)." >&2
@@ -265,12 +294,12 @@ while IFS=: read -r mapped_group mapped_project_id; do
         continue
     fi
 
-    sed -i "/^${mapped_group}:[0-9][0-9]*$/d" "$PROJID_FILE"
+    sed -i "/^${escaped_mapped_group_sed}:[0-9][0-9]*$/d" "$PROJID_FILE"
     sed -i "/^${mapped_project_id}:/d" "$PROJECTS_FILE"
     find "$(dirname "$PROJECTS_FILE")" -maxdepth 1 -type f -name ".retag_done_${mapped_group}_*" -delete || true
 
     echo "OK: cleared stale quota mapping for group '$mapped_group' (project_id=$mapped_project_id)."
-done < "$PROJID_FILE"
+done
 
 if [[ -z "$quotas_json" ]]; then
     echo "No active group quotas configured; stale mappings (if any) have been reconciled."
@@ -282,7 +311,7 @@ fi
 # ---------------------------------------------------------------------------
 while IFS=$'\t' read -r group_name quota_gb; do
     # Validate group name
-    if [[ ! "$group_name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    if ! is_safe_group_name "$group_name"; then
         echo "SKIP: Unsafe group name '$group_name'." >&2
         continue
     fi
@@ -313,11 +342,13 @@ while IFS=$'\t' read -r group_name quota_gb; do
     # Allocate or look up project ID
     # -----------------------------------------------------------------------
     project_id=""
-    escaped_group_path_regex="$(printf '%s' "$resolved_group_path" | sed 's/[.[\*^$()+?{}|]/\\&/g')"
-    escaped_group_path_sed="$(printf '%s' "$resolved_group_path" | sed 's/[\\/&]/\\\\&/g')"
+    escaped_group_name_regex="$(escape_ere_literal "$group_name")"
+    escaped_group_name_sed="$(escape_sed_basic_literal "$group_name")"
+    escaped_group_path_regex="$(escape_ere_literal "$resolved_group_path")"
+    escaped_group_path_sed="$(escape_sed_basic_literal "$resolved_group_path")"
 
-    if grep -Eq "^${group_name}:" "$PROJID_FILE"; then
-        project_id="$(sed -n "s/^${group_name}:\([0-9][0-9]*\)$/\1/p" "$PROJID_FILE" | tail -n1)"
+    if grep -Eq "^${escaped_group_name_regex}:" "$PROJID_FILE"; then
+        project_id="$(sed -n "s/^${escaped_group_name_sed}:\([0-9][0-9]*\)$/\1/p" "$PROJID_FILE" | tail -n1)"
     fi
 
     if [[ -z "$project_id" ]] && grep -Eq "^[0-9]+:${escaped_group_path_regex}$" "$PROJECTS_FILE"; then
@@ -349,8 +380,8 @@ while IFS=$'\t' read -r group_name quota_gb; do
         printf '%s:%s\n' "$project_id" "$resolved_group_path" >> "$PROJECTS_FILE"
     fi
 
-    if ! grep -Eq "^${group_name}:${project_id}$" "$PROJID_FILE"; then
-        sed -i "/^${group_name}:[0-9][0-9]*$/d" "$PROJID_FILE"
+    if ! grep -Eq "^${escaped_group_name_regex}:${project_id}$" "$PROJID_FILE"; then
+        sed -i "/^${escaped_group_name_sed}:[0-9][0-9]*$/d" "$PROJID_FILE"
         printf '%s:%s\n' "$group_name" "$project_id" >> "$PROJID_FILE"
     fi
 

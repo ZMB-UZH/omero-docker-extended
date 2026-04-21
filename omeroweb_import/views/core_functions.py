@@ -1005,7 +1005,7 @@ def _robust_update_job(
 def _resolve_job_storage_paths(job_id: str) -> tuple[Optional[Path], Optional[Path]]:
     try:
         return _job_path(job_id), _job_lock_path(job_id)
-    except (OSError, ValueError, _ManagedPathValidationError) as exc:
+    except (OSError, ValueError) as exc:
         logger.warning(
             "Unable to resolve upload job storage paths for %s: %s",
             sanitize_log_value(job_id),
@@ -1897,7 +1897,7 @@ def _get_id(obj):
     try:
         gid = obj.getId()
         return gid.getValue() if hasattr(gid, "getValue") else gid
-    except (AttributeError, Exception):
+    except Exception:
         return None
 
 
@@ -3190,7 +3190,7 @@ def _read_proc_rchar(pid):
             for line in fh:
                 if line.startswith("rchar:"):
                     return int(line.split(":", 1)[1].strip())
-    except (OSError, ValueError, PermissionError):
+    except (OSError, ValueError):
         logger.debug("Suppressed exception reading process I/O stats", exc_info=True)
     return None
 
@@ -3909,18 +3909,16 @@ def _open_group_scoped_session_connection(
 
 
 def _open_user_owned_background_connection(
-    username: str,
+    _username: str,
     *,
     session_key: str = "",
     host: str = "",
     port: Optional[int] = None,
     group_id: Optional[int] = None,
-    service_conn: Optional[BlitzGateway] = None,
+    _service_conn: Optional[BlitzGateway] = None,
     purpose: str = "background OMERO work",
 ):
     """Open a user-owned OMERO connection from an independent session key only."""
-    del service_conn
-    del username
 
     if not session_key or not host or port is None:
         logger.warning(
@@ -6094,10 +6092,14 @@ def _iter_script_services(conn):
     if conn is None:
         return
     seen = set()
-    for svc_getter in (
-        lambda: conn.getScriptService(),
-        lambda: conn.c.sf.getScriptService(),
-    ):
+
+    def _connection_script_service():
+        return conn.getScriptService()
+
+    def _session_factory_script_service():
+        return conn.c.sf.getScriptService()
+
+    for svc_getter in (_connection_script_service, _session_factory_script_service):
         try:
             svc = svc_getter()
         except Exception:

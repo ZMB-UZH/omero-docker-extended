@@ -111,7 +111,9 @@ def test_process_job_file_helpers_cover_cleanup_and_timeout_payloads(
         lambda job_id, payload: written.update({"job_id": job_id, "payload": payload}),
     )
     monkeypatch.setattr(
-        imaris_service, "_forget_process_job", lambda job_id: forgotten.append(job_id)
+        imaris_service,
+        "_forget_process_job",
+        forgotten.append,
     )
 
     imaris_service._monitor_process_job("proc-2", object())

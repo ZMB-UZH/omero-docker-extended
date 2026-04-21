@@ -30,7 +30,7 @@ def get_id(obj):
     try:
         gid = obj.getId()
         return gid.getValue() if hasattr(gid, "getValue") else gid
-    except (AttributeError, Exception):
+    except Exception:
         return None
 
 

@@ -41,7 +41,7 @@ sha256_matches_manifest() {
     fi
 
     actual_sha="$(sha256sum "${source_path}" | awk '{print $1}')"
-    [[ "${actual_sha}" == "${expected_sha}" ]]
+    [[ "${actual_sha}" = "${expected_sha}" ]]
 }
 
 is_valid_bioformats_cache() {
@@ -107,7 +107,7 @@ else
     INSTALLED_VERSION=""
 fi
 
-if [[ "${INSTALLED_VERSION}" == "${TARGET_VERSION}" && -x "${INSTALL_DIR}/ImarisConvertBioformats" ]]; then
+if [[ "${INSTALLED_VERSION}" = "${TARGET_VERSION}" && -x "${INSTALL_DIR}/ImarisConvertBioformats" ]]; then
     if ! [[ -x /usr/local/bin/imarisconvert ]]; then
         echo "Recreating missing ImarisConvert wrapper..."
         install_imarisconvert_wrapper
@@ -182,9 +182,9 @@ fi
 echo "Found FreeImage library: ${FREEIMAGE_LIB}"
 
 PARALLEL_JOBS="$(nproc)"
-NINJA_GENERATOR=""
+NINJA_GENERATOR=()
 if command -v ninja >/dev/null 2>&1; then
-    NINJA_GENERATOR="-G Ninja"
+    NINJA_GENERATOR=(-G Ninja)
 fi
 
 CCACHE_LAUNCHER=()
@@ -196,7 +196,7 @@ if command -v ccache >/dev/null 2>&1; then
 fi
 
 if ! cmake .. \
-    ${NINJA_GENERATOR} \
+    "${NINJA_GENERATOR[@]}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DJAVA_HOME=/usr/lib/jvm/java-11-openjdk \
     -DJRE_HOME=/usr/lib/jvm/jre-11-openjdk \

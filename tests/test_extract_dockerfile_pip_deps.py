@@ -69,6 +69,7 @@ def test_extractor_fails_on_missing_file():
     result = subprocess.run(
         [sys.executable, str(EXTRACTOR), "/nonexistent/Dockerfile"],
         capture_output=True,
+        check=False,
         text=True,
     )
     assert result.returncode != 0
@@ -78,6 +79,7 @@ def test_extractor_fails_without_arguments():
     result = subprocess.run(
         [sys.executable, str(EXTRACTOR)],
         capture_output=True,
+        check=False,
         text=True,
     )
     assert result.returncode != 0

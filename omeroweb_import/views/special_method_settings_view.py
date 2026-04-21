@@ -34,7 +34,7 @@ def _normalize_special_method_settings(settings_payload):
 
 @login_required()
 @require_non_root_user
-def save_settings(request, conn=None, url=None, **kwargs):
+def save_settings(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 
@@ -87,7 +87,7 @@ def save_settings(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def load_settings(request, conn=None, url=None, **kwargs):
+def load_settings(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 

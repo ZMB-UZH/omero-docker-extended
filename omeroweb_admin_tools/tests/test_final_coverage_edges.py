@@ -30,10 +30,10 @@ def _unwrap_view(func):
 
 class _Value:
     def __init__(self, value):
-        self._value = value
+        self._raw_value = value
 
     def getValue(self):
-        return self._value
+        return self._raw_value
 
 
 class _User:
@@ -242,7 +242,7 @@ def test_admin_index_helpers_and_views_cover_remaining_proxy_compose_and_quota_e
             raise RuntimeError("enumeration failed")
 
     principals = index_view._list_all_users_and_groups(
-        SimpleNamespace(getAdminService=lambda: _AdminService())
+        SimpleNamespace(getAdminService=_AdminService)
     )
     assert principals[0]["alice"] == ""
     assert principals[1] == {"scientists"}

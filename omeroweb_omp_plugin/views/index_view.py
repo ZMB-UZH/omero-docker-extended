@@ -473,7 +473,7 @@ def _safe_index_messages_json():
 
 @login_required()
 @ensure_csrf_cookie
-def index(request, conn=None, url=None, **kwargs):
+def index(request, conn=None, _url=None, **kwargs):
     """
     OMP filename+metadata harverster UI
     """
@@ -1108,13 +1108,13 @@ def index(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def list_projects(request, conn=None, url=None, **kwargs):
+def list_projects(request, conn=None, _url=None, **kwargs):
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
     return JsonResponse(payload)
 
 
 @login_required()
-def root_status(request, conn=None, url=None, **kwargs):
+def root_status(request, conn=None, _url=None, **kwargs):
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})

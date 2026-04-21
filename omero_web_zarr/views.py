@@ -157,7 +157,7 @@ def _build_store_backed_preview_context(request, image):
 
 
 @login_required()
-def index(request, conn=None, **kwargs):
+def index(request, _conn=None, **kwargs):
     home = reverse("omero_web_zarr_index")
     vizarr = reverse("zarr_app", kwargs={"app": "vizarr", "url": ""})
     instruction = (
@@ -630,7 +630,7 @@ def _inject_launcher_head(html, base_url):
 
 
 @lru_cache(maxsize=16)
-def _fetch_remote_app_shell(base_url, cache_bucket):
+def _fetch_remote_app_shell(base_url, _cache_bucket):
     response = requests.get(base_url, timeout=20)
     response.raise_for_status()
     return response.text

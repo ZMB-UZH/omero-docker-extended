@@ -157,7 +157,7 @@ def _save_annotation_link(update, link):
 # ==============================================================================
 @login_required()
 @require_non_root_user
-def start_job(request, conn=None, url=None, **kwargs):
+def start_job(request, conn=None, _url=None, **kwargs):
     try:
         if request.method != "POST":
             return JsonResponse(
@@ -242,7 +242,7 @@ def start_job(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def start_acq_job(request, conn=None, url=None, **kwargs):
+def start_acq_job(request, conn=None, _url=None, **kwargs):
     try:
         if request.method != "POST":
             return JsonResponse(
@@ -309,7 +309,7 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def start_delete_all_job(request, conn=None, url=None, **kwargs):
+def start_delete_all_job(request, conn=None, _url=None, **kwargs):
     try:
         if request.method != "POST":
             return JsonResponse(
@@ -382,7 +382,7 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
+def start_delete_plugin_job(request, conn=None, _url=None, **kwargs):
     try:
         if request.method != "POST":
             return JsonResponse(
@@ -458,7 +458,7 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
 # ==============================================================================
 @login_required()
 @require_non_root_user
-def job_progress(request, job_id, conn=None, url=None, **kwargs):
+def job_progress(request, job_id, conn=None, _url=None, **kwargs):
     lk = None
     try:
         job = load_job(job_id)

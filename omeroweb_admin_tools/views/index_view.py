@@ -298,7 +298,7 @@ def _proxy_http_request(
             base_url=base_url,
             proxy_prefix=proxy_prefix,
         )
-    except (requests.Timeout, TimeoutError, socket.timeout) as exc:
+    except (requests.Timeout, TimeoutError) as exc:
         logger.warning(
             "Proxy backend timed out target=%s reason=%s",
             sanitize_url_for_logging(target_url),
@@ -904,7 +904,7 @@ def _require_root_user(request, conn):
 
 
 @login_required()
-def index(request, conn=None, url=None, **kwargs):
+def index(request, _conn=None, _url=None, **kwargs):
     """Render the Admin tools landing page."""
     return render(
         request,
@@ -961,7 +961,7 @@ def _parse_since_ns(raw_value: str) -> int:
 
 @login_required()
 @require_root_user
-def logs_view(request, conn=None, url=None, **kwargs):
+def logs_view(request, _conn=None, _url=None, **kwargs):
     """Render the logs view."""
     log_config = optional_log_config()
     return render(
@@ -977,7 +977,7 @@ def logs_view(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_root_user
-def logs_data(request, conn=None, url=None, **kwargs):
+def logs_data(request, conn=None, _url=None, **kwargs):
     """Serve log entries as JSON from the Loki backend."""
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -1049,7 +1049,7 @@ def logs_data(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
-def root_status(request, conn=None, url=None, **kwargs):
+def root_status(request, conn=None, _url=None, **kwargs):
     """Return whether the current user is root."""
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})
@@ -1057,7 +1057,7 @@ def root_status(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_root_user
-def internal_log_labels(request, conn=None, url=None, **kwargs):
+def internal_log_labels(request, conn=None, _url=None, **kwargs):
     """Return available filenames for an internal log compose_service."""
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -1245,7 +1245,7 @@ def _docker_api_json(path: str, timeout_seconds: float = 3.0) -> Optional[object
             docker_socket,
         )
         return None
-    except (ConnectionError, OSError, json.JSONDecodeError) as exc:
+    except (OSError, json.JSONDecodeError) as exc:
         logger.warning("Docker API request failed for %s: %s", path, exc)
         return None
     finally:
@@ -1611,14 +1611,14 @@ def _build_target_service_status(
 
 @login_required()
 @require_root_user
-def resource_monitoring_view(request, conn=None, url=None, **kwargs):
+def resource_monitoring_view(request, _conn=None, _url=None, **kwargs):
     """Render resource monitoring dashboard."""
     return render(request, "omeroweb_admin_tools/resource_monitoring.html", {})
 
 
 @login_required()
 @require_root_user
-def resource_monitoring_data(request, conn=None, url=None, **kwargs):
+def resource_monitoring_data(request, conn=None, _url=None, **kwargs):
     """Return monitoring endpoint URLs for Grafana and Prometheus dashboards."""
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -1858,7 +1858,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
 @csrf_exempt
 @login_required()
 @require_root_user
-def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
+def grafana_proxy(request, subpath: str, conn=None, _url=None, **kwargs):
     """Proxy Grafana HTTP responses through OMERO.web."""
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -1919,7 +1919,7 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_root_user
-def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
+def prometheus_proxy(request, subpath: str, conn=None, _url=None, **kwargs):
     """Proxy Prometheus HTTP responses through OMERO.web."""
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -1975,14 +1975,14 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
 @login_required()
 @require_root_user
 @ensure_csrf_cookie
-def storage_view(request, conn=None, url=None, **kwargs):
+def storage_view(request, _conn=None, _url=None, **kwargs):
     """Render storage capacity distribution page."""
     return render(request, "omeroweb_admin_tools/storage.html", {})
 
 
 @login_required()
 @require_root_user
-def storage_data(request, conn=None, url=None, **kwargs):
+def storage_data(request, conn=None, _url=None, **kwargs):
     """Return size distribution by OMERO user and group using OriginalFile sizes."""
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -2124,7 +2124,7 @@ def storage_data(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_root_user
-def storage_quota_data(request, conn=None, url=None, **kwargs):
+def storage_quota_data(request, conn=None, _url=None, **kwargs):
     """Fetch persisted quota definitions and reconciliation logs."""
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -2167,7 +2167,7 @@ def storage_quota_data(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_root_user
-def storage_quota_update(request, conn=None, url=None, **kwargs):
+def storage_quota_update(request, conn=None, _url=None, **kwargs):
     """Update group quota values from UI edits."""
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -2203,7 +2203,7 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
             if not isinstance(item, dict):
                 raise QuotaError("Each quota update must be an object")
             normalized.append((item.get("group", ""), item.get("quota_gb", "")))
-    except (json.JSONDecodeError, QuotaError, ValueError, TypeError):
+    except (QuotaError, ValueError, TypeError):
         logger.warning(
             "Invalid quota update payload (content_type=%s, content_length=%s)",
             sanitize_log_value(request.META.get("CONTENT_TYPE", "")),
@@ -2230,7 +2230,7 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_root_user
-def storage_quota_import(request, conn=None, url=None, **kwargs):
+def storage_quota_import(request, conn=None, _url=None, **kwargs):
     """Import group quotas from a CSV upload."""
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -2271,7 +2271,7 @@ def storage_quota_import(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_root_user
-def storage_quota_template(request, conn=None, url=None, **kwargs):
+def storage_quota_template(request, conn=None, _url=None, **kwargs):
     """Download quota CSV template."""
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -2286,7 +2286,7 @@ def storage_quota_template(request, conn=None, url=None, **kwargs):
 @login_required()
 @require_root_user
 @ensure_csrf_cookie
-def server_database_testing_view(request, conn=None, url=None, **kwargs):
+def server_database_testing_view(request, _conn=None, _url=None, **kwargs):
     """Render OMERO.server and database diagnostics page."""
     return render(
         request,
@@ -2297,7 +2297,7 @@ def server_database_testing_view(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_root_user
-def server_database_testing_run(request, conn=None, url=None, **kwargs):
+def server_database_testing_run(request, conn=None, _url=None, **kwargs):
     """Execute selected diagnostics scripts and return a report."""
     root_error = _require_root_user(request, conn)
     if root_error:
