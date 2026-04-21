@@ -155,6 +155,7 @@ def test_start_upload_success_normalizes_entries_and_captures_group_context(
                 "files": [
                     {"relative_path": "analysis/data.txt", "size": "not-an-int"},
                     {"relative_path": "Thumbs.db", "size": -4},
+                    {"relative_path": "no-size.tif"},
                     {"relative_path": "top-level.tif", "size": 5},
                 ],
                 "special_upload": "sem_edx_spectra",
@@ -177,6 +178,7 @@ def test_start_upload_success_normalizes_entries_and_captures_group_context(
             SimpleNamespace(hex="b" * 32),
             SimpleNamespace(hex="c" * 32),
             SimpleNamespace(hex="d" * 32),
+            SimpleNamespace(hex="e" * 32),
         ]
     )
 
@@ -226,8 +228,8 @@ def test_start_upload_success_normalizes_entries_and_captures_group_context(
 
     assert response.status_code == 200
     assert payload["ok"] is True
-    assert payload["job_id"] == "d" * 32
-    assert payload["upload_url"].endswith("/mock/omeroweb_import_files/" + "d" * 32)
+    assert payload["job_id"] == "e" * 32
+    assert payload["upload_url"].endswith("/mock/omeroweb_import_files/" + "e" * 32)
 
     job = saved["job"]
     assert job["project_id"] == 9
@@ -238,7 +240,12 @@ def test_start_upload_success_normalizes_entries_and_captures_group_context(
     assert job["job_batch_size"] == 10
     assert job["orphan_dataset_name"] == "UploadRoot_TEST"
     assert job["sem_edx_associations"] == {
-        "normalized": ["analysis/data.txt", "Thumbs.db", "top-level.tif"]
+        "normalized": [
+            "analysis/data.txt",
+            "Thumbs.db",
+            "no-size.tif",
+            "top-level.tif",
+        ]
     }
     assert job["sem_edx_settings"] == {
         "create_tables": False,
@@ -251,7 +258,9 @@ def test_start_upload_success_normalizes_entries_and_captures_group_context(
     assert job["files"][1]["size"] == 0
     assert job["files"][1]["import_skip"] is True
     assert job["files"][1]["compatibility_skip"] is True
+    assert job["files"][2]["size"] == 0
     assert job["files"][2]["import_skip"] is False
+    assert job["files"][3]["import_skip"] is False
 
 
 def test_start_upload_handles_disabled_special_methods_event_context_failures_and_save_errors(

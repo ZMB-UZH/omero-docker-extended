@@ -120,6 +120,58 @@ def test_sync_state_view_returns_database_error_when_settings_unavailable(monkey
     }
 
 
+def test_enhanced_search_view_treats_corrupt_collapsed_sections_as_empty(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        index_view,
+        "render",
+        lambda request, template, context: captured.update(context) or context,
+    )
+    monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(index_view, "saved_queries", lambda username: [])
+    monkeypatch.setattr(
+        index_view,
+        "user_settings",
+        lambda username: {
+            "acquisition_metadata_enabled": True,
+            "collapsed_sections": "metadata-index",
+        },
+    )
+    monkeypatch.setattr(
+        index_view,
+        "ensure_user_index_sync",
+        lambda conn, username, settings_payload=None: ([], False, "ready"),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "runtime_config",
+        lambda: SimpleNamespace(max_results=25),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "parse_search_query",
+        lambda params: (index_view.SearchQuery(query_text="lsm"), []),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "search",
+        lambda conn, query, acquisition_metadata_enabled: {
+            "results": [],
+            "page": 1,
+            "page_size": 25,
+            "total_count": 0,
+            "has_previous": False,
+            "has_next": False,
+        },
+    )
+
+    request = RequestFactory().get("/omeroweb_tools/enhanced-search/?query_text=lsm")
+    inspect.unwrap(index_view.enhanced_search_view)(request, conn=object())
+
+    assert captured["metadata_index_collapsed"] is False
+    assert captured["saved_queries_collapsed"] is False
+
+
 def test_save_user_settings_view_rejects_non_post_and_invalid_json(monkeypatch):
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
 
@@ -211,6 +263,17 @@ def test_saved_query_views_cover_validation_delete_and_fallback_redirect(
         conn=object(),
     )
     assert delete_bad_id_response.status_code == 400
+
+    delete_missing_id = RequestFactory().post(
+        "/omeroweb_tools/enhanced-search/saved-queries/delete/",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    delete_missing_id_response = inspect.unwrap(index_view.delete_query_view)(
+        delete_missing_id,
+        conn=object(),
+    )
+    assert delete_missing_id_response.status_code == 400
 
     monkeypatch.setattr(
         index_view, "remove_saved_query", lambda username, query_id: False

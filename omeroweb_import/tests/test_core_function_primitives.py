@@ -193,6 +193,10 @@ def test_resolve_root_relative_path_returns_safe_validation_errors(
 def test_external_info_units_and_dataset_helpers_cover_aliases_and_fallbacks(
     monkeypatch,
 ):
+    assert core_functions._optional_int("17") == 17
+    assert core_functions._optional_int("not-an-int") is None
+    assert core_functions._optional_int(object()) is None
+
     assert (
         core_functions._get_text(SimpleNamespace(getValue=lambda: "value")) == "value"
     )
@@ -296,7 +300,7 @@ def test_external_info_units_and_dataset_helpers_cover_aliases_and_fallbacks(
         core_functions, "_generate_orphan_dataset_name", lambda: "UploadRoot_TEST"
     )
     orphan_dataset, dataset_names = core_functions._plan_job_dataset_targets(
-        {"orphan_dataset_name": None},
+        {"orphan_dataset_name": 77},
         [
             {
                 "relative_path": "image.ome.tif",
@@ -309,8 +313,8 @@ def test_external_info_units_and_dataset_helpers_cover_aliases_and_fallbacks(
             },
         ],
     )
-    assert orphan_dataset == "UploadRoot_TEST"
-    assert dataset_names == ["UploadRoot_TEST", "folder"]
+    assert orphan_dataset == "77"
+    assert dataset_names == ["77", "folder"]
 
 
 def test_cli_and_shared_zarr_helpers_cover_env_and_safe_cleanup(monkeypatch, tmp_path):

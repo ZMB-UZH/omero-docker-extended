@@ -589,7 +589,9 @@ def test_process_import_job_logs_sem_edx_outer_exceptions(
     monkeypatch.setattr(
         core_functions,
         "_open_service_connection",
-        lambda *args, **kwargs: SimpleNamespace(close=lambda: None),
+        lambda *args, **kwargs: SimpleNamespace(
+            close=lambda: (_ for _ in ()).throw(RuntimeError("close failed"))
+        ),
     )
     monkeypatch.setattr(
         core_functions,
@@ -598,13 +600,16 @@ def test_process_import_job_logs_sem_edx_outer_exceptions(
             RuntimeError("cache load failed")
         ),
     )
-    caplog.set_level(logging.ERROR, logger=core_functions.logger.name)
+    caplog.set_level(logging.WARNING, logger=core_functions.logger.name)
 
     core_functions._process_import_job(job["job_id"])
 
     assert saved_jobs[-1]["status"] == "done"
     assert any(
         "SEM EDX txt attachment failed" in record.message for record in caplog.records
+    )
+    assert any(
+        "Error closing connection" in record.message for record in caplog.records
     )
 
 

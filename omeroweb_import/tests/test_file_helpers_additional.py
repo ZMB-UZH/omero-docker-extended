@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import shutil
 
+import pytest
+
 from omeroweb_import.utils import file_helpers
 
 
@@ -108,6 +110,21 @@ def test_file_helpers_cover_cached_initialization_getters_and_new_dir_creation(
         lambda: setattr(file_helpers, "_JOBS_ROOT_CACHE", jobs_root),
     )
     assert file_helpers.get_jobs_root() == jobs_root
+
+    monkeypatch.setattr(file_helpers, "_UPLOAD_ROOT_CACHE", None)
+    monkeypatch.setattr(file_helpers, "_JOBS_ROOT_CACHE", jobs_root)
+    monkeypatch.setattr(file_helpers, "initialize_directories", lambda: None)
+    try:
+        with pytest.raises(RuntimeError, match="Upload root was not initialized"):
+            file_helpers.get_upload_root()
+
+        monkeypatch.setattr(file_helpers, "_UPLOAD_ROOT_CACHE", upload_root)
+        monkeypatch.setattr(file_helpers, "_JOBS_ROOT_CACHE", None)
+        with pytest.raises(RuntimeError, match="Jobs root was not initialized"):
+            file_helpers.get_jobs_root()
+    finally:
+        monkeypatch.setattr(file_helpers, "_UPLOAD_ROOT_CACHE", upload_root)
+        monkeypatch.setattr(file_helpers, "_JOBS_ROOT_CACHE", jobs_root)
 
     managed_dir = tmp_path / "managed"
     assert file_helpers.ensure_dir_with_permissions(managed_dir, 0o750) is True

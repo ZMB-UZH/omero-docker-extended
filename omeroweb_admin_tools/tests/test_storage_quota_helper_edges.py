@@ -95,6 +95,9 @@ def test_storage_quota_state_and_log_helpers_cover_normalization_paths(
     with pytest.raises(storage_quotas.QuotaError, match="Invalid quota value"):
         storage_quotas._normalize_quota_gb("not-a-number")
 
+    with pytest.raises(storage_quotas.QuotaError, match="Invalid quota value"):
+        storage_quotas._normalize_quota_gb(["not", "a", "scalar"])
+
 
 def test_storage_quota_csv_filesystem_and_state_helpers_cover_edge_cases(
     monkeypatch,

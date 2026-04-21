@@ -165,6 +165,152 @@ def test_metadata_helpers_cover_units_caps_and_empty_values():
     assert metadata._safe_details_value(_RaisingGetter(), "getLabel") is None
 
 
+def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_edges():
+    class _ValueWrapper:
+        value = "wrapped scalar"
+
+    class _NonScalarWrapper:
+        value = ["not", "indexable"]
+
+    class _BrokenValue:
+        def getValue(self):
+            raise RuntimeError("broken value")
+
+        def __str__(self):
+            return "2.5"
+
+    class _LegacyPlaneQuantity:
+        def getDeltaT(self, units=None):
+            if units is not None:
+                raise TypeError("legacy getter does not accept units")
+            return SimpleNamespace(getValue=lambda: "1.25")
+
+    class _BrokenLegacyPlaneQuantity:
+        def getDeltaT(self, units=None):
+            if units is not None:
+                raise TypeError("legacy getter does not accept units")
+            raise RuntimeError("broken legacy getter")
+
+    class _BrokenPlaneQuantity:
+        def getDeltaT(self, units=None):
+            raise RuntimeError("broken getter")
+
+    class _AxisGetter:
+        def getTheC(self):
+            return "2"
+
+    class _BrokenAxisGetter:
+        def getTheC(self):
+            raise RuntimeError("broken axis getter")
+
+    class _FallbackMapAnnotation:
+        OMERO_CLASS = "MapAnnotation"
+
+        def getValue(self):
+            raise RuntimeError("primary map getter failed")
+
+        def getMapValue(self):
+            return [
+                SimpleNamespace(getName=lambda: "Treatment", getValue=lambda: "DMSO"),
+                SimpleNamespace(
+                    getName=lambda: (_ for _ in ()).throw(RuntimeError("bad name")),
+                    getValue=lambda: (_ for _ in ()).throw(RuntimeError("bad value")),
+                ),
+            ]
+
+    class _FallbackTextAnnotation:
+        OMERO_CLASS = "TextAnnotation"
+
+        def getTextValue(self):
+            raise RuntimeError("text missing")
+
+        def getDescription(self):
+            return "QC passed"
+
+    class _NonIterableValue:
+        def listValues(self):
+            return object()
+
+    class _BrokenIterable:
+        def __iter__(self):
+            raise RuntimeError("broken iteration")
+
+    assert metadata._scalar_text(_ValueWrapper()) == "wrapped scalar"
+    assert metadata._scalar_text(_NonScalarWrapper()) == ""
+    assert metadata._merge_index_text("alpha", "beta") == "alpha; beta"
+    assert metadata._merge_index_text("alpha; beta", "") == "alpha; beta"
+    assert metadata._merge_index_text("alpha; beta", "beta") == "alpha; beta"
+    assert metadata._metadata_attributes({"!!!": "not indexed"}) == ()
+    assert metadata._quantity_to_float(_BrokenValue()) == 2.5
+    assert (
+        metadata._plane_quantity(_LegacyPlaneQuantity(), "getDeltaT", units="SECOND")
+        == 1.25
+    )
+    assert (
+        metadata._plane_quantity(
+            _BrokenLegacyPlaneQuantity(), "getDeltaT", units="SECOND"
+        )
+        is None
+    )
+    assert (
+        metadata._plane_quantity(_BrokenPlaneQuantity(), "getDeltaT", units="SECOND")
+        is None
+    )
+    assert metadata._plane_axis_index(_AxisGetter(), "theC") == 2
+    assert metadata._plane_axis_index(_BrokenAxisGetter(), "theC") is None
+    assert metadata._plane_axis_index(SimpleNamespace(theC=object()), "theC") is None
+    assert metadata._callable_accepts_no_args(int) is True
+    assert metadata._attribute_from_text("", "value") is None
+    assert metadata._attribute_from_text("valid", " ") is None
+
+    bucket: dict[str, metadata.SearchAttribute] = {}
+    metadata._append_text_attribute(
+        bucket, "!!!", "not indexed", trust_generated_key=False
+    )
+    assert bucket == {}
+
+    assert tuple(metadata._annotation_value_pairs(_FallbackMapAnnotation())) == (
+        ("annotation_map_Treatment", "DMSO"),
+    )
+    assert tuple(metadata._annotation_value_pairs(_FallbackTextAnnotation())) == (
+        ("textannotation_description", "QC passed"),
+    )
+    scalar_iter_value = metadata._safe_iter_call(_NonIterableValue(), "listValues")
+    assert len(scalar_iter_value) == 1
+    assert (
+        metadata._safe_iter_call(SimpleNamespace(listValues=lambda: None), "listValues")
+        == ()
+    )
+    assert (
+        metadata._safe_iter_call(
+            SimpleNamespace(listValues=lambda: _BrokenIterable()), "listValues"
+        )
+        == ()
+    )
+    assert (
+        metadata._pixel_axis_size(
+            SimpleNamespace(getSizeZ=lambda: "not-an-int"), "getSizeZ", 7
+        )
+        == 7
+    )
+
+    class _ImageWithBrokenRawChannels:
+        def getChannels(self):
+            raise RuntimeError("channel load failed")
+
+    assert (
+        metadata._collect_universal_metadata_attributes(
+            _ImageWithBrokenRawChannels(),
+            (),
+            {"dataset_name": "", "project_name": ""},
+        )
+        == ()
+    )
+    capped = metadata._build_search_text(["word"] * 20000)
+    assert len(capped) <= metadata._SEARCH_TEXT_CAP
+    assert capped.endswith("word")
+
+
 def test_plane_info_collection_keeps_legacy_targeted_copy_plane_info_path():
     class _Value:
         def __init__(self, value):
@@ -206,6 +352,116 @@ def test_plane_info_collection_keeps_legacy_targeted_copy_plane_info_path():
         metadata.SearchAttribute(
             attribute_key="channel_4_z1_delta_t_seconds",
             attribute_text="t1 3.5 seconds",
+            attribute_numeric=None,
+        ),
+    )
+
+
+def test_plane_info_collection_covers_unavailable_bulk_and_targeted_failures():
+    class _Value:
+        def __init__(self, value):
+            self._value = value
+
+        def getValue(self):
+            return self._value
+
+    class _PlaneInfo:
+        theC = 0
+        theZ = 1
+        theT = 0
+
+        def getDeltaT(self, units="SECOND"):
+            return _Value(2.5)
+
+    class _NoPlaneInfoPixels:
+        def getSizeZ(self):
+            return 1
+
+        def getSizeC(self):
+            return 1
+
+    class _BulkTypeErrorPixels:
+        def getSizeZ(self):
+            return 1
+
+        def getSizeC(self):
+            return 1
+
+        def copyPlaneInfo(self, *args, **kwargs):
+            if not args and not kwargs:
+                raise TypeError("bulk unsupported")
+            return [_PlaneInfo()]
+
+    class _BulkFailurePixels(_BulkTypeErrorPixels):
+        def copyPlaneInfo(self, *args, **kwargs):
+            if not args and not kwargs:
+                raise RuntimeError("bulk failed")
+            return [_PlaneInfo()]
+
+    class _BulkMissingAxisPixels(_BulkTypeErrorPixels):
+        def copyPlaneInfo(self, *args, **kwargs):
+            return [SimpleNamespace(theC=None, theZ=0, theT=0)]
+
+    class _TargetedFailurePixels:
+        def __init__(self):
+            self.calls = []
+
+        def getSizeZ(self):
+            return 2
+
+        def getSizeC(self):
+            return 1
+
+        def copyPlaneInfo(self, theC, theZ):
+            self.calls.append((theC, theZ))
+            if theZ == 0:
+                raise RuntimeError("plane failed")
+            return [_PlaneInfo()]
+
+    assert (
+        metadata._collect_all_plane_info_attributes(
+            SimpleNamespace(getPrimaryPixels=lambda: _NoPlaneInfoPixels()),
+            (),
+        )
+        == ()
+    )
+    assert (
+        metadata._collect_all_plane_info_attributes(
+            SimpleNamespace(getPrimaryPixels=lambda: _BulkFailurePixels()),
+            (),
+        )
+        == ()
+    )
+    assert (
+        metadata._collect_all_plane_info_attributes(
+            SimpleNamespace(getPrimaryPixels=lambda: _BulkMissingAxisPixels()),
+            (),
+        )
+        == ()
+    )
+
+    fallback_attributes = metadata._collect_all_plane_info_attributes(
+        SimpleNamespace(getPrimaryPixels=lambda: _BulkTypeErrorPixels()),
+        (metadata.SearchChannel(channel_index=3),),
+    )
+    assert fallback_attributes == (
+        metadata.SearchAttribute(
+            attribute_key="channel_3_z1_delta_t_seconds",
+            attribute_text="t1 2.5 seconds",
+            attribute_numeric=None,
+        ),
+    )
+
+    targeted_pixels = _TargetedFailurePixels()
+    targeted_attributes = metadata._collect_all_plane_info_attributes(
+        SimpleNamespace(getPrimaryPixels=lambda: targeted_pixels),
+        (metadata.SearchChannel(channel_index=3),),
+    )
+    assert targeted_pixels.calls == [(0, 0), (0, 1)]
+    assert targeted_attributes == (
+        metadata.SearchAttribute(
+            attribute_key="channel_3_z2_delta_t_seconds",
+            attribute_text="t1 2.5 seconds",
             attribute_numeric=None,
         ),
     )
