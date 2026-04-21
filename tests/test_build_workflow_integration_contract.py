@@ -1111,9 +1111,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "super-linter/super-linter@9e863354e3ff62e0727d37183162c4a88873df41",
             lint_step["uses"],
         )
-        self.assertEqual(
-            "${{ secrets.GITHUB_TOKEN }}", lint_step["env"]["GITHUB_TOKEN"]
-        )
+        self.assertNotIn("GITHUB_TOKEN", lint_step["env"])
         self.assertEqual(
             "(^|/)third_party/(ecc-v1\\.10\\.0|caveman-v1\\.6\\.0)/",
             lint_step["env"]["FILTER_REGEX_EXCLUDE"],
