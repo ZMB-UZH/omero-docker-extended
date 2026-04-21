@@ -1273,6 +1273,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             for step in workflow["jobs"]["hadolint"]["steps"]
             if step.get("name") == "Audit — show file being scanned"
         )
+        self.assertEqual(1, workflow["jobs"]["hadolint"]["strategy"]["max-parallel"])
         self.assertEqual(
             "${{ matrix.dockerfile }}", hadolint_audit_step["env"]["DOCKERFILE_PATH"]
         )

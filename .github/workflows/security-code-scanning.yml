@@ -360,6 +360,7 @@ jobs:
       security-events: write # Required to upload Hadolint results to code scanning.
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         dockerfile: ${{ fromJson(needs.hadolint-discover.outputs.dockerfiles) }}
 
