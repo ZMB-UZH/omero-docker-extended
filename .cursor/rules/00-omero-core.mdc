@@ -9,7 +9,7 @@ alwaysApply: true
 
 - AI agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
 - Start with `AGENTS.md` before proposing code changes.
-- Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI agent <>`; non-AI commits use real human GitHub or actual human author identities, never host/local placeholders.
+- Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI agent <>`; AI co-author trailers use `Co-authored-by: AI agent` with no email; audits include anonymous contributors (`contributors?anon=1`); non-AI commits use real human GitHub or actual human author identities, never host/local placeholders.
 - Treat `AGENTS.md` as the universal contract. Use `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, and this ruleset only as additive adapters.
 - Use `docs/reference/ai-agent-context-routing.md` to keep the loaded context narrow.
 - Honor the routing doc's numeric caps before broadening scope.

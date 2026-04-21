@@ -9,7 +9,7 @@ Use [AGENTS.md](AGENTS.md) as the universal project contract, [docs/reference/ai
 ## Core rules
 
 - Start with `AGENTS.md`, then the routing doc.
-- Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI agent <>`; non-AI commits use real human GitHub or actual human author identities, never host/local placeholders.
+- Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI agent <>`; AI co-author trailers use `Co-authored-by: AI agent` with no email; audits include anonymous contributors (`contributors?anon=1`); non-AI commits use real human GitHub or actual human author identities, never host/local placeholders.
 - Honor the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` when a skill matches the task.
 - If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill. It is for internal AI communication only, never for repo docs/comments/docstrings/function descriptions or user-facing copy, and it changes reply style only without changing routing, tool choice, verification scope, or uncertainty handling. Fall back to normal detail when safety or clarity is at risk.
