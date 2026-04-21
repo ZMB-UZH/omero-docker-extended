@@ -589,6 +589,29 @@ def test_imaris_service_additional_helper_edges_cover_remaining_type_and_config_
     )
 
 
+def test_no_processor_detector_ignores_non_exception_tuple_members(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+    monkeypatch.setattr(
+        imaris_service.omero,
+        "NoProcessorAvailable",
+        (object, NoProcessorAvailable),
+    )
+
+    assert (
+        imaris_service._is_no_processor_available(RuntimeError("plain failure"))
+        is False
+    )
+    assert (
+        imaris_service._is_no_processor_available(
+            NoProcessorAvailable("processor busy")
+        )
+        is True
+    )
+
+
 def test_imaris_service_remaining_job_state_and_output_paths_are_exercised(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
