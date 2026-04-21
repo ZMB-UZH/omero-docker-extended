@@ -118,7 +118,7 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block,
         )
         self.assertIn(
-            "https://github.com/example-owner/example-repo/actions/workflows/mypy.yml",
+            "https://github.com/python/mypy",
             badge_block,
         )
         self.assertIn(
@@ -126,7 +126,7 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block,
         )
         self.assertIn(
-            "https://github.com/example-owner/example-repo/actions/workflows/super-linter.yml",
+            "https://github.com/super-linter/super-linter",
             badge_block,
         )
         self.assertIn(
@@ -134,7 +134,11 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block,
         )
         self.assertIn(
-            "https://github.com/example-owner/example-repo/actions/workflows/vulture.yml",
+            "https://github.com/astral-sh/ruff",
+            badge_block,
+        )
+        self.assertIn(
+            "https://github.com/jendrikseipp/vulture",
             badge_block,
         )
         self.assertIn(
