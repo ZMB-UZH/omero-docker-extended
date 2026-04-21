@@ -2201,9 +2201,7 @@ class ImportPluginRegressionTests(TestCase):
             mock.patch.object(
                 index_view,
                 "_start_import_thread",
-                side_effect=lambda current_job_id: import_started.append(
-                    current_job_id
-                ),
+                side_effect=import_started.append,
             ),
         ):
             response = index_view.confirm_import(request, conn=object(), job_id=job_id)

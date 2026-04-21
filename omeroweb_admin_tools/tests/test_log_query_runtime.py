@@ -170,10 +170,7 @@ def test_log_query_level_and_filesystem_helpers_cover_remaining_edges(
     discovered = _discover_internal_log_labels_from_filesystem("omeroweb_internal")
     assert discovered == (["master.err"], "filepath")
     assert _discover_internal_log_labels_from_filesystem("unknown_internal") is None
-    assert _fetch_internal_log_labels_uncached("unknown_internal") == (
-        tuple(),
-        "filepath",
-    )
+    assert _fetch_internal_log_labels_uncached("unknown_internal") == ((), "filepath")
 
     assert _format_timestamp("1710000000000000000").endswith("+00:00")
     assert _parse_level_from_message("") is None
@@ -333,7 +330,7 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
         lambda compose_service: ([], "filepath"),
     )
     assert _fetch_internal_log_labels_uncached("omeroserver_internal") == (
-        tuple(),
+        (),
         "filepath",
     )
 

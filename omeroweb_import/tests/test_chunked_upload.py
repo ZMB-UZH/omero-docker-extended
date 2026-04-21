@@ -88,7 +88,7 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(
     monkeypatch.setattr(
         index_view,
         "_start_import_thread",
-        lambda current_job_id: import_started.append(current_job_id),
+        import_started.append,
     )
     monkeypatch.setattr(
         index_view,
@@ -197,7 +197,7 @@ def test_upload_files_defers_noncompat_import_until_background_plan_exists(
     monkeypatch.setattr(
         index_view,
         "_start_import_thread",
-        lambda current_job_id: import_started.append(current_job_id),
+        import_started.append,
     )
     monkeypatch.setattr(
         index_view,

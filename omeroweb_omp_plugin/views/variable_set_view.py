@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @login_required()
 @require_non_root_user
-def list_sets(request, conn=None, url=None, **kwargs):
+def list_sets(request, conn=None, _url=None, **kwargs):
     if request.method != "GET":
         return JsonResponse({"error": errors.method_get_required()}, status=405)
 
@@ -51,7 +51,7 @@ def list_sets(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def save_set(request, conn=None, url=None, **kwargs):
+def save_set(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 
@@ -126,7 +126,7 @@ def save_set(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def load_set(request, conn=None, url=None, **kwargs):
+def load_set(request, conn=None, _url=None, **kwargs):
     if request.method != "GET":
         return JsonResponse({"error": errors.method_get_required()}, status=405)
 
@@ -169,7 +169,7 @@ def load_set(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def delete_set(request, conn=None, url=None, **kwargs):
+def delete_set(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 

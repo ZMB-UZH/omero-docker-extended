@@ -53,7 +53,7 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
             self.web_bootstrap_text,
         )
         self.assertIn(
-            '[[ "${configured_login_logo}" == "/static/branding/logo.png" ]]',
+            '[[ "${configured_login_logo}" = "/static/branding/logo.png" ]]',
             self.web_bootstrap_text,
         )
         self.assertIn(

@@ -11,10 +11,10 @@ from omeroweb_omp_plugin.views import index_view
 
 class _Value:
     def __init__(self, value):
-        self._value = value
+        self._raw_value = value
 
     def getValue(self):
-        return self._value
+        return self._raw_value
 
 
 class _Owner:
@@ -945,7 +945,7 @@ def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkey
         getMemberCount=lambda: (_ for _ in ()).throw(RuntimeError("no count")),
         getMembers=lambda: [1, 2],
         getDetails=lambda: None,
-        getPermissions=lambda: _PermissionText(),
+        getPermissions=_PermissionText,
     )
     conn._user = SimpleNamespace(
         getId=lambda: (_ for _ in ()).throw(RuntimeError("bad user id")),
@@ -1212,7 +1212,7 @@ def test_index_helper_and_validation_edges_cover_remaining_branch_paths(monkeypa
         def getId():
             return SimpleNamespace(val=77)
 
-    project = SimpleNamespace(getDetails=lambda: None, getOwner=lambda: _OwnerWithVal())
+    project = SimpleNamespace(getDetails=lambda: None, getOwner=_OwnerWithVal)
     assert index_view._get_owner_username(project) == "77"
     assert (
         index_view._has_read_annotate_permissions(
@@ -1234,7 +1234,7 @@ def test_index_helper_and_validation_edges_cover_remaining_branch_paths(monkeypa
 
     broken_group = SimpleNamespace(
         getDetails=lambda: None,
-        getPermissions=lambda: _BrokenPermissionText(),
+        getPermissions=_BrokenPermissionText,
     )
     original_permissions_flag = index_view._permissions_flag
     monkeypatch.setattr(

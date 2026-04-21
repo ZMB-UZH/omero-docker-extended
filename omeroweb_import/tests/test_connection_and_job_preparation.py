@@ -20,9 +20,7 @@ class _FakeGatewayConnection:
         self._last_error = last_error
         self.closed = False
         self.group_calls = group_calls if group_calls is not None else []
-        self.SERVICE_OPTS = SimpleNamespace(
-            setOmeroGroup=lambda value: self.group_calls.append(value)
-        )
+        self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=self.group_calls.append)
 
     def connect(self):
         if self._connect_exception is not None:
@@ -264,9 +262,7 @@ def test_background_connection_helpers_require_independent_session_keys(monkeypa
 
     group_calls = []
     session_conn = SimpleNamespace(
-        SERVICE_OPTS=SimpleNamespace(
-            setOmeroGroup=lambda value: group_calls.append(value)
-        )
+        SERVICE_OPTS=SimpleNamespace(setOmeroGroup=group_calls.append)
     )
     monkeypatch.setattr(
         core_functions,

@@ -15,10 +15,10 @@ from omeroweb_omp_plugin.services.omero import (
 
 class _Value:
     def __init__(self, value):
-        self._value = value
+        self._raw_value = value
 
     def getValue(self):
-        return self._value
+        return self._raw_value
 
 
 class _ErrorBody:
@@ -341,7 +341,7 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
     update = _FakeUpdateService()
     conn = SimpleNamespace(
         SERVICE_OPTS=object(),
-        getQueryService=lambda: _FakeQueryService(),
+        getQueryService=_FakeQueryService,
         getObject=lambda kind, obj_id: (
             SimpleNamespace(_obj=("link", obj_id))
             if kind == "ImageAnnotationLink"
@@ -433,7 +433,7 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
     update = _UpdateService()
     conn = SimpleNamespace(
         SERVICE_OPTS=object(),
-        getQueryService=lambda: _QueryService(),
+        getQueryService=_QueryService,
         getObject=lambda kind, obj_id: (
             None
             if kind == "ImageAnnotationLink"
@@ -499,7 +499,7 @@ def test_annotation_query_helpers_cover_invalid_inputs_and_legacy_controls(monke
 
     conn = SimpleNamespace(
         SERVICE_OPTS=object(),
-        getQueryService=lambda: _QueryService(),
+        getQueryService=_QueryService,
     )
 
     assert annotation_service.is_plugin_annotation(broken_ann) is True
@@ -554,7 +554,7 @@ def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annota
 
     conn = SimpleNamespace(
         SERVICE_OPTS=object(),
-        getQueryService=lambda: _QueryService(),
+        getQueryService=_QueryService,
         getObject=lambda kind, obj_id: (
             None
             if kind == "ImageAnnotationLink"

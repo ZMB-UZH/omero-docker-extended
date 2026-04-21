@@ -759,7 +759,7 @@ def test_upload_helpers_non_chunked_paths_and_preparation_errors(tmp_path, monke
     monkeypatch.setattr(
         index_view,
         "_start_import_thread",
-        lambda current_job_id: import_started.append(current_job_id),
+        import_started.append,
     )
     response = index_view._upload_files(
         RequestFactory().post(
@@ -1409,7 +1409,6 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
 
     def update_job_none(current_job_id, updater):
         assert current_job_id == job_id
-        return None
 
     monkeypatch.setattr(index_view, "_update_job", update_job_none)
     missing_update = index_view.prune_upload(
@@ -1525,7 +1524,7 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     monkeypatch.setattr(
         index_view,
         "_start_import_thread",
-        lambda current_job_id: started.append(current_job_id),
+        started.append,
     )
     monkeypatch.setattr(
         index_view,
@@ -1892,7 +1891,7 @@ def test_index_view_additional_chunk_and_prune_error_paths_cover_remaining_retur
     monkeypatch.setattr(
         index_view,
         "_start_import_thread",
-        lambda current_job_id: import_started.append(current_job_id),
+        import_started.append,
     )
 
     def update_job(current_job_id, updater):

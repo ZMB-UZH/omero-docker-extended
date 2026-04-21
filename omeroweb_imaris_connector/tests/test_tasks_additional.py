@@ -252,9 +252,7 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
         lambda host, port: DummyClient(),
         raising=False,
     )
-    monkeypatch.setattr(
-        tasks, "BlitzGateway", lambda *args, **kwargs: DummyGateway(*args, **kwargs)
-    )
+    monkeypatch.setattr(tasks, "BlitzGateway", DummyGateway)
 
     conn = tasks._open_session_connection("session-1", "omeroserver", 4064)
     assert join_calls == ["session-1"]

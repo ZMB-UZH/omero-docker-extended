@@ -86,7 +86,7 @@ def _load_user_settings_context(
 
 
 @login_required()
-def index(request, conn=None, url=None, **kwargs):
+def index(request, conn=None, _url=None, **kwargs):
     return render(
         request,
         "omeroweb_tools/index.html",
@@ -95,13 +95,13 @@ def index(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
-def root_status(request, conn=None, url=None, **kwargs):
+def root_status(request, conn=None, _url=None, **kwargs):
     return JsonResponse({"is_root_user": _is_root_user(request, conn)})
 
 
 @login_required()
 @ensure_csrf_cookie
-def enhanced_search_view(request, conn=None, url=None, **kwargs):
+def enhanced_search_view(request, conn=None, _url=None, **kwargs):
     username = str(current_username(request, conn) or "")
     blocked_for_root = username == "root"
     (
@@ -186,7 +186,7 @@ def enhanced_search_view(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def start_scope_sync_view(request, conn=None, url=None, **kwargs):
+def start_scope_sync_view(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
     _payload, error = load_json_body(request)
@@ -229,7 +229,7 @@ def start_scope_sync_view(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def sync_state_view(request, conn=None, url=None, **kwargs):
+def sync_state_view(request, conn=None, _url=None, **kwargs):
     username = str(current_username(request, conn) or "")
     try:
         settings_payload = user_settings(username)
@@ -251,7 +251,7 @@ def sync_state_view(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def save_user_settings_view(request, conn=None, url=None, **kwargs):
+def save_user_settings_view(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
     payload, error = load_json_body(request)
@@ -267,7 +267,7 @@ def save_user_settings_view(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def save_query_view(request, conn=None, url=None, **kwargs):
+def save_query_view(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
     payload, error = load_json_body(request)
@@ -291,7 +291,7 @@ def save_query_view(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def delete_query_view(request, conn=None, url=None, **kwargs):
+def delete_query_view(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
     payload, error = load_json_body(request)
@@ -314,7 +314,7 @@ def delete_query_view(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def apply_saved_query_view(request, conn=None, url=None, query_id=None, **kwargs):
+def apply_saved_query_view(request, conn=None, _url=None, query_id=None, **kwargs):
     username = str(current_username(request, conn) or "")
     for saved in saved_queries(username):
         if int(saved["id"]) != int(query_id):

@@ -323,7 +323,7 @@ def test_copy_and_path_helpers_cover_error_and_exception_fallbacks(
         def getPhysicalSizeZ():
             return _BadPhysicalSize()
 
-    image = types.SimpleNamespace(getPrimaryPixels=lambda: _BadPrimaryPixels())
+    image = types.SimpleNamespace(getPrimaryPixels=_BadPrimaryPixels)
     assert module._get_voxel_size_from_image(image) == (1.0, 1.0, 1.0)
 
     broken_image = types.SimpleNamespace(
@@ -627,12 +627,10 @@ def test_run_script_sets_outputs_and_attaches_exported_file(
         getDetails=lambda: types.SimpleNamespace(
             getGroup=lambda: types.SimpleNamespace(getId=lambda: 9)
         ),
-        linkAnnotation=lambda annotation: linked.append(annotation),
+        linkAnnotation=linked.append,
     )
     conn = types.SimpleNamespace(
-        SERVICE_OPTS=types.SimpleNamespace(
-            setOmeroGroup=lambda value: group_calls.append(value)
-        ),
+        SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=group_calls.append),
         getObject=lambda kind, image_id: image,
         createFileAnnfromLocalFile=lambda path, mimetype, ns, desc: file_annotation,
     )

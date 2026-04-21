@@ -585,7 +585,7 @@ def _cleanup_zarr(
             "under the configured managed-repository template."
         )
     staged_name = _validate_path_component(remainder[0], "managed Zarr directory name")
-    if not (staged_name.endswith(".zarr") or staged_name.endswith(".ome.zarr")):
+    if not staged_name.endswith((".zarr", ".ome.zarr")):
         raise RuntimeError(
             "Managed Zarr cleanup only supports staged .zarr directories."
         )

@@ -400,6 +400,7 @@ class AgentSkillContractTests(unittest.TestCase):
             resolved_command,
             cwd=cls.repo_root,
             capture_output=True,
+            check=False,
             text=True,
             timeout=600,
         )

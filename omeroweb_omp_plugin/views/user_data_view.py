@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @login_required()
 @require_non_root_user
-def delete_api_keys(request, conn=None, url=None, **kwargs):
+def delete_api_keys(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 
@@ -53,7 +53,7 @@ def delete_api_keys(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def delete_variable_sets(request, conn=None, url=None, **kwargs):
+def delete_variable_sets(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 
@@ -83,7 +83,7 @@ def delete_variable_sets(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def delete_all_data(request, conn=None, url=None, **kwargs):
+def delete_all_data(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 

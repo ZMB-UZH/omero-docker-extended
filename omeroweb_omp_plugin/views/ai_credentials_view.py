@@ -248,7 +248,7 @@ def _parse_cohere_models(payload):
 
 @login_required()
 @require_non_root_user
-def list_credentials(request, conn=None, url=None, **kwargs):
+def list_credentials(request, conn=None, _url=None, **kwargs):
     if request.method != "GET":
         return JsonResponse({"error": errors.method_get_required()}, status=405)
 
@@ -278,7 +278,7 @@ def list_credentials(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def test_credentials(request, conn=None, url=None, **kwargs):
+def test_credentials(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 
@@ -313,7 +313,7 @@ def test_credentials(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def save_credentials(request, conn=None, url=None, **kwargs):
+def save_credentials(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 
@@ -351,7 +351,7 @@ def save_credentials(request, conn=None, url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
-def list_models(request, conn=None, url=None, **kwargs):
+def list_models(request, conn=None, _url=None, **kwargs):
     if request.method != "GET":
         return JsonResponse({"error": errors.method_get_required()}, status=405)
 

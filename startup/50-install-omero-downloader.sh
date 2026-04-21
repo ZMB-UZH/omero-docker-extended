@@ -15,7 +15,7 @@ else
     INSTALLED_VERSION=""
 fi
 
-if [[ "${INSTALLED_VERSION}" == "${OMERO_DOWNLOADER_VERSION}" && -x /opt/omero/downloader/download.sh ]]; then
+if [[ "${INSTALLED_VERSION}" = "${OMERO_DOWNLOADER_VERSION}" && -x /opt/omero/downloader/download.sh ]]; then
     echo "OMERO.downloader ${OMERO_DOWNLOADER_VERSION} already installed."
     exit 0
 fi

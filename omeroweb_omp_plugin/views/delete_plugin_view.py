@@ -57,7 +57,7 @@ def _run_omero_delete(cli_base_cmd, object_kind: str, object_id: int):
 
 @login_required()
 @require_non_root_user
-def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
+def delete_plugin_keyvaluepairs(request, conn=None, _url=None, **kwargs):
     """Delete ONLY plugin-generated MapAnnotations for a project."""
     try:
         if request.method != "POST":

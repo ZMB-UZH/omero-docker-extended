@@ -22,10 +22,10 @@ def _unwrap_view(func):
 
 class _Value:
     def __init__(self, value):
-        self._value = value
+        self._raw_value = value
 
     def getValue(self):
-        return self._value
+        return self._raw_value
 
 
 class _Image:

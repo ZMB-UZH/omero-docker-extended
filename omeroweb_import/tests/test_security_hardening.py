@@ -100,9 +100,9 @@ def test_open_service_connection_redacts_password_when_connect_raises(
             def close(self):
                 self.closed = True
 
-        def fake_gateway(*args, **kwargs):
-            conn = FakeConn(*args, **kwargs)
-            created.append(conn)
+        def fake_gateway(*args, _created=created, _conn_factory=FakeConn, **kwargs):
+            conn = _conn_factory(*args, **kwargs)
+            _created.append(conn)
             return conn
 
         monkeypatch.setattr(
@@ -148,9 +148,9 @@ def test_open_service_connection_redacts_password_when_connect_returns_false(
             def close(self):
                 self.closed = True
 
-        def fake_gateway(*args, **kwargs):
-            conn = FakeConn(*args, **kwargs)
-            created.append(conn)
+        def fake_gateway(*args, _created=created, _conn_factory=FakeConn, **kwargs):
+            conn = _conn_factory(*args, **kwargs)
+            _created.append(conn)
             return conn
 
         monkeypatch.setattr(
@@ -171,36 +171,41 @@ def test_open_service_connection_redacts_password_when_connect_returns_false(
         caplog.clear()
 
 
+def _assert_service_connection_falls_back_to_job_group(module, monkeypatch):
+    group_calls = []
+
+    class ServiceOpts:
+        @staticmethod
+        def setOmeroGroup(value):
+            group_calls.append(value)
+
+    class FakeConn:
+        def __init__(self, *_args, **_kwargs):
+            self.SERVICE_OPTS = ServiceOpts()
+
+        @staticmethod
+        def connect():
+            return True
+
+        @staticmethod
+        def close():
+            return None
+
+    monkeypatch.setattr(
+        module,
+        "_get_job_service_credentials",
+        lambda: ("svc-user", "svc-pass", "not-a-number", True),
+    )
+    monkeypatch.setattr(module, "BlitzGateway", FakeConn)
+
+    conn = module._open_service_connection("omero.example.org", 4064, group_id=7)
+
+    assert conn is not None
+    assert group_calls == ["7"]
+
+
 def test_open_service_connection_falls_back_to_job_group_when_override_is_invalid(
     monkeypatch,
 ):
     for module in (import_service, core_functions):
-        group_calls = []
-
-        class FakeConn:
-            def __init__(self, *_args, **_kwargs):
-                self.SERVICE_OPTS = type(
-                    "ServiceOpts",
-                    (),
-                    {"setOmeroGroup": lambda self, value: group_calls.append(value)},
-                )()
-
-            @staticmethod
-            def connect():
-                return True
-
-            @staticmethod
-            def close():
-                return None
-
-        monkeypatch.setattr(
-            module,
-            "_get_job_service_credentials",
-            lambda: ("svc-user", "svc-pass", "not-a-number", True),
-        )
-        monkeypatch.setattr(module, "BlitzGateway", lambda *args, **kwargs: FakeConn())
-
-        conn = module._open_service_connection("omero.example.org", 4064, group_id=7)
-
-        assert conn is not None
-        assert group_calls == ["7"]
+        _assert_service_connection_falls_back_to_job_group(module, monkeypatch)

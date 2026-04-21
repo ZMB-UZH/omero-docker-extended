@@ -69,7 +69,6 @@ def initialize_directories():
 
 def get_upload_root() -> Path:
     """Get cached upload root, initializing if needed."""
-    global _UPLOAD_ROOT_CACHE
     if _UPLOAD_ROOT_CACHE is None:
         initialize_directories()
     if _UPLOAD_ROOT_CACHE is None:
@@ -79,7 +78,6 @@ def get_upload_root() -> Path:
 
 def get_jobs_root() -> Path:
     """Get cached jobs root, initializing if needed."""
-    global _JOBS_ROOT_CACHE
     if _JOBS_ROOT_CACHE is None:
         initialize_directories()
     if _JOBS_ROOT_CACHE is None:

@@ -585,9 +585,10 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
         def isGroupAnnotate():
             return False
 
-    read_write_group = SimpleNamespace(
-        getDetails=lambda: SimpleNamespace(getPermissions=lambda: _Permissions())
-    )
+    def _read_write_group_details():
+        return SimpleNamespace(getPermissions=_Permissions)
+
+    read_write_group = SimpleNamespace(getDetails=_read_write_group_details)
     assert index_view._safe_group_permission_label(read_write_group) == "Read-write"
 
     broken_group = SimpleNamespace(

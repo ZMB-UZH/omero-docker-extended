@@ -340,7 +340,5 @@ def test_project_iteration_payload_and_wrapper_helpers_cover_remaining_paths(
     )
     assert index_view._safe_index_messages_json() == "{}"
 
-    monkeypatch.setattr(
-        index_view, "suggest_separator_regex", lambda filenames: "::".join(filenames)
-    )
+    monkeypatch.setattr(index_view, "suggest_separator_regex", "::".join)
     assert index_view._suggest_separator_regex(["a", "b"]) == "a::b"

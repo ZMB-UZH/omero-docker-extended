@@ -133,7 +133,9 @@ def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch
     monkeypatch.setattr(service, "db_connect", _db_connect)
 
     def _load_user_settings_row(conn, username, defaults=None):
-        del conn, username, defaults
+        assert isinstance(conn, _DbConn)
+        assert username == "alice"
+        assert defaults == service.default_user_settings()
         return {"acquisition_metadata_enabled": "true"}
 
     monkeypatch.setattr(service, "load_user_settings_row", _load_user_settings_row)
@@ -202,7 +204,7 @@ def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
         def getId():
             return _WrappedId()
 
-    assert service._current_user_id(SimpleNamespace(getUser=lambda: _User())) == 21
+    assert service._current_user_id(SimpleNamespace(getUser=_User)) == 21
     assert service._current_user_id(SimpleNamespace(getUser=lambda: None)) is None
     assert (
         service._current_user_id(
@@ -880,7 +882,7 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(service, "_root_connection", lambda: _FailingRootConnection())
+    monkeypatch.setattr(service, "_root_connection", _FailingRootConnection)
     monkeypatch.setattr(
         service,
         "mark_sync_error",

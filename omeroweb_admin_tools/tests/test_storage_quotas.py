@@ -713,9 +713,7 @@ def test_storage_data_merges_known_users_groups_and_quota_fallback(
     ]
     group_calls = []
     conn = SimpleNamespace(
-        SERVICE_OPTS=SimpleNamespace(
-            setOmeroGroup=lambda value: group_calls.append(value)
-        ),
+        SERVICE_OPTS=SimpleNamespace(setOmeroGroup=group_calls.append),
         getQueryService=lambda: SimpleNamespace(
             projection=lambda query, params, opts: rows
         ),

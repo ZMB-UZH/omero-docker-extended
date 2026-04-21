@@ -715,7 +715,7 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     class _UserConn:
         def __init__(self):
             self.c = SimpleNamespace(
-                sf=SimpleNamespace(createRawFileStore=lambda: _RawFileStore())
+                sf=SimpleNamespace(createRawFileStore=_RawFileStore)
             )
 
         @staticmethod

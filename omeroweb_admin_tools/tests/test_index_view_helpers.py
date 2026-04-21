@@ -386,7 +386,7 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
 
     users_map, group_names, permissions, groups_by_user, users_by_group = (
         index_view._list_all_users_and_groups(
-            SimpleNamespace(getAdminService=lambda: _SparseAdminService())
+            SimpleNamespace(getAdminService=_SparseAdminService)
         )
     )
 
@@ -452,9 +452,10 @@ def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypa
         def __str__(self):
             return "read-only"
 
-    fallback_group = SimpleNamespace(
-        getDetails=lambda: SimpleNamespace(getPermissions=lambda: _TextPermission())
-    )
+    def _fallback_group_details():
+        return SimpleNamespace(getPermissions=_TextPermission)
+
+    fallback_group = SimpleNamespace(getDetails=_fallback_group_details)
 
     class _CallableListingService:
         @staticmethod
@@ -635,7 +636,7 @@ def test_proxy_and_admin_post_views_cover_remaining_error_and_success_paths(
         def __str__(self):
             return "req-1"
 
-    monkeypatch.setattr(index_view.uuid, "uuid4", lambda: _RequestId())
+    monkeypatch.setattr(index_view.uuid, "uuid4", _RequestId)
     monkeypatch.setattr(
         index_view,
         "run_diagnostic_script",

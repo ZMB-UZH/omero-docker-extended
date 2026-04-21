@@ -1198,7 +1198,7 @@ def test_downscale_local_mean_falls_back_when_skimage_import_fails(
     real_import = builtins.__import__
 
     def blocked_import(name, *args, **kwargs):
-        if name == "skimage.transform" or name == "skimage":
+        if name in ("skimage.transform", "skimage"):
             raise ImportError("skimage blocked for test")
         return real_import(name, *args, **kwargs)
 

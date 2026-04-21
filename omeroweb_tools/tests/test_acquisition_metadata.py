@@ -8,10 +8,10 @@ from omeroweb_tools.services.acquisition_metadata import extract_search_document
 
 class _Value:
     def __init__(self, value):
-        self._value = value
+        self._raw_value = value
 
     def getValue(self):
-        return self._value
+        return self._raw_value
 
 
 class _UnitValue(_Value):

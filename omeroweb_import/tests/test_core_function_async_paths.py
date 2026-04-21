@@ -685,7 +685,7 @@ def test_run_compatibility_check_inner_updates_idle_disabled_and_result_paths(
     monkeypatch.setattr(
         core_functions,
         "_start_compatibility_check_thread",
-        lambda target_job_id: started_threads.append(target_job_id),
+        started_threads.append,
     )
 
     core_functions._run_compatibility_check_inner(job_id)

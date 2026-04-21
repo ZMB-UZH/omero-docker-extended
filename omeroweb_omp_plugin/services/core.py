@@ -98,7 +98,7 @@ def _supports_legacy_annotation_kwargs() -> bool:
 
 
 def _legacy_annotation_delete_callable():
-    return getattr(_annotation_service, "delete_existing_annotations")
+    return _annotation_service.delete_existing_annotations
 
 
 def _call_dynamic(callable_obj, *args, **kwargs):

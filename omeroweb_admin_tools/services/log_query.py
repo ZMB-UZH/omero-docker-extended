@@ -10,7 +10,6 @@ import logging
 import re
 import json
 import os
-import socket
 import threading
 import time
 from dataclasses import dataclass
@@ -518,7 +517,7 @@ def _execute_loki_query(
     )
     try:
         response = requests.get(url, timeout=config.timeout_seconds)
-    except (requests.Timeout, TimeoutError, socket.timeout) as exc:
+    except (requests.Timeout, TimeoutError) as exc:
         raise RuntimeError(f"Loki request timed out: {exc}") from exc
     except requests.RequestException as exc:
         raise RuntimeError(
@@ -672,7 +671,6 @@ def _prepare_query_jobs(
                             _build_internal_files_query(
                                 service,
                                 batch,
-                                label_key="filepath",
                             ),
                             text_query,
                         ),
@@ -989,14 +987,13 @@ def _entry_sort_key(entry: LogEntry) -> Tuple[int, str]:
 
 
 def fetch_internal_log_labels(
-    config: LogConfig,
+    _config: LogConfig,
     compose_service: str,
 ) -> Tuple[List[str], str]:
     """Query Loki for distinct filenames collected under a compose_service label.
 
     Returns a sorted list of base filenames (e.g. ``["Blitz-0.log", "master.err"]``).
     """
-    del config
     cache_key = f"internal-labels:{_normalize_internal_service(compose_service)}"
     cached = cast(
         tuple[tuple[str, ...], str],
@@ -1015,7 +1012,7 @@ def _fetch_internal_log_labels_uncached(
     """Discover internal log filenames from the mounted filesystem."""
     discovered = _discover_internal_log_labels_from_filesystem(compose_service)
     if discovered is None:
-        return tuple(), "filepath"
+        return (), "filepath"
     labels, label_key = discovered
     normalized = _normalize_internal_service(compose_service)
     logger.debug(

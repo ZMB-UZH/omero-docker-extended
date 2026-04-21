@@ -209,7 +209,7 @@ def test_search_runs_with_one_sided_date_filters(
     monkeypatch.setattr(
         service, "runtime_config", lambda: SimpleNamespace(max_results=10)
     )
-    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
+    monkeypatch.setattr(service, "db_connect", _DbConn)
     monkeypatch.setattr(service, "_visible_group_ids", lambda conn: [5])
     monkeypatch.setattr(service, "_current_user_id", lambda conn: 21)
     monkeypatch.setattr(
@@ -315,7 +315,7 @@ def test_save_user_settings_clears_current_user_scope_when_disabled(monkeypatch)
             return False
 
     cleared = []
-    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
+    monkeypatch.setattr(service, "db_connect", _DbConn)
     monkeypatch.setattr(
         service,
         "save_user_settings_row",
@@ -374,7 +374,7 @@ def test_save_user_settings_auto_starts_indexing_for_enabled_user(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
+    monkeypatch.setattr(service, "db_connect", _DbConn)
     monkeypatch.setattr(
         service,
         "save_user_settings_row",
@@ -543,7 +543,7 @@ def test_search_merges_omero_and_acquisition_results(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(service, "db_connect", lambda: _DbConn())
+    monkeypatch.setattr(service, "db_connect", _DbConn)
     captured_index_calls = []
     monkeypatch.setattr(
         service,
@@ -824,7 +824,7 @@ def test_request_scope_sync_dispatches_celery_task(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(service, "db_connect", lambda: _Conn())
+    monkeypatch.setattr(service, "db_connect", _Conn)
     calls = []
     monkeypatch.setattr(
         service,
@@ -887,7 +887,7 @@ def test_request_scope_sync_marks_error_when_celery_dispatch_fails(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(service, "db_connect", lambda: _Conn())
+    monkeypatch.setattr(service, "db_connect", _Conn)
     calls = []
     monkeypatch.setattr(
         service,
@@ -1011,7 +1011,7 @@ def test_request_scope_sync_uses_thread_fallback_when_celery_is_disabled(monkeyp
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(service, "db_connect", lambda: _Conn())
+    monkeypatch.setattr(service, "db_connect", _Conn)
     monkeypatch.setattr(service, "try_start_scope_sync", lambda *args, **kwargs: True)
 
     started_with = {}
@@ -1045,7 +1045,7 @@ def test_process_sync_batch_stops_when_sync_lease_is_not_active(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(service, "db_connect", lambda: _Conn())
+    monkeypatch.setattr(service, "db_connect", _Conn)
     monkeypatch.setattr(
         service,
         "sync_run_is_active",
@@ -1148,7 +1148,7 @@ def test_process_sync_batch_skips_non_callable_commit_attribute(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(service, "db_connect", lambda: _Conn())
+    monkeypatch.setattr(service, "db_connect", _Conn)
     monkeypatch.setattr(
         service,
         "sync_run_is_active",

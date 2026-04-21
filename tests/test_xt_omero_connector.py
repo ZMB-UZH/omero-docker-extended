@@ -73,7 +73,7 @@ def test_resolve_imaris_application_uses_imarislib_factory(monkeypatch):
             assert app_id == 17
             return expected
 
-    fake_module = types.SimpleNamespace(ImarisLib=lambda: _FakeImarisLibFactory())
+    fake_module = types.SimpleNamespace(ImarisLib=_FakeImarisLibFactory)
     monkeypatch.setitem(sys.modules, "ImarisLib", fake_module)
 
     assert module._resolve_imaris_application(17) is expected
@@ -93,7 +93,7 @@ def test_resolve_imaris_application_retries_until_handle_available(monkeypatch):
                 return None
             return expected
 
-    fake_module = types.SimpleNamespace(ImarisLib=lambda: _RetryingImarisLibFactory())
+    fake_module = types.SimpleNamespace(ImarisLib=_RetryingImarisLibFactory)
     monkeypatch.setitem(sys.modules, "ImarisLib", fake_module)
     monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
 
@@ -114,7 +114,7 @@ def test_resolve_imaris_application_accepts_numeric_string(monkeypatch):
             assert app_id == 17
             return expected
 
-    fake_module = types.SimpleNamespace(ImarisLib=lambda: _FakeImarisLibFactory())
+    fake_module = types.SimpleNamespace(ImarisLib=_FakeImarisLibFactory)
     monkeypatch.setitem(sys.modules, "ImarisLib", fake_module)
 
     assert module._resolve_imaris_application("17") is expected

@@ -362,9 +362,9 @@ class GeneticLabelPlacer:
 
         # 1. OVERLAP PENALTY (huge)
         overlap_penalty = 0.0
-        for i in range(len(bboxes)):
-            for j in range(i + 1, len(bboxes)):
-                overlap = bboxes[i].overlap_area(bboxes[j])
+        for i, bbox in enumerate(bboxes):
+            for other_bbox in bboxes[i + 1 :]:
+                overlap = bbox.overlap_area(other_bbox)
                 if overlap > 0:
                     overlap_penalty += overlap * 1000
 

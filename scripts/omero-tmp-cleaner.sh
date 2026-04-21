@@ -61,7 +61,7 @@ fi
 TMP_DIR="$(readlink -f "${TMP_DIR}")"
 
 # Very defensive safety checks
-if [[ "${TMP_DIR}" == "/" ]]; then
+if [[ "${TMP_DIR}" = "/" ]]; then
     echo "ERROR: Refusing to operate on /" >&2
     exit 3
 fi
@@ -103,7 +103,7 @@ read_retention_expiry() {
 path_is_within() {
     local path="$1"
     local root="$2"
-    [[ "${path}" == "${root}" || "${path}" == "${root}"/* ]]
+    [[ "${path}" = "${root}" || "${path}" = "${root}"/* ]]
 }
 
 load_active_retention_markers() {
@@ -117,15 +117,15 @@ load_active_retention_markers() {
         fi
 
         marker_name="$(basename "${marker}")"
-        if [[ "${marker_name}" == "${RETENTION_DIR_MARKER_NAME}" ]]; then
+        if [[ "${marker_name}" = "${RETENTION_DIR_MARKER_NAME}" ]]; then
             RETAINED_DIRS+=("$(dirname "${marker}")")
             RETAINED_MARKERS+=("${marker}")
             continue
         fi
 
-        if [[ "${marker_name}" == .*"${RETENTION_FILE_MARKER_SUFFIX}" ]]; then
+        if [[ "${marker_name}" = .*"${RETENTION_FILE_MARKER_SUFFIX}" ]]; then
             target_name="${marker_name#.}"
-            target_name="${target_name%${RETENTION_FILE_MARKER_SUFFIX}}"
+            target_name="${target_name%"${RETENTION_FILE_MARKER_SUFFIX}"}"
             target_path="$(dirname "${marker}")/${target_name}"
             RETAINED_FILES+=("${target_path}")
             RETAINED_MARKERS+=("${marker}")
@@ -145,7 +145,7 @@ path_is_structural() {
     local path="$1"
     local relative="${path#"${TMP_DIR}"/}"
 
-    [[ "${relative}" == "${path}" ]] && return 1
+    [[ "${relative}" = "${path}" ]] && return 1
 
     case "${relative}" in
         # depth-1 namespace dir  (e.g. omero-web, omero-server, omeroweb-import)
@@ -176,13 +176,13 @@ path_is_retained() {
     done
 
     for retained_file in "${RETAINED_FILES[@]}"; do
-        if [[ "${path}" == "${retained_file}" ]]; then
+        if [[ "${path}" = "${retained_file}" ]]; then
             return 0
         fi
     done
 
     for retained_marker in "${RETAINED_MARKERS[@]}"; do
-        if [[ "${path}" == "${retained_marker}" ]]; then
+        if [[ "${path}" = "${retained_marker}" ]]; then
             return 0
         fi
     done

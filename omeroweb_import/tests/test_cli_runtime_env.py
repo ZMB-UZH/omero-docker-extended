@@ -208,8 +208,8 @@ def test_service_import_file_adds_scan_depth_to_cli_command(monkeypatch):
     for module in (connection_service, import_service):
         captured = {}
 
-        def fake_run(cmd, *args, **kwargs):
-            captured["cmd"] = cmd
+        def fake_run(cmd, *args, _captured=captured, **kwargs):
+            _captured["cmd"] = cmd
             return subprocess.CompletedProcess(
                 args=cmd, returncode=0, stdout="ok", stderr=""
             )
