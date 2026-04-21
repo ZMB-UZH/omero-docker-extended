@@ -1107,20 +1107,27 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertFalse(checkout_step["with"]["persist-credentials"])
 
         lint_step = next(step for step in steps if step.get("name") == "Super-Linter")
-        self.assertEqual(
-            "super-linter/super-linter@9e863354e3ff62e0727d37183162c4a88873df41",
-            lint_step["uses"],
+        self.assertNotIn("uses", lint_step)
+        self.assertIn(
+            "ghcr.io/super-linter/super-linter:v8.6.0@sha256:"
+            "35955a2af8395c8224c7072732b91350f7f02c2ae9ee751842776ef29092a6cc",
+            lint_step["run"],
         )
         self.assertNotIn("GITHUB_TOKEN", lint_step["env"])
+        self.assertNotIn("MULTI_STATUS", lint_step["env"])
+        self.assertNotIn("SAVE_SUPER_LINTER_SUMMARY", lint_step["env"])
+        self.assertEqual(
+            "${{ github.event.repository.default_branch }}",
+            lint_step["env"]["DEFAULT_BRANCH"],
+        )
         self.assertEqual(
             "(^|/)third_party/(ecc-v1\\.10\\.0|caveman-v1\\.6\\.0)/",
             lint_step["env"]["FILTER_REGEX_EXCLUDE"],
         )
         self.assertEqual(".", lint_step["env"]["LINTER_RULES_PATH"])
         self.assertEqual(".markdownlint.yaml", lint_step["env"]["MARKDOWN_CONFIG_FILE"])
-        self.assertEqual("false", lint_step["env"]["MULTI_STATUS"])
+        self.assertEqual("true", lint_step["env"]["RUN_LOCAL"])
         self.assertEqual(".yamllint", lint_step["env"]["YAML_CONFIG_FILE"])
-        self.assertEqual("true", lint_step["env"]["SAVE_SUPER_LINTER_SUMMARY"])
         self.assertEqual("true", lint_step["env"]["VALIDATE_ALL_CODEBASE"])
         self.assertEqual(
             "true", lint_step["env"]["VALIDATE_GIT_MERGE_CONFLICT_MARKERS"]
