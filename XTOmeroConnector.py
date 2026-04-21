@@ -1345,14 +1345,16 @@ class OMEROBrowserDialog:
 
     def _invoke_on_ui_thread(self, callback, wait=True):
         """Run a callback on Tk's UI thread and optionally wait for the result."""
-        result: dict[str, Any] = {"value": None, "error": None}
+        value: Any = None
+        error: BaseException | None = None
         completed = threading.Event()
 
         def runner():
+            nonlocal error, value
             try:
-                result["value"] = callback()
+                value = callback()
             except Exception as exc:
-                result["error"] = exc
+                error = exc
             finally:
                 completed.set()
 
@@ -1360,9 +1362,9 @@ class OMEROBrowserDialog:
         if not wait:
             return None
         completed.wait()
-        if result["error"] is not None:
-            raise result["error"]
-        return result["value"]
+        if error is not None:
+            raise error
+        return value
 
     def _open_downloaded_file_in_imaris(self, downloaded_file):
         """Resolve the Imaris handle on the UI thread and open the IMS file."""

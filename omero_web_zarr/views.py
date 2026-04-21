@@ -122,7 +122,7 @@ def _store_backed_response(image, version, *parts):
     rsp = HttpResponse(data, content_type="application/octet-stream")
     rsp["Content-Length"] = len(data)
     filename = ".".join(source.relative_to(store_root).parts)
-    rsp["Content-Disposition"] = "attachment; filename=%s" % filename
+    rsp["Content-Disposition"] = f"attachment; filename={filename}"
     return rsp
 
 
@@ -139,9 +139,8 @@ def _store_backed_chunk_response(image, version, level, chunk):
     response = _store_backed_response(image, version, str(level), *chunk.split("/"))
     if response is None:
         return None
-    response["Content-Disposition"] = "attachment; filename=%s" % chunk.replace(
-        "/", "."
-    )
+    filename = chunk.replace("/", ".")
+    response["Content-Disposition"] = f"attachment; filename={filename}"
     return response
 
 
@@ -229,7 +228,7 @@ def get_image_shape(image, level):
     shapes = get_image_shapes(image)
     if level >= len(shapes):
         raise Exception(
-            "Level %s higher than %s levels for this image" % (level, len(shapes))
+            f"Level {level} higher than {len(shapes)} levels for this image"
         )
     return shapes[level]
 
@@ -293,7 +292,7 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
 
     if len(dims) != len(axes):
         raise Http404(
-            "chunk %s has incorrect number of dimensions for axes: %s" % (chunk, axes)
+            f"chunk {chunk} has incorrect number of dimensions for axes: {axes}"
         )
 
     level = int(level)
@@ -364,7 +363,7 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
         content_type="application/octet-stream",
     )
     rsp["Content-Length"] = len(data)
-    rsp["Content-Disposition"] = "attachment; filename=%s" % chunk_name
+    rsp["Content-Disposition"] = f"attachment; filename={chunk_name}"
     return rsp
 
 
@@ -528,13 +527,11 @@ def download_store_metadata(request, iid, conn=None, **kwargs):
         json.dumps(payload, indent=2, sort_keys=True),
         content_type="application/json",
     )
-    response["Content-Disposition"] = (
-        "attachment; filename=%s"
-        % _store_backed_download_name(
-            image,
-            "-metadata.json",
-        )
+    filename = _store_backed_download_name(
+        image,
+        "-metadata.json",
     )
+    response["Content-Disposition"] = f"attachment; filename={filename}"
     return response
 
 
@@ -596,9 +593,9 @@ def _sanitize_app_asset_path(url):
 
 
 def _build_app_launch_url(app, source):
-    return "%s?source=%s" % (
-        reverse("zarr_app", kwargs={"app": app, "url": ""}),
-        quote(source, safe="/:?=&"),
+    return (
+        f"{reverse('zarr_app', kwargs={'app': app, 'url': ''})}"
+        f"?source={quote(source, safe='/:?=&')}"
     )
 
 
@@ -641,7 +638,7 @@ def _fetch_remote_app_shell(base_url, cache_bucket):
 
 def apps(request, app, url):
     if app not in _APP_BASE_URLS:
-        raise Http404("App: %s not found" % app)
+        raise Http404(f"App: {app} not found")
 
     base_url = _APP_BASE_URLS[app]
     asset_path = _sanitize_app_asset_path(url)

@@ -97,21 +97,26 @@ class _Resolution:
 
 
 class _RenderingEngine:
-    def getResolutionLevels(self):
+    @staticmethod
+    def getResolutionLevels():
         return 2
 
-    def getResolutionDescriptions(self):
+    @staticmethod
+    def getResolutionDescriptions():
         return [_Resolution(1024, 512), _Resolution(512, 256)]
 
-    def getDefaultZ(self):
+    @staticmethod
+    def getDefaultZ():
         return 3
 
-    def getDefaultT(self):
+    @staticmethod
+    def getDefaultT():
         return 4
 
 
 class _ObjectiveSettings:
-    def getObjective(self):
+    @staticmethod
+    def getObjective():
         return SimpleNamespace(getNominalMagnification=lambda: 40)
 
 
@@ -135,79 +140,103 @@ class _MarshalImage:
     def getName(self):
         return self.name
 
-    def canAnnotate(self):
+    @staticmethod
+    def canAnnotate():
         return False
 
-    def canEdit(self):
+    @staticmethod
+    def canEdit():
         return True
 
-    def canDelete(self):
+    @staticmethod
+    def canDelete():
         return True
 
-    def canLink(self):
+    @staticmethod
+    def canLink():
         return False
 
-    def getObjectiveSettings(self):
+    @staticmethod
+    def getObjectiveSettings():
         return _ObjectiveSettings()
 
-    def getSizeX(self):
+    @staticmethod
+    def getSizeX():
         return 1024
 
-    def getSizeY(self):
+    @staticmethod
+    def getSizeY():
         return 512
 
-    def getSizeZ(self):
+    @staticmethod
+    def getSizeZ():
         return 4
 
-    def getSizeT(self):
+    @staticmethod
+    def getSizeT():
         return 2
 
-    def getSizeC(self):
+    @staticmethod
+    def getSizeC():
         return 1
 
-    def getPixelRange(self):
+    @staticmethod
+    def getPixelRange():
         raise TypeError("pixel range unavailable")
 
-    def getChannels(self):
+    @staticmethod
+    def getChannels():
         return [_Channel(label="DNA")]
 
-    def splitChannelDims(self):
+    @staticmethod
+    def splitChannelDims():
         return {"g": {"width": 1024, "height": 512}}
 
-    def isGreyscaleRenderingModel(self):
+    @staticmethod
+    def isGreyscaleRenderingModel():
         return False
 
-    def getProjection(self):
+    @staticmethod
+    def getProjection():
         return "normal"
 
-    def isInvertedAxis(self):
+    @staticmethod
+    def isInvertedAxis():
         return False
 
-    def getAuthor(self):
+    @staticmethod
+    def getAuthor():
         return "Author"
 
-    def getDate(self):
+    @staticmethod
+    def getDate():
         return datetime(2026, 3, 30, 12, 0, 0)
 
-    def getPixelsType(self):
+    @staticmethod
+    def getPixelsType():
         return "uint16"
 
-    def getProject(self):
+    @staticmethod
+    def getProject():
         return SimpleNamespace(id=11, name="Project", description="Project description")
 
-    def listParents(self):
+    @staticmethod
+    def listParents():
         return [
             _DatasetParent(12, "Dataset", "Dataset description"),
             _WellSampleParent(13),
         ]
 
-    def getPixelSizeX(self, units=None):
+    @staticmethod
+    def getPixelSizeX(units=None):
         return SimpleNamespace(getValue=lambda: 0.5)
 
-    def getPixelSizeY(self, units=None):
+    @staticmethod
+    def getPixelSizeY(units=None):
         return SimpleNamespace(getValue=lambda: 0.75)
 
-    def getPixelSizeZ(self, units=None):
+    @staticmethod
+    def getPixelSizeZ(units=None):
         return SimpleNamespace(getValue=lambda: 1.25)
 
 
@@ -224,7 +253,8 @@ class _SingleLevelImage:
             getMaxPlaneSize=lambda: (_ for _ in ()).throw(RuntimeError("plane-size"))
         )
 
-    def getChannels(self, noRE=False):
+    @staticmethod
+    def getChannels(noRE=False):
         return [_Channel(label="DNA")]
 
     def getProjection(self):
@@ -232,13 +262,16 @@ class _SingleLevelImage:
             raise RuntimeError("projection")
         return "maximum"
 
-    def getPixelSizeX(self, units=None):
+    @staticmethod
+    def getPixelSizeX(units=None):
         raise RuntimeError("x")
 
-    def getPixelSizeY(self, units=None):
+    @staticmethod
+    def getPixelSizeY(units=None):
         return None
 
-    def getPixelSizeZ(self, units=None):
+    @staticmethod
+    def getPixelSizeZ(units=None):
         return SimpleNamespace(getValue=lambda: 1.5)
 
     def getObjectiveSettings(self):
@@ -250,34 +283,44 @@ class _SingleLevelImage:
             getObjective=lambda: SimpleNamespace(getNominalMagnification=lambda: 63)
         )
 
-    def canAnnotate(self):
+    @staticmethod
+    def canAnnotate():
         return True
 
-    def canEdit(self):
+    @staticmethod
+    def canEdit():
         return False
 
-    def canDelete(self):
+    @staticmethod
+    def canDelete():
         return False
 
-    def canLink(self):
+    @staticmethod
+    def canLink():
         return True
 
-    def getSizeX(self):
+    @staticmethod
+    def getSizeX():
         return 128
 
-    def getSizeY(self):
+    @staticmethod
+    def getSizeY():
         return 64
 
-    def getSizeZ(self):
+    @staticmethod
+    def getSizeZ():
         return 2
 
-    def getSizeT(self):
+    @staticmethod
+    def getSizeT():
         return 1
 
-    def getSizeC(self):
+    @staticmethod
+    def getSizeC():
         return 1
 
-    def splitChannelDims(self):
+    @staticmethod
+    def splitChannelDims():
         return {"g": {"width": 128, "height": 64}}
 
 
@@ -537,7 +580,8 @@ def test_region_helpers_cover_remaining_error_paths(monkeypatch):
             self._re = SimpleNamespace(getResolutionLevels=lambda: levels)
             self._jpeg_payload = jpeg_payload
 
-        def _prepareRenderingEngine(self):
+        @staticmethod
+        def _prepareRenderingEngine():
             return None
 
         def renderJpegRegion(self, *args, **kwargs):
@@ -843,7 +887,8 @@ def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single
             self._re = SimpleNamespace(getResolutionLevels=lambda: 1)
             self.level = "unset"
 
-        def _prepareRenderingEngine(self):
+        @staticmethod
+        def _prepareRenderingEngine():
             return None
 
         def renderJpegRegion(self, *args, **kwargs):

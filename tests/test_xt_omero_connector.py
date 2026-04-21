@@ -68,7 +68,8 @@ def test_resolve_imaris_application_uses_imarislib_factory(monkeypatch):
     expected = object()
 
     class _FakeImarisLibFactory:
-        def GetApplication(self, app_id):
+        @staticmethod
+        def GetApplication(app_id):
             assert app_id == 17
             return expected
 
@@ -84,7 +85,8 @@ def test_resolve_imaris_application_retries_until_handle_available(monkeypatch):
     calls = {"count": 0}
 
     class _RetryingImarisLibFactory:
-        def GetApplication(self, app_id):
+        @staticmethod
+        def GetApplication(app_id):
             assert app_id == 17
             calls["count"] += 1
             if calls["count"] < 3:
@@ -107,7 +109,8 @@ def test_resolve_imaris_application_accepts_numeric_string(monkeypatch):
     expected = object()
 
     class _FakeImarisLibFactory:
-        def GetApplication(self, app_id):
+        @staticmethod
+        def GetApplication(app_id):
             assert app_id == 17
             return expected
 
@@ -150,6 +153,46 @@ def test_browser_dialog_reenable_load_button_uses_normal_state():
     module.OMEROBrowserDialog._reenable_load_button(dialog)
 
     assert states == ["normal"]
+
+
+def test_browser_dialog_invoke_on_ui_thread_returns_callback_value():
+    module = _load_xt_module()
+
+    class _Root:
+        @staticmethod
+        def after(_delay, callback):
+            callback()
+
+    dialog = types.SimpleNamespace(root=_Root())
+
+    assert (
+        module.OMEROBrowserDialog._invoke_on_ui_thread(
+            dialog,
+            lambda: "callback-result",
+        )
+        == "callback-result"
+    )
+
+
+def test_browser_dialog_invoke_on_ui_thread_reraises_callback_error():
+    module = _load_xt_module()
+
+    class _Root:
+        @staticmethod
+        def after(_delay, callback):
+            callback()
+
+    dialog = types.SimpleNamespace(root=_Root())
+
+    try:
+        module.OMEROBrowserDialog._invoke_on_ui_thread(
+            dialog,
+            lambda: (_ for _ in ()).throw(RuntimeError("callback failed")),
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "callback failed"
+    else:
+        raise AssertionError("expected RuntimeError from callback")
 
 
 def test_find_imaris_executable_prefers_env_override(monkeypatch):

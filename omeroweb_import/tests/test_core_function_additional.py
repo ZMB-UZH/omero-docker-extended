@@ -154,7 +154,8 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
             self.calls = {}
             self.closed = False
 
-        def getUpdateService(self):
+        @staticmethod
+        def getUpdateService():
             def _save(obj):
                 if getattr(obj, "image_id", None) == 10:
                     raise RuntimeError("save exploded")
@@ -209,7 +210,8 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
         def __init__(self):
             self.closed = False
 
-        def suConn(self, username):
+        @staticmethod
+        def suConn(username):
             assert username == "alice"
             return conn
 

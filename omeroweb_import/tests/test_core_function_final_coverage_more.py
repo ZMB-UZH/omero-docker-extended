@@ -298,13 +298,15 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
         def __init__(self, should_match=False):
             self.should_match = should_match
 
-        def resolve(self):
+        @staticmethod
+        def resolve():
             raise OSError("resolve failed")
 
         def __eq__(self, other):
             return self.should_match
 
-        def relative_to(self, other):
+        @staticmethod
+        def relative_to(other):
             raise ValueError("outside")
 
     monkeypatch.setattr(
@@ -402,7 +404,8 @@ def test_core_function_routing_and_native_zarr_helpers_cover_remaining_lines(
         def __init__(self, *, target, args, daemon):
             self.args = args
 
-        def start(self):
+        @staticmethod
+        def start():
             thread_starts.append("started")
 
     monkeypatch.setattr(core_functions, "_update_job", _update_job)
@@ -606,7 +609,8 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
     assert original_directory_is_usable(not_a_directory) is False
 
     class _BrokenPath:
-        def is_dir(self):
+        @staticmethod
+        def is_dir():
             raise OSError("stat failed")
 
         def __str__(self):

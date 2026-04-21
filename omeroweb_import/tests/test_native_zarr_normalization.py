@@ -181,8 +181,9 @@ def _make_large_blosc_image_store(zarr_dir: Path) -> Path:
 
 
 class TestNativeZarrNormalization:
+    @staticmethod
     def test_prepare_native_zarr_copy_accepts_multiscale_ome_zarr_without_rewriting(
-        self, tmp_path
+        tmp_path,
     ):
         zarr_dir = _make_multiscale_ome_zarr(
             tmp_path / "image.ome.zarr", ["s0", "s1", "s2"]
@@ -201,8 +202,9 @@ class TestNativeZarrNormalization:
         assert (zarr_dir / "s1").is_dir()
         assert (zarr_dir / "s2").is_dir()
 
+    @staticmethod
     def test_prepare_native_zarr_copy_rewrites_large_blosc_image_arrays_to_gzip(
-        self, tmp_path
+        tmp_path,
     ):
         zarr_dir = _make_large_blosc_image_store(tmp_path / "image.ome.zarr")
 
@@ -214,9 +216,8 @@ class TestNativeZarrNormalization:
         assert attrs["compressor"] == {"id": "gzip", "level": 1}
         assert (zarr_dir / "0" / "0" / "0" / "0" / "0").is_file()
 
-    def test_prepare_native_zarr_copy_rewrites_only_referenced_image_arrays(
-        self, tmp_path
-    ):
+    @staticmethod
+    def test_prepare_native_zarr_copy_rewrites_only_referenced_image_arrays(tmp_path):
         zarr_dir = _make_large_blosc_image_store(tmp_path / "image.ome.zarr")
         _write_text(
             zarr_dir / "tables" / "measurements" / ".zarray",
@@ -253,8 +254,9 @@ class TestNativeZarrNormalization:
         assert image_attrs["compressor"] == {"id": "gzip", "level": 1}
         assert table_attrs["compressor"]["id"] == "blosc"
 
+    @staticmethod
     def test_prepare_native_zarr_copy_rewrites_supported_bioformats2raw_series_arrays(
-        self, tmp_path
+        tmp_path,
     ):
         zarr_dir = _make_bioformats2raw_layout(tmp_path / "bf2raw.ome.zarr", ["0", "1"])
         for series_name in ("0", "1"):
@@ -289,9 +291,8 @@ class TestNativeZarrNormalization:
                 attrs = json.load(handle)
             assert attrs["compressor"] == {"id": "gzip", "level": 1}
 
-    def test_prepare_native_zarr_copy_rejects_sparse_bioformats2raw_layout(
-        self, tmp_path
-    ):
+    @staticmethod
+    def test_prepare_native_zarr_copy_rejects_sparse_bioformats2raw_layout(tmp_path):
         zarr_dir = _make_bioformats2raw_layout(
             tmp_path / "bf2raw-gap.ome.zarr", ["0", "2"]
         )
@@ -301,7 +302,8 @@ class TestNativeZarrNormalization:
         assert error is not None
         assert "contiguous numeric series" in error.lower()
 
-    def test_validate_native_ome_ngff_zarr_rejects_plate_layout(self, tmp_path):
+    @staticmethod
+    def test_validate_native_ome_ngff_zarr_rejects_plate_layout(tmp_path):
         zarr_dir = tmp_path / "plate.ome.zarr"
         _write_text(
             zarr_dir / ".zattrs",

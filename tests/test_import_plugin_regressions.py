@@ -242,7 +242,8 @@ def _load_manage_zarr_script_module():
 
 
 class ImportPluginRegressionTests(TestCase):
-    def _json_status_and_payload(self, response):
+    @staticmethod
+    def _json_status_and_payload(response):
         if isinstance(response, dict):
             return response["status"], response["payload"]
         return response.status_code, json.loads(response.content)
@@ -647,7 +648,8 @@ class ImportPluginRegressionTests(TestCase):
         client_calls = {}
 
         class FakeSession:
-            def detachOnDestroy(self):
+            @staticmethod
+            def detachOnDestroy():
                 detach_calls.append("detached")
 
         class FakeClient:
@@ -655,12 +657,14 @@ class ImportPluginRegressionTests(TestCase):
                 client_calls["host"] = host
                 client_calls["port"] = port
 
-            def joinSession(self, session_key):
+            @staticmethod
+            def joinSession(session_key):
                 client_calls["session_key"] = session_key
                 return FakeSession()
 
         class FakeServiceOpts:
-            def setOmeroGroup(self, value):
+            @staticmethod
+            def setOmeroGroup(value):
                 group_calls.append(value)
 
         class FakeGateway:
@@ -1400,6 +1404,7 @@ class ImportPluginRegressionTests(TestCase):
             self.assertIsNone(error)
             self.assertIsNotNone(shared_source)
             self.assertIsNotNone(shared_parent)
+            self.assertIsNotNone(shared_parent)
             self.assertTrue(shared_source.is_dir())
             self.assertEqual("sample.zarr", shared_source.name)
             self.assertIn(
@@ -1480,6 +1485,7 @@ class ImportPluginRegressionTests(TestCase):
 
             self.assertIsNone(error)
             self.assertIsNotNone(shared_source)
+            self.assertIsNotNone(shared_parent)
             self.assertTrue(
                 (source / "s1").exists(), "original upload must not be modified"
             )
@@ -1930,14 +1936,14 @@ class ImportPluginRegressionTests(TestCase):
                 types.SimpleNamespace(Principal=lambda *args: ("Principal", args)),
                 create=True,
             ),
-        ):
-            with core_functions._background_import_session(
+            core_functions._background_import_session(
                 "test",
                 "omeroserver",
                 4064,
                 group_name="users_private",
-            ) as session_key:
-                self.assertEqual("session-key", session_key)
+            ) as session_key,
+        ):
+            self.assertEqual("session-key", session_key)
 
         fake_service.closeSession.assert_called_once_with(fake_session)
 
@@ -2273,7 +2279,8 @@ class ImportPluginRegressionTests(TestCase):
 
         class _RequestConn:
             class _Opts:
-                def setOmeroGroup(self, value):
+                @staticmethod
+                def setOmeroGroup(value):
                     group_calls.append(value)
 
             SERVICE_OPTS = _Opts()
@@ -2586,7 +2593,8 @@ class ImportPluginRegressionTests(TestCase):
         )
         self.assertNotIn("session", error.lower())
 
-    def test_start_import_thread_does_not_spawn_when_save_fails(self):
+    @staticmethod
+    def test_start_import_thread_does_not_spawn_when_save_fails():
         job = {"job_id": "b" * 32, "status": "ready", "import_thread_started": False}
 
         with (
@@ -2948,13 +2956,15 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             omerodir = Path(tmpdir) / "OMERO.server"
-            with mock.patch.dict(os.environ, {"OMERODIR": str(omerodir)}):
-                with self.assertRaisesRegex(
+            with (
+                mock.patch.dict(os.environ, {"OMERODIR": str(omerodir)}),
+                self.assertRaisesRegex(
                     RuntimeError, "Missing import runtime state file"
-                ):
-                    manage_script._load_runtime_state_value(
-                        "omero.web.import.shared_tmp_path"
-                    )
+                ),
+            ):
+                manage_script._load_runtime_state_value(
+                    "omero.web.import.shared_tmp_path"
+                )
 
             state_dir = omerodir / "var"
             state_dir.mkdir(parents=True, exist_ok=True)
@@ -2962,13 +2972,15 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 "other=value\n", encoding="utf-8"
             )
 
-            with mock.patch.dict(os.environ, {"OMERODIR": str(omerodir)}):
-                with self.assertRaisesRegex(
+            with (
+                mock.patch.dict(os.environ, {"OMERODIR": str(omerodir)}),
+                self.assertRaisesRegex(
                     RuntimeError, "Missing required import runtime value"
-                ):
-                    manage_script._load_runtime_state_value(
-                        "omero.web.import.shared_tmp_path"
-                    )
+                ),
+            ):
+                manage_script._load_runtime_state_value(
+                    "omero.web.import.shared_tmp_path"
+                )
 
     def test_render_repo_template_and_validate_source_path_enforce_safe_inputs(self):
         manage_script = _load_manage_zarr_script_module()
@@ -3247,7 +3259,8 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 self.outputs = {}
                 self.closed = False
 
-            def getInputs(self, unwrap=True):
+            @staticmethod
+            def getInputs(unwrap=True):
                 return {
                     "Action": "invalid",
                     "Group_Name": "users_private",
@@ -3272,9 +3285,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             mock.patch.object(
                 manage_script, "rstring", side_effect=lambda value: value
             ),
+            self.assertRaisesRegex(RuntimeError, "Action must be one of"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "Action must be one of"):
-                manage_script.run_script()
+            manage_script.run_script()
 
         self.assertTrue(client.closed)
         self.assertIn("Script error: Action must be one of", client.outputs["Message"])

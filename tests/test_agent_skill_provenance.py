@@ -96,9 +96,9 @@ class AgentSkillProvenanceTests(TestCase):
                     returncode=22, stdout="", stderr="404 Not Found"
                 ),
             ),
+            self.assertRaisesRegex(RuntimeError, "404 Not Found"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "404 Not Found"):
-                agent_skill_provenance.fetch_text(allowed_url)
+            agent_skill_provenance.fetch_text(allowed_url)
 
     def test_fetch_text_surfaces_transport_exceptions(self) -> None:
         allowed_url = self.sources.raw_skill_url("search-first")
@@ -113,14 +113,19 @@ class AgentSkillProvenanceTests(TestCase):
                     cmd=["/usr/bin/curl"], timeout=20
                 ),
             ),
+            self.assertRaisesRegex(RuntimeError, "Upstream fetch failed"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "Upstream fetch failed"):
-                agent_skill_provenance.fetch_text(allowed_url)
+            agent_skill_provenance.fetch_text(allowed_url)
 
     def test_resolve_required_executable_rejects_missing_command(self) -> None:
-        with mock.patch("tools.agent_skill_provenance.shutil.which", return_value=None):
-            with self.assertRaisesRegex(RuntimeError, "not available in PATH"):
-                agent_skill_provenance.resolve_required_executable("curl")
+        with (
+            mock.patch(
+                "tools.agent_skill_provenance.shutil.which",
+                return_value=None,
+            ),
+            self.assertRaisesRegex(RuntimeError, "not available in PATH"),
+        ):
+            agent_skill_provenance.resolve_required_executable("curl")
 
 
 if __name__ == "__main__":

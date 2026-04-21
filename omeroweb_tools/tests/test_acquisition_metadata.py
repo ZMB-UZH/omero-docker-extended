@@ -82,28 +82,36 @@ class _Pixels:
             (1, 0): [_PlaneInfo(1, 0, 0, delta_t=0.6240005493164062)],
         }
 
-    def getSizeX(self):
+    @staticmethod
+    def getSizeX():
         return _Value(2048)
 
-    def getSizeY(self):
+    @staticmethod
+    def getSizeY():
         return _Value(1024)
 
-    def getSizeZ(self):
+    @staticmethod
+    def getSizeZ():
         return _Value(2)
 
-    def getSizeC(self):
+    @staticmethod
+    def getSizeC():
         return _Value(2)
 
-    def getSizeT(self):
+    @staticmethod
+    def getSizeT():
         return _Value(2)
 
-    def getPhysicalSizeX(self):
+    @staticmethod
+    def getPhysicalSizeX():
         return _UnitValue("0.108", "µm")
 
-    def getPhysicalSizeY(self):
+    @staticmethod
+    def getPhysicalSizeY():
         return _UnitValue("0.108", "µm")
 
-    def getPhysicalSizeZ(self):
+    @staticmethod
+    def getPhysicalSizeZ():
         return _UnitValue("0.400", "µm")
 
     def copyPlaneInfo(self, theC=None, theZ=None):
@@ -121,13 +129,16 @@ class _DetectorSettings:
     gain = _Value("1.5")
     offsetValue = _Value("2")
 
-    def getBinning(self):
+    @staticmethod
+    def getBinning():
         return "2x2"
 
-    def getGain(self):
+    @staticmethod
+    def getGain():
         return _Value("1.5")
 
-    def getDetector(self):
+    @staticmethod
+    def getDetector():
         return SimpleNamespace(manufacturer="Hamamatsu", model="Orca Flash")
 
 
@@ -135,18 +146,22 @@ class _LightSourceSettings:
     attenuation = _Value("0.5")
     wavelength = _Value("488")
 
-    def getLightSource(self):
+    @staticmethod
+    def getLightSource():
         return SimpleNamespace(manufacturer="Coherent", model="Sapphire")
 
 
 class _LightPath:
-    def getDichroic(self):
+    @staticmethod
+    def getDichroic():
         return SimpleNamespace(manufacturer="Chroma", model="T495lpxr")
 
-    def getEmissionFilters(self):
+    @staticmethod
+    def getEmissionFilters():
         return [SimpleNamespace(manufacturer="Chroma", model="ET525/50m")]
 
-    def getExcitationFilters(self):
+    @staticmethod
+    def getExcitationFilters():
         return [SimpleNamespace(manufacturer="Chroma", model="ET470/40x")]
 
 
@@ -155,13 +170,16 @@ class _LogicalChannel:
     fluor = "EGFP"
     ndFilter = _Value("0.2")
 
-    def getDetectorSettings(self):
+    @staticmethod
+    def getDetectorSettings():
         return _DetectorSettings()
 
-    def getLightSourceSettings(self):
+    @staticmethod
+    def getLightSourceSettings():
         return _LightSourceSettings()
 
-    def getLightPath(self):
+    @staticmethod
+    def getLightPath():
         return _LightPath()
 
 
@@ -206,13 +224,16 @@ class _NamedObject:
 
 
 class _ObjectiveSettings:
-    def getCorrectionCollar(self):
+    @staticmethod
+    def getCorrectionCollar():
         return _Value("0.17")
 
-    def getID(self):
+    @staticmethod
+    def getID():
         return _Value(31)
 
-    def getObjective(self):
+    @staticmethod
+    def getObjective():
         return SimpleNamespace(
             manufacturer="Nikon",
             model="Plan Apo Lambda",
@@ -227,15 +248,18 @@ class _Microscope:
     model = "LSM 980"
     serialNumber = "MS-42"
 
-    def getMicroscopeType(self):
+    @staticmethod
+    def getMicroscopeType():
         return "inverted"
 
 
 class _Instrument:
-    def getMicroscope(self):
+    @staticmethod
+    def getMicroscope():
         return _Microscope()
 
-    def getObjectives(self):
+    @staticmethod
+    def getObjectives():
         return [
             SimpleNamespace(
                 manufacturer="Nikon",
@@ -245,54 +269,66 @@ class _Instrument:
             )
         ]
 
-    def getFilters(self):
+    @staticmethod
+    def getFilters():
         return [SimpleNamespace(manufacturer="Chroma", model="ET525/50m")]
 
-    def getDichroics(self):
+    @staticmethod
+    def getDichroics():
         return [SimpleNamespace(manufacturer="Chroma", model="T495lpxr")]
 
-    def getDetectors(self):
+    @staticmethod
+    def getDetectors():
         return [SimpleNamespace(manufacturer="Hamamatsu", model="Orca Flash")]
 
-    def getLightSources(self):
+    @staticmethod
+    def getLightSources():
         return [SimpleNamespace(manufacturer="Coherent", model="Sapphire")]
 
 
 class _OriginalFile:
-    def getName(self):
+    @staticmethod
+    def getName():
         return "synthetic-generated.dv"
 
-    def getMimetype(self):
+    @staticmethod
+    def getMimetype():
         return "application/octet-stream"
 
-    def getSize(self):
+    @staticmethod
+    def getSize():
         return _Value(4096)
 
-    def getPath(self):
+    @staticmethod
+    def getPath():
         raise AssertionError("private file paths must not be indexed")
 
 
 class _UsedFile:
-    def getOriginalFile(self):
+    @staticmethod
+    def getOriginalFile():
         return _OriginalFile()
 
 
 class _Fileset:
-    def copyUsedFiles(self):
+    @staticmethod
+    def copyUsedFiles():
         return [_UsedFile()]
 
 
 class _MapAnnotation:
     OMERO_CLASS = "MapAnnotation"
 
-    def getValue(self):
+    @staticmethod
+    def getValue():
         return [SimpleNamespace(name="Treatment", value="DMSO")]
 
 
 class _TextAnnotation:
     OMERO_CLASS = "TextAnnotation"
 
-    def getTextValue(self):
+    @staticmethod
+    def getTextValue():
         return "QC passed"
 
 
@@ -302,46 +338,58 @@ class _Image:
         self._dataset = _NamedObject(100, "Mitotic Entry", parents=[project])
         self._pixels = _Pixels()
 
-    def getName(self):
+    @staticmethod
+    def getName():
         return "img-001"
 
-    def getDescription(self):
+    @staticmethod
+    def getDescription():
         return "Synthetic search fixture"
 
-    def getAcquisitionDate(self):
+    @staticmethod
+    def getAcquisitionDate():
         return datetime(2026, 4, 12, 10, 30, 0)
 
-    def getChannels(self):
+    @staticmethod
+    def getChannels():
         return [
             _Channel(0, "DAPI", _Value("405"), _Value("450")),
             _Channel(1, "GFP", _Value("488"), _Value("525"), _LogicalChannel()),
         ]
 
-    def getObjectiveSettings(self):
+    @staticmethod
+    def getObjectiveSettings():
         return _ObjectiveSettings()
 
-    def getDetectorSettings(self):
+    @staticmethod
+    def getDetectorSettings():
         return [_DetectorSettings()]
 
-    def getPixelSizeX(self, units=True):
+    @staticmethod
+    def getPixelSizeX(units=True):
         return _UnitValue("0.108", "µm")
 
-    def getPixelSizeY(self, units=True):
+    @staticmethod
+    def getPixelSizeY(units=True):
         return _UnitValue("0.108", "µm")
 
-    def getPixelSizeZ(self, units=True):
+    @staticmethod
+    def getPixelSizeZ(units=True):
         return _UnitValue("0.400", "µm")
 
     def getPrimaryPixels(self):
         return self._pixels
 
-    def getInstrument(self):
+    @staticmethod
+    def getInstrument():
         return _Instrument()
 
-    def getImagingEnvironment(self):
+    @staticmethod
+    def getImagingEnvironment():
         return SimpleNamespace(temperature=_Value("37"), humidity=_Value("40"))
 
-    def getStageLabel(self):
+    @staticmethod
+    def getStageLabel():
         return SimpleNamespace(
             name="Well A1",
             x=_Value("1.0"),
@@ -349,13 +397,16 @@ class _Image:
             z=_Value("3.0"),
         )
 
-    def getFileset(self):
+    @staticmethod
+    def getFileset():
         return _Fileset()
 
-    def listAnnotations(self):
+    @staticmethod
+    def listAnnotations():
         return [_MapAnnotation(), _TextAnnotation()]
 
-    def loadOriginalMetadata(self):
+    @staticmethod
+    def loadOriginalMetadata():
         return (
             None,
             [

@@ -35,15 +35,18 @@ from omeroweb_omp_plugin.constants import (
 class TestLocalProviderConstants(unittest.TestCase):
     """Verify Ollama constants resolve to sensible defaults."""
 
-    def test_ollama_base_url_is_string(self):
+    @staticmethod
+    def test_ollama_base_url_is_string():
         assert isinstance(OLLAMA_BASE_URL, str)
         assert OLLAMA_BASE_URL.startswith("http")
 
-    def test_ollama_model_is_nonempty(self):
+    @staticmethod
+    def test_ollama_model_is_nonempty():
         assert isinstance(OLLAMA_MODEL, str)
         assert len(OLLAMA_MODEL) > 0
 
-    def test_ollama_timeout_is_positive(self):
+    @staticmethod
+    def test_ollama_timeout_is_positive():
         assert isinstance(OLLAMA_TIMEOUT_SECONDS, (int, float))
         assert OLLAMA_TIMEOUT_SECONDS > 0
 
@@ -215,7 +218,8 @@ class TestGenerateAiParsedValuesLocal(unittest.TestCase):
 class TestLocalProviderNotInUnsupportedList(unittest.TestCase):
     """Verify 'local' is not rejected by the provider_not_supported guard."""
 
-    def test_local_is_not_unsupported(self):
+    @staticmethod
+    def test_local_is_not_unsupported():
         """Calling _call_ai_provider_raw with 'local' should NOT raise
         'provider not supported'. It should try Ollama (and may fail
         with connection error in test env, which is fine)."""

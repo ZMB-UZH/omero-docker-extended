@@ -66,6 +66,17 @@ class _FakeConnection:
         self.closed = True
 
 
+class _RaisingContext:
+    def __init__(self, error):
+        self.error = error
+
+    def __enter__(self):
+        raise self.error
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
 def test_import_data_store_connection_schema_and_crud(monkeypatch):
     monkeypatch.setenv(import_data_store.ENV_USER, "import-user")
     monkeypatch.setenv(import_data_store.ENV_AUTH, "import-pass")
@@ -228,12 +239,11 @@ def test_import_data_store_persistence_and_load_failures_are_sanitized(monkeypat
     else:
         raise AssertionError("Expected special method persistence failure")
 
-    @contextmanager
-    def _load_failure():
-        raise RuntimeError("database unavailable")
-        yield
-
-    monkeypatch.setattr(import_data_store, "_connect", _load_failure)
+    monkeypatch.setattr(
+        import_data_store,
+        "_connect",
+        lambda: _RaisingContext(RuntimeError("database unavailable")),
+    )
     try:
         import_data_store.load_special_method_settings("alice", "grouped")
     except import_data_store.UserSettingsStoreError as exc:
@@ -273,12 +283,14 @@ def test_import_data_store_loaders_and_connect_cover_cache_and_empty_option_edge
         "_load_psycopg2",
         lambda: (SimpleNamespace(connect=lambda **kwargs: None), _FakeExtras),
     )
-    with pytest.raises(
-        import_data_store.UserSettingsStoreError,
-        match=import_data_store.errors.db_connection_failed(),
+    with (
+        pytest.raises(
+            import_data_store.UserSettingsStoreError,
+            match=import_data_store.errors.db_connection_failed(),
+        ),
+        import_data_store._connect(),
     ):
-        with import_data_store._connect():
-            pass
+        pass
 
     monkeypatch.setattr(
         import_data_store,
@@ -297,9 +309,11 @@ def test_import_data_store_loaders_and_connect_cover_cache_and_empty_option_edge
             _FakeExtras,
         ),
     )
-    with pytest.raises(import_data_store.UserSettingsStoreError, match="boom"):
-        with import_data_store._connect():
-            pass
+    with (
+        pytest.raises(import_data_store.UserSettingsStoreError, match="boom"),
+        import_data_store._connect(),
+    ):
+        pass
 
     monkeypatch.setattr(import_data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
@@ -313,12 +327,11 @@ def test_import_data_store_loaders_and_connect_cover_cache_and_empty_option_edge
     monkeypatch.setattr(import_data_store, "_connect", _missing_special_row)
     assert import_data_store.load_special_method_settings("alice", "grouped") is None
 
-    @contextmanager
-    def _store_error():
-        raise import_data_store.UserSettingsStoreError("wrapped")
-        yield
-
-    monkeypatch.setattr(import_data_store, "_connect", _store_error)
+    monkeypatch.setattr(
+        import_data_store,
+        "_connect",
+        lambda: _RaisingContext(import_data_store.UserSettingsStoreError("wrapped")),
+    )
     with pytest.raises(import_data_store.UserSettingsStoreError, match="wrapped"):
         import_data_store.load_special_method_settings("alice", "grouped")
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import json
 import tempfile
 from pathlib import Path
@@ -208,7 +210,7 @@ def test_start_upload_success_normalizes_entries_and_captures_group_context(
     monkeypatch.setattr(
         index_view, "_generate_orphan_dataset_name", lambda: "UploadRoot_TEST"
     )
-    monkeypatch.setattr(index_view.uuid, "uuid4", lambda: next(uuid_values))
+    monkeypatch.setattr(index_view.uuid, "uuid4", lambda: next_or_fail(uuid_values))
     monkeypatch.setattr(
         index_view,
         "reverse",

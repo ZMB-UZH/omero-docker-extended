@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import unittest
 from pathlib import Path
 import re
@@ -319,9 +321,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "wait_for_dropbox_user_dir_sync_api \\",
             script_text,
         )
-        self.assertIn('OMERO_PASSWORD="${password}"', script_text)
+        self.assertIn('OMERO_PASSWORD="${dropbox_bind_value}"', script_text)
         self.assertIn('"${OMERO_BIN}" login -q -C -t 60', script_text)
         self.assertIn("schedule_dropbox_user_dir_sync", script_text)
+        self.assertNotIn("${!password_env-}", script_text)
         self.assertNotIn("OMERO_DROPBOX_USER_DIR_SYNC_ENABLED:-0", script_text)
         self.assertNotIn("65534", script_text)
         self.assertNotIn("/opt/omero/omero_data", script_text)
@@ -1042,7 +1045,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             workflow = yaml.safe_load(
                 (self.repo_root / relative_path).read_text(encoding="utf-8")
             )
-            setup_step = next(
+            setup_step = next_or_fail(
                 step
                 for step in workflow["jobs"][job_name]["steps"]
                 if step.get("name") == "Setup Python"
@@ -1063,7 +1066,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
         steps = workflow["jobs"]["codeql"]["steps"]
 
-        init_step = next(
+        init_step = next_or_fail(
             step for step in steps if step.get("name") == "Initialize CodeQL"
         )
         self.assertEqual("none", init_step["with"]["build-mode"])
@@ -1098,7 +1101,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("statuses", job_permissions)
 
         steps = workflow["jobs"]["super-linter"]["steps"]
-        checkout_step = next(step for step in steps if step.get("name") == "Checkout")
+        checkout_step = next_or_fail(
+            step for step in steps if step.get("name") == "Checkout"
+        )
         self.assertEqual(
             "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
             checkout_step["uses"],
@@ -1106,7 +1111,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual(0, checkout_step["with"]["fetch-depth"])
         self.assertFalse(checkout_step["with"]["persist-credentials"])
 
-        lint_step = next(step for step in steps if step.get("name") == "Super-Linter")
+        lint_step = next_or_fail(
+            step for step in steps if step.get("name") == "Super-Linter"
+        )
         self.assertNotIn("uses", lint_step)
         self.assertRegex(
             lint_step["run"],
@@ -1176,7 +1183,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             job["permissions"],
         )
 
-        upload_step = next(
+        upload_step = next_or_fail(
             step
             for step in job["steps"]
             if step.get("name") == "Upload coverage to Codecov"
@@ -1212,7 +1219,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             workflow["jobs"]["semgrep"]["container"]["image"],
         )
 
-        bandit_scope_step = next(
+        bandit_scope_step = next_or_fail(
             step
             for step in workflow["jobs"]["bandit"]["steps"]
             if step.get("name") == "Audit — list files in scan scope"
@@ -1233,7 +1240,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "${{ steps.discover.outputs.test_dirs }}", bandit_scope_step["run"]
         )
 
-        bandit_prod_step = next(
+        bandit_prod_step = next_or_fail(
             step
             for step in workflow["jobs"]["bandit"]["steps"]
             if step.get("name")
@@ -1257,7 +1264,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "${{ steps.discover.outputs.exclude_csv }}", bandit_prod_step["run"]
         )
 
-        bandit_test_step = next(
+        bandit_test_step = next_or_fail(
             step
             for step in workflow["jobs"]["bandit"]["steps"]
             if step.get("name")
@@ -1272,7 +1279,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "${{ steps.discover.outputs.test_dirs }}", bandit_test_step["run"]
         )
 
-        hadolint_audit_step = next(
+        hadolint_audit_step = next_or_fail(
             step
             for step in workflow["jobs"]["hadolint"]["steps"]
             if step.get("name") == "Audit — show file being scanned"
@@ -1437,6 +1444,15 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             'while [ -n "${_remaining_rel}" ]; do',
             public_pull_script,
         )
+
+    def test_server_bootstrap_avoids_bash_operator_portability_findings(self) -> None:
+        script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotRegex(script_text, r"\[\[[^\n\]]*=~")
+        self.assertNotRegex(script_text, r"\[\[[^\n\]]*==")
+        self.assertIn("is_positive_integer()", script_text)
+        self.assertIn("is_env_var_name()", script_text)
 
 
 if __name__ == "__main__":

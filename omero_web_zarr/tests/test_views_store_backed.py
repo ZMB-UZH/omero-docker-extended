@@ -59,33 +59,42 @@ class _FakeImage:
     def getName(self):
         return self._name
 
-    def getPixelSizeX(self, units=True):
+    @staticmethod
+    def getPixelSizeX(units=True):
         return None
 
-    def getPixelSizeY(self, units=True):
+    @staticmethod
+    def getPixelSizeY(units=True):
         return None
 
-    def getPixelSizeZ(self, units=True):
+    @staticmethod
+    def getPixelSizeZ(units=True):
         return None
 
 
 class _FakeChunkImage:
-    def requiresPixelsPyramid(self):
+    @staticmethod
+    def requiresPixelsPyramid():
         return False
 
-    def getSizeT(self):
+    @staticmethod
+    def getSizeT():
         return 1
 
-    def getSizeC(self):
+    @staticmethod
+    def getSizeC():
         return 1
 
-    def getSizeZ(self):
+    @staticmethod
+    def getSizeZ():
         return 1
 
-    def getSizeY(self):
+    @staticmethod
+    def getSizeY():
         return 512
 
-    def getSizeX(self):
+    @staticmethod
+    def getSizeX():
         return 1024
 
 
@@ -411,7 +420,8 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
             self.name = str(path)
             path.write_bytes(b"temp")
 
-        def close(self):
+        @staticmethod
+        def close():
             return None
 
     class _FailingWriter:
@@ -424,7 +434,8 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def write(self, *_args, **_kwargs):
+        @staticmethod
+        def write(*_args, **_kwargs):
             raise RuntimeError("writer failed")
 
     monkeypatch.setattr(
@@ -446,7 +457,8 @@ def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
     class _FakeResponse:
         text = "<html><head></head><body>vizarr</body></html>"
 
-        def raise_for_status(self):
+        @staticmethod
+        def raise_for_status():
             return None
 
     views._fetch_remote_app_shell.cache_clear()
@@ -620,7 +632,8 @@ def test_app_shell_helpers_cover_empty_paths_cache_fetch_and_invalid_apps(monkey
     class _FakeShellResponse:
         text = "<html>validator</html>"
 
-        def raise_for_status(self):
+        @staticmethod
+        def raise_for_status():
             events.append("raise_for_status")
 
     views._fetch_remote_app_shell.cache_clear()

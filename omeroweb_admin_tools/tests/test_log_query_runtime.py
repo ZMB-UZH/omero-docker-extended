@@ -285,7 +285,8 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def submit(self, fn, config, job, lookback_seconds, max_entries, since_ns):
+        @staticmethod
+        def submit(fn, config, job, lookback_seconds, max_entries, since_ns):
             future = concurrent.futures.Future()
             if job is docker_job:
                 future.set_exception(RuntimeError("docker failed"))

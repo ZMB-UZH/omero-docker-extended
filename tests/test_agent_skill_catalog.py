@@ -497,7 +497,8 @@ class AgentSkillCatalogTests(unittest.TestCase):
         )
         return self.parse_frontmatter(skill_text), skill_text, adapter
 
-    def normalize_text(self, value: str) -> str:
+    @staticmethod
+    def normalize_text(value: str) -> str:
         return re.sub(r"\s+", " ", value.lower().replace("`", "")).strip()
 
     def assertNonEmptyString(self, value: object, msg: str) -> str:

@@ -497,7 +497,8 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("unexpected image-local managed repository", result.stderr)
 
-    def _run_bash(self, script: str) -> subprocess.CompletedProcess[str]:
+    @staticmethod
+    def _run_bash(script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [BASH_BIN, "-lc", script],
             check=True,
@@ -515,7 +516,8 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             stderr=subprocess.PIPE,
         )
 
-    def _slice_function(self, content: str, start_marker: str, end_marker: str) -> str:
+    @staticmethod
+    def _slice_function(content: str, start_marker: str, end_marker: str) -> str:
         start = content.index(start_marker)
         end = content.index(end_marker, start)
         return content[start:end].rstrip()

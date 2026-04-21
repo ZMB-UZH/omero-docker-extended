@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import inspect
 import json
 from types import SimpleNamespace
@@ -56,7 +58,8 @@ class _Conn:
     def getUpdateService(self):
         return self._update
 
-    def getObjects(self, object_type):
+    @staticmethod
+    def getObjects(object_type):
         assert object_type == "Image"
         return iter([])
 
@@ -159,10 +162,12 @@ def test_validate_user_password_handles_missing_details_and_auth_failure(monkeyp
     assert error is not None
 
     class FailingClient:
-        def createSession(self, username, password):
+        @staticmethod
+        def createSession(username, password):
             raise RuntimeError("bad password")
 
-        def closeSession(self):
+        @staticmethod
+        def closeSession():
             return None
 
     monkeypatch.setattr(
@@ -390,7 +395,8 @@ def test_job_progress_rejects_other_users_and_reports_lock_contention(monkeypatc
         def __init__(self, *_args, **_kwargs):
             return None
 
-        def acquire(self):
+        @staticmethod
+        def acquire():
             raise job_view.portalocker.exceptions.LockException("busy")
 
     monkeypatch.setattr(job_view, "load_job", lambda job_id: running_job)
@@ -432,10 +438,12 @@ def test_job_progress_processes_acquisition_batches(monkeypatch):
         def __init__(self, *_args, **_kwargs):
             return None
 
-        def acquire(self):
+        @staticmethod
+        def acquire():
             return None
 
-        def release(self):
+        @staticmethod
+        def release():
             return None
 
     monkeypatch.setattr(job_view, "load_job", lambda *_args: job)
@@ -497,10 +505,12 @@ def test_job_progress_processes_filename_mapping_and_duplicate_variable_names(
         def __init__(self, *_args, **_kwargs):
             return None
 
-        def acquire(self):
+        @staticmethod
+        def acquire():
             return None
 
-        def release(self):
+        @staticmethod
+        def release():
             return None
 
     monkeypatch.setattr(job_view, "load_job", lambda *_args: job)
@@ -557,10 +567,12 @@ def test_job_progress_covers_unknown_finished_delete_paths_and_save_failures(
         def __init__(self, *_args, **_kwargs):
             return None
 
-        def acquire(self):
+        @staticmethod
+        def acquire():
             return None
 
-        def release(self):
+        @staticmethod
+        def release():
             return None
 
     monkeypatch.setattr(job_view.portalocker, "Lock", Lock)
@@ -732,10 +744,12 @@ def test_job_progress_covers_error_logs_and_save_failures(monkeypatch):
         def __init__(self, *_args, **_kwargs):
             return None
 
-        def acquire(self):
+        @staticmethod
+        def acquire():
             return None
 
-        def release(self):
+        @staticmethod
+        def release():
             return None
 
     monkeypatch.setattr(job_view.portalocker, "Lock", Lock)
@@ -851,7 +865,7 @@ def test_job_progress_covers_error_logs_and_save_failures(monkeypatch):
     monkeypatch.setattr(
         job_view,
         "_save_annotation_link",
-        lambda update, link: next(save_results),
+        lambda update, link: next_or_fail(save_results),
     )
     monkeypatch.setattr(
         job_view,
@@ -965,10 +979,12 @@ def test_validate_user_password_and_job_progress_cover_remaining_logging_and_reg
     conn = _Conn()
 
     class _Client:
-        def createSession(self, username, password):
+        @staticmethod
+        def createSession(username, password):
             return None
 
-        def closeSession(self):
+        @staticmethod
+        def closeSession():
             raise RuntimeError("close exploded")
 
     monkeypatch.setattr(
@@ -989,10 +1005,12 @@ def test_validate_user_password_and_job_progress_cover_remaining_logging_and_reg
         def __init__(self, *_args, **_kwargs):
             return None
 
-        def acquire(self):
+        @staticmethod
+        def acquire():
             return None
 
-        def release(self):
+        @staticmethod
+        def release():
             return None
 
     jobs = {

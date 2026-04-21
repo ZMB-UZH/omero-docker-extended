@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import copy
 import logging
 import sys
@@ -13,10 +15,12 @@ from omeroweb_import.views import core_functions
 
 
 class _Lock:
-    def acquire(self, timeout=None):
+    @staticmethod
+    def acquire(timeout=None):
         return True
 
-    def release(self):
+    @staticmethod
+    def release():
         return None
 
 
@@ -35,7 +39,8 @@ class _ImportedImage:
     def save(self):
         self.saved += 1
 
-    def listParents(self):
+    @staticmethod
+    def listParents():
         return [SimpleNamespace(getId=lambda: 77)]
 
 
@@ -366,13 +371,17 @@ def test_process_import_job_returns_early_when_jobs_disappear_or_are_terminal(
 
     initial_job = _base_job("n" * 32)
     load_sequence = iter([initial_job, None])
-    monkeypatch.setattr(core_functions, "_load_job", lambda job_id: next(load_sequence))
+    monkeypatch.setattr(
+        core_functions, "_load_job", lambda job_id: next_or_fail(load_sequence)
+    )
     monkeypatch.setattr(core_functions, "_get_import_lock", lambda username: _Lock())
     core_functions._process_import_job("n" * 32)
 
     terminal_job = _base_job("o" * 32)
     load_sequence = iter([terminal_job, {**terminal_job, "status": "done"}])
-    monkeypatch.setattr(core_functions, "_load_job", lambda job_id: next(load_sequence))
+    monkeypatch.setattr(
+        core_functions, "_load_job", lambda job_id: next_or_fail(load_sequence)
+    )
     monkeypatch.setattr(core_functions, "_get_import_lock", lambda username: _Lock())
     core_functions._process_import_job("o" * 32)
 
@@ -537,7 +546,8 @@ def test_process_import_job_reuses_plot_cache_and_handles_reconnect_failures(
     open_calls = {"count": 0}
 
     class _Conn:
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("expired connection")
 
     def _open_service_connection(*args, **kwargs):
@@ -632,7 +642,8 @@ def test_start_import_thread_covers_missing_job_and_thread_start_failures(
         def __init__(self, *args, **kwargs):
             pass
 
-        def start(self):
+        @staticmethod
+        def start():
             raise RuntimeError("thread start failed")
 
     monkeypatch.setattr(core_functions.threading, "Thread", _BrokenThread)

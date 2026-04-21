@@ -289,7 +289,8 @@ class DropBoxUserDirSyncTests(TestCase):
                 self.closed_with: bool | None = None
                 FakeGateway.instances.append(self)
 
-            def connect(self) -> bool:
+            @staticmethod
+            def connect() -> bool:
                 return False
 
             def close(self, hard: bool = True) -> None:
@@ -311,7 +312,8 @@ class DropBoxUserDirSyncTests(TestCase):
 
     def test_close_connection_logs_unexpected_close_failures(self) -> None:
         class FailingClose:
-            def close(self, hard: bool = True) -> None:
+            @staticmethod
+            def close(hard: bool = True) -> None:
                 raise RuntimeError("close failed")
 
         with self.assertLogs(helper.LOGGER, level="DEBUG") as captured:

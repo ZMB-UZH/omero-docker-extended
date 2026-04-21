@@ -143,7 +143,8 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
     skipped_image = _Image(None, "missing-id.tif")
 
     class _BulkConn:
-        def getObjects(self, object_type, ids=None, obj_ids=None):
+        @staticmethod
+        def getObjects(object_type, ids=None, obj_ids=None):
             assert object_type == "Image"
             if ids is not None:
                 raise TypeError("legacy signature")
@@ -154,10 +155,12 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
     assert bulk_fetched == {"external-id": external_image}
 
     class _FallbackConn:
-        def getObjects(self, object_type, ids=None, obj_ids=None):
+        @staticmethod
+        def getObjects(object_type, ids=None, obj_ids=None):
             raise RuntimeError("bulk fetch unavailable")
 
-        def getObject(self, object_type, image_id):
+        @staticmethod
+        def getObject(object_type, image_id):
             assert object_type == "Image"
             if image_id == 1:
                 raise RuntimeError("transient lookup failure")
@@ -177,7 +180,8 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
     )
 
     class _BrokenProject:
-        def listChildren(self):
+        @staticmethod
+        def listChildren():
             raise RuntimeError("broken project")
 
     assert (
@@ -262,7 +266,8 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
             return list(self._used_files)
 
     class _RaisingName:
-        def getValue(self):
+        @staticmethod
+        def getValue():
             raise RuntimeError("bad image name")
 
     image_from_fileset_extension = _Image(
@@ -359,33 +364,42 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
 
 def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_logging():
     class _ObjectiveSettings:
-        def getID(self):
+        @staticmethod
+        def getID():
             raise RuntimeError("missing objective id")
 
-        def getCorrectionCollar(self):
+        @staticmethod
+        def getCorrectionCollar():
             raise RuntimeError("missing collar")
 
     class _Channel:
-        def getIndex(self):
+        @staticmethod
+        def getIndex():
             raise RuntimeError("missing index")
 
-        def getLabel(self):
+        @staticmethod
+        def getLabel():
             raise RuntimeError("missing label")
 
-        def getEmissionWave(self):
+        @staticmethod
+        def getEmissionWave():
             raise RuntimeError("missing emission")
 
-        def getExcitationWave(self):
+        @staticmethod
+        def getExcitationWave():
             return "405"
 
     class _Detector:
-        def getID(self):
+        @staticmethod
+        def getID():
             raise RuntimeError("missing detector id")
 
-        def getBinning(self):
+        @staticmethod
+        def getBinning():
             raise RuntimeError("missing binning")
 
-        def getGain(self):
+        @staticmethod
+        def getGain():
             return "1.5"
 
     class _BrokenMetadata:
@@ -393,22 +407,28 @@ def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_log
             raise RuntimeError("len failed")
 
     class _ImageWithInnerFailures:
-        def getId(self):
+        @staticmethod
+        def getId():
             return 7
 
-        def getAcquisitionDate(self):
+        @staticmethod
+        def getAcquisitionDate():
             return "2026-03-31T12:00:00"
 
-        def getObjectiveSettings(self):
+        @staticmethod
+        def getObjectiveSettings():
             return _ObjectiveSettings()
 
-        def getChannels(self):
+        @staticmethod
+        def getChannels():
             return [_Channel()]
 
-        def getDetectorSettings(self):
+        @staticmethod
+        def getDetectorSettings():
             return [_Detector()]
 
-        def loadOriginalMetadata(self):
+        @staticmethod
+        def loadOriginalMetadata():
             return _BrokenMetadata()
 
     cleaned = metadata_service.extract_acquisition_metadata(_ImageWithInnerFailures())
@@ -419,22 +439,28 @@ def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_log
     }
 
     class _ImageWithOuterFailures:
-        def getId(self):
+        @staticmethod
+        def getId():
             raise RuntimeError("missing id")
 
-        def getAcquisitionDate(self):
+        @staticmethod
+        def getAcquisitionDate():
             raise RuntimeError("no acquisition date")
 
-        def getObjectiveSettings(self):
+        @staticmethod
+        def getObjectiveSettings():
             raise RuntimeError("no objective")
 
-        def getChannels(self):
+        @staticmethod
+        def getChannels():
             raise RuntimeError("no channels")
 
-        def getDetectorSettings(self):
+        @staticmethod
+        def getDetectorSettings():
             raise RuntimeError("no detectors")
 
-        def loadOriginalMetadata(self):
+        @staticmethod
+        def loadOriginalMetadata():
             raise RuntimeError("no metadata")
 
     assert (
@@ -493,7 +519,8 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
         def save(self):
             self.saved = True
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     class _UpdateService:
@@ -524,22 +551,28 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
             c=SimpleNamespace(sf=SimpleNamespace(createRawFileStore=lambda: raw_store)),
         )
 
-        def getId(self):
+        @staticmethod
+        def getId():
             return 7
 
-        def getAcquisitionDate(self):
+        @staticmethod
+        def getAcquisitionDate():
             return _Value("x" * 260)
 
-        def getObjectiveSettings(self):
+        @staticmethod
+        def getObjectiveSettings():
             return None
 
-        def getChannels(self):
+        @staticmethod
+        def getChannels():
             return []
 
-        def getDetectorSettings(self):
+        @staticmethod
+        def getDetectorSettings():
             return []
 
-        def loadOriginalMetadata(self):
+        @staticmethod
+        def loadOriginalMetadata():
             return None
 
     cleaned = metadata_service.extract_acquisition_metadata(_ImageWithLongMetadata())

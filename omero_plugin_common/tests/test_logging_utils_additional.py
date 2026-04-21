@@ -19,10 +19,14 @@ def test_logging_utils_cover_empty_url_parse_failures_and_exception_fallbacks(
         def __init__(self):
             super().__init__("original")
 
+    exc_type, sanitized_exc, tb = None, None, None
+
     try:
         raise _UnconstructableError()
     except _UnconstructableError as exc:
         exc_type, sanitized_exc, tb = logging_utils.sanitized_exc_info(exc)
+    else:
+        raise AssertionError("Expected _UnconstructableError")
 
     assert exc_type is RuntimeError
     assert "_UnconstructableError" in str(sanitized_exc)

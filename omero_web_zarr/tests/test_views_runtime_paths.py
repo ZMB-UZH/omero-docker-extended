@@ -13,6 +13,8 @@ from django.http import HttpResponse
 from django.http import HttpResponseRedirect
 from django.test import RequestFactory
 
+from iter_test_helpers import next_or_fail
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "omeroweb.settings")
 warnings.filterwarnings(
     "ignore",
@@ -161,7 +163,7 @@ class _FakeImage:
             default_z=2,
             default_t=1,
         )
-        pixel_type = next(iter(views.PIXEL_TYPES))
+        pixel_type = next_or_fail(iter(views.PIXEL_TYPES), "pixel type registry")
         self._primary_pixels = primary_pixels or _FakePrimaryPixels(pixel_type)
         self._channels = [_FakeChannel("DNA")]
         self._color = color
@@ -207,7 +209,8 @@ class _FakeImage:
     def getPrimaryPixels(self):
         return self._primary_pixels
 
-    def getPixelsId(self):
+    @staticmethod
+    def getPixelsId():
         return 17
 
     def getPixelSizeX(self, units=True):
@@ -366,7 +369,10 @@ def test_image_chunk_pads_edge_tiles_for_non_store_pyramids(monkeypatch):
         size_x=3,
         pyramid=True,
         resolution_descriptions=[_FakeResolutionDescription(3, 3)],
-        primary_pixels=_FakePrimaryPixels(next(iter(views.PIXEL_TYPES)), tile_value=9),
+        primary_pixels=_FakePrimaryPixels(
+            next_or_fail(iter(views.PIXEL_TYPES), "pixel type registry"),
+            tile_value=9,
+        ),
     )
     monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
     monkeypatch.setattr(views, "get_safe_image_tile_size", lambda image: (2, 2))
@@ -443,7 +449,10 @@ def test_image_chunk_builds_runtime_chunk_indices_for_tcz_axes(monkeypatch):
         size_t=1,
         size_y=2,
         size_x=2,
-        primary_pixels=_FakePrimaryPixels(next(iter(views.PIXEL_TYPES)), tile_value=5),
+        primary_pixels=_FakePrimaryPixels(
+            next_or_fail(iter(views.PIXEL_TYPES), "pixel type registry"),
+            tile_value=5,
+        ),
     )
     monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
     monkeypatch.setattr(
