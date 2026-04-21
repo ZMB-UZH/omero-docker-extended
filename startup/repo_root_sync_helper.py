@@ -78,8 +78,8 @@ def _stable_prefix_matcher(raw_part: str) -> re.Pattern[str]:
 
     for match in TOKEN_PATTERN.finditer(raw_part):
         pieces.append(re.escape(raw_part[cursor : match.start()]))
-        token = match.group(0)
-        if token != "%group%":
+        placeholder = match.group(0)
+        if placeholder != "%group%":
             raise ValueError(
                 "Only %group% is allowed in stable shared-prefix template segments, "
                 f"got: {raw_part}"

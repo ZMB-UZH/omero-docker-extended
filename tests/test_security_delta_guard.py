@@ -58,6 +58,10 @@ def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
 def test_github_api_get_json_uses_https_connection(monkeypatch) -> None:
     calls = {}
 
+    monkeypatch.setattr(
+        security_delta_guard.shutil, "which", lambda command: f"/usr/bin/{command}"
+    )
+
     def fake_run(command: list[str], **kwargs):
         calls["command"] = command
         calls["kwargs"] = kwargs
@@ -77,7 +81,7 @@ def test_github_api_get_json_uses_https_connection(monkeypatch) -> None:
 
     assert payload == {"default_branch": "main"}
     assert calls["command"] == [
-        "curl",
+        "/usr/bin/curl",
         "--silent",
         "--show-error",
         "--location",

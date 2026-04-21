@@ -87,10 +87,10 @@ def ensure_command_available(command: str) -> str:
 
 def ensure_node_version(manifest: dict[str, object]) -> None:
     """Verify that host Node.js is present and recent enough for the pinned tools."""
-    ensure_command_available("node")
+    node_bin = ensure_command_available("node")
     ensure_command_available("npm")
     node_version = subprocess.run(
-        ["node", "--version"],
+        [node_bin, "--version"],
         check=True,
         capture_output=True,
         text=True,
@@ -139,10 +139,11 @@ def ensure_tooling(tool_dir: Path, manifest: dict[str, object]) -> Path:
     package_lock = tool_dir / "package-lock.json"
     node_modules = tool_dir / "node_modules"
     if package_changed or not package_lock.exists() or not node_modules.exists():
+        npm_bin = ensure_command_available("npm")
         install_env = os.environ.copy()
         install_env.setdefault("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")
         subprocess.run(
-            ["npm", "install", "--no-audit", "--no-fund", "--loglevel=error"],
+            [npm_bin, "install", "--no-audit", "--no-fund", "--loglevel=error"],
             cwd=tool_dir,
             env=install_env,
             check=True,

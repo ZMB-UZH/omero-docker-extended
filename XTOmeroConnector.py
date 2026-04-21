@@ -161,7 +161,7 @@ def _iter_imaris_executable_candidates():
                     value, _ = winreg_module.QueryValueEx(key, None)
                 if value:
                     yield from _yield_candidate(value)
-            except Exception:
+            except (OSError, ValueError):
                 continue
 
     base_dirs = [

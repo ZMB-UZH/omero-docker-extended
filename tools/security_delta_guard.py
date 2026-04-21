@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -593,10 +594,16 @@ def github_api_get_json(api_path: str, token: str) -> Any:
     if not api_path.startswith("/"):
         raise ValueError(f"GitHub API path must start with '/': {api_path!r}")
 
+    curl_bin = shutil.which("curl")
+    if curl_bin is None:
+        raise RuntimeError(
+            "GitHub API request failed: required executable 'curl' is not available."
+        )
+
     try:
         result = subprocess.run(
             [
-                "curl",
+                curl_bin,
                 "--silent",
                 "--show-error",
                 "--location",
