@@ -10,7 +10,10 @@ if [[ "${use_celery}" != "true" ]]; then
 fi
 
 # Find venv dynamically - same method as Dockerfile uses
-venv_dir="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"
+venv_dir=""
+if [[ -d /opt/omero/web ]]; then
+    venv_dir="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' -print | sort -V | tail -n 1)"
+fi
 
 if [[ -z "${venv_dir}" || ! -d "${venv_dir}" ]]; then
     # Fallback to env variable
@@ -51,9 +54,7 @@ echo "=========================================="
 
 # Test the import before starting the worker
 echo "Testing task import..."
-"${venv_dir}/bin/python" -c "from omeroweb_imaris_connector.tasks import run_ims_export_task; print('Task import OK:', run_ims_export_task.name)"
-
-if [[ $? -ne 0 ]]; then
+if ! "${venv_dir}/bin/python" -c "from omeroweb_imaris_connector.tasks import run_ims_export_task; print('Task import OK:', run_ims_export_task.name)"; then
     echo "ERROR: Failed to import Celery tasks" >&2
     exit 1
 fi

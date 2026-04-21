@@ -69,7 +69,8 @@ def test_celery_app_builds_configured_celery_instance(monkeypatch):
             }
             self.conf = {}
 
-        def autodiscover_tasks(self, packages, force=False):
+        @staticmethod
+        def autodiscover_tasks(packages, force=False):
             created["autodiscover"] = {"packages": packages, "force": force}
 
     monkeypatch.setattr(
@@ -114,7 +115,8 @@ def test_tasks_module_registers_and_runs_scope_sync_task(monkeypatch):
     decorated = {}
 
     class _FakeApp:
-        def task(self, **kwargs):
+        @staticmethod
+        def task(**kwargs):
             def _decorator(func):
                 decorated["kwargs"] = kwargs
                 return func

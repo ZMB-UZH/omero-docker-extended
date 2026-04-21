@@ -100,12 +100,14 @@ class _AdminService:
     def lookupGroups(self):
         return list(self._groups)
 
-    def containedGroups(self, identifier=None, *_args):
+    def containedGroups(self, *args):
+        identifier = args[0] if args else None
         if identifier is None:
             return list(self._groups)
         return list(self._groups_by_user.get(int(identifier), []))
 
-    def containedExperimenters(self, identifier=None, *_args):
+    def containedExperimenters(self, *args):
+        identifier = args[0] if args else None
         if identifier is None:
             return list(self._users)
         return list(self._users_by_group.get(int(identifier), []))
@@ -360,18 +362,24 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
     )
 
     class _SparseAdminService:
-        def lookupExperimenters(self):
+        @staticmethod
+        def lookupExperimenters():
             return [missing_user]
 
-        def lookupGroups(self):
+        @staticmethod
+        def lookupGroups():
             return [unnamed_group, valid_group]
 
-        def containedGroups(self, identifier=None, *_args):
+        @staticmethod
+        def containedGroups(*args):
+            identifier = args[0] if args else None
             if identifier == 3:
                 return [SimpleNamespace(getName=lambda: _Value(""))]
             return []
 
-        def containedExperimenters(self, identifier=None, *_args):
+        @staticmethod
+        def containedExperimenters(*args):
+            identifier = args[0] if args else None
             if identifier == 23:
                 return [username_less_user]
             return []
@@ -429,13 +437,16 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
 
 def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypatch):
     class _TextPermission:
-        def isGroupRead(self):
+        @staticmethod
+        def isGroupRead():
             raise RuntimeError("bad read")
 
-        def isGroupWrite(self):
+        @staticmethod
+        def isGroupWrite():
             raise RuntimeError("bad write")
 
-        def isGroupAnnotate(self):
+        @staticmethod
+        def isGroupAnnotate():
             raise RuntimeError("bad annotate")
 
         def __str__(self):
@@ -446,10 +457,12 @@ def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypa
     )
 
     class _CallableListingService:
-        def lookupGroups(self, *_args):
+        @staticmethod
+        def lookupGroups(*_args):
             return [_Group(12, "users_rw", _Permissions("rwrw--", group_write=True))]
 
-        def containedGroups(self, *_args):
+        @staticmethod
+        def containedGroups(*_args):
             raise TypeError("wrong signature")
 
     monkeypatch.setattr(

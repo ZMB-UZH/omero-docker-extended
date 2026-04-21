@@ -126,7 +126,8 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
     assert derived == {"image.png": ["note.txt"]}
 
     class _BrokenValue:
-        def getValue(self):
+        @staticmethod
+        def getValue():
             raise RuntimeError("boom")
 
         def __str__(self):
@@ -171,7 +172,8 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
     class _BrokenLength:
         val = None
 
-        def getValue(self):
+        @staticmethod
+        def getValue():
             raise RuntimeError("bad value")
 
     assert core_functions._native_zarr_length_signature(_BrokenLength()) is None

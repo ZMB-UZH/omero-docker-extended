@@ -89,10 +89,12 @@ def _install_import_stubs() -> None:
         def __init__(self, *args, **kwargs):
             pass
 
-        def acquire(self):
+        @staticmethod
+        def acquire():
             return None
 
-        def release(self):
+        @staticmethod
+        def release():
             return None
 
     class LockException(Exception):
@@ -106,10 +108,12 @@ def _install_import_stubs() -> None:
         omero_module = types.ModuleType("omero")
 
         class _DummyClient:
-            def createSession(self, *args, **kwargs):
+            @staticmethod
+            def createSession(*args, **kwargs):
                 return None
 
-            def closeSession(self):
+            @staticmethod
+            def closeSession():
                 return None
 
         omero_module.client = lambda *args, **kwargs: _DummyClient()
@@ -355,7 +359,8 @@ class OmpPluginViewRegressionTests(TestCase):
     def tearDown(self) -> None:
         _restore_module_state(self._module_snapshot)
 
-    def _make_request(self, method: str = "POST", payload: dict | None = None):
+    @staticmethod
+    def _make_request(method: str = "POST", payload: dict | None = None):
         body = json.dumps(payload or {}).encode("utf-8")
         return types.SimpleNamespace(
             method=method,
@@ -365,7 +370,8 @@ class OmpPluginViewRegressionTests(TestCase):
             _dont_enforce_csrf_checks=True,
         )
 
-    def _make_form_request(self, method: str = "POST", post: dict | None = None):
+    @staticmethod
+    def _make_form_request(method: str = "POST", post: dict | None = None):
         return types.SimpleNamespace(
             method=method,
             POST=post or {},

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import ast
 import inspect
 from pathlib import Path
@@ -645,7 +647,7 @@ def test_tools_task_wiring_avoids_service_task_import_cycle():
     }
     assert task_name_imported_names == {"ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME"}
 
-    task_func = next(
+    task_func = next_or_fail(
         node
         for node in module.body
         if isinstance(node, ast.FunctionDef)

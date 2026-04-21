@@ -20,7 +20,8 @@ class DockerBuildxCompressedPushScriptTests(unittest.TestCase):
             cls.repo_root / "installation" / "docker_buildx_compressed_push.sh"
         )
 
-    def _create_fake_docker(self, bin_dir: Path, log_path: Path) -> None:
+    @staticmethod
+    def _create_fake_docker(bin_dir: Path, log_path: Path) -> None:
         fake_docker_path = bin_dir / "docker"
         fake_docker_path.write_text(
             """#!/usr/bin/env bash

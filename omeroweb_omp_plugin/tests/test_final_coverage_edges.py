@@ -69,10 +69,12 @@ class _ExplodingFormatImage:
     def getFileset(self):
         raise RuntimeError("format failure")
 
-    def getId(self):
+    @staticmethod
+    def getId():
         return _Value(1)
 
-    def getName(self):
+    @staticmethod
+    def getName():
         return "sample.tif"
 
 
@@ -148,7 +150,8 @@ def test_annotation_and_image_services_cover_remaining_nonfatal_edge_paths(
     class _NamedValueWithBrokenGetter:
         name = _Value("alpha")
 
-        def getValue(self):
+        @staticmethod
+        def getValue():
             raise RuntimeError("value unavailable")
 
     map_ann = SimpleNamespace(
@@ -218,7 +221,8 @@ def test_index_view_covers_remaining_group_helper_and_action_guard_edges(monkeyp
         def getMemberCount(self):
             return self._member_count
 
-        def getId(self):
+        @staticmethod
+        def getId():
             return _Value(1)
 
     blank_group = _Group(None, member_count=1)

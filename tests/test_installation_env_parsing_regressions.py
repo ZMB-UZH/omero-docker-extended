@@ -55,7 +55,8 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
 
         return source_text[start:end]
 
-    def _write_executable(self, path: Path, content: str) -> None:
+    @staticmethod
+    def _write_executable(path: Path, content: str) -> None:
         path.write_text(content, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 

@@ -73,10 +73,14 @@ def test_sanitize_url_for_logging_redacts_userinfo() -> None:
 
 
 def test_sanitized_exc_info_escapes_exception_message() -> None:
+    exc_type, sanitized_exc, tb = None, None, None
+
     try:
         raise RuntimeError("secret\nline")
     except RuntimeError as exc:
         exc_type, sanitized_exc, tb = logging_utils.sanitized_exc_info(exc)
+    else:
+        raise AssertionError("Expected RuntimeError")
 
     assert exc_type is RuntimeError
     assert str(sanitized_exc) == "secret\\\\nline"

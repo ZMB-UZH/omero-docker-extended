@@ -21,7 +21,8 @@ class _SearchCursor:
             return (3,)
         return None
 
-    def fetchall(self):
+    @staticmethod
+    def fetchall():
         return [
             (
                 17,
@@ -79,7 +80,8 @@ class _SettingsCursor:
     def fetchone(self):
         return self.rows.pop(0) if self.rows else None
 
-    def fetchall(self):
+    @staticmethod
+    def fetchall():
         return []
 
     def __enter__(self):
@@ -118,7 +120,8 @@ def test_connect_does_not_wrap_exceptions_raised_inside_with_block(monkeypatch):
     credential_value = "-".join(("db", "credential", "placeholder"))
 
     class _FakeConn:
-        def close(self):
+        @staticmethod
+        def close():
             closed.append(True)
 
     class _FakePsycopg:

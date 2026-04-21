@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import logging
 import subprocess
 import types
@@ -564,7 +566,8 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
                 setPhysicalSizeX=lambda value: self._storage.__setitem__("x", value)
             )
 
-        def getPhysicalSizeX(self):
+        @staticmethod
+        def getPhysicalSizeX():
             return None
 
     class _Image:
@@ -585,7 +588,8 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
             self.closed = False
             self._calls = {}
 
-        def getUpdateService(self):
+        @staticmethod
+        def getUpdateService():
             return types.SimpleNamespace(
                 saveAndReturnObject=lambda obj: update_saves.append(obj) or obj
             )
@@ -617,7 +621,8 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
         def __init__(self):
             self.closed = False
 
-        def suConn(self, username):
+        @staticmethod
+        def suConn(username):
             assert username == "alice"
             return conn
 
@@ -857,7 +862,7 @@ def test_mark_failed_job_for_deferred_cleanup_reports_partial_failures(
     monkeypatch.setattr(
         core_functions,
         "safe_mark_path_for_deferred_cleanup",
-        lambda *args, **kwargs: next(results),
+        lambda *args, **kwargs: next_or_fail(results),
     )
 
     assert core_functions._mark_failed_job_for_deferred_cleanup("f" * 32) is False
@@ -884,7 +889,8 @@ def test_open_service_connection_handles_group_override_and_connect_failures(
         def close(self):
             self.closed = True
 
-        def getLastError(self):
+        @staticmethod
+        def getLastError():
             return "boom"
 
     success_conn = _Conn()
@@ -1331,7 +1337,8 @@ def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions
     events = []
 
     class _OldConn:
-        def close(self):
+        @staticmethod
+        def close():
             events.append("old-close")
 
     class _NewConn:
@@ -1397,7 +1404,8 @@ def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions
     assert core_functions._reconnect_session("session", "omeroserver", 4064) is None
 
     class _ExplodingOldConn:
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("stale close exploded")
 
     class _ExplodingInvalidConn(_NewConn):
@@ -1665,7 +1673,8 @@ def test_start_import_thread_requires_ready_state_and_persistence(monkeypatch):
         def __init__(self, *, target, args, daemon):
             thread_targets.append((target, args, daemon))
 
-        def start(self):
+        @staticmethod
+        def start():
             events.append("thread-started")
 
     job = {"job_id": "a" * 32, "status": "checking"}

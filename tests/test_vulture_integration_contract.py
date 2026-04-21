@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 from pathlib import Path, PurePosixPath
 from unittest import TestCase, main, mock
 
@@ -52,7 +54,9 @@ class VultureIntegrationContractTests(TestCase):
             "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405",
             uses_values,
         )
-        setup_step = next(step for step in steps if step.get("name") == "Setup Python")
+        setup_step = next_or_fail(
+            step for step in steps if step.get("name") == "Setup Python"
+        )
         self.assertEqual("3.14.4", setup_step["with"]["python-version"])
         self.assertEqual("pip", setup_step["with"]["cache"])
         self.assertEqual(

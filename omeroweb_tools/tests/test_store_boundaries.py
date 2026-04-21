@@ -90,10 +90,10 @@ def test_psycopg_loaders_cover_success_cache_and_missing_driver(monkeypatch):
     monkeypatch.setattr(store, "_psycopg2_sql", None)
     original_import = builtins.__import__
 
-    def _missing_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def _missing_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):
         if name == "psycopg2":
             raise ImportError("missing driver")
-        return original_import(name, globals, locals, fromlist, level)
+        return original_import(name, global_vars, local_vars, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", _missing_import)
 
@@ -140,12 +140,14 @@ def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
     monkeypatch.setattr(store, "_load_psycopg2", lambda: (_FailingPsycopg(), None))
     monkeypatch.setattr(store, "_db_params", lambda: {"dbname": "plugin-db"})
 
-    with pytest.raises(
-        store.EnhancedSearchStoreError,
-        match="Enhanced-search database operation failed.",
+    with (
+        pytest.raises(
+            store.EnhancedSearchStoreError,
+            match="Enhanced-search database operation failed.",
+        ),
+        store.connect(),
     ):
-        with store.connect():
-            pass
+        pass
 
     monkeypatch.setattr(
         store,
@@ -157,12 +159,15 @@ def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
         "_db_params",
         lambda: (_ for _ in ()).throw(store.EnhancedSearchStoreError("driver missing")),
     )
-    with pytest.raises(store.EnhancedSearchStoreError, match="driver missing"):
-        with store.connect():
-            pass
+    with (
+        pytest.raises(store.EnhancedSearchStoreError, match="driver missing"),
+        store.connect(),
+    ):
+        pass
 
     class _BadCloseConn:
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close boom")
 
     class _OkPsycopg:

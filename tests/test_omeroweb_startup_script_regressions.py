@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import json
 import os
 import stat
@@ -23,7 +25,8 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
         )
         cls.cleanprevious_script = cls.repo_root / "startup" / "98-cleanprevious.sh"
 
-    def _make_fake_omero(self, workspace: Path) -> tuple[Path, Path]:
+    @staticmethod
+    def _make_fake_omero(workspace: Path) -> tuple[Path, Path]:
         calls_file = workspace / "omero-calls.log"
         fake_omero = workspace / "omero"
         fake_omero.write_text(
@@ -35,7 +38,8 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
         fake_omero.chmod(fake_omero.stat().st_mode | stat.S_IXUSR)
         return fake_omero, calls_file
 
-    def _make_fake_python_validator(self, workspace: Path) -> tuple[Path, Path]:
+    @staticmethod
+    def _make_fake_python_validator(workspace: Path) -> tuple[Path, Path]:
         calls_file = workspace / "python-calls.log"
         fake_python = workspace / "python3"
         fake_python.write_text(
@@ -192,12 +196,12 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             )
 
             calls = calls_file.read_text(encoding="utf-8").splitlines()
-            apps_call = next(
+            apps_call = next_or_fail(
                 call
                 for call in calls
                 if call.startswith("config set -- omero.web.apps ")
             )
-            top_links_call = next(
+            top_links_call = next_or_fail(
                 call
                 for call in calls
                 if call.startswith("config set -- omero.web.ui.top_links ")

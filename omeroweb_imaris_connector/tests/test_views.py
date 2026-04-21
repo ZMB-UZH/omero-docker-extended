@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import json
 import django
 import logging
@@ -312,7 +314,7 @@ def test_imaris_export_sync_paths_cover_missing_script_wait_override_and_unknown
         lambda job_id: ("RUNNING", None, None, None),
     )
     time_values = iter([0.0, 0.0, views.EXPORT_TIMEOUT + 1.0])
-    monkeypatch.setattr(views.time, "time", lambda: next(time_values))
+    monkeypatch.setattr(views.time, "time", lambda: next_or_fail(time_values))
     monkeypatch.setattr(views.time, "sleep", lambda *_args: None)
     unknown_state = views.imaris_export(unknown_state_request, conn=SimpleNamespace())
     assert unknown_state.status_code == 504
@@ -497,7 +499,9 @@ def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
             ("FAILED", None, None, None),
         ]
     )
-    monkeypatch.setattr(views, "_poll_celery_job", lambda job_id: next(poll_results))
+    monkeypatch.setattr(
+        views, "_poll_celery_job", lambda job_id: next_or_fail(poll_results)
+    )
     failed = views.imaris_export(failing_request, conn=SimpleNamespace())
     assert failed.status_code == 500
     assert failed.content.decode("utf-8") == views.IMS_EXPORT_JOB_FAILED_MESSAGE
@@ -653,7 +657,7 @@ def test_imaris_export_rejects_missing_image_invalid_image_no_celery_and_timeout
         lambda job_id: ("RUNNING", None, None, {"status": "running"}),
     )
     time_values = iter([0.0, 0.0, views.EXPORT_TIMEOUT + 1.0])
-    monkeypatch.setattr(views.time, "time", lambda: next(time_values))
+    monkeypatch.setattr(views.time, "time", lambda: next_or_fail(time_values))
     monkeypatch.setattr(views.time, "sleep", lambda *_args: None)
     assert (
         views.imaris_export(timeout_request, conn=SimpleNamespace()).status_code == 504

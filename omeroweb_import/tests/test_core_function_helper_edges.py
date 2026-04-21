@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import stat
 from pathlib import Path
 from types import SimpleNamespace
@@ -78,13 +80,16 @@ def test_identity_owner_and_permission_helpers_cover_edge_failures(monkeypatch) 
     )
 
     class _FallbackOwner:
-        def getOmeName(self):
+        @staticmethod
+        def getOmeName():
             raise RuntimeError("ome name exploded")
 
-        def getName(self):
+        @staticmethod
+        def getName():
             return SimpleNamespace(val="")
 
-        def getFirstName(self):
+        @staticmethod
+        def getFirstName():
             return SimpleNamespace(val="")
 
     monkeypatch.setattr(core_functions, "_get_id", lambda owner: 42)
@@ -187,16 +192,19 @@ def test_dataset_and_native_zarr_helpers_cover_unhappy_paths(
     class _LengthWithRawFallback:
         val = "2.5"
 
-        def getValue(self):
+        @staticmethod
+        def getValue():
             raise RuntimeError("value exploded")
 
-        def getUnit(self):
+        @staticmethod
+        def getUnit():
             raise RuntimeError("unit exploded")
 
     class _BadLength:
         val = "not-a-number"
 
-        def getValue(self):
+        @staticmethod
+        def getValue():
             raise RuntimeError("value exploded")
 
     assert core_functions._native_zarr_length_signature(_LengthWithRawFallback()) == (
@@ -319,13 +327,13 @@ def test_background_import_session_covers_missing_error_and_cleanup_paths(
     closed = []
 
     class _SessionService:
-        def createSessionWithTimeouts(
-            self, principal, user_timeout_ms, group_timeout_ms
-        ):
+        @staticmethod
+        def createSessionWithTimeouts(principal, user_timeout_ms, group_timeout_ms):
             created.append((principal, user_timeout_ms, group_timeout_ms))
             return SimpleNamespace(getUuid=lambda: _Value("background-session"))
 
-        def closeSession(self, session):
+        @staticmethod
+        def closeSession(session):
             closed.append(session)
             raise RuntimeError("close exploded")
 
@@ -501,7 +509,8 @@ def test_script_service_helpers_cover_deduping_and_selection() -> None:
     ]
 
     class _WorkingService:
-        def getScripts(self):
+        @staticmethod
+        def getScripts():
             return preferred_scripts
 
     conn = SimpleNamespace(
@@ -571,7 +580,7 @@ def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_p
     monkeypatch.setattr(core_functions, "_get_script_start_retry_seconds", lambda: 0)
 
     now_values = iter([100.0, 100.0, 100.0, 100.0])
-    monkeypatch.setattr(core_functions.time, "time", lambda: next(now_values))
+    monkeypatch.setattr(core_functions.time, "time", lambda: next_or_fail(now_values))
     sleeps = []
     monkeypatch.setattr(
         core_functions.time, "sleep", lambda seconds: sleeps.append(seconds)
@@ -597,7 +606,7 @@ def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_p
     def _run(cmd, **kwargs):
         attempted_cmds.append(cmd)
         attempted_envs.append(kwargs["env"])
-        return next(results)
+        return next_or_fail(results)
 
     monkeypatch.setattr(core_functions.subprocess, "run", _run)
 
@@ -670,7 +679,8 @@ def test_background_user_connection_with_session_key(monkeypatch) -> None:
     closed = {"count": 0}
 
     class FakeConn:
-        def close(self):
+        @staticmethod
+        def close():
             closed["count"] += 1
 
     monkeypatch.setattr(
@@ -707,7 +717,8 @@ def test_background_user_connection_with_session_key_close_fails(
     """_background_user_connection logs warning when connection close raises."""
 
     class FakeConn:
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     monkeypatch.setattr(
@@ -730,7 +741,8 @@ def test_background_user_connection_without_session_key(monkeypatch) -> None:
     closed = {"count": 0}
 
     class FakeConn:
-        def close(self):
+        @staticmethod
+        def close():
             closed["count"] += 1
 
     @contextmanager
@@ -761,7 +773,8 @@ def test_background_user_connection_without_session_key_close_fails(
     from contextlib import contextmanager
 
     class FakeConn:
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     @contextmanager

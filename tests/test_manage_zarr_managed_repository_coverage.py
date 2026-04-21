@@ -522,13 +522,16 @@ def test_manage_script_handles_prefix_not_directory_and_main_entrypoint(
     output_calls = []
 
     class _Client:
-        def getInputs(self, unwrap=True):
+        @staticmethod
+        def getInputs(unwrap=True):
             return {}
 
-        def setOutput(self, key, value):
+        @staticmethod
+        def setOutput(key, value):
             output_calls.append((key, value))
 
-        def closeSession(self):
+        @staticmethod
+        def closeSession():
             output_calls.append(("closed", True))
 
     omero_module = types.ModuleType("omero")

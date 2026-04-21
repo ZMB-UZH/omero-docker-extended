@@ -297,7 +297,8 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
     deleted_link_ids = set()
 
     class _FakeQueryService:
-        def projection(self, hql, params, service_opts=None):
+        @staticmethod
+        def projection(hql, params, service_opts=None):
             if "where l.parent.id = :iid and a.ns = :ns" in hql:
                 return [[_Value(1)], [_Value(2)], [_Value(3)]]
             if "join a.mapValue mv" in hql and "where a.id = :aid" in hql:
@@ -404,7 +405,8 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
             self.link_id = value.getValue() if hasattr(value, "getValue") else value
 
     class _QueryService:
-        def projection(self, hql, params, service_opts=None):
+        @staticmethod
+        def projection(hql, params, service_opts=None):
             if "where l.child.id = :aid" in hql:
                 aid = params.values["aid"].getValue()
                 return [] if aid in deleted_annotation_ids else [[_Value(401)]]
@@ -483,7 +485,8 @@ def test_annotation_query_helpers_cover_invalid_inputs_and_legacy_controls(monke
     invalid_marker_ann = _MapAnnotation(10, {"alpha": "1", HASH_KEY: "not-plugin"})
 
     class _QueryService:
-        def projection(self, hql, params, service_opts=None):
+        @staticmethod
+        def projection(hql, params, service_opts=None):
             if "where l.parent.id = :iid and a.ns = :ns" in hql:
                 return [[_Value(4)], [_Value(5)]]
             if "join a.mapValue mv" in hql and "where a.id = :aid" in hql:
@@ -535,7 +538,8 @@ def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annota
     deleted = []
 
     class _QueryService:
-        def projection(self, hql, params, service_opts=None):
+        @staticmethod
+        def projection(hql, params, service_opts=None):
             if "where l.child.id = :aid" in hql:
                 aid = params.values["aid"].getValue()
                 return [[_Value(link_id)] for link_id in lingering_links.get(aid, [])]
@@ -544,7 +548,8 @@ def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annota
             raise AssertionError(f"Unexpected HQL: {hql}")
 
     class _UpdateService:
-        def deleteObject(self, obj):
+        @staticmethod
+        def deleteObject(obj):
             deleted.append(obj)
 
     conn = SimpleNamespace(
@@ -659,19 +664,23 @@ class _FakeImageForMetadata:
         )
         self._obj = "image-obj"
 
-    def getId(self):
+    @staticmethod
+    def getId():
         return 99
 
-    def getAcquisitionDate(self):
+    @staticmethod
+    def getAcquisitionDate():
         return _Value("2026-03-20T09:10:11")
 
-    def getObjectiveSettings(self):
+    @staticmethod
+    def getObjectiveSettings():
         return SimpleNamespace(
             getID=lambda: _Value(7),
             getCorrectionCollar=lambda: _Value(0.17),
         )
 
-    def getChannels(self):
+    @staticmethod
+    def getChannels():
         return [
             SimpleNamespace(
                 getIndex=lambda: 0,
@@ -681,7 +690,8 @@ class _FakeImageForMetadata:
             )
         ]
 
-    def getDetectorSettings(self):
+    @staticmethod
+    def getDetectorSettings():
         return [
             SimpleNamespace(
                 getID=lambda: _Value(3),
@@ -690,7 +700,8 @@ class _FakeImageForMetadata:
             )
         ]
 
-    def loadOriginalMetadata(self):
+    @staticmethod
+    def loadOriginalMetadata():
         return (
             1,
             [("Exposure", "100ms"), ("LongNote", "X" * 260)],
@@ -820,13 +831,15 @@ def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
     fetched = {1: image_one, 2: image_two}
 
     class _FetchConn:
-        def getObjects(self, object_type, ids=None, obj_ids=None):
+        @staticmethod
+        def getObjects(object_type, ids=None, obj_ids=None):
             assert object_type == "Image"
             if ids is not None:
                 raise TypeError("legacy backend")
             raise RuntimeError("bulk lookup failed")
 
-        def getObject(self, object_type, image_id):
+        @staticmethod
+        def getObject(object_type, image_id):
             assert object_type == "Image"
             return fetched.get(image_id)
 
@@ -899,19 +912,23 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
             )
             self._obj = "image-obj"
 
-        def getId(self):
+        @staticmethod
+        def getId():
             return 101
 
-        def getAcquisitionDate(self):
+        @staticmethod
+        def getAcquisitionDate():
             return "2026-03-21T10:11:12"
 
-        def getObjectiveSettings(self):
+        @staticmethod
+        def getObjectiveSettings():
             return SimpleNamespace(
                 getID=lambda: "OBJ-7",
                 getCorrectionCollar=lambda: 0.20,
             )
 
-        def getChannels(self):
+        @staticmethod
+        def getChannels():
             return [
                 SimpleNamespace(
                     getIndex=lambda: (_ for _ in ()).throw(RuntimeError("no index")),
@@ -929,7 +946,8 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
                 ),
             ]
 
-        def getDetectorSettings(self):
+        @staticmethod
+        def getDetectorSettings():
             return [
                 SimpleNamespace(
                     getID=lambda: (_ for _ in ()).throw(
@@ -940,7 +958,8 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
                 )
             ]
 
-        def loadOriginalMetadata(self):
+        @staticmethod
+        def loadOriginalMetadata():
             return (
                 1,
                 [("Exposure", 100), ("OnlyKey",), None],
@@ -965,22 +984,28 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
 def test_extract_acquisition_metadata_returns_empty_when_sections_raise():
     class _BrokenImage:
-        def getId(self):
+        @staticmethod
+        def getId():
             return 202
 
-        def getAcquisitionDate(self):
+        @staticmethod
+        def getAcquisitionDate():
             raise RuntimeError("date failed")
 
-        def getObjectiveSettings(self):
+        @staticmethod
+        def getObjectiveSettings():
             raise RuntimeError("objective failed")
 
-        def getChannels(self):
+        @staticmethod
+        def getChannels():
             raise RuntimeError("channels failed")
 
-        def getDetectorSettings(self):
+        @staticmethod
+        def getDetectorSettings():
             raise RuntimeError("detectors failed")
 
-        def loadOriginalMetadata(self):
+        @staticmethod
+        def loadOriginalMetadata():
             raise RuntimeError("metadata failed")
 
     assert metadata_service.extract_acquisition_metadata(_BrokenImage()) == {}
@@ -1081,14 +1106,16 @@ def test_image_service_collectors_and_format_detection(monkeypatch):
     project = _FakeProject([ds1, ds2, ds_other_owner])
 
     class _FakeConn:
-        def getObjects(self, kind, ids=None, obj_ids=None):
+        @staticmethod
+        def getObjects(kind, ids=None, obj_ids=None):
             if ids is not None:
                 raise TypeError("legacy gateway")
             if obj_ids is not None:
                 raise RuntimeError("bulk fetch unavailable")
             return []
 
-        def getObject(self, kind, object_id):
+        @staticmethod
+        def getObject(kind, object_id):
             if kind == "Project":
                 return project if object_id == 77 else None
             return images.get(object_id)

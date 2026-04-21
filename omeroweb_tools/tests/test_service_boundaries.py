@@ -193,11 +193,13 @@ def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
     assert service.ensure_scope_state(()) == []
 
     class _WrappedId:
-        def getValue(self):
+        @staticmethod
+        def getValue():
             return 21
 
     class _User:
-        def getId(self):
+        @staticmethod
+        def getId():
             return _WrappedId()
 
     assert service._current_user_id(SimpleNamespace(getUser=lambda: _User())) == 21
@@ -364,7 +366,8 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
     class _BrokenDatasetHit:
         OMERO_CLASS = "Dataset"
 
-        def listChildren(self):
+        @staticmethod
+        def listChildren():
             raise RuntimeError("boom")
 
     class _UnknownHit:
@@ -434,7 +437,8 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
         def __init__(self):
             self.calls = 0
 
-        def searchObjects(self, object_types, fulltext_query, **kwargs):
+        @staticmethod
+        def searchObjects(object_types, fulltext_query, **kwargs):
             retry_calls.append(kwargs["searchGroup"])
             raise RuntimeError("still failing")
 
@@ -493,19 +497,22 @@ def test_image_helpers_owner_context_and_document_conversion(monkeypatch):
     class _DatasetHit:
         OMERO_CLASS = "Dataset"
 
-        def listChildren(self):
+        @staticmethod
+        def listChildren():
             return ["image-a"]
 
     class _ProjectHit:
         OMERO_CLASS = "Project"
 
-        def listChildren(self):
+        @staticmethod
+        def listChildren():
             return [SimpleNamespace(listChildren=lambda: ["image-b"])]
 
     class _BrokenProjectHit:
         OMERO_CLASS = "Project"
 
-        def listChildren(self):
+        @staticmethod
+        def listChildren():
             raise RuntimeError("boom")
 
     image_hit = _ImageHit()
@@ -759,9 +766,11 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
     monkeypatch,
 ):
     monkeypatch.delenv("ROOTPASS", raising=False)
-    with pytest.raises(RuntimeError, match="ROOTPASS is missing"):
-        with service._root_connection():
-            pass
+    with (
+        pytest.raises(RuntimeError, match="ROOTPASS is missing"),
+        service._root_connection(),
+    ):
+        pass
 
     monkeypatch.setenv("ROOTPASS", "root-auth-value")
     monkeypatch.setattr(
@@ -777,13 +786,16 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
         def __init__(self, *args, **kwargs):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
-        def connect(self):
+        @staticmethod
+        def connect():
             return False
 
     monkeypatch.setattr(service, "BlitzGateway", _FailingGateway)
-    with pytest.raises(RuntimeError, match="Failed to connect as root"):
-        with service._root_connection():
-            pass
+    with (
+        pytest.raises(RuntimeError, match="Failed to connect as root"),
+        service._root_connection(),
+    ):
+        pass
 
     closed = []
 
@@ -793,10 +805,12 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
                 setOmeroGroup=lambda value: (_ for _ in ()).throw(RuntimeError("boom"))
             )
 
-        def connect(self):
+        @staticmethod
+        def connect():
             return True
 
-        def close(self):
+        @staticmethod
+        def close():
             closed.append(True)
             raise RuntimeError("close boom")
 
@@ -859,12 +873,14 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
 
     error_calls = []
 
-    @contextmanager
-    def _failing_root_connection():
-        raise RuntimeError("boom")
-        yield object()
+    class _FailingRootConnection:
+        def __enter__(self):
+            raise RuntimeError("boom")
 
-    monkeypatch.setattr(service, "_root_connection", _failing_root_connection)
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(service, "_root_connection", lambda: _FailingRootConnection())
     monkeypatch.setattr(
         service,
         "mark_sync_error",
@@ -990,7 +1006,8 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
                 }
             )
 
-        def start(self):
+        @staticmethod
+        def start():
             started.append("started")
 
     monkeypatch.setattr(service.threading, "Thread", _FakeThread)

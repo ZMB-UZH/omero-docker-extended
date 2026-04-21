@@ -11,15 +11,18 @@ from omeroweb_omp_plugin.views import job_view, variable_set_view
 
 
 class _LockStub:
-    def acquire(self):
+    @staticmethod
+    def acquire():
         return None
 
-    def release(self):
+    @staticmethod
+    def release():
         return None
 
 
 class _ImageStub:
-    def getName(self):
+    @staticmethod
+    def getName():
         return "image.ome.tif"
 
 

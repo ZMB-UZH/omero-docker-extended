@@ -1006,7 +1006,7 @@ def confirm_import(request, job_id, conn=None, url=None, **kwargs):
             sanitize_log_value(job_id),
         )
         return json_error(errors.unable_update_upload_job_state(), status=500)
-    prepared_job, prep_error = _prepare_ready_job_for_import_start(job_id, job, conn)
+    _prepared_job, prep_error = _prepare_ready_job_for_import_start(job_id, job, conn)
     if prep_error:
         return _import_internal_error_response(
             job_id,

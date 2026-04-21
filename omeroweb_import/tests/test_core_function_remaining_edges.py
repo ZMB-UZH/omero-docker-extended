@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import errno
 from pathlib import Path
 from types import SimpleNamespace
@@ -389,7 +391,8 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
         def suConn(self, username):
             return self._conn
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("admin close exploded")
 
     monkeypatch.setattr(
@@ -410,10 +413,12 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
     group_calls = []
 
     class _UpdateService:
-        def saveAndReturnObject(self, dataset, opts):
+        @staticmethod
+        def saveAndReturnObject(dataset, opts):
             raise RuntimeError("save failed")
 
-        def saveObject(self, link, opts):
+        @staticmethod
+        def saveObject(link, opts):
             group_calls.append(("linked", link, opts))
 
     class _DatasetConn:
@@ -422,10 +427,12 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
                 setOmeroGroup=lambda value: group_calls.append(("group", value))
             )
 
-        def getUpdateService(self):
+        @staticmethod
+        def getUpdateService():
             return _UpdateService()
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("dataset close exploded")
 
     monkeypatch.setattr(
@@ -468,10 +475,12 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
                 raise self._connect_result
             return self._connect_result
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close exploded")
 
-        def getLastError(self):
+        @staticmethod
+        def getLastError():
             return "last-error"
 
     connect_attempts = iter(
@@ -484,7 +493,7 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
     monkeypatch.setattr(
         core_functions,
         "BlitzGateway",
-        lambda *args, **kwargs: next(connect_attempts),
+        lambda *args, **kwargs: next_or_fail(connect_attempts),
     )
 
     monkeypatch.setattr(

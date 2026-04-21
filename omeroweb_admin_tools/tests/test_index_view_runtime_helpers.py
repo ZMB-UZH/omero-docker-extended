@@ -442,10 +442,12 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
         def __init__(self, family, sock_type):
             events["created"] = (family, sock_type)
 
-        def settimeout(self, timeout):
+        @staticmethod
+        def settimeout(timeout):
             events["timeout"] = timeout
 
-        def connect(self, path):
+        @staticmethod
+        def connect(path):
             events["path"] = path
 
     monkeypatch.setattr(index_view.socket, "socket", _SocketStub)
@@ -571,13 +573,16 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
     )
 
     class _Permissions:
-        def isGroupRead(self):
+        @staticmethod
+        def isGroupRead():
             return True
 
-        def isGroupWrite(self):
+        @staticmethod
+        def isGroupWrite():
             return True
 
-        def isGroupAnnotate(self):
+        @staticmethod
+        def isGroupAnnotate():
             return False
 
     read_write_group = SimpleNamespace(

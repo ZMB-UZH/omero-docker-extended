@@ -700,17 +700,17 @@ def _is_security_violation(exc: Exception) -> bool:
 
 def _is_no_processor_available(exc: Exception) -> bool:
     no_processor_type = getattr(omero, "NoProcessorAvailable", None)
-    for err in _iter_exception_chain(exc):
-        matches_omero_type = False
-        if isinstance(no_processor_type, type):
-            matches_omero_type = isinstance(err, no_processor_type)
-        elif (
-            isinstance(no_processor_type, tuple)
-            and no_processor_type
-            and all(isinstance(candidate, type) for candidate in no_processor_type)
+    no_processor_types = ()
+    if isinstance(no_processor_type, type):
+        no_processor_types = (no_processor_type,)
+    elif isinstance(no_processor_type, tuple):
+        processor_type_candidates = tuple(no_processor_type)
+        if processor_type_candidates and all(
+            isinstance(candidate, type) for candidate in processor_type_candidates
         ):
-            matches_omero_type = isinstance(err, no_processor_type)
-        if matches_omero_type:
+            no_processor_types = processor_type_candidates
+    for err in _iter_exception_chain(exc):
+        if no_processor_types and isinstance(err, no_processor_types):
             return True
         name = err.__class__.__name__
         if name == "NoProcessorAvailable":

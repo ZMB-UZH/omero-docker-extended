@@ -55,13 +55,16 @@ def test_open_service_connection_reports_connect_exceptions_without_last_error(
         def __init__(self):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
-        def connect(self):
+        @staticmethod
+        def connect():
             raise RuntimeError("connect failed")
 
-        def getLastError(self):
+        @staticmethod
+        def getLastError():
             raise RuntimeError("last error unavailable")
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     conn = _Conn()
@@ -100,13 +103,16 @@ def test_open_service_connection_suppresses_close_failure_after_false_connect(
         def __init__(self):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
-        def connect(self):
+        @staticmethod
+        def connect():
             return False
 
-        def getLastError(self):
+        @staticmethod
+        def getLastError():
             return "gateway refused connection"
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     conn = _Conn()
@@ -135,10 +141,12 @@ def test_open_service_connection_logs_group_context_failures_but_keeps_connectio
                 )
             )
 
-        def connect(self):
+        @staticmethod
+        def connect():
             return True
 
-        def close(self):
+        @staticmethod
+        def close():
             return None
 
     conn = _Conn()
@@ -174,10 +182,12 @@ def test_open_service_connection_reraises_unexpected_group_id_failures(
         def __init__(self):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
-        def connect(self):
+        @staticmethod
+        def connect():
             return True
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     conn = _Conn()
@@ -188,10 +198,12 @@ def test_open_service_connection_reraises_unexpected_group_id_failures(
     )
     monkeypatch.setattr(import_service, "BlitzGateway", lambda *args, **kwargs: conn)
 
-    with caplog.at_level(logging.DEBUG, logger=import_service.logger.name):
-        with pytest.raises(TypeError, match="bad group id"):
-            import_service._open_service_connection(
-                "omeroserver", 4064, group_id=_BadGroupId(fail=True)
-            )
+    with (
+        caplog.at_level(logging.DEBUG, logger=import_service.logger.name),
+        pytest.raises(TypeError, match="bad group id"),
+    ):
+        import_service._open_service_connection(
+            "omeroserver", 4064, group_id=_BadGroupId(fail=True)
+        )
 
     assert "Suppressed non-fatal exception in import_service.py" in caplog.text

@@ -211,7 +211,8 @@ def test_run_conversion_returns_missing_original_file_error(tmp_path) -> None:
     module = _load_script_module()
 
     class _Conn:
-        def getObject(self, object_type, image_id):
+        @staticmethod
+        def getObject(object_type, image_id):
             return types.SimpleNamespace(getName=lambda: "demo.ome.tif")
 
     module.get_original_file_path = lambda conn, image: None
@@ -305,17 +306,21 @@ def test_copy_and_path_helpers_cover_error_and_exception_fallbacks(
     )
 
     class _BadPhysicalSize:
-        def getValue(self):
+        @staticmethod
+        def getValue():
             raise RuntimeError("bad value")
 
     class _BadPrimaryPixels:
-        def getPhysicalSizeX(self):
+        @staticmethod
+        def getPhysicalSizeX():
             return _BadPhysicalSize()
 
-        def getPhysicalSizeY(self):
+        @staticmethod
+        def getPhysicalSizeY():
             return _BadPhysicalSize()
 
-        def getPhysicalSizeZ(self):
+        @staticmethod
+        def getPhysicalSizeZ():
             return _BadPhysicalSize()
 
     image = types.SimpleNamespace(getPrimaryPixels=lambda: _BadPrimaryPixels())
@@ -475,7 +480,8 @@ def test_convert_and_run_conversion_cover_missing_runtime_and_success_paths(
         @staticmethod
         def utcnow():
             class _Now:
-                def strftime(self, fmt):
+                @staticmethod
+                def strftime(fmt):
                     return "20260330T120000Z"
 
             return _Now()
@@ -509,7 +515,8 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
         @staticmethod
         def utcnow():
             class _Now:
-                def strftime(self, fmt):
+                @staticmethod
+                def strftime(fmt):
                     return "20260331T120000Z"
 
             return _Now()
@@ -631,14 +638,17 @@ def test_run_script_sets_outputs_and_attaches_exported_file(
     )
 
     class _Client:
-        def getInputs(self, unwrap=True):
+        @staticmethod
+        def getInputs(unwrap=True):
             assert unwrap is True
             return {"Image_ID": 7}
 
-        def setOutput(self, key, value):
+        @staticmethod
+        def setOutput(key, value):
             outputs[key] = value
 
-        def closeSession(self):
+        @staticmethod
+        def closeSession():
             outputs["closed"] = True
 
     client = _Client()
@@ -707,13 +717,16 @@ def test_run_script_survives_attachment_failure_and_reports_export_path(
     )
 
     class _Client:
-        def getInputs(self, unwrap=True):
+        @staticmethod
+        def getInputs(unwrap=True):
             return {"Image_ID": 8}
 
-        def setOutput(self, key, value):
+        @staticmethod
+        def setOutput(key, value):
             outputs[key] = value
 
-        def closeSession(self):
+        @staticmethod
+        def closeSession():
             outputs["closed"] = True
 
     monkeypatch.setattr(module, "_get_export_root", lambda: str(export_root))
@@ -759,15 +772,18 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
     output_calls = []
 
     class _Client:
-        def getInputs(self, unwrap=True):
+        @staticmethod
+        def getInputs(unwrap=True):
             return {"Image_ID": 9}
 
-        def setOutput(self, key, value):
+        @staticmethod
+        def setOutput(key, value):
             output_calls.append((key, value))
             if key == "File_Annotation":
                 raise RuntimeError("output failed")
 
-        def closeSession(self):
+        @staticmethod
+        def closeSession():
             output_calls.append(("closed", True))
 
     client = _Client()
@@ -823,13 +839,16 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
     missing_image_calls = []
 
     class _MissingImageClient:
-        def getInputs(self, unwrap=True):
+        @staticmethod
+        def getInputs(unwrap=True):
             return {"Image_ID": 10}
 
-        def setOutput(self, key, value):
+        @staticmethod
+        def setOutput(key, value):
             missing_image_calls.append((key, value))
 
-        def closeSession(self):
+        @staticmethod
+        def closeSession():
             missing_image_calls.append(("closed", True))
 
     monkeypatch.setattr(
@@ -856,10 +875,12 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
     error_calls = []
 
     class _ExplodingClient:
-        def setOutput(self, key, value):
+        @staticmethod
+        def setOutput(key, value):
             error_calls.append((key, value))
 
-        def closeSession(self):
+        @staticmethod
+        def closeSession():
             error_calls.append(("closed", True))
 
     monkeypatch.setattr(
@@ -887,13 +908,16 @@ def test_ims_export_script_main_entrypoint_executes_run_script() -> None:
     output_calls = []
 
     class _Client:
-        def getInputs(self, unwrap=True):
+        @staticmethod
+        def getInputs(unwrap=True):
             raise RuntimeError("boom")
 
-        def setOutput(self, key, value):
+        @staticmethod
+        def setOutput(key, value):
             output_calls.append((key, value))
 
-        def closeSession(self):
+        @staticmethod
+        def closeSession():
             output_calls.append(("closed", True))
 
     sys.modules["omero"].scripts.client = lambda *args, **kwargs: _Client()

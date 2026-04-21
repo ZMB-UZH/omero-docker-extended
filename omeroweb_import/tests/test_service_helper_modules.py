@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import importlib.util
 import logging
 import sys
@@ -125,7 +127,7 @@ class _FakeSecrets:
         self._values = iter(values)
 
     def choice(self, _alphabet):
-        return next(self._values)
+        return next_or_fail(self._values)
 
 
 class _FakeServiceOpts:

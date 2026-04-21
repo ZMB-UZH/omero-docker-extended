@@ -6,6 +6,45 @@ log() {
     echo "[server-bootstrap] $*"
 }
 
+is_non_negative_integer() {
+    case "$1" in
+        ""|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+is_positive_integer() {
+    is_non_negative_integer "$1" && [ "$1" -gt 0 ]
+}
+
+is_env_var_name() {
+    case "$1" in
+        ""|[0-9]*|*[!A-Za-z0-9_]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+is_omero_group_name() {
+    case "$1" in
+        ""|*[!A-Za-z0-9_.-]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+is_truthy_bool() {
+    case "$1" in
+        1|true|yes|on) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+is_falsey_bool() {
+    case "$1" in
+        0|false|no|off) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 require_positive_integer_env_var() {
     local var_name="$1"
     local value="${!var_name-}"
@@ -20,13 +59,8 @@ require_positive_integer_env_var() {
         exit 1
     fi
 
-    if ! [[ "${value}" =~ ^[0-9]+$ ]]; then
+    if ! is_positive_integer "${value}"; then
         echo "ERROR: Required environment variable '${var_name}' must be a positive integer, got '${value}'." >&2
-        exit 1
-    fi
-
-    if (( value <= 0 )); then
-        echo "ERROR: Required environment variable '${var_name}' must be greater than 0, got '${value}'." >&2
         exit 1
     fi
 }
@@ -135,7 +169,7 @@ normalize_dir_path() {
     if [[ -z "${path}" ]]; then
         return 1
     fi
-    while [[ "${path}" == */ && "${path}" != "/" ]]; do
+    while [[ "${path}" = */ && "${path}" != "/" ]]; do
         path="${path%/}"
     done
     printf "%s\n" "${path}"
@@ -172,7 +206,7 @@ expected_managed_repository_root() {
         return 1
     fi
 
-    if [[ "${normalized_managed_dir}" == "${normalized_omero_dir}" ]]; then
+    if [[ "${normalized_managed_dir}" = "${normalized_omero_dir}" ]]; then
         echo "ERROR: CONFIG_omero_managed_dir must not point to OMERO_DIR directly: '${configured_managed_dir}'" >&2
         return 1
     fi
@@ -196,7 +230,7 @@ find_unexpected_server_managed_repository_dirs() {
     while IFS= read -r candidate; do
         [[ -n "${candidate}" ]] || continue
         candidate="$(normalize_dir_path "${candidate}")" || continue
-        [[ "${candidate}" == "${expected_root}" ]] && continue
+        [[ "${candidate}" = "${expected_root}" ]] && continue
         [[ -n "${seen[${candidate}]+x}" ]] && continue
         seen["${candidate}"]=1
         printf "%s\n" "${candidate}"
@@ -305,7 +339,7 @@ write_cli_keepalive_config() {
     local owner_uid=""
     local owner_gid=""
 
-    if ! [[ "${keepalive_seconds}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${keepalive_seconds}"; then
         echo "ERROR: Invalid OMERO CLI keepalive value: ${keepalive_seconds}" >&2
         return 1
     fi
@@ -365,7 +399,7 @@ run_omero_with_keepalive() {
         had_ice_config=1
     fi
 
-    if [[ "${keepalive_seconds}" =~ ^[0-9]+$ ]] && (( keepalive_seconds > 0 )); then
+    if is_positive_integer "${keepalive_seconds}"; then
         generated_ice_config="$(write_cli_keepalive_config "${keepalive_seconds}")" || return 1
         export ICE_CONFIG="${generated_ice_config}"
     fi
@@ -389,8 +423,9 @@ ensure_tmpdir_permissions() {
     local requested_owner="$1"
     local tmp_root="${OMERO_TMP_PATH:-}"
     local expected_tmp_dir=""
-    local legacy_tmp_dir="$(dirname "${SERVER_HOME}")/omero/tmp"
+    local legacy_tmp_dir=""
     local runtime_tmp_dir=""
+    legacy_tmp_dir="$(dirname "${SERVER_HOME}")/omero/tmp"
     if [[ -z "${tmp_root}" ]]; then
         echo "ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set." >&2
         exit 1
@@ -605,12 +640,12 @@ validate_ldap_new_user_group_configuration() {
         return
     fi
 
-    if [[ "${ldap_group_setting}" == :* ]]; then
+    if [[ "${ldap_group_setting}" = :* ]]; then
         log "LDAP new-user group uses dynamic mapping expression (${ldap_group_setting}); runtime group auto-bootstrap is skipped"
         return
     fi
 
-    if ! [[ "${ldap_group_setting}" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    if ! is_omero_group_name "${ldap_group_setting}"; then
         echo "ERROR: CONFIG_omero_ldap_new__user__group contains invalid OMERO group name '${ldap_group_setting}'. Allowed pattern: [A-Za-z0-9_.-]+" >&2
         exit 1
     fi
@@ -635,7 +670,7 @@ validate_job_service_bootstrap_configuration() {
     # Jitter may be zero (disable jitter), so validate as non-negative integer
     if [[ -n "${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS-}" ]]; then
         local jitter_val="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS}"
-        if ! [[ "${jitter_val}" =~ ^[0-9]+$ ]]; then
+        if ! is_non_negative_integer "${jitter_val}"; then
             echo "ERROR: OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS must be a non-negative integer, got: '${jitter_val}'" >&2
             exit 1
         fi
@@ -664,7 +699,7 @@ validate_binary_repository_cleanse_configuration() {
 
     if [[ -n "${OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS-}" ]]; then
         local keepalive_seconds="${OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS}"
-        if ! [[ "${keepalive_seconds}" =~ ^[0-9]+$ ]]; then
+        if ! is_non_negative_integer "${keepalive_seconds}"; then
             echo "ERROR: OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS must be a non-negative integer, got: '${keepalive_seconds}'" >&2
             exit 1
         fi
@@ -767,7 +802,7 @@ toggle_zarr_pixel_buffer_plugin() {
     local server_lib="${SERVER_HOME}/lib/server"
     local disabled_dir="${SERVER_HOME}/lib/server-disabled"
 
-    if [[ "${enabled}" == "true" || "${enabled}" == "1" ]]; then
+    if [[ "${enabled}" = "true" || "${enabled}" = "1" ]]; then
         # Restore plugin JARs from disabled directory if they were previously moved
         if [[ -d "${disabled_dir}" ]]; then
             local restored=0
@@ -808,12 +843,12 @@ validate_repo_root_sync_configuration() {
     local jitter="${OMERO_REPO_ROOT_SYNC_JITTER_SECONDS:-20}"
     local stable_prefix_depth=""
 
-    if ! [[ "${interval}" =~ ^[0-9]+$ ]] || [ "${interval}" -lt 1 ]; then
+    if ! is_positive_integer "${interval}"; then
         echo "ERROR: OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS must be a positive integer, got: '${interval}'" >&2
         exit 1
     fi
 
-    if ! [[ "${jitter}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${jitter}"; then
         echo "ERROR: OMERO_REPO_ROOT_SYNC_JITTER_SECONDS must be a non-negative integer, got: '${jitter}'" >&2
         exit 1
     fi
@@ -830,7 +865,7 @@ validate_repo_root_sync_configuration() {
         echo "ERROR: Failed to analyze CONFIG_omero_fs_repo_path for shared-prefix sync." >&2
         exit 1
     }
-    if ! [[ "${stable_prefix_depth}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${stable_prefix_depth}"; then
         echo "ERROR: Invalid shared-prefix depth reported for CONFIG_omero_fs_repo_path: '${stable_prefix_depth}'" >&2
         exit 1
     fi
@@ -865,19 +900,19 @@ validate_dropbox_user_dir_sync_configuration() {
             ;;
     esac
 
-    if [[ "${dropbox_enabled}" =~ ^(1|true|yes|on)$ ]]; then
+    if is_truthy_bool "${dropbox_enabled}"; then
         require_nonempty_env_var "OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS"
         require_nonempty_env_var "OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS"
 
         ice_startup_wait="${OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS}"
         ice_poll_interval="${OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS}"
 
-        if ! [[ "${ice_startup_wait}" =~ ^[0-9]+$ ]] || [ "${ice_startup_wait}" -lt 1 ]; then
+        if ! is_positive_integer "${ice_startup_wait}"; then
             echo "ERROR: OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS must be a positive integer, got: '${ice_startup_wait}'" >&2
             exit 1
         fi
 
-        if ! [[ "${ice_poll_interval}" =~ ^[0-9]+$ ]] || [ "${ice_poll_interval}" -lt 1 ]; then
+        if ! is_positive_integer "${ice_poll_interval}"; then
             echo "ERROR: OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS must be a positive integer, got: '${ice_poll_interval}'" >&2
             exit 1
         fi
@@ -888,7 +923,7 @@ validate_dropbox_user_dir_sync_configuration() {
         exit 1
     fi
 
-    if [[ "${dropbox_enabled}" =~ ^(0|false|no|off)$ && "${enabled}" == "1" ]]; then
+    if is_falsey_bool "${dropbox_enabled}" && [[ "${enabled}" = "1" ]]; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_ENABLED=1 requires OMERO_DROPBOX_ENABLED=1." >&2
         exit 1
     fi
@@ -930,32 +965,32 @@ validate_dropbox_user_dir_sync_configuration() {
         exit 1
     fi
 
-    if ! [[ "${interval}" =~ ^[0-9]+$ ]] || [ "${interval}" -lt 1 ]; then
+    if ! is_positive_integer "${interval}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_INTERVAL_SECONDS must be a positive integer, got: '${interval}'" >&2
         exit 1
     fi
 
-    if ! [[ "${jitter}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${jitter}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_JITTER_SECONDS must be a non-negative integer, got: '${jitter}'" >&2
         exit 1
     fi
 
-    if ! [[ "${startup_wait}" =~ ^[0-9]+$ ]] || [ "${startup_wait}" -lt 1 ]; then
+    if ! is_positive_integer "${startup_wait}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS must be a positive integer, got: '${startup_wait}'" >&2
         exit 1
     fi
 
-    if ! [[ "${poll_interval}" =~ ^[0-9]+$ ]] || [ "${poll_interval}" -lt 1 ]; then
+    if ! is_positive_integer "${poll_interval}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS must be a positive integer, got: '${poll_interval}'" >&2
         exit 1
     fi
 
-    if ! [[ "${retries}" =~ ^[0-9]+$ ]] || [ "${retries}" -lt 1 ]; then
+    if ! is_positive_integer "${retries}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES must be a positive integer, got: '${retries}'" >&2
         exit 1
     fi
 
-    if ! [[ "${port}" =~ ^[0-9]+$ ]] || [ "${port}" -lt 1 ]; then
+    if ! is_positive_integer "${port}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PORT must be a positive integer, got: '${port}'" >&2
         exit 1
     fi
@@ -976,7 +1011,7 @@ validate_dropbox_user_dir_sync_configuration() {
             ;;
     esac
 
-    if ! [[ "${password_env}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    if ! is_env_var_name "${password_env}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PASSWORD_ENV must be an environment variable name, got: '${password_env}'" >&2
         exit 1
     fi
@@ -1032,12 +1067,16 @@ apply_ldap_runtime_configuration() {
 
     local ldap_user_filter="${CONFIG_omero_ldap_user__filter:-}"
     local ldap_new_user_group="${CONFIG_omero_ldap_new__user__group:-}"
+    local ldap_urls="${CONFIG_omero_ldap_urls:-}"
+    local ldap_username="${CONFIG_omero_ldap_username:-}"
+    local -n ldap_bind_value=CONFIG_omero_ldap_password
+    local ldap_base="${CONFIG_omero_ldap_base-}"
 
     run_omero config set omero.ldap.config true
-    run_omero config set omero.ldap.urls "${CONFIG_omero_ldap_urls}"
-    run_omero config set omero.ldap.username "${CONFIG_omero_ldap_username}"
-    run_omero config set omero.ldap.password "${CONFIG_omero_ldap_password}"
-    run_omero config set omero.ldap.base "${CONFIG_omero_ldap_base}"
+    run_omero config set omero.ldap.urls "${ldap_urls}"
+    run_omero config set omero.ldap.username "${ldap_username}"
+    run_omero config set omero.ldap.password "${ldap_bind_value}"
+    run_omero config set omero.ldap.base "${ldap_base}"
     
     if [[ -n "${CONFIG_omero_ldap_user__filter+x}" ]]; then
         run_omero config set omero.ldap.user_filter "${ldap_user_filter}"
@@ -1349,11 +1388,11 @@ schedule_ldap_group_bootstrap() {
     fi
 
     local ldap_group_setting="${CONFIG_omero_ldap_new__user__group:-}"
-    if [[ -z "${ldap_group_setting}" || "${ldap_group_setting}" == :* ]]; then
+    if [[ -z "${ldap_group_setting}" || "${ldap_group_setting}" = :* ]]; then
         return
     fi
 
-    if [[ "${ldap_group_setting}" == "default" ]]; then
+    if [[ "${ldap_group_setting}" = "default" ]]; then
         log "LDAP new-user group is set to built-in default; explicit group bootstrap is skipped"
         return
     fi
@@ -1594,7 +1633,7 @@ run_repo_root_bootstrap_once() {
             lookup_exit_code=$?
             set -e
 
-            if [[ "${lookup_exit_code}" -eq 0 ]] && [[ "${lookup_output}" == FOUND\|* ]]; then
+            if [[ "${lookup_exit_code}" -eq 0 ]] && [[ "${lookup_output}" = FOUND\|* ]]; then
                 break
             fi
 
@@ -1609,7 +1648,7 @@ run_repo_root_bootstrap_once() {
             continue
         fi
 
-        if [[ "${lookup_output}" == MISSING* ]]; then
+        if [[ "${lookup_output}" = MISSING* ]]; then
             echo "[$(date -u)] ERROR: repository root lookup did not find shared prefix for ${repo_dir_path} after fs mkdir retries"
             failed_prefix_count=$((failed_prefix_count + 1))
             continue
@@ -1625,7 +1664,7 @@ run_repo_root_bootstrap_once() {
 
         echo "[$(date -u)] INFO: repository prefix ${repo_dir_path} -> OriginalFile:${root_dir_id} owner=${root_dir_owner} repo=${root_dir_repo}"
 
-        if [[ "${root_dir_owner}" == "root" ]]; then
+        if [[ "${root_dir_owner}" = "root" ]]; then
             echo "[$(date -u)] INFO: repository prefix ${repo_dir_path} already normalized"
             continue
         fi
@@ -1768,13 +1807,17 @@ wait_for_dropbox_user_dir_sync_api() {
     local host="$3"
     local port="$4"
     local username="$5"
-    local password_env="$6"
-    local password="${!password_env-}"
+    local bind_env_name="$6"
     local deadline=$(( $(date +%s) + wait_seconds ))
     local cli_home=""
     local cli_tmpdir=""
 
-    if [[ -z "${password}" ]]; then
+    if ! is_env_var_name "${bind_env_name}"; then
+        return 1
+    fi
+
+    local -n dropbox_bind_value="${bind_env_name}"
+    if [[ -z "${dropbox_bind_value-}" ]]; then
         return 1
     fi
 
@@ -1787,7 +1830,7 @@ wait_for_dropbox_user_dir_sync_api() {
                 TMPDIR="${cli_tmpdir}" \
                 OMERO_TMPDIR="${cli_tmpdir}" \
                 OMERO_TEMPDIR="${cli_tmpdir}" \
-                OMERO_PASSWORD="${password}" \
+                OMERO_PASSWORD="${dropbox_bind_value}" \
                 "${OMERO_BIN}" login -q -C -t 60 \
                     -s "${host}" -p "${port}" -u "${username}" >/dev/null 2>&1; then
             return 0
@@ -1796,6 +1839,17 @@ wait_for_dropbox_user_dir_sync_api() {
     done
 
     return 1
+}
+
+env_var_value_is_empty() {
+    local env_name="$1"
+
+    if ! is_env_var_name "${env_name}"; then
+        return 0
+    fi
+
+    local -n env_value_ref="${env_name}"
+    [[ -z "${env_value_ref-}" ]]
 }
 
 run_dropbox_ice_command() {
@@ -1851,9 +1905,9 @@ run_dropbox_ice_bootstrap_once() {
         return 1
     fi
 
-    if [[ "${OMERO_DROPBOX_USER_DIR_SYNC_ENABLED}" == "1" ]]; then
+    if [[ "${OMERO_DROPBOX_USER_DIR_SYNC_ENABLED}" = "1" ]]; then
         write_dropbox_ice_bootstrap_status "running" "enable-start" "waiting-for-omero-api" "0"
-        if [[ -z "${api_password_env}" || -z "${!api_password_env-}" ]]; then
+        if env_var_value_is_empty "${api_password_env}"; then
             write_dropbox_ice_bootstrap_status "error" "enable" "omero-api-password-missing" "0"
             echo "[$(date -u)] ERROR: OMERO API readiness check cannot run because DropBox password env is missing"
             return 1
@@ -1898,7 +1952,7 @@ schedule_dropbox_ice_bootstrap() {
     local startup_wait="${OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS}"
     local poll_interval="${OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS}"
 
-    if [[ "${enabled}" =~ ^(0|false|no|off)$ ]]; then
+    if is_falsey_bool "${enabled}"; then
         log "Skipping DropBox Ice bootstrap (OMERO_DROPBOX_ENABLED=${enabled})."
         return
     fi
@@ -1966,9 +2020,9 @@ run_dropbox_user_dir_sync_once() {
 
     write_dropbox_user_dir_sync_status "running" "waiting-for-omero-admin" "0" "0"
 
-    if [[ -z "${!password_env-}" ]]; then
+    if env_var_value_is_empty "${password_env}"; then
         local missing_password_message="missing-password-env"
-        if [[ "${password_env}" == "ROOTPASS" ]]; then
+        if [[ "${password_env}" = "ROOTPASS" ]]; then
             missing_password_message="missing-rootpass"
         fi
         write_dropbox_user_dir_sync_status "error" "${missing_password_message}" "0" "1"
@@ -1976,7 +2030,7 @@ run_dropbox_user_dir_sync_once() {
         return 1
     fi
 
-    if [[ "${wait_seconds}" =~ ^[0-9]+$ ]] && [ "${wait_seconds}" -gt 0 ]; then
+    if is_positive_integer "${wait_seconds}"; then
         if ! wait_for_dropbox_user_dir_sync_api \
             "${wait_seconds}" \
             "${retry_delay}" \
@@ -1998,7 +2052,8 @@ run_dropbox_user_dir_sync_once() {
     local cli_home=""
     cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")" || return 1
     cli_tmpdir="$(resolve_omero_cli_tmpdir)" || return 1
-    if ! env "${password_env}=${!password_env-}" HOME="${cli_home}" \
+    local -n dropbox_sync_bind_value="${password_env}"
+    if ! env "${password_env}=${dropbox_sync_bind_value}" HOME="${cli_home}" \
         TMPDIR="${cli_tmpdir}" OMERO_TMPDIR="${cli_tmpdir}" OMERO_TEMPDIR="${cli_tmpdir}" \
         "${venv_py}" "${DROPBOX_USER_DIR_SYNC_HELPER}" sync \
         --host "${host}" \
@@ -2045,7 +2100,7 @@ schedule_dropbox_user_dir_sync() {
         local first_cycle="1"
         while true; do
             local cycle_wait="0"
-            if [[ "${first_cycle}" == "1" ]]; then
+            if [[ "${first_cycle}" = "1" ]]; then
                 cycle_wait="${startup_wait}"
                 first_cycle="0"
             fi
@@ -2119,8 +2174,9 @@ schedule_binary_repository_cleanse() {
             exit 1
         fi
 
-        local start_epoch="$(date +%s)"
+        local start_epoch=""
         local rc=0
+        start_epoch="$(date +%s)"
 
         run_omero_with_keepalive \
             "${keepalive_seconds}" \
@@ -2155,7 +2211,7 @@ install_figure_script() {
     if [[ -f "${script_path}" ]]; then
         local current_version="unknown"
         current_version="$(grep -E '^\s*(VERSION|__version__)\s*=' "${script_path}" 2>/dev/null | head -n 1 | sed -E "s/.*[\"']([^\"']+)[\"'].*/\1/" || true)"
-        if [[ "${current_version}" == "${figure_version}" ]]; then
+        if [[ "${current_version}" = "${figure_version}" ]]; then
             log "OMERO.Figure script already present (version ${current_version})"
             return
         fi
@@ -2440,7 +2496,7 @@ acquire_lockdir() {
             if [[ -n "${existing_start_ticks}" ]]; then
                 if [[ -n "${existing_boot_id}" && -n "${current_boot_id}" && "${existing_boot_id}" != "${current_boot_id}" ]]; then
                     lock_state="stale"
-                elif [[ "${existing_start_ticks}" == "${live_start_ticks}" ]]; then
+                elif [[ "${existing_start_ticks}" = "${live_start_ticks}" ]]; then
                     lock_state="active"
                 fi
             else
@@ -2457,7 +2513,7 @@ acquire_lockdir() {
             fi
         fi
 
-        if [[ "${lock_state}" == "active" ]]; then
+        if [[ "${lock_state}" = "active" ]]; then
             log "${label} already running (pid=${existing_pid}); skipping"
             return 1
         fi

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import json
 import sys
 import tempfile
@@ -88,7 +90,8 @@ def test_run_script_fails_after_timeout(monkeypatch: pytest.MonkeyPatch) -> None
     imaris_service = _import_imaris_service(monkeypatch)
 
     class DummyService:
-        def runScript(self, *args, **kwargs):
+        @staticmethod
+        def runScript(*args, **kwargs):
             raise NoProcessorAvailable("No processor available")
 
     service = DummyService()
@@ -126,19 +129,22 @@ def test_run_script_fails_fast_when_processors_disabled(
             raise NoProcessorAvailable("No processor available")
 
     class DummyConfigService:
-        def getConfigValue(self, key):
+        @staticmethod
+        def getConfigValue(key):
             assert key == "omero.scripts.processors"
             return "0"
 
     class DummyServiceFactory:
-        def getConfigService(self):
+        @staticmethod
+        def getConfigService():
             return DummyConfigService()
 
     class DummyConn:
         def __init__(self) -> None:
             self.c = types.SimpleNamespace(sf=DummyServiceFactory())
 
-        def isAdmin(self) -> bool:
+        @staticmethod
+        def isAdmin() -> bool:
             return True
 
     service = DummyService()
@@ -175,7 +181,8 @@ def test_run_script_fails_fast_when_processor_missing(
             raise NoProcessorAvailable("No processor available")
 
     class DummyConfigService:
-        def getConfigValue(self, key):
+        @staticmethod
+        def getConfigValue(key):
             if key == "omero.scripts.processors":
                 return "2"
             if key == "omero.server.nodedescriptors":
@@ -183,14 +190,16 @@ def test_run_script_fails_fast_when_processor_missing(
             raise AssertionError(f"Unexpected config key: {key}")
 
     class DummyServiceFactory:
-        def getConfigService(self):
+        @staticmethod
+        def getConfigService():
             return DummyConfigService()
 
     class DummyConn:
         def __init__(self) -> None:
             self.c = types.SimpleNamespace(sf=DummyServiceFactory())
 
-        def isAdmin(self) -> bool:
+        @staticmethod
+        def isAdmin() -> bool:
             return True
 
     service = DummyService()
@@ -234,7 +243,8 @@ def test_wait_for_process_detaches_after_completion(
             self.poll_calls += 1
             return "FINISHED"
 
-        def getResults(self, *_args):
+        @staticmethod
+        def getResults(*_args):
             return {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")}
 
         def close(self, *_args):
@@ -336,10 +346,12 @@ def test_poll_process_job_persists_completed_live_process(
     )
 
     class DummyProcess:
-        def poll(self):
+        @staticmethod
+        def poll():
             return "finished"
 
-        def getResults(self, *_args):
+        @staticmethod
+        def getResults(*_args):
             return {"Export_Path": SimpleNamespace(val=str(export_path))}
 
     proc = DummyProcess()
@@ -365,10 +377,12 @@ def test_resolve_async_result_prefers_service_end_method(
     imaris_service = _import_imaris_service(monkeypatch)
 
     class DummyAsyncResult:
-        def waitForCompleted(self):
+        @staticmethod
+        def waitForCompleted():
             return None
 
-        def getResponse(self):
+        @staticmethod
+        def getResponse():
             return None
 
     async_result = DummyAsyncResult()
@@ -387,10 +401,12 @@ def test_resolve_async_result_waits_and_uses_response_getter(
     calls = []
 
     class DummyAsyncResult:
-        def waitForCompleted(self):
+        @staticmethod
+        def waitForCompleted():
             calls.append("wait")
 
-        def getResponse(self):
+        @staticmethod
+        def getResponse():
             calls.append("response")
             return {"job": 7}
 
@@ -439,7 +455,8 @@ def test_get_script_processor_config_caches_admin_lookup(
     calls = {"count": 0}
 
     class DummyConfigService:
-        def getConfigValue(self, key):
+        @staticmethod
+        def getConfigValue(key):
             calls["count"] += 1
             assert key == "omero.scripts.processors"
             return "3"
@@ -450,7 +467,7 @@ def test_get_script_processor_config_caches_admin_lookup(
             sf=SimpleNamespace(getConfigService=lambda: DummyConfigService())
         ),
     )
-    monkeypatch.setattr(imaris_service.time, "time", lambda: next(time_values))
+    monkeypatch.setattr(imaris_service.time, "time", lambda: next_or_fail(time_values))
     monkeypatch.setattr(
         imaris_service,
         "_PROCESSOR_CONFIG_CACHE",
@@ -585,7 +602,8 @@ def test_detach_script_process_falls_back_to_close_without_flag(
     calls = []
 
     class DummyProcess:
-        def close(self, *args):
+        @staticmethod
+        def close(*args):
             calls.append(args)
             if args:
                 raise TypeError("close() takes 0 positional arguments")
@@ -893,7 +911,8 @@ def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths
     raw_service = object()
 
     class _Conn:
-        def getScriptService(self):
+        @staticmethod
+        def getScriptService():
             raise RuntimeError("gateway unavailable")
 
         c = SimpleNamespace(sf=SimpleNamespace(getScriptService=lambda: raw_service))
@@ -901,16 +920,20 @@ def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths
     assert imaris_service._get_script_services(_Conn()) == [raw_service]
 
     class _Service:
-        def runScriptAsync(self):
+        @staticmethod
+        def runScriptAsync():
             return None
 
-        def executeScript(self):
+        @staticmethod
+        def executeScript():
             return None
 
-        def begin_runScript(self):
+        @staticmethod
+        def begin_runScript():
             return None
 
-        def canRunScript(self):
+        @staticmethod
+        def canRunScript():
             return None
 
     method_names = [name for name, _ in imaris_service._iter_script_methods(_Service())]
@@ -936,10 +959,12 @@ def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths
     assert calls[0] == (7, {"a": 1})
 
     class _DedicatedStateService:
-        def getJobStatus(self, job_id):
+        @staticmethod
+        def getJobStatus(job_id):
             return "FINISHED"
 
-        def getJobOutputs(self, job_id):
+        @staticmethod
+        def getJobOutputs(job_id):
             return {"Export_Path": str(resolved_export)}
 
     monkeypatch.setattr(
@@ -951,7 +976,8 @@ def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths
     )
 
     class _JobInfoService:
-        def getJobs(self):
+        @staticmethod
+        def getJobs():
             return [
                 SimpleNamespace(
                     id=SimpleNamespace(val=77),
@@ -999,17 +1025,21 @@ def test_find_script_id_and_async_result_resolution_prefer_official_paths_and_fa
     assert imaris_service._find_script_id(object()) == 11
 
     class _AsyncResult:
-        def waitForCompleted(self):
+        @staticmethod
+        def waitForCompleted():
             raise RuntimeError("wait failed")
 
-        def getResponse(self):
+        @staticmethod
+        def getResponse():
             raise RuntimeError("response missing")
 
-        def getResults(self):
+        @staticmethod
+        def getResults():
             return {"Export_Path": resolved_export}
 
     class _AsyncService:
-        def end_runScript(self, result):
+        @staticmethod
+        def end_runScript(result):
             raise RuntimeError("end failed")
 
     assert imaris_service._resolve_async_result(
@@ -1027,14 +1057,16 @@ def test_wait_for_process_timeout_and_request_bool_helpers_cover_remaining_edges
     detached = []
 
     class _NeverFinishes:
-        def poll(self):
+        @staticmethod
+        def poll():
             return None
 
-        def getResults(self, *_args):
+        @staticmethod
+        def getResults(*_args):
             raise AssertionError("results should not be requested")
 
     time_values = iter([0.0, 0.5, 1.5])
-    monkeypatch.setattr(imaris_service.time, "time", lambda: next(time_values))
+    monkeypatch.setattr(imaris_service.time, "time", lambda: next_or_fail(time_values))
     monkeypatch.setattr(imaris_service.time, "sleep", lambda *_: None)
     monkeypatch.setattr(
         imaris_service,
@@ -1056,7 +1088,8 @@ def test_imaris_helper_fallbacks_cover_service_discovery_and_job_queries(
     imaris_service = _import_imaris_service(monkeypatch)
 
     class _BrokenConn:
-        def getScriptService(self):
+        @staticmethod
+        def getScriptService():
             raise RuntimeError("gateway missing")
 
         c = SimpleNamespace(
@@ -1070,7 +1103,8 @@ def test_imaris_helper_fallbacks_cover_service_discovery_and_job_queries(
     assert imaris_service._get_script_services(_BrokenConn()) == []
 
     class _BrokenService:
-        def getScripts(self):
+        @staticmethod
+        def getScripts():
             raise RuntimeError("script listing failed")
 
     monkeypatch.setattr(
@@ -1086,13 +1120,16 @@ def test_imaris_helper_fallbacks_cover_service_discovery_and_job_queries(
     ) == {"job": 4}
 
     class _StateService:
-        def getJobStatus(self, _job_id):
+        @staticmethod
+        def getJobStatus(_job_id):
             raise RuntimeError("status failed")
 
-        def getJobOutputs(self, _job_id):
+        @staticmethod
+        def getJobOutputs(_job_id):
             raise RuntimeError("outputs failed")
 
-        def getJobs(self):
+        @staticmethod
+        def getJobs():
             return [
                 SimpleNamespace(
                     id=SimpleNamespace(val="bad"), status=SimpleNamespace(val="RUNNING")
@@ -1231,7 +1268,8 @@ def test_imaris_file_and_output_helpers_cover_invalid_annotations_and_cleanup(
         def __init__(self):
             self.closed = False
 
-        def read(self, _offset, _size):
+        @staticmethod
+        def read(_offset, _size):
             return b""
 
         def close(self):
@@ -1245,13 +1283,16 @@ def test_imaris_file_and_output_helpers_cover_invalid_annotations_and_cleanup(
     assert store.closed is True
 
     class _InvalidSizeFile:
-        def getName(self):
+        @staticmethod
+        def getName():
             raise RuntimeError("name missing")
 
-        def getSize(self):
+        @staticmethod
+        def getSize():
             return "bad-size"
 
-        def getId(self):
+        @staticmethod
+        def getId():
             return SimpleNamespace(val=77)
 
     raw_store = SimpleNamespace(
@@ -1289,7 +1330,8 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
     raw_service = object()
 
     class _Conn:
-        def getScriptService(self):
+        @staticmethod
+        def getScriptService():
             return direct_service
 
         c = SimpleNamespace(sf=SimpleNamespace(getScriptService=lambda: raw_service))
@@ -1358,19 +1400,24 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
     assert imaris_service._find_script_id(object()) == 13
 
     class _BrokenAsyncResult:
-        def waitForCompleted(self):
+        @staticmethod
+        def waitForCompleted():
             return None
 
-        def getResponse(self):
+        @staticmethod
+        def getResponse():
             raise RuntimeError("response exploded")
 
-        def getResult(self):
+        @staticmethod
+        def getResult():
             raise RuntimeError("result exploded")
 
-        def getResults(self):
+        @staticmethod
+        def getResults():
             raise RuntimeError("results exploded")
 
-        def get(self):
+        @staticmethod
+        def get():
             raise RuntimeError("get exploded")
 
     async_result = _BrokenAsyncResult()
@@ -1415,13 +1462,16 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
     )
 
     class _OriginalFile:
-        def getName(self):
+        @staticmethod
+        def getName():
             return r"..\\unsafe\name.ims"
 
-        def getSize(self):
+        @staticmethod
+        def getSize():
             raise RuntimeError("size exploded")
 
-        def getId(self):
+        @staticmethod
+        def getId():
             return SimpleNamespace(val=77)
 
     conn = SimpleNamespace(

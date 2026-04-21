@@ -962,7 +962,7 @@ def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogE
         buckets.setdefault(entry.container, []).append(entry)
 
     capped: List[LogEntry] = []
-    for container, container_entries in buckets.items():
+    for container_entries in buckets.values():
         container_entries.sort(key=_entry_sort_key, reverse=True)
         capped.extend(container_entries[:limit])
     return capped

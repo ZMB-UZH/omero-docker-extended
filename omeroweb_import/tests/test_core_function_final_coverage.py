@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import json
 import subprocess
 import sys
@@ -275,17 +277,21 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
     assert core_functions._load_job(job_id) is None
 
     class _BrokenFilePath:
-        def is_file(self):
+        @staticmethod
+        def is_file():
             return True
 
-        def stat(self):
+        @staticmethod
+        def stat():
             raise OSError("stat failed")
 
     class _BrokenDirPath:
-        def is_file(self):
+        @staticmethod
+        def is_file():
             return False
 
-        def rglob(self, pattern):
+        @staticmethod
+        def rglob(pattern):
             raise OSError("walk failed")
 
     assert core_functions._get_path_total_size(_BrokenFilePath()) == 0
@@ -421,17 +427,19 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
                 raise RuntimeError("connect exploded")
             return False
 
-        def getLastError(self):
+        @staticmethod
+        def getLastError():
             raise RuntimeError("no last error")
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close exploded")
 
     states = iter(["fail", "raise"])
     monkeypatch.setattr(
         core_functions,
         "BlitzGateway",
-        lambda *args, **kwargs: _FailingRootConn(next(states)),
+        lambda *args, **kwargs: _FailingRootConn(next_or_fail(states)),
     )
     assert core_functions._open_admin_connection("omeroserver", 4064) is None
     assert core_functions._open_admin_connection("omeroserver", 4064) is None
@@ -446,10 +454,12 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
         def __init__(self, *args, **kwargs):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
-        def connect(self):
+        @staticmethod
+        def connect():
             return True
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close exploded")
 
     monkeypatch.setattr(core_functions, "BlitzGateway", _ServiceConn)
@@ -512,7 +522,8 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
         def setName(self, value):
             self._name = value
 
-        def save(self):
+        @staticmethod
+        def save():
             return None
 
         def getId(self):
@@ -623,7 +634,8 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     class _BadPath:
         name = "bad.txt"
 
-        def read_bytes(self):
+        @staticmethod
+        def read_bytes():
             raise OSError("read failed")
 
         def __str__(self):
@@ -682,7 +694,8 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
         def save(self):
             self.saved = True
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     class _UpdateService:
@@ -705,13 +718,16 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
                 sf=SimpleNamespace(createRawFileStore=lambda: _RawFileStore())
             )
 
-        def getUpdateService(self):
+        @staticmethod
+        def getUpdateService():
             return _UpdateService()
 
-        def getObject(self, kind, image_id):
+        @staticmethod
+        def getObject(kind, image_id):
             return _ImageObj()
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     sem_edx_parser = types.ModuleType("omeroweb_import.services.omero.sem_edx_parser")
@@ -737,10 +753,12 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     class _BadPlotPath:
         name = "plot.png"
 
-        def exists(self):
+        @staticmethod
+        def exists():
             return True
 
-        def read_bytes(self):
+        @staticmethod
+        def read_bytes():
             raise OSError("plot read failed")
 
         def __str__(self):
@@ -970,14 +988,16 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
         def __init__(self):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
-        def getQueryService(self):
+        @staticmethod
+        def getQueryService():
             return SimpleNamespace(
                 projection=lambda *args, **kwargs: (_ for _ in ()).throw(
                     RuntimeError("projection failed")
                 )
             )
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     class _ClosingAdmin:
@@ -987,7 +1007,8 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
         def suConn(self, username):
             return self.conn
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("admin close failed")
 
     monkeypatch.setattr(
@@ -1028,17 +1049,21 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
         def __init__(self):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
-        def getObject(self, kind, image_id):
+        @staticmethod
+        def getObject(kind, image_id):
             return render_image
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     class _RenderAdmin:
-        def suConn(self, username):
+        @staticmethod
+        def suConn(username):
             return _RenderConn()
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("admin close failed")
 
     monkeypatch.setattr(
@@ -1065,19 +1090,23 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
         def __init__(self):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
-        def getQueryService(self):
+        @staticmethod
+        def getQueryService():
             return SimpleNamespace(
                 projection=lambda *args, **kwargs: [[SimpleNamespace(val=9)]]
             )
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("close failed")
 
     class _VerifyAdmin:
-        def suConn(self, username):
+        @staticmethod
+        def suConn(username):
             return _VerifyConn()
 
-        def close(self):
+        @staticmethod
+        def close():
             raise RuntimeError("admin close failed")
 
     monkeypatch.setattr(

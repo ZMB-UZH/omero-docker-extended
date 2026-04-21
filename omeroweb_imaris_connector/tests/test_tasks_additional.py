@@ -37,10 +37,12 @@ def _install_celery_stubs() -> None:
         def __init__(self, *_args, **_kwargs):
             self.conf = types.SimpleNamespace(update=lambda **_kwargs: None)
 
-        def autodiscover_tasks(self, *_args, **_kwargs):
+        @staticmethod
+        def autodiscover_tasks(*_args, **_kwargs):
             return None
 
-        def task(self, *args, **kwargs):
+        @staticmethod
+        def task(*args, **kwargs):
             def _decorator(fn):
                 return fn
 
@@ -199,9 +201,11 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
             stderr="backend failed",
         ),
     )
-    with caplog.at_level(logging.ERROR, logger=tasks.logger.name):
-        with pytest.raises(RuntimeError, match="CLI launch failed"):
-            tasks._run_script_via_omero_cli(7, 11, "omeroserver", 4064, "session-key")
+    with (
+        caplog.at_level(logging.ERROR, logger=tasks.logger.name),
+        pytest.raises(RuntimeError, match="CLI launch failed"),
+    ):
+        tasks._run_script_via_omero_cli(7, 11, "omeroserver", 4064, "session-key")
     assert "backend failed" not in caplog.text
     assert "stderr_lines=1" in caplog.text
 
@@ -224,7 +228,8 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
     join_calls = []
 
     class DummyClient:
-        def joinSession(self, session_key):
+        @staticmethod
+        def joinSession(session_key):
             join_calls.append(session_key)
             return types.SimpleNamespace(
                 detachOnDestroy=lambda: detach_calls.append(True)
@@ -379,7 +384,8 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
         def __init__(self, *args, **kwargs):
             self.SERVICE_OPTS = types.SimpleNamespace(setOmeroGroup=lambda value: None)
 
-        def connect(self):
+        @staticmethod
+        def connect():
             return False
 
     monkeypatch.setattr(tasks, "BlitzGateway", _FailingGateway)

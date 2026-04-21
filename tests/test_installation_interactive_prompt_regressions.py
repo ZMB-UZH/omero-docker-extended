@@ -52,11 +52,13 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
 
         return cls.script_text[start:end]
 
-    def _write_executable(self, path: Path, content: str) -> None:
+    @staticmethod
+    def _write_executable(path: Path, content: str) -> None:
         path.write_text(content, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
-    def _build_harness(self, *blocks: str, body: str) -> str:
+    @staticmethod
+    def _build_harness(*blocks: str, body: str) -> str:
         joined_blocks = "\n".join(blocks)
         return textwrap.dedent(
             f"""\
@@ -74,8 +76,8 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
             """,
         )
 
+    @staticmethod
     def _run_harness_with_pty(
-        self,
         harness_path: Path,
         *,
         user_input: str,

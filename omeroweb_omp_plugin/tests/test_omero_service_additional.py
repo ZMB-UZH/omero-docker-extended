@@ -58,7 +58,8 @@ class _Project:
 
 def test_image_service_fetch_and_collectors_cover_bulk_and_fallback_paths(monkeypatch):
     class _BulkConn:
-        def getObjects(self, object_type, ids=None, obj_ids=None):
+        @staticmethod
+        def getObjects(object_type, ids=None, obj_ids=None):
             assert object_type == "Image"
             if ids is not None:
                 raise TypeError("legacy signature")
@@ -69,10 +70,12 @@ def test_image_service_fetch_and_collectors_cover_bulk_and_fallback_paths(monkey
     assert sorted(image_map) == [1, 2]
 
     class _FallbackConn:
-        def getObjects(self, object_type, ids=None, obj_ids=None):
+        @staticmethod
+        def getObjects(object_type, ids=None, obj_ids=None):
             raise RuntimeError("bulk load unavailable")
 
-        def getObject(self, object_type, image_id):
+        @staticmethod
+        def getObject(object_type, image_id):
             assert object_type == "Image"
             return _Image(image_id, f"image-{image_id}.tif") if image_id == 3 else None
 
@@ -132,7 +135,8 @@ def test_image_service_fetch_and_collectors_cover_bulk_and_fallback_paths(monkey
     assert [dataset.getId().getValue() for dataset, _images in non_owned_rows] == [13]
 
     class _BrokenSelectedProject:
-        def listChildren(self):
+        @staticmethod
+        def listChildren():
             raise RuntimeError("selected datasets unavailable")
 
     assert (
@@ -226,19 +230,23 @@ def test_collect_dataset_summaries_detects_formats_across_metadata_fallbacks(
 
 def test_extract_acquisition_metadata_handles_partial_failures_without_long_values():
     class _Image:
-        def getId(self):
+        @staticmethod
+        def getId():
             return 7
 
-        def getAcquisitionDate(self):
+        @staticmethod
+        def getAcquisitionDate():
             raise RuntimeError("missing acquisition date")
 
-        def getObjectiveSettings(self):
+        @staticmethod
+        def getObjectiveSettings():
             return SimpleNamespace(
                 getID=lambda: "objective-1",
                 getCorrectionCollar=lambda: 0.15,
             )
 
-        def getChannels(self):
+        @staticmethod
+        def getChannels():
             return [
                 SimpleNamespace(
                     getIndex=lambda: (_ for _ in ()).throw(RuntimeError("no index")),
@@ -248,7 +256,8 @@ def test_extract_acquisition_metadata_handles_partial_failures_without_long_valu
                 )
             ]
 
-        def getDetectorSettings(self):
+        @staticmethod
+        def getDetectorSettings():
             return [
                 SimpleNamespace(
                     getID=lambda: (_ for _ in ()).throw(RuntimeError("no id")),
@@ -257,7 +266,8 @@ def test_extract_acquisition_metadata_handles_partial_failures_without_long_valu
                 )
             ]
 
-        def loadOriginalMetadata(self):
+        @staticmethod
+        def loadOriginalMetadata():
             return (
                 1,
                 [("Exposure", "100ms"), ("broken",), ("Title", "short note")],
@@ -294,29 +304,41 @@ def test_image_and_metadata_services_cover_remaining_runtime_failure_paths(monke
             return True
 
         def __iter__(self):
-            def _items():
-                raise RuntimeError("detectors unavailable")
-                yield None
+            class _BrokenDetectorIterator:
+                def __init__(self):
+                    self._message = "detectors unavailable"
 
-            return _items()
+                def __iter__(self):
+                    return self
+
+                def __next__(self):
+                    raise RuntimeError(self._message)
+
+            return _BrokenDetectorIterator()
 
     class _BrokenMetadataImage:
-        def getId(self):
+        @staticmethod
+        def getId():
             return 1
 
-        def getAcquisitionDate(self):
+        @staticmethod
+        def getAcquisitionDate():
             return None
 
-        def getObjectiveSettings(self):
+        @staticmethod
+        def getObjectiveSettings():
             return None
 
-        def getChannels(self):
+        @staticmethod
+        def getChannels():
             return []
 
-        def getDetectorSettings(self):
+        @staticmethod
+        def getDetectorSettings():
             return _BrokenDetectorList()
 
-        def loadOriginalMetadata(self):
+        @staticmethod
+        def loadOriginalMetadata():
             return _BrokenMetadataTuple()
 
     assert metadata_service.extract_acquisition_metadata(_BrokenMetadataImage()) == {}

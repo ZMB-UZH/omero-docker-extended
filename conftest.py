@@ -70,7 +70,7 @@ class _ColorHolder:
         return cls(r, g, b, a)
 
     def getHtml(self):
-        return "{:02X}{:02X}{:02X}".format(self._r, self._g, self._b)
+        return f"{self._r:02X}{self._g:02X}{self._b:02X}"
 
     def getRed(self):
         return self._r
@@ -103,10 +103,12 @@ class _DummyCelery:
     def __init__(self, *args, **kwargs):
         self.conf = MagicMock()
 
-    def autodiscover_tasks(self, *args, **kwargs):
+    @staticmethod
+    def autodiscover_tasks(*args, **kwargs):
         return None
 
-    def task(self, *args, **kwargs):
+    @staticmethod
+    def task(*args, **kwargs):
         def decorator(func):
             return func
 

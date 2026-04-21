@@ -97,6 +97,35 @@ def _supports_legacy_annotation_kwargs() -> bool:
     return {"annotation_ids", "link_ids", "allow_legacy"} <= parameter_names
 
 
+def _legacy_annotation_delete_callable():
+    return getattr(_annotation_service, "delete_existing_annotations")
+
+
+def _call_dynamic(callable_obj, *args, **kwargs):
+    return callable_obj(*args, **kwargs)
+
+
+def _call_legacy_annotation_delete(
+    conn,
+    image_id,
+    annotation_ids=None,
+    link_ids=None,
+    allow_legacy=True,
+):
+    legacy_delete_existing_annotations = _legacy_annotation_delete_callable()
+    legacy_kwargs = {
+        "annotation_ids": annotation_ids,
+        "link_ids": link_ids,
+        "allow_legacy": allow_legacy,
+    }
+    return _call_dynamic(
+        legacy_delete_existing_annotations,
+        conn,
+        image_id,
+        **legacy_kwargs,
+    )
+
+
 def _normalize_annotation_ids(values):
     normalized = []
     seen = set()
@@ -190,11 +219,7 @@ def delete_existing_annotations(
             )
         image_id = args[0]
         if _supports_legacy_annotation_kwargs():
-            legacy_delete_existing_annotations = getattr(
-                _annotation_service,
-                "delete_existing_annotations",
-            )
-            return legacy_delete_existing_annotations(
+            return _call_legacy_annotation_delete(
                 conn,
                 image_id,
                 annotation_ids=annotation_ids,

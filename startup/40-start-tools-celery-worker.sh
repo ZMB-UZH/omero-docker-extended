@@ -9,7 +9,10 @@ if [[ "${use_celery}" != "true" ]]; then
     exit 0
 fi
 
-venv_dir="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"
+venv_dir=""
+if [[ -d /opt/omero/web ]]; then
+    venv_dir="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' -print | sort -V | tail -n 1)"
+fi
 if [[ -z "${venv_dir}" || ! -d "${venv_dir}" ]]; then
     venv_dir="/opt/omero/web/${OMERO_WEB_VENV:-venv}"
 fi

@@ -89,10 +89,12 @@ def test_open_service_connection_redacts_password_when_connect_raises(
                     "ServiceOpts", (), {"setOmeroGroup": lambda self, value: None}
                 )()
 
-            def connect(self):
+            @staticmethod
+            def connect():
                 raise RuntimeError("authentication failed for password super-secret")
 
-            def getLastError(self):
+            @staticmethod
+            def getLastError():
                 return "password=super-secret"
 
             def close(self):
@@ -135,10 +137,12 @@ def test_open_service_connection_redacts_password_when_connect_returns_false(
                     "ServiceOpts", (), {"setOmeroGroup": lambda self, value: None}
                 )()
 
-            def connect(self):
+            @staticmethod
+            def connect():
                 return False
 
-            def getLastError(self):
+            @staticmethod
+            def getLastError():
                 return "password=super-secret"
 
             def close(self):
@@ -181,10 +185,12 @@ def test_open_service_connection_falls_back_to_job_group_when_override_is_invali
                     {"setOmeroGroup": lambda self, value: group_calls.append(value)},
                 )()
 
-            def connect(self):
+            @staticmethod
+            def connect():
                 return True
 
-            def close(self):
+            @staticmethod
+            def close():
                 return None
 
         monkeypatch.setattr(

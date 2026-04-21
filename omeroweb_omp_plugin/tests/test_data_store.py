@@ -79,6 +79,17 @@ class _FakeConnection:
         self.closed = True
 
 
+class _RaisingContext:
+    def __init__(self, error):
+        self.error = error
+
+    def __enter__(self):
+        raise self.error
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
 def _patch_connection_queue(monkeypatch, connections):
     queue = list(connections)
 
@@ -225,10 +236,10 @@ def test_import_and_connection_helpers_raise_store_errors_on_backend_failures(
 ):
     original_import = builtins.__import__
 
-    def failing_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def failing_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):
         if name == "psycopg2" or name.startswith("psycopg2"):
             raise ImportError("psycopg2 missing")
-        return original_import(name, globals, locals, fromlist, level)
+        return original_import(name, global_vars, local_vars, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", failing_import)
     monkeypatch.setattr(data_store, "_psycopg2_mod", None)
@@ -267,9 +278,8 @@ def test_import_and_connection_helpers_raise_store_errors_on_backend_failures(
         ],
     )
 
-    with pytest.raises(data_store.VariableStoreError):
-        with data_store._connect():
-            pass
+    with pytest.raises(data_store.VariableStoreError), data_store._connect():
+        pass
 
 
 @pytest.mark.parametrize(
@@ -339,12 +349,11 @@ def test_crud_operations_wrap_unexpected_backend_failures(
         lambda: (SimpleNamespace(), _FakeExtras),
     )
 
-    @contextmanager
-    def failing_connect():
-        raise RuntimeError("backend failure")
-        yield
-
-    monkeypatch.setattr(data_store, "_connect", failing_connect)
+    monkeypatch.setattr(
+        data_store,
+        "_connect",
+        lambda: _RaisingContext(RuntimeError("backend failure")),
+    )
 
     with pytest.raises(error_type):
         operation(*args)
@@ -390,9 +399,8 @@ def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
         ),
     )
     monkeypatch.setattr(data_store, "_db_params", lambda: [])
-    with pytest.raises(data_store.VariableStoreError):
-        with data_store._connect():
-            pass
+    with pytest.raises(data_store.VariableStoreError), data_store._connect():
+        pass
 
     class _ClosingConnection(_FakeConnection):
         def close(self):
@@ -431,12 +439,11 @@ def test_specific_store_error_paths_and_confirmation_failures_are_propagated(
         lambda: (SimpleNamespace(), _FakeExtras),
     )
 
-    @contextmanager
-    def variable_error_connect():
-        raise data_store.VariableStoreError("typed")
-        yield
-
-    monkeypatch.setattr(data_store, "_connect", variable_error_connect)
+    monkeypatch.setattr(
+        data_store,
+        "_connect",
+        lambda: _RaisingContext(data_store.VariableStoreError("typed")),
+    )
     with pytest.raises(data_store.VariableStoreError, match="typed"):
         data_store.list_variable_sets("alice")
     with pytest.raises(data_store.VariableStoreError, match="typed"):
@@ -458,12 +465,11 @@ def test_specific_store_error_paths_and_confirmation_failures_are_propagated(
     with pytest.raises(data_store.VariableStoreError, match="confirmed"):
         data_store.delete_variable_set("alice", "set-a")
 
-    @contextmanager
-    def ai_error_connect():
-        raise data_store.AiCredentialStoreError("typed-ai")
-        yield
-
-    monkeypatch.setattr(data_store, "_connect", ai_error_connect)
+    monkeypatch.setattr(
+        data_store,
+        "_connect",
+        lambda: _RaisingContext(data_store.AiCredentialStoreError("typed-ai")),
+    )
     with pytest.raises(data_store.AiCredentialStoreError, match="typed-ai"):
         data_store.list_ai_credentials("alice")
     with pytest.raises(data_store.AiCredentialStoreError, match="typed-ai"):
@@ -473,12 +479,11 @@ def test_specific_store_error_paths_and_confirmation_failures_are_propagated(
     with pytest.raises(data_store.AiCredentialStoreError, match="typed-ai"):
         data_store.delete_all_ai_credentials("alice")
 
-    @contextmanager
-    def settings_error_connect():
-        raise data_store.UserSettingsStoreError("typed-settings")
-        yield
-
-    monkeypatch.setattr(data_store, "_connect", settings_error_connect)
+    monkeypatch.setattr(
+        data_store,
+        "_connect",
+        lambda: _RaisingContext(data_store.UserSettingsStoreError("typed-settings")),
+    )
     with pytest.raises(data_store.UserSettingsStoreError, match="typed-settings"):
         data_store.delete_all_user_settings("alice")
 
@@ -488,12 +493,11 @@ def test_specific_store_error_paths_and_confirmation_failures_are_propagated(
     with pytest.raises(data_store.UserSettingsStoreError, match="persisted"):
         data_store.save_user_settings("alice", {"theme": "dark"})
 
-    @contextmanager
-    def user_data_error_connect():
-        raise data_store.VariableStoreError("typed-user-data")
-        yield
-
-    monkeypatch.setattr(data_store, "_connect", user_data_error_connect)
+    monkeypatch.setattr(
+        data_store,
+        "_connect",
+        lambda: _RaisingContext(data_store.VariableStoreError("typed-user-data")),
+    )
     with pytest.raises(data_store.UserDataStoreError, match="user data"):
         data_store.delete_all_user_data("alice")
 
@@ -538,6 +542,8 @@ def test_connect_re_raises_variable_store_errors_from_backend(monkeypatch):
         ],
     )
 
-    with pytest.raises(data_store.VariableStoreError, match="typed connect failure"):
-        with data_store._connect():
-            pass
+    with (
+        pytest.raises(data_store.VariableStoreError, match="typed connect failure"),
+        data_store._connect(),
+    ):
+        pass

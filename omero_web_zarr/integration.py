@@ -130,7 +130,7 @@ def _store_backed_render_response(image, request, z=None, t=None, download=False
         image.getName(),
         default=f"Image-{image.id}",
     )
-    response["Content-Disposition"] = "attachment; filename=%s.%s" % (filename, suffix)
+    response["Content-Disposition"] = f"attachment; filename={filename}.{suffix}"
     return response
 
 
@@ -309,51 +309,48 @@ def _marshal_regular_image_data_with_safe_tile_size(image, request):
     if init_zoom is not None and init_zoom < 0:
         init_zoom = levels + init_zoom
 
+    payload.update(
+        {
+            "interpolate": viewer_settings.get("interpolate_pixels", True),
+            "size": {
+                "width": image.getSizeX(),
+                "height": image.getSizeY(),
+                "z": image.getSizeZ(),
+                "t": image.getSizeT(),
+                "c": image.getSizeC(),
+            },
+            "pixel_size": _pixel_size_in_microns(image),
+        }
+    )
+    if init_zoom is not None:
+        payload["init_zoom"] = init_zoom
+    if nominal_magnification is not None:
+        payload["nominalMagnification"] = nominal_magnification
     try:
-        payload.update(
-            {
-                "interpolate": viewer_settings.get("interpolate_pixels", True),
-                "size": {
-                    "width": image.getSizeX(),
-                    "height": image.getSizeY(),
-                    "z": image.getSizeZ(),
-                    "t": image.getSizeT(),
-                    "c": image.getSizeC(),
-                },
-                "pixel_size": _pixel_size_in_microns(image),
-            }
-        )
-        if init_zoom is not None:
-            payload["init_zoom"] = init_zoom
-        if nominal_magnification is not None:
-            payload["nominalMagnification"] = nominal_magnification
-        try:
-            payload["pixel_range"] = image.getPixelRange()
-            payload["channels"] = [
-                channelMarshal(channel) for channel in image.getChannels()
-            ]
-            payload["split_channel"] = image.splitChannelDims()
-            payload["rdefs"] = {
-                "model": image.isGreyscaleRenderingModel() and "greyscale" or "color",
-                "projection": image.getProjection(),
-                "defaultZ": image._re.getDefaultZ(),
-                "defaultT": image._re.getDefaultT(),
-                "invertAxis": image.isInvertedAxis(),
-            }
-        except TypeError:
-            LOGGER.error("imageMarshal", exc_info=True)
-            payload["pixel_range"] = (0, 0)
-            payload["channels"] = ()
-            payload["split_channel"] = ()
-            payload["rdefs"] = {
-                "model": "color",
-                "projection": image.getProjection(),
-                "defaultZ": 0,
-                "defaultT": 0,
-                "invertAxis": image.isInvertedAxis(),
-            }
-    except AttributeError:
-        raise
+        payload["pixel_range"] = image.getPixelRange()
+        payload["channels"] = [
+            channelMarshal(channel) for channel in image.getChannels()
+        ]
+        payload["split_channel"] = image.splitChannelDims()
+        payload["rdefs"] = {
+            "model": image.isGreyscaleRenderingModel() and "greyscale" or "color",
+            "projection": image.getProjection(),
+            "defaultZ": image._re.getDefaultZ(),
+            "defaultT": image._re.getDefaultT(),
+            "invertAxis": image.isInvertedAxis(),
+        }
+    except TypeError:
+        LOGGER.error("imageMarshal", exc_info=True)
+        payload["pixel_range"] = (0, 0)
+        payload["channels"] = ()
+        payload["split_channel"] = ()
+        payload["rdefs"] = {
+            "model": "color",
+            "projection": image.getProjection(),
+            "defaultZ": 0,
+            "defaultT": 0,
+            "invertAxis": image.isInvertedAxis(),
+        }
 
     return payload
 
@@ -580,15 +577,8 @@ def _load_metadata_preview_with_safe_rendering(
                 color = channel["lut"] if "lut" in channel else channel["color"]
                 reverse = "r" if channel["inverted"] else "-r"
                 channels.append(
-                    "%s%s|%s:%s%s$%s"
-                    % (
-                        active_prefix,
-                        index + 1,
-                        channel["start"],
-                        channel["end"],
-                        reverse,
-                        color,
-                    )
+                    f"{active_prefix}{index + 1}|"
+                    f"{channel['start']}:{channel['end']}{reverse}${color}"
                 )
             rdef_queries.append(
                 {
@@ -916,7 +906,7 @@ def install_webgateway_overrides():
 
         if len(image_ids) > settings.THUMBNAILS_BATCH:
             return HttpJavascriptResponseServerError(
-                "Max %s thumbnails at a time." % settings.THUMBNAILS_BATCH
+                f"Max {settings.THUMBNAILS_BATCH} thumbnails at a time."
             )
 
         response: dict[Any, str | None] = {}
@@ -936,9 +926,9 @@ def install_webgateway_overrides():
                     z=z_index,
                     t=t_index,
                 )
-                response[image_id] = "data:image/jpeg;base64,%s" % base64.b64encode(
-                    thumbnail
-                ).decode("utf-8")
+                response[image_id] = (
+                    f"data:image/jpeg;base64,{base64.b64encode(thumbnail).decode('utf-8')}"
+                )
             except Exception:
                 LOGGER.error(
                     "Failed to render store-backed thumbnail for image %s",
@@ -955,8 +945,8 @@ def install_webgateway_overrides():
                     payload = thumbnails[image_id]
                     if payload:
                         response[image_id] = (
-                            "data:image/jpeg;base64,%s"
-                            % base64.b64encode(payload).decode("utf-8")
+                            f"data:image/jpeg;base64,"
+                            f"{base64.b64encode(payload).decode('utf-8')}"
                         )
                 except KeyError:
                     LOGGER.error("Thumbnail not available. (img id: %d)", image_id)

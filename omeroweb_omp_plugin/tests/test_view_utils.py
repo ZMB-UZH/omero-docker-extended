@@ -114,10 +114,12 @@ def test_validate_user_password_and_session_key_helpers(monkeypatch):
     monkeypatch.setattr(utils, "resolve_omero_host_port", lambda conn: ("omero", 4064))
 
     class FailingClient:
-        def createSession(self, username, password):
+        @staticmethod
+        def createSession(username, password):
             raise RuntimeError("bad password")
 
-        def closeSession(self):
+        @staticmethod
+        def closeSession():
             raise RuntimeError("close failed")
 
     monkeypatch.setattr(utils.omero, "client", lambda host, port: FailingClient())

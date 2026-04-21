@@ -102,7 +102,8 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
             raise AttributeError(name)
 
     class _FailingPermissions:
-        def failing(self):
+        @staticmethod
+        def failing():
             raise RuntimeError("flag failed")
 
     assert index_view._permissions_flag(_MissingAttrPermissions(), "isRead") is False
@@ -151,16 +152,20 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
     )
 
     class _BadCountGroup:
-        def getMemberCount(self):
+        @staticmethod
+        def getMemberCount():
             return SimpleNamespace(val="bad")
 
-        def getMembers(self):
+        @staticmethod
+        def getMembers():
             return object()
 
-        def getExperimenters(self):
+        @staticmethod
+        def getExperimenters():
             return object()
 
-        def getExperimenterIds(self):
+        @staticmethod
+        def getExperimenterIds():
             return object()
 
     bad_count_group = _BadCountGroup()
@@ -228,10 +233,12 @@ def test_project_iteration_payload_and_wrapper_helpers_cover_remaining_paths(
     class _FailingConn:
         SERVICE_OPTS = failing_opts
 
-        def getObjects(self, object_type, opts=None):
+        @staticmethod
+        def getObjects(object_type, opts=None):
             raise RuntimeError("query failed")
 
-        def listProjects(self):
+        @staticmethod
+        def listProjects():
             return [SimpleNamespace(name="listed")]
 
     assert [

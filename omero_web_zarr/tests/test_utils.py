@@ -130,12 +130,14 @@ class _FakeConnForTileSize:
 
 
 class _BrokenQueryService:
-    def projection(self, *args, **kwargs):
+    @staticmethod
+    def projection(*args, **kwargs):
         raise RuntimeError("boom")
 
 
 class _EmptyQueryService:
-    def projection(self, *args, **kwargs):
+    @staticmethod
+    def projection(*args, **kwargs):
         return []
 
 
@@ -162,7 +164,8 @@ class _FakeChannel:
 
 
 class _TileFailureRenderingEngine:
-    def getTileSize(self):
+    @staticmethod
+    def getTileSize():
         raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
 
 
@@ -860,7 +863,8 @@ def test_store_backed_dataset_and_render_helpers_cover_fallback_paths():
 
 def test_get_safe_image_tile_size_prepares_rendering_engine_and_falls_back():
     class _PreparedEngine:
-        def getTileSize(self):
+        @staticmethod
+        def getTileSize():
             return (64, 32)
 
     class _PreparedImage:
@@ -870,25 +874,30 @@ def test_get_safe_image_tile_size_prepares_rendering_engine_and_falls_back():
         def _prepareRenderingEngine(self):
             self._re = _PreparedEngine()
 
-        def getSizeX(self):
+        @staticmethod
+        def getSizeX():
             return 512
 
-        def getSizeY(self):
+        @staticmethod
+        def getSizeY():
             return 256
 
     assert get_safe_image_tile_size(_PreparedImage()) == (64, 32)
 
     class _BrokenEngine:
-        def getTileSize(self):
+        @staticmethod
+        def getTileSize():
             raise RuntimeError("not a tile-size failure")
 
     class _BrokenImage:
         _re = _BrokenEngine()
 
-        def getSizeX(self):
+        @staticmethod
+        def getSizeX():
             return 512
 
-        def getSizeY(self):
+        @staticmethod
+        def getSizeY():
             return 256
 
     with pytest.raises(RuntimeError, match="not a tile-size failure"):

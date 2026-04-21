@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from iter_test_helpers import next_or_fail
+
 import json
 import logging
 import sys
@@ -57,7 +59,8 @@ class _Group:
     def getName(self):
         return self.name
 
-    def getDetails(self):
+    @staticmethod
+    def getDetails():
         return SimpleNamespace(getPermissions=lambda: "rw----")
 
 
@@ -221,16 +224,21 @@ def test_admin_index_helpers_and_views_cover_remaining_proxy_compose_and_quota_e
     user = _User(5, "alice")
 
     class _AdminService:
-        def lookupExperimenters(self):
+        @staticmethod
+        def lookupExperimenters():
             return [user]
 
-        def lookupGroups(self):
+        @staticmethod
+        def lookupGroups():
             return [blank_group, valid_group]
 
-        def containedGroups(self, identifier=None, *_args):
+        @staticmethod
+        def containedGroups(*args):
+            identifier = args[0] if args else None
             return [blank_group] if identifier is not None else [valid_group]
 
-        def containedExperimenters(self, identifier=None, *_args):
+        @staticmethod
+        def containedExperimenters(*args):
             raise RuntimeError("enumeration failed")
 
     principals = index_view._list_all_users_and_groups(
@@ -298,7 +306,7 @@ def test_admin_index_helpers_and_views_cover_remaining_proxy_compose_and_quota_e
     monkeypatch.setattr(
         index_view,
         "_proxy_http_request",
-        lambda *args, **kwargs: next(responses),
+        lambda *args, **kwargs: next_or_fail(responses),
     )
     proxy_response = _unwrap_view(index_view.prometheus_proxy)(
         factory.get("/admin/prometheus/api/v1/targets"),
