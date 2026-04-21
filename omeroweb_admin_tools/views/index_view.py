@@ -26,7 +26,7 @@ from django.shortcuts import render
 from django.template.backends.django import DjangoTemplates
 from django.template.response import SimpleTemplateResponse
 from django.urls import reverse
-from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie
 from omeroweb.decorators import login_required
 from omero_plugin_common import process_utils
 from omero_plugin_common.logging_utils import (
@@ -1855,7 +1855,6 @@ def resource_monitoring_data(request, conn=None, _url=None, **kwargs):
     )
 
 
-@csrf_exempt
 @login_required()
 @require_root_user
 def grafana_proxy(request, subpath: str, conn=None, _url=None, **kwargs):
