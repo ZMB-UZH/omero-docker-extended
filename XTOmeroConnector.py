@@ -1,5 +1,6 @@
 import logging
 import traceback
+import importlib
 
 logger = logging.getLogger(__name__)
 #
@@ -137,11 +138,11 @@ def _iter_imaris_executable_candidates():
     if env_candidate:
         yield from _yield_candidate(env_candidate)
 
-    winreg_module: Any = None
+    winreg_module: Any
     try:
-        import winreg as winreg_module
-    except Exception:
-        pass
+        winreg_module = importlib.import_module("winreg")
+    except ImportError:
+        winreg_module = None
 
     if winreg_module is not None:
         reg_locations = [

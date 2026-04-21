@@ -6,7 +6,6 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 _OMERO_GATEWAY_UTILS_LOGGER = "omero.gateway.utils"
-_OMERO_GATEWAY_LOGGING_CONFIGURED = False
 
 
 def sanitize_log_value(value: Any) -> str:
@@ -87,6 +86,14 @@ def sanitized_exc_info(exc: BaseException):
     return type(sanitized_exc), sanitized_exc, sanitized_exc.__traceback__
 
 
+def _gateway_logging_configured() -> bool:
+    return bool(getattr(configure_omero_gateway_logging, "_configured", False))
+
+
+def _set_gateway_logging_configured(configured: bool) -> None:
+    setattr(configure_omero_gateway_logging, "_configured", configured)
+
+
 def configure_omero_gateway_logging() -> None:
     """Reduce noisy OMERO gateway debug logs in production web logs.
 
@@ -96,9 +103,11 @@ def configure_omero_gateway_logging() -> None:
     logger to ``INFO`` removes repeated noise while preserving warning/error
     signals from the same module.
     """
-    global _OMERO_GATEWAY_LOGGING_CONFIGURED
-    if _OMERO_GATEWAY_LOGGING_CONFIGURED:
+    if _gateway_logging_configured():
         return
 
     logging.getLogger(_OMERO_GATEWAY_UTILS_LOGGER).setLevel(logging.INFO)
-    _OMERO_GATEWAY_LOGGING_CONFIGURED = True
+    _set_gateway_logging_configured(True)
+
+
+_set_gateway_logging_configured(False)

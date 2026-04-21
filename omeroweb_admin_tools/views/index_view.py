@@ -24,6 +24,7 @@ from django.http import JsonResponse
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.template.backends.django import DjangoTemplates
+from django.template.response import SimpleTemplateResponse
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from omeroweb.decorators import login_required
@@ -579,20 +580,18 @@ def _grafana_unavailable_response(
   </body>
 </html>"""
     )
-    response = HttpResponse(
-        template.render(
-            {
-                "status_code": status_code,
-                "attempted_targets": attempted_targets,
-                "refreshed_path": refreshed_path,
-            }
-        ),
+    response = SimpleTemplateResponse(
+        template,
+        {
+            "status_code": status_code,
+            "attempted_targets": attempted_targets,
+            "refreshed_path": refreshed_path,
+        },
         status=503,
-        content_type="text/html; charset=utf-8",
     )
     response["Cache-Control"] = "no-store"
     response["Retry-After"] = "30"
-    return response
+    return response.render()
 
 
 def _is_internal_hostname(hostname: str) -> bool:
