@@ -238,6 +238,31 @@ def test_start_scope_sync_view_requires_acquisition_indexing(monkeypatch):
     }
 
 
+def test_start_scope_sync_view_returns_database_error_when_settings_unavailable(
+    monkeypatch,
+):
+    monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(
+        index_view,
+        "user_settings",
+        lambda username: (_ for _ in ()).throw(
+            index_view.EnhancedSearchStoreError("db offline")
+        ),
+    )
+
+    request = RequestFactory().post(
+        "/omeroweb_tools/enhanced-search/sync/",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    response = inspect.unwrap(index_view.start_scope_sync_view)(request, conn=object())
+
+    assert response.status_code == 503
+    assert json.loads(response.content.decode("utf-8")) == {
+        "error": "Could not retrieve user setting. Database is not accessible."
+    }
+
+
 def test_save_user_settings_view_persists_payload(monkeypatch):
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(

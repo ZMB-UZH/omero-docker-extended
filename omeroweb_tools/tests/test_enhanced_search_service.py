@@ -50,6 +50,9 @@ def test_parse_search_query_accepts_display_date_formats():
 
 
 def test_search_query_display_dates_do_not_localize_end_of_day_forward():
+    assert service.SearchQuery().acquisition_date_from_display == ""
+    assert service.SearchQuery().acquisition_date_to_display == ""
+
     query = service.SearchQuery(
         acquisition_date_from=datetime(2026, 4, 13, tzinfo=timezone.utc),
         acquisition_date_to=datetime(
@@ -121,6 +124,31 @@ def test_search_without_query_text_or_date_filters_returns_empty_payload():
         "has_previous": False,
         "has_next": False,
     }
+
+
+def test_search_omero_builtin_scope_runs_without_acquisition_index(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        service, "runtime_config", lambda: SimpleNamespace(max_results=10)
+    )
+    monkeypatch.setattr(
+        service,
+        "_search_omero_builtin_rows",
+        lambda conn, query: calls.append(query.indexed_scope) or [],
+    )
+
+    payload = service.search(
+        object(),
+        service.SearchQuery(
+            query_text="delta",
+            indexed_scope=service.SEARCH_SCOPE_OMERO_BUILTIN,
+        ),
+        acquisition_metadata_enabled=False,
+    )
+
+    assert calls == [service.SEARCH_SCOPE_OMERO_BUILTIN]
+    assert payload["results"] == []
+    assert payload["total_count"] == 0
 
 
 def test_search_does_not_query_user_index_without_current_user(monkeypatch):
@@ -1033,3 +1061,71 @@ def test_process_sync_batch_stops_when_sync_lease_is_not_active(monkeypatch):
         assert "user:9" in str(exc)
     else:
         raise AssertionError("expected ScopeSyncCancelledError")
+
+
+def test_process_sync_batch_commits_after_progress_update(monkeypatch):
+    scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
+
+    class _Conn:
+        def __init__(self):
+            self.commits = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def commit(self):
+            self.commits += 1
+
+    conn = _Conn()
+    upserts = []
+    progress_updates = []
+    monkeypatch.setattr(service, "db_connect", lambda: conn)
+    monkeypatch.setattr(
+        service,
+        "sync_run_is_active",
+        lambda conn, scope_type, scope_id, run_token: True,
+    )
+    monkeypatch.setattr(
+        service,
+        "_document_for_image",
+        lambda image, schema_version: (
+            {"image_id": image.image_id, "schema_version": schema_version},
+            (),
+            (),
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "upsert_search_document",
+        lambda *args, **kwargs: upserts.append(kwargs),
+    )
+    monkeypatch.setattr(
+        service,
+        "update_sync_progress",
+        lambda *args, **kwargs: progress_updates.append(kwargs),
+    )
+
+    processed = service._process_sync_batch(
+        scope,
+        "token",
+        [SimpleNamespace(image_id=17)],
+        2,
+        3,
+    )
+
+    assert processed == 3
+    assert upserts[0]["commit"] is False
+    assert upserts[0]["run_token"] == "token"
+    assert progress_updates == [
+        {
+            "commit": False,
+            "run_token": "token",
+            "indexed_image_count": 3,
+            "current_message": "Indexed 3 image(s).",
+            "last_cursor_image_id": 17,
+        }
+    ]
+    assert conn.commits == 1

@@ -329,6 +329,12 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
         )
         assert "--resolutions" not in cmd
 
+    def test_invalid_resolutions_are_omitted(self):
+        cmd = _build_bioformats2raw_command(
+            "/in", "/out", self._defaults(resolutions="not-an-int")
+        )
+        assert "--resolutions" not in cmd
+
     def test_resolutions_nonzero_included(self):
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(resolutions=5)

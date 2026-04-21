@@ -122,24 +122,23 @@ async def _run_async(
     stderr_lines: list[str] = []
     stdout_task = asyncio.create_task(_consume_stream(process.stdout, stdout_lines))
     stderr_task = asyncio.create_task(_consume_stream(process.stderr, stderr_lines))
-    try:
-        if timeout is None:
-            await process.wait()
-        else:
-            await asyncio.wait_for(process.wait(), timeout)
-    except asyncio.TimeoutError as exc:
-        if process.returncode is None:
-            process.kill()
+    if timeout is None:
         await process.wait()
-        await asyncio.gather(stdout_task, stderr_task)
-        if timeout is None:
-            raise RuntimeError("Subprocess timed out without a timeout value.") from exc
-        raise TimeoutExpired(
-            command,
-            float(timeout),
-            stdout="".join(stdout_lines),
-            stderr="".join(stderr_lines),
-        ) from exc
+    else:
+        timeout_seconds = float(timeout)
+        try:
+            await asyncio.wait_for(process.wait(), timeout_seconds)
+        except asyncio.TimeoutError as exc:
+            if process.returncode is None:
+                process.kill()
+            await process.wait()
+            await asyncio.gather(stdout_task, stderr_task)
+            raise TimeoutExpired(
+                command,
+                timeout_seconds,
+                stdout="".join(stdout_lines),
+                stderr="".join(stderr_lines),
+            ) from exc
     await asyncio.gather(stdout_task, stderr_task)
 
     completed = CompletedProcess(

@@ -274,6 +274,29 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
         ["bundle"],
     )
 
+    planned_orphan_job = dict(planned_job, orphan_dataset_name=404)
+    planned_orphan_job["planned_import_units"] = [
+        {
+            "relative_path": "orphan.bin",
+            "dataset_relative_path": "orphan.bin",
+            "covered_relative_paths": ["bundle/data.bin"],
+        }
+    ]
+    assert core_functions._plan_request_job_dataset_targets(planned_orphan_job) == (
+        "404",
+        ["404"],
+    )
+
+    fallback_orphan_job = {
+        "orphan_dataset_name": 405,
+        "planned_import_units": [],
+        "files": [{"relative_path": "top-level.bin"}],
+    }
+    assert core_functions._plan_request_job_dataset_targets(fallback_orphan_job) == (
+        "405",
+        ["405"],
+    )
+
 
 def test_request_path_dataset_preparation_covers_success_and_failure(
     monkeypatch,

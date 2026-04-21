@@ -1259,6 +1259,7 @@ def _diagnose_docker_health() -> Dict[str, object]:
     cases where container health status is not being reported correctly.
     """
     docker_socket = os.environ.get("ADMIN_TOOLS_DOCKER_SOCKET", "/var/run/docker.sock")
+    current_gids: List[int] = []
     diag: Dict[str, object] = {
         "socket_path": docker_socket,
         "socket_exists": os.path.exists(docker_socket),
@@ -1280,7 +1281,8 @@ def _diagnose_docker_health() -> Dict[str, object]:
     # Who we are inside the container
     try:
         diag["current_uid"] = os.getuid()
-        diag["current_gids"] = list(os.getgroups())
+        current_gids = list(os.getgroups())
+        diag["current_gids"] = current_gids
         import pwd
 
         try:
@@ -1300,9 +1302,6 @@ def _diagnose_docker_health() -> Dict[str, object]:
                 f"mode={oct(stat_info.st_mode)}"
             )
             diag["socket_gid"] = int(stat_info.st_gid)
-            current_gids = diag.get("current_gids", [])
-            if not isinstance(current_gids, list):
-                current_gids = []
             diag["process_in_socket_group"] = int(stat_info.st_gid) in {
                 int(gid) for gid in current_gids
             }
