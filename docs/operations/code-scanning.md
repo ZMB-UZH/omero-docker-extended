@@ -39,7 +39,7 @@ The current advanced CodeQL setup uses `build-mode: none` for the Python and Jav
 
 Last live API refresh: **2026-04-22**.
 
-GitHub reported **12 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
+GitHub reported **4 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
 These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
 
@@ -66,18 +66,21 @@ To prevent documentation drift:
 
 | Scanner     | Open alerts |
 | ----------- | ----------: |
-| Hadolint    | 2           |
 | Scorecard   | 4           |
-| Semgrep OSS | 4           |
-| Trivy       | 2           |
-| **Total**   | **12**      |
+| **Total**   | **4**       |
 
-2026-04-22 Docker `USER` remediation note: the open Trivy `DS002`,
+2026-04-22 Docker `USER` remediation note: GitHub closed the Trivy `DS002`,
 Semgrep `last-user-is-root`, and Hadolint `DL3002` alerts on
-`docker/omero-server.Dockerfile` and `docker/omero-web.Dockerfile` are fixed
-in-tree now and should clear on the next workflow refresh. The fix defaults
-both images to their application users and keeps the required root bootstrap as
-an explicit Compose handoff for mounted runtime-path reconciliation.
+`docker/omero-server.Dockerfile` and `docker/omero-web.Dockerfile` after the
+default-branch security workflow for commit
+`d28baff97a64bb95bbb3b69ba10b91bea4df5db2` completed successfully. The fix
+defaults both images to their application users and keeps the required root
+bootstrap as an explicit Compose handoff for mounted runtime-path
+reconciliation.
+
+The remaining 4 open alerts are repository-level Scorecard findings with no
+file location: `MaintainedID`, `CodeReviewID`, `CIIBestPracticesID`, and
+`BranchProtectionID`.
 
 ### Historical snapshots below
 
@@ -144,7 +147,7 @@ The detailed severity and scanner tables that follow capture the earlier **2026-
 | ---------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `PinnedDependenciesID` (Scorecard) | 32    | Unpinned GitHub Actions, Dockerfiles, or pip installs                                                                                      |
 | `py/stack-trace-exposure`          | 4     | Exception details exposed to users                                                                                                         |
-| `SecurityPolicyID` (Scorecard)     | 1     | Repository root `SECURITY.md` was missing in the 2026-03-15 scan snapshot; fixed in-tree now and should clear on the next workflow refresh |
+| `SecurityPolicyID` (Scorecard)     | 1     | Missing in the 2026-03-15 scan snapshot; resolved before the 2026-04-22 live refresh                                                       |
 | `FuzzingID` (Scorecard)            | 1     | No fuzzing integration detected                                                                                                            |
 
 ### Warning findings (192 alerts)
@@ -226,14 +229,14 @@ These categories may contain genuine issues that should be reviewed:
 5. **CSRF exempt** (`csrf-exempt`): Confirm each exempt view has alternative authentication (OMERO session tokens).
 6. **Subprocess injection** (`subprocess-injection`): Review argument construction in delete views.
 7. **Regex injection** (`py/regex-injection`): Review filename parser to confirm user input is escaped before regex compilation.
-8. **Dockerfile USER** (`DS002`, `missing-user-entrypoint`, `last-user-is-root`): Some containers require root for bind-mount permissions. Document which require root and why.
+8. **Dockerfile USER** (`DS002`, `missing-user-entrypoint`, `last-user-is-root`): Images should default to application users. If startup bind-mount reconciliation requires root, make root an explicit Compose handoff and drop privileges before long-running processes.
 
 ## Hardening roadmap
 
 1. Add branch protection requiring all security scanning checks to pass on pull requests.
 2. ~~Add CI policy to fail builds when new `CRITICAL` or `HIGH` alerts are introduced.~~ **Done**: the `security-delta` job in `.github/workflows/security-code-scanning.yml` now enforces a zero-added-alert policy for pull requests and flags newly created default-branch alerts after default-branch security scans.
 3. Pin all GitHub Actions to full commit SHAs (addresses 32 Scorecard `PinnedDependenciesID` findings).
-4. ~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**: the repository root now includes `SECURITY.md`, which points GitHub-native security surfaces at the canonical `docs/SECURITY.md` guidance. The Scorecard `SecurityPolicyID` finding should clear on the next workflow refresh.
+4. ~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**: the repository root now includes `SECURITY.md`, which points GitHub-native security surfaces at the canonical `docs/SECURITY.md` guidance. The Scorecard `SecurityPolicyID` finding is no longer open in the 2026-04-22 live refresh.
 5. ~~Add image-level vulnerability scans for each built Docker image.~~
    **Done**: Docker Scout two-phase scanning (pre-build baseline + post-build
    report) covers all images in `docker-compose.yml`, both custom-built and
