@@ -8,6 +8,8 @@ import subprocess
 import sys
 import types
 
+import pytest
+
 
 def _install_omero_stub() -> None:
     omero_module = types.ModuleType("omero")
@@ -131,7 +133,9 @@ def test_ensure_bioformats_jar_returns_none_without_runtime_or_cache(
     assert module._ensure_bioformats_jar(str(install_dir)) is None
 
 
-def test_safe_filename_and_checksum_helpers_cover_edge_cases(tmp_path) -> None:
+def test_safe_filename_and_checksum_helpers_cover_edge_cases(
+    monkeypatch, tmp_path
+) -> None:
     module = _load_script_module()
     checksum_path = tmp_path / "bioformats.sha256"
 
@@ -141,9 +145,34 @@ def test_safe_filename_and_checksum_helpers_cover_edge_cases(tmp_path) -> None:
 
     checksum_path.write_text("not-a-checksum\n", encoding="ascii")
     assert module._read_expected_sha256(str(checksum_path)) is None
+    checksum_path.write_text("", encoding="ascii")
+    assert module._read_expected_sha256(str(checksum_path)) is None
+    assert module._read_expected_sha256(None) is None
+    assert module._read_expected_sha256("") is None
+    assert module._read_expected_sha256("\x00") is None
+    assert module._read_expected_sha256(bytes(checksum_path)) is None
+    assert module._read_expected_sha256(str(tmp_path)) is None
+
+    class _StatFailingPath:
+        @staticmethod
+        def is_file():
+            raise OSError("stat failed")
+
+    def _stat_failing_path(_path_text):
+        return _StatFailingPath()
+
+    with monkeypatch.context() as context:
+        context.setattr(module, "Path", _stat_failing_path)
+        assert module._read_expected_sha256("stat-fails.sha256") is None
 
     assert module._write_expected_sha256(str(checksum_path), "a" * 64) is True
     assert module._read_expected_sha256(str(checksum_path)) == "a" * 64
+    assert (
+        module._sha256_file(str(checksum_path))
+        == hashlib.sha256(checksum_path.read_bytes()).hexdigest()
+    )
+    with pytest.raises(FileNotFoundError):
+        module._sha256_file(str(tmp_path))
 
 
 def test_export_root_and_checksum_helpers_cover_fallback_cleanup_and_altsep(

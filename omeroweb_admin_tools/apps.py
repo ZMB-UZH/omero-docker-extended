@@ -7,6 +7,7 @@ class AdminToolsPluginConfig(AppConfig):
     name = "omeroweb_admin_tools"
     label = "omeroweb_admin_tools"
 
-    def ready(self) -> None:
+    @staticmethod
+    def ready() -> None:
         """Apply plugin-wide runtime configuration."""
         configure_omero_gateway_logging()

@@ -343,6 +343,47 @@ def test_store_backed_metadata_helpers_cover_symlink_resolution_and_reader_fallb
     assert utils._load_store_backed_image_node_with_reader(store_root) is None
 
 
+def test_store_metadata_file_resolution_rejects_paths_outside_store(tmp_path) -> None:
+    store_root = tmp_path / "secure.zarr"
+    _write_minimal_store(store_root)
+    (store_root / ".zattrs").write_text(
+        json.dumps({"multiscales": [{"datasets": []}]}),
+        encoding="utf-8",
+    )
+
+    outside_metadata = tmp_path / "outside" / ".zattrs"
+    outside_metadata.parent.mkdir()
+    outside_metadata.write_text(json.dumps({"unsafe": True}), encoding="utf-8")
+
+    assert utils._read_store_root_attrs(store_root) == {
+        "multiscales": [{"datasets": []}]
+    }
+    with pytest.raises(FileNotFoundError, match="metadata path"):
+        utils._read_store_json(store_root, outside_metadata)
+    with pytest.raises(FileNotFoundError, match="metadata path"):
+        utils._read_store_json(store_root, "..", ".zattrs")
+    with pytest.raises(FileNotFoundError, match="metadata path"):
+        utils._resolve_store_metadata_file(store_root, "..", ".zattrs")
+    with pytest.raises(FileNotFoundError, match="metadata path"):
+        utils._resolve_store_metadata_file(store_root, "missing", ".zattrs")
+
+    non_metadata_file = store_root / "payload.bin"
+    non_metadata_file.write_bytes(b"payload")
+    with pytest.raises(FileNotFoundError, match="metadata path"):
+        utils._resolve_store_metadata_file(store_root, "payload.bin")
+
+    with pytest.raises(FileNotFoundError, match="store root"):
+        utils._resolve_store_root(tmp_path / "missing.zarr")
+    with pytest.raises(FileNotFoundError, match="store root"):
+        utils._resolve_store_root(None)
+
+    non_store = tmp_path / "not-a-store"
+    non_store.mkdir()
+    (non_store / ".zattrs").write_text("{}", encoding="utf-8")
+    with pytest.raises(FileNotFoundError, match="store root"):
+        utils._resolve_store_root(non_store)
+
+
 def test_store_backed_axis_and_size_helpers_cover_fallback_shapes() -> None:
     fallback_node = SimpleNamespace(
         data=[np.zeros((2, 3, 4), dtype=np.uint8)],
@@ -362,6 +403,7 @@ def test_store_backed_utils_cover_root_attrs_rgb_rendering_and_tile_size_fallbac
 ):
     store_root = tmp_path / "root.zarr"
     store_root.mkdir()
+    (store_root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
     (store_root / ".zattrs").write_text(
         json.dumps({"multiscales": [{"datasets": [{"path": "0"}]}]}),
         encoding="utf-8",

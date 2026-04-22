@@ -562,6 +562,7 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
     assert response.content.decode("utf-8") == "omeroweb_admin_tools/index.html"
 
     assert index_view._call_admin_listing(SimpleNamespace(), "missing") == []
+    assert index_view._first_admin_listing(SimpleNamespace(), ("missing",)) == []
     assert (
         index_view._build_public_service_url(
             "https://grafana:3000",
@@ -599,6 +600,71 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
     with pytest.raises(ValueError, match="empty since value"):
         index_view._parse_since_ns(" ")
     assert index_view._parse_since_ns("2026-03-30T06:56:57") > 0
+
+
+def test_refactored_monitoring_helpers_preserve_guard_branch_contracts(
+    monkeypatch,
+) -> None:
+    headers = {"Origin": "https://omero.example.org"}
+    index_view._rewrite_origin_headers(headers, "not-a-url")
+    assert headers == {"Origin": "https://omero.example.org"}
+    assert (
+        index_view._unsupported_event_stream_response(
+            "api/v1/notifications/live",
+            "application/json",
+            "https://prometheus.example.test/api/v1/notifications/live",
+        )
+        is None
+    )
+
+    entries = [
+        SimpleNamespace(container="omeroserver", level="error", message="failure"),
+        SimpleNamespace(container="omeroweb", level="info", message="ready"),
+    ]
+    assert index_view._filter_log_entries(entries, level="error", query="") == [
+        entries[0]
+    ]
+
+    diagnostics = {"socket_exists": False, "socket_stat": ""}
+    index_view._docker_socket_diagnostics(diagnostics, "/missing.sock", [998])
+    assert diagnostics == {"socket_exists": False, "socket_stat": ""}
+
+    assert index_view._inspected_health_status({"State": {"Health": "bad-shape"}}) == ""
+    assert (
+        index_view._inspected_health_status({"State": {"Health": {"Status": "paused"}}})
+        == ""
+    )
+
+    calls = []
+
+    def _docker_api(path, timeout_seconds=3.0):
+        calls.append((path, timeout_seconds))
+        return {"Config": {}, "State": {"Health": {"Status": "healthy"}}}
+
+    monkeypatch.setattr(index_view, "_docker_api_json", _docker_api)
+    runtime_health = {"redis": {"state": "running", "health": ""}}
+    healthcheck_config: dict[str, bool] = {}
+    index_view._apply_container_inspect_health(
+        "redis",
+        "redis1",
+        healthcheck_config,
+        runtime_health,
+    )
+    assert calls == [("/containers/redis1/json", 3.0)]
+    assert healthcheck_config == {}
+    assert runtime_health == {"redis": {"state": "running", "health": ""}}
+
+    assert (
+        index_view._public_monitoring_base_url(
+            configured_public_url="",
+            internal_url="https://grafana.example.org",
+            request_scheme="https",
+            request_host="omero.example.org",
+            host_port=3000,
+            proxied=False,
+        )
+        == ""
+    )
 
 
 def test_logs_compose_prometheus_and_proxy_helpers_cover_remaining_runtime_guards(

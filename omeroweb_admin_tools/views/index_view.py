@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 from urllib.parse import urlencode
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import urllib.parse
 import requests
@@ -60,6 +60,8 @@ _SAFE_REDIRECT_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 _PROXY_SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 _GRAFANA_PROXY_METHODS = ("GET", "HEAD", "OPTIONS", "POST")
+_INTERNAL_LOG_SERVICES = frozenset({"omeroserver_internal", "omeroweb_internal"})
+_VALID_LOG_LEVELS = frozenset({"debug", "info", "warn", "error", "fatal"})
 _INLINE_TEMPLATE_BACKEND = DjangoTemplates(
     {
         "NAME": "inline_admin_tools",
@@ -209,41 +211,32 @@ def _normalize_proxy_request_target(subpath: str) -> Tuple[str, str]:
     return "/".join(segments), forwarded_query
 
 
-def _proxy_http_request(
-    django_request,
-    base_url: str,
-    path: str,
-    query: str = "",
-    *,
-    proxy_prefix: str = "",
-    rewrite_origin_headers: bool = False,
-    extra_forwarded_headers: tuple = (),
-) -> HttpResponse:
-    """Proxy an HTTP request to a backend URL and return the response body."""
-    try:
-        normalized_path, _ignored_query = _normalize_proxy_request_target(path)
-        base_parsed = urllib.parse.urlparse(_validated_http_url(base_url))
-        # Reconstruct the URL from validated base components + normalized path
-        # to prevent any user-controlled input from altering the scheme or host.
-        safe_path = base_parsed.path.rstrip("/")
-        if normalized_path:
-            safe_path = f"{safe_path}/{normalized_path}"
-        else:
-            safe_path = f"{safe_path}/"
-        target_url = urllib.parse.urlunparse(
-            (
-                base_parsed.scheme,
-                base_parsed.netloc,
-                safe_path,
-                "",  # params
-                query,  # query string
-                "",  # fragment
-            )
+def _build_proxy_target_url(base_url: str, path: str, query: str) -> tuple[str, str]:
+    normalized_path, _ignored_query = _normalize_proxy_request_target(path)
+    base_parsed = urllib.parse.urlparse(_validated_http_url(base_url))
+    safe_path = base_parsed.path.rstrip("/")
+    if normalized_path:
+        safe_path = f"{safe_path}/{normalized_path}"
+    else:
+        safe_path = f"{safe_path}/"
+    target_url = urllib.parse.urlunparse(
+        (
+            base_parsed.scheme,
+            base_parsed.netloc,
+            safe_path,
+            "",
+            query,
+            "",
         )
-    except ValueError:
-        return JsonResponse({"error": "Invalid URL format"}, status=400)
+    )
+    return normalized_path, target_url
 
-    forwarded_headers = {}
+
+def _collect_proxy_headers(
+    django_request,
+    extra_forwarded_headers: tuple,
+) -> dict[str, str]:
+    forwarded_headers: dict[str, str] = {}
     for header_name in (
         "Accept",
         "Content-Type",
@@ -257,39 +250,80 @@ def _proxy_http_request(
         value = django_request.headers.get(header_name)
         if value:
             forwarded_headers[header_name] = value
+    return forwarded_headers
 
+
+def _rewrite_origin_headers(headers: dict[str, str], base_url: str) -> None:
+    backend_origin = _origin_from_url(base_url)
+    if not backend_origin:
+        return
+    if headers.get("Origin"):
+        headers["Origin"] = backend_origin
+    if headers.get("Referer"):
+        headers["Referer"] = f"{backend_origin}/"
+
+
+def _proxy_request_body(django_request) -> bytes | None:
+    if django_request.method not in {"POST", "PUT", "PATCH"}:
+        return None
+    return django_request.body
+
+
+def _unsupported_event_stream_response(
+    normalized_path: str,
+    content_type: str,
+    target_url: str,
+) -> HttpResponse | None:
+    if normalized_path != "api/v1/notifications/live":
+        return None
+    if not content_type.startswith("text/event-stream"):
+        return None
+    logger.info(
+        "Proxy suppressed unsupported event stream target=%s",
+        sanitize_url_for_logging(target_url),
+    )
+    suppressed = HttpResponse(status=204)
+    suppressed["Cache-Control"] = "no-store"
+    return suppressed
+
+
+def _proxy_http_request(
+    django_request,
+    base_url: str,
+    path: str,
+    query: str = "",
+    *,
+    proxy_prefix: str = "",
+    rewrite_origin_headers: bool = False,
+    extra_forwarded_headers: tuple = (),
+) -> HttpResponse:
+    """Proxy an HTTP request to a backend URL and return the response body."""
+    try:
+        normalized_path, target_url = _build_proxy_target_url(base_url, path, query)
+    except ValueError:
+        return JsonResponse({"error": "Invalid URL format"}, status=400)
+
+    forwarded_headers = _collect_proxy_headers(django_request, extra_forwarded_headers)
     if rewrite_origin_headers:
-        backend_origin = _origin_from_url(base_url)
-        if backend_origin:
-            if forwarded_headers.get("Origin"):
-                forwarded_headers["Origin"] = backend_origin
-            if forwarded_headers.get("Referer"):
-                forwarded_headers["Referer"] = f"{backend_origin}/"
+        _rewrite_origin_headers(forwarded_headers, base_url)
 
     try:
         response = requests.request(
             method=django_request.method,
             url=target_url,
-            data=(
-                django_request.body
-                if django_request.method in {"POST", "PUT", "PATCH"}
-                else None
-            ),
+            data=_proxy_request_body(django_request),
             headers=forwarded_headers,
             timeout=10.0,
             allow_redirects=False,
         )
         headers = getattr(getattr(response, "raw", None), "headers", response.headers)
         content_type = str(response.headers.get("Content-Type", "") or "").lower()
-        if normalized_path == "api/v1/notifications/live" and content_type.startswith(
-            "text/event-stream"
-        ):
-            logger.info(
-                "Proxy suppressed unsupported event stream target=%s",
-                sanitize_url_for_logging(target_url),
-            )
-            suppressed = HttpResponse(status=204)
-            suppressed["Cache-Control"] = "no-store"
+        suppressed = _unsupported_event_stream_response(
+            normalized_path,
+            content_type,
+            target_url,
+        )
+        if suppressed is not None:
             return suppressed
         return _build_proxied_response(
             response.content,
@@ -763,6 +797,100 @@ def _list_omero_group_names(conn) -> List[str]:
         return []
 
 
+def _first_admin_listing(admin_service, method_names: tuple[str, ...]) -> list:
+    for method_name in method_names:
+        objects = _call_admin_listing(admin_service, method_name)
+        if objects:
+            return objects
+    return []
+
+
+def _register_admin_users(
+    experimenters: list,
+) -> tuple[dict[str, str], dict[str, set[str]]]:
+    users: dict[str, str] = {}
+    groups_by_user: dict[str, set[str]] = {}
+    for user in experimenters:
+        username = _safe_username(user)
+        if username:
+            users[username] = _safe_full_name(user)
+            groups_by_user.setdefault(username, set())
+    return users, groups_by_user
+
+
+def _register_admin_groups(
+    experimenter_groups: list,
+) -> tuple[set[str], dict[str, str], dict[str, set[str]]]:
+    groups: set[str] = set()
+    group_permissions: dict[str, str] = {}
+    users_by_group: dict[str, set[str]] = {}
+    for group in experimenter_groups:
+        group_name = _safe_group_name(group)
+        if group_name:
+            groups.add(group_name)
+            group_permissions[group_name] = _safe_group_permission_label(group)
+            users_by_group.setdefault(group_name, set())
+    return groups, group_permissions, users_by_group
+
+
+def _admin_id_arg_options(object_id: int) -> tuple[tuple[object, ...], ...]:
+    return ((object_id,), (int(object_id),), (object_id, False), (object_id, None))
+
+
+def _link_user_group_memberships(
+    admin_service,
+    experimenters: list,
+    groups: set[str],
+    group_permissions: dict[str, str],
+    groups_by_user: dict[str, set[str]],
+    users_by_group: dict[str, set[str]],
+) -> None:
+    for user in experimenters:
+        user_id = _safe_object_id(user)
+        username = _safe_username(user)
+        if user_id is None or not username:
+            continue
+        user_groups = _call_admin_listing(
+            admin_service,
+            "containedGroups",
+            arg_options=_admin_id_arg_options(user_id),
+        )
+        for group in user_groups:
+            group_name = _safe_group_name(group)
+            if group_name:
+                groups.add(group_name)
+                groups_by_user.setdefault(username, set()).add(group_name)
+                users_by_group.setdefault(group_name, set()).add(username)
+                group_permissions.setdefault(
+                    group_name, _safe_group_permission_label(group)
+                )
+
+
+def _link_group_user_memberships(
+    admin_service,
+    experimenter_groups: list,
+    users: dict[str, str],
+    groups_by_user: dict[str, set[str]],
+    users_by_group: dict[str, set[str]],
+) -> None:
+    for group in experimenter_groups:
+        group_id = _safe_object_id(group)
+        group_name = _safe_group_name(group)
+        if group_id is None or not group_name:
+            continue
+        group_users = _call_admin_listing(
+            admin_service,
+            "containedExperimenters",
+            arg_options=_admin_id_arg_options(group_id),
+        )
+        for user in group_users:
+            username = _safe_username(user)
+            if username:
+                users.setdefault(username, _safe_full_name(user))
+                groups_by_user.setdefault(username, set()).add(group_name)
+                users_by_group.setdefault(group_name, set()).add(username)
+
+
 def _list_all_users_and_groups(conn):
     """Collect all OMERO users and groups to keep zero-usage rows visible."""
     users: dict[str, str] = {}
@@ -772,77 +900,33 @@ def _list_all_users_and_groups(conn):
     users_by_group: dict[str, set[str]] = {}
     try:
         admin_service = conn.getAdminService()
-        experimenters = []
-        experimenter_groups = []
-        for method_name in ("lookupExperimenters", "containedExperimenters"):
-            experimenters = _call_admin_listing(admin_service, method_name)
-            if experimenters:
-                break
-        for method_name in ("lookupGroups", "containedGroups"):
-            experimenter_groups = _call_admin_listing(admin_service, method_name)
-            if experimenter_groups:
-                break
-
-        for user in experimenters:
-            username = _safe_username(user)
-            if username:
-                users[username] = _safe_full_name(user)
-                groups_by_user.setdefault(username, set())
-        for group in experimenter_groups:
-            group_name = _safe_group_name(group)
-            if group_name:
-                groups.add(group_name)
-                group_permissions[group_name] = _safe_group_permission_label(group)
-                users_by_group.setdefault(group_name, set())
-
-        for user in experimenters:
-            user_id = _safe_object_id(user)
-            username = _safe_username(user)
-            if user_id is None or not username:
-                continue
-            user_groups = _call_admin_listing(
-                admin_service,
-                "containedGroups",
-                arg_options=(
-                    (user_id,),
-                    (int(user_id),),
-                    (user_id, False),
-                    (user_id, None),
-                ),
-            )
-            for group in user_groups:
-                group_name = _safe_group_name(group)
-                if not group_name:
-                    continue
-                groups.add(group_name)
-                groups_by_user.setdefault(username, set()).add(group_name)
-                users_by_group.setdefault(group_name, set()).add(username)
-                group_permissions.setdefault(
-                    group_name, _safe_group_permission_label(group)
-                )
-
-        for group in experimenter_groups:
-            group_id = _safe_object_id(group)
-            group_name = _safe_group_name(group)
-            if group_id is None or not group_name:
-                continue
-            group_users = _call_admin_listing(
-                admin_service,
-                "containedExperimenters",
-                arg_options=(
-                    (group_id,),
-                    (int(group_id),),
-                    (group_id, False),
-                    (group_id, None),
-                ),
-            )
-            for user in group_users:
-                username = _safe_username(user)
-                if not username:
-                    continue
-                users.setdefault(username, _safe_full_name(user))
-                groups_by_user.setdefault(username, set()).add(group_name)
-                users_by_group.setdefault(group_name, set()).add(username)
+        experimenters = _first_admin_listing(
+            admin_service,
+            ("lookupExperimenters", "containedExperimenters"),
+        )
+        experimenter_groups = _first_admin_listing(
+            admin_service,
+            ("lookupGroups", "containedGroups"),
+        )
+        users, groups_by_user = _register_admin_users(experimenters)
+        groups, group_permissions, users_by_group = _register_admin_groups(
+            experimenter_groups
+        )
+        _link_user_group_memberships(
+            admin_service,
+            experimenters,
+            groups,
+            group_permissions,
+            groups_by_user,
+            users_by_group,
+        )
+        _link_group_user_memberships(
+            admin_service,
+            experimenter_groups,
+            users,
+            groups_by_user,
+            users_by_group,
+        )
     except Exception:
         logger.exception(
             "Failed to enumerate all users/groups from OMERO admin service"
@@ -863,15 +947,15 @@ def _permission_flag(permission_obj, method_name: str) -> bool:
         return False
 
 
-def _safe_group_permission_label(group_obj) -> str:
-    """Return a stable group permission name for the storage group view."""
-    permission_obj = None
+def _safe_group_permission_object(group_obj):
     try:
         details = group_obj.getDetails()
-        permission_obj = details.getPermissions() if details is not None else None
+        return details.getPermissions() if details is not None else None
     except Exception:
-        permission_obj = None
+        return None
 
+
+def _permission_label_from_flags(permission_obj) -> str:
     group_read = _permission_flag(permission_obj, "isGroupRead")
     group_write = _permission_flag(permission_obj, "isGroupWrite")
     group_annotate = _permission_flag(permission_obj, "isGroupAnnotate")
@@ -881,17 +965,29 @@ def _safe_group_permission_label(group_obj) -> str:
         return "Read-annotate"
     if group_read:
         return "Read-only"
+    return ""
 
+
+def _permission_label_from_text(permission_obj) -> str:
     permission_text = str(permission_obj or "").strip().lower()
-    if "read-write" in permission_text or "rwrw" in permission_text:
-        return "Read-write"
-    if "read-annotate" in permission_text or "rwra" in permission_text:
-        return "Read-annotate"
-    if "read-only" in permission_text:
-        return "Read-only"
-    if "private" in permission_text:
-        return "Private"
+    labels = (
+        ("Read-write", ("read-write", "rwrw")),
+        ("Read-annotate", ("read-annotate", "rwra")),
+        ("Read-only", ("read-only",)),
+        ("Private", ("private",)),
+    )
+    for label, markers in labels:
+        if any(marker in permission_text for marker in markers):
+            return label
     return "Private"
+
+
+def _safe_group_permission_label(group_obj) -> str:
+    """Return a stable group permission name for the storage group view."""
+    permission_obj = _safe_group_permission_object(group_obj)
+    return _permission_label_from_flags(permission_obj) or _permission_label_from_text(
+        permission_obj
+    )
 
 
 def _require_root_user(request, conn):
@@ -975,6 +1071,46 @@ def logs_view(request, _conn=None, _url=None, **kwargs):
     )
 
 
+def _parse_log_limits(request, log_config) -> tuple[int, int]:
+    lookback_seconds = int(request.GET.get("lookback", log_config.lookback_seconds))
+    max_entries = int(request.GET.get("limit", log_config.max_entries))
+    return lookback_seconds, max_entries
+
+
+def _parse_optional_since_ns(request) -> int | None:
+    since_raw = request.GET.get("since", "").strip()
+    if not since_raw:
+        return None
+    return _parse_since_ns(since_raw)
+
+
+def _internal_log_files_from_query(values: list[str]) -> dict[str, set[str]]:
+    internal_files: dict[str, set[str]] = {}
+    for value in values:
+        if not value or "/" not in value:
+            continue
+        service, filename = value.split("/", 1)
+        if service in _INTERNAL_LOG_SERVICES and filename:
+            internal_files.setdefault(service, set()).add(filename)
+    return internal_files
+
+
+def _filter_log_entries(entries, *, level: str, query: str):
+    filtered_entries = entries
+    if level:
+        filtered_entries = [entry for entry in filtered_entries if entry.level == level]
+    if not query:
+        return filtered_entries
+    needle = query.lower()
+    return [
+        entry
+        for entry in filtered_entries
+        if needle in entry.message.lower()
+        or needle in entry.container.lower()
+        or needle in entry.level.lower()
+    ]
+
+
 @login_required()
 @require_root_user
 def logs_data(request, conn=None, _url=None, **kwargs):
@@ -993,32 +1129,20 @@ def logs_data(request, conn=None, _url=None, **kwargs):
     if not containers:
         return JsonResponse({"entries": []})
     try:
-        lookback_seconds = int(request.GET.get("lookback", log_config.lookback_seconds))
-        max_entries = int(request.GET.get("limit", log_config.max_entries))
+        lookback_seconds, max_entries = _parse_log_limits(request, log_config)
     except ValueError:
         return JsonResponse({"error": "Invalid lookback or limit value."}, status=400)
     query = request.GET.get("query", "").strip()
     level = request.GET.get("level", "").strip().lower()
     text_query = query if len(query) >= 2 else None
-    since_ns = None
-    since_raw = request.GET.get("since", "").strip()
-    if since_raw:
-        try:
-            since_ns = _parse_since_ns(since_raw)
-        except ValueError:
-            return JsonResponse({"error": "Invalid since value."}, status=400)
-    if level and level not in {"debug", "info", "warn", "error", "fatal"}:
+    try:
+        since_ns = _parse_optional_since_ns(request)
+    except ValueError:
+        return JsonResponse({"error": "Invalid since value."}, status=400)
+    if level and level not in _VALID_LOG_LEVELS:
         return JsonResponse({"error": "Invalid log level."}, status=400)
     try:
-        internal_files: dict[str, set[str]] = {}
-        for value in internal_files_raw:
-            if not value or "/" not in value:
-                continue
-            service, filename = value.split("/", 1)
-            if service not in ("omeroserver_internal", "omeroweb_internal"):
-                continue
-            if filename:
-                internal_files.setdefault(service, set()).add(filename)
+        internal_files = _internal_log_files_from_query(internal_files_raw)
         entries = fetch_loki_logs(
             log_config,
             containers,
@@ -1034,17 +1158,7 @@ def logs_data(request, conn=None, _url=None, **kwargs):
             {"error": "Failed to fetch logs."},
             status=502,
         )
-    if level:
-        entries = [entry for entry in entries if entry.level == level]
-    if query:
-        needle = query.lower()
-        entries = [
-            entry
-            for entry in entries
-            if needle in entry.message.lower()
-            or needle in entry.container.lower()
-            or needle in entry.level.lower()
-        ]
+    entries = _filter_log_entries(entries, level=level, query=query)
     return JsonResponse({"entries": serialize_entries(entries)})
 
 
@@ -1252,6 +1366,94 @@ def _docker_api_json(path: str, timeout_seconds: float = 3.0) -> Optional[object
         connection.close()
 
 
+def _docker_identity_diagnostics(diag: dict[str, object]) -> list[int]:
+    try:
+        diag["current_uid"] = os.getuid()
+        current_gids = list(os.getgroups())
+        diag["current_gids"] = current_gids
+        import pwd
+
+        try:
+            diag["current_user"] = pwd.getpwuid(os.getuid()).pw_name
+        except KeyError:
+            diag["current_user"] = f"uid={os.getuid()}"
+        return current_gids
+    except Exception as exc:
+        logger.warning("Unable to resolve current user for Docker diagnostics: %s", exc)
+        diag["current_user"] = "error"
+        return []
+
+
+def _docker_socket_diagnostics(
+    diag: dict[str, object],
+    docker_socket: str,
+    current_gids: list[int],
+) -> None:
+    if not diag["socket_exists"]:
+        return
+    try:
+        stat_info = os.stat(docker_socket)
+        diag["socket_stat"] = (
+            f"uid={stat_info.st_uid} gid={stat_info.st_gid} "
+            f"mode={oct(stat_info.st_mode)}"
+        )
+        diag["socket_gid"] = int(stat_info.st_gid)
+        diag["process_in_socket_group"] = int(stat_info.st_gid) in {
+            int(gid) for gid in current_gids
+        }
+    except Exception as exc:
+        logger.warning("Unable to stat Docker socket %s: %s", docker_socket, exc)
+        diag["socket_stat"] = "stat unavailable"
+
+
+def _docker_status_sample(container: dict) -> dict[str, str]:
+    labels = container.get("Labels", {}) or {}
+    service = str(labels.get("com.docker.compose.service", "")).strip()
+    status = str(container.get("Status", "")).strip()
+    state = str(container.get("State", "")).strip()
+    parsed_health = _parse_docker_status_health(status)
+    return {
+        "service": service or "(no label)",
+        "state": state,
+        "status": status,
+        "parsed_health": parsed_health or "(none)",
+    }
+
+
+def _docker_container_health_summary(
+    containers: list,
+) -> tuple[int, list[dict[str, str]]]:
+    health_count = 0
+    samples: list[dict[str, str]] = []
+    for container in containers[:15]:
+        if not isinstance(container, dict):
+            continue
+        sample = _docker_status_sample(container)
+        if sample["parsed_health"] != "(none)":
+            health_count += 1
+        samples.append(sample)
+    return health_count, samples
+
+
+def _docker_api_diagnostics(diag: dict[str, object]) -> None:
+    try:
+        containers = _docker_api_json("/containers/json?all=1")
+        if containers is None:
+            diag["api_error"] = "API returned None (connection or permission error)"
+            return
+        if not isinstance(containers, list):
+            diag["api_error"] = f"unexpected type: {type(containers).__name__}"
+            return
+        diag["api_reachable"] = True
+        diag["container_count"] = len(containers)
+        health_count, samples = _docker_container_health_summary(containers)
+        diag["containers_with_health"] = health_count
+        diag["sample_statuses"] = samples
+    except Exception as exc:
+        logger.warning("Docker API diagnostics failed: %s", exc)
+        diag["api_error"] = "Docker API request failed"
+
+
 def _diagnose_docker_health() -> Dict[str, object]:
     """Return diagnostic info about Docker socket access and health data retrieval.
 
@@ -1278,73 +1480,9 @@ def _diagnose_docker_health() -> Dict[str, object]:
         "sample_statuses": [],
     }
 
-    # Who we are inside the container
-    try:
-        diag["current_uid"] = os.getuid()
-        current_gids = list(os.getgroups())
-        diag["current_gids"] = current_gids
-        import pwd
-
-        try:
-            diag["current_user"] = pwd.getpwuid(os.getuid()).pw_name
-        except KeyError:
-            diag["current_user"] = f"uid={os.getuid()}"
-    except Exception as exc:
-        logger.warning("Unable to resolve current user for Docker diagnostics: %s", exc)
-        diag["current_user"] = "error"
-
-    # Socket file ownership
-    if diag["socket_exists"]:
-        try:
-            stat_info = os.stat(docker_socket)
-            diag["socket_stat"] = (
-                f"uid={stat_info.st_uid} gid={stat_info.st_gid} "
-                f"mode={oct(stat_info.st_mode)}"
-            )
-            diag["socket_gid"] = int(stat_info.st_gid)
-            diag["process_in_socket_group"] = int(stat_info.st_gid) in {
-                int(gid) for gid in current_gids
-            }
-        except Exception as exc:
-            logger.warning("Unable to stat Docker socket %s: %s", docker_socket, exc)
-            diag["socket_stat"] = "stat unavailable"
-
-    # Try the actual API call
-    try:
-        containers = _docker_api_json("/containers/json?all=1")
-        if containers is None:
-            diag["api_error"] = "API returned None (connection or permission error)"
-        elif not isinstance(containers, list):
-            diag["api_error"] = f"unexpected type: {type(containers).__name__}"
-        else:
-            diag["api_reachable"] = True
-            diag["container_count"] = len(containers)
-            health_count = 0
-            samples = []
-            for container in containers[:15]:
-                if not isinstance(container, dict):
-                    continue
-                labels = container.get("Labels", {}) or {}
-                service = str(labels.get("com.docker.compose.service", "")).strip()
-                status = str(container.get("Status", "")).strip()
-                state = str(container.get("State", "")).strip()
-                parsed_health = _parse_docker_status_health(status)
-                if parsed_health:
-                    health_count += 1
-                samples.append(
-                    {
-                        "service": service or "(no label)",
-                        "state": state,
-                        "status": status,
-                        "parsed_health": parsed_health or "(none)",
-                    }
-                )
-            diag["containers_with_health"] = health_count
-            diag["sample_statuses"] = samples
-    except Exception as exc:
-        logger.warning("Docker API diagnostics failed: %s", exc)
-        diag["api_error"] = "Docker API request failed"
-
+    current_gids = _docker_identity_diagnostics(diag)
+    _docker_socket_diagnostics(diag, docker_socket, current_gids)
+    _docker_api_diagnostics(diag)
     return diag
 
 
@@ -1354,6 +1492,64 @@ def _parse_docker_status_health(status: str) -> str:
     if match:
         return match.group(1)
     return ""
+
+
+def _compose_service_from_container(container: dict) -> str:
+    labels = container.get("Labels", {}) or {}
+    if not isinstance(labels, dict):
+        return ""
+    return str(labels.get("com.docker.compose.service", "")).strip()
+
+
+def _container_runtime_health(container: dict) -> tuple[str, str, str]:
+    service_name = _compose_service_from_container(container)
+    if not service_name:
+        return "", "", ""
+    state = str(container.get("State", "")).strip().lower()
+    health = _parse_docker_status_health(str(container.get("Status", "")).strip())
+    return service_name, state, health
+
+
+def _container_id(container: dict) -> str:
+    return str(container.get("Id", "")).strip()
+
+
+def _has_inspected_healthcheck(inspect_payload: dict) -> bool:
+    config_payload = inspect_payload.get("Config", {}) or {}
+    healthcheck_payload = config_payload.get("Healthcheck")
+    return (
+        isinstance(healthcheck_payload, dict)
+        and bool(healthcheck_payload.get("Test"))
+        and healthcheck_payload.get("Test") != ["NONE"]
+    )
+
+
+def _inspected_health_status(inspect_payload: dict) -> str:
+    state_payload = inspect_payload.get("State", {}) or {}
+    state_health = state_payload.get("Health", {}) or {}
+    if not isinstance(state_health, dict):
+        return ""
+    inspected_health = str(state_health.get("Status", "")).strip().lower()
+    if inspected_health in {"healthy", "unhealthy", "starting"}:
+        return inspected_health
+    return ""
+
+
+def _apply_container_inspect_health(
+    service_name: str,
+    container_id: str,
+    healthcheck_config: dict[str, bool],
+    runtime_health: dict[str, dict[str, str]],
+) -> None:
+    inspect_payload = _docker_api_json(f"/containers/{container_id}/json")
+    if not isinstance(inspect_payload, dict):
+        return
+    if not _has_inspected_healthcheck(inspect_payload):
+        return
+    healthcheck_config[service_name] = True
+    inspected_health = _inspected_health_status(inspect_payload)
+    if inspected_health:
+        runtime_health[service_name]["health"] = inspected_health
 
 
 def _load_compose_health_data() -> Tuple[Dict[str, bool], Dict[str, Dict[str, str]]]:
@@ -1385,16 +1581,9 @@ def _load_compose_health_data() -> Tuple[Dict[str, bool], Dict[str, Dict[str, st
     for container in containers:
         if not isinstance(container, dict):
             continue
-        labels = container.get("Labels", {}) or {}
-        if not isinstance(labels, dict):
-            continue
-        service_name = str(labels.get("com.docker.compose.service", "")).strip()
+        service_name, state, health_from_status = _container_runtime_health(container)
         if not service_name:
             continue
-
-        state = str(container.get("State", "")).strip().lower()
-        status_text = str(container.get("Status", "")).strip()
-        health_from_status = _parse_docker_status_health(status_text)
 
         if health_from_status:
             # Status field has a health indicator → container has a healthcheck.
@@ -1411,33 +1600,19 @@ def _load_compose_health_data() -> Tuple[Dict[str, bool], Dict[str, Dict[str, st
                 healthcheck_config[service_name] = False
             runtime_health[service_name] = {"state": state, "health": ""}
             if state == "running":
-                container_id = str(container.get("Id", "")).strip()
+                container_id = _container_id(container)
                 if container_id:
                     needs_inspect.append((service_name, container_id))
 
     # Inspect only the small set of running containers that lacked a health
     # parenthetical — typically services without a healthcheck at all.
     for service_name, container_id in needs_inspect:
-        inspect_payload = _docker_api_json(f"/containers/{container_id}/json")
-        if not isinstance(inspect_payload, dict):
-            continue
-
-        config_payload = inspect_payload.get("Config", {}) or {}
-        healthcheck_payload = config_payload.get("Healthcheck")
-        has_healthcheck = (
-            isinstance(healthcheck_payload, dict)
-            and bool(healthcheck_payload.get("Test"))
-            and healthcheck_payload.get("Test") != ["NONE"]
+        _apply_container_inspect_health(
+            service_name,
+            container_id,
+            healthcheck_config,
+            runtime_health,
         )
-        if has_healthcheck:
-            healthcheck_config[service_name] = True
-            # Try to read Health.Status from inspect State
-            state_payload = inspect_payload.get("State", {}) or {}
-            state_health = state_payload.get("Health", {}) or {}
-            if isinstance(state_health, dict):
-                inspected_health = str(state_health.get("Status", "")).strip().lower()
-                if inspected_health in {"healthy", "unhealthy", "starting"}:
-                    runtime_health[service_name]["health"] = inspected_health
 
     return healthcheck_config, runtime_health
 
@@ -1479,6 +1654,159 @@ def _load_compose_runtime_health() -> Dict[str, Dict[str, str]]:
     return runtime
 
 
+def _service_name_variants(raw_candidate: str) -> set[str]:
+    candidate = str(raw_candidate or "").strip().lstrip("/")
+    if not candidate:
+        return set()
+
+    variants = {candidate, candidate.lower()}
+    if "/" in candidate:
+        tail = candidate.rsplit("/", 1)[-1]
+        variants.update({tail, tail.lower()})
+    if ":" in candidate:
+        head = candidate.split(":", 1)[0]
+        variants.update({head, head.lower()})
+
+    container_name_match = re.match(r"^[^_]+_([^_]+)_\d+$", candidate)
+    if container_name_match:
+        service_candidate = container_name_match.group(1)
+        variants.update({service_candidate, service_candidate.lower()})
+
+    normalized_variants = set(variants)
+    normalized_variants.update(value.replace("_", "-") for value in variants)
+    normalized_variants.update(value.replace("-", "_") for value in variants)
+    return normalized_variants
+
+
+def _resolve_expected_service_name(
+    raw_candidate: str,
+    expected_lookup: dict[str, str],
+) -> str:
+    for variant in _service_name_variants(raw_candidate):
+        direct_match = expected_lookup.get(variant)
+        if direct_match:
+            return direct_match
+    return ""
+
+
+def _target_service_candidates(target: dict[str, object]) -> tuple[str, ...]:
+    raw_labels = target.get("labels", {}) or {}
+    raw_discovered_labels = target.get("discoveredLabels", {}) or {}
+    labels = raw_labels if isinstance(raw_labels, dict) else {}
+    discovered_labels = (
+        raw_discovered_labels if isinstance(raw_discovered_labels, dict) else {}
+    )
+    return (
+        str(labels.get("container_label_com_docker_compose_service", "")).strip(),
+        str(
+            discovered_labels.get(
+                "__meta_docker_container_label_com_docker_compose_service",
+                "",
+            )
+        ).strip(),
+        str(discovered_labels.get("__meta_docker_container_name", "")).strip(),
+        str(labels.get("job", "")).strip(),
+        str(target.get("scrapePool", "")).strip(),
+    )
+
+
+def _status_by_prometheus_target(
+    active_targets: List[Dict[str, object]],
+    expected_services: List[str],
+) -> dict[str, str]:
+    expected_lookup = {service.lower(): service for service in expected_services}
+    status_by_service = {service: "unknown" for service in expected_services}
+    for target in active_targets:
+        health = str(target.get("health", "unknown")).lower()
+        for candidate in _target_service_candidates(target):
+            service_name = _resolve_expected_service_name(candidate, expected_lookup)
+            if service_name:
+                _apply_prometheus_target_health(status_by_service, service_name, health)
+    return status_by_service
+
+
+def _apply_prometheus_target_health(
+    status_by_service: dict[str, str],
+    service_name: str,
+    health: str,
+) -> None:
+    current = status_by_service[service_name]
+    if health == "up":
+        status_by_service[service_name] = "up"
+    elif current != "up" and health in {"down", "unknown"}:
+        status_by_service[service_name] = health
+
+
+def _mark_recently_seen_services(
+    status_by_service: dict[str, str],
+    recently_seen_services: Optional[List[str]],
+) -> None:
+    recently_seen = {
+        str(service).strip().lower() for service in (recently_seen_services or [])
+    }
+    for service, health in list(status_by_service.items()):
+        if health == "unknown" and service.lower() in recently_seen:
+            status_by_service[service] = "up"
+
+
+def _lower_bool_lookup(values: Optional[Dict[str, bool]]) -> dict[str, bool]:
+    return {
+        str(name).lower(): bool(enabled) for name, enabled in (values or {}).items()
+    }
+
+
+def _lower_runtime_lookup(
+    values: Optional[Dict[str, Dict[str, str]]],
+) -> dict[str, Dict[str, str]]:
+    return {str(name).lower(): payload for name, payload in (values or {}).items()}
+
+
+def _target_service_health(
+    prometheus_health: str,
+    state: str,
+    healthcheck_state: str,
+    has_healthcheck: bool,
+) -> str:
+    if not has_healthcheck:
+        return (
+            "up"
+            if prometheus_health == "unknown" and state == "running"
+            else prometheus_health
+        )
+    if state and state != "running":
+        return "down"
+    if healthcheck_state in {"healthy", "unhealthy", "starting"}:
+        return healthcheck_state
+    if prometheus_health == "unknown" and state == "running":
+        return "up"
+    return prometheus_health
+
+
+def _target_service_entry(
+    service: str,
+    prometheus_health: str,
+    healthcheck_lookup: dict[str, bool],
+    runtime_lookup: dict[str, Dict[str, str]],
+) -> dict[str, str]:
+    runtime = runtime_lookup.get(service.lower(), {})
+    state = str(runtime.get("state", "")).lower()
+    healthcheck_state = str(runtime.get("health", "")).lower()
+    has_healthcheck = healthcheck_lookup.get(service.lower(), False)
+    if not has_healthcheck and healthcheck_state:
+        has_healthcheck = True
+    return {
+        "service": service,
+        "health": _target_service_health(
+            prometheus_health,
+            state,
+            healthcheck_state,
+            has_healthcheck,
+        ),
+        "state": state or "unknown",
+        "healthcheck": healthcheck_state if has_healthcheck else "none",
+    }
+
+
 def _build_target_service_status(
     active_targets: List[Dict[str, object]],
     expected_services: List[str],
@@ -1487,126 +1815,165 @@ def _build_target_service_status(
     runtime_health_by_service: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> List[Dict[str, str]]:
     """Map expected compose services to their Prometheus target health."""
-    expected_lookup = {service.lower(): service for service in expected_services}
+    status_by_service = _status_by_prometheus_target(active_targets, expected_services)
+    _mark_recently_seen_services(status_by_service, recently_seen_services)
+    healthcheck_lookup = _lower_bool_lookup(service_healthcheck_config)
+    runtime_lookup = _lower_runtime_lookup(runtime_health_by_service)
+    return [
+        _target_service_entry(
+            service,
+            status_by_service.get(service, "unknown"),
+            healthcheck_lookup,
+            runtime_lookup,
+        )
+        for service in expected_services
+    ]
 
-    def _resolve_expected_service_name(raw_candidate: str) -> str:
-        candidate = str(raw_candidate or "").strip().lstrip("/")
-        if not candidate:
-            return ""
 
-        variants = {candidate}
-        variants.add(candidate.lower())
-
-        if "/" in candidate:
-            tail = candidate.rsplit("/", 1)[-1]
-            variants.add(tail)
-            variants.add(tail.lower())
-        if ":" in candidate:
-            head = candidate.split(":", 1)[0]
-            variants.add(head)
-            variants.add(head.lower())
-
-        container_name_match = re.match(r"^[^_]+_([^_]+)_\d+$", candidate)
-        if container_name_match:
-            service_candidate = container_name_match.group(1)
-            variants.add(service_candidate)
-            variants.add(service_candidate.lower())
-
-        normalized_variants = set(variants)
-        normalized_variants.update(value.replace("_", "-") for value in variants)
-        normalized_variants.update(value.replace("-", "_") for value in variants)
-
-        for variant in normalized_variants:
-            direct_match = expected_lookup.get(variant)
-            if direct_match:
-                return direct_match
+def _public_monitoring_base_url(
+    *,
+    configured_public_url: str,
+    internal_url: str,
+    request_scheme: str,
+    request_host: str,
+    host_port: int,
+    proxied: bool,
+) -> str:
+    if configured_public_url:
+        return configured_public_url
+    if not _is_internal_hostname(urlparse(internal_url).hostname or ""):
         return ""
+    if proxied:
+        return ""
+    return _build_public_service_url(
+        internal_url,
+        request_scheme,
+        request_host,
+        host_port,
+    )
 
-    status_by_service: Dict[str, str] = {
-        service: "unknown" for service in expected_services
+
+def _monitoring_dashboard_query() -> str:
+    return urlencode(
+        {
+            "orgId": "1",
+            "from": "now-6h",
+            "to": "now",
+            "timezone": "browser",
+            "refresh": "10s",
+        }
+    )
+
+
+def _grafana_dashboard_urls(
+    grafana_public_base_url: str,
+    dashboard_query: str,
+) -> dict[str, str]:
+    dashboard_uid = os.environ.get(
+        "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
+    )
+    dashboard_slug = os.environ.get(
+        "ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-infrastructure"
+    )
+    dashboards = {
+        "dashboard": (
+            f"d/{dashboard_uid}/{dashboard_slug}",
+            dashboard_uid,
+            dashboard_slug,
+        ),
+        "database_dashboard": (
+            "d/database-metrics/database",
+            "database-metrics",
+            "database",
+        ),
+        "plugin_database_dashboard": (
+            "d/plugin-database-metrics/plugin-database",
+            "plugin-database-metrics",
+            "plugin-database",
+        ),
+        "redis_dashboard": ("d/redis-metrics/redis", "redis-metrics", "redis"),
     }
-
-    for target in active_targets:
-        raw_labels = target.get("labels", {}) or {}
-        raw_discovered_labels = target.get("discoveredLabels", {}) or {}
-        labels = raw_labels if isinstance(raw_labels, dict) else {}
-        discovered_labels = (
-            raw_discovered_labels if isinstance(raw_discovered_labels, dict) else {}
+    urls: dict[str, str] = {}
+    for prefix, (subpath, uid, slug) in dashboards.items():
+        proxy_path = reverse(
+            "omeroweb_admin_tools_grafana_proxy",
+            kwargs={"subpath": subpath},
         )
-        candidates = [
-            str(labels.get("container_label_com_docker_compose_service", "")).strip(),
-            str(
-                discovered_labels.get(
-                    "__meta_docker_container_label_com_docker_compose_service", ""
-                )
-            ).strip(),
-            str(discovered_labels.get("__meta_docker_container_name", "")).strip(),
-            str(labels.get("job", "")).strip(),
-            str(target.get("scrapePool", "")).strip(),
-        ]
-        health = str(target.get("health", "unknown")).lower()
-        for candidate in candidates:
-            service_name = _resolve_expected_service_name(candidate)
-            if not service_name:
-                continue
-            current = status_by_service[service_name]
-            if health == "up":
-                status_by_service[service_name] = "up"
-            elif current != "up" and health in {"down", "unknown"}:
-                status_by_service[service_name] = health
-
-    recently_seen = {
-        str(service).strip().lower() for service in (recently_seen_services or [])
-    }
-
-    for service, health in list(status_by_service.items()):
-        if health == "unknown" and service.lower() in recently_seen:
-            status_by_service[service] = "up"
-
-    healthcheck_lookup = {
-        str(name).lower(): bool(enabled)
-        for name, enabled in (service_healthcheck_config or {}).items()
-    }
-    runtime_lookup = {
-        str(name).lower(): payload
-        for name, payload in (runtime_health_by_service or {}).items()
-    }
-
-    services: List[Dict[str, str]] = []
-    for service in expected_services:
-        prometheus_health = status_by_service.get(service, "unknown")
-        runtime = runtime_lookup.get(service.lower(), {})
-        state = str(runtime.get("state", "")).lower()
-        healthcheck_state = str(runtime.get("health", "")).lower()
-        has_healthcheck = healthcheck_lookup.get(service.lower(), False)
-        if not has_healthcheck and healthcheck_state:
-            has_healthcheck = True
-
-        final_health = prometheus_health
-        if has_healthcheck:
-            if state and state != "running":
-                final_health = "down"
-            elif healthcheck_state == "healthy":
-                final_health = "healthy"
-            elif healthcheck_state == "unhealthy":
-                final_health = "unhealthy"
-            elif healthcheck_state == "starting":
-                final_health = "starting"
-            elif final_health == "unknown" and state == "running":
-                final_health = "up"
-        elif final_health == "unknown" and state == "running":
-            final_health = "up"
-
-        services.append(
-            {
-                "service": service,
-                "health": final_health,
-                "state": state or "unknown",
-                "healthcheck": healthcheck_state if has_healthcheck else "none",
-            }
+        urls[f"{prefix}_url"] = f"/d/{uid}/{slug}?{dashboard_query}"
+        urls[f"{prefix}_proxy_url"] = f"{proxy_path}?{dashboard_query}"
+        urls[f"{prefix}_external_url"] = (
+            f"{grafana_public_base_url.rstrip('/')}/d/{uid}/{slug}?{dashboard_query}"
+            if grafana_public_base_url
+            else ""
         )
+    return urls
 
-    return services
+
+def _empty_targets_overview() -> dict[str, Any]:
+    return {"active": 0, "up": 0, "down": 0, "unknown": 0, "services": []}
+
+
+def _prometheus_active_targets(prometheus_base_url: str) -> list[dict[str, object]]:
+    response = requests.get(
+        f"{_validated_http_url(prometheus_base_url).rstrip('/')}/api/v1/targets",
+        timeout=5.0,
+    )
+    payload = response.json()
+    data_payload = payload.get("data", {}) if isinstance(payload, dict) else {}
+    raw_active_targets = (
+        data_payload.get("activeTargets", []) if isinstance(data_payload, dict) else []
+    )
+    return [target for target in raw_active_targets if isinstance(target, dict)]
+
+
+def _target_counts(active_targets: list[dict[str, object]]) -> dict[str, int]:
+    up_count = sum(
+        1 for target in active_targets if str(target.get("health", "")).lower() == "up"
+    )
+    down_count = sum(
+        1
+        for target in active_targets
+        if str(target.get("health", "")).lower() == "down"
+    )
+    return {
+        "active": len(active_targets),
+        "up": up_count,
+        "down": down_count,
+        "unknown": len(active_targets) - up_count - down_count,
+    }
+
+
+def _recently_seen_services(prometheus_base_url: str) -> list[str]:
+    try:
+        return _collect_recently_seen_services(prometheus_base_url)
+    except Exception:
+        logger.exception("Failed to fetch recently seen cAdvisor services")
+        return []
+
+
+def _monitoring_targets_overview(
+    prometheus_base_url: str,
+    expected_services: list[str],
+) -> dict[str, Any]:
+    targets_overview = _empty_targets_overview()
+    try:
+        active_targets = _prometheus_active_targets(prometheus_base_url)
+        targets_overview.update(_target_counts(active_targets))
+        service_healthcheck_config, runtime_health_by_service = (
+            _load_compose_health_data()
+        )
+        recently_seen_services = _recently_seen_services(prometheus_base_url)
+        all_services = sorted(set(expected_services) | set(recently_seen_services))
+        targets_overview["services"] = _build_target_service_status(
+            active_targets,
+            all_services,
+            recently_seen_services=recently_seen_services,
+            service_healthcheck_config=service_healthcheck_config,
+            runtime_health_by_service=runtime_health_by_service,
+        )
+    except Exception:
+        logger.exception("Failed to fetch Prometheus targets overview")
+    return targets_overview
 
 
 @login_required()
@@ -1635,123 +2002,39 @@ def resource_monitoring_data(request, conn=None, _url=None, **kwargs):
         default_port=9090,
     )
 
-    grafana_public_url = os.environ.get("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "").strip()
-    prometheus_public_url = os.environ.get(
-        "ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL", ""
-    ).strip()
-    grafana_host_port = _to_int_env("GRAFANA_HOST_PORT", 3000)
-    prometheus_host_port = _to_int_env("PROMETHEUS_HOST_PORT", 9090)
-
     request_host = _safe_request_host(request)
     request_scheme = request.scheme
-    _proxied = _is_behind_reverse_proxy(request)
-
-    dashboard_uid = os.environ.get(
-        "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
+    proxied = _is_behind_reverse_proxy(request)
+    grafana_public_base_url = _public_monitoring_base_url(
+        configured_public_url=os.environ.get(
+            "ADMIN_TOOLS_GRAFANA_PUBLIC_URL", ""
+        ).strip(),
+        internal_url=grafana_base_url,
+        request_scheme=request_scheme,
+        request_host=request_host,
+        host_port=_to_int_env("GRAFANA_HOST_PORT", 3000),
+        proxied=proxied,
     )
-    dashboard_slug = os.environ.get(
-        "ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-infrastructure"
+    prometheus_public_base_url = _public_monitoring_base_url(
+        configured_public_url=os.environ.get(
+            "ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL", ""
+        ).strip(),
+        internal_url=prometheus_base_url,
+        request_scheme=request_scheme,
+        request_host=request_host,
+        host_port=_to_int_env("PROMETHEUS_HOST_PORT", 9090),
+        proxied=proxied,
     )
-
-    dashboard_query = urlencode(
-        {
-            "orgId": "1",
-            "from": "now-6h",
-            "to": "now",
-            "timezone": "browser",
-            "refresh": "10s",
-        }
+    dashboard_query = _monitoring_dashboard_query()
+    dashboard_urls = _grafana_dashboard_urls(
+        grafana_public_base_url,
+        dashboard_query,
     )
-    grafana_public_base_url = grafana_public_url
-    if not grafana_public_base_url and _is_internal_hostname(
-        urlparse(grafana_base_url).hostname or ""
-    ):
-        if _proxied:
-            # Behind a reverse proxy without an explicit GRAFANA_PUBLIC_URL:
-            # auto-generated URLs (with or without port) won't reach Grafana
-            # because the proxy routes to OMERO.web, not Grafana.  Leave empty
-            # so the JS falls through to the Django proxy URL which partially
-            # works for dashboard viewing.
-            grafana_public_base_url = ""
-        else:
-            grafana_public_base_url = _build_public_service_url(
-                grafana_base_url,
-                request_scheme,
-                request_host,
-                grafana_host_port,
-            )
-
-    prometheus_public_base_url = prometheus_public_url
-    if not prometheus_public_base_url and _is_internal_hostname(
-        urlparse(prometheus_base_url).hostname or ""
-    ):
-        if _proxied:
-            prometheus_public_base_url = ""
-        else:
-            prometheus_public_base_url = _build_public_service_url(
-                prometheus_base_url,
-                request_scheme,
-                request_host,
-                prometheus_host_port,
-            )
-
-    dashboard_external_url = ""
-    if grafana_public_base_url:
-        dashboard_external_url = f"{grafana_public_base_url.rstrip('/')}/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
-
-    prometheus_targets_url = ""
-    if prometheus_public_base_url:
-        prometheus_targets_url = f"{prometheus_public_base_url.rstrip('/')}/targets"
-
-    dashboard_proxy_path = reverse(
-        "omeroweb_admin_tools_grafana_proxy",
-        kwargs={"subpath": f"d/{dashboard_uid}/{dashboard_slug}"},
+    prometheus_targets_url = (
+        f"{prometheus_public_base_url.rstrip('/')}/targets"
+        if prometheus_public_base_url
+        else ""
     )
-    dashboard_proxy_url = f"{dashboard_proxy_path}?{dashboard_query}"
-    dashboard_url = f"/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
-
-    postgres_dashboard_proxy_path = reverse(
-        "omeroweb_admin_tools_grafana_proxy",
-        kwargs={"subpath": "d/database-metrics/database"},
-    )
-    database_dashboard_proxy_url = f"{postgres_dashboard_proxy_path}?{dashboard_query}"
-    database_dashboard_url = f"/d/database-metrics/database?{dashboard_query}"
-    database_dashboard_external_url = ""
-    if grafana_public_base_url:
-        database_dashboard_external_url = (
-            f"{grafana_public_base_url.rstrip('/')}/d/database-metrics/database?"
-            f"{dashboard_query}"
-        )
-
-    plugin_database_dashboard_proxy_path = reverse(
-        "omeroweb_admin_tools_grafana_proxy",
-        kwargs={"subpath": "d/plugin-database-metrics/plugin-database"},
-    )
-    plugin_database_dashboard_proxy_url = (
-        f"{plugin_database_dashboard_proxy_path}?{dashboard_query}"
-    )
-    plugin_database_dashboard_url = (
-        f"/d/plugin-database-metrics/plugin-database?{dashboard_query}"
-    )
-    plugin_database_dashboard_external_url = ""
-    if grafana_public_base_url:
-        plugin_database_dashboard_external_url = (
-            f"{grafana_public_base_url.rstrip('/')}/d/plugin-database-metrics/"
-            f"plugin-database?{dashboard_query}"
-        )
-
-    redis_dashboard_proxy_path = reverse(
-        "omeroweb_admin_tools_grafana_proxy",
-        kwargs={"subpath": "d/redis-metrics/redis"},
-    )
-    redis_dashboard_proxy_url = f"{redis_dashboard_proxy_path}?{dashboard_query}"
-    redis_dashboard_url = f"/d/redis-metrics/redis?{dashboard_query}"
-    redis_dashboard_external_url = ""
-    if grafana_public_base_url:
-        redis_dashboard_external_url = (
-            f"{grafana_public_base_url.rstrip('/')}/d/redis-metrics/redis?"
-            f"{dashboard_query}"
-        )
     prometheus_targets_proxy_url = reverse(
         "omeroweb_admin_tools_prometheus_proxy", kwargs={"subpath": "targets"}
     )
@@ -1761,85 +2044,17 @@ def resource_monitoring_data(request, conn=None, _url=None, **kwargs):
 
     expected_services = _load_compose_service_names()
     system_metrics = _collect_system_metrics(prometheus_base_url)
-
-    targets_overview: dict[str, Any] = {
-        "active": 0,
-        "up": 0,
-        "down": 0,
-        "unknown": 0,
-        "services": [],
-    }
-    try:
-        response = requests.get(
-            f"{_validated_http_url(prometheus_base_url).rstrip('/')}/api/v1/targets",
-            timeout=5.0,
-        )
-        payload = response.json()
-        data_payload = payload.get("data", {}) if isinstance(payload, dict) else {}
-        raw_active_targets = (
-            data_payload.get("activeTargets", {})
-            if isinstance(data_payload, dict)
-            else []
-        )
-        active_targets = [
-            target for target in raw_active_targets if isinstance(target, dict)
-        ]
-        targets_overview["active"] = len(active_targets)
-        targets_overview["up"] = sum(
-            1
-            for target in active_targets
-            if str(target.get("health", "")).lower() == "up"
-        )
-        targets_overview["down"] = sum(
-            1
-            for target in active_targets
-            if str(target.get("health", "")).lower() == "down"
-        )
-        targets_overview["unknown"] = (
-            targets_overview["active"]
-            - targets_overview["up"]
-            - targets_overview["down"]
-        )
-
-        recently_seen_services: List[str] = []
-        service_healthcheck_config, runtime_health_by_service = (
-            _load_compose_health_data()
-        )
-        try:
-            recently_seen_services = _collect_recently_seen_services(
-                prometheus_base_url
-            )
-        except Exception:
-            logger.exception("Failed to fetch recently seen cAdvisor services")
-
-        all_services = sorted(set(expected_services) | set(recently_seen_services))
-        targets_overview["services"] = _build_target_service_status(
-            active_targets,
-            all_services,
-            recently_seen_services=recently_seen_services,
-            service_healthcheck_config=service_healthcheck_config,
-            runtime_health_by_service=runtime_health_by_service,
-        )
-    except Exception:
-        logger.exception("Failed to fetch Prometheus targets overview")
+    targets_overview = _monitoring_targets_overview(
+        prometheus_base_url,
+        expected_services,
+    )
 
     return JsonResponse(
         {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "grafana": {
                 "base_url": grafana_base_url,
-                "dashboard_url": dashboard_url,
-                "dashboard_external_url": dashboard_external_url,
-                "dashboard_proxy_url": dashboard_proxy_url,
-                "database_dashboard_url": database_dashboard_url,
-                "database_dashboard_external_url": database_dashboard_external_url,
-                "database_dashboard_proxy_url": database_dashboard_proxy_url,
-                "plugin_database_dashboard_url": plugin_database_dashboard_url,
-                "plugin_database_dashboard_external_url": plugin_database_dashboard_external_url,
-                "plugin_database_dashboard_proxy_url": plugin_database_dashboard_proxy_url,
-                "redis_dashboard_url": redis_dashboard_url,
-                "redis_dashboard_external_url": redis_dashboard_external_url,
-                "redis_dashboard_proxy_url": redis_dashboard_proxy_url,
+                **dashboard_urls,
                 "probe": grafana_probe,
             },
             "prometheus": {
@@ -1979,6 +2194,183 @@ def storage_view(request, _conn=None, _url=None, **kwargs):
     return render(request, "omeroweb_admin_tools/storage.html", {})
 
 
+_STORAGE_DISTRIBUTION_QUERY = """
+    select e.id, e.omeName, g.id, g.name, sum(file.size)
+    from OriginalFile file
+    join file.details.owner e
+    join file.details.group g
+    group by e.id, e.omeName, g.id, g.name
+"""
+
+
+def _storage_distribution_from_rows(rows) -> dict[str, object]:
+    per_user_group: list[dict[str, object]] = []
+    totals_by_user: dict[str, int] = {}
+    full_name_by_user: dict[str, str] = {}
+    groups_by_user: dict[str, set[str]] = {}
+    totals_by_group: dict[str, int] = {}
+    users_by_group: dict[str, set[str]] = {}
+    total_size = 0
+
+    for row in rows:
+        user_name = str(_unwrap_rtype_value(row[1], "unknown") or "unknown")
+        group_name = str(_unwrap_rtype_value(row[3], "unknown") or "unknown")
+        size_value = int(_unwrap_rtype_value(row[4], 0) or 0)
+        per_user_group.append(
+            {"username": user_name, "group": group_name, "bytes": size_value}
+        )
+        totals_by_user[user_name] = totals_by_user.get(user_name, 0) + size_value
+        groups_by_user.setdefault(user_name, set()).add(group_name)
+        totals_by_group[group_name] = totals_by_group.get(group_name, 0) + size_value
+        users_by_group.setdefault(group_name, set()).add(user_name)
+        total_size += size_value
+
+    return {
+        "per_user_group": per_user_group,
+        "totals_by_user": totals_by_user,
+        "full_name_by_user": full_name_by_user,
+        "groups_by_user": groups_by_user,
+        "totals_by_group": totals_by_group,
+        "users_by_group": users_by_group,
+        "total_size": total_size,
+    }
+
+
+def _query_storage_distribution(conn) -> dict[str, object]:
+    service_opts = conn.SERVICE_OPTS
+    if hasattr(service_opts, "setOmeroGroup"):
+        service_opts.setOmeroGroup(-1)
+    rows = conn.getQueryService().projection(
+        _STORAGE_DISTRIBUTION_QUERY,
+        None,
+        service_opts,
+    )
+    distribution = _storage_distribution_from_rows(rows)
+    _merge_known_storage_principals(conn, distribution)
+    return distribution
+
+
+def _merge_known_storage_principals(conn, distribution: dict[str, object]) -> None:
+    totals_by_user = cast(dict[str, int], distribution["totals_by_user"])
+    full_name_by_user = cast(dict[str, str], distribution["full_name_by_user"])
+    groups_by_user = cast(dict[str, set[str]], distribution["groups_by_user"])
+    totals_by_group = cast(dict[str, int], distribution["totals_by_group"])
+    users_by_group = cast(dict[str, set[str]], distribution["users_by_group"])
+
+    (
+        all_users,
+        all_groups,
+        group_permissions,
+        all_groups_by_user,
+        all_users_by_group,
+    ) = _list_all_users_and_groups(conn)
+    for username, full_name in all_users.items():
+        totals_by_user.setdefault(username, 0)
+        groups_by_user.setdefault(username, set()).update(
+            all_groups_by_user.get(username, set())
+        )
+        full_name_by_user[username] = full_name
+    for group_name in all_groups:
+        totals_by_group.setdefault(group_name, 0)
+        users_by_group.setdefault(group_name, set()).update(
+            all_users_by_group.get(group_name, set())
+        )
+        group_permissions.setdefault(group_name, "Private")
+
+    for username in totals_by_user:
+        full_name_by_user.setdefault(username, "")
+    distribution["group_permissions"] = group_permissions
+
+
+def _storage_disk_usage(data_root: str) -> tuple[int | None, int | None, int | None]:
+    try:
+        return shutil.disk_usage(data_root)
+    except Exception:
+        logger.warning("Could not read disk usage for data root %s", data_root)
+        return None, None, None
+
+
+def _storage_quota_status(known_groups: list[str]) -> dict[str, object]:
+    try:
+        return reconcile_quotas(known_groups)
+    except Exception:
+        logger.warning(
+            "Quota reconciliation failed; returning storage data without quota info",
+            exc_info=True,
+        )
+        try:
+            enforcer_available = is_quota_enforcement_available()
+        except Exception:
+            enforcer_available = False
+        return {
+            "quotas_gb": {},
+            "logs": [],
+            "quota_enforcement_available": enforcer_available,
+        }
+
+
+def _storage_bytes_sort_key(item: dict[str, object]) -> int:
+    value = item.get("bytes", 0)
+    return int(value) if isinstance(value, (int, float, str)) else 0
+
+
+def _storage_response_payload(
+    distribution: dict[str, object],
+    data_root: str,
+    data_total: int | None,
+    data_used: int | None,
+    data_free: int | None,
+    quota_status: dict[str, object],
+) -> dict[str, object]:
+    totals_by_user = cast(dict[str, int], distribution["totals_by_user"])
+    full_name_by_user = cast(dict[str, str], distribution["full_name_by_user"])
+    groups_by_user = cast(dict[str, set[str]], distribution["groups_by_user"])
+    totals_by_group = cast(dict[str, int], distribution["totals_by_group"])
+    users_by_group = cast(dict[str, set[str]], distribution["users_by_group"])
+    group_permissions = cast(dict[str, str], distribution["group_permissions"])
+    per_user_group = cast(
+        list[dict[str, object]],
+        distribution["per_user_group"],
+    )
+    return {
+        "totals": {
+            "omero_binary_bytes": distribution["total_size"],
+            "data_root": data_root,
+            "data_root_total_bytes": data_total,
+            "data_root_used_bytes": data_used,
+            "data_root_free_bytes": data_free,
+        },
+        "by_user": [
+            {
+                "username": username,
+                "full_name": full_name_by_user.get(username, ""),
+                "groups": sorted(groups_by_user.get(username, set())),
+                "bytes": size,
+            }
+            for username, size in sorted(
+                totals_by_user.items(), key=lambda item: item[1], reverse=True
+            )
+        ],
+        "by_group": [
+            {
+                "group": groupname,
+                "users": sorted(users_by_group.get(groupname, set())),
+                "permissions": group_permissions.get(groupname, "Private"),
+                "bytes": size,
+            }
+            for groupname, size in sorted(
+                totals_by_group.items(), key=lambda item: item[1], reverse=True
+            )
+        ],
+        "by_user_group": sorted(
+            per_user_group,
+            key=_storage_bytes_sort_key,
+            reverse=True,
+        ),
+        "quotas": quota_status,
+    }
+
+
 @login_required()
 @require_root_user
 def storage_data(request, conn=None, _url=None, **kwargs):
@@ -1987,137 +2379,26 @@ def storage_data(request, conn=None, _url=None, **kwargs):
     if root_error:
         return root_error
 
-    query = """
-        select e.id, e.omeName, g.id, g.name, sum(file.size)
-        from OriginalFile file
-        join file.details.owner e
-        join file.details.group g
-        group by e.id, e.omeName, g.id, g.name
-    """
-    per_user_group = []
-    totals_by_user: Dict[str, int] = {}
-    full_name_by_user: Dict[str, str] = {}
-    groups_by_user: Dict[str, set] = {}
-    totals_by_group: Dict[str, int] = {}
-    users_by_group: Dict[str, set] = {}
-    total_size = 0
-
     try:
-        service_opts = conn.SERVICE_OPTS
-        if hasattr(service_opts, "setOmeroGroup"):
-            service_opts.setOmeroGroup(-1)
-        rows = conn.getQueryService().projection(query, None, service_opts)
-        for row in rows:
-            user_name = str(_unwrap_rtype_value(row[1], "unknown") or "unknown")
-            group_name = str(_unwrap_rtype_value(row[3], "unknown") or "unknown")
-            size_raw = _unwrap_rtype_value(row[4], 0)
-            size_value = int(size_raw or 0)
-            per_user_group.append(
-                {
-                    "username": user_name,
-                    "group": group_name,
-                    "bytes": size_value,
-                }
-            )
-            totals_by_user[user_name] = totals_by_user.get(user_name, 0) + size_value
-            groups_by_user.setdefault(user_name, set()).add(group_name)
-            totals_by_group[group_name] = (
-                totals_by_group.get(group_name, 0) + size_value
-            )
-            users_by_group.setdefault(group_name, set()).add(user_name)
-            total_size += size_value
-
-        (
-            all_users,
-            all_groups,
-            group_permissions,
-            all_groups_by_user,
-            all_users_by_group,
-        ) = _list_all_users_and_groups(conn)
-        for username, full_name in all_users.items():
-            totals_by_user.setdefault(username, 0)
-            groups_by_user.setdefault(username, set()).update(
-                all_groups_by_user.get(username, set())
-            )
-            full_name_by_user[username] = full_name
-        for group_name in all_groups:
-            totals_by_group.setdefault(group_name, 0)
-            users_by_group.setdefault(group_name, set()).update(
-                all_users_by_group.get(group_name, set())
-            )
-            group_permissions.setdefault(group_name, "Private")
-
-        for username in totals_by_user:
-            full_name_by_user.setdefault(username, "")
+        distribution = _query_storage_distribution(conn)
     except Exception:
         logger.exception("Failed to compute storage distribution")
         return JsonResponse({"error": "Storage query failed."}, status=500)
 
     data_root = os.environ.get("OMERO_DATA_DIR", "/OMERO")
-    data_total = data_used = data_free = None
-    try:
-        data_total, data_used, data_free = shutil.disk_usage(data_root)
-    except Exception:
-        logger.warning("Could not read disk usage for data root %s", data_root)
+    data_total, data_used, data_free = _storage_disk_usage(data_root)
 
-    known_groups = sorted(totals_by_group.keys())
-    try:
-        quota_status = reconcile_quotas(known_groups)
-    except Exception:
-        logger.warning(
-            "Quota reconciliation failed; returning storage data without quota info",
-            exc_info=True,
-        )
-        # Use the actual marker-file check instead of hardcoding False.
-        # reconcile_quotas() can fail for transient reasons (e.g. first
-        # write to the state file, permission issues) that are unrelated
-        # to whether the host-side quota enforcer is installed.
-        try:
-            enforcer_available = is_quota_enforcement_available()
-        except Exception:
-            enforcer_available = False
-        quota_status = {
-            "quotas_gb": {},
-            "logs": [],
-            "quota_enforcement_available": enforcer_available,
-        }
-
+    totals_by_group = cast(dict[str, int], distribution["totals_by_group"])
+    quota_status = _storage_quota_status(sorted(totals_by_group.keys()))
     return JsonResponse(
-        {
-            "totals": {
-                "omero_binary_bytes": total_size,
-                "data_root": data_root,
-                "data_root_total_bytes": data_total,
-                "data_root_used_bytes": data_used,
-                "data_root_free_bytes": data_free,
-            },
-            "by_user": [
-                {
-                    "username": username,
-                    "full_name": full_name_by_user.get(username, ""),
-                    "groups": sorted(groups_by_user.get(username, set())),
-                    "bytes": size,
-                }
-                for username, size in sorted(
-                    totals_by_user.items(), key=lambda item: item[1], reverse=True
-                )
-            ],
-            "by_group": [
-                {
-                    "group": groupname,
-                    "users": sorted(users_by_group.get(groupname, set())),
-                    "permissions": group_permissions.get(groupname, "Private"),
-                    "bytes": size,
-                }
-                for groupname, size in sorted(
-                    totals_by_group.items(), key=lambda item: item[1], reverse=True
-                )
-            ],
-            "by_user_group": sorted(
-                per_user_group, key=lambda item: item["bytes"], reverse=True
-            ),
-            "quotas": quota_status,
-        }
+        _storage_response_payload(
+            distribution,
+            data_root,
+            data_total,
+            data_used,
+            data_free,
+            quota_status,
+        )
     )
 
 
@@ -2164,6 +2445,47 @@ def storage_quota_data(request, conn=None, _url=None, **kwargs):
     )
 
 
+def _json_payload_from_request(request) -> dict[str, object]:
+    raw_body = request.body.decode("utf-8").strip()
+    if not raw_body:
+        return {}
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _quota_updates_from_form(request):
+    if not request.POST:
+        return None
+    raw_updates = request.POST.get("updates")
+    if raw_updates is None:
+        return None
+    return json.loads(raw_updates) if isinstance(raw_updates, str) else raw_updates
+
+
+def _normalize_quota_updates(updates) -> list[tuple[str, object]]:
+    if updates is None:
+        return []
+    if not isinstance(updates, list):
+        raise QuotaError("Expected payload with list field 'updates'")
+    normalized = []
+    for item in updates:
+        if not isinstance(item, dict):
+            raise QuotaError("Each quota update must be an object")
+        normalized.append((cast(str, item.get("group", "")), item.get("quota_gb", "")))
+    return normalized
+
+
+def _quota_updates_from_request(request) -> list[tuple[str, object]]:
+    payload = _json_payload_from_request(request)
+    updates = payload.get("updates")
+    if updates is None:
+        updates = _quota_updates_from_form(request)
+    return _normalize_quota_updates(updates)
+
+
 @login_required()
 @require_root_user
 def storage_quota_update(request, conn=None, _url=None, **kwargs):
@@ -2176,32 +2498,7 @@ def storage_quota_update(request, conn=None, _url=None, **kwargs):
 
     # ---- parse the request payload ----
     try:
-        raw_body = request.body.decode("utf-8").strip()
-        try:
-            payload = json.loads(raw_body) if raw_body else {}
-        except json.JSONDecodeError:
-            payload = {}
-        updates = payload.get("updates") if isinstance(payload, dict) else None
-
-        if updates is None and request.POST:
-            raw_updates = request.POST.get("updates")
-            if raw_updates is not None:
-                updates = (
-                    json.loads(raw_updates)
-                    if isinstance(raw_updates, str)
-                    else raw_updates
-                )
-
-        if updates is None:
-            updates = []
-        if not isinstance(updates, list):
-            raise QuotaError("Expected payload with list field 'updates'")
-
-        normalized = []
-        for item in updates:
-            if not isinstance(item, dict):
-                raise QuotaError("Each quota update must be an object")
-            normalized.append((item.get("group", ""), item.get("quota_gb", "")))
+        normalized = _quota_updates_from_request(request)
     except (QuotaError, ValueError, TypeError):
         logger.warning(
             "Invalid quota update payload (content_type=%s, content_length=%s)",
@@ -2294,6 +2591,41 @@ def server_database_testing_view(request, _conn=None, _url=None, **kwargs):
     )
 
 
+def _diagnostic_script_ids_from_request(
+    request,
+) -> tuple[list[str], JsonResponse | None]:
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return [], JsonResponse({"error": "Invalid JSON payload."}, status=400)
+
+    script_ids = payload.get("scripts") if isinstance(payload, dict) else None
+    if not isinstance(script_ids, list) or not script_ids:
+        return [], JsonResponse(
+            {"error": "Payload must include non-empty 'scripts' list."},
+            status=400,
+        )
+
+    normalized_script_ids = [str(script_id).strip() for script_id in script_ids]
+    if any(not script_id for script_id in normalized_script_ids):
+        return [], JsonResponse(
+            {"error": "Payload contains invalid empty script IDs."},
+            status=400,
+        )
+    return normalized_script_ids, None
+
+
+def _request_username_or_unknown(request, conn) -> str:
+    try:
+        return current_username(request, conn)
+    except Exception:
+        return "unknown"
+
+
+def _sanitized_script_id_list(script_ids: list[str]) -> str:
+    return ", ".join(sanitize_log_value(script_id) for script_id in script_ids)
+
+
 @login_required()
 @require_root_user
 def server_database_testing_run(request, conn=None, _url=None, **kwargs):
@@ -2303,35 +2635,18 @@ def server_database_testing_run(request, conn=None, _url=None, **kwargs):
         return root_error
     if request.method != "POST":
         return JsonResponse({"error": "POST method required."}, status=405)
-    try:
-        payload = json.loads(request.body.decode("utf-8") or "{}")
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
-
-    script_ids = payload.get("scripts")
-    if not isinstance(script_ids, list) or not script_ids:
-        return JsonResponse(
-            {"error": "Payload must include non-empty 'scripts' list."},
-            status=400,
-        )
-
-    normalized_script_ids = [str(script_id).strip() for script_id in script_ids]
-    if any(not script_id for script_id in normalized_script_ids):
-        return JsonResponse(
-            {"error": "Payload contains invalid empty script IDs."},
-            status=400,
-        )
 
     request_id = str(uuid.uuid4())
-    try:
-        username = current_username(request, conn)
-    except Exception:
-        username = "unknown"
+    normalized_script_ids, error_response = _diagnostic_script_ids_from_request(request)
+    if error_response is not None:
+        return error_response
+    username = _request_username_or_unknown(request, conn)
+    script_id_list = _sanitized_script_id_list(normalized_script_ids)
     logger.info(
         "[%s] Running diagnostics scripts requested by %s: %s",
         request_id,
         sanitize_log_value(username),
-        ", ".join(sanitize_log_value(script_id) for script_id in normalized_script_ids),
+        script_id_list,
     )
     try:
         results = [
@@ -2341,9 +2656,7 @@ def server_database_testing_run(request, conn=None, _url=None, **kwargs):
         logger.error(
             "[%s] Failed to run diagnostics scripts %s: %s\n%s",
             request_id,
-            ", ".join(
-                sanitize_log_value(script_id) for script_id in normalized_script_ids
-            ),
+            script_id_list,
             sanitize_log_value(exc),
             traceback.format_exc(),
         )
@@ -2358,6 +2671,6 @@ def server_database_testing_run(request, conn=None, _url=None, **kwargs):
     logger.info(
         "[%s] Diagnostics scripts completed successfully. scripts=%s",
         request_id,
-        ", ".join(sanitize_log_value(script_id) for script_id in normalized_script_ids),
+        script_id_list,
     )
     return JsonResponse({"results": results, "request_id": request_id})
