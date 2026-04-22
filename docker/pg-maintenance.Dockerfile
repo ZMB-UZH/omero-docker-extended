@@ -37,11 +37,12 @@ RUN set -euo pipefail; \
 # Copy the maintenance script and cron schedule
 # ---------------------------------------------
 COPY maintenance/postgres/pg-maintenance.sh    /usr/local/bin/pg-maintenance.sh
+COPY maintenance/postgres/pg-maintenance-cron-runner /usr/local/bin/pg-maintenance-cron-runner
 COPY maintenance/postgres/pg-maintenance-cron  /etc/cron.d/pg-maintenance
 
 # Make script executable, set correct cron permissions, create log file
 # ---------------------------------------------------------------------
-RUN chmod +x /usr/local/bin/pg-maintenance.sh && \
+RUN chmod +x /usr/local/bin/pg-maintenance.sh /usr/local/bin/pg-maintenance-cron-runner && \
     chmod 0644 /etc/cron.d/pg-maintenance && \
     touch /var/log/pg-maintenance.log
 
