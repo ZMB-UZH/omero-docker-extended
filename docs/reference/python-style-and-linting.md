@@ -28,6 +28,7 @@ pre-commit install
 Run the same checks locally before proposing Python changes:
 
 ```bash
+python3 tools/run_local_workflow_gates.py --setup --profile ci
 ruff check .
 ruff format --check .
 python3 tools/mypy_check.py
