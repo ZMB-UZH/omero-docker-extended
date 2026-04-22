@@ -4,8 +4,8 @@
 # ----------
 FROM openmicroscopy/omero-server:5.6.17@sha256:7bd34f1d40f139e36652b183ec29f612723ffdab6f80994c583aff09684740b0
 
-# Run as root (REQUIRED)
-# ----------------------
+# Run image build steps as root
+# -----------------------------
 USER root
 
 # Use bash with pipefail for safer RUN commands
@@ -521,8 +521,8 @@ RUN set -euo pipefail; \
     chown -R omero-server:omero-server /opt/omero/server/OMERO.server/var; \
     chmod -R g+rwX /opt/omero/server/OMERO.server/var
 
-# Fix base image start script to drop privileges and keep root as image user
-# --------------------------------------------------------------------------
+# Fix base image start script to drop privileges when startup runs as root
+# -----------------------------------------------------------------------
 RUN set -euo pipefail; \
     rm -f /startup/99-run.sh; \
     printf '%s\n' \
@@ -533,18 +533,27 @@ RUN set -euo pipefail; \
         "    echo \"FATAL: OMERO CLI executable not found at \$omero\" >&2" \
         "    exit 127" \
         "fi" \
-        "echo \"Starting OMERO.server as omero-server\"" \
-        "exec runuser -p -m -u omero-server -- \"\$omero\" admin start --foreground" \
+        "if [ \"\$(id -u)\" -eq 0 ]; then" \
+        "    echo \"Starting OMERO.server as omero-server\"" \
+        "    exec runuser -p -m -u omero-server -- \"\$omero\" admin start --foreground" \
+        "fi" \
+        "echo \"Starting OMERO.server as \$(id -un)\"" \
+        "exec \"\$omero\" admin start --foreground" \
         > /startup/99-run.sh; \
     chmod 0555 /startup/99-run.sh
 
-# Wrap entrypoint so all /startup/*.py AND 60-database.sh scripts run as omero-server, avoiding permission corruption
-# ----------------------------------------------------------------------------------------------
+# Wrap entrypoint so root startup can repair bind mounts before privilege drop.
+# Direct non-root image runs skip root-only bootstrap and launch the requested command.
+# --------------------------------------------------------------------------------
 RUN set -euo pipefail; \
     mv /usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint-original.sh; \
     printf '%s\n' \
         "#!/bin/bash" \
         "set -e" \
+        "if [ \"\$(id -u)\" -ne 0 ]; then" \
+        "    printf 'Running unprivileged; skipping root startup bootstrap and launching: %s\n' \"\$*\"" \
+        "    exec \"\$@\"" \
+        "fi" \
         "VENV_ACTIVATE=\$(find /opt/omero/server -maxdepth 1 -type d -name \"venv*\" | sort -V | tail -n 1)/bin/activate" \
         "if [ ! -f \"\$VENV_ACTIVATE\" ]; then" \
         "    echo \"FATAL: OMERO virtualenv activate script not found at \$VENV_ACTIVATE\" >&2" \
@@ -564,13 +573,11 @@ RUN set -euo pipefail; \
         > /usr/local/bin/entrypoint.sh; \
     chmod 0755 /usr/local/bin/entrypoint.sh
 
-# IMPORTANT: Fix the Docker healthcheck!
-# The official image defines: HEALTHCHECK CMD omero admin diagnostics
-# Since the image user is now root, this runs as root and crashes with the permission error.
-# We must redefine it to drop to the omero-server user.
-# --------------------------------------------------------------------------------------
+# Keep the image healthcheck valid for both managed root-bootstrap starts and
+# direct non-root image starts.
+# --------------------------------------------------------------------------
 HEALTHCHECK --interval=60s --timeout=30s --start-period=300s --retries=5 \
-    CMD runuser -p -m -u omero-server -- sh -c 'set -eu; omero_bin=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero; [ -x "${omero_bin}" ] || { echo "FATAL: OMERO CLI executable not found at ${omero_bin}" >&2; exit 127; }; exec "${omero_bin}" admin diagnostics'
+    CMD sh -c 'set -eu; omero_bin=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero; [ -x "${omero_bin}" ] || { echo "FATAL: OMERO CLI executable not found at ${omero_bin}" >&2; exit 127; }; if [ "$(id -u)" -eq 0 ]; then exec runuser -p -m -u omero-server -- "${omero_bin}" admin diagnostics; fi; exec "${omero_bin}" admin diagnostics'
 
 # ---------------------------------------------------------------------------
 # Final security hardening pass (APPLY_SECURITY_HARDENING=1)
@@ -628,6 +635,6 @@ RUN set -euo pipefail; \
     find /usr/lib64 /usr/lib -type f -name "*.so*" \
         -exec sh -c 'strip --strip-unneeded "$1" 2>/dev/null || true' _ {} \; || true
 
-# Keep root as image user so bootstrap scripts can reconcile runtime permissions
-# before dropping to the application user in 99-run.sh and in entrypoint python scripts
-USER root
+# Default the image to the application user. Compose explicitly requests root
+# only for managed startup bootstrap, then the entrypoint drops privileges.
+USER omero-server
