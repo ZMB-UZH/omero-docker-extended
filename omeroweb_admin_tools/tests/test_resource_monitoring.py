@@ -10,6 +10,7 @@ from django.test import RequestFactory
 from omeroweb_admin_tools.views.index_view import (
     logs_data,
     resource_monitoring_data,
+    _build_proxy_request_target,
     _build_proxy_target_url,
     _build_public_service_url,
     _build_target_service_status,
@@ -23,6 +24,7 @@ from omeroweb_admin_tools.views.index_view import (
     _origin_from_url,
     _grafana_proxy_home_fallback_response,
     _rewrite_proxied_location,
+    _send_proxy_backend_request,
 )
 
 
@@ -49,6 +51,34 @@ class _RequestsResponse:
 
     def json(self):
         return json.loads(self.content.decode("utf-8"))
+
+    def close(self) -> None:
+        return None
+
+
+def _install_proxy_backend_stub(monkeypatch, handler) -> None:
+    def fake_backend_request(
+        *,
+        base_url,
+        method,
+        request_target,
+        data,
+        headers,
+        timeout_seconds,
+    ):
+        return handler(
+            method,
+            f"{base_url.rstrip('/')}{request_target}",
+            data=data,
+            headers=headers,
+            timeout=timeout_seconds,
+            allow_redirects=False,
+        )
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._send_proxy_backend_request",
+        fake_backend_request,
+    )
 
 
 def test_load_compose_service_names_reads_service_block(tmp_path, monkeypatch) -> None:
@@ -184,10 +214,7 @@ def test_proxy_http_request_rewrites_origin_headers_when_enabled(monkeypatch) ->
             payload=b'{"status":"ok"}',
         )
 
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
-        fake_request,
-    )
+    _install_proxy_backend_stub(monkeypatch, fake_request)
 
     class DummyDjangoRequest:
         method = "GET"
@@ -226,10 +253,7 @@ def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
             payload=b'{"status":"ok"}',
         )
 
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
-        fake_request,
-    )
+    _install_proxy_backend_stub(monkeypatch, fake_request)
 
     class DummyDjangoRequest:
         method = "POST"
@@ -271,10 +295,7 @@ def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> Non
             payload=b'{"status":"ok"}',
         )
 
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
-        fake_request,
-    )
+    _install_proxy_backend_stub(monkeypatch, fake_request)
 
     class DummyDjangoRequest:
         method = "GET"
@@ -342,6 +363,15 @@ def test_build_proxy_target_url_rejects_query_or_fragment_in_path() -> None:
         raise AssertionError("Expected unsafe proxy query to be rejected")
 
 
+def test_build_proxy_target_url_rejects_backend_without_hostname() -> None:
+    try:
+        _build_proxy_target_url("https://:3000", "api/search", "")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected hostname-less proxy backend to be rejected")
+
+
 def test_build_proxy_target_url_rejects_origin_drift(monkeypatch) -> None:
     urlunparse_results = iter(
         ("https://grafana:3000", "https://unexpected.example/api/search")
@@ -371,11 +401,105 @@ def test_build_proxy_target_url_quotes_path_and_preserves_query() -> None:
         target_url
         == "https://grafana:3000/root/api/search%20with%20space?orgId=1&query=a%2Fb"
     )
+    assert (
+        _build_proxy_request_target(target_url)
+        == "/root/api/search%20with%20space?orgId=1&query=a%2Fb"
+    )
+
+
+def test_build_proxy_request_target_rejects_control_characters() -> None:
+    try:
+        _build_proxy_request_target("https://grafana:3000/api/search?query=up\x7f")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected unsafe request target to be rejected")
+
+
+def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
+    monkeypatch,
+) -> None:
+    captured = {}
+
+    class DummyRawResponse:
+        status = 202
+
+        def __init__(self):
+            self.msg = _make_headers({"Content-Type": "application/json"})
+
+        @staticmethod
+        def read():
+            return b'{"ok":true}'
+
+    class DummyConnection:
+        def __init__(self, host, *, port, timeout):
+            captured["host"] = host
+            captured["port"] = port
+            captured["timeout"] = timeout
+            self.closed = False
+
+        def request(self, method, target, *, body, headers):
+            captured["method"] = method
+            captured["target"] = target
+            captured["body"] = body
+            captured["headers"] = dict(headers)
+
+        @staticmethod
+        def getresponse():
+            return DummyRawResponse()
+
+        def close(self):
+            self.closed = True
+            captured["closed"] = True
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.HTTPSConnection",
+        DummyConnection,
+    )
+
+    response = _send_proxy_backend_request(
+        base_url="https://grafana.example.test:3443/grafana",
+        method="POST",
+        request_target="/grafana/api/search?q=up",
+        data=b"payload",
+        headers={"Accept": "application/json"},
+        timeout_seconds=7.5,
+    )
+
+    assert response.status_code == 202
+    assert response.content == b'{"ok":true}'
+    response.close()
+    assert captured == {
+        "host": "grafana.example.test",
+        "port": 3443,
+        "timeout": 7.5,
+        "method": "POST",
+        "target": "/grafana/api/search?q=up",
+        "body": b"payload",
+        "headers": {"Accept": "application/json"},
+        "closed": True,
+    }
+
+
+def test_send_proxy_backend_request_rejects_backend_without_hostname() -> None:
+    try:
+        _send_proxy_backend_request(
+            base_url="https://:3000",
+            method="GET",
+            request_target="/api/search",
+            data=None,
+            headers={},
+            timeout_seconds=1.0,
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected hostname-less proxy backend to be rejected")
 
 
 def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
+    _install_proxy_backend_stub(
+        monkeypatch,
         lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
             _RequestsResponse(
                 302,
@@ -420,8 +544,8 @@ def test_rewrite_proxied_location_blocks_external_redirects() -> None:
 def test_proxy_http_request_rewrites_non_root_relative_location_header(
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
+    _install_proxy_backend_stub(
+        monkeypatch,
         lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
             _RequestsResponse(
                 302,
@@ -452,9 +576,9 @@ def test_proxy_http_request_rewrites_non_root_relative_location_header(
 
 def test_proxy_http_request_rejects_traversal_before_backend_call(monkeypatch) -> None:
     monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
+        "omeroweb_admin_tools.views.index_view._send_proxy_backend_request",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("requests.request should not run")
+            AssertionError("_send_proxy_backend_request should not run")
         ),
     )
 
@@ -1162,8 +1286,8 @@ def test_build_public_service_url_direct_access_unchanged() -> None:
 def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
     """The proxy should rewrite Grafana appSubUrl to the proxy prefix."""
 
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
+    _install_proxy_backend_stub(
+        monkeypatch,
         lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
             _RequestsResponse(
                 200,
@@ -1198,8 +1322,8 @@ def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
 
 
 def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
+    _install_proxy_backend_stub(
+        monkeypatch,
         lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
             _RequestsResponse(
                 200,
@@ -1535,8 +1659,8 @@ def test_cookie_path_for_proxy_rewrites_root_to_proxy_prefix() -> None:
 
 
 def test_proxy_rewrites_set_cookie_path_for_grafana(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
+    _install_proxy_backend_stub(
+        monkeypatch,
         lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
             _RequestsResponse(
                 200,
@@ -1579,10 +1703,7 @@ def test_proxy_http_request_forwards_extra_headers(monkeypatch) -> None:
         captured["headers"] = dict(headers or {})
         return _RequestsResponse(200, payload=b'{"ok":true}')
 
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
-        fake_request,
-    )
+    _install_proxy_backend_stub(monkeypatch, fake_request)
 
     class DummyDjangoRequest:
         method = "POST"
@@ -1619,10 +1740,7 @@ def test_proxy_http_request_ignores_absent_extra_headers(monkeypatch) -> None:
         captured["headers"] = dict(headers or {})
         return _RequestsResponse(200, payload=b'{"ok":true}')
 
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
-        fake_request,
-    )
+    _install_proxy_backend_stub(monkeypatch, fake_request)
 
     class DummyDjangoRequest:
         method = "GET"
