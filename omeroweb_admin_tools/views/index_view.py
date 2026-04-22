@@ -9,7 +9,7 @@ import uuid
 from csv import Error as CsvError
 from html import escape
 from http.cookies import SimpleCookie
-from http.client import HTTPConnection
+from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from urllib.parse import quote
 from urllib.parse import urlparse
 from urllib.parse import urlencode
@@ -216,7 +216,7 @@ def _normalize_proxy_request_target(subpath: str) -> Tuple[str, str]:
 
 def _normalize_proxy_query_string(query: str) -> str:
     normalized_query = str(query or "").lstrip("?")
-    if any(ord(char) < 32 for char in normalized_query):
+    if any(ord(char) < 32 or ord(char) == 127 for char in normalized_query):
         raise ValueError("Invalid proxy query")
     return normalized_query
 
@@ -224,6 +224,9 @@ def _normalize_proxy_query_string(query: str) -> str:
 def _build_proxy_target_url(base_url: str, path: str, query: str) -> tuple[str, str]:
     normalized_path, _ignored_query = _normalize_proxy_request_target(path)
     base_parsed = urllib.parse.urlparse(_validated_http_url(base_url))
+    if not base_parsed.hostname:
+        raise ValueError("Invalid proxy backend")
+    _ = base_parsed.port
     normalized_query = _normalize_proxy_query_string(query)
     safe_path = base_parsed.path.rstrip("/")
     if normalized_path:
@@ -250,6 +253,25 @@ def _build_proxy_target_url(base_url: str, path: str, query: str) -> tuple[str, 
     ):
         raise ValueError("Invalid proxy target")
     return normalized_path, target_url
+
+
+def _build_proxy_request_target(target_url: str) -> str:
+    target_parsed = urllib.parse.urlparse(target_url)
+    request_target = urllib.parse.urlunparse(
+        (
+            "",
+            "",
+            target_parsed.path or "/",
+            "",
+            target_parsed.query,
+            "",
+        )
+    )
+    if not request_target.startswith("/") or any(
+        ord(char) < 32 or ord(char) == 127 for char in request_target
+    ):
+        raise ValueError("Invalid proxy target")
+    return request_target
 
 
 def _collect_proxy_headers(
@@ -289,6 +311,58 @@ def _proxy_request_body(django_request) -> bytes | None:
     return django_request.body
 
 
+class _ProxyBackendResponse:
+    def __init__(self, raw_response, connection) -> None:
+        self.status_code = int(raw_response.status)
+        self.headers = getattr(raw_response, "headers", None) or raw_response.msg
+        self._connection = connection
+        self._raw_response = raw_response
+        self._content: bytes | None = None
+
+    @property
+    def content(self) -> bytes:
+        if self._content is None:
+            self._content = self._raw_response.read()
+        return self._content
+
+    def close(self) -> None:
+        self._connection.close()
+
+
+def _send_proxy_backend_request(
+    *,
+    base_url: str,
+    method: str,
+    request_target: str,
+    data: bytes | None,
+    headers: dict[str, str],
+    timeout_seconds: float,
+) -> _ProxyBackendResponse:
+    base_parsed = urllib.parse.urlparse(_validated_http_url(base_url))
+    hostname = base_parsed.hostname
+    if not hostname:
+        raise ValueError("Invalid proxy backend")
+    port = base_parsed.port
+    if port is None:
+        port = 443 if base_parsed.scheme == "https" else 80
+
+    connection_class = (
+        HTTPSConnection if base_parsed.scheme == "https" else HTTPConnection
+    )
+    connection = connection_class(hostname, port=port, timeout=timeout_seconds)
+    try:
+        connection.request(
+            method,
+            request_target,
+            body=data,
+            headers=headers,
+        )
+        return _ProxyBackendResponse(connection.getresponse(), connection)
+    except Exception:
+        connection.close()
+        raise
+
+
 def _unsupported_event_stream_response(
     normalized_path: str,
     content_type: str,
@@ -320,6 +394,7 @@ def _proxy_http_request(
     """Proxy an HTTP request to a backend URL and return the response body."""
     try:
         normalized_path, target_url = _build_proxy_target_url(base_url, path, query)
+        request_target = _build_proxy_request_target(target_url)
     except ValueError:
         return JsonResponse({"error": "Invalid URL format"}, status=400)
 
@@ -327,16 +402,17 @@ def _proxy_http_request(
     if rewrite_origin_headers:
         _rewrite_origin_headers(forwarded_headers, base_url)
 
+    response = None
     try:
-        response = requests.request(
+        response = _send_proxy_backend_request(
+            base_url=base_url,
             method=django_request.method,
-            url=target_url,
+            request_target=request_target,
             data=_proxy_request_body(django_request),
             headers=forwarded_headers,
-            timeout=10.0,
-            allow_redirects=False,
+            timeout_seconds=10.0,
         )
-        headers = getattr(getattr(response, "raw", None), "headers", response.headers)
+        headers = response.headers
         content_type = str(response.headers.get("Content-Type", "") or "").lower()
         suppressed = _unsupported_event_stream_response(
             normalized_path,
@@ -362,7 +438,7 @@ def _proxy_http_request(
             {"error": "Backend timed out."},
             status=504,
         )
-    except requests.RequestException as exc:
+    except (requests.RequestException, HTTPException, OSError) as exc:
         logger.warning(
             "Proxy backend unreachable target=%s reason=%s",
             sanitize_url_for_logging(target_url),
@@ -372,6 +448,9 @@ def _proxy_http_request(
             {"error": "Backend unreachable."},
             status=502,
         )
+    finally:
+        if response is not None:
+            response.close()
 
 
 def _header_first(headers, name: str, default: str = "") -> str:
