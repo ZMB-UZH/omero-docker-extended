@@ -19,6 +19,9 @@ The permission model is enforced in layers:
    This is the primary host-side ownership normalizer for bind-mounted paths from `installation_paths.env`.
 2. `startup/*.sh`
    These scripts repair runtime-critical writable paths inside containers on every boot.
+   For `omeroserver` and `omeroweb`, Compose starts the entrypoint as `root`
+   only for these bind-mount repairs; the long-running processes run as their
+   application users.
 3. `docker/*.Dockerfile`
    Image builds establish ownership and executable bits for image-internal paths, but not host bind mounts.
 4. `github_pull*_example` and runtime pull helpers

@@ -39,14 +39,17 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
         self.assertTrue((self.repo_root / "docs" / "SECURITY.md").exists())
 
-    def test_code_scanning_runbook_records_root_security_fix_as_pending_refresh(
+    def test_code_scanning_runbook_records_current_root_security_state(
         self,
     ) -> None:
         runbook_text = self.read_text("docs/operations/code-scanning.md")
+        self.assertIn("GitHub reported **4 open alerts on `main`**", runbook_text)
         self.assertIn(
-            "fixed in-tree now and should clear on the next workflow refresh",
+            "GitHub closed the Trivy `DS002`,",
             runbook_text,
         )
+        self.assertIn("The remaining 4 open alerts are repository-level", runbook_text)
+        self.assertNotIn("should clear on the next workflow refresh", runbook_text)
         self.assertIn(
             "~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**",
             runbook_text,

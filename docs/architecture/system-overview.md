@@ -17,7 +17,9 @@ Stateful backend providing the OMERO API, image storage, script execution, and d
 - Clones official OME scripts and BIOP scripts during build, and bundles a pinned `Figure_To_Pdf.py` from `ome/omero-figure` so PDF export does not depend on runtime GitHub access.
 - Bootstrap script (`startup/10-server-bootstrap.sh`) configures Python path, TLS certificates, job-service user, requires `OMERO_FIGURE_VERSION` from `env/omeroserver.env`, validates or upgrades the OMERO.Figure PDF export script, and registers official scripts.
 - Optional runtime installations: OMERO.downloader (`startup/50-install-omero-downloader.sh`) and ImarisConvertBioformats (`startup/51-install-imarisconvert.sh`).
-- Runs as `omero-server` user (non-root), exposed on port 4064.
+- Compose starts the service as `root` only for bind-mount reconciliation; the
+  long-running OMERO.server process runs as `omero-server` and is exposed on
+  port 4064.
 - Health check: admin login attempt via OMERO CLI.
 
 ### OMERO.web (`omeroweb`)
@@ -29,6 +31,8 @@ Django-based web frontend with all registered plugin apps and co-located Celery 
 - Installs matplotlib (SEM-EDX visualization), psycopg2-binary (plugin database), celery+redis (Imaris export and Tools enhanced-search indexing), and pinned `pytest` for in-container plugin regression tests.
 - Managed by supervisord (`supervisord.conf`): runs OMERO.web plus the Imaris and Tools Celery workers as three supervised processes.
 - Bootstrap script (`startup/10-web-bootstrap.sh`) validates/repairs the OMERO.web `var/` runtime layout, guarantees `var/django_secret_key` exists, validates log-directory access, and configures Docker socket GID.
+- Compose starts the service as `root` only for bind-mount reconciliation; the
+  supervised OMERO.web and worker processes run as `omero-web`.
 - Exposed on port 4090, health check: `curl` to `/webgateway/`.
 - Mounts: OMERO data (read-write), upload temp directory (tmpfs for job files), Docker socket (read-only), server logs (read-only for admin tools).
 
