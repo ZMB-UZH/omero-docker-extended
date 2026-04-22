@@ -35,7 +35,7 @@ from omero.gateway import BlitzGateway
 from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
 from omero.rtypes import rstring
 from omeroweb.decorators import login_required
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 from ..constants import (
     BIOFORMATS2RAW_CLI,
     MAX_UPLOAD_BATCH_BYTES,
@@ -77,6 +77,7 @@ __all__ = [
     "JOB_SERVICE_AUTH_ENV",
     "JOB_SERVICE_SECURE_ENV",
     "JOB_SERVICE_USER_ENV",
+    "JobServiceCredentials",
     "JsonResponse",
     "MAX_IMPORT_LOG_LINES",
     "MAX_UPLOAD_BATCH_BYTES",
@@ -154,6 +155,7 @@ __all__ = [
     "_managed_upload_error_message",
     "_mark_failed_job_for_deferred_cleanup",
     "_normalize_job_batch_size",
+    "_normalize_job_service_credentials",
     "_normalize_upload_relative_path",
     "_normalize_ngff_converter_settings",
     "_normalize_sem_edx_associations",
@@ -272,6 +274,14 @@ JOB_SERVICE_GROUP_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_GROUP"
 # Defaults to True (ssl) if unset.
 JOB_SERVICE_SECURE_ENV = "OMERO_JOB_SERVICE_SECURE"
 JOB_SERVICE_SECURE_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_SECURE"
+
+
+class JobServiceCredentials(NamedTuple):
+    user: str
+    password: str
+    group_override: str
+    secure: bool
+
 
 # Namespace used for SEM-EDX spectra TXT attachments (FileAnnotation.ns)
 SEM_EDX_FILEANNOTATION_NS = "sem_edx.spectra"
@@ -2829,6 +2839,12 @@ def _get_root_password() -> str:
     return (os.environ.get("ROOTPASS") or "").strip()
 
 
+def _normalize_job_service_credentials(credentials) -> JobServiceCredentials:
+    if isinstance(credentials, JobServiceCredentials):
+        return credentials
+    return JobServiceCredentials(*credentials)
+
+
 def _open_admin_connection(host: str, port: int) -> Optional[BlitzGateway]:
     root_pass = _get_root_password()
     if not root_pass:
@@ -2837,8 +2853,10 @@ def _open_admin_connection(host: str, port: int) -> Optional[BlitzGateway]:
         )
         return None
 
-    _, _, _, secure = _get_job_service_credentials()
-    conn = BlitzGateway("root", root_pass, host=host, port=int(port), secure=secure)
+    credentials = _normalize_job_service_credentials(_get_job_service_credentials())
+    conn = BlitzGateway(
+        "root", root_pass, host=host, port=int(port), secure=credentials.secure
+    )
     try:
         if not conn.connect():
             last_err = None
@@ -2850,7 +2868,7 @@ def _open_admin_connection(host: str, port: int) -> Optional[BlitzGateway]:
                 "root connect() failed for background import sessions: host=%s port=%s tls=%s lastError=%r",
                 sanitize_log_value(host),
                 sanitize_log_value(port),
-                "enabled" if secure else "disabled",
+                "enabled" if credentials.secure else "disabled",
                 last_err,
             )
             try:
@@ -3691,36 +3709,45 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
     return results
 
 
-def _get_job_service_credentials():
+def _first_non_empty_env(*names: str) -> str:
+    for name in names:
+        value = (os.environ.get(name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _job_service_secure_from_env(raw_value: str) -> bool:
+    return not (raw_value and raw_value.lower() in ("0", "false", "no", "off"))
+
+
+def _get_job_service_credentials() -> JobServiceCredentials:
     """Resolve service credentials from environment.
 
     This is intentionally NOT taken from the end-user's OMERO.web session.
     Using the user's session for background work can invalidate their login.
     """
-    user = (os.environ.get(JOB_SERVICE_USER_ENV) or "").strip()
-    if not user:
-        user = (os.environ.get(JOB_SERVICE_USER_ENV_FALLBACK) or "").strip()
-    if not user:
-        user = JOB_SERVICE_USERNAME_DEFAULT
-
-    passwd = (os.environ.get(JOB_SERVICE_AUTH_ENV) or "").strip()
-    if not passwd:
-        passwd = (os.environ.get(JOB_SERVICE_AUTH_ENV_FALLBACK) or "").strip()
-
-    # Optional override: force a specific group id for job-service.
-    # If empty, we'll use the job's group_id (recommended).
-    group_override = (os.environ.get(JOB_SERVICE_GROUP_ENV) or "").strip()
-    if not group_override:
-        group_override = (os.environ.get(JOB_SERVICE_GROUP_ENV_FALLBACK) or "").strip()
-
-    # Optional: allow forcing secure/insecure connection
-    secure_raw = (os.environ.get(JOB_SERVICE_SECURE_ENV) or "").strip()
-    if not secure_raw:
-        secure_raw = (os.environ.get(JOB_SERVICE_SECURE_ENV_FALLBACK) or "").strip()
-
-    secure = not (secure_raw and secure_raw.lower() in ("0", "false", "no", "off"))
-
-    return user, passwd, group_override, secure
+    return JobServiceCredentials(
+        user=_first_non_empty_env(
+            JOB_SERVICE_USER_ENV,
+            JOB_SERVICE_USER_ENV_FALLBACK,
+        )
+        or JOB_SERVICE_USERNAME_DEFAULT,
+        password=_first_non_empty_env(
+            JOB_SERVICE_AUTH_ENV,
+            JOB_SERVICE_AUTH_ENV_FALLBACK,
+        ),
+        group_override=_first_non_empty_env(
+            JOB_SERVICE_GROUP_ENV,
+            JOB_SERVICE_GROUP_ENV_FALLBACK,
+        ),
+        secure=_job_service_secure_from_env(
+            _first_non_empty_env(
+                JOB_SERVICE_SECURE_ENV,
+                JOB_SERVICE_SECURE_ENV_FALLBACK,
+            )
+        ),
+    )
 
 
 def _create_dataset_via_admin_connection(
@@ -3793,9 +3820,9 @@ def _open_service_connection(
     host: str, port: int, group_id: Optional[int] = None
 ) -> Optional[BlitzGateway]:
     """Login as service user for async background work (safe for user sessions)."""
-    service_user, service_pass, group_override, secure = _get_job_service_credentials()
+    credentials = _normalize_job_service_credentials(_get_job_service_credentials())
 
-    if not service_pass:
+    if not credentials.password:
         logger.error(
             "job-service authentication missing. Set %s in the omeroweb container environment.",
             JOB_SERVICE_AUTH_ENV,
@@ -3803,7 +3830,11 @@ def _open_service_connection(
         return None
 
     conn = BlitzGateway(
-        service_user, service_pass, host=host, port=int(port), secure=secure
+        credentials.user,
+        credentials.password,
+        host=host,
+        port=int(port),
+        secure=credentials.secure,
     )
 
     try:
@@ -3814,7 +3845,7 @@ def _open_service_connection(
                 "job-service connect() raised: host=%s port=%s tls=%s error_type=%s has_last_error=%s",
                 sanitize_log_value(host),
                 port,
-                "enabled" if secure else "disabled",
+                "enabled" if credentials.secure else "disabled",
                 sanitize_log_value(type(exc).__name__),
                 _connection_has_last_error(conn),
             )
@@ -3832,7 +3863,7 @@ def _open_service_connection(
                 "job-service connect() failed: host=%s port=%s tls=%s has_last_error=%s",
                 sanitize_log_value(host),
                 port,
-                "enabled" if secure else "disabled",
+                "enabled" if credentials.secure else "disabled",
                 _connection_has_last_error(conn),
             )
             try:
@@ -3846,9 +3877,9 @@ def _open_service_connection(
 
         # Prefer explicit override, else use job's group_id when provided.
         effective_group = None
-        if group_override:
+        if credentials.group_override:
             try:
-                effective_group = int(group_override)
+                effective_group = int(credentials.group_override)
             except Exception:
                 logger.warning(
                     "Ignoring invalid %s override; falling back to the job group context.",
