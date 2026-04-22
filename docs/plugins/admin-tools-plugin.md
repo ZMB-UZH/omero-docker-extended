@@ -148,7 +148,12 @@ When the managed repository is on `ext4`, quota reconciliation uses the bundled 
 
 The enforcer performs the following for each group directory with a configured quota:
 
-During host installer updates, `scripts/install-quota-enforcer.sh` now verifies byte-level integrity (`sha256`) of `scripts/omero-quota-enforcer.sh`: identical files are kept with refreshed permissions, and changed files are reinstalled with post-install checksum verification.
+During host installer updates, `scripts/install-quota-enforcer.sh` now verifies
+byte-level integrity (`sha256`) of `scripts/omero-quota-enforcer.sh`:
+identical files are kept with refreshed permissions, and changed files are
+reinstalled with post-install checksum verification. It also disables/removes
+the repo-managed quota units before rendering and enabling the current service,
+timer, and path units from the active installation paths.
 The installer and `installation/installation_script.sh` both enforce `.admin-tools` directories with mode `0777` (no sticky bit) so quota-state persistence survives container restarts and project updates without `os.replace` rename failures.
 During installation and upgrades, the installer also repairs (or creates) `.admin-tools/group-quotas.json` with mode `0666` so the non-root `omeroweb` container process can always persist quota edits while the host-side systemd enforcer (root) continues to read the same file.
 At runtime, `startup/10-web-bootstrap.sh` now re-validates the configured quota-state path and related shared quota metadata files on every `omeroweb` container start, repairing stale ownership or unreadable file modes that may have been introduced on the host between deployments.
