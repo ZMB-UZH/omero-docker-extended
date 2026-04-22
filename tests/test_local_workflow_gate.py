@@ -7,7 +7,6 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -81,11 +80,11 @@ class LocalWorkflowGateTests(unittest.TestCase):
         )
 
         with (
-            mock.patch.object(
+            unittest.mock.patch.object(
                 self.tool, "_require_executable", return_value="/bin/true"
             ),
-            mock.patch.object(self.tool, "_run"),
-            mock.patch.object(
+            unittest.mock.patch.object(self.tool, "_run"),
+            unittest.mock.patch.object(
                 self.tool,
                 "_sarif_result_count",
                 side_effect=[0, 1],
@@ -147,7 +146,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
                 calls.append((label, tuple(command)))
                 return subprocess.CompletedProcess(command, 0)
 
-            with mock.patch.object(self.tool, "_run", side_effect=record_run):
+            with unittest.mock.patch.object(self.tool, "_run", side_effect=record_run):
                 self.tool.run_tests(context)
 
             self.assertFalse((repo_root / ".coverage.root").exists())
@@ -216,11 +215,13 @@ class LocalWorkflowGateTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 1, stdout="")
 
         with (
-            mock.patch.dict(self.tool.os.environ, {}, clear=True),
-            mock.patch.object(
+            unittest.mock.patch.dict(self.tool.os.environ, {}, clear=True),
+            unittest.mock.patch.object(
                 self.tool, "_require_executable", return_value="/bin/git"
             ),
-            mock.patch.object(self.tool.subprocess, "run", side_effect=fake_run),
+            unittest.mock.patch.object(
+                self.tool.subprocess, "run", side_effect=fake_run
+            ),
         ):
             branch = self.tool._default_branch(REPO_ROOT)
 
