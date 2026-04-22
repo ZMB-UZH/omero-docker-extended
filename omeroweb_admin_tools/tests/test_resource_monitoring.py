@@ -10,6 +10,7 @@ from django.test import RequestFactory
 from omeroweb_admin_tools.views.index_view import (
     logs_data,
     resource_monitoring_data,
+    _build_proxy_target_url,
     _build_public_service_url,
     _build_target_service_status,
     _is_internal_hostname,
@@ -313,13 +314,63 @@ def test_normalize_proxy_request_target_rejects_traversal() -> None:
         raise AssertionError("Expected traversal target to be rejected")
 
 
-def test_normalize_proxy_request_target_strips_absolute_url_to_safe_path() -> None:
-    path, query = _normalize_proxy_request_target(
-        "https://grafana.example.org//api/../api/search?orgId=1"
+def test_normalize_proxy_request_target_rejects_absolute_url() -> None:
+    try:
+        _normalize_proxy_request_target(
+            "https://grafana.example.org//api/../api/search?orgId=1"
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected absolute proxy target to be rejected")
+
+
+def test_build_proxy_target_url_rejects_query_or_fragment_in_path() -> None:
+    for path in ("api/search?orgId=1", "api/search#fragment"):
+        try:
+            _build_proxy_target_url("https://grafana:3000", path, "")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Expected unsafe proxy path to be rejected")
+
+    try:
+        _build_proxy_target_url("https://grafana:3000", "api/search", "orgId=1\n")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected unsafe proxy query to be rejected")
+
+
+def test_build_proxy_target_url_rejects_origin_drift(monkeypatch) -> None:
+    urlunparse_results = iter(
+        ("https://grafana:3000", "https://unexpected.example/api/search")
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.urllib.parse.urlunparse",
+        lambda _parts: next(urlunparse_results),
     )
 
-    assert path == "api/search"
-    assert query == "orgId=1"
+    try:
+        _build_proxy_target_url("https://grafana:3000", "api/search", "")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected proxy target origin drift to be rejected")
+
+
+def test_build_proxy_target_url_quotes_path_and_preserves_query() -> None:
+    path, target_url = _build_proxy_target_url(
+        "https://grafana:3000/root/",
+        "api/search with space",
+        "?orgId=1&query=a%2Fb",
+    )
+
+    assert path == "api/search%20with%20space"
+    assert (
+        target_url
+        == "https://grafana:3000/root/api/search%20with%20space?orgId=1&query=a%2Fb"
+    )
 
 
 def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> None:

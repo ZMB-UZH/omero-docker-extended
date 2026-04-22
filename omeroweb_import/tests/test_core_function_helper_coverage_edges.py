@@ -188,11 +188,12 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
     monkeypatch.delenv(core_functions.JOB_SERVICE_AUTH_ENV_FALLBACK, raising=False)
     monkeypatch.delenv(core_functions.JOB_SERVICE_GROUP_ENV, raising=False)
     monkeypatch.delenv(core_functions.JOB_SERVICE_GROUP_ENV_FALLBACK, raising=False)
-    user, passwd, group_override, secure = core_functions._get_job_service_credentials()
-    assert user == core_functions.JOB_SERVICE_USERNAME_DEFAULT
-    assert not passwd
-    assert group_override == ""
-    assert secure is True
+    credentials = core_functions._get_job_service_credentials()
+    assert credentials.user == core_functions.JOB_SERVICE_USERNAME_DEFAULT
+    assert not credentials.password
+    assert credentials.group_override == ""
+    assert credentials.secure is True
+    assert core_functions._normalize_job_service_credentials(credentials) is credentials
 
     service_opts = SimpleNamespace(
         setOmeroGroup=lambda _value: (_ for _ in ()).throw(RuntimeError("bad group"))

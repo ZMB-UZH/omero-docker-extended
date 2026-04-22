@@ -59,6 +59,7 @@ LOG_TABLE_ROW_CAP = 5000
 _SAFE_REDIRECT_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 _PROXY_SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
+_PROXY_PATH_SEGMENT_SAFE_CHARS = "-._~!$&'()*+,;=:@"
 _GRAFANA_PROXY_METHODS = ("GET", "HEAD", "OPTIONS", "POST")
 _INTERNAL_LOG_SERVICES = frozenset({"omeroserver_internal", "omeroweb_internal"})
 _VALID_LOG_LEVELS = frozenset({"debug", "info", "warn", "error", "fatal"})
@@ -190,12 +191,12 @@ def _safe_dashboard_uid(value: str, default: str) -> str:
 
 def _normalize_proxy_request_target(subpath: str) -> Tuple[str, str]:
     raw_target = str(subpath or "").strip()
-    forwarded_query = ""
-    if raw_target.startswith(("http://", "https://")):
-        parsed = urlparse(raw_target)
-        raw_target = parsed.path
-        forwarded_query = parsed.query
-    decoded = urllib.parse.unquote(raw_target or "")
+    parsed_target = urllib.parse.urlsplit(raw_target)
+    if parsed_target.scheme or parsed_target.netloc:
+        raise ValueError("Invalid proxy target")
+    if parsed_target.query or parsed_target.fragment:
+        raise ValueError("Invalid proxy target")
+    decoded = urllib.parse.unquote(parsed_target.path or "")
     if "\x00" in decoded:
         raise ValueError("Invalid proxy target")
     segments: list[str] = []
@@ -207,13 +208,23 @@ def _normalize_proxy_request_target(subpath: str) -> Tuple[str, str]:
                 raise ValueError("Invalid proxy target")
             segments.pop()
             continue
-        segments.append(segment)
-    return "/".join(segments), forwarded_query
+        segments.append(
+            urllib.parse.quote(segment, safe=_PROXY_PATH_SEGMENT_SAFE_CHARS)
+        )
+    return "/".join(segments), ""
+
+
+def _normalize_proxy_query_string(query: str) -> str:
+    normalized_query = str(query or "").lstrip("?")
+    if any(ord(char) < 32 for char in normalized_query):
+        raise ValueError("Invalid proxy query")
+    return normalized_query
 
 
 def _build_proxy_target_url(base_url: str, path: str, query: str) -> tuple[str, str]:
     normalized_path, _ignored_query = _normalize_proxy_request_target(path)
     base_parsed = urllib.parse.urlparse(_validated_http_url(base_url))
+    normalized_query = _normalize_proxy_query_string(query)
     safe_path = base_parsed.path.rstrip("/")
     if normalized_path:
         safe_path = f"{safe_path}/{normalized_path}"
@@ -225,10 +236,19 @@ def _build_proxy_target_url(base_url: str, path: str, query: str) -> tuple[str, 
             base_parsed.netloc,
             safe_path,
             "",
-            query,
+            normalized_query,
             "",
         )
     )
+    target_parsed = urllib.parse.urlparse(target_url)
+    if (
+        target_parsed.scheme != base_parsed.scheme
+        or target_parsed.netloc != base_parsed.netloc
+        or target_parsed.username
+        or target_parsed.password
+        or target_parsed.fragment
+    ):
+        raise ValueError("Invalid proxy target")
     return normalized_path, target_url
 
 
