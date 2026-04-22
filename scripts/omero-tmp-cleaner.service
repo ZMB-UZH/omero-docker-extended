@@ -5,7 +5,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/omero-tmp-cleaner --tmp-dir __OMERO_TMP_PATH__ --max-age-seconds 86400
+ExecStart=__TMP_CLEANER_BIN__ --tmp-dir __OMERO_TMP_PATH__ --max-age-seconds 86400
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

@@ -167,6 +167,10 @@ Cleanup is performed by two mechanisms:
 - **Immediate**: the upload payload directory for a job is deleted right after a successful import finishes (job JSON remains for UI status).
 - **Sweep**: a host-side systemd timer (`omero-tmp-cleaner.timer`) runs periodically and deletes anything under `OMERO_TMP_PATH` older than 24 hours by default. The Import plugin writes deferred-cleanup markers for failed jobs so their payload directory and job JSON are retained for 48 hours unless `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` overrides that window.
 
+The installer replaces the repo-managed tmp-cleaner service and timer on every
+run before enabling the current units, so stale unit definitions do not remain
+active after updates.
+
 Useful commands (host):
 
 - `systemctl status omero-tmp-cleaner.timer`

@@ -74,6 +74,7 @@ All three processes have dedicated log files with rotation (20MB max, 3 backups)
 - Two isolated PostgreSQL instances prevent plugin operations from affecting OMERO core.
 - `pg-maintenance` sidecar runs automated VACUUM ANALYZE (weekly) and REINDEX CONCURRENTLY (monthly).
 - Maintenance scripts wait for database readiness (30 retries x 5 seconds) before executing.
+- Scheduled maintenance uses a private shell-quoted cron environment file and fails loud on `vacuumdb` or `reindexdb` command errors.
 - `VACUUM FULL` is intentionally excluded because it requires exclusive locks and planned downtime.
 - PostgreSQL data directories use a `pgdata` subdirectory to avoid ext4 `lost+found` volume issues.
 

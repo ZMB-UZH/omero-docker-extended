@@ -12,9 +12,12 @@
 #
 # ============================================================================
 
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
 # Weekly: VACUUM ANALYZE on both databases (every Sunday at 03:00)
-0 3 * * 0   /usr/local/bin/pg-maintenance.sh vacuum_analyze >> /var/log/pg-maintenance.log 2>&1
+0 3 * * 0   /usr/local/bin/pg-maintenance-cron-runner vacuum_analyze >> /var/log/pg-maintenance.log 2>&1
 
 # Monthly: REINDEX CONCURRENTLY on both databases (first Sunday of the month at 04:00)
 # The [ $(date +\%d) -le 7 ] trick ensures it only runs on the first Sunday.
-0 4 * * 0   [ $(date +\%d) -le 7 ] && /usr/local/bin/pg-maintenance.sh reindex >> /var/log/pg-maintenance.log 2>&1
+0 4 * * 0   [ "$(date +\%d)" -le 7 ] && /usr/local/bin/pg-maintenance-cron-runner reindex >> /var/log/pg-maintenance.log 2>&1

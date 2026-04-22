@@ -63,6 +63,17 @@ wait_for_db() {
     die "Database $dbname at $host:$port did not become ready after $((retries * delay))s"
 }
 
+run_logged_command() {
+    local status
+
+    set +e
+    "$@" 2>&1 | while IFS= read -r line; do log "  $line"; done
+    status=${PIPESTATUS[0]}
+    set -e
+
+    return "$status"
+}
+
 # ---------------------------------------------------------------------------
 # Core maintenance functions
 # ---------------------------------------------------------------------------
@@ -70,38 +81,60 @@ wait_for_db() {
 # run_vacuum_analyze <host> <port> <dbname> <user> <password>
 run_vacuum_analyze() {
     local host="$1" port="$2" dbname="$3" user="$4"
+    local lock_timeout="${PG_MAINTENANCE_LOCK_TIMEOUT:-2s}"
+    local statement_timeout="${PG_MAINTENANCE_VACUUM_STATEMENT_TIMEOUT:-0}"
+    local status=0
+
     export PGPASSWORD="$5"
+    export PGOPTIONS="-c lock_timeout=${lock_timeout} -c statement_timeout=${statement_timeout}"
 
     log "--- VACUUM ANALYZE on $dbname ($host:$port) ---"
+    log "    lock_timeout=${lock_timeout} statement_timeout=${statement_timeout}"
+
     # vacuumdb --analyze runs plain VACUUM + ANALYZE on every table.
-    # It does NOT acquire exclusive locks — fully safe while the DB is online.
-    if vacuumdb --host="$host" --port="$port" --username="$user" \
-                --dbname="$dbname" --analyze --verbose 2>&1 | \
-                while IFS= read -r line; do log "  $line"; done; then
+    # lock_timeout prevents maintenance from waiting behind production locks.
+    if run_logged_command \
+        vacuumdb --host="$host" --port="$port" --username="$user" \
+        --dbname="$dbname" --analyze --verbose; then
         log "VACUUM ANALYZE completed successfully on $dbname."
     else
-        log "WARNING: VACUUM ANALYZE reported issues on $dbname (exit $?)."
+        status=$?
     fi
-    unset PGPASSWORD
+
+    unset PGOPTIONS PGPASSWORD
+    if (( status != 0 )); then
+        die "VACUUM ANALYZE failed on $dbname (exit ${status})."
+    fi
 }
 
 # run_reindex <host> <port> <dbname> <user> <password>
 run_reindex() {
     local host="$1" port="$2" dbname="$3" user="$4"
+    local lock_timeout="${PG_MAINTENANCE_LOCK_TIMEOUT:-2s}"
+    local statement_timeout="${PG_MAINTENANCE_REINDEX_STATEMENT_TIMEOUT:-0}"
+    local status=0
+
     export PGPASSWORD="$5"
+    export PGOPTIONS="-c lock_timeout=${lock_timeout} -c statement_timeout=${statement_timeout}"
 
     log "--- REINDEX (CONCURRENTLY) on $dbname ($host:$port) ---"
+    log "    lock_timeout=${lock_timeout} statement_timeout=${statement_timeout}"
+
     # reindexdb --concurrently rebuilds every index with only a
     # SHARE UPDATE EXCLUSIVE lock — reads and writes continue normally.
     # Available since PostgreSQL 12. The stack uses PostgreSQL 16.12.
-    if reindexdb --host="$host" --port="$port" --username="$user" \
-                 --dbname="$dbname" --concurrently --verbose 2>&1 | \
-                 while IFS= read -r line; do log "  $line"; done; then
+    if run_logged_command \
+        reindexdb --host="$host" --port="$port" --username="$user" \
+        --dbname="$dbname" --concurrently --verbose; then
         log "REINDEX CONCURRENTLY completed successfully on $dbname."
     else
-        log "WARNING: REINDEX CONCURRENTLY reported issues on $dbname (exit $?)."
+        status=$?
     fi
-    unset PGPASSWORD
+
+    unset PGOPTIONS PGPASSWORD
+    if (( status != 0 )); then
+        die "REINDEX CONCURRENTLY failed on $dbname (exit ${status})."
+    fi
 }
 
 # ---------------------------------------------------------------------------

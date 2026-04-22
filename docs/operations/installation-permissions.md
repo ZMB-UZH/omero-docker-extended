@@ -49,6 +49,9 @@ Host-side installer:
   - recursively re-owns top-level non-server temp subtrees to `OMERO_WEB_UID:GID`,
   - recursively restores `${OMERO_TMP_PATH}/omero-server` to `OMERO_SERVER_UID:GID`,
   - sets `${OMERO_TMP_PATH}/omero-server` and `${OMERO_TMP_PATH}/omero-server/tmp` to `0700`.
+- `scripts/install-tmp-cleaner.sh`
+  - fully replaces the repo-managed `omero-tmp-cleaner` systemd service and
+    timer on every run before enabling the current units.
 
 Server bootstrap:
 
@@ -104,6 +107,10 @@ DropBox external writers:
 Quota helper:
 
 - `scripts/install-quota-enforcer.sh`
+  - fully replaces the repo-managed `omero-quota-enforcer` service, timer, and
+    path units on every run before enabling the current units,
+  - renders unit paths from the active installation and data paths instead of
+    assuming `/opt/omero`,
   - creates `${OMERO_DATA_DIR}/.admin-tools/quota`,
   - sets `.admin-tools` and `.admin-tools/quota` to `0777`,
   - sets `group-quotas.json` to `0666` so host root and non-root `omeroweb` can both update quota state.

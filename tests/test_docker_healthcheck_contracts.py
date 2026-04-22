@@ -125,6 +125,10 @@ class DockerHealthcheckContractTests(unittest.TestCase):
 
     def test_pg_maintenance_image_defaults_to_postgres_user(self) -> None:
         dockerfile_text = self.dockerfiles["pg-maintenance"]
+        self.assertIn(
+            "COPY maintenance/postgres/pg-maintenance-cron-runner",
+            dockerfile_text,
+        )
         self.assertIn("USER postgres", dockerfile_text)
         self.assertNotIn("USER root", dockerfile_text)
 

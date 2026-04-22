@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Source the private cron environment, then run pg-maintenance.
+
+set -euo pipefail
+
+ENV_FILE="${PG_MAINTENANCE_ENV_FILE:-/etc/pg-maintenance-env}"
+MAINTENANCE_SCRIPT="${PG_MAINTENANCE_SCRIPT:-/usr/local/bin/pg-maintenance.sh}"
+
+log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*"; }
+
+if [ ! -r "$ENV_FILE" ]; then
+    log "FATAL: Cron environment file is not readable: ${ENV_FILE}" >&2
+    exit 1
+fi
+
+# shellcheck source=/dev/null
+. "$ENV_FILE"
+
+exec "$MAINTENANCE_SCRIPT" "$@"

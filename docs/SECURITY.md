@@ -26,8 +26,9 @@ Security practices and controls for this deployment.
   default to non-root users. Compose explicitly runs these helper services as
   `root` only where the runtime boundary requires it: CrowdSec manipulates the
   host firewall with `NET_ADMIN`, pg-maintenance starts system cron and writes
-  its cron environment under `/etc`, and redis-sysctl-init applies the
-  host-kernel `vm.overcommit_memory=1` sysctl with `privileged: true`.
+  a private `0600` shell-quoted cron environment under `/etc`, and
+  redis-sysctl-init applies the host-kernel `vm.overcommit_memory=1` sysctl
+  with `privileged: true`.
 
 ## Post-build vulnerability scanning
 

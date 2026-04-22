@@ -2,8 +2,7 @@
 Description=Watch for OMERO quota updates
 
 [Path]
-PathModified=/etc/default/omero-quota-enforcer
-# The actual path will be injected by the installer
+PathModified=__QUOTA_STATE_FILE__
 
 [Install]
 WantedBy=multi-user.target

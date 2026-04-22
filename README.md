@@ -105,7 +105,8 @@ For the official OMERO documentation, release notes, and guides, your first poin
 │   └── blackbox/config.yml            #   HTTP/TCP probe definitions
 ├── maintenance/postgres/              # Database maintenance automation
 │   ├── pg-maintenance.sh              #   VACUUM ANALYZE + REINDEX CONCURRENTLY
-│   ├── pg-maintenance-entrypoint.sh   #   Cron environment setup
+│   ├── pg-maintenance-entrypoint.sh   #   Private cron environment setup
+│   ├── pg-maintenance-cron-runner     #   Sources cron env before scheduled jobs
 │   └── pg-maintenance-cron            #   Weekly/monthly schedule
 ├── installation/                      # Deployment automation
 │   ├── installation_script.sh         #   Full orchestration: env, builds, ownership
