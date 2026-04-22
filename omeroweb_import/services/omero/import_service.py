@@ -20,6 +20,7 @@ JOB_SERVICE_SECURE_ENV_FALLBACK = _core.JOB_SERVICE_SECURE_ENV_FALLBACK
 JOB_SERVICE_USER_ENV = _core.JOB_SERVICE_USER_ENV
 JOB_SERVICE_USER_ENV_FALLBACK = _core.JOB_SERVICE_USER_ENV_FALLBACK
 JOB_SERVICE_USERNAME_DEFAULT = _core.JOB_SERVICE_USERNAME_DEFAULT
+JobServiceCredentials = _core.JobServiceCredentials
 MAX_IMPORT_LOG_LINES = _core.MAX_IMPORT_LOG_LINES
 OMERO_IMPORT_SCAN_DEPTH = _core.OMERO_IMPORT_SCAN_DEPTH
 logger = _core.logger
@@ -40,6 +41,7 @@ _get_env_int = _core._get_env_int
 _get_import_lock = _core._get_import_lock
 _get_job_service_credentials = _core._get_job_service_credentials
 _get_jobs_root = _core._get_jobs_root
+_normalize_job_service_credentials = _core._normalize_job_service_credentials
 _get_upload_root = _core._get_upload_root
 _has_import_candidates_in_output = _core._has_import_candidates_in_output
 _open_session_connection = _core._open_session_connection
@@ -86,9 +88,9 @@ def _connection_has_last_error(conn) -> bool:
 
 def _open_service_connection(host: str, port: int, group_id=None):
     """Login as the async service user without leaking credentials in logs."""
-    service_user, service_pass, group_override, secure = _get_job_service_credentials()
+    credentials = _normalize_job_service_credentials(_get_job_service_credentials())
 
-    if not service_pass:
+    if not credentials.password:
         logger.error(
             "job-service authentication missing. Set %s in the omeroweb container environment.",
             JOB_SERVICE_AUTH_ENV,
@@ -96,7 +98,11 @@ def _open_service_connection(host: str, port: int, group_id=None):
         return None
 
     conn = BlitzGateway(
-        service_user, service_pass, host=host, port=int(port), secure=secure
+        credentials.user,
+        credentials.password,
+        host=host,
+        port=int(port),
+        secure=credentials.secure,
     )
 
     try:
@@ -107,7 +113,7 @@ def _open_service_connection(host: str, port: int, group_id=None):
                 "job-service connect() raised: host=%s port=%s tls=%s error_type=%s has_last_error=%s",
                 sanitize_log_value(host),
                 port,
-                "enabled" if secure else "disabled",
+                "enabled" if credentials.secure else "disabled",
                 sanitize_log_value(type(exc).__name__),
                 _connection_has_last_error(conn),
             )
@@ -125,7 +131,7 @@ def _open_service_connection(host: str, port: int, group_id=None):
                 "job-service connect() failed: host=%s port=%s tls=%s has_last_error=%s",
                 sanitize_log_value(host),
                 port,
-                "enabled" if secure else "disabled",
+                "enabled" if credentials.secure else "disabled",
                 _connection_has_last_error(conn),
             )
             try:
@@ -138,9 +144,9 @@ def _open_service_connection(host: str, port: int, group_id=None):
             return None
 
         effective_group = None
-        if group_override:
+        if credentials.group_override:
             try:
-                effective_group = int(group_override)
+                effective_group = int(credentials.group_override)
             except Exception:
                 logger.warning(
                     "Ignoring invalid %s override; falling back to the job group context.",
@@ -178,6 +184,7 @@ __all__ = [
     "OMERO_IMPORT_SCAN_DEPTH",
     "INT_SANITIZER",
     "JOB_ID_SANITIZER",
+    "JobServiceCredentials",
     "JOB_SERVICE_USERNAME_DEFAULT",
     "JOB_SERVICE_USER_ENV",
     "JOB_SERVICE_USER_ENV_FALLBACK",
@@ -190,6 +197,7 @@ __all__ = [
     "_get_env_int",
     "_get_upload_root",
     "_get_jobs_root",
+    "_normalize_job_service_credentials",
     "_build_omero_cli_command",
     "_run_omero_cli",
     "_parse_cli_id",

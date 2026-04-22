@@ -130,9 +130,14 @@ def test_proxy_path_and_redirect_safety_helpers():
         "api/health",
         "",
     )
-    assert index_view._normalize_proxy_request_target(
-        "https://grafana.example.org/grafana/api/live?watch=1"
-    ) == ("grafana/api/live", "watch=1")
+    try:
+        index_view._normalize_proxy_request_target(
+            "https://grafana.example.org/grafana/api/live?watch=1"
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected absolute proxy target to be rejected")
 
 
 def test_normalize_proxy_request_target_rejects_path_traversal():
