@@ -136,6 +136,6 @@ echo "  sudo rm ${TMP_CLEANER_BIN}"
 echo "  sudo systemctl daemon-reload"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     main "$@"
 fi

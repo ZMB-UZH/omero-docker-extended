@@ -8,7 +8,8 @@ class OmeroWebZarrAppConfig(AppConfig):
     name = "omero_web_zarr"
     label = "zarr"
 
-    def ready(self):
+    @staticmethod
+    def ready():
         from .integration import install_webgateway_overrides
 
         install_webgateway_overrides()

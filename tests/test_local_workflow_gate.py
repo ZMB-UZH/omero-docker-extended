@@ -89,12 +89,12 @@ class LocalWorkflowGateTests(unittest.TestCase):
                 "_sarif_result_count",
                 side_effect=[0, 1],
             ),
-        ):
-            with self.assertRaisesRegex(
+            self.assertRaisesRegex(
                 self.tool.GateError,
                 r"Bandit test scan produced 1 result",
-            ):
-                self.tool.run_bandit(context)
+            ),
+        ):
+            self.tool.run_bandit(context)
 
     def test_ci_profile_matches_locally_reproducible_workflow_set(self) -> None:
         self.assertEqual(
@@ -142,7 +142,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
                 label: str,
                 check: bool = True,
             ) -> subprocess.CompletedProcess[str]:
-                del cwd, env, check
+                _ = (cwd, env, check)
                 calls.append((label, tuple(command)))
                 return subprocess.CompletedProcess(command, 0)
 
@@ -156,8 +156,10 @@ class LocalWorkflowGateTests(unittest.TestCase):
             self.assertTrue((repo_root / ".coverage.unrelated").exists())
 
         combine_command = next(
-            command for label, command in calls if label == "coverage combine"
+            (command for label, command in calls if label == "coverage combine"),
+            (),
         )
+        self.assertTrue(combine_command, "coverage combine command was not recorded")
         self.assertIn(".coverage.root", combine_command)
         self.assertIn(".coverage.zarr", combine_command)
         self.assertNotIn(".coverage.unrelated", combine_command)
@@ -192,7 +194,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
             text: bool,
             capture_output: bool,
         ) -> subprocess.CompletedProcess[str]:
-            del cwd, check, text, capture_output
+            _ = (cwd, check, text, capture_output)
             args = tuple(command[1:])
             commands.append(args)
             if args == (

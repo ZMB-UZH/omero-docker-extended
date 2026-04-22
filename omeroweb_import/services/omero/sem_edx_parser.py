@@ -428,15 +428,17 @@ class GeneticLabelPlacer:
 
         return overlap_penalty + crossing_penalty + distance_penalty + bounds_penalty
 
+    @staticmethod
     def tournament_selection(
-        self, population: List[Chromosome], tournament_size: int = 3
+        population: List[Chromosome], tournament_size: int = 3
     ) -> Chromosome:
         """Select parent using tournament selection"""
         tournament = random.sample(population, tournament_size)  # nosec B311
         return min(tournament, key=lambda c: c.fitness)
 
+    @staticmethod
     def crossover(
-        self, parent1: Chromosome, parent2: Chromosome
+        parent1: Chromosome, parent2: Chromosome
     ) -> Tuple[Chromosome, Chromosome]:
         """Ordered crossover"""
         n = len(parent1.genes)

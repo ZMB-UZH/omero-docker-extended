@@ -27,9 +27,9 @@ def _maintenance_env(**overrides: str) -> dict[str, str]:
         "PLUGIN_DB_PORT": "5433",
         "PLUGIN_DB_NAME": "omero-plugin",
         "PLUGIN_DB_USER": "omero-plugin",
+        OMERO_DB_AUTH_ENV: "omero-auth-value",
+        PLUGIN_DB_AUTH_ENV: "plugin-auth-value",
     }
-    env[OMERO_DB_AUTH_ENV] = "omero-auth-value"
-    env[PLUGIN_DB_AUTH_ENV] = "plugin-auth-value"
     env.update(overrides)
     return env
 

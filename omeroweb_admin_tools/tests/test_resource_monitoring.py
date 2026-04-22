@@ -1216,10 +1216,6 @@ def test_grafana_proxy_root_redirects_to_default_dashboard(monkeypatch) -> None:
 
 
 def test_grafana_proxy_root_redirect_sanitizes_env_segments(monkeypatch) -> None:
-    from omeroweb_admin_tools.views.index_view import (
-        _grafana_proxy_home_fallback_response,
-    )
-
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "https://evil.example")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "../escape")
 
