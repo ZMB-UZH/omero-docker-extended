@@ -14,6 +14,9 @@ class DockerHealthcheckContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         cls.dockerfiles = {
+            "omero-server": (
+                REPO_ROOT / "docker" / "omero-server.Dockerfile"
+            ).read_text(encoding="utf-8"),
             "omero-web": (REPO_ROOT / "docker" / "omero-web.Dockerfile").read_text(
                 encoding="utf-8"
             ),
@@ -39,6 +42,30 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         cls.redis_sysctl_script = (
             REPO_ROOT / "docker" / "redis-sysctl-init.sh"
         ).read_text(encoding="utf-8")
+
+    @staticmethod
+    def _last_user(dockerfile_text: str) -> str:
+        users = [
+            line.strip()
+            for line in dockerfile_text.splitlines()
+            if line.strip().startswith("USER ")
+        ]
+        if not users:
+            return ""
+        return users[-1]
+
+    @staticmethod
+    def _compose_service_text(compose_text: str, service_name: str) -> str:
+        compose_lines = compose_text.splitlines(keepends=True)
+        service_header = f"  {service_name}:\n"
+        service_start = compose_lines.index(service_header)
+        service_end = len(compose_lines)
+        for index in range(service_start + 1, len(compose_lines)):
+            line = compose_lines[index]
+            if line.startswith("  ") and not line.startswith("    "):
+                service_end = index
+                break
+        return "".join(compose_lines[service_start:service_end])
 
     def test_image_level_healthchecks_exist_for_hardened_auxiliary_images(self) -> None:
         expected_checks = {
@@ -101,21 +128,33 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertIn("USER postgres", dockerfile_text)
         self.assertNotIn("USER root", dockerfile_text)
 
+    def test_omero_server_image_defaults_to_application_user(self) -> None:
+        dockerfile_text = self.dockerfiles["omero-server"]
+        self.assertEqual("USER omero-server", self._last_user(dockerfile_text))
+        self.assertIn("skipping root startup bootstrap", dockerfile_text)
+        self.assertIn("runuser -p -m -u omero-server", dockerfile_text)
+        self.assertIn("admin start --foreground", dockerfile_text)
+        self.assertIn('exec "${omero_bin}" admin diagnostics', dockerfile_text)
+
+    def test_omero_web_image_defaults_to_application_user(self) -> None:
+        dockerfile_text = self.dockerfiles["omero-web"]
+        self.assertEqual("USER omero-web", self._last_user(dockerfile_text))
+        self.assertIn("skipping root startup bootstrap", dockerfile_text)
+        self.assertIn("runuser -p -m -u omero-web", dockerfile_text)
+        self.assertIn('exec \\"\\$@\\"', dockerfile_text)
+
     def test_root_required_helper_services_are_explicit_compose_handoffs(
         self,
     ) -> None:
-        compose_lines = self.compose_text.splitlines(keepends=True)
-        root_required_services = ("crowdsec", "pg-maintenance", "redis-sysctl-init")
+        root_required_services = (
+            "crowdsec",
+            "omeroserver",
+            "omeroweb",
+            "pg-maintenance",
+            "redis-sysctl-init",
+        )
         for service_name in root_required_services:
-            service_header = f"  {service_name}:\n"
-            service_start = compose_lines.index(service_header)
-            service_end = len(compose_lines)
-            for index in range(service_start + 1, len(compose_lines)):
-                line = compose_lines[index]
-                if line.startswith("  ") and not line.startswith("    "):
-                    service_end = index
-                    break
-            service_text = "".join(compose_lines[service_start:service_end])
+            service_text = self._compose_service_text(self.compose_text, service_name)
             self.assertIn("    user: root\n", service_text)
 
     def test_redis_sysctl_init_image_defaults_to_named_non_root_user(self) -> None:

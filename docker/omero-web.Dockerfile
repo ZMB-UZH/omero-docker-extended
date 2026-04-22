@@ -6,8 +6,8 @@
 # ----------
 FROM openmicroscopy/omero-web-standalone:5.31.0@sha256:47e22f00e8466ca14247936b4d312a03ec48d883a12dd5a645aa93f60d2555d7
 
-# Run as root (REQUIRED)
-# ----------------------
+# Run image build steps as root
+# -----------------------------
 USER root
 
 # Use bash with pipefail for safer RUN commands
@@ -434,6 +434,10 @@ RUN set -euo pipefail; \
     printf '%s\n' \
         "#!/usr/local/bin/dumb-init /bin/bash" \
         "set -e" \
+        "if [ \"\$(id -u)\" -ne 0 ]; then" \
+        "    printf 'Running unprivileged; skipping root startup bootstrap and launching: %s\n' \"\$*\"" \
+        "    exec \"\$@\"" \
+        "fi" \
         "VENV_DIR=\"\${OMERO_WEB_VENV:-}\"" \
         "if [ -n \"\${VENV_DIR}\" ]; then" \
         "    VENV_DIR=\"/opt/omero/web/\${VENV_DIR}\"" \
@@ -463,9 +467,9 @@ RUN set -euo pipefail; \
     chmod 0555 /usr/local/bin/entrypoint-supervisord.sh
 
 
-# Keep root as image user so bootstrap scripts can reconcile runtime permissions
-# before dropping to the application user in the entrypoint.
-USER root
+# Default the image to the application user. Compose explicitly requests root
+# only for managed startup bootstrap, then the entrypoint drops privileges.
+USER omero-web
 
 ENTRYPOINT ["/usr/local/bin/entrypoint-supervisord.sh"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

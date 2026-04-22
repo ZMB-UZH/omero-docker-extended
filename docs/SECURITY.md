@@ -15,7 +15,10 @@ Security practices and controls for this deployment.
 ## Container security
 
 - All containers run with `security_opt: no-new-privileges:true`.
-- The `omeroserver` container drops to the `omero-server` user at runtime (non-root).
+- The `omeroserver` and `omeroweb` images default to their application users
+  (`omero-server` and `omero-web`). Compose runs those services as `root` only
+  for startup bind-mount reconciliation, and the entrypoints drop to the
+  application users before launching the long-running processes.
 - The `omero-celery-worker` container runs as a dedicated `celery` user (uid/gid 10001).
 - Redis runs with `maxmemory 512mb` and `allkeys-lru` eviction on tmpfs (no persistent state).
 - `cadvisor` runs privileged because it inspects host/container runtime state for metrics.

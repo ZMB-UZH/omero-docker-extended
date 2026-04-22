@@ -37,9 +37,9 @@ The current advanced CodeQL setup uses `build-mode: none` for the Python and Jav
 
 ## Alert inventory
 
-Last live API refresh: **2026-04-20**.
+Last live API refresh: **2026-04-22**.
 
-GitHub reported **13 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
+GitHub reported **12 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
 These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
 
@@ -68,9 +68,16 @@ To prevent documentation drift:
 | ----------- | ----------: |
 | Hadolint    | 2           |
 | Scorecard   | 4           |
-| Semgrep OSS | 5           |
+| Semgrep OSS | 4           |
 | Trivy       | 2           |
-| **Total**   | **13**      |
+| **Total**   | **12**      |
+
+2026-04-22 Docker `USER` remediation note: the open Trivy `DS002`,
+Semgrep `last-user-is-root`, and Hadolint `DL3002` alerts on
+`docker/omero-server.Dockerfile` and `docker/omero-web.Dockerfile` are fixed
+in-tree now and should clear on the next workflow refresh. The fix defaults
+both images to their application users and keeps the required root bootstrap as
+an explicit Compose handoff for mounted runtime-path reconciliation.
 
 ### Historical snapshots below
 

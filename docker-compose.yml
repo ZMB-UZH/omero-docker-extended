@@ -350,6 +350,8 @@ services:
       args:
         OMERO_DROPBOX_VERSION: "${OMERO_DROPBOX_VERSION:?Set OMERO_DROPBOX_VERSION in env/omeroserver.env}"
     restart: unless-stopped
+    # Startup reconciles bind-mounted runtime paths, then drops to omero-server.
+    user: root
     depends_on:
       database:
         condition: service_healthy
@@ -449,6 +451,8 @@ services:
         OME_ZARR_PY_VERSION: "${OME_ZARR_PY_VERSION:?Set OME_ZARR_PY_VERSION in env/omeroserver.env}"
         BIOFORMATS2RAW_VERSION: "${BIOFORMATS2RAW_VERSION:?Set BIOFORMATS2RAW_VERSION in env/omeroserver.env}"
     restart: unless-stopped
+    # Startup reconciles bind-mounted runtime paths, then drops to omero-web.
+    user: root
     depends_on:
       omeroserver:
         condition: service_healthy
