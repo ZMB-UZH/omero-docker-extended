@@ -310,6 +310,6 @@ echo "  sudo rm ${SYSTEMD_SYSTEM_DIR%/}/omero-quota-enforcer.{service,timer,path
 echo "  sudo systemctl daemon-reload"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     main "$@"
 fi

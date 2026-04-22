@@ -13,6 +13,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlencode
 
@@ -665,7 +666,13 @@ def get_workflow_run_started_at(
 
 
 def load_event_payload(path: str) -> dict[str, Any]:
-    with open(path, encoding="utf-8") as handle:
+    try:
+        payload_path = Path(path).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise RuntimeError("GitHub event payload path is not readable.") from exc
+    if not payload_path.is_file():
+        raise RuntimeError("GitHub event payload path must be a file.")
+    with payload_path.open(encoding="utf-8") as handle:
         payload = json.load(handle)
     if not isinstance(payload, dict):
         raise RuntimeError("GitHub event payload must be a JSON object.")

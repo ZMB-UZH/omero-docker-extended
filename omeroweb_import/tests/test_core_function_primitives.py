@@ -236,7 +236,7 @@ def test_external_info_units_and_dataset_helpers_cover_aliases_and_fallbacks(
     }
 
     class _FakeUnitsLength:
-        _enumerators = {index: unit for index, unit in enumerate(units.values())}
+        _enumerators = dict(enumerate(units.values()))
 
     for name, unit in units.items():
         setattr(_FakeUnitsLength, name, unit)

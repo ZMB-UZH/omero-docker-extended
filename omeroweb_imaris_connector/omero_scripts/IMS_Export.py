@@ -13,6 +13,7 @@ import shutil
 import re
 import hashlib
 from datetime import datetime
+from pathlib import Path
 
 from omero_plugin_common import process_utils
 from omero_plugin_common.env_utils import (
@@ -30,6 +31,22 @@ BIOFORMATS_MIN_SIZE_BYTES = 10_000_000
 DEFAULT_TIMEOUT_SECONDS = 600
 _PRIVATE_FILE_MODE = 0o600
 subprocess = process_utils
+
+
+def _existing_regular_path(path):
+    try:
+        path_text = os.fspath(path)
+    except TypeError:
+        return None
+    if isinstance(path_text, bytes):
+        return None
+    if not path_text or "\x00" in path_text:
+        return None
+    candidate = Path(path_text)
+    try:
+        return candidate if candidate.is_file() else None
+    except OSError:
+        return None
 
 
 def _get_export_root():
@@ -86,15 +103,16 @@ def _ensure_bioformats_jar(install_dir):
     expected_sha256 = _read_expected_sha256(cache_sha256_path)
 
     if _is_valid_bioformats_jar(jar_path, expected_sha256=expected_sha256):
-        if not _is_valid_bioformats_jar(cache_path, expected_sha256=expected_sha256):
-            if _copy_bioformats_jar(
-                jar_path,
-                cache_path,
-                expected_sha256=_sha256_file(jar_path),
-                file_mode=_PRIVATE_FILE_MODE,
-                description="cached Bio-Formats jar",
-            ):
-                _write_expected_sha256(cache_sha256_path, _sha256_file(jar_path))
+        if not _is_valid_bioformats_jar(
+            cache_path, expected_sha256=expected_sha256
+        ) and _copy_bioformats_jar(
+            jar_path,
+            cache_path,
+            expected_sha256=_sha256_file(jar_path),
+            file_mode=_PRIVATE_FILE_MODE,
+            description="cached Bio-Formats jar",
+        ):
+            _write_expected_sha256(cache_sha256_path, _sha256_file(jar_path))
         return jar_path
 
     if _is_valid_bioformats_jar(cache_path, expected_sha256=expected_sha256):
@@ -124,8 +142,11 @@ def _ensure_bioformats_jar(install_dir):
 
 
 def _read_expected_sha256(path):
+    checksum_path = _existing_regular_path(path)
+    if checksum_path is None:
+        return None
     try:
-        with open(path, "r", encoding="ascii") as handle:
+        with checksum_path.open("r", encoding="ascii") as handle:
             token = handle.read().strip().split()[0].lower()
     except (OSError, IndexError, UnicodeDecodeError):
         return None
@@ -156,8 +177,11 @@ def _write_expected_sha256(path, sha256_value):
 
 
 def _sha256_file(path):
+    source_path = _existing_regular_path(path)
+    if source_path is None:
+        raise FileNotFoundError(path)
     digest = hashlib.sha256()
-    with open(path, "rb") as handle:
+    with source_path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()

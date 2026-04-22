@@ -32,6 +32,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import http.cookiejar
+from pathlib import Path
 from typing import Any
 
 # Default timeout/poll values for client-side export polling.
@@ -43,6 +44,49 @@ IMARIS_HANDLE_RETRY_ATTEMPTS = 10
 IMARIS_HANDLE_RETRY_INTERVAL = 0.25
 _XT_LOG_PATH: str | None = None
 _XT_DLL_DIR_HANDLES: list[Any] = []
+
+
+def _coerce_path(value):
+    try:
+        path_text = os.fspath(value)
+    except TypeError:
+        return None
+    if isinstance(path_text, bytes):
+        return None
+    if not path_text or "\x00" in path_text:
+        return None
+    return Path(path_text)
+
+
+def _existing_regular_file_path(file_path):
+    candidate = _coerce_path(file_path)
+    if candidate is None:
+        return None
+    try:
+        return candidate if candidate.is_file() else None
+    except OSError:
+        return None
+
+
+def _safe_xt_log_file(log_path):
+    candidate = _coerce_path(log_path)
+    if candidate is None or not candidate.is_absolute():
+        return None
+    if not candidate.name.startswith("XTOmeroConnector_") or candidate.suffix != ".log":
+        return None
+    try:
+        temp_root = Path(tempfile.gettempdir()).resolve(strict=True)
+        parent = candidate.parent.resolve(strict=True)
+    except OSError:
+        return None
+    if parent != temp_root:
+        return None
+    try:
+        if candidate.is_symlink() or (candidate.exists() and not candidate.is_file()):
+            return None
+    except OSError:
+        return None
+    return candidate
 
 
 def _xt_debug(message):
@@ -74,8 +118,11 @@ def _parse_port(port_value):
 def is_ims_file(file_path):
     """Check if a file looks like an Imaris IMS (HDF5) file."""
     hdf5_signature = b"\x89HDF\r\n\x1a\n"
+    candidate = _existing_regular_file_path(file_path)
+    if candidate is None:
+        return False
     try:
-        with open(file_path, "rb") as f:
+        with candidate.open("rb") as f:
             header = f.read(len(hdf5_signature))
         return header == hdf5_signature
     except Exception:
@@ -459,7 +506,8 @@ class OMEROWebClient:
         self.session_id = None
         self.session_key = None
 
-    def _build_base_url(self, host, port, scheme):
+    @staticmethod
+    def _build_base_url(host, port, scheme):
         if host.startswith("http://") or host.startswith("https://"):
             return host.rstrip("/")
         return f"{scheme}://{host}:{port}"
@@ -495,7 +543,8 @@ class OMEROWebClient:
                 self.csrf_token = cookie.value
                 _xt_debug(f"Extracted csrftoken: {cookie.value[:8]}...")
 
-    def _check_login_redirect(self, response, context="request"):
+    @staticmethod
+    def _check_login_redirect(response, context="request"):
         """Check if a response was redirected to login page.
 
         Returns True if redirected to login (authentication failed).
@@ -508,7 +557,8 @@ class OMEROWebClient:
             return True
         return False
 
-    def _looks_like_login_page(self, raw_body):
+    @staticmethod
+    def _looks_like_login_page(raw_body):
         """Best-effort detection for HTML login content returned with 200."""
         if not raw_body:
             return False
@@ -522,7 +572,8 @@ class OMEROWebClient:
             and "/webclient/login/" in text
         )
 
-    def _with_all_groups(self, endpoint):
+    @staticmethod
+    def _with_all_groups(endpoint):
         """Ensure API endpoints query all groups accessible to the user."""
         if "group=" in endpoint:
             return endpoint
@@ -548,7 +599,8 @@ class OMEROWebClient:
                     return nested
         return []
 
-    def _build_named_entities(self, rows, default_prefix):
+    @staticmethod
+    def _build_named_entities(rows, default_prefix):
         """Normalize API rows into [{'id': ..., 'name': ...}] objects."""
         out = []
         for row in rows or []:
@@ -791,7 +843,7 @@ class OMEROWebClient:
             sid = item.get("id") or item.get("@id")
             if not sid:
                 continue
-            if name == script_name or path == script_name:
+            if script_name in (name, path):
                 return sid
             if name and os.path.basename(name) == script_name:
                 return sid
@@ -1025,7 +1077,7 @@ class OMEROWebClient:
                             ) from exc
 
                 except urllib.error.HTTPError as e:
-                    if e.code == 401 or e.code == 403:
+                    if e.code in (401, 403):
                         if not reauth_attempted:
                             reauth_attempted = True
                             if self._attempt_reauth("IMS export poll HTTP error"):
@@ -1134,7 +1186,8 @@ class OMEROWebClient:
         except urllib.error.URLError as e:
             raise RuntimeError(f"IMS export failed (URLError): {e}") from e
 
-    def _normalize_url(self, url, base_url):
+    @staticmethod
+    def _normalize_url(url, base_url):
         """Normalize a URL to use the base_url's scheme and host.
 
         This ensures all URLs point to the same server the client authenticated with.
@@ -1319,7 +1372,8 @@ class OMEROBrowserDialog:
         )
         self.status.pack(fill=tk.X, side=tk.BOTTOM)
 
-    def _get_export_dir(self):
+    @staticmethod
+    def _get_export_dir():
         home = os.path.expanduser("~")
         desktop = os.path.join(home, "Desktop")
         if os.path.isdir(desktop):
@@ -1565,12 +1619,15 @@ def _xt_log_path():
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     except Exception:
         ts = "unknown"
-    return os.path.join(tempfile.gettempdir(), f"XTOmeroConnector_{ts}.log")
+    return str(Path(tempfile.gettempdir()) / f"XTOmeroConnector_{ts}.log")
 
 
 def _xt_write_log(log_path, msg):
+    candidate = _safe_xt_log_file(log_path)
+    if candidate is None:
+        return
     try:
-        with open(log_path, "a", encoding="utf-8", errors="replace") as f:
+        with candidate.open("a", encoding="utf-8", errors="replace") as f:
             f.write(msg)
             if not msg.endswith("\n"):
                 f.write("\n")

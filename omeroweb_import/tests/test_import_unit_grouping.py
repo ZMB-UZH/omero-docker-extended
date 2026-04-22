@@ -2698,6 +2698,14 @@ def test_read_proc_rchar_returns_none_for_missing_pid():
     assert result is None
 
 
+def test_read_proc_rchar_rejects_invalid_pid_values():
+    """_read_proc_rchar must normalize PID input before reading /proc."""
+    assert core_functions._read_proc_rchar("not-a-pid") is None
+    assert core_functions._read_proc_rchar("0") is None
+    assert core_functions._read_proc_rchar(-1) is None
+    assert core_functions._read_proc_rchar(None) is None
+
+
 def test_get_path_total_size_for_file(tmp_path: Path):
     f = tmp_path / "test.bin"
     f.write_bytes(b"x" * 1234)

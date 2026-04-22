@@ -6,6 +6,7 @@ import ntpath
 import os
 import sys
 import types
+from pathlib import Path
 
 _XT_SCRIPT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -138,6 +139,42 @@ def test_resolve_imaris_application_returns_none_when_bridge_import_fails(monkey
 def test_open_file_in_imaris_returns_false_without_handle():
     module = _load_xt_module()
     assert module.open_file_in_imaris("C:\\temp\\demo.ims", None) is False
+
+
+def test_is_ims_file_accepts_only_existing_regular_hdf5_files(tmp_path):
+    module = _load_xt_module()
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+
+    assert module.is_ims_file(ims_path) is True
+    assert module.is_ims_file(tmp_path / "plain.txt") is False
+    assert module.is_ims_file(tmp_path) is False
+    assert module.is_ims_file(None) is False
+    assert module.is_ims_file(b"demo.ims") is False
+    assert module.is_ims_file(f"{ims_path}\x00suffix") is False
+
+
+def test_xt_write_log_accepts_only_connector_logs_in_temp_root(tmp_path, monkeypatch):
+    module = _load_xt_module()
+    monkeypatch.setattr(module.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    log_path = Path(module._xt_log_path())
+    module._xt_write_log(str(log_path), "first line")
+    assert log_path.read_text(encoding="utf-8") == "first line\n"
+
+    outside_path = tmp_path.parent / "XTOmeroConnector_outside.log"
+    module._xt_write_log(str(outside_path), "outside")
+    assert not outside_path.exists()
+
+    wrong_name = tmp_path / "unrelated.log"
+    module._xt_write_log(str(wrong_name), "wrong name")
+    assert not wrong_name.exists()
+
+    symlink_path = tmp_path / "XTOmeroConnector_link.log"
+    symlink_target = tmp_path.parent / "connector-link-target.log"
+    symlink_path.symlink_to(symlink_target)
+    module._xt_write_log(str(symlink_path), "through symlink")
+    assert not symlink_target.exists()
 
 
 def test_browser_dialog_reenable_load_button_uses_normal_state():

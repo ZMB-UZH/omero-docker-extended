@@ -97,6 +97,6 @@ main() {
     exec tail -F "$LOG_FILE"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     main "$@"
 fi

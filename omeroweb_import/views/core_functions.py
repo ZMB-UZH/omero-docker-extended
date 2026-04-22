@@ -3186,7 +3186,14 @@ def _read_proc_rchar(pid):
     non-Linux OS, etc.).
     """
     try:
-        with open(f"/proc/{pid}/io", "r") as fh:
+        normalized_pid = int(str(pid).strip())
+    except (TypeError, ValueError):
+        return None
+    if normalized_pid <= 0:
+        return None
+    proc_io_path = Path("/proc") / str(normalized_pid) / "io"
+    try:
+        with proc_io_path.open("r", encoding="utf-8") as fh:
             for line in fh:
                 if line.startswith("rchar:"):
                     return int(line.split(":", 1)[1].strip())
@@ -3711,10 +3718,7 @@ def _get_job_service_credentials():
     if not secure_raw:
         secure_raw = (os.environ.get(JOB_SERVICE_SECURE_ENV_FALLBACK) or "").strip()
 
-    secure = True
-    if secure_raw:
-        if secure_raw.lower() in ("0", "false", "no", "off"):
-            secure = False
+    secure = not (secure_raw and secure_raw.lower() in ("0", "false", "no", "off"))
 
     return user, passwd, group_override, secure
 
@@ -5856,10 +5860,9 @@ def _run_compatibility_check_inner(job_id: str):
         return job_dict
 
     updated_job = _update_job(job_id, apply_results)
-    if updated_job:
-        if _should_start_compatibility_check(updated_job):
-            _start_compatibility_check_thread(job_id)
-            return
+    if updated_job and _should_start_compatibility_check(updated_job):
+        _start_compatibility_check_thread(job_id)
+        return
 
 
 def _start_compatibility_check_thread(job_id: str):
@@ -8006,12 +8009,7 @@ def _process_import_job(job_id: str):
                                         batch_results = _batch_find_images_by_name(
                                             conn, dataset_images, dataset_id
                                         )
-                                        image_cache.update(
-                                            {
-                                                name: img
-                                                for name, img in batch_results.items()
-                                            }
-                                        )
+                                        image_cache.update(batch_results)
 
                             # Fallback: global search for images not found in datasets
                             missing_images = set(all_image_names) - set(
@@ -8066,60 +8064,63 @@ def _process_import_job(job_id: str):
 
                                 # Validate job-service session periodically (every 10 attachments).
                                 # IMPORTANT: NEVER reconnect using the end-user session_key here.
-                                if attachment_count > 0 and attachment_count % 10 == 0:
-                                    if not _validate_session(conn):
-                                        logger.warning(
-                                            "job-service session expired, reopening service connection..."
-                                        )
+                                if (
+                                    attachment_count > 0
+                                    and attachment_count % 10 == 0
+                                    and not _validate_session(conn)
+                                ):
+                                    logger.warning(
+                                        "job-service session expired, reopening service connection..."
+                                    )
+                                    try:
                                         try:
-                                            try:
-                                                conn.close()
-                                            except Exception as close_exc:
-                                                logger.debug(
-                                                    "Failed to close expired job-service connection: %s",
-                                                    sanitize_log_value(close_exc),
-                                                )
-                                            conn = _open_service_connection(
-                                                host, port, group_id=job.get("group_id")
+                                            conn.close()
+                                        except Exception as close_exc:
+                                            logger.debug(
+                                                "Failed to close expired job-service connection: %s",
+                                                sanitize_log_value(close_exc),
                                             )
-                                        except Exception:
-                                            conn = None
-
-                                        if not conn:
-                                            logger.error(
-                                                "Failed to reopen job-service connection, aborting SEM EDX attachments"
-                                            )
-                                            break
-
-                                        # Re-populate cache after reconnect
-                                        logger.info(
-                                            "Re-loading image cache after reconnect"
+                                        conn = _open_service_connection(
+                                            host, port, group_id=job.get("group_id")
                                         )
-                                        image_cache.clear()
-                                        for dataset_id in datasets_to_search:
-                                            if dataset_id:
-                                                dataset_images = [
-                                                    name
-                                                    for name, did in image_to_dataset.items()
-                                                    if did == dataset_id
-                                                ]
-                                                if dataset_images:
-                                                    batch_results = (
-                                                        _batch_find_images_by_name(
-                                                            conn,
-                                                            dataset_images,
-                                                            dataset_id,
-                                                        )
+                                    except Exception:
+                                        conn = None
+
+                                    if not conn:
+                                        logger.error(
+                                            "Failed to reopen job-service connection, aborting SEM EDX attachments"
+                                        )
+                                        break
+
+                                    # Re-populate cache after reconnect
+                                    logger.info(
+                                        "Re-loading image cache after reconnect"
+                                    )
+                                    image_cache.clear()
+                                    for dataset_id in datasets_to_search:
+                                        if dataset_id:
+                                            dataset_images = [
+                                                name
+                                                for name, did in image_to_dataset.items()
+                                                if did == dataset_id
+                                            ]
+                                            if dataset_images:
+                                                batch_results = (
+                                                    _batch_find_images_by_name(
+                                                        conn,
+                                                        dataset_images,
+                                                        dataset_id,
                                                     )
-                                                    image_cache.update(batch_results)
-                                        missing_images = set(all_image_names) - set(
-                                            image_cache.keys()
+                                                )
+                                                image_cache.update(batch_results)
+                                    missing_images = set(all_image_names) - set(
+                                        image_cache.keys()
+                                    )
+                                    if missing_images:
+                                        global_results = _batch_find_images_by_name(
+                                            conn, list(missing_images), None
                                         )
-                                        if missing_images:
-                                            global_results = _batch_find_images_by_name(
-                                                conn, list(missing_images), None
-                                            )
-                                            image_cache.update(global_results)
+                                        image_cache.update(global_results)
 
                                 # Get cached image (no query needed!)
                                 image_obj = image_cache.get(image_name)

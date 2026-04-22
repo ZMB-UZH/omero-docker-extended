@@ -84,71 +84,100 @@ def _run(
     return result
 
 
+def _git_stdout(repo_root: Path, *args: str) -> str | None:
+    git = _require_executable("git")
+    result = subprocess.run(
+        (git, *args),
+        cwd=repo_root,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def _upstream_remote(repo_root: Path) -> str:
+    stdout = _git_stdout(
+        repo_root,
+        "rev-parse",
+        "--abbrev-ref",
+        "--symbolic-full-name",
+        "@{upstream}",
+    )
+    if not stdout:
+        return ""
+    remote_name, separator, _branch = stdout.strip().partition("/")
+    return remote_name if separator else ""
+
+
+def _configured_remotes(repo_root: Path) -> tuple[str, ...]:
+    stdout = _git_stdout(repo_root, "remote")
+    if not stdout:
+        return ()
+    return tuple(remote.strip() for remote in stdout.splitlines() if remote.strip())
+
+
+def _preferred_remotes(repo_root: Path) -> tuple[str, ...]:
+    preferred_remotes: list[str] = []
+    upstream_remote = _upstream_remote(repo_root)
+    if upstream_remote:
+        preferred_remotes.append(upstream_remote)
+    for remote_name in _configured_remotes(repo_root):
+        if remote_name not in preferred_remotes:
+            preferred_remotes.append(remote_name)
+    return tuple(preferred_remotes)
+
+
+def _remote_head_branch(repo_root: Path, remote_name: str) -> str:
+    stdout = _git_stdout(repo_root, "remote", "show", remote_name)
+    if not stdout:
+        return ""
+    for line in stdout.splitlines():
+        key, separator, branch = line.strip().partition(":")
+        if separator and key == "HEAD branch" and branch.strip():
+            return branch.strip()
+    return ""
+
+
+def _symbolic_remote_head_branch(repo_root: Path, remote_name: str) -> str:
+    stdout = _git_stdout(
+        repo_root,
+        "symbolic-ref",
+        "--quiet",
+        "--short",
+        f"refs/remotes/{remote_name}/HEAD",
+    )
+    if not stdout:
+        return ""
+    _remote, separator, branch = stdout.strip().partition("/")
+    return branch if separator else ""
+
+
+def _first_default_branch_candidate(repo_root: Path) -> str:
+    preferred_remotes = _preferred_remotes(repo_root)
+    for remote_name in preferred_remotes:
+        branch = _remote_head_branch(repo_root, remote_name)
+        if branch:
+            return branch
+
+    for remote_name in preferred_remotes:
+        branch = _symbolic_remote_head_branch(repo_root, remote_name)
+        if branch:
+            return branch
+
+    return ""
+
+
 def _default_branch(repo_root: Path) -> str:
     configured = os.environ.get("DEFAULT_BRANCH")
     if configured:
         return configured
 
-    git = _require_executable("git")
-    upstream_result = subprocess.run(
-        (git, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"),
-        cwd=repo_root,
-        check=False,
-        text=True,
-        capture_output=True,
-    )
-    preferred_remotes: list[str] = []
-    if upstream_result.returncode == 0:
-        remote_name, separator, _ = upstream_result.stdout.strip().partition("/")
-        if separator and remote_name:
-            preferred_remotes.append(remote_name)
-
-    remotes_result = subprocess.run(
-        (git, "remote"),
-        cwd=repo_root,
-        check=False,
-        text=True,
-        capture_output=True,
-    )
-    if remotes_result.returncode == 0:
-        for remote_name in remotes_result.stdout.splitlines():
-            remote_name = remote_name.strip()
-            if remote_name and remote_name not in preferred_remotes:
-                preferred_remotes.append(remote_name)
-
-    for remote_name in preferred_remotes:
-        remote_result = subprocess.run(
-            (git, "remote", "show", remote_name),
-            cwd=repo_root,
-            check=False,
-            text=True,
-            capture_output=True,
-        )
-        if remote_result.returncode != 0:
-            continue
-        for line in remote_result.stdout.splitlines():
-            key, separator, branch = line.strip().partition(":")
-            if separator and key == "HEAD branch" and branch.strip():
-                return branch.strip()
-
-    for remote_name in preferred_remotes:
-        result = subprocess.run(
-            (
-                git,
-                "symbolic-ref",
-                "--quiet",
-                "--short",
-                f"refs/remotes/{remote_name}/HEAD",
-            ),
-            cwd=repo_root,
-            check=False,
-            text=True,
-            capture_output=True,
-        )
-        if result.returncode == 0:
-            _, _, branch = result.stdout.strip().partition("/")
-            if branch:
-                return branch
+    branch = _first_default_branch_candidate(repo_root)
+    if branch:
+        return branch
 
     raise GateError(
         "Cannot detect the default branch for local Super-Linter. Set "
@@ -224,11 +253,11 @@ def _read_super_linter_image(repo_root: Path) -> str:
         repo_root / ".github" / "workflows" / "super-linter.yml"
     ).read_text(encoding="utf-8")
     matches = sorted(
-        set(
+        {
             line.strip()
             for line in workflow_text.splitlines()
             if line.strip().startswith("ghcr.io/super-linter/super-linter:")
-        )
+        }
     )
     if len(matches) != 1:
         raise GateError(

@@ -233,6 +233,25 @@ def test_get_workflow_run_started_at_prefers_run_started_at(monkeypatch) -> None
     assert result == datetime(2026, 4, 2, 12, 34, 56, tzinfo=UTC)
 
 
+def test_load_event_payload_requires_readable_json_object_file(tmp_path) -> None:
+    payload_path = tmp_path / "event.json"
+    payload_path.write_text('{"ref": "refs/heads/main"}', encoding="utf-8")
+
+    assert security_delta_guard.load_event_payload(str(payload_path)) == {
+        "ref": "refs/heads/main"
+    }
+
+    with pytest.raises(RuntimeError, match="must be a file"):
+        security_delta_guard.load_event_payload(str(tmp_path))
+    with pytest.raises(RuntimeError, match="not readable"):
+        security_delta_guard.load_event_payload(str(tmp_path / "missing.json"))
+
+    list_payload = tmp_path / "list.json"
+    list_payload.write_text("[]", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="JSON object"):
+        security_delta_guard.load_event_payload(str(list_payload))
+
+
 def test_evaluate_direct_event_pull_request_uses_payload_pr_number() -> None:
     calls = []
 

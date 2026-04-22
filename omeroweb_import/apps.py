@@ -7,6 +7,7 @@ class ImportPluginConfig(AppConfig):
     name = "omeroweb_import"
     label = "omeroweb_import"
 
-    def ready(self) -> None:
+    @staticmethod
+    def ready() -> None:
         """Apply plugin-wide runtime configuration."""
         configure_omero_gateway_logging()

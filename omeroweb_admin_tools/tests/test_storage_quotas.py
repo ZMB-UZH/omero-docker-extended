@@ -454,6 +454,43 @@ def test_storage_quota_update_endpoint_accepts_form_encoded_updates(
     assert response.status_code == 200
 
 
+def test_storage_quota_update_endpoint_treats_missing_form_updates_as_noop(
+    monkeypatch,
+) -> None:
+    captured = {}
+    request = RequestFactory().post(
+        "/omeroweb_admin_tools/storage/quota/update/",
+        data={"other": "value"},
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+
+    def _upsert(updates, source):
+        captured["updates"] = updates
+        captured["source"] = source
+        return {"quotas_gb": {}}
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.upsert_quotas",
+        _upsert,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.reconcile_quotas",
+        lambda groups: {"logs": []},
+    )
+
+    response = storage_quota_update(request, conn=None)
+
+    assert response.status_code == 200
+    assert captured == {"updates": [], "source": "ui-edit"}
+
+
 def test_upsert_recovers_from_empty_state_file(tmp_path, monkeypatch) -> None:
     """When the state file exists but is empty, upsert should start fresh."""
     state_path = tmp_path / "quotas.json"

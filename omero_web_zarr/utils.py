@@ -230,6 +230,31 @@ def is_local_zarr_store(path):
     return (path / "zarr.json").is_file() or (path / ".zgroup").is_file()
 
 
+def _resolve_store_root(store_root):
+    try:
+        resolved = Path(store_root).resolve(strict=True)
+    except (OSError, TypeError, ValueError) as exc:
+        raise FileNotFoundError("zarr store root not found") from exc
+    if not resolved.is_dir() or not is_local_zarr_store(resolved):
+        raise FileNotFoundError("zarr store root not found")
+    return resolved
+
+
+def _resolve_store_metadata_file(store_root, *parts):
+    root = _resolve_store_root(store_root)
+    relative_path = Path(*parts)
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        raise FileNotFoundError("zarr metadata path not found")
+    try:
+        target = (root / relative_path).resolve(strict=True)
+        target.relative_to(root)
+    except (OSError, ValueError) as exc:
+        raise FileNotFoundError("zarr metadata path not found") from exc
+    if not target.is_file() or not is_store_metadata_path(target):
+        raise FileNotFoundError("zarr metadata path not found")
+    return target
+
+
 def is_store_backed_image(image):
     return resolve_image_backing_zarr_store(image) is not None
 
@@ -250,30 +275,34 @@ def collect_store_metadata_documents(image):
     for path in sorted(store_root.rglob("*")):
         if not path.is_file() or not is_store_metadata_path(path):
             continue
-        with open(path, "r", encoding="utf-8") as handle:
-            documents[str(path.relative_to(store_root))] = json.load(handle)
+        relative_path = path.relative_to(store_root)
+        metadata_path = _resolve_store_metadata_file(store_root, relative_path)
+        with metadata_path.open("r", encoding="utf-8") as handle:
+            documents[str(relative_path)] = json.load(handle)
 
     return documents
 
 
 def _read_store_root_attrs(store_root):
-    with open(store_root / ".zattrs", "r", encoding="utf-8") as handle:
+    zattrs_path = _resolve_store_metadata_file(store_root, ".zattrs")
+    with zattrs_path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
-def _read_store_json(path):
-    with open(path, "r", encoding="utf-8") as handle:
+def _read_store_json(store_root, *parts):
+    target = _resolve_store_metadata_file(store_root, *parts)
+    with target.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
 def _read_store_attrs(store_root):
     zattrs_path = store_root / ".zattrs"
     if zattrs_path.is_file():
-        return _read_store_json(zattrs_path)
+        return _read_store_json(store_root, ".zattrs")
 
     zarr_json_path = store_root / "zarr.json"
     if zarr_json_path.is_file():
-        payload = _read_store_json(zarr_json_path)
+        payload = _read_store_json(store_root, "zarr.json")
         attributes = payload.get("attributes")
         if isinstance(attributes, dict):
             return attributes
@@ -496,9 +525,12 @@ def load_store_backed_image_node(image):
 
 def get_store_backed_channel_overrides(image, channels=None):
     cached = getattr(image, "_omero_web_zarr_channel_overrides", _MISSING)
-    if cached is not _MISSING and isinstance(cached, list):
-        if channels is None or len(cached) == len(channels):
-            return cached
+    if (
+        cached is not _MISSING
+        and isinstance(cached, list)
+        and (channels is None or len(cached) == len(channels))
+    ):
+        return cached
 
     node = load_store_backed_image_node(image)
     metadata = getattr(node, "metadata", {}) or {} if node is not None else {}
