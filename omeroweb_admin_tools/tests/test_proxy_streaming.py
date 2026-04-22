@@ -21,6 +21,31 @@ class _DummyDjangoRequest:
     headers: dict[str, str] = {}
 
 
+def _install_proxy_backend_stub(monkeypatch, handler) -> None:
+    def fake_backend_request(
+        *,
+        base_url,
+        method,
+        request_target,
+        data,
+        headers,
+        timeout_seconds,
+    ):
+        return handler(
+            method,
+            f"{base_url.rstrip('/')}{request_target}",
+            data=data,
+            headers=headers,
+            timeout=timeout_seconds,
+            allow_redirects=False,
+        )
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._send_proxy_backend_request",
+        fake_backend_request,
+    )
+
+
 def test_proxy_http_request_suppresses_prometheus_live_notification_stream(
     monkeypatch,
 ) -> None:
@@ -28,16 +53,19 @@ def test_proxy_http_request_suppresses_prometheus_live_notification_stream(
 
     class DummyResponse:
         status_code = 200
-        headers = {"Content-Type": "text/event-stream"}
-        raw = type("Raw", (), {"headers": _make_headers(headers)})()
+        headers = _make_headers({"Content-Type": "text/event-stream"})
 
         @property
         def content(self):
             read_called["value"] = True
             raise AssertionError("streaming payload should not be fully read")
 
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
+        @staticmethod
+        def close():
+            return None
+
+    _install_proxy_backend_stub(
+        monkeypatch,
         lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
             DummyResponse()
         ),
@@ -63,10 +91,7 @@ def test_proxy_http_request_returns_gateway_timeout_for_backend_timeout(
     ):
         raise requests.Timeout("timed out")
 
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
-        fake_request,
-    )
+    _install_proxy_backend_stub(monkeypatch, fake_request)
 
     response = _proxy_http_request(
         _DummyDjangoRequest(),
@@ -89,10 +114,7 @@ def test_proxy_http_request_returns_gateway_timeout_for_socket_timeout(
     ):
         raise socket.timeout("socket timed out")
 
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view.requests.request",
-        fake_request,
-    )
+    _install_proxy_backend_stub(monkeypatch, fake_request)
 
     response = _proxy_http_request(
         _DummyDjangoRequest(),
