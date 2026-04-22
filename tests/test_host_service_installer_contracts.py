@@ -9,6 +9,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TMP_INSTALLER = REPO_ROOT / "scripts" / "install-tmp-cleaner.sh"
 QUOTA_INSTALLER = REPO_ROOT / "scripts" / "install-quota-enforcer.sh"
+BASH_BIN = "/bin/bash"
 
 
 def _fake_systemctl(tmp_path: Path) -> tuple[Path, Path]:
@@ -29,7 +30,7 @@ def _fake_systemctl(tmp_path: Path) -> tuple[Path, Path]:
 
 def _run_bash(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["bash", "-c", script],
+        [BASH_BIN, "-c", script],
         check=False,
         cwd=REPO_ROOT,
         env=env,

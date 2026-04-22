@@ -8,6 +8,18 @@ The repository also includes a `security-delta` job inside `.github/workflows/se
 
 The current advanced CodeQL setup uses `build-mode: none` for the Python and JavaScript/TypeScript matrix, which matches GitHub's interpreted-language guidance and avoids an unnecessary `autobuild` step. The same workflow also enables CodeQL dependency caching, and the Bandit job restores and stores `pip` downloads keyed to `.github/requirements/security-code-scanning.txt`.
 
+## Local workflow parity gate
+
+Run the locally reproducible workflow gates before committing or pushing changes:
+
+```bash
+python3 tools/run_local_workflow_gates.py --setup --profile ci
+```
+
+This installs Python-backed workflow tools into an ignored local environment from the same hash-pinned requirement files used by GitHub Actions, then runs the docs, Ruff, Mypy, Vulture, split test, coverage, and Bandit gates. Use `--profile all` when Docker is available and you also need the pinned Super-Linter container gate.
+
+Some GitHub-only behavior cannot be made fully identical on the host: SARIF upload, CodeQL hosted analysis, OIDC publishing, repository Scorecard checks, OSV reusable workflow publishing, and Codecov upload still require the actual GitHub workflow result. Do not present the local gate as a replacement for the GitHub security workflow; use it to catch reproducible failures before push.
+
 ## Active scanners
 
 | Scanner        | Type                                 | Scope                                                 | Free |

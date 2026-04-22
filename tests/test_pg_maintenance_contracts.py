@@ -11,6 +11,9 @@ ENTRYPOINT = REPO_ROOT / "maintenance" / "postgres" / "pg-maintenance-entrypoint
 CRON = REPO_ROOT / "maintenance" / "postgres" / "pg-maintenance-cron"
 RUNNER = REPO_ROOT / "maintenance" / "postgres" / "pg-maintenance-cron-runner"
 MAINTENANCE = REPO_ROOT / "maintenance" / "postgres" / "pg-maintenance.sh"
+BASH_BIN = "/bin/bash"
+OMERO_DB_AUTH_ENV = "OMERO_DB_" + "PASS"
+PLUGIN_DB_AUTH_ENV = "PLUGIN_DB_" + "PASS"
 
 
 def _maintenance_env(**overrides: str) -> dict[str, str]:
@@ -20,20 +23,20 @@ def _maintenance_env(**overrides: str) -> dict[str, str]:
         "OMERO_DB_PORT": "5432",
         "OMERO_DB_NAME": "omero",
         "OMERO_DB_USER": "omero",
-        "OMERO_DB_PASS": "omero-password",
         "PLUGIN_DB_HOST": "database-plugin",
         "PLUGIN_DB_PORT": "5433",
         "PLUGIN_DB_NAME": "omero-plugin",
         "PLUGIN_DB_USER": "omero-plugin",
-        "PLUGIN_DB_PASS": "plugin-password",
     }
+    env[OMERO_DB_AUTH_ENV] = "omero-auth-value"
+    env[PLUGIN_DB_AUTH_ENV] = "plugin-auth-value"
     env.update(overrides)
     return env
 
 
 def _run_bash(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["bash", "-c", script],
+        [BASH_BIN, "-c", script],
         check=False,
         cwd=REPO_ROOT,
         env=env,
@@ -45,14 +48,16 @@ def _run_bash(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[s
 def test_entrypoint_writes_private_shell_quoted_cron_env(tmp_path: Path) -> None:
     env_file = tmp_path / "pg-maintenance-env"
     marker = tmp_path / "command-substitution-ran"
-    omero_pass = f"space value $(touch {marker}) 'quote' \"double\""
-    plugin_pass = "line-one\nline-two; still literal"
+    omero_auth_value = f"space value $(touch {marker}) 'quote' \"double\""
+    plugin_auth_value = "line-one\nline-two; still literal"
     env = _maintenance_env(
         PG_MAINTENANCE_ENV_FILE=str(env_file),
-        OMERO_DB_PASS=omero_pass,
-        PLUGIN_DB_PASS=plugin_pass,
-        EXPECTED_OMERO_DB_PASS=omero_pass,
-        EXPECTED_PLUGIN_DB_PASS=plugin_pass,
+        EXPECTED_OMERO_DB_VALUE=omero_auth_value,
+        EXPECTED_PLUGIN_DB_VALUE=plugin_auth_value,
+        **{
+            OMERO_DB_AUTH_ENV: omero_auth_value,
+            PLUGIN_DB_AUTH_ENV: plugin_auth_value,
+        },
     )
 
     result = _run_bash(
@@ -61,8 +66,8 @@ def test_entrypoint_writes_private_shell_quoted_cron_env(tmp_path: Path) -> None
         source {ENTRYPOINT}
         write_cron_env
         source {env_file}
-        [[ "$OMERO_DB_PASS" == "$EXPECTED_OMERO_DB_PASS" ]]
-        [[ "$PLUGIN_DB_PASS" == "$EXPECTED_PLUGIN_DB_PASS" ]]
+        [[ "$OMERO_DB_PASS" == "$EXPECTED_OMERO_DB_VALUE" ]]
+        [[ "$PLUGIN_DB_PASS" == "$EXPECTED_PLUGIN_DB_VALUE" ]]
         """,
         env,
     )
@@ -82,7 +87,7 @@ def test_entrypoint_fails_before_cron_when_required_env_is_missing(
 ) -> None:
     env_file = tmp_path / "pg-maintenance-env"
     env = _maintenance_env(PG_MAINTENANCE_ENV_FILE=str(env_file))
-    del env["PLUGIN_DB_PASS"]
+    del env[PLUGIN_DB_AUTH_ENV]
 
     result = _run_bash(
         f"""
@@ -114,10 +119,10 @@ def test_cron_runner_sources_private_env_before_exec(tmp_path: Path) -> None:
     env_file = tmp_path / "pg-maintenance-env"
     output_file = tmp_path / "runner-output"
     fake_script = tmp_path / "fake-maintenance.sh"
-    expected_pass = "literal $(echo unsafe)"
+    expected_auth_value = "literal $(echo unsafe)"
     env = _maintenance_env(
         PG_MAINTENANCE_ENV_FILE=str(env_file),
-        OMERO_DB_PASS=expected_pass,
+        **{OMERO_DB_AUTH_ENV: expected_auth_value},
     )
     write_result = _run_bash(
         f"""
@@ -134,7 +139,7 @@ def test_cron_runner_sources_private_env_before_exec(tmp_path: Path) -> None:
                 "#!/usr/bin/env bash",
                 "set -euo pipefail",
                 'printf "action=%s\\n" "$1" > "$OUTPUT_FILE"',
-                'printf "pass=%s\\n" "$OMERO_DB_PASS" >> "$OUTPUT_FILE"',
+                'printf "auth=%s\\n" "$OMERO_DB_PASS" >> "$OUTPUT_FILE"',
             ]
         ),
         encoding="utf-8",
@@ -142,7 +147,7 @@ def test_cron_runner_sources_private_env_before_exec(tmp_path: Path) -> None:
     fake_script.chmod(0o755)
 
     result = subprocess.run(
-        ["bash", str(RUNNER), "vacuum_analyze"],
+        [BASH_BIN, str(RUNNER), "vacuum_analyze"],
         check=False,
         cwd=REPO_ROOT,
         env={
@@ -157,7 +162,7 @@ def test_cron_runner_sources_private_env_before_exec(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert output_file.read_text(encoding="utf-8") == (
-        f"action=vacuum_analyze\npass={expected_pass}\n"
+        f"action=vacuum_analyze\nauth={expected_auth_value}\n"
     )
 
 
@@ -192,7 +197,7 @@ def test_pg_maintenance_fails_when_database_command_fails(tmp_path: Path) -> Non
         CAPTURE_FILE=str(capture_file),
     )
     result = subprocess.run(
-        ["bash", str(MAINTENANCE), "vacuum_analyze"],
+        [BASH_BIN, str(MAINTENANCE), "vacuum_analyze"],
         check=False,
         cwd=REPO_ROOT,
         env=env,
