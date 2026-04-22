@@ -67,6 +67,8 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Never create, edit, overwrite, or delete `env/omero_secrets.env` as an AI agent.
 - Run `python3 tools/env_safety_guard.py check` and `python3 tools/env_safety_guard.py compose-guard` before any `docker compose` operation to verify deployment env files are intact and the checkout matches the live installation root.
 - Validate Markdown with `npx markdownlint-cli2` after editing `.md` files to prevent CI super-linter failures.
+- Before committing or pushing code, tests, workflow, or documentation changes, run `python3 tools/run_local_workflow_gates.py --setup --profile ci`. Use `--profile all` when the Docker-backed Super-Linter gate must be mirrored locally.
+- `tools/run_local_workflow_gates.py` installs Python-backed workflow tools from the same hash-pinned requirement files used by GitHub Actions and runs the locally reproducible workflow gates. GitHub-only services such as SARIF upload, OIDC publishing, CodeQL hosted analysis, repository Scorecard checks, and Codecov upload still require the post-push workflow result.
 
 ## Repository map
 

@@ -612,6 +612,17 @@ def test_image_preview_and_download_views_cover_missing_store_backed_images(
     with pytest.raises(Http404):
         views.download_store_ome_tiff(request, 14, conn=missing_conn)
 
+    monkeypatch.setattr(views, "resolve_image_backing_zarr_store", lambda current: None)
+    with pytest.raises(Http404):
+        views.download_store_original(request, 14, conn=_FakeConn(image))
+    with pytest.raises(Http404):
+        views.download_store_metadata(request, 14, conn=_FakeConn(image))
+
+    monkeypatch.setattr(
+        views,
+        "resolve_image_backing_zarr_store",
+        lambda current: tmp_path.resolve(),
+    )
     monkeypatch.setattr(views, "load_store_backed_image_node", lambda current: None)
     with pytest.raises(Http404):
         views.download_store_ome_tiff(request, 14, conn=_FakeConn(image))
