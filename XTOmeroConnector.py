@@ -47,7 +47,6 @@ NATIVE_BRIDGE_RUNNER_TIMEOUT = 600
 NATIVE_BRIDGE_PROBE_TIMEOUT = 60
 IMARIS_OPEN_VERIFY_TIMEOUT = 10.0
 IMARIS_OPEN_VERIFY_INTERVAL = 0.25
-IMARIS_FILE_CONVERTER_STARTUP_GRACE = 1.0
 OMERO_CONNECTOR_WINDOW_WIDTH = 1000
 OMERO_CONNECTOR_WINDOW_HEIGHT = 700
 _XT_LOG_PATH: Optional[str] = None
@@ -162,13 +161,11 @@ def _get_imaris_application(app_id, retries, retry_interval):
     return None
 
 
-def _open_file_in_imaris(file_path, app):
+def _open_file_in_imaris(file_path, app, verify_current_file=True):
     getter = _current_file_getter(app)
     for method_name, args in (
         ("FileOpen", (file_path, "")),
         ("FileOpen", (file_path,)),
-        ("OpenFile", (file_path,)),
-        ("LoadFile", (file_path,)),
     ):
         method = getattr(app, method_name, None)
         if not callable(method):
@@ -176,7 +173,11 @@ def _open_file_in_imaris(file_path, app):
         result = method(*args)
         if result is False:
             continue
-        if getter is None or _wait_for_current_file(getter, file_path):
+        if (
+            not verify_current_file
+            or getter is None
+            or _wait_for_current_file(getter, file_path)
+        ):
             return True
     return False
 
@@ -201,10 +202,58 @@ def _open_files_in_imaris(file_paths, app, require_ims=True):
             return False
         validated.append(path_text)
 
-    for path_text in validated:
-        if not _open_file_in_imaris(path_text, app):
+    if len(validated) == 1:
+        return _open_file_in_imaris(
+            validated[0],
+            app,
+            verify_current_file=require_ims,
+        )
+    return _open_files_as_imaris_image_slots(validated, app)
+
+
+def _clone_current_dataset(app):
+    get_data_set = getattr(app, "GetDataSet", None)
+    if not callable(get_data_set):
+        return None
+    data_set = get_data_set()
+    clone = getattr(data_set, "Clone", None)
+    if not callable(clone):
+        return None
+    return clone()
+
+
+def _wait_for_image_count(app, expected_count):
+    get_count = getattr(app, "GetNumberOfImages", None)
+    if not callable(get_count):
+        return True
+    deadline = time.time() + OPEN_VERIFY_TIMEOUT
+    while time.time() <= deadline:
+        try:
+            if int(get_count()) >= int(expected_count):
+                return True
+        except Exception:
             return False
-    return True
+        time.sleep(OPEN_VERIFY_INTERVAL)
+    return False
+
+
+def _open_files_as_imaris_image_slots(file_paths, app):
+    set_image = getattr(app, "SetImage", None)
+    if not callable(set_image):
+        return False
+
+    data_sets = []
+    for file_path in file_paths:
+        if not _open_file_in_imaris(file_path, app, verify_current_file=False):
+            return False
+        data_set = _clone_current_dataset(app)
+        if data_set is None:
+            return False
+        data_sets.append(data_set)
+
+    for index, data_set in enumerate(data_sets):
+        set_image(index, data_set)
+    return _wait_for_image_count(app, len(data_sets))
 
 
 def _current_file_getter(app):
@@ -244,10 +293,7 @@ def _wait_for_current_file(getter, expected_path):
 
 
 def _has_open_method(app):
-    for method_name in ("FileOpen", "OpenFile", "LoadFile"):
-        if callable(getattr(app, method_name, None)):
-            return True
-    return False
+    return callable(getattr(app, "FileOpen", None))
 
 
 def main():
@@ -492,7 +538,7 @@ def _wait_for_imaris_current_file(
 
 
 def open_file_in_imaris(file_path, imaris_app, require_ims=True):
-    """Attempt to open a file in Imaris using available API methods."""
+    """Attempt to open a file in Imaris using FileOpen."""
     candidate = _existing_regular_file_path(file_path)
     if candidate is None:
         _xt_debug("Imaris open skipped: file does not exist")
@@ -510,8 +556,6 @@ def open_file_in_imaris(file_path, imaris_app, require_ims=True):
     candidates = [
         ("FileOpen", (file_path_text, "")),
         ("FileOpen", (file_path_text,)),
-        ("OpenFile", (file_path_text,)),
-        ("LoadFile", (file_path_text,)),
     ]
     for method_name, args in candidates:
         method = getattr(imaris_app, method_name, None)
@@ -522,6 +566,8 @@ def open_file_in_imaris(file_path, imaris_app, require_ims=True):
             if result is False:
                 last_error = f"{method_name} returned False"
                 continue
+            if not require_ims:
+                return True
             if _wait_for_imaris_current_file(imaris_app, file_path_text):
                 return True
             last_error = (
@@ -565,20 +611,74 @@ def open_files_in_imaris(file_paths, imaris_app, require_ims=True):
             return False
         validated_paths.append(str(candidate))
 
-    for path in validated_paths:
-        if not open_file_in_imaris(path, imaris_app, require_ims=require_ims):
+    if len(validated_paths) == 1:
+        return open_file_in_imaris(
+            validated_paths[0],
+            imaris_app,
+            require_ims=require_ims,
+        )
+    return open_files_as_imaris_image_slots(validated_paths, imaris_app)
+
+
+def _clone_current_imaris_dataset(imaris_app):
+    get_data_set = getattr(imaris_app, "GetDataSet", None)
+    if not callable(get_data_set):
+        return None
+    data_set = get_data_set()
+    clone = getattr(data_set, "Clone", None)
+    if not callable(clone):
+        return None
+    return clone()
+
+
+def _wait_for_imaris_image_count(
+    imaris_app,
+    expected_count,
+    timeout=IMARIS_OPEN_VERIFY_TIMEOUT,
+    interval=IMARIS_OPEN_VERIFY_INTERVAL,
+):
+    get_count = getattr(imaris_app, "GetNumberOfImages", None)
+    if not callable(get_count):
+        return True
+    deadline = time.time() + max(0.0, float(timeout))
+    while time.time() <= deadline:
+        try:
+            if int(get_count()) >= int(expected_count):
+                return True
+        except Exception as exc:
+            _xt_debug(f"Imaris image-count verification failed: {exc}")
             return False
-    return True
+        time.sleep(max(0.0, float(interval)))
+    return False
+
+
+def open_files_as_imaris_image_slots(file_paths, imaris_app):
+    """Open prepared files as separate images in the current Imaris application."""
+    set_image = getattr(imaris_app, "SetImage", None)
+    if not callable(set_image):
+        _xt_debug("Direct Imaris multi-open failed: SetImage API is unavailable")
+        return False
+
+    data_sets = []
+    for file_path in file_paths:
+        if not open_file_in_imaris(file_path, imaris_app, require_ims=False):
+            return False
+        data_set = _clone_current_imaris_dataset(imaris_app)
+        if data_set is None:
+            _xt_debug("Direct Imaris multi-open failed: dataset clone is unavailable")
+            return False
+        data_sets.append(data_set)
+
+    for index, data_set in enumerate(data_sets):
+        set_image(index, data_set)
+    return _wait_for_imaris_image_count(imaris_app, len(data_sets))
 
 
 def _looks_like_imaris_application(candidate):
     """Return True when the object looks like a live Imaris application handle."""
     if candidate is None:
         return False
-    for method_name in ("FileOpen", "OpenFile", "LoadFile"):
-        if callable(getattr(candidate, method_name, None)):
-            return True
-    return False
+    return callable(getattr(candidate, "FileOpen", None))
 
 
 def _infer_imaris_major_version_from_path(path_value):
@@ -999,112 +1099,6 @@ def _find_imaris_executable():
     return None
 
 
-_IMARIS_FILE_CONVERTER_EXE_NAMES = {
-    "imarisfileconverter.exe",
-    "fileconverter.exe",
-    "imarisconvert.exe",
-}
-
-
-def _looks_like_imaris_file_converter_executable(path_value):
-    path_text = _coerce_path(path_value)
-    if path_text is None:
-        return False
-    name = os.path.basename(path_text).lower()
-    if name in _IMARIS_FILE_CONVERTER_EXE_NAMES:
-        return True
-    return name.endswith(".exe") and "imaris" in name and "convert" in name
-
-
-def _iter_imaris_file_converter_executable_candidates():
-    """Yield plausible native Imaris File Converter executables."""
-    seen = set()
-
-    def _yield_candidate(path):
-        if not path:
-            return
-        normalized = os.path.normpath(path)
-        key = os.path.normcase(normalized)
-        if key in seen:
-            return
-        seen.add(key)
-        if _looks_like_imaris_file_converter_executable(normalized):
-            yield normalized
-
-    env_candidate = os.environ.get("IMARIS_FILE_CONVERTER_EXE", "").strip()
-    if env_candidate:
-        yield from _yield_candidate(env_candidate)
-
-    winreg_module: Any = None
-    try:
-        winreg_module = importlib.import_module("winreg")
-    except ImportError:
-        winreg_module = None
-
-    if winreg_module is not None:
-        reg_locations = []
-        for exe_name in sorted(_IMARIS_FILE_CONVERTER_EXE_NAMES):
-            reg_locations.extend(
-                [
-                    (
-                        winreg_module.HKEY_LOCAL_MACHINE,
-                        rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{exe_name}",
-                    ),
-                    (
-                        winreg_module.HKEY_LOCAL_MACHINE,
-                        rf"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\{exe_name}",
-                    ),
-                ]
-            )
-        for hive, subkey in reg_locations:
-            try:
-                with winreg_module.OpenKey(hive, subkey) as key:
-                    value, _ = winreg_module.QueryValueEx(key, None)
-                yield from _yield_candidate(value)
-            except (OSError, ValueError):
-                continue
-
-    install_roots = list(_iter_imaris_install_roots())
-    direct_subdirs = ["", "FileConverter", "bin", "XT", os.path.join("XT", "bin")]
-    for install_root in install_roots:
-        for subdir in direct_subdirs:
-            base_dir = os.path.join(install_root, subdir) if subdir else install_root
-            for exe_name in sorted(_IMARIS_FILE_CONVERTER_EXE_NAMES):
-                yield from _yield_candidate(os.path.join(base_dir, exe_name))
-
-        try:
-            for root, dirs, files in os.walk(install_root):
-                rel_path = os.path.relpath(root, install_root)
-                depth = 0 if rel_path == "." else len(rel_path.split(os.sep))
-                if depth >= 2:
-                    dirs[:] = []
-                for filename in files:
-                    yield from _yield_candidate(os.path.join(root, filename))
-        except Exception as exc:
-            _xt_debug(
-                f"Imaris File Converter search failed under {install_root}: {exc}"
-            )
-
-
-def _find_imaris_file_converter_executable():
-    """Return the native Imaris File Converter executable if present."""
-    if os.name != "nt":
-        return None
-    for candidate in _iter_imaris_file_converter_executable_candidates():
-        path = _existing_regular_file_path(candidate)
-        if path is None:
-            continue
-        if not _looks_like_imaris_file_converter_executable(str(path)):
-            continue
-        if not _is_supported_imaris_install_path(str(path)):
-            continue
-        try:
-            return str(path.resolve(strict=True))
-        except OSError:
-            continue
-    return None
-
-
 def _existing_regular_file_path_list(file_paths):
     if isinstance(file_paths, (str, bytes, os.PathLike)):
         file_paths = [file_paths]
@@ -1123,73 +1117,6 @@ def _existing_regular_file_path_list(file_paths):
             return None
         candidates.append(candidate)
     return candidates
-
-
-def open_files_in_imaris_file_converter(file_paths, converter_executable=None):
-    """Launch Imaris' native File Converter for prepared original files."""
-    candidates = _existing_regular_file_path_list(file_paths)
-    if candidates is None:
-        _xt_debug(
-            "Imaris File Converter launch skipped: one or more inputs are missing"
-        )
-        return False
-
-    converter = converter_executable or _find_imaris_file_converter_executable()
-    converter_path = _existing_regular_file_path(converter)
-    if converter_path is None:
-        _xt_debug("Imaris File Converter launch skipped: executable not found")
-        return False
-    if not _looks_like_imaris_file_converter_executable(str(converter_path)):
-        _xt_debug(
-            "Imaris File Converter launch skipped: executable name is not recognized"
-        )
-        return False
-    if not _is_supported_imaris_install_path(str(converter_path)):
-        _xt_debug(
-            "Imaris File Converter launch skipped: Imaris major version is not 11+"
-        )
-        return False
-
-    import subprocess
-
-    command = [str(converter_path)] + [str(candidate) for candidate in candidates]
-    _xt_debug(f"Starting Imaris File Converter: {str(converter_path)}")
-    try:
-        process = subprocess.Popen(
-            command,
-            cwd=str(converter_path.parent),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            shell=False,
-            close_fds=True,
-        )
-    except Exception as exc:
-        _xt_debug(f"Imaris File Converter failed to start: {exc}")
-        return False
-
-    try:
-        return_code = process.wait(timeout=IMARIS_FILE_CONVERTER_STARTUP_GRACE)
-    except subprocess.TimeoutExpired:
-        _xt_debug(f"Imaris File Converter running with pid={process.pid}")
-        return True
-
-    if return_code == 0:
-        _xt_debug(
-            "Imaris File Converter accepted the file selection and exited cleanly"
-        )
-        return True
-
-    _xt_debug(f"Imaris File Converter exited with code={return_code}")
-    return False
-
-
-def open_file_in_imaris_file_converter(file_path, converter_executable=None):
-    """Launch Imaris' native File Converter for one original archived file."""
-    return open_files_in_imaris_file_converter(
-        [file_path],
-        converter_executable=converter_executable,
-    )
 
 
 def _iter_imaris_install_roots():
@@ -2583,7 +2510,7 @@ class OMEROWebClient:
         download_dir,
         fallback_name="original",
     ):
-        """Download the archived original file for local Imaris conversion."""
+        """Download the archived original file for local Imaris opening."""
         if download_dir is None:
             download_dir = os.path.join(
                 os.path.expanduser("~"), "Downloads", "OMERO_Imaris_Originals"
@@ -2936,6 +2863,7 @@ class OMEROBrowserDialog:
             yscrollcommand=y_scroll.set,
             xscrollcommand=x_scroll.set,
             exportselection=False,
+            activestyle=_tk_constant("NONE", "none"),
         )
         if selectmode is not None:
             listbox.config(selectmode=selectmode)
@@ -3058,13 +2986,6 @@ class OMEROBrowserDialog:
     def _detect_converter_options_after_connection(self):
         """Populate converter options only after login and native-open checks."""
         self._start_native_bridge_probe()
-        imaris_converter = _find_imaris_file_converter_executable()
-        imaris_available = bool(imaris_converter)
-        if imaris_converter:
-            _xt_debug(f"Native Imaris File Converter detected: {imaris_converter}")
-        else:
-            _xt_debug("Native Imaris File Converter executable was not detected")
-
         if not self._native_bridge_probe_done.wait(timeout=NATIVE_BRIDGE_PROBE_TIMEOUT):
             _xt_debug("Native bridge probe timed out during converter detection")
             native_available = False
@@ -3082,7 +3003,7 @@ class OMEROBrowserDialog:
             omero_available = self.client.has_omero_ims_export_capability()
         if omero_available and native_available:
             options.append("OMERO")
-        if imaris_available:
+        if native_available:
             options.append("Imaris")
         _xt_debug(f"Detected converter options after connection: {options}")
         return options
@@ -3518,22 +3439,15 @@ class OMEROBrowserDialog:
                 raise RuntimeError("Selected image is missing an OMERO image id.")
             image_name = self._image_display_name(img)
             _xt_debug(f"Load worker starting image_id={image_id} converter={converter}")
-            imaris_converter_executable = None
-            if (
-                converter == "OMERO"
-                and not self._ensure_native_open_ready_before_export()
-            ):
-                raise RuntimeError(
-                    "Cannot open files in the running Imaris session because no "
-                    "compatible Imaris bridge is available. Download/conversion "
-                    "was not started."
-                )
-            if converter == "Imaris":
-                imaris_converter_executable = _find_imaris_file_converter_executable()
-                if not imaris_converter_executable:
+            if converter in {"OMERO", "Imaris"}:
+                if not self._ensure_native_open_ready_before_export():
+                    blocked_action = (
+                        "Download/conversion" if converter == "OMERO" else "Download"
+                    )
                     raise RuntimeError(
-                        "Cannot start Imaris native conversion because the Imaris "
-                        "File Converter executable was not detected. Download was not started."
+                        "Cannot open files in the running Imaris session because no "
+                        f"compatible Imaris bridge is available. {blocked_action} "
+                        "was not started."
                     )
 
             # Download directory
@@ -3570,7 +3484,7 @@ class OMEROBrowserDialog:
             if require_ims and not is_ims_file(downloaded_file):
                 raise RuntimeError(
                     "Downloaded file is not a valid IMS (HDF5) file. "
-                    "Refusing to open to avoid triggering Imaris File Converter. "
+                    "Refusing to open the invalid server-side export in Imaris. "
                     "Please verify that the server-side conversion completed successfully."
                 )
 
@@ -3594,17 +3508,18 @@ class OMEROBrowserDialog:
                 success_message = "IMS file opened in the current Imaris session."
                 failure_message = "Failed to open IMS in the current Imaris session."
             else:
-                self._set_status("Starting Imaris File Converter...", "#fff3cd")
-                success = open_file_in_imaris_file_converter(
-                    downloaded_file,
-                    converter_executable=imaris_converter_executable,
+                self._set_status("Opening original file in Imaris...", "#fff3cd")
+                success = self._invoke_on_ui_thread(
+                    lambda: self._open_downloaded_file_in_imaris(
+                        downloaded_file,
+                        require_ims=False,
+                    )
                 )
-                success_status = "Started Imaris File Converter"
-                success_message = "Original file was handed to Imaris File Converter."
-                failure_message = (
-                    "Failed to start Imaris File Converter for the downloaded "
-                    "original file."
+                success_status = "Opened original file in current Imaris session"
+                success_message = (
+                    "Original file was handed to Imaris through the current session."
                 )
+                failure_message = "Failed to open the original file in Imaris."
 
             if success:
                 self._set_status(success_status, "#d4edda")
@@ -3636,7 +3551,6 @@ class OMEROBrowserDialog:
                 f"Multi-image load worker starting count={count} converter={converter}"
             )
 
-            imaris_converter_executable = None
             if converter == "OMERO":
                 if not self._ensure_native_open_ready_before_export():
                     raise RuntimeError(
@@ -3645,11 +3559,10 @@ class OMEROBrowserDialog:
                         "was not started."
                     )
             elif converter == "Imaris":
-                imaris_converter_executable = _find_imaris_file_converter_executable()
-                if not imaris_converter_executable:
+                if not self._ensure_native_open_ready_before_export():
                     raise RuntimeError(
-                        "Cannot start Imaris native conversion because the Imaris "
-                        "File Converter executable was not detected. Download was not started."
+                        "Cannot open files in the running Imaris session because no "
+                        "compatible Imaris bridge is available. Download was not started."
                     )
             else:
                 raise RuntimeError(f"Unsupported converter: {converter}")
@@ -3723,16 +3636,20 @@ class OMEROBrowserDialog:
                 )
                 failure_message = "Imaris did not accept the prepared IMS file batch."
             else:
-                success = open_files_in_imaris_file_converter(
-                    downloaded_files,
-                    converter_executable=imaris_converter_executable,
+                success = self._invoke_on_ui_thread(
+                    lambda: self._open_downloaded_files_in_imaris(
+                        downloaded_files,
+                        require_ims=False,
+                    )
                 )
-                success_status = "Submitted selected originals to Imaris File Converter"
+                success_status = "Submitted selected originals to Imaris"
                 success_message = (
-                    "All selected original files were handed to Imaris File Converter "
+                    "All selected original files were handed to the current Imaris session "
                     "after every download completed."
                 )
-                failure_message = "Failed to hand the selected original files to Imaris File Converter."
+                failure_message = (
+                    "Failed to hand the selected original files to Imaris."
+                )
 
             if success:
                 self._set_status(success_status, "#d4edda")

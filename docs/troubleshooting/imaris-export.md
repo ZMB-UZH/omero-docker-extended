@@ -184,11 +184,16 @@ Operational rule:
   connector endpoints that predate the explicit capabilities JSON response are
   treated as OMERO-capable only when the endpoint returns the legacy
   `Missing image id` response.
-- `Imaris` is shown only when the native Imaris File Converter executable is
-  detected from the current Imaris 11+ installation. This mode downloads the
-  original archived file and starts Imaris' own converter; it does not call
-  `Imaris.exe`, use a Windows file association, or claim success unless the
-  converter process remains running after startup.
+- `Imaris` is shown only when a same-session Imaris XT `FileOpen` path is
+  available. This mode downloads the original archived file and hands it to the
+  running Imaris application through `FileOpen`, allowing Imaris to handle
+  raw/vendor parsing natively. It must not start `Imaris.exe`, use a Windows
+  file association, or spawn a standalone File Converter process.
+- when multiple images are selected, the connector must finish every download
+  or server-side IMS export before handing the prepared files to Imaris. It then
+  opens the files through `FileOpen` and installs the resulting datasets as
+  separate Imaris image slots, so the final workspace contains the selected
+  image set instead of only the last opened file.
 - connector diagnostics must not print CSRF tokens, session cookie values,
   passwords, or local user-profile paths. The local export cache defaults to the
   operating system temp directory and can be overridden with
