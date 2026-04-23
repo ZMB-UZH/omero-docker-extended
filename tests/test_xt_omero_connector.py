@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import importlib.util
 import builtins
-import io
 import json
 import ntpath
 import os
@@ -64,6 +63,21 @@ class _FakeHTTPResponse:
 
     def geturl(self):
         return self._final_url
+
+
+class _FakeHTTPError(urllib.error.HTTPError):
+    def __init__(self, body, code=400, msg="Bad Request"):
+        super().__init__(
+            url=f"{_TEST_BASE_URL}/omeroweb_imaris_connector/imaris-export/",
+            code=code,
+            msg=msg,
+            hdrs={},
+            fp=None,
+        )
+        self._body = body
+
+    def read(self, *_args, **_kwargs):
+        return self._body
 
 
 def test_xt_script_annotations_stay_python37_runtime_safe():
@@ -181,13 +195,7 @@ def test_client_treats_legacy_missing_image_capability_response_as_available():
         @staticmethod
         def open(_request, timeout):
             assert timeout == 30
-            raise urllib.error.HTTPError(
-                url=f"{_TEST_BASE_URL}/omeroweb_imaris_connector/imaris-export/",
-                code=400,
-                msg="Bad Request",
-                hdrs={},
-                fp=io.BytesIO(b"Missing image id"),
-            )
+            raise _FakeHTTPError(b"Missing image id")
 
     client.opener = _FakeOpener()
 
@@ -203,13 +211,7 @@ def test_client_rejects_non_legacy_capability_http_errors():
         @staticmethod
         def open(_request, timeout):
             assert timeout == 30
-            raise urllib.error.HTTPError(
-                url=f"{_TEST_BASE_URL}/omeroweb_imaris_connector/imaris-export/",
-                code=400,
-                msg="Bad Request",
-                hdrs={},
-                fp=io.BytesIO(b"Invalid base_url parameter."),
-            )
+            raise _FakeHTTPError(b"Invalid base_url parameter.")
 
     client.opener = _FakeOpener()
 
