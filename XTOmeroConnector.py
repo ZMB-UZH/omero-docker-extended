@@ -273,7 +273,12 @@ def _open_file_in_imaris(file_path, app, verify_current_file=True):
         if not callable(method):
             continue
         before = _imaris_app_snapshot(app)
-        result = method(*args)
+        try:
+            result = method(*args)
+        except TypeError:
+            continue
+        except Exception:
+            raise
         if result is False:
             continue
         if verify_current_file:
