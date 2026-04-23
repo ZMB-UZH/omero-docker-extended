@@ -4,7 +4,7 @@
 #     --no-emit-index-url --strip-extras \
 #     --output-file .github/requirements/mypy-ci.txt \
 #     .github/requirements/mypy-ci.in
-mypy==1.20.1
+mypy==1.20.2
 django-stubs==6.0.3
 types-requests==2.33.0.20260408
 types-atheris==3.0.0.20260408

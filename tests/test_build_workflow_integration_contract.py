@@ -1074,7 +1074,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertFalse(
             any(
                 step.get("uses")
-                == "github/codeql-action/autobuild@7fc6561ed893d15cec696e062df840b21db27eb0"
+                == "github/codeql-action/autobuild@95e58e9a2cdfd71adc6e0353d5c52f41a045d225"
                 for step in steps
             )
         )
@@ -1198,6 +1198,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             upload_step["if"],
         )
         self.assertEqual("true", str(upload_step["with"]["use_oidc"]).lower())
+        self.assertEqual("v11.2.8", upload_step["with"]["version"])
         self.assertNotIn("token", upload_step["with"])
         self.assertFalse(
             any(step.get("name") == "Validate Codecov token" for step in job["steps"])
@@ -1215,8 +1216,17 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertEqual({"contents": "read"}, workflow["permissions"])
         self.assertEqual(
-            "semgrep/semgrep:1.160.0@sha256:7810f1d7884974ab6dda7bef8f4a2c8e165ea2142fd8260515d380e4f1407263",
+            "semgrep/semgrep:1.161.0@sha256:326e5f41cc972bb423b764a14febbb62bbad29ee1c01820805d077dd868fea48",
             workflow["jobs"]["semgrep"]["container"]["image"],
+        )
+        trivy_step = next_or_fail(
+            step
+            for step in workflow["jobs"]["trivy-filesystem"]["steps"]
+            if step.get("name") == "Run Trivy vulnerability scan"
+        )
+        self.assertEqual(
+            "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
+            trivy_step["uses"],
         )
 
         bandit_scope_step = next_or_fail(

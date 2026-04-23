@@ -88,4 +88,5 @@ jobs:
         with:
           files: ./coverage.xml
           use_oidc: true
+          version: v11.2.8
           fail_ci_if_error: true
