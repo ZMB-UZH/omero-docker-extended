@@ -25,6 +25,14 @@ CAVEMAN_BADGE_IMAGE_URL = (
     "&logo=github&logoColor=white"
 )
 CAVEMAN_BADGE_TARGET_URL = "https://github.com/JuliusBrussee/caveman"
+DEEPSOURCE_BADGE_TITLE = "DeepSource"
+DEEPSOURCE_BADGE_IMAGE_URL = (
+    "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended.svg/"
+    "?label=active+issues&show_trend=true&token=PzuHW2m-HGSR7AFW5klcqPzJ"
+)
+DEEPSOURCE_BADGE_TARGET_URL = (
+    "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended/"
+)
 
 
 @dataclass(frozen=True)
@@ -201,6 +209,7 @@ def render_badge_block(
         f"[![tests](https://img.shields.io/github/actions/workflow/status/{github_path}/tests.yml?branch={branch}&label=tests)](https://github.com/{github_path}/actions/workflows/tests.yml)",
         f"[![security-code-scanning](https://img.shields.io/github/actions/workflow/status/{github_path}/security-code-scanning.yml?branch={branch}&label=security-code-scanning)](https://github.com/{github_path}/actions/workflows/security-code-scanning.yml)",
         f"[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/{github_path})](https://github.com/{github_path}/commits/{branch})",
+        f"[![{DEEPSOURCE_BADGE_TITLE}]({DEEPSOURCE_BADGE_IMAGE_URL})]({DEEPSOURCE_BADGE_TARGET_URL})",
         f"[![Codecov](https://img.shields.io/codecov/c/github/{github_path}?label=Codecov&logo=codecov)](https://codecov.io/gh/{github_path})",
         f"[![Mypy](https://img.shields.io/github/actions/workflow/status/{github_path}/mypy.yml?branch={branch}&logo=python&label=Mypy)](https://github.com/python/mypy)",
         f"[![super-linter](https://img.shields.io/github/actions/workflow/status/{github_path}/super-linter.yml?branch={branch}&label=super-linter&logo=github)](https://github.com/super-linter/super-linter)",

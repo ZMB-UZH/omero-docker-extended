@@ -45,6 +45,10 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![GitHub commit activity]("),
+            badge_block.index("[![DeepSource]("),
+        )
+        self.assertLess(
+            badge_block.index("[![DeepSource]("),
             badge_block.index("[![Codecov]("),
         )
         self.assertLess(
@@ -99,6 +103,14 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertIn(
             "https://github.com/example-owner/example-repo/commits/main",
+            badge_block,
+        )
+        self.assertIn(
+            "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended.svg/?label=active+issues&show_trend=true&token=PzuHW2m-HGSR7AFW5klcqPzJ",
+            badge_block,
+        )
+        self.assertIn(
+            "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended/",
             badge_block,
         )
         self.assertIn(
