@@ -192,11 +192,14 @@ Operational rule:
   running Imaris application through `FileOpen`, allowing Imaris to handle
   raw/vendor parsing natively. It must not start `Imaris.exe`, use a Windows
   file association, or spawn a standalone File Converter process.
-- for original/raw files, a successful native bridge result means Imaris
-  accepted the `FileOpen` request in the current session. The connector must
-  report that handoff as submitted, not as a fully completed native import,
-  because vendor parsers may continue inside Imaris or require native Imaris UI
-  choices after `FileOpen` returns.
+- for original/raw files, a successful native bridge result means the current
+  Imaris session reported an observable response to `FileOpen` through the
+  current-file, image-count, or dataset APIs. The connector must report that
+  handoff as a verified handoff, not as a fully completed native import, because
+  vendor parsers may continue inside Imaris or require native Imaris UI choices
+  after `FileOpen` returns. If `FileOpen` returns without any observable Imaris
+  state change, the connector must fail explicitly instead of showing a false
+  success message.
 - when multiple images are selected, the connector must finish every download
   or server-side IMS export before handing the prepared files to Imaris. It then
   opens the files through `FileOpen` and installs the resulting datasets as

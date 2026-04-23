@@ -508,18 +508,23 @@ def test_open_file_in_imaris_allows_original_file_for_imaris_converter(tmp_path)
     opened = []
 
     class _FakeImaris:
-        @staticmethod
-        def FileOpen(path, *_args):
-            opened.append(path)
+        current = ""
+
+        def FileOpen(self, path, *_args):
+            opened.append((path, _args))
+            self.current = path
+
+        def GetCurrentFileName(self):
+            return self.current
 
     assert (
         module.open_file_in_imaris(original_path, _FakeImaris(), require_ims=False)
         is True
     )
-    assert opened == [str(original_path)]
+    assert opened == [(str(original_path), ())]
 
 
-def test_open_file_in_imaris_raw_file_does_not_wait_for_current_file(
+def test_open_file_in_imaris_raw_file_uses_observable_effect_not_ims_verification(
     tmp_path,
     monkeypatch,
 ):
@@ -536,9 +541,14 @@ def test_open_file_in_imaris_raw_file_does_not_wait_for_current_file(
     )
 
     class _FakeImaris:
-        @staticmethod
-        def FileOpen(path, *_args):
-            opened.append(path)
+        current = ""
+
+        def FileOpen(self, path, *_args):
+            opened.append((path, _args))
+            self.current = path
+
+        def GetCurrentFileName(self):
+            return self.current
 
     assert (
         module.open_file_in_imaris(
@@ -548,7 +558,45 @@ def test_open_file_in_imaris_raw_file_does_not_wait_for_current_file(
         )
         is True
     )
-    assert opened == [str(original_path)]
+    assert opened == [(str(original_path), ())]
+
+
+def test_open_file_in_imaris_raw_file_rejects_unobserved_fileopen(
+    tmp_path,
+    monkeypatch,
+):
+    module = _load_xt_module()
+    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_TIMEOUT", 0.01)
+    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_INTERVAL", 0.01)
+    original_path = tmp_path / "demo.lif"
+    original_path.write_text("native converter input", encoding="utf-8")
+    opened = []
+
+    class _FakeImaris:
+        @staticmethod
+        def FileOpen(path, *_args):
+            opened.append((path, _args))
+
+        @staticmethod
+        def GetCurrentFileName():
+            return ""
+
+        @staticmethod
+        def GetNumberOfImages():
+            return 1
+
+    assert (
+        module.open_file_in_imaris(
+            original_path,
+            _FakeImaris(),
+            require_ims=False,
+        )
+        is False
+    )
+    assert opened == [
+        (str(original_path), ()),
+        (str(original_path), ("",)),
+    ]
 
 
 def test_open_files_in_imaris_uses_image_slots_for_multiple_files(tmp_path):
@@ -561,6 +609,9 @@ def test_open_files_in_imaris_uses_image_slots_for_multiple_files(tmp_path):
     class _FakeDataSet:
         def __init__(self, path):
             self.path = path
+
+        def GetSizeX(self):
+            return 1 if "first" in self.path else 2
 
         def Clone(self):
             return f"clone:{self.path}"
@@ -830,6 +881,128 @@ def test_native_bridge_helper_reuses_imarislib_factory_across_retries(tmp_path):
     assert counter_path.read_text(encoding="utf-8") == "1"
 
 
+def test_native_bridge_helper_prefers_one_argument_fileopen_for_originals(tmp_path):
+    module = _load_xt_module()
+    original_path = tmp_path / "demo.lif"
+    original_path.write_bytes(b"native input")
+    calls_path = tmp_path / "calls.txt"
+    fake_imarislib = tmp_path / "ImarisLib.py"
+    fake_imarislib.write_text(
+        "\n".join(
+            [
+                "import os",
+                "calls_path = os.environ['IMARIS_FAKE_CALLS']",
+                "",
+                "class App:",
+                "    def __init__(self):",
+                "        self.current = ''",
+                "",
+                "    def FileOpen(self, *args):",
+                "        with open(calls_path, 'a', encoding='utf-8') as handle:",
+                "            handle.write(str(len(args)) + '\\n')",
+                "        if len(args) == 1:",
+                "            self.current = args[0]",
+                "",
+                "    def GetCurrentFileName(self):",
+                "        return self.current",
+                "",
+                "class ImarisLib:",
+                "    def GetApplication(self, app_id):",
+                "        return App()",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    payload = {
+        "mode": "open",
+        "app_id": 17,
+        "install_roots": [str(tmp_path)],
+        "retry_attempts": 1,
+        "retry_interval": 0,
+        "file_path": str(original_path),
+        "require_ims": False,
+        "open_verify_timeout": 0.01,
+        "open_verify_interval": 0.01,
+    }
+    env = dict(os.environ)
+    env["IMARIS_FAKE_CALLS"] = str(calls_path)
+
+    completed = subprocess.run(
+        [sys.executable, "-c", module._NATIVE_BRIDGE_OPEN_HELPER],
+        check=False,
+        input=json.dumps(payload),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        env=env,
+        timeout=10,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_OPENED"
+    assert calls_path.read_text(encoding="utf-8").splitlines() == ["1"]
+
+
+def test_native_bridge_helper_rejects_unobserved_original_fileopen(tmp_path):
+    module = _load_xt_module()
+    original_path = tmp_path / "demo.lif"
+    original_path.write_bytes(b"native input")
+    calls_path = tmp_path / "calls.txt"
+    fake_imarislib = tmp_path / "ImarisLib.py"
+    fake_imarislib.write_text(
+        "\n".join(
+            [
+                "import os",
+                "calls_path = os.environ['IMARIS_FAKE_CALLS']",
+                "",
+                "class App:",
+                "    def FileOpen(self, *args):",
+                "        with open(calls_path, 'a', encoding='utf-8') as handle:",
+                "            handle.write(str(len(args)) + '\\n')",
+                "",
+                "    def GetCurrentFileName(self):",
+                "        return ''",
+                "",
+                "    def GetNumberOfImages(self):",
+                "        return 1",
+                "",
+                "class ImarisLib:",
+                "    def GetApplication(self, app_id):",
+                "        return App()",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    payload = {
+        "mode": "open",
+        "app_id": 17,
+        "install_roots": [str(tmp_path)],
+        "retry_attempts": 1,
+        "retry_interval": 0,
+        "file_path": str(original_path),
+        "require_ims": False,
+        "open_verify_timeout": 0.01,
+        "open_verify_interval": 0.01,
+    }
+    env = dict(os.environ)
+    env["IMARIS_FAKE_CALLS"] = str(calls_path)
+
+    completed = subprocess.run(
+        [sys.executable, "-c", module._NATIVE_BRIDGE_OPEN_HELPER],
+        check=False,
+        input=json.dumps(payload),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        env=env,
+        timeout=15,
+    )
+
+    assert completed.returncode == 3
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_OPEN_UNVERIFIED"
+    assert calls_path.read_text(encoding="utf-8").splitlines() == ["1", "2"]
+
+
 def test_native_bridge_runner_suppresses_plural_ice_shutdown_warning(
     tmp_path, monkeypatch
 ):
@@ -875,7 +1048,7 @@ def test_native_bridge_runner_suppresses_plural_ice_shutdown_warning(
     assert not any("stderr:" in message for message in messages)
 
 
-def test_native_bridge_runner_reports_raw_fileopen_as_accepted_request(
+def test_native_bridge_runner_reports_raw_fileopen_as_verified_handoff(
     tmp_path, monkeypatch
 ):
     module = _load_xt_module()
@@ -908,7 +1081,7 @@ def test_native_bridge_runner_reports_raw_fileopen_as_accepted_request(
         is True
     )
     assert any(
-        "accepted FileOpen request in the current Imaris session" in message
+        "verified FileOpen handoff in the current Imaris session" in message
         for message in messages
     )
     assert not any("completed open request" in message for message in messages)
@@ -1819,13 +1992,13 @@ def test_load_worker_imaris_converter_submits_original_with_native_fileopen(
     assert calls == [("original", 7, "img_7", "sample.lif")]
     assert opened == [(str(original_file), False)]
     assert dialog.temp_files == [str(original_file)]
-    assert statuses[-1][0] == "Submitted original file to Imaris"
+    assert statuses[-1][0] == "Verified original-file handoff to Imaris"
     assert info_messages == [
         (
             "Submitted to Imaris",
-            "The original-file open request was accepted by the current Imaris "
-            "session. Complete any native Imaris import workflow there if Imaris "
-            "asks for one.",
+            "The current Imaris session reported an observable response to the "
+            "original-file open request. Complete any native Imaris import workflow "
+            "there if Imaris asks for one.",
         )
     ]
     assert all("Opened original" not in status[0] for status in statuses)
@@ -1980,9 +2153,9 @@ def test_load_multiple_worker_imaris_submits_originals_after_downloads(
     ]
     assert opened == [([str(first_original), str(second_original)], False)]
     assert dialog.temp_files == [str(first_original), str(second_original)]
-    assert statuses[-1][0] == "Submitted selected originals to Imaris"
+    assert statuses[-1][0] == "Verified selected original-file handoff to Imaris"
     assert info_messages[0][0] == "Submitted to Imaris"
-    assert "open requests were accepted" in info_messages[0][1]
+    assert "reported observable responses" in info_messages[0][1]
 
 
 def test_load_worker_blocks_before_download_when_native_open_unavailable(tmp_path):
