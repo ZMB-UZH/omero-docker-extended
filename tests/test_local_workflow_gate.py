@@ -179,7 +179,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
         )
 
     def test_setup_reads_ruff_version_from_repo_config(self) -> None:
-        self.assertEqual("0.15.10", self.tool._read_required_ruff_version(REPO_ROOT))
+        self.assertEqual("0.15.11", self.tool._read_required_ruff_version(REPO_ROOT))
 
     def test_default_branch_prefers_remote_head_metadata_over_stale_symbolic_ref(
         self,
