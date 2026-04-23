@@ -297,6 +297,26 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
         ["405"],
     )
 
+    override_job = {
+        "dataset_name_override": "Imported Folder",
+        "planned_import_units": [],
+        "files": [
+            {"relative_path": "top-level.bin"},
+            {"relative_path": "nested/child.bin"},
+        ],
+    }
+    assert core_functions._plan_request_job_dataset_targets(override_job) == (
+        None,
+        ["Imported Folder"],
+    )
+    assert core_functions._plan_job_dataset_targets(
+        override_job,
+        [
+            {"relative_path": "top-level.bin"},
+            {"relative_path": "nested/child.bin"},
+        ],
+    ) == (None, ["Imported Folder"])
+
 
 def test_request_path_dataset_preparation_covers_success_and_failure(
     monkeypatch,
