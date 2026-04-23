@@ -766,14 +766,14 @@ def test_safe_url_for_log_redacts_host_ids_and_query_values():
     module = _load_xt_module()
 
     safe_url = module._safe_url_for_log(
-        "http://172.23.208.90:4090/api/v0/m/projects/51/datasets/"
-        "?group=-1&base_url=http%3A%2F%2F172.23.208.90%3A4090"
+        "http://omero.example.org:4090/api/v0/m/projects/51/datasets/"
+        "?group=-1&base_url=http%3A%2F%2Fomero.example.org%3A4090"
     )
 
     assert safe_url == (
         "/api/v0/m/projects/<id>/datasets/?group=<redacted>&base_url=<redacted>"
     )
-    assert "172.23.208.90" not in safe_url
+    assert "omero.example.org" not in safe_url
     assert "51" not in safe_url
 
 
