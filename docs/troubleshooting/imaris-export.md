@@ -153,7 +153,10 @@ Root cause:
 - opening an `.ims` file is native in Imaris,
 - opening it in the already running Imaris session from the standalone XT connector requires a live XT handle,
 - that handle depends on the official Imaris XT Python bridge,
-- the affected Windows host was running the connector under Python `3.9.1`, while official Imaris XT support is restricted to Python `2.7` or `3.7`.
+- the affected Windows host was running the connector under Python `3.9.9`, while official Imaris XT support is restricted to Python `2.7` or `3.7`,
+- the standalone connector must therefore avoid startup-time syntax and annotation
+  constructs that exclude Python `3.7` or `3.9`, because those failures happen
+  before the GUI or XT diagnostics can open.
 
 Operational rule:
 

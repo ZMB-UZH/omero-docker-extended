@@ -33,7 +33,7 @@ import urllib.parse
 import urllib.error
 import http.cookiejar
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Optional
 
 # Default timeout/poll values for client-side export polling.
 # These must NOT depend on server-side packages (omero_plugin_common)
@@ -42,8 +42,8 @@ EXPORT_TIMEOUT = 3600  # seconds
 EXPORT_POLL_INTERVAL = 2.0  # seconds
 IMARIS_HANDLE_RETRY_ATTEMPTS = 10
 IMARIS_HANDLE_RETRY_INTERVAL = 0.25
-_XT_LOG_PATH: str | None = None
-_XT_DLL_DIR_HANDLES: list[Any] = []
+_XT_LOG_PATH: Optional[str] = None
+_XT_DLL_DIR_HANDLES: List[Any] = []
 
 
 def _coerce_path(value):
@@ -185,7 +185,7 @@ def _iter_imaris_executable_candidates():
     if env_candidate:
         yield from _yield_candidate(env_candidate)
 
-    winreg_module: Any
+    winreg_module: Any = None
     try:
         winreg_module = importlib.import_module("winreg")
     except ImportError:
@@ -1400,7 +1400,7 @@ class OMEROBrowserDialog:
     def _invoke_on_ui_thread(self, callback, wait=True):
         """Run a callback on Tk's UI thread and optionally wait for the result."""
         value: Any = None
-        error: BaseException | None = None
+        error: Optional[BaseException] = None
         completed = threading.Event()
 
         def runner():
