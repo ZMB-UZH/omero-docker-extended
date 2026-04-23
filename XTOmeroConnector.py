@@ -179,8 +179,8 @@ def _get_imaris_application(app_id, retries, retry_interval):
     return None
 
 
-def _file_open_call_candidates(file_path, verify_current_file=True):
-    if verify_current_file:
+def _file_open_call_candidates(file_path, verification_mode="current_file"):
+    if verification_mode == "current_file":
         return (
             ("FileOpen", (file_path, "")),
             ("FileOpen", (file_path,)),
@@ -263,11 +263,11 @@ def _wait_for_open_observable_effect(app, before, expected_path):
     return False
 
 
-def _open_file_in_imaris(file_path, app, verify_current_file=True):
+def _open_file_in_imaris(file_path, app, verification_mode="current_file"):
     getter = _current_file_getter(app)
     for method_name, args in _file_open_call_candidates(
         file_path,
-        verify_current_file=verify_current_file,
+        verification_mode=verification_mode,
     ):
         method = getattr(app, method_name, None)
         if not callable(method):
@@ -281,7 +281,9 @@ def _open_file_in_imaris(file_path, app, verify_current_file=True):
             raise
         if result is False:
             continue
-        if verify_current_file:
+        if verification_mode == "submission_only":
+            return True
+        if verification_mode == "current_file":
             if getter is None or _wait_for_current_file(getter, file_path):
                 return True
             continue
@@ -314,7 +316,7 @@ def _open_files_in_imaris(file_paths, app, require_ims=True):
         return _open_file_in_imaris(
             validated[0],
             app,
-            verify_current_file=require_ims,
+            verification_mode="current_file" if require_ims else "submission_only",
         )
     return _open_files_as_imaris_image_slots(validated, app)
 
@@ -352,7 +354,11 @@ def _open_files_as_imaris_image_slots(file_paths, app):
 
     data_sets = []
     for file_path in file_paths:
-        if not _open_file_in_imaris(file_path, app, verify_current_file=False):
+        if not _open_file_in_imaris(
+            file_path,
+            app,
+            verification_mode="observable_effect",
+        ):
             return False
         data_set = _clone_current_dataset(app)
         if data_set is None:
@@ -675,8 +681,8 @@ def _wait_for_imaris_current_file(
     return False
 
 
-def _file_open_call_candidates(file_path, verify_current_file=True):
-    if verify_current_file:
+def _file_open_call_candidates(file_path, verification_mode="current_file"):
+    if verification_mode == "current_file":
         return (
             ("FileOpen", (file_path, "")),
             ("FileOpen", (file_path,)),
@@ -785,13 +791,12 @@ def _wait_for_imaris_open_observable_effect(
     return False
 
 
-def open_file_in_imaris(file_path, imaris_app, require_ims=True):
-    """Attempt to open a file in Imaris using FileOpen."""
+def _open_file_in_imaris_with_mode(file_path, imaris_app, verification_mode):
     candidate = _existing_regular_file_path(file_path)
     if candidate is None:
         _xt_debug("Imaris open skipped: file does not exist")
         return False
-    if require_ims and not is_ims_file(candidate):
+    if verification_mode == "current_file" and not is_ims_file(candidate):
         _xt_debug("Imaris open skipped: file is not a valid IMS file")
         return False
 
@@ -803,7 +808,7 @@ def open_file_in_imaris(file_path, imaris_app, require_ims=True):
     file_path_text = str(candidate)
     for method_name, args in _file_open_call_candidates(
         file_path_text,
-        verify_current_file=require_ims,
+        verification_mode=verification_mode,
     ):
         method = getattr(imaris_app, method_name, None)
         if not method:
@@ -814,7 +819,9 @@ def open_file_in_imaris(file_path, imaris_app, require_ims=True):
             if result is False:
                 last_error = f"{method_name} returned False"
                 continue
-            if not require_ims:
+            if verification_mode == "submission_only":
+                return True
+            if verification_mode == "observable_effect":
                 if _wait_for_imaris_open_observable_effect(
                     imaris_app,
                     before,
@@ -840,6 +847,12 @@ def open_file_in_imaris(file_path, imaris_app, require_ims=True):
     else:
         _xt_debug("Direct Imaris open failed: no supported API method found")
     return False
+
+
+def open_file_in_imaris(file_path, imaris_app, require_ims=True):
+    """Attempt to open a file in Imaris using FileOpen."""
+    verification_mode = "current_file" if require_ims else "submission_only"
+    return _open_file_in_imaris_with_mode(file_path, imaris_app, verification_mode)
 
 
 def open_files_in_imaris(file_paths, imaris_app, require_ims=True):
@@ -918,7 +931,11 @@ def open_files_as_imaris_image_slots(file_paths, imaris_app):
 
     data_sets = []
     for file_path in file_paths:
-        if not open_file_in_imaris(file_path, imaris_app, require_ims=False):
+        if not _open_file_in_imaris_with_mode(
+            file_path,
+            imaris_app,
+            "observable_effect",
+        ):
             return False
         data_set = _clone_current_imaris_dataset(imaris_app)
         if data_set is None:
@@ -1563,11 +1580,16 @@ def _run_native_bridge_helper(python_executable, payload, context, timeout):
                 f"Native bridge runner ({context}) resolved the current Imaris session"
             )
         elif stdout in {"BRIDGE_RUNNER_OPENED", "BRIDGE_RUNNER_OPENED_MANY"}:
-            action = (
-                "verified FileOpen handoff in the current Imaris session"
-                if payload.get("require_ims") is False
-                else "completed open request in the current Imaris session"
-            )
+            if payload.get("require_ims") is False:
+                action = (
+                    "submitted the selected original-file open requests in the "
+                    "current Imaris session"
+                    if stdout == "BRIDGE_RUNNER_OPENED_MANY"
+                    else "submitted the original-file open request in the current "
+                    "Imaris session"
+                )
+            else:
+                action = "completed open request in the current Imaris session"
             _xt_debug(f"Native bridge runner ({context}) {action}")
         elif stdout == "BRIDGE_RUNNER_HANDLE_UNAVAILABLE":
             _xt_debug(
@@ -4154,12 +4176,12 @@ class OMEROBrowserDialog:
                         require_ims=False,
                     )
                 )
-                success_status = "Verified original-file handoff to Imaris"
+                success_status = "Submitted original file to Imaris"
                 success_title = "Submitted to Imaris"
                 success_message = (
-                    "The current Imaris session reported an observable response to "
-                    "the original-file open request. Complete any native Imaris "
-                    "import workflow there if Imaris asks for one."
+                    "Imaris accepted the original-file open request in the current "
+                    "session. A loaded dataset may not be observable yet because the "
+                    "native Imaris import workflow can continue interactively there."
                 )
                 failure_message = "Failed to submit the original file to Imaris."
 
@@ -4285,13 +4307,13 @@ class OMEROBrowserDialog:
                         require_ims=False,
                     )
                 )
-                success_status = "Verified selected original-file handoff to Imaris"
+                success_status = "Submitted selected original files to Imaris"
                 success_title = "Submitted to Imaris"
                 success_message = (
-                    "The current Imaris session reported observable responses to the "
-                    "selected original-file open requests after every download "
-                    "completed. Complete any native Imaris import workflow there if "
-                    "Imaris asks for one."
+                    "Imaris accepted the selected original-file open requests in the "
+                    "current session after every download completed. Loaded datasets "
+                    "may not be observable yet because native Imaris import can "
+                    "continue interactively there."
                 )
                 failure_message = (
                     "Failed to submit the selected original files to Imaris."

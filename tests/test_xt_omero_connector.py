@@ -524,7 +524,7 @@ def test_open_file_in_imaris_allows_original_file_for_imaris_converter(tmp_path)
     assert opened == [(str(original_path), ())]
 
 
-def test_open_file_in_imaris_raw_file_uses_observable_effect_not_ims_verification(
+def test_open_file_in_imaris_raw_file_uses_submission_only_verification(
     tmp_path,
     monkeypatch,
 ):
@@ -537,6 +537,15 @@ def test_open_file_in_imaris_raw_file_uses_observable_effect_not_ims_verificatio
         "_wait_for_imaris_current_file",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("raw FileOpen must not require current-file verification")
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "_wait_for_imaris_open_observable_effect",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError(
+                "raw FileOpen must not require observable-effect verification"
+            )
         ),
     )
 
@@ -561,16 +570,30 @@ def test_open_file_in_imaris_raw_file_uses_observable_effect_not_ims_verificatio
     assert opened == [(str(original_path), ())]
 
 
-def test_open_file_in_imaris_raw_file_rejects_unobserved_fileopen(
+def test_open_file_in_imaris_raw_file_accepts_successful_submission(
     tmp_path,
     monkeypatch,
 ):
     module = _load_xt_module()
-    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_TIMEOUT", 0.01)
-    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_INTERVAL", 0.01)
     original_path = tmp_path / "demo.lif"
     original_path.write_text("native converter input", encoding="utf-8")
     opened = []
+    monkeypatch.setattr(
+        module,
+        "_wait_for_imaris_current_file",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("raw FileOpen must not require current-file verification")
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "_wait_for_imaris_open_observable_effect",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError(
+                "raw FileOpen must not require observable-effect verification"
+            )
+        ),
+    )
 
     class _FakeImaris:
         @staticmethod
@@ -591,12 +614,9 @@ def test_open_file_in_imaris_raw_file_rejects_unobserved_fileopen(
             _FakeImaris(),
             require_ims=False,
         )
-        is False
+        is True
     )
-    assert opened == [
-        (str(original_path), ()),
-        (str(original_path), ("",)),
-    ]
+    assert opened == [(str(original_path), ())]
 
 
 def test_open_file_in_imaris_raw_file_retries_with_options_after_typeerror(tmp_path):
@@ -1040,7 +1060,9 @@ def test_native_bridge_helper_retries_with_options_after_typeerror_for_originals
     assert calls_path.read_text(encoding="utf-8").splitlines() == ["1", "2"]
 
 
-def test_native_bridge_helper_rejects_unobserved_original_fileopen(tmp_path):
+def test_native_bridge_helper_accepts_original_submission_without_dataset_change(
+    tmp_path,
+):
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
     original_path.write_bytes(b"native input")
@@ -1095,9 +1117,9 @@ def test_native_bridge_helper_rejects_unobserved_original_fileopen(tmp_path):
         timeout=15,
     )
 
-    assert completed.returncode == 3
-    assert completed.stdout.strip() == "BRIDGE_RUNNER_OPEN_UNVERIFIED"
-    assert calls_path.read_text(encoding="utf-8").splitlines() == ["1", "2"]
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_OPENED"
+    assert calls_path.read_text(encoding="utf-8").splitlines() == ["1"]
 
 
 def test_native_bridge_runner_suppresses_plural_ice_shutdown_warning(
@@ -1145,7 +1167,7 @@ def test_native_bridge_runner_suppresses_plural_ice_shutdown_warning(
     assert not any("stderr:" in message for message in messages)
 
 
-def test_native_bridge_runner_reports_raw_fileopen_as_verified_handoff(
+def test_native_bridge_runner_reports_raw_fileopen_as_submitted_request(
     tmp_path, monkeypatch
 ):
     module = _load_xt_module()
@@ -1178,7 +1200,8 @@ def test_native_bridge_runner_reports_raw_fileopen_as_verified_handoff(
         is True
     )
     assert any(
-        "verified FileOpen handoff in the current Imaris session" in message
+        "submitted the original-file open request in the current Imaris session"
+        in message
         for message in messages
     )
     assert not any("completed open request" in message for message in messages)
@@ -2089,13 +2112,13 @@ def test_load_worker_imaris_converter_submits_original_with_native_fileopen(
     assert calls == [("original", 7, "img_7", "sample.lif")]
     assert opened == [(str(original_file), False)]
     assert dialog.temp_files == [str(original_file)]
-    assert statuses[-1][0] == "Verified original-file handoff to Imaris"
+    assert statuses[-1][0] == "Submitted original file to Imaris"
     assert info_messages == [
         (
             "Submitted to Imaris",
-            "The current Imaris session reported an observable response to the "
-            "original-file open request. Complete any native Imaris import workflow "
-            "there if Imaris asks for one.",
+            "Imaris accepted the original-file open request in the current "
+            "session. A loaded dataset may not be observable yet because the "
+            "native Imaris import workflow can continue interactively there.",
         )
     ]
     assert all("Opened original" not in status[0] for status in statuses)
@@ -2250,9 +2273,9 @@ def test_load_multiple_worker_imaris_submits_originals_after_downloads(
     ]
     assert opened == [([str(first_original), str(second_original)], False)]
     assert dialog.temp_files == [str(first_original), str(second_original)]
-    assert statuses[-1][0] == "Verified selected original-file handoff to Imaris"
+    assert statuses[-1][0] == "Submitted selected original files to Imaris"
     assert info_messages[0][0] == "Submitted to Imaris"
-    assert "reported observable responses" in info_messages[0][1]
+    assert "accepted the selected original-file open requests" in info_messages[0][1]
 
 
 def test_load_worker_blocks_before_download_when_native_open_unavailable(tmp_path):
