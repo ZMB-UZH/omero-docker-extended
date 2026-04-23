@@ -160,8 +160,15 @@ Root cause:
 
 Operational rule:
 
-- the standalone connector must not launch a second Imaris session as a fallback,
-- if no live XT handle is available, fail explicitly and fix the local Imaris XT runtime instead.
+- the standalone connector first tries to open the exported file through the live
+  Imaris XT handle so the existing session is reused,
+- the standalone connector must not launch a second Imaris session, call
+  `Imaris.exe` directly, or use the Windows file association as a fallback,
+- if no live XT handle is available, fail explicitly and fix the local Imaris XT
+  bridge/runtime path resolution,
+- do not install extra Python packages on the Imaris workstation for this
+  connector. It must remain a single-file, standard-library script and use only
+  the Imaris XT bridge files that are already shipped with Imaris.
 
 ## Standard Diagnostic Flow
 

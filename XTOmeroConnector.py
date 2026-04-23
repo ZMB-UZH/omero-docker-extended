@@ -131,16 +131,25 @@ def is_ims_file(file_path):
 
 def open_file_in_imaris(file_path, imaris_app):
     """Attempt to open a file in Imaris using available API methods."""
+    candidate = _existing_regular_file_path(file_path)
+    if candidate is None:
+        print("Imaris open failed: file does not exist.")
+        return False
+    if not is_ims_file(candidate):
+        print("Imaris open failed: file is not a valid IMS file.")
+        return False
+
     if imaris_app is None:
         print("Imaris application handle is not available.")
         return False
 
     last_error = None
+    file_path_text = str(candidate)
     candidates = [
-        ("FileOpen", (file_path, "")),
-        ("FileOpen", (file_path,)),
-        ("OpenFile", (file_path,)),
-        ("LoadFile", (file_path,)),
+        ("FileOpen", (file_path_text, "")),
+        ("FileOpen", (file_path_text,)),
+        ("OpenFile", (file_path_text,)),
+        ("LoadFile", (file_path_text,)),
     ]
     for method_name, args in candidates:
         method = getattr(imaris_app, method_name, None)
@@ -268,6 +277,21 @@ def _iter_imaris_install_roots():
             yield normalized
 
 
+def _iter_imaris_xt_path_candidates(install_root):
+    """Yield native Imaris XT directories that may contain modules or DLLs."""
+    yield install_root
+    yield os.path.join(install_root, "XT")
+    yield os.path.join(install_root, "XT", "python3")
+    yield os.path.join(install_root, "XT", "python3", "DLLs")
+    yield os.path.join(install_root, "XT", "bin")
+    yield os.path.join(install_root, "XT", "python3", "Lib")
+    yield os.path.join(install_root, "XT", "python3", "Lib", "site-packages")
+    yield os.path.join(install_root, "XT", "python3", "private")
+    yield os.path.join(install_root, "XT", "python3", "private", "Ice")
+    yield os.path.join(install_root, "XT", "python")
+    yield os.path.join(install_root, "XT", "lib")
+
+
 def _prepend_unique_path(values, candidate):
     normalized = os.path.normpath(candidate)
     if normalized in values:
@@ -288,18 +312,7 @@ def _prepare_imaris_xt_environment():
     dll_dirs = []
     add_dll_directory = getattr(os, "add_dll_directory", None)
     for install_root in _iter_imaris_install_roots():
-        candidates = [
-            install_root,
-            os.path.join(install_root, "XT"),
-            os.path.join(install_root, "XT", "python3"),
-            os.path.join(install_root, "XT", "python3", "DLLs"),
-            os.path.join(install_root, "XT", "bin"),
-            os.path.join(install_root, "XT", "python3", "Lib"),
-            os.path.join(install_root, "XT", "python3", "Lib", "site-packages"),
-            os.path.join(install_root, "XT", "python"),
-            os.path.join(install_root, "XT", "lib"),
-        ]
-        for candidate in candidates:
+        for candidate in _iter_imaris_xt_path_candidates(install_root):
             if not os.path.isdir(candidate):
                 continue
             normalized = os.path.normpath(candidate)
@@ -341,12 +354,7 @@ def _collect_imaris_xt_diagnostics():
     install_roots = list(_iter_imaris_install_roots())
     xt_paths = []
     for install_root in install_roots:
-        xt_paths.append(os.path.join(install_root, "XT"))
-        xt_paths.append(os.path.join(install_root, "XT", "python3"))
-        xt_paths.append(os.path.join(install_root, "XT", "python3", "Lib"))
-        xt_paths.append(
-            os.path.join(install_root, "XT", "python3", "Lib", "site-packages")
-        )
+        xt_paths.extend(_iter_imaris_xt_path_candidates(install_root))
     deduped_xt_paths = []
     seen = set()
     for candidate in xt_paths:
