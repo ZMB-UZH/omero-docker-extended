@@ -128,7 +128,7 @@ def _prepare_imaris_xt_environment(install_roots):
                 try:
                     add_dll_directory(normalized)
                 except Exception:
-                    pass
+                    continue
             added.append(normalized)
     os.environ["PATH"] = os.pathsep.join(path_parts)
     return added
@@ -196,8 +196,8 @@ def _normalize_path_for_compare(path_value):
         return ""
     try:
         path_text = os.path.abspath(path_text)
-    except Exception:
-        pass
+    except (OSError, ValueError):
+        return os.path.normcase(os.path.normpath(path_text))
     return os.path.normcase(os.path.normpath(path_text))
 
 
@@ -392,8 +392,8 @@ def _normalize_imaris_compare_path(path_value):
         return ""
     try:
         path_text = os.path.abspath(path_text)
-    except Exception:
-        pass
+    except (OSError, ValueError):
+        return os.path.normcase(os.path.normpath(path_text))
     return os.path.normcase(os.path.normpath(path_text))
 
 
