@@ -9,7 +9,6 @@ import os
 import subprocess
 import sys
 import types
-import urllib.error
 from pathlib import Path
 
 _XT_SCRIPT = os.path.join(
@@ -65,15 +64,10 @@ class _FakeHTTPResponse:
         return self._final_url
 
 
-class _FakeHTTPError(urllib.error.HTTPError):
+class _FakeHTTPError(Exception):
     def __init__(self, body, code=400, msg="Bad Request"):
-        super().__init__(
-            url=f"{_TEST_BASE_URL}/omeroweb_imaris_connector/imaris-export/",
-            code=code,
-            msg=msg,
-            hdrs={},
-            fp=None,
-        )
+        super().__init__(f"HTTP {code} {msg}")
+        self.code = code
         self._body = body
 
     def read(self, *_args, **_kwargs):
@@ -186,8 +180,11 @@ def test_client_treats_non_object_capability_response_as_unavailable():
     assert client.has_omero_ims_export_capability() is False
 
 
-def test_client_treats_legacy_missing_image_capability_response_as_available():
+def test_client_treats_legacy_missing_image_capability_response_as_available(
+    monkeypatch,
+):
     module = _load_xt_module()
+    monkeypatch.setattr(module.urllib.error, "HTTPError", _FakeHTTPError)
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
     client.session_id = "session-123"
 
@@ -202,8 +199,9 @@ def test_client_treats_legacy_missing_image_capability_response_as_available():
     assert client.has_omero_ims_export_capability() is True
 
 
-def test_client_rejects_non_legacy_capability_http_errors():
+def test_client_rejects_non_legacy_capability_http_errors(monkeypatch):
     module = _load_xt_module()
+    monkeypatch.setattr(module.urllib.error, "HTTPError", _FakeHTTPError)
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
     client.session_id = "session-123"
 
