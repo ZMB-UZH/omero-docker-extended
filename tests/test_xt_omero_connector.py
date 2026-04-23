@@ -179,6 +179,49 @@ def test_open_file_in_imaris_returns_false_without_handle():
     assert module.open_file_in_imaris("C:\\temp\\demo.ims", None) is False
 
 
+def test_open_file_in_imaris_uses_live_handle_for_valid_ims(tmp_path):
+    module = _load_xt_module()
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    opened = []
+
+    class _FakeImaris:
+        @staticmethod
+        def FileOpen(path, *_args):
+            opened.append(path)
+
+    assert module.open_file_in_imaris(ims_path, _FakeImaris()) is True
+    assert opened == [str(ims_path)]
+
+
+def test_open_file_in_imaris_rejects_non_ims_before_live_handle(tmp_path):
+    module = _load_xt_module()
+    plain_path = tmp_path / "plain.txt"
+    plain_path.write_text("not ims", encoding="utf-8")
+    opened = []
+
+    class _FakeImaris:
+        @staticmethod
+        def FileOpen(path, *_args):
+            opened.append(path)
+
+    assert module.open_file_in_imaris(plain_path, _FakeImaris()) is False
+    assert opened == []
+
+
+def test_open_file_in_imaris_does_not_launch_fallback_when_live_handle_fails(tmp_path):
+    module = _load_xt_module()
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+
+    class _FailingImaris:
+        @staticmethod
+        def FileOpen(_path, *_args):
+            raise RuntimeError("bridge failed")
+
+    assert module.open_file_in_imaris(ims_path, _FailingImaris()) is False
+
+
 def test_is_ims_file_accepts_only_existing_regular_hdf5_files(tmp_path):
     module = _load_xt_module()
     ims_path = tmp_path / "demo.ims"
@@ -296,6 +339,8 @@ def test_prepare_imaris_xt_environment_adds_bundled_paths(monkeypatch):
         r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3",
         r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\DLLs",
         r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\Lib",
+        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\private",
+        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\private\Ice",
     }
     monkeypatch.setattr(
         module.os.path,
@@ -325,6 +370,11 @@ def test_prepare_imaris_xt_environment_adds_bundled_paths(monkeypatch):
         r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\DLLs"
         in prepared["dll_dirs"]
     )
+    assert r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\private" in added_paths
+    assert (
+        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\private\Ice"
+        in added_dll_dirs
+    )
     assert r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\DLLs" in added_dll_dirs
     module.sys.path[:] = original_sys_path
     monkeypatch.setattr(module.os, "path", original_os_path, raising=False)
@@ -332,6 +382,7 @@ def test_prepare_imaris_xt_environment_adds_bundled_paths(monkeypatch):
 
 def test_collect_imaris_xt_diagnostics_reports_import_failures(monkeypatch):
     module = _load_xt_module()
+    monkeypatch.setattr(module.os, "path", ntpath, raising=False)
     monkeypatch.setattr(
         module,
         "_find_imaris_executable",
@@ -360,10 +411,19 @@ def test_collect_imaris_xt_diagnostics_reports_import_failures(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", _raising_import)
 
     diagnostics = module._collect_imaris_xt_diagnostics()
+    diagnostic_paths = {entry["path"] for entry in diagnostics["xt_candidate_paths"]}
 
     assert diagnostics["python_version_short"]
     assert diagnostics["imaris_executable_exists"] is True
     assert "has_add_dll_directory" in diagnostics
+    assert (
+        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\private"
+        in diagnostic_paths
+    )
+    assert (
+        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\private\Ice"
+        in diagnostic_paths
+    )
     assert diagnostics["imarislib_import"]["ok"] is False
     assert diagnostics["icepy_import"]["ok"] is False
 
