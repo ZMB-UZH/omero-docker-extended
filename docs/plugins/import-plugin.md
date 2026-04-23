@@ -14,6 +14,15 @@ Related docs:
 
 - Upload session creation and browser-to-server file transfer.
 - Automatic chunked transfer for large files so multi-GB uploads do not depend on a single oversized HTTP request.
+- Capability-driven external clients can reuse the same chunked upload/import
+  contract by calling `/omeroweb_import/start/` with a file manifest and
+  `dataset_name_override`. That path imports the selected folder into OMERO
+  root as one Dataset named by the override instead of distributing files by
+  upload-path heuristics.
+- The XT OMERO connector's folder-import flow uses the standard Tk directory
+  chooser (`tkinter.filedialog.askdirectory`) plus ordinary HTTPS requests. It
+  does not depend on Explorer automation, PowerShell, COM-only pickers, or
+  newer Windows shell APIs.
 - OMERO CLI-based import with configurable batching and concurrency.
 - OMERO CLI import and import preflight checks run with `--depth 15` so directory-backed formats can be scanned deeper than the OMERO CLI default.
 - OMERO CLI keepalive hardening for long-running imports via `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS` (default `30` seconds).
@@ -206,6 +215,26 @@ Useful commands (host):
 7. For NGFF converter: uploaded files are converted to OME-NGFF zarr via `bioformats2raw` before OMERO import.
 8. Confirm import and monitor status until terminal state.
 9. Prune temporary upload assets once processing is complete.
+
+## External client workflow
+
+The same job lifecycle can be driven by external clients such as
+`XTOmeroConnector.py`:
+
+1. `POST /omeroweb_import/start/` with `files`, `compatibility_enabled`, and
+   `dataset_name_override`.
+2. Stream each file to `/omeroweb_import/upload/<job_id>/` with the existing
+   chunked upload fields (`relative_path`, `chunk_start`, `chunk_end`,
+   `file_size`, `is_last_chunk`).
+3. `POST /omeroweb_import/import/<job_id>/` to start the OMERO-side import.
+4. Poll `/omeroweb_import/status/<job_id>/` until `status=done` or
+   `status=awaiting_confirmation`.
+5. If `confirmation_required=true`, `POST /omeroweb_import/confirm/<job_id>/`
+   and continue polling.
+
+When `dataset_name_override` is present and no `project_id` is supplied, the
+job imports into OMERO root as a single Dataset with the override value as its
+name.
 
 ## Code structure
 
