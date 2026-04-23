@@ -43,6 +43,7 @@ from .core_functions import (
     _load_job,
     _managed_upload_error_message,
     _normalize_job_batch_size,
+    _normalize_dataset_name_override,
     _normalize_ngff_converter_settings,
     _normalize_sem_edx_associations,
     _normalize_sem_edx_settings,
@@ -140,6 +141,11 @@ def _start_upload(request, conn):
     payload = load_json_body(request)
     if not isinstance(payload, dict):
         payload = {}
+    dataset_name_override, dataset_name_override_error = (
+        _normalize_dataset_name_override(payload.get("dataset_name_override"))
+    )
+    if dataset_name_override_error:
+        return json_error(dataset_name_override_error, status=400)
 
     raw_project_id = (payload.get("project_id") or "").strip()
     project_id = None
@@ -308,7 +314,7 @@ def _start_upload(request, conn):
 
     dataset_map: dict[str, str] = {}
     orphan_dataset_name = None
-    if any(
+    if not dataset_name_override and any(
         _dataset_name_for_path(entry["relative_path"]) is None for entry in normalized
     ):
         orphan_dataset_name = _generate_orphan_dataset_name()
@@ -360,6 +366,7 @@ def _start_upload(request, conn):
         "created": time.time(),
         "dataset_map": dataset_map,
         "orphan_dataset_name": orphan_dataset_name,
+        "dataset_name_override": dataset_name_override,
         "import_index": 0,
         "messages": [],
         "import_thread_started": False,

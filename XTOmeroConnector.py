@@ -21,8 +21,10 @@ Requests server-side IMS conversion and opens the resulting IMS in Imaris.
 import sys
 import os
 import json
+import ntpath
+import stat
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 import threading
 import re
 import tempfile
@@ -33,7 +35,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import http.cookiejar
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, List, Optional
 
 # Default timeout/poll values for client-side export polling.
@@ -46,6 +48,13 @@ DEFAULT_DOWNLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
 MIN_DOWNLOAD_CHUNK_SIZE_BYTES = 64 * 1024
 MAX_DOWNLOAD_CHUNK_SIZE_BYTES = 64 * 1024 * 1024
 DOWNLOAD_PROGRESS_UNIT_BYTES = 1024 * 1024
+UPLOAD_CHUNK_SIZE_ENV = "OMERO_IMARIS_UPLOAD_CHUNK_BYTES"
+DEFAULT_UPLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
+MIN_UPLOAD_CHUNK_SIZE_BYTES = 64 * 1024
+MAX_UPLOAD_CHUNK_SIZE_BYTES = 64 * 1024 * 1024
+FOLDER_IMPORT_TIMEOUT = 3600
+FOLDER_IMPORT_POLL_INTERVAL = 2.0
+FOLDER_IMPORT_CONFIRM_PREVIEW_LIMIT = 10
 IMARIS_HANDLE_RETRY_ATTEMPTS = 10
 IMARIS_HANDLE_RETRY_INTERVAL = 0.25
 NATIVE_BRIDGE_RUNNER_TIMEOUT = 600
@@ -593,6 +602,168 @@ def _download_chunk_size_bytes():
         MIN_DOWNLOAD_CHUNK_SIZE_BYTES,
         min(value, MAX_DOWNLOAD_CHUNK_SIZE_BYTES),
     )
+
+
+def _upload_chunk_size_bytes():
+    """Return a bounded upload chunk size for streaming multipart requests."""
+    raw_value = os.environ.get(UPLOAD_CHUNK_SIZE_ENV, "").strip()
+    if not raw_value:
+        return DEFAULT_UPLOAD_CHUNK_SIZE_BYTES
+    try:
+        value = int(raw_value, 10)
+    except ValueError:
+        return DEFAULT_UPLOAD_CHUNK_SIZE_BYTES
+    return max(
+        MIN_UPLOAD_CHUNK_SIZE_BYTES,
+        min(value, MAX_UPLOAD_CHUNK_SIZE_BYTES),
+    )
+
+
+def _folder_display_name(folder_path):
+    candidate = _coerce_path(folder_path)
+    if candidate is None:
+        return ""
+    normalized = os.path.normpath(candidate)
+    name = os.path.basename(normalized).strip()
+    if name:
+        return name
+    drive, _tail = os.path.splitdrive(normalized)
+    return drive.rstrip(":\\/").strip()
+
+
+def _is_filesystem_root(folder_path):
+    candidate = _coerce_path(folder_path)
+    if candidate is None:
+        return False
+
+    normalized = os.path.normpath(candidate)
+    if os.path.dirname(normalized) == normalized:
+        return True
+
+    windows_normalized = ntpath.normpath(candidate)
+    windows_drive, windows_tail = ntpath.splitdrive(windows_normalized)
+    if windows_drive and windows_tail in {"\\", "/"}:
+        return True
+    if windows_drive and ntpath.dirname(windows_normalized) == windows_normalized:
+        return True
+    return False
+
+
+def _stringvar_value(variable):
+    if variable is None:
+        return ""
+    getter = getattr(variable, "get", None)
+    if callable(getter):
+        value = getter()
+    else:
+        value = getattr(variable, "value", "")
+    return str(value or "")
+
+
+def _multipart_form_body(fields, file_field_name, file_name, file_bytes):
+    boundary = f"----OMEROConnector{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}{os.getpid()}{int(time.time() * 1000000)}"
+    body = bytearray()
+
+    def append_text(value):
+        if isinstance(value, bytes):
+            body.extend(value)
+        else:
+            body.extend(str(value).encode("utf-8"))
+
+    for key, value in list(fields.items()):
+        body.extend(f"--{boundary}\r\n".encode("ascii"))
+        body.extend(
+            (f'Content-Disposition: form-data; name="{key}"\r\n\r\n').encode("utf-8")
+        )
+        append_text(value)
+        body.extend(b"\r\n")
+
+    body.extend(f"--{boundary}\r\n".encode("ascii"))
+    safe_name = _safe_download_filename(file_name, "upload.bin") or "upload.bin"
+    body.extend(
+        (
+            f'Content-Disposition: form-data; name="{file_field_name}"; '
+            f'filename="{safe_name}"\r\n'
+            "Content-Type: application/octet-stream\r\n"
+            "\r\n"
+        ).encode("utf-8")
+    )
+    body.extend(file_bytes)
+    body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode("ascii"))
+    return boundary, bytes(body)
+
+
+def _is_windows_reparse_point(stat_result):
+    flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    attributes = getattr(stat_result, "st_file_attributes", 0)
+    return bool(flag and attributes & flag)
+
+
+def _collect_local_folder_entries(folder_path):
+    root = _coerce_path(folder_path)
+    if root is None:
+        raise RuntimeError("The selected folder path is invalid.")
+    root_path = Path(root)
+    if not root_path.exists():
+        raise RuntimeError("The selected folder no longer exists.")
+    if not root_path.is_dir():
+        raise RuntimeError("The selected path is not a folder.")
+
+    entries = []
+    pending = [root_path]
+
+    while pending:
+        current_dir = pending.pop()
+        try:
+            with os.scandir(str(current_dir)) as iterator:
+                dir_entries = sorted(
+                    list(iterator),
+                    key=lambda item: item.name.lower(),
+                )
+        except OSError as exc:
+            raise RuntimeError(
+                f"Failed to read the selected folder: {type(exc).__name__}"
+            ) from exc
+
+        child_dirs = []
+        for item in dir_entries:
+            try:
+                item_stat = item.stat(follow_symlinks=False)
+            except OSError as exc:
+                raise RuntimeError(
+                    f"Failed to inspect a selected file or folder: {type(exc).__name__}"
+                ) from exc
+
+            relative_path = Path(item.path).relative_to(root_path).as_posix()
+            if item.is_symlink() or _is_windows_reparse_point(item_stat):
+                raise RuntimeError(
+                    "Selected folders must not contain symbolic links or reparse-point entries. "
+                    f"Blocked entry: {relative_path}"
+                )
+
+            if item.is_dir(follow_symlinks=False):
+                child_dirs.append(Path(item.path))
+                continue
+            if not item.is_file(follow_symlinks=False):
+                raise RuntimeError(
+                    "Selected folders must contain only regular files and directories. "
+                    f"Blocked entry: {relative_path}"
+                )
+
+            entries.append(
+                {
+                    "absolute_path": str(Path(item.path)),
+                    "relative_path": relative_path,
+                    "size": int(getattr(item_stat, "st_size", 0) or 0),
+                }
+            )
+
+        pending.extend(reversed(child_dirs))
+
+    if not entries:
+        raise RuntimeError("The selected folder does not contain any files.")
+    return entries
 
 
 def _xt_debug(message):
@@ -2385,6 +2556,87 @@ class OMEROWebClient:
             _xt_debug(f"API POST error: {e}")
             return None
 
+    @staticmethod
+    def _payload_error_message(payload, raw_text, default_message):
+        if isinstance(payload, dict):
+            for key in ("error", "detail", "message"):
+                value = payload.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        if isinstance(raw_text, str):
+            normalized = " ".join(raw_text.strip().split())
+            lowered = normalized.lower()
+            if (
+                normalized
+                and len(normalized) <= 500
+                and not any(
+                    marker in lowered
+                    for marker in ("<html", "<!doctype", "<body", "<head", "<title")
+                )
+            ):
+                return normalized
+        return default_message
+
+    def _request_json_url(
+        self,
+        url,
+        *,
+        method=None,
+        payload=None,
+        raw_data=None,
+        content_type=None,
+        headers=None,
+        timeout=30,
+        context="request",
+    ):
+        if not self.session_id:
+            raise RuntimeError("Not authenticated to OMERO.web. Please connect again.")
+
+        data = raw_data
+        if data is None and payload is not None:
+            data = json.dumps(payload).encode("utf-8")
+            if content_type is None:
+                content_type = "application/json"
+
+        request_method = method or ("POST" if data is not None else "GET")
+        req = self._create_request_with_cookies(url, data=data, method=request_method)
+        if content_type:
+            req.add_header("Content-Type", content_type)
+        for key, value in list((headers or {}).items()):
+            req.add_header(key, value)
+
+        status_code = 200
+        raw_body = b""
+        try:
+            with self.opener.open(req, timeout=timeout) as response:
+                if self._check_login_redirect(response, context):
+                    raise RuntimeError(
+                        "Not authenticated to OMERO.web. Please connect again."
+                    )
+                status_code = getattr(response, "status", 200)
+                raw_body = response.read()
+                if self._looks_like_login_page(raw_body):
+                    raise RuntimeError(
+                        "Not authenticated to OMERO.web. Please connect again."
+                    )
+        except urllib.error.HTTPError as exc:
+            status_code = exc.code
+            try:
+                raw_body = exc.read()
+            except Exception:
+                raw_body = b""
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"{context} failed: {exc}") from exc
+
+        raw_text = raw_body.decode("utf-8", errors="replace") if raw_body else ""
+        decoded = None
+        if raw_text.strip():
+            try:
+                decoded = json.loads(raw_text)
+            except json.JSONDecodeError:
+                decoded = None
+        return status_code, decoded, raw_text
+
     def get_image_metadata(self, image_id):
         """Get image metadata including original filename."""
         data = self._api_request(self._with_all_groups(f"m/images/{image_id}/"))
@@ -2500,6 +2752,236 @@ class OMEROWebClient:
         available = bool(payload.get("omero_ims_export") or converter_available)
         _xt_debug(f"OMERO IMS export capability available={available}")
         return available
+
+    def get_folder_import_capability(self):
+        """Detect whether the current OMERO.web instance exposes folder import."""
+        if not self.session_id:
+            return {
+                "available": False,
+                "reason": "Not authenticated to OMERO.web.",
+            }
+
+        capability_url = f"{self.base_url.rstrip('/')}/omeroweb_import/start/"
+        _xt_debug(
+            "Checking OMERO folder import capability endpoint="
+            f"{_safe_url_for_log(capability_url)}"
+        )
+        try:
+            status_code, payload, raw_text = self._request_json_url(
+                capability_url,
+                method="POST",
+                payload={},
+                timeout=30,
+                context="folder import capability check",
+            )
+        except Exception as exc:
+            _xt_debug(f"OMERO folder import capability unavailable: {exc}")
+            return {"available": False, "reason": str(exc)}
+
+        message = self._payload_error_message(
+            payload,
+            raw_text,
+            f"HTTP {status_code}",
+        )
+        lowered = message.lower()
+        if message == "No files provided.":
+            _xt_debug("OMERO folder import capability available=True")
+            return {"available": True, "reason": ""}
+        if "please login as regular user" in lowered:
+            _xt_debug(
+                "OMERO folder import capability unavailable: regular user required"
+            )
+            return {
+                "available": False,
+                "reason": "Folder import is unavailable for the OMERO root user.",
+            }
+        if isinstance(payload, dict) and payload.get("ok") is False and message:
+            _xt_debug(f"OMERO folder import capability unavailable: {message}")
+            return {"available": False, "reason": message}
+
+        _xt_debug(
+            "OMERO folder import capability unavailable: "
+            f"unexpected status={status_code}"
+        )
+        return {
+            "available": False,
+            "reason": "Folder import is not available on this OMERO.web instance.",
+        }
+
+    def start_folder_import_job(self, dataset_name, file_entries):
+        """Create a folder-import job using the detected OMERO.web upload flow."""
+        if not isinstance(dataset_name, str) or not dataset_name.strip():
+            raise RuntimeError("The selected folder name is invalid.")
+        files = []
+        for entry in list(file_entries or []):
+            if not isinstance(entry, dict):
+                continue
+            relative_path = str(entry.get("relative_path") or "").strip()
+            if not relative_path:
+                continue
+            try:
+                size = int(entry.get("size") or 0)
+            except (TypeError, ValueError):
+                size = 0
+            if size < 0:
+                size = 0
+            files.append({"relative_path": relative_path, "size": size})
+        if not files:
+            raise RuntimeError("The selected folder does not contain any files.")
+
+        start_url = f"{self.base_url.rstrip('/')}/omeroweb_import/start/"
+        _xt_debug(
+            "Starting OMERO folder import job via endpoint="
+            f"{_safe_url_for_log(start_url)}"
+        )
+        status_code, payload, raw_text = self._request_json_url(
+            start_url,
+            method="POST",
+            payload={
+                "files": files,
+                "dataset_name_override": dataset_name.strip(),
+                "compatibility_enabled": True,
+            },
+            timeout=60,
+            context="folder import start",
+        )
+        if (
+            status_code >= 400
+            or not isinstance(payload, dict)
+            or payload.get("ok") is not True
+        ):
+            raise RuntimeError(
+                self._payload_error_message(
+                    payload,
+                    raw_text,
+                    "Failed to start OMERO folder import.",
+                )
+            )
+
+        for key in ("upload_url", "import_step_url", "status_url", "confirm_url"):
+            if payload.get(key):
+                payload[key] = self._normalize_url(payload[key], self.base_url)
+        return payload
+
+    def upload_folder_chunk(
+        self,
+        upload_url,
+        relative_path,
+        file_size,
+        chunk_start,
+        chunk_bytes,
+        is_last_chunk,
+    ):
+        if not upload_url:
+            raise RuntimeError("The OMERO upload URL is missing.")
+        safe_relative_path = str(relative_path or "").strip()
+        if not safe_relative_path:
+            raise RuntimeError("A folder import file path is missing.")
+        boundary, body = _multipart_form_body(
+            {
+                "upload_mode": "chunked",
+                "relative_path": safe_relative_path,
+                "chunk_start": int(chunk_start),
+                "chunk_end": int(chunk_start) + len(chunk_bytes or b""),
+                "file_size": int(file_size),
+                "is_last_chunk": "1" if is_last_chunk else "0",
+            },
+            "file",
+            os.path.basename(safe_relative_path) or "upload.bin",
+            chunk_bytes or b"",
+        )
+        status_code, payload, raw_text = self._request_json_url(
+            upload_url,
+            method="POST",
+            raw_data=body,
+            content_type=f"multipart/form-data; boundary={boundary}",
+            timeout=EXPORT_TIMEOUT + 60,
+            context="folder import chunk upload",
+        )
+        if (
+            status_code >= 400
+            or not isinstance(payload, dict)
+            or payload.get("ok") is not True
+        ):
+            raise RuntimeError(
+                self._payload_error_message(
+                    payload,
+                    raw_text,
+                    "Failed to upload a folder chunk to OMERO.",
+                )
+            )
+        return payload
+
+    def trigger_folder_import(self, import_step_url):
+        if not import_step_url:
+            raise RuntimeError("The OMERO import-step URL is missing.")
+        status_code, payload, raw_text = self._request_json_url(
+            import_step_url,
+            method="POST",
+            payload={},
+            timeout=60,
+            context="folder import trigger",
+        )
+        if (
+            status_code >= 400
+            or not isinstance(payload, dict)
+            or payload.get("ok") is not True
+        ):
+            raise RuntimeError(
+                self._payload_error_message(
+                    payload,
+                    raw_text,
+                    "Failed to start the OMERO import.",
+                )
+            )
+        return payload
+
+    def confirm_folder_import(self, confirm_url):
+        if not confirm_url:
+            raise RuntimeError("The OMERO confirmation URL is missing.")
+        status_code, payload, raw_text = self._request_json_url(
+            confirm_url,
+            method="POST",
+            payload={},
+            timeout=60,
+            context="folder import confirmation",
+        )
+        if (
+            status_code >= 400
+            or not isinstance(payload, dict)
+            or payload.get("ok") is not True
+        ):
+            raise RuntimeError(
+                self._payload_error_message(
+                    payload,
+                    raw_text,
+                    "Failed to confirm the OMERO import.",
+                )
+            )
+        return payload
+
+    def get_folder_import_status(self, status_url):
+        if not status_url:
+            raise RuntimeError("The OMERO status URL is missing.")
+        status_code, payload, raw_text = self._request_json_url(
+            status_url,
+            method="GET",
+            timeout=30,
+            context="folder import status poll",
+        )
+        if (
+            status_code >= 400
+            or not isinstance(payload, dict)
+            or payload.get("ok") is not True
+        ):
+            raise RuntimeError(
+                self._payload_error_message(
+                    payload,
+                    raw_text,
+                    "Failed to poll the OMERO import status.",
+                )
+            )
+        return payload
 
     def poll_activity(self, job_id, timeout=900, interval=2):
         """Poll a script activity until completion."""
@@ -2956,6 +3438,10 @@ class OMEROBrowserDialog:
         )
         self._connected = False
         self._connection_in_progress = False
+        self._folder_import_available = False
+        self._folder_import_reason = "Connect to OMERO first."
+        self._import_in_progress = False
+        self._image_selection_anchor = None
 
         # Get export directory
         self.export_dir = self._get_export_dir()
@@ -3111,6 +3597,7 @@ class OMEROBrowserDialog:
             i_frame,
             selectmode=_tk_constant("EXTENDED", "extended"),
         )
+        self._configure_image_selection_bindings()
 
         # Actions
         actions = tk.Frame(self.root)
@@ -3140,6 +3627,7 @@ class OMEROBrowserDialog:
             activebackground="#2f85c7",
             activeforeground="white",
             font=("Arial", 12, "bold"),
+            state=_tk_constant("DISABLED", "disabled"),
             width=260,
             height=52,
         )
@@ -3224,7 +3712,7 @@ class OMEROBrowserDialog:
         if not options:
             self.converter_var.set("")
             self._hide_converter_frame()
-            self.load_btn.config(state=_tk_constant("DISABLED", "disabled"))
+            self._set_load_button_for_converter()
             self._set_refresh_button_state(_tk_constant("DISABLED", "disabled"))
             return
 
@@ -3235,11 +3723,319 @@ class OMEROBrowserDialog:
             )
         self.converter_var.set(options[0])
         self._show_converter_frame()
-        self.load_btn.config(state=_tk_constant("NORMAL", "normal"))
-        self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
+        self._set_load_button_for_converter()
+        self._set_refresh_button_state(
+            _tk_constant("DISABLED", "disabled")
+            if getattr(self, "_import_in_progress", False)
+            else _tk_constant("NORMAL", "normal")
+        )
 
     def _import_into_omero(self):
-        return None
+        if self._import_in_progress:
+            return
+        if not self._connected or self.client is None:
+            messagebox.showwarning("Not Connected", "Please connect to OMERO first.")
+            return
+        if not self._folder_import_available:
+            messagebox.showwarning(
+                "Import Unavailable",
+                self._folder_import_reason
+                or "Folder import is not available on this OMERO.web instance.",
+            )
+            return
+
+        selected_folder = filedialog.askdirectory(
+            parent=self.root,
+            mustexist=True,
+            title="Select folder to import into OMERO",
+        )
+        if not selected_folder:
+            return
+
+        folder_name = _folder_display_name(selected_folder)
+        if _is_filesystem_root(selected_folder) or not folder_name:
+            messagebox.showerror(
+                "Invalid Folder",
+                "Please select a regular folder, not a filesystem root.",
+            )
+            return
+
+        confirmation = (
+            "Import the selected folder into OMERO root as a dataset?\n\n"
+            f"Dataset name: {folder_name}\n"
+            "Target: OMERO root (no project)\n\n"
+            "This uploads every file inside the selected folder."
+        )
+        if not messagebox.askyesno("Confirm Folder Import", confirmation):
+            return
+
+        self._set_actions_busy_for_import(True)
+        self._set_status("Preparing folder import into OMERO...", "#fff3cd")
+        threading.Thread(
+            target=self._import_folder_worker,
+            args=(selected_folder, folder_name),
+            daemon=True,
+        ).start()
+
+    @staticmethod
+    def _folder_import_failure_message(status_payload):
+        if isinstance(status_payload, dict):
+            errors = [
+                str(value).strip()
+                for value in list(status_payload.get("errors") or [])
+                if str(value).strip()
+            ]
+            if errors:
+                return errors[0]
+            messages = [
+                str(value).strip()
+                for value in list(status_payload.get("messages") or [])
+                if str(value).strip()
+            ]
+            if messages:
+                return messages[-1]
+        return "OMERO reported that the folder import failed."
+
+    @staticmethod
+    def _folder_import_progress_percent(current_value, total_value):
+        try:
+            current = float(current_value or 0)
+            total = float(total_value or 0)
+        except (TypeError, ValueError):
+            return None
+        if total <= 0:
+            return None
+        return max(0.0, min((current / total) * 100.0, 100.0))
+
+    def _folder_import_status_text(self, folder_name, status_payload):
+        status = str(status_payload.get("status") or "").strip().lower()
+        total_bytes = status_payload.get("total_bytes") or 0
+
+        if status == "uploading":
+            percent = self._folder_import_progress_percent(
+                status_payload.get("uploaded_bytes"),
+                total_bytes,
+            )
+            if percent is not None:
+                return f"Uploading folder to OMERO... {percent:.1f}%"
+            return f"Uploading folder '{folder_name}' to OMERO..."
+
+        if status == "checking":
+            return "Checking folder import compatibility in OMERO..."
+        if status == "awaiting_confirmation":
+            return "Waiting for confirmation to continue the OMERO import..."
+        if status == "ready":
+            return "Starting OMERO import..."
+        if status == "importing":
+            percent = self._folder_import_progress_percent(
+                status_payload.get("import_progress_bytes")
+                or status_payload.get("imported_bytes"),
+                total_bytes,
+            )
+            if percent is not None:
+                return f"Importing folder into OMERO... {percent:.1f}%"
+            return f"Importing folder '{folder_name}' into OMERO..."
+        if status == "done":
+            return "Folder import completed in OMERO"
+        if status == "error":
+            return "Folder import failed"
+        if status:
+            return f"Folder import status: {status}"
+        return f"Importing folder '{folder_name}' into OMERO..."
+
+    def _confirm_folder_import_with_incompatible_files(self, status_payload):
+        incompatible_files = [
+            str(path).strip()
+            for path in list(status_payload.get("incompatible_files") or [])
+            if str(path).strip()
+        ]
+        preview = incompatible_files[:FOLDER_IMPORT_CONFIRM_PREVIEW_LIMIT]
+        lines = [
+            "OMERO reported incompatible files in the selected folder.",
+            "",
+            "Continue importing the remaining compatible files?",
+        ]
+        if preview:
+            lines.extend(["", "Incompatible files:"])
+            lines.extend(f"- {item}" for item in preview)
+            remaining = len(incompatible_files) - len(preview)
+            if remaining > 0:
+                lines.append(f"- ... and {remaining} more")
+        prompt = "\n".join(lines)
+        return bool(
+            self._invoke_on_ui_thread(
+                lambda: messagebox.askyesno(
+                    "Confirm Compatible OMERO Import",
+                    prompt,
+                )
+            )
+        )
+
+    def _wait_for_folder_import_completion(
+        self,
+        folder_name,
+        status_url,
+        confirm_url,
+    ):
+        deadline = time.time() + FOLDER_IMPORT_TIMEOUT
+        while time.time() < deadline:
+            status_payload = self.client.get_folder_import_status(status_url)
+            self._set_status(
+                self._folder_import_status_text(folder_name, status_payload),
+                "#fff3cd",
+            )
+            status = str(status_payload.get("status") or "").strip().lower()
+            if status == "done":
+                return status_payload
+            if status == "error":
+                raise RuntimeError(self._folder_import_failure_message(status_payload))
+            if status_payload.get("confirmation_required"):
+                if not self._confirm_folder_import_with_incompatible_files(
+                    status_payload
+                ):
+                    raise RuntimeError(
+                        "Folder import was cancelled after OMERO reported incompatible files."
+                    )
+                self._set_status("Confirming compatible OMERO import...", "#fff3cd")
+                self.client.confirm_folder_import(confirm_url)
+            time.sleep(FOLDER_IMPORT_POLL_INTERVAL)
+
+        raise RuntimeError("Folder import timed out while waiting for OMERO.")
+
+    def _import_folder_worker(self, selected_folder, folder_name):
+        try:
+            self._set_status("Scanning selected folder...", "#fff3cd")
+            local_entries = _collect_local_folder_entries(selected_folder)
+            total_bytes = sum(int(entry.get("size") or 0) for entry in local_entries)
+            _xt_debug(
+                "Folder import starting "
+                f"dataset_name={folder_name!r} file_count={len(local_entries)} "
+                f"total_bytes={total_bytes}"
+            )
+
+            self._set_status("Creating OMERO upload job...", "#fff3cd")
+            job_payload = self.client.start_folder_import_job(
+                folder_name, local_entries
+            )
+            upload_url = job_payload.get("upload_url")
+            import_step_url = job_payload.get("import_step_url")
+            status_url = job_payload.get("status_url")
+            confirm_url = job_payload.get("confirm_url")
+
+            if (
+                not upload_url
+                or not import_step_url
+                or not status_url
+                or not confirm_url
+            ):
+                raise RuntimeError(
+                    "OMERO returned an incomplete folder-import job response."
+                )
+
+            chunk_size = _upload_chunk_size_bytes()
+            uploaded_bytes = 0
+            file_count = len(local_entries)
+
+            for file_index, entry in enumerate(local_entries, start=1):
+                absolute_path = entry.get("absolute_path")
+                relative_path = entry.get("relative_path")
+                file_size = int(entry.get("size") or 0)
+                if not absolute_path or not relative_path:
+                    raise RuntimeError("A selected file entry is incomplete.")
+
+                display_name = PurePosixPath(relative_path).name or relative_path
+                with open(absolute_path, "rb") as handle:
+                    chunk_start = 0
+                    sent_empty_file = False
+                    while True:
+                        chunk = handle.read(chunk_size)
+                        if not chunk:
+                            if file_size == 0 and not sent_empty_file:
+                                chunk = b""
+                                sent_empty_file = True
+                                is_last_chunk = True
+                            else:
+                                break
+                        else:
+                            is_last_chunk = chunk_start + len(chunk) >= file_size
+
+                        projected_uploaded = uploaded_bytes + len(chunk)
+                        percent = (
+                            100.0
+                            if total_bytes <= 0
+                            else max(
+                                0.0,
+                                min(
+                                    (projected_uploaded / float(total_bytes)) * 100.0,
+                                    100.0,
+                                ),
+                            )
+                        )
+                        self._set_status(
+                            (
+                                "Uploading folder to OMERO... "
+                                f"{percent:.1f}% ({file_index}/{file_count}: {display_name})"
+                            ),
+                            "#fff3cd",
+                        )
+                        self.client.upload_folder_chunk(
+                            upload_url,
+                            relative_path,
+                            file_size,
+                            chunk_start,
+                            chunk,
+                            is_last_chunk,
+                        )
+                        chunk_start += len(chunk)
+                        uploaded_bytes += len(chunk)
+                        if is_last_chunk:
+                            break
+
+                if chunk_start != file_size:
+                    raise RuntimeError(
+                        f"Folder upload size verification failed for {relative_path}."
+                    )
+
+            self._set_status("Starting OMERO import...", "#fff3cd")
+            self.client.trigger_folder_import(import_step_url)
+            final_status = self._wait_for_folder_import_completion(
+                folder_name,
+                status_url,
+                confirm_url,
+            )
+
+            incompatible_files = list(final_status.get("incompatible_files") or [])
+            if incompatible_files:
+                self._set_status(
+                    "Folder import completed with compatibility skips",
+                    "#fff3cd",
+                )
+                self._show_info(
+                    "Folder Import Completed",
+                    (
+                        f"The folder was imported into OMERO root as dataset "
+                        f"'{folder_name}'.\n\n"
+                        f"{len(incompatible_files)} incompatible file(s) were skipped."
+                    ),
+                )
+            else:
+                self._set_status("Folder import completed in OMERO", "#d4edda")
+                self._show_info(
+                    "Folder Import Completed",
+                    (
+                        f"The folder was imported into OMERO root as dataset "
+                        f"'{folder_name}'."
+                    ),
+                )
+        except Exception as exc:
+            self._set_status("Folder import failed", "#f8d7da")
+            self._show_error("Folder Import Failed", str(exc))
+            _xt_debug(f"Folder import failed: {type(exc).__name__}: {exc}")
+        finally:
+            self._invoke_on_ui_thread(
+                lambda: self._set_actions_busy_for_import(False),
+                wait=False,
+            )
 
     def _hide_converter_frame(self):
         if hasattr(self.converter_frame, "grid_remove"):
@@ -3295,6 +4091,8 @@ class OMEROBrowserDialog:
         self.projects_data = []
         self.datasets_data = []
         self.images_data = []
+        self._image_selection_anchor = None
+        self._set_folder_import_capability(False, "Connect to OMERO first.")
         self.plist.delete(0, _tk_constant("END", "end"))
         self.dlist.delete(0, _tk_constant("END", "end"))
         self.ilist.delete(0, _tk_constant("END", "end"))
@@ -3332,6 +4130,16 @@ class OMEROBrowserDialog:
             options.append("Imaris")
         _xt_debug(f"Detected converter options after connection: {options}")
         return options
+
+    def _detect_folder_import_after_connection(self):
+        if not self.client:
+            return {"available": False, "reason": "No OMERO.web client is available."}
+        capability = self.client.get_folder_import_capability()
+        _xt_debug(
+            "Detected OMERO folder import capability "
+            f"available={bool(capability.get('available'))}"
+        )
+        return capability
 
     @staticmethod
     def _get_export_dir():
@@ -3641,6 +4449,7 @@ class OMEROBrowserDialog:
             return
 
         self._set_converter_options([])
+        self._set_folder_import_capability(False, "Detecting OMERO folder import...")
 
         port = _parse_port(p)
         if port is None:
@@ -3672,14 +4481,19 @@ class OMEROBrowserDialog:
                 )
                 self._set_status("Connected to OMERO", "#d4edda")
                 self._load_projects()
-                self._set_status("Detecting converter capabilities...", "#fff3cd")
+                self._set_status("Detecting connector capabilities...", "#fff3cd")
                 converter_options = self._detect_converter_options_after_connection()
+                folder_import_capability = self._detect_folder_import_after_connection()
                 self._set_converter_options(converter_options)
-                if converter_options:
+                self._set_folder_import_capability(
+                    folder_import_capability.get("available"),
+                    folder_import_capability.get("reason", ""),
+                )
+                if converter_options or folder_import_capability.get("available"):
                     self._set_status("Connected to OMERO", "#d4edda")
                 else:
                     self._set_status(
-                        "Connected, but no supported converter is available",
+                        "Connected, but no supported connector workflow is available",
                         "#f8d7da",
                     )
             else:
@@ -3689,6 +4503,7 @@ class OMEROBrowserDialog:
                 self.client.session_id = None
                 self.client.session_key = None
                 self.client = None
+                self._set_folder_import_capability(False, "Connect to OMERO first.")
                 self._set_connect_button(
                     "Connect",
                     _tk_constant("NORMAL", "normal"),
@@ -3710,6 +4525,7 @@ class OMEROBrowserDialog:
         self._did = None
         self.datasets_data = []
         self.images_data = []
+        self._image_selection_anchor = None
         self.dlist.delete(0, _tk_constant("END", "end"))
         self.ilist.delete(0, _tk_constant("END", "end"))
         for p in self.projects_data:
@@ -3750,6 +4566,7 @@ class OMEROBrowserDialog:
         self.ilist.delete(0, _tk_constant("END", "end"))
         self._did = did
         self.images_data = self.client.list_images(did)
+        self._image_selection_anchor = None
         for img in self.images_data:
             self.ilist.insert(_tk_constant("END", "end"), self._image_list_label(img))
 
@@ -3834,6 +4651,89 @@ class OMEROBrowserDialog:
         for label in labels:
             listbox.insert(_tk_constant("END", "end"), label)
 
+    def _configure_image_selection_bindings(self):
+        self.ilist.bind("<Button-1>", self._on_image_listbox_click, add="+")
+        self.ilist.bind("<Control-Button-1>", self._on_image_listbox_click, add="+")
+        self.ilist.bind("<Shift-Button-1>", self._on_image_listbox_click, add="+")
+        self.ilist.bind(
+            "<Control-Shift-Button-1>",
+            self._on_image_listbox_click,
+            add="+",
+        )
+
+    @staticmethod
+    def _listbox_size(listbox):
+        size_getter = getattr(listbox, "size", None)
+        if callable(size_getter):
+            try:
+                return int(size_getter())
+            except Exception:
+                return 0
+        return 0
+
+    @staticmethod
+    def _set_listbox_anchor(listbox, index):
+        activate = getattr(listbox, "activate", None)
+        if callable(activate):
+            try:
+                activate(index)
+            except Exception:
+                pass
+        selection_anchor = getattr(listbox, "selection_anchor", None)
+        if callable(selection_anchor):
+            try:
+                selection_anchor(index)
+            except Exception:
+                pass
+
+    def _on_image_listbox_click(self, event):
+        listbox = getattr(event, "widget", None)
+        if listbox is not self.ilist:
+            return None
+
+        size = self._listbox_size(listbox)
+        if size <= 0:
+            return "break"
+
+        index = int(listbox.nearest(event.y))
+        if index < 0 or index >= size:
+            return "break"
+
+        shift_pressed = bool(getattr(event, "state", 0) & 0x0001)
+        ctrl_pressed = bool(getattr(event, "state", 0) & 0x0004)
+        current_selection = {int(value) for value in listbox.curselection()}
+
+        if shift_pressed:
+            anchor = self._image_selection_anchor
+            if anchor is None:
+                anchor = min(current_selection) if current_selection else index
+            start = min(anchor, index)
+            end = max(anchor, index)
+            if not ctrl_pressed:
+                self._clear_listbox_selection(listbox)
+            for selected_index in range(start, end + 1):
+                listbox.selection_set(selected_index)
+            self._set_listbox_anchor(listbox, index)
+            listbox.see(index)
+            return "break"
+
+        if ctrl_pressed:
+            if index in current_selection:
+                listbox.selection_clear(index)
+            else:
+                listbox.selection_set(index)
+            self._image_selection_anchor = index
+            self._set_listbox_anchor(listbox, index)
+            listbox.see(index)
+            return "break"
+
+        self._clear_listbox_selection(listbox)
+        listbox.selection_set(index)
+        self._image_selection_anchor = index
+        self._set_listbox_anchor(listbox, index)
+        listbox.see(index)
+        return "break"
+
     def _current_selected_project_id(self):
         for raw_index in self.plist.curselection():
             try:
@@ -3859,13 +4759,75 @@ class OMEROBrowserDialog:
         if refresh_btn is not None:
             refresh_btn.config(state=state)
 
+    def _set_import_button_state(self, state):
+        import_btn = getattr(self, "import_btn", None)
+        if import_btn is not None:
+            import_btn.config(state=state)
+
+    def _update_import_button_state(self):
+        enabled = (
+            getattr(self, "_connected", False)
+            and getattr(self, "_folder_import_available", False)
+            and not getattr(self, "_connection_in_progress", False)
+            and not getattr(self, "_refresh_in_progress", False)
+            and not getattr(self, "_import_in_progress", False)
+        )
+        self._set_import_button_state(
+            _tk_constant("NORMAL", "normal")
+            if enabled
+            else _tk_constant("DISABLED", "disabled")
+        )
+
+    def _set_folder_import_capability(self, available, reason=""):
+        self._folder_import_available = bool(available)
+        self._folder_import_reason = str(reason or "").strip()
+        self._update_import_button_state()
+
     def _set_load_button_for_converter(self):
+        converter_value = _stringvar_value(getattr(self, "converter_var", None))
         state = (
             _tk_constant("NORMAL", "normal")
-            if self.converter_var.get() in {"OMERO", "Imaris"}
+            if (
+                converter_value in {"OMERO", "Imaris"}
+                and not getattr(self, "_import_in_progress", False)
+            )
             else _tk_constant("DISABLED", "disabled")
         )
         self.load_btn.config(state=state)
+
+    def _set_actions_busy_for_import(self, active):
+        self._import_in_progress = bool(active)
+        disabled = _tk_constant("DISABLED", "disabled")
+        if active:
+            self.load_btn.config(state=disabled)
+            self._set_import_button_state(disabled)
+            self._set_refresh_button_state(disabled)
+            self.connect_btn.config(state=disabled)
+            return
+
+        if self._connected:
+            self._set_connect_button(
+                "Disconnect",
+                _tk_constant("NORMAL", "normal"),
+                "#f39c12",
+                active_bg="#d68910",
+            )
+        else:
+            self._set_connect_button(
+                "Connect",
+                _tk_constant("NORMAL", "normal"),
+                "#3498db",
+                active_bg="#2f85c7",
+            )
+        self._set_load_button_for_converter()
+        self._update_import_button_state()
+        if self._connected and _stringvar_value(
+            getattr(self, "converter_var", None)
+        ) in {
+            "OMERO",
+            "Imaris",
+        }:
+            self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
 
     def _refresh_browser(self):
         if self._refresh_in_progress:
@@ -3881,6 +4843,7 @@ class OMEROBrowserDialog:
         dataset_id = self._current_selected_dataset_id()
         self._set_refresh_button_state(_tk_constant("DISABLED", "disabled"))
         self.load_btn.config(state=_tk_constant("DISABLED", "disabled"))
+        self._set_import_button_state(_tk_constant("DISABLED", "disabled"))
         self._set_status("Refreshing OMERO browser...", "#fff3cd")
         threading.Thread(
             target=self._refresh_worker,
@@ -3953,6 +4916,7 @@ class OMEROBrowserDialog:
             self._did = None
             self.datasets_data = []
             self.images_data = []
+            self._image_selection_anchor = None
             self._replace_listbox_items(self.dlist, [])
             self._replace_listbox_items(self.ilist, [])
             self._clear_listbox_selection(self.plist)
@@ -3977,6 +4941,7 @@ class OMEROBrowserDialog:
         if dataset_index is None:
             self._did = None
             self.images_data = []
+            self._image_selection_anchor = None
             self._replace_listbox_items(self.ilist, [])
             self._clear_listbox_selection(self.dlist)
             if requested_dataset_id is None:
@@ -3992,6 +4957,7 @@ class OMEROBrowserDialog:
         self._did = self._entity_id(datasets[dataset_index])
         self._select_listbox_index(self.dlist, dataset_index)
         self.images_data = images
+        self._image_selection_anchor = None
         self._replace_listbox_items(
             self.ilist,
             [self._image_list_label(img) for img in images],
@@ -4010,8 +4976,16 @@ class OMEROBrowserDialog:
 
     def _finish_refresh_buttons(self):
         self._refresh_in_progress = False
-        self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
+        self._set_refresh_button_state(
+            _tk_constant("NORMAL", "normal")
+            if self._connected
+            and _stringvar_value(getattr(self, "converter_var", None))
+            in {"OMERO", "Imaris"}
+            and not getattr(self, "_import_in_progress", False)
+            else _tk_constant("DISABLED", "disabled")
+        )
         self._set_load_button_for_converter()
+        self._update_import_button_state()
 
     @staticmethod
     def _image_cache_subdir(image_id):
@@ -4050,7 +5024,7 @@ class OMEROBrowserDialog:
             messagebox.showwarning("No Selection", "Please select at least one image")
             return
 
-        converter = self.converter_var.get()
+        converter = _stringvar_value(getattr(self, "converter_var", None))
         if converter not in {"OMERO", "Imaris"}:
             messagebox.showwarning(
                 "No Converter",

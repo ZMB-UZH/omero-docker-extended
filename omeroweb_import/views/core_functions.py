@@ -154,6 +154,7 @@ __all__ = [
     "_load_job",
     "_managed_upload_error_message",
     "_mark_failed_job_for_deferred_cleanup",
+    "_normalize_dataset_name_override",
     "_normalize_job_batch_size",
     "_normalize_job_service_credentials",
     "_normalize_upload_relative_path",
@@ -239,6 +240,7 @@ MAX_IMPORT_LOG_LINES = 1000
 MAX_UPLOAD_PATH_COMPONENT_BYTES = 255
 MAX_UPLOAD_RELATIVE_PATH_BYTES = 2048
 MAX_UPLOAD_STAGED_TARGET_BYTES = 4096
+MAX_DATASET_NAME_BYTES = 255
 INT_SANITIZER = re.compile(r"[^0-9]")
 JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
 JOB_LOCK_RETRIES = 12
@@ -1058,6 +1060,29 @@ def _normalize_upload_relative_path(raw_name: str):
     if length_error:
         return None, length_error
     return rel_path, None
+
+
+def _normalize_dataset_name_override(raw_name):
+    if raw_name is None:
+        return None, None
+    if not isinstance(raw_name, str):
+        raw_name = str(raw_name)
+    dataset_name = raw_name.strip()
+    if not dataset_name:
+        return None, errors.invalid_dataset_name_override("name must not be empty")
+    if any(ord(character) < 32 for character in dataset_name):
+        return None, errors.invalid_dataset_name_override(
+            "control characters are not allowed"
+        )
+    if "/" in dataset_name or "\\" in dataset_name:
+        return None, errors.invalid_dataset_name_override(
+            "path separators are not allowed"
+        )
+    if len(os.fsencode(dataset_name)) > MAX_DATASET_NAME_BYTES:
+        return None, errors.invalid_dataset_name_override(
+            f"name exceeds {MAX_DATASET_NAME_BYTES} bytes"
+        )
+    return dataset_name, None
 
 
 @dataclass(frozen=True)
@@ -2158,6 +2183,36 @@ def _dataset_name_for_import_entry(entry: dict, orphan_dataset_name: str | None 
     return _dataset_name_for_path(dataset_relative_path, orphan_dataset_name)
 
 
+def _job_dataset_name_override(job_dict: dict):
+    dataset_name = job_dict.get("dataset_name_override")
+    if dataset_name is None:
+        return None
+    dataset_name = str(dataset_name).strip()
+    return dataset_name or None
+
+
+def _dataset_name_for_job_entry(
+    job_dict: dict,
+    entry: dict,
+    orphan_dataset_name: str | None = None,
+):
+    dataset_name_override = _job_dataset_name_override(job_dict)
+    if dataset_name_override:
+        return dataset_name_override
+    return _dataset_name_for_import_entry(entry, orphan_dataset_name)
+
+
+def _dataset_name_for_job_relative_path(
+    job_dict: dict,
+    relative_path: str,
+    orphan_dataset_name: str | None = None,
+):
+    dataset_name_override = _job_dataset_name_override(job_dict)
+    if dataset_name_override:
+        return dataset_name_override
+    return _dataset_name_for_upload_relative_path(relative_path, orphan_dataset_name)
+
+
 def _generate_orphan_dataset_name():
     suffix = "".join(
         secrets.choice(ORPHAN_SUFFIX_ALPHANUM) for _ in range(ORPHAN_SUFFIX_LENGTH)
@@ -2289,6 +2344,13 @@ def _get_or_create_dataset(
 
 
 def _plan_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
+    dataset_name_override = _job_dataset_name_override(job_dict)
+    if dataset_name_override:
+        return (
+            None,
+            [dataset_name_override] if list(entries_to_import or []) else [],
+        )
+
     orphan_dataset_name = job_dict.get("orphan_dataset_name")
     if orphan_dataset_name is not None:
         orphan_dataset_name = str(orphan_dataset_name)
@@ -2299,7 +2361,11 @@ def _plan_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
 
     dataset_names = []
     for entry in entries_to_import:
-        dataset_name = _dataset_name_for_import_entry(entry, orphan_dataset_name)
+        dataset_name = _dataset_name_for_job_entry(
+            job_dict,
+            entry,
+            orphan_dataset_name,
+        )
         if dataset_name:
             dataset_names.append(dataset_name)
 
@@ -2372,6 +2438,16 @@ def _planned_import_units_for_request(job_dict: dict):
 
 
 def _plan_request_job_dataset_targets(job_dict: dict):
+    dataset_name_override = _job_dataset_name_override(job_dict)
+    if dataset_name_override:
+        has_active_entries = any(
+            isinstance(entry, dict)
+            and not entry.get("import_skip")
+            and str(entry.get("relative_path") or "").strip()
+            for entry in list(job_dict.get("files") or [])
+        )
+        return None, [dataset_name_override] if has_active_entries else []
+
     planned_units = _planned_import_units_for_request(job_dict)
     if planned_units:
         orphan_dataset_name = job_dict.get("orphan_dataset_name")
@@ -2382,7 +2458,11 @@ def _plan_request_job_dataset_targets(job_dict: dict):
 
         dataset_names = []
         for unit in planned_units:
-            dataset_name = _dataset_name_for_import_entry(unit, orphan_dataset_name)
+            dataset_name = _dataset_name_for_job_entry(
+                job_dict,
+                unit,
+                orphan_dataset_name,
+            )
             if dataset_name:
                 dataset_names.append(dataset_name)
 
@@ -2401,7 +2481,11 @@ def _plan_request_job_dataset_targets(job_dict: dict):
         if not relative_path:
             continue
         if (
-            _dataset_name_for_upload_relative_path(relative_path, orphan_dataset_name)
+            _dataset_name_for_job_relative_path(
+                job_dict,
+                relative_path,
+                orphan_dataset_name,
+            )
             is None
         ):
             requires_orphan_dataset = True
@@ -2417,8 +2501,10 @@ def _plan_request_job_dataset_targets(job_dict: dict):
         relative_path = (entry.get("relative_path") or "").strip()
         if not relative_path:
             continue
-        dataset_name = _dataset_name_for_upload_relative_path(
-            relative_path, orphan_dataset_name
+        dataset_name = _dataset_name_for_job_relative_path(
+            job_dict,
+            relative_path,
+            orphan_dataset_name,
         )
         if dataset_name:
             dataset_names.append(dataset_name)
@@ -5756,6 +5842,7 @@ def _run_compatibility_check_inner(job_id: str):
     orphan_dataset_name = job.get("orphan_dataset_name")
     if orphan_dataset_name is not None:
         orphan_dataset_name = str(orphan_dataset_name)
+    dataset_name_override = _job_dataset_name_override(job)
 
     max_workers = min(4, len(units_to_check), os.cpu_count() or 2)
     results = []
@@ -5788,7 +5875,13 @@ def _run_compatibility_check_inner(job_id: str):
                     }
                 )
                 continue
-            dataset_name = _dataset_name_for_import_entry(unit, orphan_dataset_name)
+            if dataset_name_override:
+                dataset_name = dataset_name_override
+            else:
+                dataset_name = _dataset_name_for_import_entry(
+                    unit,
+                    orphan_dataset_name,
+                )
             dataset_id = (job.get("dataset_map") or {}).get(dataset_name)
             future = executor.submit(
                 _check_import_compatibility,
@@ -7042,6 +7135,7 @@ def _import_job_entry(
     port,
     dataset_map,
     orphan_dataset_name,
+    dataset_name_override=None,
     group_id=None,
     progress_job=None,
     username=None,
@@ -7082,7 +7176,10 @@ def _import_job_entry(
     # Allow callers (SEM-EDX) to override dataset selection.
     dataset_id = entry.get("dataset_id_override")
     if dataset_id is None:
-        dataset_name = _dataset_name_for_import_entry(entry, orphan_dataset_name)
+        if dataset_name_override:
+            dataset_name = dataset_name_override
+        else:
+            dataset_name = _dataset_name_for_import_entry(entry, orphan_dataset_name)
         dataset_id = dataset_map.get(dataset_name)
 
     normalization_context = _build_import_name_normalization_context(
@@ -7815,6 +7912,7 @@ def _process_import_job(job_id: str):
             orphan_dataset_name = job.get("orphan_dataset_name")
             if orphan_dataset_name is not None:
                 orphan_dataset_name = str(orphan_dataset_name)
+            dataset_name_override = _job_dataset_name_override(job)
             _save_job(job)
 
             logger.info(
@@ -7846,6 +7944,7 @@ def _process_import_job(job_id: str):
                             port,
                             dataset_map,
                             orphan_dataset_name,
+                            dataset_name_override=dataset_name_override,
                             group_id=job.get("group_id"),
                             progress_job=job,
                             username=job.get("username"),
@@ -8018,9 +8117,13 @@ def _process_import_job(job_id: str):
                                 )
                                 if image_name:
                                     all_image_names.append(image_name)
-                                    dataset_name = _dataset_name_for_path(
-                                        image_rel, orphan_dataset_name
-                                    )
+                                    if dataset_name_override:
+                                        dataset_name = dataset_name_override
+                                    else:
+                                        dataset_name = _dataset_name_for_path(
+                                            image_rel,
+                                            orphan_dataset_name,
+                                        )
                                     dataset_id = dataset_map.get(dataset_name)
                                     image_to_dataset[image_name] = dataset_id
 
@@ -8341,6 +8444,7 @@ def _process_import_job(job_id: str):
                                             port,
                                             dataset_map,
                                             orphan_dataset_name,
+                                            dataset_name_override=dataset_name_override,
                                             progress_job=job,
                                             username=job.get("username"),
                                             group_name=job.get("group_name"),

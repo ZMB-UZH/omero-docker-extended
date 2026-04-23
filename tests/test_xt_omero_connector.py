@@ -11,6 +11,8 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 _XT_SCRIPT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "XTOmeroConnector.py",
@@ -20,6 +22,7 @@ _XT_SCRIPT = os.path.join(
 def _load_xt_module():
     tkinter_module = types.ModuleType("tkinter")
     tkinter_module.messagebox = types.SimpleNamespace()
+    tkinter_module.filedialog = types.SimpleNamespace()
     sys.modules.setdefault("tkinter", tkinter_module)
 
     spec = importlib.util.spec_from_file_location(
@@ -78,6 +81,8 @@ class _FakeListbox:
         self.items = list(items or [])
         self.selection = set(selection or [])
         self.seen = []
+        self.activated = []
+        self.anchors = []
 
     def delete(self, start, end=None):
         if start == 0:
@@ -98,6 +103,18 @@ class _FakeListbox:
 
     def selection_set(self, index):
         self.selection.add(int(index))
+
+    def nearest(self, index):
+        return int(index)
+
+    def size(self):
+        return len(self.items)
+
+    def activate(self, index):
+        self.activated.append(int(index))
+
+    def selection_anchor(self, index):
+        self.anchors.append(int(index))
 
     def see(self, index):
         self.seen.append(int(index))
@@ -295,6 +312,114 @@ def test_client_rejects_non_legacy_capability_http_errors(monkeypatch):
     assert client.has_omero_ims_export_capability() is False
     assert "Invalid base_url parameter" not in "\n".join(messages)
     assert "OMERO IMS export capability unavailable: HTTP 400" in messages
+
+
+def test_client_detects_folder_import_capability_from_start_endpoint():
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+    opened_urls = []
+
+    class _FakeOpener:
+        @staticmethod
+        def open(request, timeout):
+            opened_urls.append((request.full_url, timeout, request.data))
+            return _FakeHTTPResponse(b'{"ok": false, "error": "No files provided."}')
+
+    client.opener = _FakeOpener()
+
+    assert client.get_folder_import_capability() == {"available": True, "reason": ""}
+    assert opened_urls == [
+        (
+            f"{client.base_url}/omeroweb_import/start/",
+            30,
+            b"{}",
+        )
+    ]
+
+
+def test_client_marks_root_folder_import_capability_as_unavailable():
+    module = _load_xt_module()
+    module.urllib.error.HTTPError = _FakeHTTPError
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+
+    class _FakeOpener:
+        @staticmethod
+        def open(_request, timeout):
+            assert timeout == 30
+            raise _FakeHTTPError(
+                b'{"error": "PLEASE LOGIN AS REGULAR USER\\nTO USE THIS PLUGIN"}',
+                code=403,
+                msg="Forbidden",
+            )
+
+    client.opener = _FakeOpener()
+
+    capability = client.get_folder_import_capability()
+
+    assert capability["available"] is False
+    assert "root user" in capability["reason"].lower()
+
+
+def test_client_start_folder_import_job_posts_dataset_override_and_normalizes_urls():
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+    calls = []
+
+    class _FakeOpener:
+        @staticmethod
+        def open(request, timeout):
+            calls.append((request.full_url, timeout, request.data))
+            return _FakeHTTPResponse(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "job_id": "abc123",
+                        "upload_url": "http://localhost:4080/omeroweb_import/upload/abc123/",
+                        "import_step_url": "/omeroweb_import/import/abc123/",
+                        "status_url": "/omeroweb_import/status/abc123/",
+                        "confirm_url": "/omeroweb_import/confirm/abc123/",
+                    }
+                ).encode("utf-8")
+            )
+
+    client.opener = _FakeOpener()
+
+    payload = client.start_folder_import_job(
+        "Dataset Root",
+        [
+            {"relative_path": "sub/file-a.tif", "size": 5},
+            {"relative_path": "file-b.tif", "size": 0},
+        ],
+    )
+
+    posted = json.loads(calls[0][2].decode("utf-8"))
+    assert posted["dataset_name_override"] == "Dataset Root"
+    assert posted["compatibility_enabled"] is True
+    assert posted["files"] == [
+        {"relative_path": "sub/file-a.tif", "size": 5},
+        {"relative_path": "file-b.tif", "size": 0},
+    ]
+    assert payload["upload_url"] == (
+        f"{client.base_url}/omeroweb_import/upload/abc123/"
+    )
+    assert payload["import_step_url"] == (
+        f"{client.base_url}/omeroweb_import/import/abc123/"
+    )
+
+
+def test_folder_import_error_message_does_not_echo_html():
+    module = _load_xt_module()
+
+    message = module.OMEROWebClient._payload_error_message(
+        None,
+        "<html><body>Traceback</body></html>",
+        "Failed to start OMERO folder import.",
+    )
+
+    assert message == "Failed to start OMERO folder import."
 
 
 def test_client_download_original_file_uses_archived_files_endpoint_and_safe_name(
@@ -695,6 +820,270 @@ def test_open_files_in_imaris_uses_image_slots_for_multiple_files(tmp_path):
         0: f"clone:{str(first_path)}",
         1: f"clone:{str(second_path)}",
     }
+
+
+def test_collect_local_folder_entries_returns_sorted_relative_paths(tmp_path):
+    module = _load_xt_module()
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "b.txt").write_text("b", encoding="utf-8")
+    (tmp_path / "nested" / "a.txt").write_text("a", encoding="utf-8")
+
+    entries = module._collect_local_folder_entries(tmp_path)
+
+    assert [entry["relative_path"] for entry in entries] == [
+        "b.txt",
+        "nested/a.txt",
+    ]
+
+
+def test_collect_local_folder_entries_rejects_empty_folder(tmp_path):
+    module = _load_xt_module()
+
+    with pytest.raises(RuntimeError, match="does not contain any files"):
+        module._collect_local_folder_entries(tmp_path)
+
+
+def test_is_filesystem_root_detects_windows_and_posix_roots():
+    module = _load_xt_module()
+
+    assert module._is_filesystem_root("/") is True
+    assert module._is_filesystem_root(r"C:\\") is True
+    assert module._is_filesystem_root(r"\\server\share") is True
+    assert module._is_filesystem_root(r"\\server\share\\") is True
+    assert module._is_filesystem_root(r"C:\\Users\\alice") is False
+    assert module._is_filesystem_root(r"\\server\share\folder") is False
+
+
+def test_import_into_omero_starts_folder_worker_after_confirmation(
+    tmp_path, monkeypatch
+):
+    module = _load_xt_module()
+    selected_folder = tmp_path / "selected"
+    selected_folder.mkdir()
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._import_in_progress = False
+    dialog._connected = True
+    dialog.client = object()
+    dialog._folder_import_available = True
+    dialog._folder_import_reason = ""
+    dialog.root = object()
+    dialog._import_folder_worker = lambda *_args: None
+    dialog._set_actions_busy_for_import = lambda active: busy_states.append(active)
+    dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
+
+    busy_states = []
+    statuses = []
+    threads = []
+
+    monkeypatch.setattr(
+        module.filedialog,
+        "askdirectory",
+        lambda **_kwargs: str(selected_folder),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.messagebox,
+        "askyesno",
+        lambda *_args, **_kwargs: True,
+        raising=False,
+    )
+
+    class _FakeThread:
+        def __init__(self, target, args, daemon):
+            threads.append({"target": target, "args": args, "daemon": daemon})
+
+        @staticmethod
+        def start():
+            return None
+
+    monkeypatch.setattr(module.threading, "Thread", _FakeThread)
+
+    module.OMEROBrowserDialog._import_into_omero(dialog)
+
+    assert busy_states == [True]
+    assert statuses == [("Preparing folder import into OMERO...", "#fff3cd")]
+    assert threads == [
+        {
+            "target": dialog._import_folder_worker,
+            "args": (str(selected_folder), "selected"),
+            "daemon": True,
+        }
+    ]
+
+
+def test_import_into_omero_rejects_filesystem_root(monkeypatch):
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._import_in_progress = False
+    dialog._connected = True
+    dialog.client = object()
+    dialog._folder_import_available = True
+    dialog._folder_import_reason = ""
+    dialog.root = object()
+    dialog._set_actions_busy_for_import = lambda *_args, **_kwargs: (
+        _ for _ in ()
+    ).throw(AssertionError("busy state must not change"))
+    dialog._set_status = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("status must not change")
+    )
+
+    errors = []
+    monkeypatch.setattr(
+        module.filedialog,
+        "askdirectory",
+        lambda **_kwargs: r"C:\\",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+        raising=False,
+    )
+
+    module.OMEROBrowserDialog._import_into_omero(dialog)
+
+    assert errors == [
+        (
+            "Invalid Folder",
+            "Please select a regular folder, not a filesystem root.",
+        )
+    ]
+
+
+def test_import_folder_worker_uploads_folder_and_reports_success(tmp_path):
+    module = _load_xt_module()
+    selected_folder = tmp_path / "batch"
+    selected_folder.mkdir()
+    (selected_folder / "first.txt").write_bytes(b"first")
+    (selected_folder / "nested").mkdir()
+    (selected_folder / "nested" / "second.txt").write_bytes(b"second")
+
+    status_updates = []
+    info_messages = []
+    error_messages = []
+    client_calls = []
+    ui_callbacks = []
+
+    status_sequence = iter(
+        [
+            {"status": "importing", "total_bytes": 11, "imported_bytes": 5},
+            {"status": "done", "total_bytes": 11, "incompatible_files": []},
+        ]
+    )
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.client = types.SimpleNamespace(
+        start_folder_import_job=lambda folder_name, entries: (
+            client_calls.append(
+                (
+                    "start",
+                    folder_name,
+                    [(entry["relative_path"], entry["size"]) for entry in entries],
+                )
+            )
+            or {
+                "upload_url": "https://omero.example.org/upload/",
+                "import_step_url": "https://omero.example.org/import/",
+                "status_url": "https://omero.example.org/status/",
+                "confirm_url": "https://omero.example.org/confirm/",
+            }
+        ),
+        upload_folder_chunk=lambda *args: client_calls.append(("upload",) + args) or {},
+        trigger_folder_import=lambda url: client_calls.append(("trigger", url)) or {},
+        get_folder_import_status=lambda url: (
+            client_calls.append(("status", url)) or next(status_sequence)
+        ),
+        confirm_folder_import=lambda url: client_calls.append(("confirm", url)) or {},
+    )
+    dialog._set_status = lambda text, color="#ecf0f1": status_updates.append(
+        (text, color)
+    )
+    dialog._show_info = lambda title, message: info_messages.append((title, message))
+    dialog._show_error = lambda title, message: error_messages.append((title, message))
+    dialog._invoke_on_ui_thread = lambda callback, wait=True: (
+        ui_callbacks.append(wait),
+        callback(),
+    )[1]
+    dialog._set_actions_busy_for_import = lambda active: client_calls.append(
+        ("busy", active)
+    )
+
+    module.OMEROBrowserDialog._import_folder_worker(
+        dialog,
+        str(selected_folder),
+        "batch",
+    )
+
+    assert client_calls[0] == (
+        "start",
+        "batch",
+        [("first.txt", 5), ("nested/second.txt", 6)],
+    )
+    upload_calls = [call for call in client_calls if call[0] == "upload"]
+    assert len(upload_calls) == 2
+    assert upload_calls[0][1:] == (
+        "https://omero.example.org/upload/",
+        "first.txt",
+        5,
+        0,
+        b"first",
+        True,
+    )
+    assert upload_calls[1][1:] == (
+        "https://omero.example.org/upload/",
+        "nested/second.txt",
+        6,
+        0,
+        b"second",
+        True,
+    )
+    assert ("trigger", "https://omero.example.org/import/") in client_calls
+    assert ("status", "https://omero.example.org/status/") in client_calls
+    assert client_calls[-1] == ("busy", False)
+    assert error_messages == []
+    assert info_messages == [
+        (
+            "Folder Import Completed",
+            "The folder was imported into OMERO root as dataset 'batch'.",
+        )
+    ]
+    assert status_updates[-1] == ("Folder import completed in OMERO", "#d4edda")
+    assert ui_callbacks[-1] is False
+
+
+def test_images_ctrl_shift_click_adds_range_without_clearing_existing_selection():
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.ilist = _FakeListbox(
+        items=["a", "b", "c", "d", "e"],
+        selection={0, 3},
+    )
+    dialog._image_selection_anchor = 0
+
+    result = dialog._on_image_listbox_click(
+        types.SimpleNamespace(widget=dialog.ilist, y=2, state=0x0001 | 0x0004)
+    )
+
+    assert result == "break"
+    assert dialog.ilist.selection == {0, 1, 2, 3}
+    assert dialog._image_selection_anchor == 0
+
+
+def test_images_ctrl_click_toggles_single_selection_and_updates_anchor():
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.ilist = _FakeListbox(items=["a", "b", "c"], selection={0})
+    dialog._image_selection_anchor = 0
+
+    result = dialog._on_image_listbox_click(
+        types.SimpleNamespace(widget=dialog.ilist, y=2, state=0x0004)
+    )
+
+    assert result == "break"
+    assert dialog.ilist.selection == {0, 2}
+    assert dialog._image_selection_anchor == 2
 
 
 def test_open_file_in_imaris_does_not_launch_fallback_when_live_handle_fails(tmp_path):

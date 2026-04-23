@@ -30,6 +30,10 @@ def invalid_file_paths(paths):
     return f"Invalid file paths: {', '.join(paths)}."
 
 
+def invalid_dataset_name_override(detail):
+    return f"Invalid dataset name override: {detail}."
+
+
 def upload_endpoint_post_required():
     return "Upload endpoint expects POST."
 

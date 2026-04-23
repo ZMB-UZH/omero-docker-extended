@@ -327,6 +327,60 @@ def test_start_upload_handles_disabled_special_methods_event_context_failures_an
     assert captured["job"]["sem_edx_settings"] == {}
 
 
+def test_start_upload_accepts_dataset_name_override_for_root_dataset(
+    tmp_path, monkeypatch
+):
+    upload_root = tmp_path / "upload-root"
+    jobs_root = tmp_path / "jobs-root"
+    captured = {}
+    request = RequestFactory().post(
+        "/omeroweb_import/start/",
+        data=json.dumps(
+            {
+                "dataset_name_override": "Import Batch",
+                "files": [
+                    {"relative_path": "top-level.ome.tif", "size": 10},
+                    {"relative_path": "nested/child.ome.tif", "size": 12},
+                ],
+            }
+        ),
+        content_type="application/json",
+    )
+
+    monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(index_view, "_get_jobs_root", lambda: jobs_root)
+    monkeypatch.setattr(index_view, "_ensure_dir", lambda path: True)
+    monkeypatch.setattr(
+        index_view, "_resolve_omero_host_port", lambda conn: ("omeroserver", 4064)
+    )
+    monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(index_view.uuid, "uuid4", lambda: SimpleNamespace(hex="f" * 32))
+    monkeypatch.setattr(index_view, "_special_methods_enabled", lambda: True)
+    monkeypatch.setattr(
+        index_view,
+        "reverse",
+        lambda name, kwargs=None: (
+            f"/mock/{name}/{kwargs['job_id']}" if kwargs else f"/mock/{name}"
+        ),
+    )
+    monkeypatch.setattr(
+        index_view, "_generate_orphan_dataset_name", lambda: "UploadRoot_TEST"
+    )
+
+    def save_job(job):
+        captured["job"] = json.loads(json.dumps(job))
+        return True
+
+    monkeypatch.setattr(index_view, "_save_job", save_job)
+
+    response = index_view._start_upload(request, conn=_Conn())
+
+    assert response.status_code == 200
+    assert _payload(response)["ok"] is True
+    assert captured["job"]["dataset_name_override"] == "Import Batch"
+    assert captured["job"]["orphan_dataset_name"] is None
+
+
 def test_start_upload_rejects_invalid_project_payloads_paths_and_batch_limits(
     tmp_path, monkeypatch
 ):
@@ -421,6 +475,20 @@ def test_start_upload_rejects_invalid_project_payloads_paths_and_batch_limits(
         RequestFactory().post("/omeroweb_import/start/"), conn=object()
     )
     assert _payload(response) == {"ok": False, "error": errors.no_files_provided()}
+
+    monkeypatch.setattr(
+        index_view,
+        "load_json_body",
+        lambda request: {
+            "dataset_name_override": "bad/name",
+            "files": [{"relative_path": "file.tif", "size": 1}],
+        },
+    )
+    response = index_view._start_upload(
+        RequestFactory().post("/omeroweb_import/start/"), conn=object()
+    )
+    assert response.status_code == 400
+    assert "Invalid dataset name override" in _payload(response)["error"]
 
     monkeypatch.setattr(
         index_view,

@@ -44,12 +44,20 @@ flowchart TD
 - The browser uploads files into a job-specific staged tree under `OMERO_TMP_PATH`.
 - Directory structure is preserved. The plugin does not flatten directory-backed formats.
 - Upload handling is request-safe: the heavy format planning is deferred so the final upload request does not block on a long dry-run scan.
+- External clients can drive the same lifecycle without the browser UI. When a
+  client starts the job with `dataset_name_override` and no `project_id`, the
+  import target becomes one OMERO-root Dataset named by that override.
+- The XT connector uses Tk's built-in directory chooser for that external-client
+  path, so the selection step stays compatible with older Windows shells
+  instead of depending on Explorer-specific automation.
 
 ### 2. Logical import planning
 
 - The plugin asks OMERO/Bio-Formats for a dry-run grouping plan.
 - That output becomes the source of truth for logical import units.
 - Dataset creation and later import execution both follow the same persisted plan.
+- `dataset_name_override` short-circuits the normal path-derived dataset naming
+  logic so all uploaded entries land in the explicitly requested Dataset.
 - The request path should prepare missing Dataset targets when possible, but the import worker can also create them later through an independent admin-created user session if planning finished after the upload response returned.
 
 ### 3. Route decision
