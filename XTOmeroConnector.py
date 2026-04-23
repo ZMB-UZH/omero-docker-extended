@@ -45,6 +45,7 @@ IMARIS_HANDLE_RETRY_ATTEMPTS = 10
 IMARIS_HANDLE_RETRY_INTERVAL = 0.25
 NATIVE_BRIDGE_RUNNER_TIMEOUT = 600
 NATIVE_BRIDGE_PROBE_TIMEOUT = 60
+NATIVE_BRIDGE_REVALIDATE_AFTER = 30.0
 IMARIS_OPEN_VERIFY_TIMEOUT = 10.0
 IMARIS_OPEN_VERIFY_INTERVAL = 0.25
 OMERO_CONNECTOR_WINDOW_WIDTH = 1000
@@ -138,20 +139,32 @@ def _prepare_imaris_xt_environment(install_roots):
 def _get_imaris_application(app_id, retries, retry_interval):
     import ImarisLib
 
-    attempts = max(1, int(retries or 1))
-    for attempt in range(attempts):
-        lib_factory = getattr(ImarisLib, "ImarisLib", None)
-        if callable(lib_factory):
+    get_application_methods = []
+    lib_factory = getattr(ImarisLib, "ImarisLib", None)
+    if callable(lib_factory):
+        try:
             lib = lib_factory()
+        except Exception:
+            lib = None
+        if lib is not None:
             get_application = getattr(lib, "GetApplication", None)
             if callable(get_application):
-                app = get_application(app_id)
-                if app is not None:
-                    return app
+                get_application_methods.append(get_application)
 
-        get_application = getattr(ImarisLib, "GetApplication", None)
-        if callable(get_application):
-            app = get_application(app_id)
+    get_application = getattr(ImarisLib, "GetApplication", None)
+    if callable(get_application):
+        get_application_methods.append(get_application)
+
+    if not get_application_methods:
+        return None
+
+    attempts = max(1, int(retries or 1))
+    for attempt in range(attempts):
+        for get_application in get_application_methods:
+            try:
+                app = get_application(app_id)
+            except Exception:
+                app = None
             if app is not None:
                 return app
 
@@ -1307,13 +1320,31 @@ def _run_native_bridge_helper(python_executable, payload, context, timeout):
             _xt_debug(
                 f"Native bridge runner ({context}) completed open request in the current Imaris session"
             )
+        elif stdout == "BRIDGE_RUNNER_HANDLE_UNAVAILABLE":
+            _xt_debug(
+                f"Native bridge runner ({context}) could not resolve the current Imaris session"
+            )
+        elif stdout == "BRIDGE_RUNNER_OPEN_METHOD_UNAVAILABLE":
+            _xt_debug(
+                f"Native bridge runner ({context}) resolved Imaris but FileOpen is unavailable"
+            )
+        elif stdout in {
+            "BRIDGE_RUNNER_INVALID_FILE_LIST",
+            "BRIDGE_RUNNER_MISSING_FILE",
+            "BRIDGE_RUNNER_INVALID_IMS",
+            "BRIDGE_RUNNER_OPEN_FAILED",
+        }:
+            _xt_debug(f"Native bridge runner ({context}) result: {stdout}")
         else:
             _xt_debug(f"Native bridge runner ({context}) stdout: {stdout[:4000]}")
     if stderr:
         stderr_lines = [
             line
             for line in stderr.splitlines()
-            if "communicator not destroyed during global destruction" not in line
+            if (
+                "communicator not destroyed during global destruction" not in line
+                and "communicators not destroyed during global destruction" not in line
+            )
         ]
         if stderr_lines:
             _xt_debug(
@@ -2647,6 +2678,9 @@ class OMEROBrowserDialog:
         self._native_bridge_available = _looks_like_imaris_application(self.imaris)
         self._native_bridge_python_executable = None
         self._native_bridge_probe_error = ""
+        self._native_bridge_last_verified_at = (
+            time.time() if self._native_bridge_available else 0.0
+        )
         self._connected = False
         self._connection_in_progress = False
 
@@ -3184,6 +3218,7 @@ class OMEROBrowserDialog:
             self._native_bridge_probe_started = True
             if _looks_like_imaris_application(self.imaris):
                 self._native_bridge_available = True
+                self._native_bridge_last_verified_at = time.time()
                 self._native_bridge_probe_done.set()
                 _xt_debug("Native bridge probe skipped: current Imaris handle is live")
                 return
@@ -3193,19 +3228,21 @@ class OMEROBrowserDialog:
     def _native_bridge_probe_worker(self):
         bridge_python = None
         bridge_error = ""
+        verified_at = 0.0
         try:
             if _coerce_imaris_id(self.imaris_id) is None:
                 bridge_error = "No numeric Imaris application id was provided."
             else:
                 bridge_python = _find_compatible_native_bridge_python(self.imaris_id)
                 if bridge_python:
+                    verified_at = time.time()
                     _xt_debug(
                         f"Native bridge probe found compatible Python: {bridge_python}"
                     )
                 else:
                     bridge_error = (
-                        "No installed Python listed by the Windows launcher could "
-                        "load ImarisLib/IcePy for the live Imaris application."
+                        "No compatible installed Python could load ImarisLib/IcePy "
+                        "and resolve the live Imaris application."
                     )
         except Exception as exc:
             bridge_error = str(exc)
@@ -3215,7 +3252,59 @@ class OMEROBrowserDialog:
                 self._native_bridge_python_executable = bridge_python
                 self._native_bridge_available = bool(bridge_python)
                 self._native_bridge_probe_error = bridge_error
+                self._native_bridge_last_verified_at = verified_at
                 self._native_bridge_probe_done.set()
+
+    def _revalidate_native_bridge(self):
+        """Synchronously verify that the cached native bridge still resolves Imaris."""
+        if _looks_like_imaris_application(self.imaris):
+            with self._native_bridge_probe_lock:
+                self._native_bridge_available = True
+                self._native_bridge_probe_error = ""
+                self._native_bridge_last_verified_at = time.time()
+            return True
+
+        if _coerce_imaris_id(self.imaris_id) is None:
+            bridge_error = "No numeric Imaris application id was provided."
+            with self._native_bridge_probe_lock:
+                self._native_bridge_available = False
+                self._native_bridge_probe_error = bridge_error
+                self._native_bridge_last_verified_at = 0.0
+            _xt_debug(f"Native bridge revalidation failed: {bridge_error}")
+            return False
+
+        with self._native_bridge_probe_lock:
+            preferred_python = self._native_bridge_python_executable
+
+        bridge_python = None
+        bridge_error = ""
+        try:
+            if preferred_python and _run_native_bridge_probe_helper(
+                preferred_python,
+                self.imaris_id,
+            ):
+                bridge_python = preferred_python
+            else:
+                bridge_python = _find_compatible_native_bridge_python(self.imaris_id)
+            if bridge_python:
+                _xt_debug(
+                    "Native bridge revalidation resolved the current Imaris session"
+                )
+            else:
+                bridge_error = (
+                    "No compatible installed Python could load ImarisLib/IcePy "
+                    "and resolve the live Imaris application."
+                )
+        except Exception as exc:
+            bridge_error = str(exc)
+            _xt_debug(f"Native bridge revalidation failed: {exc}")
+
+        with self._native_bridge_probe_lock:
+            self._native_bridge_python_executable = bridge_python
+            self._native_bridge_available = bool(bridge_python)
+            self._native_bridge_probe_error = bridge_error
+            self._native_bridge_last_verified_at = time.time() if bridge_python else 0.0
+        return bool(bridge_python)
 
     def _ensure_native_open_ready_before_export(self):
         """Return True only when the final open can use a native Imaris bridge."""
@@ -3229,12 +3318,24 @@ class OMEROBrowserDialog:
         with self._native_bridge_probe_lock:
             available = self._native_bridge_available
             bridge_error = self._native_bridge_probe_error
+            last_verified_at = self._native_bridge_last_verified_at
         if not available:
             _xt_debug(
                 "Imaris same-session open bridge is unavailable before export: "
                 f"{bridge_error}"
             )
-        return available
+            return False
+        if time.time() - last_verified_at <= NATIVE_BRIDGE_REVALIDATE_AFTER:
+            return True
+        if self._revalidate_native_bridge():
+            return True
+        with self._native_bridge_probe_lock:
+            bridge_error = self._native_bridge_probe_error
+        _xt_debug(
+            "Imaris same-session open bridge failed revalidation before export: "
+            f"{bridge_error}"
+        )
+        return False
 
     def _connect(self):
         h = self.host_entry.get().strip()

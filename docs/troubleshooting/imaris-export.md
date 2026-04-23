@@ -165,6 +165,9 @@ Operational rule:
 - native Imaris bridge compatibility is probed in the background as the dialog
   opens, and the connector must not start server-side conversion unless the
   final IMS can be opened through a native Imaris bridge path,
+- stale native bridge probe results are revalidated before expensive
+  server-side exports or original-file downloads, so a lost Imaris session
+  handle fails before transferring large files,
 - the standalone connector must not launch a second Imaris session, call
   `Imaris.exe` directly, or use the Windows file association as a fallback,
 - if no live XT handle is available, fail explicitly and fix the local Imaris XT
