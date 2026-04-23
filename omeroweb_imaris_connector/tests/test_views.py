@@ -59,6 +59,50 @@ def test_imaris_export_hides_invalid_port_exception_text(monkeypatch) -> None:
     assert response.content.decode("utf-8") == views.INVALID_OMERO_PORT_MESSAGE
 
 
+def test_imaris_export_capabilities_reports_omero_when_script_is_available(
+    monkeypatch,
+) -> None:
+    request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"capabilities": "1"},
+    )
+    request.session = SimpleNamespace(session_key=None)
+
+    views = _import_views()
+    monkeypatch.setattr(views, "use_celery", lambda: True)
+    monkeypatch.setattr(views, "_find_script_id", lambda conn: 1301)
+
+    response = views.imaris_export(request, conn=SimpleNamespace())
+    payload = json.loads(response.content.decode("utf-8"))
+
+    assert response.status_code == 200
+    assert payload == {
+        "converters": {"OMERO": True, "Imaris": True},
+        "omero_ims_export": True,
+    }
+
+
+def test_imaris_export_capabilities_hides_omero_without_script(monkeypatch) -> None:
+    request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"capabilities": "1"},
+    )
+    request.session = SimpleNamespace(session_key=None)
+
+    views = _import_views()
+    monkeypatch.setattr(views, "use_celery", lambda: True)
+    monkeypatch.setattr(views, "_find_script_id", lambda conn: None)
+
+    response = views.imaris_export(request, conn=SimpleNamespace())
+    payload = json.loads(response.content.decode("utf-8"))
+
+    assert response.status_code == 200
+    assert payload == {
+        "converters": {"OMERO": False, "Imaris": True},
+        "omero_ims_export": False,
+    }
+
+
 def test_imaris_export_hides_job_failure_details(monkeypatch) -> None:
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",

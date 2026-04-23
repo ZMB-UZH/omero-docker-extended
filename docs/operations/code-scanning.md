@@ -2,7 +2,13 @@
 
 This project enables automated security scanning via `.github/workflows/security-code-scanning.yml`. All scanners produce SARIF output uploaded to the GitHub Security tab.
 
-GitHub-native code scanning is the supported repository scanning surface here. Retired third-party scanning integrations and badge-only status surfaces are intentionally not part of the tracked workflow set.
+GitHub-native code scanning is the supported repository scanning surface here.
+Retired third-party scanning integrations are intentionally not part of the
+tracked workflow set. The README DeepSource badge is display-only and must not
+introduce an API key, private credential, workflow gate, or source-of-truth
+alert count. Its `token=` URL parameter is the badge-rendering URL parameter
+copied from the repository's DeepSource **Settings > Badges** page, not an API
+key or private credential.
 
 The repository also includes a `security-delta` job inside `.github/workflows/security-code-scanning.yml`. That job fails when a pull request introduces any open code-scanning alert or when a default-branch security scan creates new open alerts.
 

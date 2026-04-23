@@ -162,13 +162,27 @@ Operational rule:
 
 - the standalone connector first tries to open the exported file through the live
   Imaris XT handle so the existing session is reused,
+- native Imaris bridge compatibility is probed in the background as the dialog
+  opens, and the connector must not start server-side conversion unless the
+  final IMS can be opened through a native Imaris bridge path,
 - the standalone connector must not launch a second Imaris session, call
   `Imaris.exe` directly, or use the Windows file association as a fallback,
 - if no live XT handle is available, fail explicitly and fix the local Imaris XT
   bridge/runtime path resolution,
 - do not install extra Python packages on the Imaris workstation for this
   connector. It must remain a single-file, standard-library script and use only
-  the Imaris XT bridge files that are already shipped with Imaris.
+  the Imaris XT bridge files that are already shipped with Imaris,
+- if the configured Python cannot load Imaris' native `IcePy`, the connector may
+  use the Windows Python launcher to find another already-installed Python that
+  can load the same native Imaris bridge and call `FileOpen` on the live Imaris
+  application id. This is still same-session native opening; it is not a file
+  association or `Imaris.exe` launch.
+- after a successful OMERO.web login, the connector probes converter
+  capabilities before enabling load actions. `OMERO` is shown first only when
+  the current server exposes the Imaris connector IMS export endpoint and the
+  export script is registered. `Imaris` remains available when native opening is
+  available and downloads the original archived file for Imaris' own converter
+  instead of requesting server-side IMS conversion.
 
 ## Standard Diagnostic Flow
 

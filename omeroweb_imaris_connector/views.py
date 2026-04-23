@@ -95,6 +95,28 @@ def imaris_export(request, conn=None, **kwargs):
         except ValueError:
             return HttpResponseBadRequest(INVALID_OMERO_PORT_MESSAGE)
 
+    if _bool_from_request(request.GET.get("capabilities")):
+        celery_available = use_celery()
+        script_available = False
+        if celery_available:
+            try:
+                script_available = bool(_find_script_id(conn))
+            except Exception as exc:
+                logger.warning(
+                    "IMS export capability probe failed: %s",
+                    sanitize_log_value(exc),
+                    exc_info=sanitized_exc_info(exc),
+                )
+        return JsonResponse(
+            {
+                "converters": {
+                    "OMERO": bool(celery_available and script_available),
+                    "Imaris": True,
+                },
+                "omero_ims_export": bool(celery_available and script_available),
+            }
+        )
+
     job_id = request.GET.get("job") or request.GET.get("job_id")
     if job_id:
         logger.debug(
