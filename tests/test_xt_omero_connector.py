@@ -322,6 +322,27 @@ def test_resolve_imaris_application_returns_none_when_bridge_import_fails(monkey
     assert module._resolve_imaris_application(17) is None
 
 
+def test_resolve_imaris_application_bridge_failure_message_keeps_runner_path(
+    monkeypatch,
+):
+    module = _load_xt_module()
+    messages = []
+
+    real_import = builtins.__import__
+
+    def _raising_import(name, *args, **kwargs):
+        if name == "ImarisLib":
+            raise ImportError("IcePy missing")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _raising_import)
+    monkeypatch.setattr(module, "_xt_debug", messages.append)
+
+    assert module._resolve_imaris_application(17) is None
+    assert any("compatible native bridge runner" in message for message in messages)
+    assert all("same-session open cannot work" not in message for message in messages)
+
+
 def test_open_file_in_imaris_returns_false_without_handle():
     module = _load_xt_module()
     assert module.open_file_in_imaris("C:\\temp\\demo.ims", None) is False
@@ -984,6 +1005,63 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
     assert dialog.load_btn.state == "disabled"
 
 
+def test_set_converter_options_populates_menu_without_blank_entry():
+    module = _load_xt_module()
+
+    class DummyMenu:
+        def __init__(self):
+            self.deleted = None
+            self.commands = []
+
+        def delete(self, start, end):
+            self.deleted = (start, end)
+
+        def add_command(self, label, command):
+            self.commands.append((label, command))
+
+    class DummyFrame:
+        def __init__(self):
+            self.shown = False
+
+        def grid(self):
+            self.shown = True
+
+    class DummyButton:
+        def __init__(self):
+            self.state = None
+
+        def config(self, **kwargs):
+            self.state = kwargs["state"]
+
+    class DummyVar:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    menu = DummyMenu()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.converter_menu = types.SimpleNamespace(menu=menu)
+    dialog.converter_var = DummyVar()
+    dialog.converter_frame = DummyFrame()
+    dialog.load_btn = DummyButton()
+
+    module.OMEROBrowserDialog._set_converter_options(dialog, ["OMERO", "Imaris"])
+
+    labels = [label for label, _command in menu.commands]
+    assert menu.deleted == (0, "end")
+    assert labels == ["OMERO", "Imaris"]
+    assert "" not in labels
+    assert "-" not in labels
+    assert dialog.converter_var.value == "OMERO"
+    assert dialog.converter_frame.shown is True
+    assert dialog.load_btn.state == "normal"
+
+    menu.commands[1][1]()
+    assert dialog.converter_var.value == "Imaris"
+
+
 def test_load_worker_imaris_converter_downloads_original_without_ims_check(
     tmp_path,
     monkeypatch,
@@ -1225,6 +1303,55 @@ def test_browser_dialog_reenable_load_button_uses_normal_state():
     module.OMEROBrowserDialog._reenable_load_button(dialog)
 
     assert states == ["normal"]
+
+
+def test_browser_dialog_sets_initial_window_as_minimum_size():
+    module = _load_xt_module()
+
+    class DummyRoot:
+        def __init__(self):
+            self.updated = False
+            self.geometry_value = None
+            self.minimum_size = None
+            self.resizable_value = None
+
+        def update_idletasks(self):
+            self.updated = True
+
+        @staticmethod
+        def winfo_width():
+            return 980
+
+        @staticmethod
+        def winfo_height():
+            return 680
+
+        @staticmethod
+        def winfo_reqwidth():
+            return 1010
+
+        @staticmethod
+        def winfo_reqheight():
+            return 720
+
+        def geometry(self, value):
+            self.geometry_value = value
+
+        def minsize(self, width, height):
+            self.minimum_size = (width, height)
+
+        def resizable(self, width_enabled, height_enabled):
+            self.resizable_value = (width_enabled, height_enabled)
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = DummyRoot()
+
+    module.OMEROBrowserDialog._configure_initial_window_constraints(dialog)
+
+    assert dialog.root.updated is True
+    assert dialog.root.geometry_value == "1010x720"
+    assert dialog.root.minimum_size == (1010, 720)
+    assert dialog.root.resizable_value == (True, True)
 
 
 def test_browser_dialog_invoke_on_ui_thread_returns_callback_value():

@@ -48,6 +48,8 @@ NATIVE_BRIDGE_PROBE_TIMEOUT = 60
 IMARIS_OPEN_VERIFY_TIMEOUT = 10.0
 IMARIS_OPEN_VERIFY_INTERVAL = 0.25
 IMARIS_FILE_CONVERTER_STARTUP_GRACE = 1.0
+OMERO_CONNECTOR_WINDOW_WIDTH = 1000
+OMERO_CONNECTOR_WINDOW_HEIGHT = 700
 _XT_LOG_PATH: Optional[str] = None
 _XT_DLL_DIR_HANDLES: List[Any] = []
 _WINDOWS_RESERVED_FILENAMES = {
@@ -435,7 +437,7 @@ def open_file_in_imaris(file_path, imaris_app, require_ims=True):
         return False
 
     if imaris_app is None:
-        print("Imaris application handle is not available.")
+        print("Direct Imaris application handle is not available in this Python.")
         return False
 
     last_error: Any = None
@@ -503,6 +505,321 @@ def _is_supported_imaris_install_path(path_value):
 
 def _tk_constant(name, fallback):
     return getattr(tk, name, fallback)
+
+
+def _widget_background(widget):
+    try:
+        return widget.cget("bg")
+    except Exception:
+        return "#f0f0f0"
+
+
+def _hex_to_rgb(value, fallback=(128, 128, 128)):
+    if not isinstance(value, str):
+        return fallback
+    text = value.strip()
+    if text.startswith("#") and len(text) == 7:
+        try:
+            return tuple(int(text[index : index + 2], 16) for index in (1, 3, 5))
+        except ValueError:
+            return fallback
+    return fallback
+
+
+def _rgb_to_hex(rgb):
+    return "#{:02x}{:02x}{:02x}".format(
+        max(0, min(255, int(rgb[0]))),
+        max(0, min(255, int(rgb[1]))),
+        max(0, min(255, int(rgb[2]))),
+    )
+
+
+def _blend_colors(first, second, second_weight):
+    second_weight = max(0.0, min(1.0, float(second_weight)))
+    first_weight = 1.0 - second_weight
+    rgb_first = _hex_to_rgb(first)
+    rgb_second = _hex_to_rgb(second)
+    return _rgb_to_hex(
+        (
+            rgb_first[0] * first_weight + rgb_second[0] * second_weight,
+            rgb_first[1] * first_weight + rgb_second[1] * second_weight,
+            rgb_first[2] * first_weight + rgb_second[2] * second_weight,
+        )
+    )
+
+
+def _shade_color(value, amount):
+    target = "#ffffff" if amount >= 0 else "#000000"
+    return _blend_colors(value, target, abs(amount))
+
+
+def _normalized_tk_state(state):
+    return str(state or _tk_constant("NORMAL", "normal")).lower()
+
+
+class _RoundedButton:
+    """Canvas-backed button with consistent rounded 3D states."""
+
+    def __init__(
+        self,
+        master,
+        text="",
+        command=None,
+        bg="#3498db",
+        fg="white",
+        activebackground=None,
+        activeforeground=None,
+        font=None,
+        width=140,
+        height=42,
+        state=None,
+    ):
+        self._text = text
+        self._command = command
+        self._bg = bg
+        self._fg = fg
+        self._active_bg = activebackground or _shade_color(bg, -0.08)
+        self._active_fg = activeforeground or fg
+        self._font = font
+        self._width = width
+        self._height = height
+        self._state = state or _tk_constant("NORMAL", "normal")
+        self._pressed = False
+        self._hover = False
+        self._radius = 7
+        self._canvas = tk.Canvas(
+            master,
+            width=width,
+            height=height,
+            bd=0,
+            highlightthickness=0,
+            relief=_tk_constant("FLAT", "flat"),
+            bg=_widget_background(master),
+        )
+        self._canvas.bind("<Configure>", lambda _event: self._redraw())
+        self._canvas.bind("<Enter>", self._on_enter)
+        self._canvas.bind("<Leave>", self._on_leave)
+        self._canvas.bind("<ButtonPress-1>", self._on_press)
+        self._canvas.bind("<ButtonRelease-1>", self._on_release)
+        self._sync_cursor()
+        self._redraw()
+
+    def pack(self, *args, **kwargs):
+        return self._canvas.pack(*args, **kwargs)
+
+    def grid(self, *args, **kwargs):
+        return self._canvas.grid(*args, **kwargs)
+
+    def place(self, *args, **kwargs):
+        return self._canvas.place(*args, **kwargs)
+
+    def pack_forget(self):
+        return self._canvas.pack_forget()
+
+    def grid_remove(self):
+        return self._canvas.grid_remove()
+
+    def config(self, cnf=None, **kwargs):
+        if cnf:
+            kwargs.update(cnf)
+        for key, value in kwargs.items():
+            if key in {"bg", "background"}:
+                self._bg = value
+            elif key == "activebackground":
+                self._active_bg = value
+            elif key in {"fg", "foreground"}:
+                self._fg = value
+            elif key == "activeforeground":
+                self._active_fg = value
+            elif key == "text":
+                self._text = value
+            elif key == "command":
+                self._command = value
+            elif key == "font":
+                self._font = value
+            elif key == "state":
+                self._state = value
+                if not self._is_enabled():
+                    self._pressed = False
+                    self._hover = False
+            elif key == "width":
+                self._width = int(value)
+                self._canvas.config(width=self._width)
+            elif key == "height":
+                self._height = int(value)
+                self._canvas.config(height=self._height)
+            else:
+                self._canvas.config(**{key: value})
+        self._sync_cursor()
+        self._redraw()
+
+    configure = config
+
+    def cget(self, key):
+        if key in {"bg", "background"}:
+            return self._bg
+        if key == "activebackground":
+            return self._active_bg
+        if key in {"fg", "foreground"}:
+            return self._fg
+        if key == "activeforeground":
+            return self._active_fg
+        if key == "text":
+            return self._text
+        if key == "state":
+            return self._state
+        return self._canvas.cget(key)
+
+    def invoke(self):
+        if self._is_enabled() and self._command is not None:
+            return self._command()
+        return None
+
+    def _is_enabled(self):
+        return _normalized_tk_state(self._state) != _normalized_tk_state(
+            _tk_constant("DISABLED", "disabled")
+        )
+
+    def _sync_cursor(self):
+        cursor = "hand2" if self._is_enabled() else "arrow"
+        self._canvas.config(cursor=cursor)
+
+    def _on_enter(self, _event):
+        if self._is_enabled():
+            self._hover = True
+            self._redraw()
+
+    def _on_leave(self, _event):
+        self._hover = False
+        self._pressed = False
+        self._redraw()
+
+    def _on_press(self, _event):
+        if self._is_enabled():
+            self._pressed = True
+            self._redraw()
+
+    def _on_release(self, event):
+        should_invoke = (
+            self._is_enabled()
+            and self._pressed
+            and 0 <= event.x <= self._canvas.winfo_width()
+            and 0 <= event.y <= self._canvas.winfo_height()
+        )
+        self._pressed = False
+        self._redraw()
+        if should_invoke:
+            return self.invoke()
+        return None
+
+    def _draw_round_rect(self, x1, y1, x2, y2, radius, **kwargs):
+        points = [
+            x1 + radius,
+            y1,
+            x2 - radius,
+            y1,
+            x2,
+            y1,
+            x2,
+            y1 + radius,
+            x2,
+            y2 - radius,
+            x2,
+            y2,
+            x2 - radius,
+            y2,
+            x1 + radius,
+            y2,
+            x1,
+            y2,
+            x1,
+            y2 - radius,
+            x1,
+            y1 + radius,
+            x1,
+            y1,
+        ]
+        return self._canvas.create_polygon(
+            points,
+            smooth=True,
+            splinesteps=12,
+            **kwargs,
+        )
+
+    def _redraw(self):
+        width = max(int(self._canvas.winfo_width() or self._width), self._width)
+        height = max(int(self._canvas.winfo_height() or self._height), self._height)
+        self._canvas.delete("all")
+
+        enabled = self._is_enabled()
+        pressed = enabled and self._pressed
+        if not enabled:
+            fill = _blend_colors(self._bg, "#edf1f4", 0.72)
+            text_fill = _blend_colors(self._fg, "#6f7b84", 0.62)
+            shadow = _blend_colors(self._bg, "#d7dde2", 0.82)
+        elif pressed:
+            fill = self._active_bg
+            text_fill = self._active_fg
+            shadow = _shade_color(self._bg, -0.45)
+        elif self._hover:
+            fill = _shade_color(self._bg, 0.08)
+            text_fill = self._fg
+            shadow = _shade_color(self._bg, -0.38)
+        else:
+            fill = self._bg
+            text_fill = self._fg
+            shadow = _shade_color(self._bg, -0.35)
+
+        surface_offset = 2 if pressed else 0
+        shadow_offset = 1 if pressed else 3
+        left = 3
+        top = 2 + surface_offset
+        right = width - 4
+        bottom = height - 6 + surface_offset
+        radius = min(self._radius, max(3, (height - 10) // 2))
+
+        self._draw_round_rect(
+            left + 1,
+            top + shadow_offset,
+            right + 1,
+            bottom + shadow_offset,
+            radius,
+            fill=shadow,
+            outline="",
+        )
+        self._draw_round_rect(
+            left,
+            top,
+            right,
+            bottom,
+            radius,
+            fill=fill,
+            outline=_shade_color(fill, -0.23),
+            width=1,
+        )
+        self._canvas.create_line(
+            left + radius,
+            top + 2,
+            right - radius,
+            top + 2,
+            fill=_shade_color(fill, 0.28),
+            width=1,
+        )
+        self._canvas.create_line(
+            left + radius,
+            bottom - 2,
+            right - radius,
+            bottom - 2,
+            fill=_shade_color(fill, -0.18),
+            width=1,
+        )
+        self._canvas.create_text(
+            width / 2 + surface_offset / 2,
+            height / 2 + surface_offset / 2 - 1,
+            text=self._text,
+            fill=text_fill,
+            font=self._font,
+        )
 
 
 def _iter_imaris_executable_candidates():
@@ -1289,9 +1606,9 @@ def _resolve_imaris_application(
         except Exception as exc:
             version_info = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
             _xt_debug(
-                "Imaris XT bridge import failed: "
+                "Direct Imaris XT bridge is unavailable in this Python: "
                 f"{exc}. Current Python={version_info}. "
-                "The live Imaris session handle is unavailable, so same-session open cannot work."
+                "The connector will use the compatible native bridge runner if available."
             )
             break
 
@@ -2179,10 +2496,14 @@ class OMEROBrowserDialog:
 
         self.root = tk.Tk()
         self.root.title("OMERO Connector")
-        self.root.geometry("1000x700")
+        self.root.geometry(
+            f"{OMERO_CONNECTOR_WINDOW_WIDTH}x{OMERO_CONNECTOR_WINDOW_HEIGHT}"
+        )
+        self.root.resizable(True, True)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_ui()
+        self._configure_initial_window_constraints()
         self._start_native_bridge_probe()
 
     def _on_close(self):
@@ -2239,7 +2560,7 @@ class OMEROBrowserDialog:
         self.pass_entry = tk.Entry(conn_frame, show="*", width=25)
         self.pass_entry.grid(row=1, column=3, columnspan=2, pady=5, padx=5, sticky=tk.W)
 
-        self.connect_btn = tk.Button(
+        self.connect_btn = _RoundedButton(
             conn_frame,
             text="Connect",
             command=self._toggle_connection,
@@ -2248,7 +2569,8 @@ class OMEROBrowserDialog:
             activebackground="#2f85c7",
             activeforeground="white",
             font=("Arial", 10, "bold"),
-            width=15,
+            width=150,
+            height=42,
         )
         self.connect_btn.grid(row=0, column=5, rowspan=2, padx=(10, 12), pady=5)
 
@@ -2257,12 +2579,33 @@ class OMEROBrowserDialog:
         tk.Label(self.converter_frame, text="Converter:").pack(
             side=tk.LEFT, padx=(0, 5)
         )
-        self.converter_menu = tk.OptionMenu(
-            self.converter_frame, self.converter_var, ""
+        self.converter_menu = tk.Menubutton(
+            self.converter_frame,
+            textvariable=self.converter_var,
+            relief=_tk_constant("RAISED", "raised"),
+            bd=1,
+            bg="#f8f9fa",
+            fg="#2c3e50",
+            activebackground="#e9eef3",
+            activeforeground="#2c3e50",
+            font=("Arial", 10),
+            width=10,
+            padx=10,
+            pady=4,
+            anchor=tk.W,
+            indicatoron=True,
         )
-        self.converter_menu.config(width=10)
+        self.converter_menu_menu = tk.Menu(self.converter_menu, tearoff=0)
+        self.converter_menu.config(menu=self.converter_menu_menu)
         self.converter_menu.pack(side=tk.LEFT)
-        self.converter_frame.grid(row=0, column=6, rowspan=2, sticky=tk.W, pady=5)
+        self.converter_frame.grid(
+            row=0,
+            column=6,
+            rowspan=2,
+            sticky=tk.W,
+            padx=(14, 0),
+            pady=5,
+        )
         self.converter_frame.grid_remove()
         conn_frame.grid_columnconfigure(7, weight=1)
 
@@ -2273,76 +2616,66 @@ class OMEROBrowserDialog:
         # Projects
         p_frame = tk.LabelFrame(browser, text="Projects")
         p_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
-        p_scroll = tk.Scrollbar(p_frame)
-        p_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.plist = tk.Listbox(
-            p_frame, yscrollcommand=p_scroll.set, exportselection=False
-        )
-        self.plist.pack(fill=tk.BOTH, expand=True)
-        p_scroll.config(command=self.plist.yview)
+        self.plist = self._build_scrolled_listbox(p_frame)
         self.plist.bind("<<ListboxSelect>>", lambda e: self._sel_proj())
 
         # Datasets
         d_frame = tk.LabelFrame(browser, text="Datasets")
         d_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
-        d_scroll = tk.Scrollbar(d_frame)
-        d_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.dlist = tk.Listbox(
-            d_frame, yscrollcommand=d_scroll.set, exportselection=False
-        )
-        self.dlist.pack(fill=tk.BOTH, expand=True)
-        d_scroll.config(command=self.dlist.yview)
+        self.dlist = self._build_scrolled_listbox(d_frame)
         self.dlist.bind("<<ListboxSelect>>", lambda e: self._sel_ds())
 
         # Images
         i_frame = tk.LabelFrame(browser, text="Images")
         i_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
-        i_scroll = tk.Scrollbar(i_frame)
-        i_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.ilist = tk.Listbox(
-            i_frame, yscrollcommand=i_scroll.set, exportselection=False
-        )
-        self.ilist.pack(fill=tk.BOTH, expand=True)
-        i_scroll.config(command=self.ilist.yview)
+        self.ilist = self._build_scrolled_listbox(i_frame)
 
         # Actions
         actions = tk.Frame(self.root)
         actions.pack(fill=tk.X, padx=10, pady=10)
 
-        self.load_btn = tk.Button(
+        self.load_btn = _RoundedButton(
             actions,
-            text="Load into Imaris",
+            text="Load images into Imaris",
             command=self._load,
             bg="#27ae60",
             fg="white",
+            activebackground="#229954",
+            activeforeground="white",
             font=("Arial", 12, "bold"),
             state=_tk_constant("DISABLED", "disabled"),
-            height=2,
+            width=260,
+            height=52,
         )
         self.load_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        self.import_btn = tk.Button(
+        self.import_btn = _RoundedButton(
             actions,
-            text="Import into OMERO",
+            text="Import folder into OMERO",
             command=self._import_into_omero,
             bg="#3498db",
             fg="white",
             activebackground="#2f85c7",
             activeforeground="white",
             font=("Arial", 12, "bold"),
-            height=2,
+            width=260,
+            height=52,
         )
         self.import_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        tk.Button(
+        close_btn = _RoundedButton(
             actions,
             text="Close",
             command=self._on_close,
             bg="#95a5a6",
             fg="white",
+            activebackground="#7f8c8d",
+            activeforeground="white",
             font=("Arial", 12, "bold"),
-            height=2,
-        ).pack(side=tk.LEFT, padx=2)
+            width=120,
+            height=52,
+        )
+        close_btn.pack(side=tk.LEFT, padx=2)
 
         # Status
         self.status = tk.Label(
@@ -2357,9 +2690,51 @@ class OMEROBrowserDialog:
         )
         self.status.pack(fill=tk.X, side=tk.BOTTOM)
 
+    @staticmethod
+    def _build_scrolled_listbox(parent):
+        y_scroll = tk.Scrollbar(parent, orient=_tk_constant("VERTICAL", "vertical"))
+        x_scroll = tk.Scrollbar(parent, orient=_tk_constant("HORIZONTAL", "horizontal"))
+        y_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        x_scroll.pack(side=tk.BOTTOM, fill=tk.X)
+        listbox = tk.Listbox(
+            parent,
+            yscrollcommand=y_scroll.set,
+            xscrollcommand=x_scroll.set,
+            exportselection=False,
+        )
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        y_scroll.config(command=listbox.yview)
+        x_scroll.config(command=listbox.xview)
+        return listbox
+
+    def _configure_initial_window_constraints(self):
+        self.root.update_idletasks()
+        width = max(
+            OMERO_CONNECTOR_WINDOW_WIDTH,
+            int(self.root.winfo_width() or 0),
+            int(self.root.winfo_reqwidth() or 0),
+        )
+        height = max(
+            OMERO_CONNECTOR_WINDOW_HEIGHT,
+            int(self.root.winfo_height() or 0),
+            int(self.root.winfo_reqheight() or 0),
+        )
+        self.root.geometry(f"{width}x{height}")
+        self.root.minsize(width, height)
+        self.root.resizable(True, True)
+
+    def _get_converter_menu(self):
+        dialog_menu = getattr(self, "converter_menu_menu", None)
+        if dialog_menu is not None:
+            return dialog_menu
+        menu = getattr(self.converter_menu, "menu", None)
+        if menu is not None:
+            return menu
+        return self.converter_menu["menu"]
+
     def _set_converter_options(self, options):
         options = list(options or [])
-        menu = self.converter_menu["menu"]
+        menu = self._get_converter_menu()
         menu.delete(0, _tk_constant("END", "end"))
         if not options:
             self.converter_var.set("")
@@ -2530,7 +2905,8 @@ class OMEROBrowserDialog:
 
         if self.imaris is None:
             _xt_debug(
-                "Imaris handle missing before open; attempting UI-thread re-acquisition"
+                "Direct Imaris handle is not available in this Python; "
+                "attempting UI-thread acquisition"
             )
             try:
                 self.imaris = _resolve_imaris_application(
@@ -2543,7 +2919,8 @@ class OMEROBrowserDialog:
 
         if self.imaris is None:
             _xt_debug(
-                "Imaris handle is still unavailable after re-acquisition attempts"
+                "Direct Imaris handle remains unavailable in this Python; "
+                "continuing with native bridge runner if available"
             )
         else:
             _xt_debug(
@@ -2554,7 +2931,7 @@ class OMEROBrowserDialog:
             return True
 
         _xt_debug(
-            "Current Python could not open through the live handle; "
+            "Direct Imaris handle path did not open the file; "
             "trying compatible native bridge runner"
         )
         with self._native_bridge_probe_lock:
@@ -2854,7 +3231,7 @@ class OMEROBrowserDialog:
                     converter_executable=imaris_converter_executable,
                 )
                 success_status = "Started Imaris File Converter"
-                success_message = "Original file opened with Imaris File Converter."
+                success_message = "Original file was handed to Imaris File Converter."
                 failure_message = (
                     "Failed to start Imaris File Converter for the downloaded "
                     "original file."
