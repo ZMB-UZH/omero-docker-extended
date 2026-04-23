@@ -180,9 +180,19 @@ Operational rule:
 - after a successful OMERO.web login, the connector probes converter
   capabilities before enabling load actions. `OMERO` is shown first only when
   the current server exposes the Imaris connector IMS export endpoint and the
-  export script is registered. `Imaris` remains available when native opening is
-  available and downloads the original archived file for Imaris' own converter
-  instead of requesting server-side IMS conversion.
+  final IMS can be opened through the current Imaris session. Older deployed
+  connector endpoints that predate the explicit capabilities JSON response are
+  treated as OMERO-capable only when the endpoint returns the legacy
+  `Missing image id` response.
+- `Imaris` is shown only when the native Imaris File Converter executable is
+  detected from the current Imaris 11+ installation. This mode downloads the
+  original archived file and starts Imaris' own converter; it does not call
+  `Imaris.exe`, use a Windows file association, or claim success unless the
+  converter process remains running after startup.
+- connector diagnostics must not print CSRF tokens, session cookie values,
+  passwords, or local user-profile paths. The local export cache defaults to the
+  operating system temp directory and can be overridden with
+  `OMERO_IMARIS_EXPORT_DIR`.
 
 ## Standard Diagnostic Flow
 
