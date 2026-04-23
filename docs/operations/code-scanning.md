@@ -24,7 +24,14 @@ python3 tools/run_local_workflow_gates.py --setup --profile ci
 
 This installs Python-backed workflow tools into an ignored local environment from the same hash-pinned requirement files used by GitHub Actions, then runs the docs, Ruff, Mypy, Vulture, split test, coverage, and Bandit gates. Use `--profile all` when Docker is available and you also need the pinned Super-Linter container gate.
 
-Some GitHub-only behavior cannot be made fully identical on the host: SARIF upload, CodeQL hosted analysis, OIDC publishing, repository Scorecard checks, OSV reusable workflow publishing, and Codecov upload still require the actual GitHub workflow result. Do not present the local gate as a replacement for the GitHub security workflow; use it to catch reproducible failures before push.
+Some GitHub-only behavior cannot be made fully identical on the host: SARIF
+upload, CodeQL hosted analysis, OIDC publishing, repository Scorecard checks,
+OSV reusable workflow publishing, and Codecov upload still require the actual
+GitHub workflow result. Do not present the local gate as a replacement for the
+GitHub security workflow; use it to catch reproducible failures before push.
+The tests workflow pins the Codecov CLI version instead of using Codecov's
+`latest` default; update that pin only after verifying the replacement
+version's published signature.
 
 ## Active scanners
 

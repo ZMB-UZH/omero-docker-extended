@@ -48,9 +48,9 @@ class MypyIntegrationContractTests(TestCase):
         source = self.read_text(".github/requirements/mypy-ci.in")
         compiled = self.read_text(".github/requirements/mypy-ci.txt")
 
-        self.assertIn("mypy==1.20.1", source)
+        self.assertIn("mypy==1.20.2", source)
         self.assertIn("pip-compile", compiled)
-        self.assertIn("mypy==1.20.1", compiled)
+        self.assertIn("mypy==1.20.2", compiled)
         self.assertIn("django-stubs==6.0.3", compiled)
         self.assertIn("types-requests==2.33.0.20260408", compiled)
         self.assertIn("types-atheris==3.0.0.20260408", compiled)
