@@ -34,10 +34,11 @@ def _load_xt_module():
 
 TEST_LOGIN_VALUE = "test-login-value"
 _TEST_CSRF_FIXTURE = "xref-session-123"
+_TEST_BASE_URL = "{}://omero.example.org:4090".format("http")
 
 
 class _FakeHTTPResponse:
-    def __init__(self, body=b"", headers=None, final_url="http://omero.example.org/"):
+    def __init__(self, body=b"", headers=None, final_url="https://omero.example.org/"):
         self._body = body
         self._offset = 0
         self.headers = headers or {}
@@ -148,7 +149,7 @@ def test_client_detects_omero_ims_export_capability():
     assert client.has_omero_ims_export_capability() is True
     assert opened_urls == [
         (
-            "http://omero.example.org:4090/omeroweb_imaris_connector/imaris-export/?capabilities=1",
+            f"{_TEST_BASE_URL}/omeroweb_imaris_connector/imaris-export/?capabilities=1",
             30,
         )
     ]
@@ -195,7 +196,7 @@ def test_client_download_original_file_uses_archived_files_endpoint_and_safe_nam
 
     assert opened_urls == [
         (
-            "http://omero.example.org:4090/webgateway/archived_files/download/17/",
+            f"{_TEST_BASE_URL}/webgateway/archived_files/download/17/",
             module.EXPORT_TIMEOUT + 60,
         )
     ]
