@@ -701,6 +701,102 @@ def test_native_bridge_probe_helper_checks_bridge_without_file_open(monkeypatch)
     assert module._run_native_bridge_probe_helper(python_exe, "17") is True
 
 
+def test_native_bridge_helper_reuses_imarislib_factory_across_retries(tmp_path):
+    module = _load_xt_module()
+    counter_path = tmp_path / "factory_count.txt"
+    fake_imarislib = tmp_path / "ImarisLib.py"
+    fake_imarislib.write_text(
+        "\n".join(
+            [
+                "import os",
+                "counter_path = os.environ['IMARIS_FAKE_COUNTER']",
+                "",
+                "class ImarisLib:",
+                "    def __init__(self):",
+                "        count = 0",
+                "        if os.path.exists(counter_path):",
+                "            with open(counter_path, 'r', encoding='utf-8') as handle:",
+                "                count = int(handle.read() or '0')",
+                "        with open(counter_path, 'w', encoding='utf-8') as handle:",
+                "            handle.write(str(count + 1))",
+                "",
+                "    def GetApplication(self, app_id):",
+                "        return None",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    payload = {
+        "mode": "probe",
+        "app_id": 17,
+        "install_roots": [str(tmp_path)],
+        "retry_attempts": 5,
+        "retry_interval": 0,
+    }
+    env = dict(os.environ)
+    env["IMARIS_FAKE_COUNTER"] = str(counter_path)
+
+    completed = subprocess.run(
+        [sys.executable, "-c", module._NATIVE_BRIDGE_OPEN_HELPER],
+        check=False,
+        input=json.dumps(payload),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        env=env,
+        timeout=10,
+    )
+
+    assert completed.returncode == 2
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_HANDLE_UNAVAILABLE"
+    assert counter_path.read_text(encoding="utf-8") == "1"
+
+
+def test_native_bridge_runner_suppresses_plural_ice_shutdown_warning(
+    tmp_path, monkeypatch
+):
+    module = _load_xt_module()
+    python_exe = str(tmp_path / "python.exe")
+    messages = []
+    monkeypatch.setattr(module, "_xt_debug", messages.append)
+    monkeypatch.setattr(
+        module,
+        "_resolve_python_executable_candidate",
+        lambda path: python_exe if path == python_exe else None,
+    )
+
+    def _fake_run(cmd, **kwargs):
+        assert cmd == [python_exe, "-c", module._NATIVE_BRIDGE_OPEN_HELPER]
+        return types.SimpleNamespace(
+            returncode=2,
+            stdout="BRIDGE_RUNNER_HANDLE_UNAVAILABLE\n",
+            stderr=(
+                "!! 04/23/26 15:50:22.395 error: "
+                "10 communicators not destroyed during global destruction.\n"
+            ),
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    assert (
+        module._run_native_bridge_helper(
+            python_exe,
+            {"mode": "probe", "app_id": 17},
+            "probe",
+            60,
+        )
+        is False
+    )
+    assert any(
+        "could not resolve the current Imaris session" in message
+        for message in messages
+    )
+    assert any(
+        "suppressed benign Ice shutdown warning" in message for message in messages
+    )
+    assert not any("stderr:" in message for message in messages)
+
+
 def test_safe_download_filename_removes_paths_markers_and_reserved_names():
     module = _load_xt_module()
 
@@ -846,6 +942,7 @@ def test_dialog_native_bridge_probe_runs_before_export_and_blocks_when_unavailab
     dialog._native_bridge_available = False
     dialog._native_bridge_python_executable = None
     dialog._native_bridge_probe_error = "bridge unavailable"
+    dialog._native_bridge_last_verified_at = 0.0
     status_updates = []
     dialog._set_status = lambda text, _color="#ecf0f1": status_updates.append(text)
 
@@ -864,11 +961,110 @@ def test_dialog_native_bridge_probe_does_not_trust_non_opening_handle():
     dialog._native_bridge_probe_started = True
     dialog._native_bridge_available = False
     dialog._native_bridge_probe_error = "bridge unavailable"
+    dialog._native_bridge_last_verified_at = 0.0
     status_updates = []
     dialog._set_status = lambda text, _color="#ecf0f1": status_updates.append(text)
 
     assert dialog._ensure_native_open_ready_before_export() is False
     assert status_updates == ["Checking Imaris same-session open support..."]
+
+
+def test_dialog_native_bridge_probe_revalidates_stale_cached_python(
+    tmp_path, monkeypatch
+):
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+    dialog._native_bridge_probe_lock = module.threading.Lock()
+    dialog._native_bridge_probe_done = module.threading.Event()
+    dialog._native_bridge_probe_done.set()
+    dialog._native_bridge_probe_started = True
+    dialog._native_bridge_available = True
+    python_exe = str(tmp_path / "python.exe")
+    dialog._native_bridge_python_executable = python_exe
+    dialog._native_bridge_probe_error = ""
+    dialog._native_bridge_last_verified_at = 0.0
+    dialog._set_status = lambda *_args, **_kwargs: None
+    attempts = []
+    monkeypatch.setattr(
+        module,
+        "_run_native_bridge_probe_helper",
+        lambda python_executable, imaris_id: (
+            attempts.append((python_executable, imaris_id)) or True
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "_find_compatible_native_bridge_python",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("cached bridge Python should be checked first")
+        ),
+    )
+
+    assert dialog._ensure_native_open_ready_before_export() is True
+    assert attempts == [(python_exe, "17")]
+    assert dialog._native_bridge_available is True
+    assert dialog._native_bridge_last_verified_at > 0
+
+
+def test_dialog_native_bridge_probe_blocks_after_failed_revalidation(
+    tmp_path, monkeypatch
+):
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+    dialog._native_bridge_probe_lock = module.threading.Lock()
+    dialog._native_bridge_probe_done = module.threading.Event()
+    dialog._native_bridge_probe_done.set()
+    dialog._native_bridge_probe_started = True
+    dialog._native_bridge_available = True
+    dialog._native_bridge_python_executable = str(tmp_path / "python.exe")
+    dialog._native_bridge_probe_error = ""
+    dialog._native_bridge_last_verified_at = 0.0
+    dialog._set_status = lambda *_args, **_kwargs: None
+    monkeypatch.setattr(
+        module,
+        "_run_native_bridge_probe_helper",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        module,
+        "_find_compatible_native_bridge_python",
+        lambda *_args, **_kwargs: None,
+    )
+
+    assert dialog._ensure_native_open_ready_before_export() is False
+    assert dialog._native_bridge_available is False
+    assert dialog._native_bridge_python_executable is None
+    assert "No compatible installed Python" in dialog._native_bridge_probe_error
+    assert dialog._native_bridge_last_verified_at == 0.0
+
+
+def test_dialog_native_bridge_probe_skips_recent_revalidation(tmp_path, monkeypatch):
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+    dialog._native_bridge_probe_lock = module.threading.Lock()
+    dialog._native_bridge_probe_done = module.threading.Event()
+    dialog._native_bridge_probe_done.set()
+    dialog._native_bridge_probe_started = True
+    dialog._native_bridge_available = True
+    dialog._native_bridge_python_executable = str(tmp_path / "python.exe")
+    dialog._native_bridge_probe_error = ""
+    dialog._native_bridge_last_verified_at = module.time.time()
+    dialog._set_status = lambda *_args, **_kwargs: None
+    monkeypatch.setattr(
+        module,
+        "_run_native_bridge_probe_helper",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("recent probe result should be reused")
+        ),
+    )
+
+    assert dialog._ensure_native_open_ready_before_export() is True
 
 
 def test_dialog_native_bridge_probe_uses_cached_python_for_open(monkeypatch):
