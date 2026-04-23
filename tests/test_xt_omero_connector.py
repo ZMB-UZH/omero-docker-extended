@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
 import builtins
 import ntpath
@@ -31,6 +32,43 @@ def _load_xt_module():
 
 TEST_AUTH_VALUE = "test-fixture-auth"
 _TEST_CSRF_FIXTURE = "xref-session-123"
+
+
+def test_xt_script_annotations_stay_python37_runtime_safe():
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=_XT_SCRIPT)
+    unsupported = []
+    builtin_generics = {"list", "dict", "tuple", "set", "frozenset", "type"}
+
+    for node in ast.walk(tree):
+        annotation = None
+        if isinstance(node, ast.AnnAssign):
+            annotation = node.annotation
+        elif isinstance(node, ast.arg):
+            annotation = node.annotation
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            annotation = node.returns
+
+        if annotation is None:
+            continue
+
+        for annotation_node in ast.walk(annotation):
+            if isinstance(annotation_node, ast.BinOp) and isinstance(
+                annotation_node.op, ast.BitOr
+            ):
+                unsupported.append(
+                    f"line {annotation_node.lineno}: PEP 604 union annotation"
+                )
+            if (
+                isinstance(annotation_node, ast.Subscript)
+                and isinstance(annotation_node.value, ast.Name)
+                and annotation_node.value.id in builtin_generics
+            ):
+                unsupported.append(
+                    f"line {annotation_node.lineno}: builtin generic annotation"
+                )
+
+    assert unsupported == []
 
 
 def test_create_request_with_cookies_relies_on_cookie_jar_for_get():
