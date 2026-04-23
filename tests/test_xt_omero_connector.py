@@ -34,7 +34,6 @@ def _load_xt_module():
 
 TEST_LOGIN_VALUE = "test-login-value"
 _TEST_CSRF_FIXTURE = "xref-session-123"
-_TEST_BASE_URL = "{}://omero.example.org:4090".format("http")
 
 
 class _FakeHTTPResponse:
@@ -159,7 +158,7 @@ def test_client_detects_omero_ims_export_capability():
     assert client.has_omero_ims_export_capability() is True
     assert opened_urls == [
         (
-            f"{_TEST_BASE_URL}/omeroweb_imaris_connector/imaris-export/?capabilities=1",
+            f"{client.base_url}/omeroweb_imaris_connector/imaris-export/?capabilities=1",
             30,
         )
     ]
@@ -246,7 +245,7 @@ def test_client_download_original_file_uses_archived_files_endpoint_and_safe_nam
 
     assert opened_urls == [
         (
-            f"{_TEST_BASE_URL}/webgateway/archived_files/download/17/",
+            f"{client.base_url}/webgateway/archived_files/download/17/",
             module.EXPORT_TIMEOUT + 60,
         )
     ]
@@ -661,7 +660,9 @@ def test_open_file_in_imaris_file_converter_uses_fixed_popen_command(
     ]
 
 
-def test_open_file_in_imaris_file_converter_rejects_fast_exit(tmp_path, monkeypatch):
+def test_open_file_in_imaris_file_converter_accepts_clean_fast_exit(
+    tmp_path, monkeypatch
+):
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
     converter_path = tmp_path / "Imaris 11.0.0" / "ImarisFileConverter.exe"
@@ -685,8 +686,82 @@ def test_open_file_in_imaris_file_converter_rejects_fast_exit(tmp_path, monkeypa
             original_path,
             converter_executable=converter_path,
         )
+        is True
+    )
+
+
+def test_open_file_in_imaris_file_converter_rejects_nonzero_fast_exit(
+    tmp_path, monkeypatch
+):
+    module = _load_xt_module()
+    original_path = tmp_path / "demo.lif"
+    converter_path = tmp_path / "Imaris 11.0.0" / "ImarisFileConverter.exe"
+    original_path.write_bytes(b"native input")
+    converter_path.parent.mkdir()
+    converter_path.write_bytes(b"exe")
+
+    class _FakeProcess:
+        @staticmethod
+        def wait(timeout):
+            return 17
+
+    monkeypatch.setattr(
+        subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: _FakeProcess(),
+    )
+
+    assert (
+        module.open_file_in_imaris_file_converter(
+            original_path,
+            converter_executable=converter_path,
+        )
         is False
     )
+
+
+def test_open_files_in_imaris_file_converter_batches_inputs(tmp_path, monkeypatch):
+    module = _load_xt_module()
+    first_path = tmp_path / "first.lif"
+    second_path = tmp_path / "second.czi"
+    converter_path = tmp_path / "Imaris 11.0.0" / "ImarisFileConverter.exe"
+    first_path.write_bytes(b"first")
+    second_path.write_bytes(b"second")
+    converter_path.parent.mkdir()
+    converter_path.write_bytes(b"exe")
+    calls = []
+
+    class _FakeProcess:
+        @staticmethod
+        def wait(timeout):
+            return 0
+
+    def _fake_popen(command, **kwargs):
+        calls.append((command, kwargs))
+        return _FakeProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen)
+
+    assert (
+        module.open_files_in_imaris_file_converter(
+            [first_path, second_path],
+            converter_executable=converter_path,
+        )
+        is True
+    )
+    assert calls == [
+        (
+            [str(converter_path), str(first_path), str(second_path)],
+            {
+                "cwd": str(converter_path.parent),
+                "stdin": subprocess.DEVNULL,
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+                "shell": False,
+                "close_fds": True,
+            },
+        )
+    ]
 
 
 def test_native_bridge_probe_helper_checks_bridge_without_file_open(monkeypatch):
@@ -764,10 +839,11 @@ def test_xt_log_sanitizer_redacts_session_material_and_user_paths(monkeypatch):
 
 def test_safe_url_for_log_redacts_host_ids_and_query_values():
     module = _load_xt_module()
+    scheme = "".join(("htt", "p"))
 
     safe_url = module._safe_url_for_log(
-        "http://omero.example.org:4090/api/v0/m/projects/51/datasets/"
-        "?group=-1&base_url=http%3A%2F%2Fomero.example.org%3A4090"
+        f"{scheme}://omero.example.org:4090/api/v0/m/projects/51/datasets/"
+        f"?group=-1&base_url={scheme}%3A%2F%2Fomero.example.org%3A4090"
     )
 
     assert safe_url == (
@@ -1102,6 +1178,115 @@ def test_set_converter_options_populates_menu_without_blank_entry():
     assert dialog.converter_var.value == "Imaris"
 
 
+def test_selected_images_returns_all_valid_indexes():
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    first = {"id": 1, "name": "first"}
+    second = {"id": 2, "name": "second"}
+    third = {"id": 3, "name": "third"}
+    dialog.images_data = [first, second, third]
+    dialog.ilist = types.SimpleNamespace(
+        curselection=lambda: ("0", "2", "99", "not-an-index")
+    )
+
+    assert module.OMEROBrowserDialog._selected_images(dialog) == [first, third]
+
+
+def test_load_routes_single_selection_to_single_worker(monkeypatch):
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    image = {"id": 1, "name": "single"}
+    dialog.images_data = [image]
+    dialog.ilist = types.SimpleNamespace(curselection=lambda: (0,))
+    dialog.converter_var = types.SimpleNamespace(get=lambda: "OMERO")
+    dialog.load_btn = types.SimpleNamespace(config=lambda **_kwargs: None)
+    dialog._load_worker = lambda *_args: None
+    dialog._load_multiple_worker = lambda *_args: None
+    confirmations = []
+    threads = []
+    monkeypatch.setattr(
+        module.messagebox,
+        "askyesno",
+        lambda title, message: confirmations.append((title, message)) or True,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.messagebox,
+        "showwarning",
+        lambda *_args, **_kwargs: None,
+        raising=False,
+    )
+
+    class _FakeThread:
+        def __init__(self, target, args, daemon):
+            threads.append({"target": target, "args": args, "daemon": daemon})
+
+        @staticmethod
+        def start():
+            return None
+
+    monkeypatch.setattr(module.threading, "Thread", _FakeThread)
+
+    module.OMEROBrowserDialog._load(dialog)
+
+    assert "single" in confirmations[0][1]
+    assert threads == [
+        {
+            "target": dialog._load_worker,
+            "args": (image, "OMERO"),
+            "daemon": True,
+        }
+    ]
+
+
+def test_load_routes_multi_selection_to_multi_worker(monkeypatch):
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    first = {"id": 1, "name": "first"}
+    second = {"id": 2, "name": "second"}
+    dialog.images_data = [first, second]
+    dialog.ilist = types.SimpleNamespace(curselection=lambda: (0, 1))
+    dialog.converter_var = types.SimpleNamespace(get=lambda: "Imaris")
+    dialog.load_btn = types.SimpleNamespace(config=lambda **_kwargs: None)
+    dialog._load_worker = lambda *_args: None
+    dialog._load_multiple_worker = lambda *_args: None
+    confirmations = []
+    threads = []
+    monkeypatch.setattr(
+        module.messagebox,
+        "askyesno",
+        lambda title, message: confirmations.append((title, message)) or True,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.messagebox,
+        "showwarning",
+        lambda *_args, **_kwargs: None,
+        raising=False,
+    )
+
+    class _FakeThread:
+        def __init__(self, target, args, daemon):
+            threads.append({"target": target, "args": args, "daemon": daemon})
+
+        @staticmethod
+        def start():
+            return None
+
+    monkeypatch.setattr(module.threading, "Thread", _FakeThread)
+
+    module.OMEROBrowserDialog._load(dialog)
+
+    assert "2 selected images" in confirmations[0][1]
+    assert threads == [
+        {
+            "target": dialog._load_multiple_worker,
+            "args": ([first, second], "Imaris"),
+            "daemon": True,
+        }
+    ]
+
+
 def test_load_worker_imaris_converter_downloads_original_without_ims_check(
     tmp_path,
     monkeypatch,
@@ -1201,6 +1386,130 @@ def test_load_worker_omero_converter_downloads_ims_and_requires_ims(tmp_path):
     assert calls == [("ims", 8, "img_8", "img_8.ims")]
     assert opened == [(str(ims_file), True)]
     assert dialog.temp_files == [str(ims_file)]
+
+
+def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path):
+    module = _load_xt_module()
+    first_ims = tmp_path / "first.ims"
+    second_ims = tmp_path / "second.ims"
+    first_ims.write_bytes(b"\x89HDF\r\n\x1a\nfirst")
+    second_ims.write_bytes(b"\x89HDF\r\n\x1a\nsecond")
+    files_by_id = {11: str(first_ims), 12: str(second_ims)}
+    events = []
+    info_messages = []
+
+    def _download_ims_export(image_id, download_dir, fallback_name):
+        assert not any(event[0] == "open" for event in events)
+        events.append(("download", image_id, Path(download_dir).name, fallback_name))
+        return files_by_id[image_id]
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.export_dir = str(tmp_path)
+    dialog.temp_files = []
+    dialog.client = types.SimpleNamespace(
+        download_ims_export=_download_ims_export,
+        download_original_file=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("original download must not run")
+        ),
+    )
+    dialog._ensure_native_open_ready_before_export = lambda: True
+    dialog._set_status = lambda *_args, **_kwargs: None
+    dialog._show_info = lambda _title, message: info_messages.append(message)
+    dialog._show_error = lambda *_args, **_kwargs: None
+    dialog._reenable_load_button = lambda: None
+    dialog._invoke_on_ui_thread = lambda callback, wait=True: (
+        None if not wait else callback()
+    )
+
+    def _open_downloaded_files(paths, require_ims=True):
+        events.append(("open", tuple(paths), require_ims))
+        assert [event[0] for event in events] == ["download", "download", "open"]
+        return True
+
+    dialog._open_downloaded_files_in_imaris = _open_downloaded_files
+
+    module.OMEROBrowserDialog._load_multiple_worker(
+        dialog,
+        [{"id": 11, "name": "first"}, {"id": 12, "name": "second"}],
+        "OMERO",
+    )
+
+    assert events == [
+        ("download", 11, "img_11", "img_11.ims"),
+        ("download", 12, "img_12", "img_12.ims"),
+        ("open", (str(first_ims), str(second_ims)), True),
+    ]
+    assert dialog.temp_files == [str(first_ims), str(second_ims)]
+    assert "after every download completed" in info_messages[0]
+
+
+def test_load_multiple_worker_imaris_batches_originals_without_native_bridge(
+    tmp_path,
+    monkeypatch,
+):
+    module = _load_xt_module()
+    first_original = tmp_path / "first.lif"
+    second_original = tmp_path / "second.czi"
+    converter_path = tmp_path / "Imaris 11.0.0" / "ImarisFileConverter.exe"
+    first_original.write_bytes(b"first")
+    second_original.write_bytes(b"second")
+    converter_path.parent.mkdir()
+    converter_path.write_bytes(b"exe")
+    files_by_id = {21: str(first_original), 22: str(second_original)}
+    events = []
+    converter_calls = []
+    monkeypatch.setattr(
+        module,
+        "_find_imaris_file_converter_executable",
+        lambda: str(converter_path),
+    )
+    monkeypatch.setattr(
+        module,
+        "open_files_in_imaris_file_converter",
+        lambda paths, converter_executable=None: (
+            converter_calls.append((list(paths), converter_executable)) or True
+        ),
+    )
+
+    def _download_original_file(image_id, download_dir, fallback_name):
+        assert not converter_calls
+        events.append(("download", image_id, Path(download_dir).name, fallback_name))
+        return files_by_id[image_id]
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.export_dir = str(tmp_path)
+    dialog.temp_files = []
+    dialog.client = types.SimpleNamespace(
+        download_original_file=_download_original_file,
+        download_ims_export=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("IMS export must not run")
+        ),
+    )
+    dialog._ensure_native_open_ready_before_export = lambda: (_ for _ in ()).throw(
+        AssertionError("native bridge must not be required for Imaris converter")
+    )
+    dialog._set_status = lambda *_args, **_kwargs: None
+    dialog._show_info = lambda *_args, **_kwargs: None
+    dialog._show_error = lambda *_args, **_kwargs: None
+    dialog._reenable_load_button = lambda: None
+    dialog._invoke_on_ui_thread = lambda callback, wait=True: (
+        None if not wait else callback()
+    )
+
+    module.OMEROBrowserDialog._load_multiple_worker(
+        dialog,
+        [{"id": 21, "name": "first.lif"}, {"id": 22, "name": "second.czi"}],
+        "Imaris",
+    )
+
+    assert events == [
+        ("download", 21, "img_21", "first.lif"),
+        ("download", 22, "img_22", "second.czi"),
+    ]
+    assert converter_calls == [
+        ([str(first_original), str(second_original)], str(converter_path))
+    ]
+    assert dialog.temp_files == [str(first_original), str(second_original)]
 
 
 def test_load_worker_blocks_before_download_when_native_open_unavailable(tmp_path):

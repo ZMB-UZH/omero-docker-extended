@@ -181,6 +181,32 @@ def _open_file_in_imaris(file_path, app):
     return False
 
 
+def _open_files_in_imaris(file_paths, app, require_ims=True):
+    if isinstance(file_paths, (str, bytes, os.PathLike)):
+        file_paths = [file_paths]
+    if not isinstance(file_paths, list) or not file_paths:
+        return False
+
+    validated = []
+    for file_path in file_paths:
+        try:
+            path_text = os.fspath(file_path)
+        except TypeError:
+            return False
+        if isinstance(path_text, bytes) or "\x00" in path_text:
+            return False
+        if not os.path.isfile(path_text):
+            return False
+        if require_ims and not _is_ims_file(path_text):
+            return False
+        validated.append(path_text)
+
+    for path_text in validated:
+        if not _open_file_in_imaris(path_text, app):
+            return False
+    return True
+
+
 def _current_file_getter(app):
     for method_name in ("GetCurrentFileName", "GetCurrentFilePath"):
         method = getattr(app, method_name, None)
@@ -243,18 +269,35 @@ def main():
             return 3
         print("BRIDGE_RUNNER_PROBE_OK")
         return 0
-    file_path = os.fspath(payload["file_path"])
+    file_paths = payload.get("file_paths")
+    if file_paths is None:
+        file_paths = [payload["file_path"]]
+    if not isinstance(file_paths, list):
+        print("BRIDGE_RUNNER_INVALID_FILE_LIST")
+        return 64
     require_ims = bool(payload.get("require_ims", True))
-    if not os.path.isfile(file_path):
-        print("BRIDGE_RUNNER_MISSING_FILE")
+    if not file_paths:
+        print("BRIDGE_RUNNER_INVALID_FILE_LIST")
         return 64
-    if require_ims and not _is_ims_file(file_path):
-        print("BRIDGE_RUNNER_INVALID_IMS")
-        return 64
-    if not _open_file_in_imaris(file_path, app):
+    for file_path in file_paths:
+        try:
+            file_path = os.fspath(file_path)
+        except TypeError:
+            print("BRIDGE_RUNNER_INVALID_FILE_LIST")
+            return 64
+        if isinstance(file_path, bytes) or "\x00" in file_path:
+            print("BRIDGE_RUNNER_INVALID_FILE_LIST")
+            return 64
+        if not os.path.isfile(file_path):
+            print("BRIDGE_RUNNER_MISSING_FILE")
+            return 64
+        if require_ims and not _is_ims_file(file_path):
+            print("BRIDGE_RUNNER_INVALID_IMS")
+            return 64
+    if not _open_files_in_imaris(file_paths, app, require_ims=require_ims):
         print("BRIDGE_RUNNER_OPEN_FAILED")
         return 3
-    print("BRIDGE_RUNNER_OPENED")
+    print("BRIDGE_RUNNER_OPENED_MANY" if len(file_paths) > 1 else "BRIDGE_RUNNER_OPENED")
     return 0
 
 
@@ -494,6 +537,38 @@ def open_file_in_imaris(file_path, imaris_app, require_ims=True):
     else:
         _xt_debug("Direct Imaris open failed: no supported API method found")
     return False
+
+
+def open_files_in_imaris(file_paths, imaris_app, require_ims=True):
+    """Open already prepared files in the current Imaris application handle."""
+    if isinstance(file_paths, (str, bytes, os.PathLike)):
+        file_paths = [file_paths]
+    else:
+        try:
+            file_paths = list(file_paths)
+        except TypeError:
+            file_paths = []
+    if not file_paths:
+        _xt_debug("Direct Imaris multi-open skipped: no files were provided")
+        return False
+
+    validated_paths = []
+    for file_path in file_paths:
+        candidate = _existing_regular_file_path(file_path)
+        if candidate is None:
+            _xt_debug("Direct Imaris multi-open skipped: one input file is missing")
+            return False
+        if require_ims and not is_ims_file(candidate):
+            _xt_debug(
+                "Direct Imaris multi-open skipped: one file is not a valid IMS file"
+            )
+            return False
+        validated_paths.append(str(candidate))
+
+    for path in validated_paths:
+        if not open_file_in_imaris(path, imaris_app, require_ims=require_ims):
+            return False
+    return True
 
 
 def _looks_like_imaris_application(candidate):
@@ -1030,11 +1105,33 @@ def _find_imaris_file_converter_executable():
     return None
 
 
-def open_file_in_imaris_file_converter(file_path, converter_executable=None):
-    """Launch Imaris' native File Converter for an original archived file."""
-    candidate = _existing_regular_file_path(file_path)
-    if candidate is None:
-        _xt_debug("Imaris File Converter launch skipped: input file is missing")
+def _existing_regular_file_path_list(file_paths):
+    if isinstance(file_paths, (str, bytes, os.PathLike)):
+        file_paths = [file_paths]
+    else:
+        try:
+            file_paths = list(file_paths)
+        except TypeError:
+            file_paths = []
+    if not file_paths:
+        return None
+
+    candidates = []
+    for file_path in file_paths:
+        candidate = _existing_regular_file_path(file_path)
+        if candidate is None:
+            return None
+        candidates.append(candidate)
+    return candidates
+
+
+def open_files_in_imaris_file_converter(file_paths, converter_executable=None):
+    """Launch Imaris' native File Converter for prepared original files."""
+    candidates = _existing_regular_file_path_list(file_paths)
+    if candidates is None:
+        _xt_debug(
+            "Imaris File Converter launch skipped: one or more inputs are missing"
+        )
         return False
 
     converter = converter_executable or _find_imaris_file_converter_executable()
@@ -1055,7 +1152,7 @@ def open_file_in_imaris_file_converter(file_path, converter_executable=None):
 
     import subprocess
 
-    command = [str(converter_path), str(candidate)]
+    command = [str(converter_path)] + [str(candidate) for candidate in candidates]
     _xt_debug(f"Starting Imaris File Converter: {str(converter_path)}")
     try:
         process = subprocess.Popen(
@@ -1077,11 +1174,22 @@ def open_file_in_imaris_file_converter(file_path, converter_executable=None):
         _xt_debug(f"Imaris File Converter running with pid={process.pid}")
         return True
 
-    _xt_debug(
-        "Imaris File Converter exited before startup verification "
-        f"completed with code={return_code}"
-    )
+    if return_code == 0:
+        _xt_debug(
+            "Imaris File Converter accepted the file selection and exited cleanly"
+        )
+        return True
+
+    _xt_debug(f"Imaris File Converter exited with code={return_code}")
     return False
+
+
+def open_file_in_imaris_file_converter(file_path, converter_executable=None):
+    """Launch Imaris' native File Converter for one original archived file."""
+    return open_files_in_imaris_file_converter(
+        [file_path],
+        converter_executable=converter_executable,
+    )
 
 
 def _iter_imaris_install_roots():
@@ -1211,7 +1319,9 @@ def _iter_native_bridge_python_executables():
             yield resolved
 
 
-def _native_bridge_payload(imaris_id, mode, file_path=None, require_ims=True):
+def _native_bridge_payload(
+    imaris_id, mode, file_path=None, file_paths=None, require_ims=True
+):
     app_id = _coerce_imaris_id(imaris_id)
     if app_id is None:
         _xt_debug("Native bridge runner skipped: missing Imaris application id")
@@ -1226,6 +1336,9 @@ def _native_bridge_payload(imaris_id, mode, file_path=None, require_ims=True):
     }
     if file_path is not None:
         payload["file_path"] = str(file_path)
+        payload["require_ims"] = bool(require_ims)
+    if file_paths is not None:
+        payload["file_paths"] = [str(path) for path in file_paths]
         payload["require_ims"] = bool(require_ims)
     return payload
 
@@ -1263,9 +1376,9 @@ def _run_native_bridge_helper(python_executable, payload, context, timeout):
             _xt_debug(
                 f"Native bridge runner ({context}) resolved the current Imaris session"
             )
-        elif stdout == "BRIDGE_RUNNER_OPENED":
+        elif stdout in {"BRIDGE_RUNNER_OPENED", "BRIDGE_RUNNER_OPENED_MANY"}:
             _xt_debug(
-                f"Native bridge runner ({context}) opened the file in the current Imaris session"
+                f"Native bridge runner ({context}) completed open request in the current Imaris session"
             )
         else:
             _xt_debug(f"Native bridge runner ({context}) stdout: {stdout[:4000]}")
@@ -1320,6 +1433,28 @@ def _run_native_bridge_open_helper(
     )
 
 
+def _run_native_bridge_open_many_helper(
+    python_executable, file_paths, imaris_id, require_ims=True
+):
+    """Open prepared files via ImarisLib using a compatible native Python process."""
+    candidates = _existing_regular_file_path_list(file_paths)
+    if candidates is None:
+        return False
+    if require_ims and any(not is_ims_file(candidate) for candidate in candidates):
+        return False
+    return _run_native_bridge_helper(
+        python_executable,
+        _native_bridge_payload(
+            imaris_id,
+            "open",
+            file_paths=candidates,
+            require_ims=require_ims,
+        ),
+        "open_many",
+        NATIVE_BRIDGE_RUNNER_TIMEOUT,
+    )
+
+
 def _find_compatible_native_bridge_python(imaris_id):
     """Return an installed Python executable that can use Imaris' native bridge."""
     if _coerce_imaris_id(imaris_id) is None:
@@ -1359,6 +1494,55 @@ def _open_file_in_imaris_with_native_bridge_runner(
         if _run_native_bridge_open_helper(
             resolved,
             file_path,
+            imaris_id,
+            require_ims=require_ims,
+        ):
+            return True
+    if not attempted:
+        _xt_debug("Native bridge runner unavailable: no alternate Python found")
+    return False
+
+
+def _open_files_in_imaris_with_native_bridge_runner(
+    file_paths, imaris_id, preferred_python_executable=None, require_ims=True
+):
+    """Try compatible installed Python runtimes while staying on ImarisLib/FileOpen."""
+    if os.name != "nt":
+        return False
+    if _coerce_imaris_id(imaris_id) is None:
+        _xt_debug("Native bridge runner unavailable: no numeric Imaris application id")
+        return False
+
+    candidates = _existing_regular_file_path_list(file_paths)
+    if candidates is None:
+        return False
+    if len(candidates) == 1:
+        return _open_file_in_imaris_with_native_bridge_runner(
+            candidates[0],
+            imaris_id,
+            preferred_python_executable=preferred_python_executable,
+            require_ims=require_ims,
+        )
+
+    attempted = False
+    python_candidates = []
+    if preferred_python_executable:
+        python_candidates.append(preferred_python_executable)
+    python_candidates.extend(_iter_native_bridge_python_executables())
+
+    seen = set()
+    for python_executable in python_candidates:
+        resolved = _resolve_python_executable_candidate(python_executable)
+        if not resolved:
+            continue
+        normalized = os.path.normcase(os.path.normpath(resolved))
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        attempted = True
+        if _run_native_bridge_open_many_helper(
+            resolved,
+            candidates,
             imaris_id,
             require_ims=require_ims,
         ):
@@ -1887,9 +2071,6 @@ class OMEROWebClient:
             return False
         except Exception as e:
             _xt_debug(f"Connection error: {e}")
-            import traceback
-
-            _xt_debug(traceback.format_exc())
             return False
 
     def _api_request(self, endpoint):
@@ -2232,11 +2413,9 @@ class OMEROWebClient:
                 try:
                     payload = json.loads(raw_body)
                 except json.JSONDecodeError as exc:
-                    snippet = raw_body[:2000].strip()
                     raise RuntimeError(
                         "IMS export failed: server returned a non-JSON response. "
-                        "Please verify the OMERO.web Imaris connector is healthy.\n\n"
-                        f"Response preview:\n{snippet}"
+                        "Please verify the OMERO.web Imaris connector is healthy."
                     ) from exc
 
                 job_id = payload.get("job_id")
@@ -2291,11 +2470,9 @@ class OMEROWebClient:
                         try:
                             poll_payload = json.loads(poll_body)
                         except json.JSONDecodeError as exc:
-                            snippet = poll_body[:2000].strip()
                             raise RuntimeError(
                                 "IMS export poll failed: server returned a non-JSON response. "
-                                "Please verify the OMERO.web Imaris connector is healthy.\n\n"
-                                f"Response preview:\n{snippet}"
+                                "Please verify the OMERO.web Imaris connector is healthy."
                             ) from exc
 
                 except urllib.error.HTTPError as e:
@@ -2387,17 +2564,16 @@ class OMEROWebClient:
             return local_path
 
         except urllib.error.HTTPError as e:
-            body = ""
             try:
-                body = e.read().decode("utf-8", errors="replace")
+                body_length = len(e.read())
             except Exception as exc:
+                body_length = 0
                 logger.debug(
                     "Suppressed non-fatal exception in XTOmeroConnector.py",
                     exc_info=exc,
                 )
-            raise RuntimeError(
-                f"IMS export HTTPError {e.code}: {e.reason}\n{body[:2000]}"
-            ) from e
+            _xt_debug(f"IMS export HTTP error body omitted length={body_length}")
+            raise RuntimeError(f"IMS export HTTPError {e.code}: {e.reason}") from e
         except urllib.error.URLError as e:
             raise RuntimeError(f"IMS export failed (URLError): {e}") from e
 
@@ -2467,16 +2643,19 @@ class OMEROWebClient:
             _xt_debug("Original file downloaded OK")
             return local_path
         except urllib.error.HTTPError as e:
-            body = ""
             try:
-                body = e.read().decode("utf-8", errors="replace")
+                body_length = len(e.read())
             except Exception as exc:
+                body_length = 0
                 logger.debug(
                     "Suppressed non-fatal exception in XTOmeroConnector.py",
                     exc_info=exc,
                 )
+            _xt_debug(
+                f"Original file download HTTP error body omitted length={body_length}"
+            )
             raise RuntimeError(
-                f"Original file download HTTPError {e.code}: {e.reason}\n{body[:2000]}"
+                f"Original file download HTTPError {e.code}: {e.reason}"
             ) from e
         except urllib.error.URLError as e:
             raise RuntimeError(f"Original file download failed (URLError): {e}") from e
@@ -2681,7 +2860,10 @@ class OMEROBrowserDialog:
         # Images
         i_frame = tk.LabelFrame(browser, text="Images")
         i_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
-        self.ilist = self._build_scrolled_listbox(i_frame)
+        self.ilist = self._build_scrolled_listbox(
+            i_frame,
+            selectmode=_tk_constant("EXTENDED", "extended"),
+        )
 
         # Actions
         actions = tk.Frame(self.root)
@@ -2744,7 +2926,7 @@ class OMEROBrowserDialog:
         self.status.pack(fill=tk.X, side=tk.BOTTOM)
 
     @staticmethod
-    def _build_scrolled_listbox(parent):
+    def _build_scrolled_listbox(parent, selectmode=None):
         y_scroll = tk.Scrollbar(parent, orient=_tk_constant("VERTICAL", "vertical"))
         x_scroll = tk.Scrollbar(parent, orient=_tk_constant("HORIZONTAL", "horizontal"))
         y_scroll.pack(side=tk.RIGHT, fill=tk.Y)
@@ -2755,6 +2937,8 @@ class OMEROBrowserDialog:
             xscrollcommand=x_scroll.set,
             exportselection=False,
         )
+        if selectmode is not None:
+            listbox.config(selectmode=selectmode)
         listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         y_scroll.config(command=listbox.yview)
         x_scroll.config(command=listbox.xview)
@@ -2965,6 +3149,15 @@ class OMEROBrowserDialog:
             require_ims=require_ims,
         )
 
+    def _open_files_with_native_bridge_runner(self, downloaded_files, require_ims=True):
+        bridge_python = self._get_native_bridge_python_executable()
+        return _open_files_in_imaris_with_native_bridge_runner(
+            downloaded_files,
+            self.imaris_id,
+            preferred_python_executable=bridge_python,
+            require_ims=require_ims,
+        )
+
     def _open_downloaded_file_in_imaris(self, downloaded_file, require_ims=True):
         """Resolve the Imaris handle on the UI thread and open the file."""
         self._set_status("Opening file in Imaris...", "#fff3cd")
@@ -3011,6 +3204,54 @@ class OMEROBrowserDialog:
         )
         return self._open_with_native_bridge_runner(
             downloaded_file,
+            require_ims=require_ims,
+        )
+
+    def _open_downloaded_files_in_imaris(self, downloaded_files, require_ims=True):
+        """Open a fully prepared batch in the current Imaris session."""
+        downloaded_files = list(downloaded_files or [])
+        if not downloaded_files:
+            return False
+        if len(downloaded_files) == 1:
+            return self._open_downloaded_file_in_imaris(
+                downloaded_files[0],
+                require_ims=require_ims,
+            )
+
+        self._set_status("Opening selected files in Imaris...", "#fff3cd")
+
+        if self.imaris is None and self._get_native_bridge_python_executable():
+            _xt_debug(
+                "Opening selected files in the current Imaris session via compatible native bridge runner"
+            )
+            return self._open_files_with_native_bridge_runner(
+                downloaded_files,
+                require_ims=require_ims,
+            )
+
+        if self.imaris is None:
+            _xt_debug(
+                "Direct Imaris handle is not available in this Python; "
+                "attempting UI-thread acquisition for batch open"
+            )
+            try:
+                self.imaris = _resolve_imaris_application(
+                    self.imaris_id,
+                    retries=IMARIS_HANDLE_RETRY_ATTEMPTS,
+                    retry_interval=IMARIS_HANDLE_RETRY_INTERVAL,
+                )
+            except Exception as exc:
+                _xt_debug(f"Failed to re-acquire Imaris application handle: {exc}")
+
+        if open_files_in_imaris(downloaded_files, self.imaris, require_ims=require_ims):
+            return True
+
+        _xt_debug(
+            "Direct Imaris handle path did not complete the batch open; "
+            "trying compatible native bridge runner"
+        )
+        return self._open_files_with_native_bridge_runner(
+            downloaded_files,
             require_ims=require_ims,
         )
 
@@ -3191,13 +3432,43 @@ class OMEROBrowserDialog:
                 _tk_constant("END", "end"), f"{img['name']} [{size_info}]"
             )
 
+    @staticmethod
+    def _image_cache_subdir(image_id):
+        safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", str(image_id)).strip(" .")
+        if not safe_id:
+            safe_id = "unknown"
+        if safe_id.upper() in _WINDOWS_RESERVED_FILENAMES:
+            safe_id = f"_{safe_id}"
+        return f"img_{safe_id[:80]}"
+
+    @staticmethod
+    def _image_display_name(img):
+        if isinstance(img, dict):
+            name = img.get("name")
+            if name:
+                return str(name)
+            image_id = img.get("id")
+            if image_id is not None:
+                return f"Image {image_id}"
+        return "selected image"
+
+    def _selected_images(self):
+        selected = []
+        for raw_index in self.ilist.curselection():
+            try:
+                index = int(raw_index)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= index < len(self.images_data):
+                selected.append(self.images_data[index])
+        return selected
+
     def _load(self):
-        sel = self.ilist.curselection()
-        if not sel:
-            messagebox.showwarning("No Selection", "Please select an image")
+        selected_images = self._selected_images()
+        if not selected_images:
+            messagebox.showwarning("No Selection", "Please select at least one image")
             return
 
-        img = self.images_data[sel[0]]
         converter = self.converter_var.get()
         if converter not in {"OMERO", "Imaris"}:
             messagebox.showwarning(
@@ -3206,16 +3477,34 @@ class OMEROBrowserDialog:
             )
             return
 
+        if len(selected_images) == 1:
+            img = selected_images[0]
+            confirmation = (
+                "Download and open:\n"
+                f"{self._image_display_name(img)}\n\n"
+                f"Converter: {converter}"
+            )
+            worker_args = (img, converter)
+            worker_target = self._load_worker
+        else:
+            confirmation = (
+                f"Download {len(selected_images)} selected images and hand them "
+                "to Imaris after all files are ready?\n\n"
+                f"Converter: {converter}"
+            )
+            worker_args = (selected_images, converter)
+            worker_target = self._load_multiple_worker
+
         if not messagebox.askyesno(
             "Confirm Load",
-            f"Download and open:\n{img['name']}\n\nConverter: {converter}",
+            confirmation,
         ):
             return
 
         self.load_btn.config(state=_tk_constant("DISABLED", "disabled"))
         threading.Thread(
-            target=self._load_worker,
-            args=(img, converter),
+            target=worker_target,
+            args=worker_args,
             daemon=True,
         ).start()
 
@@ -3224,9 +3513,11 @@ class OMEROBrowserDialog:
 
     def _load_worker(self, img, converter):
         try:
-            _xt_debug(
-                f"Load worker starting image_id={img['id']} converter={converter}"
-            )
+            image_id = img.get("id") if isinstance(img, dict) else None
+            if image_id is None:
+                raise RuntimeError("Selected image is missing an OMERO image id.")
+            image_name = self._image_display_name(img)
+            _xt_debug(f"Load worker starting image_id={image_id} converter={converter}")
             imaris_converter_executable = None
             if (
                 converter == "OMERO"
@@ -3246,26 +3537,29 @@ class OMEROBrowserDialog:
                     )
 
             # Download directory
-            download_dir = os.path.join(self.export_dir, f"img_{img['id']}")
+            download_dir = os.path.join(
+                self.export_dir,
+                self._image_cache_subdir(image_id),
+            )
             os.makedirs(download_dir, exist_ok=True)
 
             require_ims = converter == "OMERO"
             if converter == "OMERO":
-                self._set_status(f"Exporting IMS for {img['name']}...", "#fff3cd")
+                self._set_status(f"Exporting IMS for {image_name}...", "#fff3cd")
                 self._set_status("Running server-side IMS export...", "#fff3cd")
                 downloaded_file = self.client.download_ims_export(
-                    img["id"],
+                    image_id,
                     download_dir,
-                    fallback_name=f"img_{img['id']}.ims",
+                    fallback_name=f"{self._image_cache_subdir(image_id)}.ims",
                 )
             elif converter == "Imaris":
                 self._set_status(
-                    f"Downloading original file for {img['name']}...", "#fff3cd"
+                    f"Downloading original file for {image_name}...", "#fff3cd"
                 )
                 downloaded_file = self.client.download_original_file(
-                    img["id"],
+                    image_id,
                     download_dir,
-                    fallback_name=img.get("name") or f"img_{img['id']}",
+                    fallback_name=img.get("name") or self._image_cache_subdir(image_id),
                 )
             else:
                 raise RuntimeError(f"Unsupported converter: {converter}")
@@ -3325,6 +3619,131 @@ class OMEROBrowserDialog:
             self._set_status("✗ Failed", "#f8d7da")
             self._show_error("Error", str(e))
             _xt_debug(f"Load worker failed: {type(e).__name__}: {e}")
+        finally:
+            self._invoke_on_ui_thread(self._reenable_load_button, wait=False)
+
+    def _load_multiple_worker(self, images, converter):
+        try:
+            selected_images = [
+                img for img in list(images or []) if isinstance(img, dict)
+            ]
+            if len(selected_images) < 2:
+                raise RuntimeError(
+                    "Multiple-image loading requires at least two selected images."
+                )
+            count = len(selected_images)
+            _xt_debug(
+                f"Multi-image load worker starting count={count} converter={converter}"
+            )
+
+            imaris_converter_executable = None
+            if converter == "OMERO":
+                if not self._ensure_native_open_ready_before_export():
+                    raise RuntimeError(
+                        "Cannot open files in the running Imaris session because no "
+                        "compatible Imaris bridge is available. Download/conversion "
+                        "was not started."
+                    )
+            elif converter == "Imaris":
+                imaris_converter_executable = _find_imaris_file_converter_executable()
+                if not imaris_converter_executable:
+                    raise RuntimeError(
+                        "Cannot start Imaris native conversion because the Imaris "
+                        "File Converter executable was not detected. Download was not started."
+                    )
+            else:
+                raise RuntimeError(f"Unsupported converter: {converter}")
+
+            downloaded_files = []
+            require_ims = converter == "OMERO"
+            for index, img in enumerate(selected_images, start=1):
+                image_id = img.get("id")
+                if image_id is None:
+                    raise RuntimeError("A selected image is missing an OMERO image id.")
+                image_name = self._image_display_name(img)
+                download_dir = os.path.join(
+                    self.export_dir,
+                    self._image_cache_subdir(image_id),
+                )
+                os.makedirs(download_dir, exist_ok=True)
+
+                if converter == "OMERO":
+                    self._set_status(
+                        f"Exporting IMS {index}/{count}: {image_name}", "#fff3cd"
+                    )
+                    downloaded_file = self.client.download_ims_export(
+                        image_id,
+                        download_dir,
+                        fallback_name=f"{self._image_cache_subdir(image_id)}.ims",
+                    )
+                else:
+                    self._set_status(
+                        f"Downloading original {index}/{count}: {image_name}",
+                        "#fff3cd",
+                    )
+                    downloaded_file = self.client.download_original_file(
+                        image_id,
+                        download_dir,
+                        fallback_name=img.get("name")
+                        or self._image_cache_subdir(image_id),
+                    )
+
+                if not downloaded_file or not os.path.exists(downloaded_file):
+                    raise RuntimeError(
+                        "Failed to download one selected file from OMERO."
+                    )
+                if require_ims and not is_ims_file(downloaded_file):
+                    raise RuntimeError(
+                        "A downloaded file is not a valid IMS (HDF5) file. "
+                        "Refusing to open the selected batch."
+                    )
+
+                downloaded_files.append(downloaded_file)
+                self.temp_files.append(downloaded_file)
+
+            self._set_status(
+                "All selected files are ready; handing them to Imaris...",
+                "#fff3cd",
+            )
+            _xt_debug(
+                f"Prepared {len(downloaded_files)} selected files before Imaris handoff"
+            )
+
+            if converter == "OMERO":
+                success = self._invoke_on_ui_thread(
+                    lambda: self._open_downloaded_files_in_imaris(
+                        downloaded_files,
+                        require_ims=True,
+                    )
+                )
+                success_status = "Submitted selected IMS files to Imaris"
+                success_message = (
+                    "All selected IMS files were handed to the current Imaris session "
+                    "after every download completed."
+                )
+                failure_message = "Imaris did not accept the prepared IMS file batch."
+            else:
+                success = open_files_in_imaris_file_converter(
+                    downloaded_files,
+                    converter_executable=imaris_converter_executable,
+                )
+                success_status = "Submitted selected originals to Imaris File Converter"
+                success_message = (
+                    "All selected original files were handed to Imaris File Converter "
+                    "after every download completed."
+                )
+                failure_message = "Failed to hand the selected original files to Imaris File Converter."
+
+            if success:
+                self._set_status(success_status, "#d4edda")
+                self._show_info("Success", success_message)
+            else:
+                raise RuntimeError(failure_message)
+
+        except Exception as e:
+            self._set_status("✗ Failed", "#f8d7da")
+            self._show_error("Error", str(e))
+            _xt_debug(f"Multi-image load worker failed: {type(e).__name__}: {e}")
         finally:
             self._invoke_on_ui_thread(self._reenable_load_button, wait=False)
 
