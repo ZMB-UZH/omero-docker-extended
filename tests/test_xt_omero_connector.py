@@ -73,6 +73,84 @@ class _FakeHTTPError(Exception):
         return self._body
 
 
+class _FakeListbox:
+    def __init__(self, items=None, selection=None):
+        self.items = list(items or [])
+        self.selection = set(selection or [])
+        self.seen = []
+
+    def delete(self, start, end=None):
+        if start == 0:
+            self.items = []
+            self.selection.clear()
+
+    def insert(self, index, value):
+        if index in {"end", "END"}:
+            self.items.append(value)
+        else:
+            self.items.insert(int(index), value)
+
+    def curselection(self):
+        return tuple(sorted(self.selection))
+
+    def selection_clear(self, *_args):
+        self.selection.clear()
+
+    def selection_set(self, index):
+        self.selection.add(int(index))
+
+    def see(self, index):
+        self.seen.append(int(index))
+
+
+class _FakeButton:
+    def __init__(self):
+        self.configs = []
+        self.state = None
+
+    def config(self, **kwargs):
+        self.configs.append(kwargs)
+        if "state" in kwargs:
+            self.state = kwargs["state"]
+
+
+class _FakeVar:
+    def __init__(self, value=""):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+    def set(self, value):
+        self.value = value
+
+
+def _make_refresh_dialog(module):
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._connected = True
+    dialog._refresh_generation = 1
+    dialog._refresh_in_progress = True
+    dialog._pid = "project-1"
+    dialog._did = "dataset-1"
+    dialog.projects_data = [{"id": "project-1", "name": "Old project"}]
+    dialog.datasets_data = [{"id": "dataset-1", "name": "Old dataset"}]
+    dialog.images_data = [{"id": "image-1", "name": "Old image"}]
+    dialog.plist = _FakeListbox(["Old project"], selection={0})
+    dialog.dlist = _FakeListbox(["Old dataset"], selection={0})
+    dialog.ilist = _FakeListbox(["Old image"], selection={0})
+    dialog.refresh_btn = _FakeButton()
+    dialog.load_btn = _FakeButton()
+    dialog.converter_var = _FakeVar("OMERO")
+    dialog.status_updates = []
+    dialog.errors = []
+    dialog._set_status = lambda text, color="#ecf0f1": dialog.status_updates.append(
+        (text, color)
+    )
+    dialog._show_error = lambda title, message: dialog.errors.append((title, message))
+    dialog._invoke_on_ui_thread = lambda callback, wait=True: callback()
+    return dialog
+
+
 def test_xt_script_annotations_stay_python37_runtime_safe():
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
     tree = ast.parse(source, filename=_XT_SCRIPT)
@@ -797,6 +875,45 @@ def test_native_bridge_runner_suppresses_plural_ice_shutdown_warning(
     assert not any("stderr:" in message for message in messages)
 
 
+def test_native_bridge_runner_reports_raw_fileopen_as_accepted_request(
+    tmp_path, monkeypatch
+):
+    module = _load_xt_module()
+    python_exe = str(tmp_path / "python.exe")
+    messages = []
+    monkeypatch.setattr(module, "_xt_debug", messages.append)
+    monkeypatch.setattr(
+        module,
+        "_resolve_python_executable_candidate",
+        lambda path: python_exe if path == python_exe else None,
+    )
+
+    def _fake_run(cmd, **kwargs):
+        assert cmd == [python_exe, "-c", module._NATIVE_BRIDGE_OPEN_HELPER]
+        return types.SimpleNamespace(
+            returncode=0,
+            stdout="BRIDGE_RUNNER_OPENED\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    assert (
+        module._run_native_bridge_helper(
+            python_exe,
+            {"mode": "open", "app_id": 17, "require_ims": False},
+            "open",
+            60,
+        )
+        is True
+    )
+    assert any(
+        "accepted FileOpen request in the current Imaris session" in message
+        for message in messages
+    )
+    assert not any("completed open request" in message for message in messages)
+
+
 def test_safe_download_filename_removes_paths_markers_and_reserved_names():
     module = _load_xt_module()
 
@@ -853,6 +970,39 @@ def test_safe_url_for_log_redacts_host_ids_and_query_values():
     )
     assert "omero.example.org" not in safe_url
     assert "51" not in safe_url
+
+
+def test_download_chunk_size_is_bounded_runtime_configuration(monkeypatch):
+    module = _load_xt_module()
+    monkeypatch.delenv(module.DOWNLOAD_CHUNK_SIZE_ENV, raising=False)
+
+    assert (
+        module._download_chunk_size_bytes() == module.DEFAULT_DOWNLOAD_CHUNK_SIZE_BYTES
+    )
+
+    monkeypatch.setenv(module.DOWNLOAD_CHUNK_SIZE_ENV, "not-an-int")
+    assert (
+        module._download_chunk_size_bytes() == module.DEFAULT_DOWNLOAD_CHUNK_SIZE_BYTES
+    )
+
+    monkeypatch.setenv(module.DOWNLOAD_CHUNK_SIZE_ENV, "1")
+    assert module._download_chunk_size_bytes() == module.MIN_DOWNLOAD_CHUNK_SIZE_BYTES
+
+    monkeypatch.setenv(
+        module.DOWNLOAD_CHUNK_SIZE_ENV,
+        str(module.MAX_DOWNLOAD_CHUNK_SIZE_BYTES * 2),
+    )
+    assert module._download_chunk_size_bytes() == module.MAX_DOWNLOAD_CHUNK_SIZE_BYTES
+
+    monkeypatch.setenv(module.DOWNLOAD_CHUNK_SIZE_ENV, "131072")
+    assert module._download_chunk_size_bytes() == 131072
+
+
+def test_xt_connector_does_not_hardcode_selected_image_render_export():
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+
+    assert "render_ome_tiff" not in source
+    assert ".ome.tiff" not in source.lower()
 
 
 def test_native_bridge_runner_rejects_non_ims_before_subprocess(tmp_path, monkeypatch):
@@ -1201,6 +1351,7 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
     dialog.converter_var = DummyVar()
     dialog.converter_frame = DummyFrame()
     dialog.load_btn = DummyButton()
+    dialog.refresh_btn = DummyButton()
 
     module.OMEROBrowserDialog._set_converter_options(dialog, [])
 
@@ -1208,6 +1359,7 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
     assert dialog.converter_var.value == ""
     assert dialog.converter_frame.hidden is True
     assert dialog.load_btn.state == "disabled"
+    assert dialog.refresh_btn.state == "disabled"
 
 
 def test_set_converter_options_populates_menu_without_blank_entry():
@@ -1251,6 +1403,7 @@ def test_set_converter_options_populates_menu_without_blank_entry():
     dialog.converter_var = DummyVar()
     dialog.converter_frame = DummyFrame()
     dialog.load_btn = DummyButton()
+    dialog.refresh_btn = DummyButton()
 
     module.OMEROBrowserDialog._set_converter_options(dialog, ["OMERO", "Imaris"])
 
@@ -1262,6 +1415,7 @@ def test_set_converter_options_populates_menu_without_blank_entry():
     assert dialog.converter_var.value == "OMERO"
     assert dialog.converter_frame.shown is True
     assert dialog.load_btn.state == "normal"
+    assert dialog.refresh_btn.state == "normal"
 
     menu.commands[1][1]()
     assert dialog.converter_var.value == "Imaris"
@@ -1341,6 +1495,189 @@ def test_selected_images_returns_all_valid_indexes():
     )
 
     assert module.OMEROBrowserDialog._selected_images(dialog) == [first, third]
+
+
+def test_refresh_preserves_project_and_dataset_but_clears_image_selection():
+    module = _load_xt_module()
+    dialog = _make_refresh_dialog(module)
+    calls = []
+
+    class _Client:
+        @staticmethod
+        def list_projects():
+            calls.append("projects")
+            return [
+                {"id": "project-1", "name": "Project A"},
+                {"id": "project-2", "name": "Project B"},
+            ]
+
+        @staticmethod
+        def list_datasets(project_id):
+            calls.append(("datasets", project_id))
+            return [
+                {"id": "dataset-1", "name": "Dataset A"},
+                {"id": "dataset-2", "name": "Dataset B"},
+            ]
+
+        @staticmethod
+        def list_images(dataset_id):
+            calls.append(("images", dataset_id))
+            return [
+                {
+                    "id": "image-1",
+                    "name": "Image A",
+                    "sizeX": 10,
+                    "sizeY": 11,
+                    "sizeZ": 1,
+                    "sizeC": 1,
+                    "sizeT": 1,
+                },
+                {
+                    "id": "image-2",
+                    "name": "Image B",
+                    "sizeX": 20,
+                    "sizeY": 21,
+                    "sizeZ": 2,
+                    "sizeC": 3,
+                    "sizeT": 4,
+                },
+            ]
+
+    dialog.client = _Client()
+
+    module.OMEROBrowserDialog._refresh_worker(
+        dialog,
+        "project-1",
+        "dataset-1",
+        1,
+    )
+
+    assert calls == ["projects", ("datasets", "project-1"), ("images", "dataset-1")]
+    assert dialog._pid == "project-1"
+    assert dialog._did == "dataset-1"
+    assert dialog.plist.items == ["Project A", "Project B"]
+    assert dialog.dlist.items == ["Dataset A", "Dataset B"]
+    assert dialog.ilist.items == ["Image A [10×11×1]", "Image B [20×21×2 C3 T4]"]
+    assert dialog.plist.curselection() == (0,)
+    assert dialog.dlist.curselection() == (0,)
+    assert dialog.ilist.curselection() == ()
+    assert dialog.refresh_btn.state == "normal"
+    assert dialog.load_btn.state == "normal"
+    assert dialog.status_updates[-1][0] == "OMERO browser refreshed"
+
+
+def test_refresh_dataset_disappeared_keeps_project_and_clears_images():
+    module = _load_xt_module()
+    dialog = _make_refresh_dialog(module)
+    calls = []
+
+    class _Client:
+        @staticmethod
+        def list_projects():
+            calls.append("projects")
+            return [{"id": "project-1", "name": "Project A"}]
+
+        @staticmethod
+        def list_datasets(project_id):
+            calls.append(("datasets", project_id))
+            return [{"id": "dataset-2", "name": "Dataset B"}]
+
+        @staticmethod
+        def list_images(dataset_id):
+            calls.append(("images", dataset_id))
+            return []
+
+    dialog.client = _Client()
+
+    module.OMEROBrowserDialog._refresh_worker(
+        dialog,
+        "project-1",
+        "dataset-1",
+        1,
+    )
+
+    assert calls == ["projects", ("datasets", "project-1")]
+    assert dialog._pid == "project-1"
+    assert dialog._did is None
+    assert dialog.plist.items == ["Project A"]
+    assert dialog.dlist.items == ["Dataset B"]
+    assert dialog.ilist.items == []
+    assert dialog.plist.curselection() == (0,)
+    assert dialog.dlist.curselection() == ()
+    assert dialog.ilist.curselection() == ()
+    assert dialog.status_updates[-1][0] == (
+        "Selected dataset is no longer available; datasets refreshed"
+    )
+
+
+def test_refresh_project_disappeared_clears_dataset_and_images():
+    module = _load_xt_module()
+    dialog = _make_refresh_dialog(module)
+    calls = []
+
+    class _Client:
+        @staticmethod
+        def list_projects():
+            calls.append("projects")
+            return [{"id": "project-2", "name": "Project B"}]
+
+        @staticmethod
+        def list_datasets(project_id):
+            calls.append(("datasets", project_id))
+            return []
+
+        @staticmethod
+        def list_images(dataset_id):
+            calls.append(("images", dataset_id))
+            return []
+
+    dialog.client = _Client()
+
+    module.OMEROBrowserDialog._refresh_worker(
+        dialog,
+        "project-1",
+        "dataset-1",
+        1,
+    )
+
+    assert calls == ["projects"]
+    assert dialog._pid is None
+    assert dialog._did is None
+    assert dialog.plist.items == ["Project B"]
+    assert dialog.dlist.items == []
+    assert dialog.ilist.items == []
+    assert dialog.plist.curselection() == ()
+    assert dialog.dlist.curselection() == ()
+    assert dialog.ilist.curselection() == ()
+    assert dialog.status_updates[-1][0] == (
+        "Selected project is no longer available; projects refreshed"
+    )
+
+
+def test_refresh_ignores_stale_results_without_mutating_current_view():
+    module = _load_xt_module()
+    dialog = _make_refresh_dialog(module)
+    dialog._refresh_generation = 2
+
+    module.OMEROBrowserDialog._apply_refresh_result(
+        dialog,
+        1,
+        "project-1",
+        "dataset-1",
+        [{"id": "project-2", "name": "Project B"}],
+        0,
+        [],
+        None,
+        [],
+    )
+
+    assert dialog._pid == "project-1"
+    assert dialog._did == "dataset-1"
+    assert dialog.plist.items == ["Old project"]
+    assert dialog.dlist.items == ["Old dataset"]
+    assert dialog.ilist.items == ["Old image"]
+    assert dialog.refresh_btn.configs == []
+    assert dialog.load_btn.configs == []
 
 
 def test_load_routes_single_selection_to_single_worker(monkeypatch):
@@ -1438,7 +1775,7 @@ def test_load_routes_multi_selection_to_multi_worker(monkeypatch):
     ]
 
 
-def test_load_worker_imaris_converter_opens_original_with_native_fileopen(
+def test_load_worker_imaris_converter_submits_original_with_native_fileopen(
     tmp_path,
 ):
     module = _load_xt_module()
@@ -1446,6 +1783,8 @@ def test_load_worker_imaris_converter_opens_original_with_native_fileopen(
     original_file.write_bytes(b"native input")
     calls = []
     opened = []
+    statuses = []
+    info_messages = []
 
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.export_dir = str(tmp_path)
@@ -1460,8 +1799,8 @@ def test_load_worker_imaris_converter_opens_original_with_native_fileopen(
         ),
     )
     dialog._ensure_native_open_ready_before_export = lambda: True
-    dialog._set_status = lambda *_args, **_kwargs: None
-    dialog._show_info = lambda *_args, **_kwargs: None
+    dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
+    dialog._show_info = lambda title, message: info_messages.append((title, message))
     dialog._show_error = lambda *_args, **_kwargs: None
     dialog._reenable_load_button = lambda: None
     dialog._invoke_on_ui_thread = lambda callback, wait=True: (
@@ -1480,6 +1819,16 @@ def test_load_worker_imaris_converter_opens_original_with_native_fileopen(
     assert calls == [("original", 7, "img_7", "sample.lif")]
     assert opened == [(str(original_file), False)]
     assert dialog.temp_files == [str(original_file)]
+    assert statuses[-1][0] == "Submitted original file to Imaris"
+    assert info_messages == [
+        (
+            "Submitted to Imaris",
+            "The original-file open request was accepted by the current Imaris "
+            "session. Complete any native Imaris import workflow there if Imaris "
+            "asks for one.",
+        )
+    ]
+    assert all("Opened original" not in status[0] for status in statuses)
 
 
 def test_load_worker_omero_converter_downloads_ims_and_requires_ims(tmp_path):
@@ -1579,7 +1928,7 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path
     assert "after every download completed" in info_messages[0]
 
 
-def test_load_multiple_worker_imaris_batches_originals_without_native_bridge(
+def test_load_multiple_worker_imaris_submits_originals_after_downloads(
     tmp_path,
 ):
     module = _load_xt_module()
@@ -1590,6 +1939,8 @@ def test_load_multiple_worker_imaris_batches_originals_without_native_bridge(
     files_by_id = {21: str(first_original), 22: str(second_original)}
     events = []
     opened = []
+    statuses = []
+    info_messages = []
 
     def _download_original_file(image_id, download_dir, fallback_name):
         assert not opened
@@ -1606,8 +1957,8 @@ def test_load_multiple_worker_imaris_batches_originals_without_native_bridge(
         ),
     )
     dialog._ensure_native_open_ready_before_export = lambda: True
-    dialog._set_status = lambda *_args, **_kwargs: None
-    dialog._show_info = lambda *_args, **_kwargs: None
+    dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
+    dialog._show_info = lambda title, message: info_messages.append((title, message))
     dialog._show_error = lambda *_args, **_kwargs: None
     dialog._reenable_load_button = lambda: None
     dialog._invoke_on_ui_thread = lambda callback, wait=True: (
@@ -1629,6 +1980,9 @@ def test_load_multiple_worker_imaris_batches_originals_without_native_bridge(
     ]
     assert opened == [([str(first_original), str(second_original)], False)]
     assert dialog.temp_files == [str(first_original), str(second_original)]
+    assert statuses[-1][0] == "Submitted selected originals to Imaris"
+    assert info_messages[0][0] == "Submitted to Imaris"
+    assert "open requests were accepted" in info_messages[0][1]
 
 
 def test_load_worker_blocks_before_download_when_native_open_unavailable(tmp_path):

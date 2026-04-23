@@ -41,6 +41,11 @@ from typing import Any, List, Optional
 # because this script runs inside Imaris on the user's machine.
 EXPORT_TIMEOUT = 3600  # seconds
 EXPORT_POLL_INTERVAL = 2.0  # seconds
+DOWNLOAD_CHUNK_SIZE_ENV = "OMERO_IMARIS_DOWNLOAD_CHUNK_BYTES"
+DEFAULT_DOWNLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
+MIN_DOWNLOAD_CHUNK_SIZE_BYTES = 64 * 1024
+MAX_DOWNLOAD_CHUNK_SIZE_BYTES = 64 * 1024 * 1024
+DOWNLOAD_PROGRESS_UNIT_BYTES = 1024 * 1024
 IMARIS_HANDLE_RETRY_ATTEMPTS = 10
 IMARIS_HANDLE_RETRY_INTERVAL = 0.25
 NATIVE_BRIDGE_RUNNER_TIMEOUT = 600
@@ -462,6 +467,21 @@ def _safe_url_for_log(url):
         return path
     query = "&".join(f"{key}=<redacted>" for key in safe_keys)
     return f"{path}?{query}"
+
+
+def _download_chunk_size_bytes():
+    """Return a bounded download buffer size for streaming HTTP responses."""
+    raw_value = os.environ.get(DOWNLOAD_CHUNK_SIZE_ENV, "").strip()
+    if not raw_value:
+        return DEFAULT_DOWNLOAD_CHUNK_SIZE_BYTES
+    try:
+        value = int(raw_value, 10)
+    except ValueError:
+        return DEFAULT_DOWNLOAD_CHUNK_SIZE_BYTES
+    return max(
+        MIN_DOWNLOAD_CHUNK_SIZE_BYTES,
+        min(value, MAX_DOWNLOAD_CHUNK_SIZE_BYTES),
+    )
 
 
 def _xt_debug(message):
@@ -1317,9 +1337,12 @@ def _run_native_bridge_helper(python_executable, payload, context, timeout):
                 f"Native bridge runner ({context}) resolved the current Imaris session"
             )
         elif stdout in {"BRIDGE_RUNNER_OPENED", "BRIDGE_RUNNER_OPENED_MANY"}:
-            _xt_debug(
-                f"Native bridge runner ({context}) completed open request in the current Imaris session"
+            action = (
+                "accepted FileOpen request in the current Imaris session"
+                if payload.get("require_ims") is False
+                else "completed open request in the current Imaris session"
             )
+            _xt_debug(f"Native bridge runner ({context}) {action}")
         elif stdout == "BRIDGE_RUNNER_HANDLE_UNAVAILABLE":
             _xt_debug(
                 f"Native bridge runner ({context}) could not resolve the current Imaris session"
@@ -2331,9 +2354,7 @@ class OMEROWebClient:
         This intentionally avoids /api/v0/scripts/ (often not available).
         """
         if download_dir is None:
-            download_dir = os.path.join(
-                os.path.expanduser("~"), "Downloads", "OMERO_Imaris_Exports"
-            )
+            download_dir = os.path.join(tempfile.gettempdir(), "ImarisOMEROExports")
 
         # Ensure logged in
         if not self.session_id:
@@ -2491,7 +2512,7 @@ class OMEROWebClient:
 
                 total_size = int(response.headers.get("content-length", 0) or 0)
                 downloaded = 0
-                chunk_size = 1024 * 1024  # 1MB
+                chunk_size = _download_chunk_size_bytes()
 
                 _xt_debug("Downloading IMS to connector export cache")
                 with open(local_path, "wb") as f:
@@ -2503,8 +2524,9 @@ class OMEROWebClient:
                         downloaded += len(chunk)
                         if total_size:
                             percent = (downloaded / total_size) * 100.0
+                            progress_mb = downloaded / DOWNLOAD_PROGRESS_UNIT_BYTES
                             print(
-                                f"  Progress: {percent:.1f}% ({downloaded / (1024 * 1024):.1f} MB)",
+                                f"  Progress: {percent:.1f}% ({progress_mb:.1f} MB)",
                                 end="\r",
                             )
 
@@ -2543,9 +2565,7 @@ class OMEROWebClient:
     ):
         """Download the archived original file for local Imaris opening."""
         if download_dir is None:
-            download_dir = os.path.join(
-                os.path.expanduser("~"), "Downloads", "OMERO_Imaris_Originals"
-            )
+            download_dir = os.path.join(tempfile.gettempdir(), "ImarisOMEROExports")
         if not self.session_id:
             raise RuntimeError("Not logged in to OMERO.web (missing session key).")
 
@@ -2571,7 +2591,7 @@ class OMEROWebClient:
                 local_path = _unique_download_path(download_dir, safe_filename)
                 total_size = int(response.headers.get("content-length", 0) or 0)
                 downloaded = 0
-                chunk_size = 1024 * 1024
+                chunk_size = _download_chunk_size_bytes()
 
                 _xt_debug("Downloading original file to connector export cache")
                 with open(local_path, "wb") as f:
@@ -2583,8 +2603,9 @@ class OMEROWebClient:
                         downloaded += len(chunk)
                         if total_size:
                             percent = (downloaded / total_size) * 100.0
+                            progress_mb = downloaded / DOWNLOAD_PROGRESS_UNIT_BYTES
                             print(
-                                f"  Progress: {percent:.1f}% ({downloaded / (1024 * 1024):.1f} MB)",
+                                f"  Progress: {percent:.1f}% ({progress_mb:.1f} MB)",
                                 end="\r",
                             )
 
@@ -2672,6 +2693,9 @@ class OMEROBrowserDialog:
         self.images_data = []
         self.temp_files = []
         self._pid = None
+        self._did = None
+        self._refresh_generation = 0
+        self._refresh_in_progress = False
         self._native_bridge_probe_lock = threading.Lock()
         self._native_bridge_probe_done = threading.Event()
         self._native_bridge_probe_started = False
@@ -2791,6 +2815,19 @@ class OMEROBrowserDialog:
         self.converter_menu_menu = tk.Menu(self.converter_menu, tearoff=0)
         self.converter_menu.config(menu=self.converter_menu_menu)
         self.converter_menu.pack(side=tk.LEFT)
+        self.refresh_btn = _RoundedButton(
+            self.converter_frame,
+            text="Refresh",
+            command=self._refresh_browser,
+            bg="#3498db",
+            fg="white",
+            activebackground="#2f85c7",
+            activeforeground="white",
+            font=("Arial", 10, "bold"),
+            width=112,
+            height=36,
+        )
+        self.refresh_btn.pack(side=tk.LEFT, padx=(16, 0))
         self.converter_frame.grid(
             row=0,
             column=6,
@@ -2939,6 +2976,7 @@ class OMEROBrowserDialog:
             self.converter_var.set("")
             self._hide_converter_frame()
             self.load_btn.config(state=_tk_constant("DISABLED", "disabled"))
+            self._set_refresh_button_state(_tk_constant("DISABLED", "disabled"))
             return
 
         for option in options:
@@ -2949,6 +2987,7 @@ class OMEROBrowserDialog:
         self.converter_var.set(options[0])
         self._show_converter_frame()
         self.load_btn.config(state=_tk_constant("NORMAL", "normal"))
+        self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
 
     def _import_into_omero(self):
         return None
@@ -3001,6 +3040,9 @@ class OMEROBrowserDialog:
         self.client = None
         self._connected = False
         self._pid = None
+        self._did = None
+        self._refresh_generation += 1
+        self._refresh_in_progress = False
         self.projects_data = []
         self.datasets_data = []
         self.images_data = []
@@ -3415,16 +3457,24 @@ class OMEROBrowserDialog:
     def _load_projects(self):
         self.plist.delete(0, _tk_constant("END", "end"))
         self.projects_data = self.client.list_projects()
+        self._pid = None
+        self._did = None
+        self.datasets_data = []
+        self.images_data = []
+        self.dlist.delete(0, _tk_constant("END", "end"))
+        self.ilist.delete(0, _tk_constant("END", "end"))
         for p in self.projects_data:
-            self.plist.insert(_tk_constant("END", "end"), p["name"])
+            self.plist.insert(_tk_constant("END", "end"), self._project_list_label(p))
 
     def _sel_proj(self):
         sel = self.plist.curselection()
         if not sel:
             return
         p = self.projects_data[sel[0]]
-        if self._pid != p["id"]:
-            self._pid = p["id"]
+        project_id = self._entity_id(p)
+        if self._pid != project_id:
+            self._pid = project_id
+            self._did = None
             self._load_ds()
 
     def _sel_ds(self):
@@ -3432,27 +3482,287 @@ class OMEROBrowserDialog:
         if not sel:
             return
         d = self.datasets_data[sel[0]]
-        self._load_imgs(d["id"])
+        dataset_id = self._entity_id(d)
+        if dataset_id is None:
+            return
+        self._did = dataset_id
+        self._load_imgs(dataset_id)
 
     def _load_ds(self):
         self.dlist.delete(0, _tk_constant("END", "end"))
         self.ilist.delete(0, _tk_constant("END", "end"))
+        self._did = None
+        self.images_data = []
         self.datasets_data = self.client.list_datasets(self._pid)
         for d in self.datasets_data:
-            self.dlist.insert(_tk_constant("END", "end"), d["name"])
+            self.dlist.insert(_tk_constant("END", "end"), self._dataset_list_label(d))
 
     def _load_imgs(self, did):
         self.ilist.delete(0, _tk_constant("END", "end"))
+        self._did = did
         self.images_data = self.client.list_images(did)
         for img in self.images_data:
-            size_info = f"{img['sizeX']}×{img['sizeY']}×{img['sizeZ']}"
-            if img["sizeC"] > 1:
-                size_info += f" C{img['sizeC']}"
-            if img["sizeT"] > 1:
-                size_info += f" T{img['sizeT']}"
-            self.ilist.insert(
-                _tk_constant("END", "end"), f"{img['name']} [{size_info}]"
+            self.ilist.insert(_tk_constant("END", "end"), self._image_list_label(img))
+
+    @classmethod
+    def _project_list_label(cls, project):
+        if isinstance(project, dict):
+            project_id = cls._entity_id(project)
+            return project.get("name") or (
+                f"Project {project_id}" if project_id is not None else "Project"
             )
+        return "Project"
+
+    @classmethod
+    def _dataset_list_label(cls, dataset):
+        if isinstance(dataset, dict):
+            dataset_id = cls._entity_id(dataset)
+            return dataset.get("name") or (
+                f"Dataset {dataset_id}" if dataset_id is not None else "Dataset"
+            )
+        return "Dataset"
+
+    @classmethod
+    def _image_list_label(cls, image):
+        if not isinstance(image, dict):
+            return "Image"
+        image_id = cls._entity_id(image)
+        name = image.get("name") or (
+            f"Image {image_id}" if image_id is not None else "Image"
+        )
+        size_x = image.get("sizeX", 0)
+        size_y = image.get("sizeY", 0)
+        size_z = image.get("sizeZ", 1)
+        size_info = f"{size_x}×{size_y}×{size_z}"
+        if image.get("sizeC", 1) > 1:
+            size_info += f" C{image.get('sizeC')}"
+        if image.get("sizeT", 1) > 1:
+            size_info += f" T{image.get('sizeT')}"
+        return f"{name} [{size_info}]"
+
+    @staticmethod
+    def _entity_id(entity):
+        if not isinstance(entity, dict):
+            return None
+        value = entity.get("id")
+        if value is None:
+            value = entity.get("@id")
+        if value is None:
+            return None
+        return str(value)
+
+    @classmethod
+    def _find_entity_index(cls, entities, entity_id):
+        if entity_id is None:
+            return None
+        target = str(entity_id)
+        for index, entity in enumerate(list(entities or [])):
+            if cls._entity_id(entity) == target:
+                return index
+        return None
+
+    @staticmethod
+    def _clear_listbox_selection(listbox):
+        selection_clear = getattr(listbox, "selection_clear", None)
+        if callable(selection_clear):
+            selection_clear(0, _tk_constant("END", "end"))
+
+    @classmethod
+    def _select_listbox_index(cls, listbox, index):
+        cls._clear_listbox_selection(listbox)
+        if index is None:
+            return
+        selection_set = getattr(listbox, "selection_set", None)
+        if callable(selection_set):
+            selection_set(index)
+        see = getattr(listbox, "see", None)
+        if callable(see):
+            see(index)
+
+    @staticmethod
+    def _replace_listbox_items(listbox, labels):
+        listbox.delete(0, _tk_constant("END", "end"))
+        for label in labels:
+            listbox.insert(_tk_constant("END", "end"), label)
+
+    def _current_selected_project_id(self):
+        for raw_index in self.plist.curselection():
+            try:
+                index = int(raw_index)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= index < len(self.projects_data):
+                return self._entity_id(self.projects_data[index])
+        return str(self._pid) if self._pid is not None else None
+
+    def _current_selected_dataset_id(self):
+        for raw_index in self.dlist.curselection():
+            try:
+                index = int(raw_index)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= index < len(self.datasets_data):
+                return self._entity_id(self.datasets_data[index])
+        return str(self._did) if self._did is not None else None
+
+    def _set_refresh_button_state(self, state):
+        refresh_btn = getattr(self, "refresh_btn", None)
+        if refresh_btn is not None:
+            refresh_btn.config(state=state)
+
+    def _set_load_button_for_converter(self):
+        state = (
+            _tk_constant("NORMAL", "normal")
+            if self.converter_var.get() in {"OMERO", "Imaris"}
+            else _tk_constant("DISABLED", "disabled")
+        )
+        self.load_btn.config(state=state)
+
+    def _refresh_browser(self):
+        if self._refresh_in_progress:
+            return
+        if not self._connected or self.client is None:
+            messagebox.showwarning("Not Connected", "Please connect to OMERO first.")
+            return
+
+        self._refresh_in_progress = True
+        self._refresh_generation += 1
+        generation = self._refresh_generation
+        project_id = self._current_selected_project_id()
+        dataset_id = self._current_selected_dataset_id()
+        self._set_refresh_button_state(_tk_constant("DISABLED", "disabled"))
+        self.load_btn.config(state=_tk_constant("DISABLED", "disabled"))
+        self._set_status("Refreshing OMERO browser...", "#fff3cd")
+        threading.Thread(
+            target=self._refresh_worker,
+            args=(project_id, dataset_id, generation),
+            daemon=True,
+        ).start()
+
+    def _refresh_worker(self, project_id, dataset_id, generation):
+        try:
+            projects = self.client.list_projects()
+            project_index = self._find_entity_index(projects, project_id)
+            datasets = []
+            dataset_index = None
+            images = []
+
+            if project_index is not None:
+                refreshed_project_id = self._entity_id(projects[project_index])
+                datasets = self.client.list_datasets(refreshed_project_id)
+                dataset_index = self._find_entity_index(datasets, dataset_id)
+                if dataset_index is not None:
+                    refreshed_dataset_id = self._entity_id(datasets[dataset_index])
+                    images = self.client.list_images(refreshed_dataset_id)
+
+            self._invoke_on_ui_thread(
+                lambda: self._apply_refresh_result(
+                    generation,
+                    project_id,
+                    dataset_id,
+                    projects,
+                    project_index,
+                    datasets,
+                    dataset_index,
+                    images,
+                ),
+                wait=False,
+            )
+        except Exception as exc:
+            refresh_error = exc
+            self._invoke_on_ui_thread(
+                lambda: self._finish_refresh_error(generation, refresh_error),
+                wait=False,
+            )
+
+    def _apply_refresh_result(
+        self,
+        generation,
+        requested_project_id,
+        requested_dataset_id,
+        projects,
+        project_index,
+        datasets,
+        dataset_index,
+        images,
+    ):
+        if generation != self._refresh_generation or not self._connected:
+            return
+
+        projects = list(projects or [])
+        datasets = list(datasets or [])
+        images = list(images or [])
+
+        self.projects_data = projects
+        self._replace_listbox_items(
+            self.plist,
+            [self._project_list_label(project) for project in projects],
+        )
+
+        if project_index is None:
+            self._pid = None
+            self._did = None
+            self.datasets_data = []
+            self.images_data = []
+            self._replace_listbox_items(self.dlist, [])
+            self._replace_listbox_items(self.ilist, [])
+            self._clear_listbox_selection(self.plist)
+            if requested_project_id is None:
+                self._set_status("Project list refreshed", "#d4edda")
+            else:
+                self._set_status(
+                    "Selected project is no longer available; projects refreshed",
+                    "#fff3cd",
+                )
+            self._finish_refresh_buttons()
+            return
+
+        self._pid = self._entity_id(projects[project_index])
+        self._select_listbox_index(self.plist, project_index)
+        self.datasets_data = datasets
+        self._replace_listbox_items(
+            self.dlist,
+            [self._dataset_list_label(dataset) for dataset in datasets],
+        )
+
+        if dataset_index is None:
+            self._did = None
+            self.images_data = []
+            self._replace_listbox_items(self.ilist, [])
+            self._clear_listbox_selection(self.dlist)
+            if requested_dataset_id is None:
+                self._set_status("Datasets refreshed", "#d4edda")
+            else:
+                self._set_status(
+                    "Selected dataset is no longer available; datasets refreshed",
+                    "#fff3cd",
+                )
+            self._finish_refresh_buttons()
+            return
+
+        self._did = self._entity_id(datasets[dataset_index])
+        self._select_listbox_index(self.dlist, dataset_index)
+        self.images_data = images
+        self._replace_listbox_items(
+            self.ilist,
+            [self._image_list_label(img) for img in images],
+        )
+        self._clear_listbox_selection(self.ilist)
+        self._set_status("OMERO browser refreshed", "#d4edda")
+        self._finish_refresh_buttons()
+
+    def _finish_refresh_error(self, generation, exc):
+        if generation != self._refresh_generation:
+            return
+        self._set_status("Refresh failed", "#f8d7da")
+        self._show_error("Refresh Failed", str(exc))
+        _xt_debug(f"Refresh failed: {type(exc).__name__}: {exc}")
+        self._finish_refresh_buttons()
+
+    def _finish_refresh_buttons(self):
+        self._refresh_in_progress = False
+        self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
+        self._set_load_button_for_converter()
 
     @staticmethod
     def _image_cache_subdir(image_id):
@@ -3606,26 +3916,30 @@ class OMEROBrowserDialog:
                     )
                 )
                 success_status = "Opened IMS in current Imaris session"
+                success_title = "Success"
                 success_message = "IMS file opened in the current Imaris session."
                 failure_message = "Failed to open IMS in the current Imaris session."
             else:
-                self._set_status("Opening original file in Imaris...", "#fff3cd")
+                self._set_status("Submitting original file to Imaris...", "#fff3cd")
                 success = self._invoke_on_ui_thread(
                     lambda: self._open_downloaded_file_in_imaris(
                         downloaded_file,
                         require_ims=False,
                     )
                 )
-                success_status = "Opened original file in current Imaris session"
+                success_status = "Submitted original file to Imaris"
+                success_title = "Submitted to Imaris"
                 success_message = (
-                    "Original file was handed to Imaris through the current session."
+                    "The original-file open request was accepted by the current "
+                    "Imaris session. Complete any native Imaris import workflow "
+                    "there if Imaris asks for one."
                 )
-                failure_message = "Failed to open the original file in Imaris."
+                failure_message = "Failed to submit the original file to Imaris."
 
             if success:
                 self._set_status(success_status, "#d4edda")
                 self._show_info(
-                    "Success",
+                    success_title,
                     success_message,
                 )
             else:
@@ -3716,7 +4030,7 @@ class OMEROBrowserDialog:
                 self.temp_files.append(downloaded_file)
 
             self._set_status(
-                "All selected files are ready; handing them to Imaris...",
+                "All selected files are ready; submitting them to Imaris...",
                 "#fff3cd",
             )
             _xt_debug(
@@ -3731,6 +4045,7 @@ class OMEROBrowserDialog:
                     )
                 )
                 success_status = "Submitted selected IMS files to Imaris"
+                success_title = "Success"
                 success_message = (
                     "All selected IMS files were handed to the current Imaris session "
                     "after every download completed."
@@ -3744,17 +4059,19 @@ class OMEROBrowserDialog:
                     )
                 )
                 success_status = "Submitted selected originals to Imaris"
+                success_title = "Submitted to Imaris"
                 success_message = (
-                    "All selected original files were handed to the current Imaris session "
-                    "after every download completed."
+                    "All selected original-file open requests were accepted by the "
+                    "current Imaris session after every download completed. Complete "
+                    "any native Imaris import workflow there if Imaris asks for one."
                 )
                 failure_message = (
-                    "Failed to hand the selected original files to Imaris."
+                    "Failed to submit the selected original files to Imaris."
                 )
 
             if success:
                 self._set_status(success_status, "#d4edda")
-                self._show_info("Success", success_message)
+                self._show_info(success_title, success_message)
             else:
                 raise RuntimeError(failure_message)
 

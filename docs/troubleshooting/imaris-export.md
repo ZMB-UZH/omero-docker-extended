@@ -192,15 +192,27 @@ Operational rule:
   running Imaris application through `FileOpen`, allowing Imaris to handle
   raw/vendor parsing natively. It must not start `Imaris.exe`, use a Windows
   file association, or spawn a standalone File Converter process.
+- for original/raw files, a successful native bridge result means Imaris
+  accepted the `FileOpen` request in the current session. The connector must
+  report that handoff as submitted, not as a fully completed native import,
+  because vendor parsers may continue inside Imaris or require native Imaris UI
+  choices after `FileOpen` returns.
 - when multiple images are selected, the connector must finish every download
   or server-side IMS export before handing the prepared files to Imaris. It then
   opens the files through `FileOpen` and installs the resulting datasets as
   separate Imaris image slots, so the final workspace contains the selected
   image set instead of only the last opened file.
+- the standalone browser refresh action re-queries projects, datasets, and
+  images without keeping stale image selections. If the selected dataset no
+  longer exists, datasets remain visible for the selected project and images are
+  cleared. If the selected project no longer exists, the project list remains
+  visible and datasets/images are cleared.
 - connector diagnostics must not print CSRF tokens, session cookie values,
   passwords, or local user-profile paths. The local export cache defaults to the
   operating system temp directory and can be overridden with
-  `OMERO_IMARIS_EXPORT_DIR`.
+  `OMERO_IMARIS_EXPORT_DIR`. The HTTP download buffer is bounded for memory
+  safety and can be tuned with `OMERO_IMARIS_DOWNLOAD_CHUNK_BYTES` without
+  changing file-format behavior.
 
 ## Standard Diagnostic Flow
 
