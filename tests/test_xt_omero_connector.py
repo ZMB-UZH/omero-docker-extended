@@ -32,7 +32,7 @@ def _load_xt_module():
     return module
 
 
-TEST_AUTH_VALUE = "test-fixture-auth"
+TEST_LOGIN_VALUE = "test-login-value"
 _TEST_CSRF_FIXTURE = "xref-session-123"
 
 
@@ -102,7 +102,7 @@ def test_xt_script_annotations_stay_python37_runtime_safe():
 
 def test_create_request_with_cookies_relies_on_cookie_jar_for_get():
     module = _load_xt_module()
-    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_AUTH_VALUE)
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
     client.session_id = "session-123"
     client.csrf_token = _TEST_CSRF_FIXTURE
 
@@ -116,7 +116,7 @@ def test_create_request_with_cookies_relies_on_cookie_jar_for_get():
 
 def test_create_request_with_cookies_adds_csrf_headers_without_cookie_override():
     module = _load_xt_module()
-    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_AUTH_VALUE)
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
     client.session_id = "session-123"
     client.csrf_token = _TEST_CSRF_FIXTURE
 
@@ -133,7 +133,7 @@ def test_create_request_with_cookies_adds_csrf_headers_without_cookie_override()
 
 def test_client_detects_omero_ims_export_capability():
     module = _load_xt_module()
-    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_AUTH_VALUE)
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
     client.session_id = "session-123"
     opened_urls = []
 
@@ -156,7 +156,7 @@ def test_client_detects_omero_ims_export_capability():
 
 def test_client_treats_non_object_capability_response_as_unavailable():
     module = _load_xt_module()
-    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_AUTH_VALUE)
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
     client.session_id = "session-123"
 
     class _FakeOpener:
@@ -173,7 +173,7 @@ def test_client_download_original_file_uses_archived_files_endpoint_and_safe_nam
     tmp_path,
 ):
     module = _load_xt_module()
-    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_AUTH_VALUE)
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
     client.session_id = "session-123"
     opened_urls = []
 
@@ -184,7 +184,7 @@ def test_client_download_original_file_uses_archived_files_endpoint_and_safe_nam
             return _FakeHTTPResponse(
                 b"original bytes",
                 headers={
-                    "Content-Disposition": 'attachment; filename="../bad;token=x.lif"',
+                    "Content-Disposition": 'attachment; filename="../bad;marker=x.lif"',
                     "content-length": "14",
                 },
             )
@@ -199,7 +199,7 @@ def test_client_download_original_file_uses_archived_files_endpoint_and_safe_nam
             module.EXPORT_TIMEOUT + 60,
         )
     ]
-    assert Path(downloaded).name == "bad_token_x.lif"
+    assert Path(downloaded).name == "bad_marker_x.lif"
     assert Path(downloaded).read_bytes() == b"original bytes"
 
 
@@ -513,15 +513,15 @@ def test_native_bridge_probe_helper_checks_bridge_without_file_open(monkeypatch)
     assert module._run_native_bridge_probe_helper(python_exe, "17") is True
 
 
-def test_safe_download_filename_removes_paths_tokens_and_reserved_names():
+def test_safe_download_filename_removes_paths_markers_and_reserved_names():
     module = _load_xt_module()
 
     assert (
         module._safe_download_filename(
-            r"..\secret\demo;token=abc.lif",
+            r"..\hidden\demo;marker=abc.lif",
             "fallback.lif",
         )
-        == "demo_token_abc.lif"
+        == "demo_marker_abc.lif"
     )
     assert module._safe_download_filename("CON", "fallback.lif") == "_CON"
     assert module._safe_download_filename("..", "fallback.ims", ".ims") == (
