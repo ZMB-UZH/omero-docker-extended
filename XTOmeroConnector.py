@@ -340,6 +340,28 @@ def _sanitize_xt_log_message(message):
     return text
 
 
+def _safe_url_for_log(url):
+    """Return a diagnostic URL shape without hostnames, IDs, or query values."""
+    try:
+        parsed = urllib.parse.urlparse(str(url))
+    except Exception:
+        return "<url>"
+    path = parsed.path or "/"
+    path = re.sub(r"(?<=/)\d+(?=/|$)", "<id>", path)
+    if not parsed.query:
+        return path
+
+    safe_keys = []
+    for key, _value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True):
+        safe_key = re.sub(r"[^A-Za-z0-9_.-]", "_", key)[:64] or "param"
+        if safe_key not in safe_keys:
+            safe_keys.append(safe_key)
+    if not safe_keys:
+        return path
+    query = "&".join(f"{key}=<redacted>" for key in safe_keys)
+    return f"{path}?{query}"
+
+
 def _xt_debug(message):
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {_sanitize_xt_log_message(message)}"
@@ -430,14 +452,14 @@ def open_file_in_imaris(file_path, imaris_app, require_ims=True):
     """Attempt to open a file in Imaris using available API methods."""
     candidate = _existing_regular_file_path(file_path)
     if candidate is None:
-        print("Imaris open failed: file does not exist.")
+        _xt_debug("Imaris open skipped: file does not exist")
         return False
     if require_ims and not is_ims_file(candidate):
-        print("Imaris open failed: file is not a valid IMS file.")
+        _xt_debug("Imaris open skipped: file is not a valid IMS file")
         return False
 
     if imaris_app is None:
-        print("Direct Imaris application handle is not available in this Python.")
+        _xt_debug("Direct Imaris application handle is not available in this Python")
         return False
 
     last_error: Any = None
@@ -468,9 +490,9 @@ def open_file_in_imaris(file_path, imaris_app, require_ims=True):
             continue
 
     if last_error:
-        print(f"Imaris open failed: {last_error}")
+        _xt_debug(f"Direct Imaris open failed: {last_error}")
     else:
-        print("Imaris open failed: no supported API method found.")
+        _xt_debug("Direct Imaris open failed: no supported API method found")
     return False
 
 
@@ -1237,7 +1259,16 @@ def _run_native_bridge_helper(python_executable, payload, context, timeout):
     stdout = (completed.stdout or "").strip()
     stderr = (completed.stderr or "").strip()
     if stdout:
-        _xt_debug(f"Native bridge runner ({context}) stdout: {stdout[:4000]}")
+        if stdout == "BRIDGE_RUNNER_PROBE_OK":
+            _xt_debug(
+                f"Native bridge runner ({context}) resolved the current Imaris session"
+            )
+        elif stdout == "BRIDGE_RUNNER_OPENED":
+            _xt_debug(
+                f"Native bridge runner ({context}) opened the file in the current Imaris session"
+            )
+        else:
+            _xt_debug(f"Native bridge runner ({context}) stdout: {stdout[:4000]}")
     if stderr:
         stderr_lines = [
             line
@@ -1251,7 +1282,7 @@ def _run_native_bridge_helper(python_executable, payload, context, timeout):
             )
         else:
             _xt_debug(
-                f"Native bridge runner ({context}) emitted only Ice shutdown warning"
+                f"Native bridge runner ({context}) suppressed benign Ice shutdown warning"
             )
     _xt_debug(f"Native bridge runner ({context}) exit code: {completed.returncode}")
     return completed.returncode == 0
@@ -1688,7 +1719,8 @@ class OMEROWebClient:
         final_url = getattr(response, "geturl", lambda: "")()
         if "/webclient/login/" in str(final_url):
             _xt_debug(
-                f"Authentication failed during {context}: redirected to {final_url}"
+                "Authentication failed during "
+                f"{context}: redirected to {_safe_url_for_log(final_url)}"
             )
             return True
         return False
@@ -1782,7 +1814,9 @@ class OMEROWebClient:
             urllib.request.install_opener(self.opener)
 
             login_url = f"{self.base_url}/webclient/login/"
-            _xt_debug(f"Connecting to OMERO.web login url={login_url}")
+            _xt_debug(
+                f"Connecting to OMERO.web login endpoint {_safe_url_for_log(login_url)}"
+            )
 
             # First GET to obtain CSRF token
             req = urllib.request.Request(login_url)
@@ -1818,7 +1852,7 @@ class OMEROWebClient:
             raw_body = response.read()
             post_url = getattr(response, "geturl", lambda: "")()
             if post_url:
-                _xt_debug(f"Login POST final url={post_url}")
+                _xt_debug(f"Login POST final endpoint={_safe_url_for_log(post_url)}")
 
             # Extract session cookie from response
             self._extract_cookies_from_jar()
@@ -1865,7 +1899,7 @@ class OMEROWebClient:
             return None
 
         url = f"{self.api_url}/{endpoint}"
-        _xt_debug(f"API GET url={url}")
+        _xt_debug(f"API GET endpoint={_safe_url_for_log(url)}")
 
         # Create request with explicit cookies
         req = self._create_request_with_cookies(url)
@@ -1915,7 +1949,8 @@ class OMEROWebClient:
                 return None
 
             _xt_debug(
-                f"API POST url={url} response={getattr(response, 'status', 'unknown')}"
+                "API POST endpoint="
+                f"{_safe_url_for_log(url)} response={getattr(response, 'status', 'unknown')}"
             )
             raw = response.read()
             if not raw:
@@ -2017,7 +2052,10 @@ class OMEROWebClient:
         capability_url = (
             f"{base}/omeroweb_imaris_connector/imaris-export/?capabilities=1"
         )
-        _xt_debug(f"Checking OMERO IMS export capability: {capability_url}")
+        _xt_debug(
+            "Checking OMERO IMS export capability endpoint="
+            f"{_safe_url_for_log(capability_url)}"
+        )
         req = self._create_request_with_cookies(capability_url)
         try:
             with self.opener.open(req, timeout=30) as response:
@@ -2036,9 +2074,7 @@ class OMEROWebClient:
                     "Legacy IMS export endpoint detected; enabling OMERO converter"
                 )
                 return True
-            _xt_debug(
-                f"OMERO IMS export capability unavailable: HTTP {exc.code} {body[:200]}"
-            )
+            _xt_debug(f"OMERO IMS export capability unavailable: HTTP {exc.code}")
             return False
         except Exception as exc:
             _xt_debug(f"OMERO IMS export capability unavailable: {exc}")
@@ -2172,7 +2208,7 @@ class OMEROWebClient:
         }
 
         export_url = f"{base}/omeroweb_imaris_connector/imaris-export/?{urllib.parse.urlencode(query_params)}"
-        _xt_debug(f"Requesting IMS export from: {export_url}")
+        _xt_debug(f"Requesting IMS export endpoint={_safe_url_for_log(export_url)}")
 
         os.makedirs(download_dir, exist_ok=True)
 
@@ -2209,7 +2245,10 @@ class OMEROWebClient:
                     raise RuntimeError(f"Unexpected response from server: {payload}")
 
                 status_url = self._normalize_url(status_url, base)
-                _xt_debug(f"IMS export started job_id={job_id} status_url={status_url}")
+                _xt_debug(
+                    "IMS export started; polling endpoint="
+                    f"{_safe_url_for_log(status_url)}"
+                )
 
             # Poll for completion
             deadline = time.time() + EXPORT_TIMEOUT
@@ -2220,7 +2259,10 @@ class OMEROWebClient:
 
             while time.time() < deadline:
                 poll_count += 1
-                _xt_debug(f"IMS export poll #{poll_count} url={status_url}")
+                _xt_debug(
+                    f"IMS export poll #{poll_count} endpoint="
+                    f"{_safe_url_for_log(status_url)}"
+                )
 
                 # Create poll request with explicit cookies
                 poll_req = self._create_request_with_cookies(status_url)
@@ -2269,7 +2311,12 @@ class OMEROWebClient:
                     raise
 
                 last_state = poll_payload.get("state")
-                _xt_debug(f"IMS export poll state={last_state} payload={poll_payload}")
+                _xt_debug(
+                    "IMS export poll state="
+                    f"{last_state} finished={bool(poll_payload.get('finished'))} "
+                    f"failed={bool(poll_payload.get('failed'))} "
+                    f"status={poll_payload.get('status') or '<unset>'}"
+                )
 
                 if poll_payload.get("failed"):
                     error_msg = poll_payload.get("error", "unknown error")
@@ -2287,7 +2334,7 @@ class OMEROWebClient:
                 raise RuntimeError(f"IMS export timed out (last state: {last_state})")
 
             # Download the file
-            _xt_debug(f"Downloading IMS from: {download_url}")
+            _xt_debug(f"Downloading IMS endpoint={_safe_url_for_log(download_url)}")
             download_req = self._create_request_with_cookies(download_url)
 
             with self.opener.open(
@@ -2370,7 +2417,10 @@ class OMEROWebClient:
 
         base = self.base_url.rstrip("/")
         download_url = f"{base}/webgateway/archived_files/download/{int(image_id)}/"
-        _xt_debug(f"Requesting original file download from: {download_url}")
+        _xt_debug(
+            "Requesting original file download endpoint="
+            f"{_safe_url_for_log(download_url)}"
+        )
         os.makedirs(download_dir, exist_ok=True)
         req = self._create_request_with_cookies(download_url)
 
@@ -2461,7 +2511,10 @@ class OMEROWebClient:
                         parsed.fragment,
                     )
                 )
-                _xt_debug(f"Normalized URL: {url} -> {rebuilt}")
+                _xt_debug(
+                    "Normalized OMERO.web endpoint "
+                    f"{_safe_url_for_log(url)} -> {_safe_url_for_log(rebuilt)}"
+                )
                 return rebuilt
             return url
 
@@ -2899,9 +2952,31 @@ class OMEROBrowserDialog:
             raise error
         return value
 
+    def _get_native_bridge_python_executable(self):
+        with self._native_bridge_probe_lock:
+            return self._native_bridge_python_executable
+
+    def _open_with_native_bridge_runner(self, downloaded_file, require_ims=True):
+        bridge_python = self._get_native_bridge_python_executable()
+        return _open_file_in_imaris_with_native_bridge_runner(
+            downloaded_file,
+            self.imaris_id,
+            preferred_python_executable=bridge_python,
+            require_ims=require_ims,
+        )
+
     def _open_downloaded_file_in_imaris(self, downloaded_file, require_ims=True):
         """Resolve the Imaris handle on the UI thread and open the file."""
         self._set_status("Opening file in Imaris...", "#fff3cd")
+
+        if self.imaris is None and self._get_native_bridge_python_executable():
+            _xt_debug(
+                "Opening file in the current Imaris session via compatible native bridge runner"
+            )
+            return self._open_with_native_bridge_runner(
+                downloaded_file,
+                require_ims=require_ims,
+            )
 
         if self.imaris is None:
             _xt_debug(
@@ -2934,12 +3009,8 @@ class OMEROBrowserDialog:
             "Direct Imaris handle path did not open the file; "
             "trying compatible native bridge runner"
         )
-        with self._native_bridge_probe_lock:
-            bridge_python = self._native_bridge_python_executable
-        return _open_file_in_imaris_with_native_bridge_runner(
+        return self._open_with_native_bridge_runner(
             downloaded_file,
-            self.imaris_id,
-            preferred_python_executable=bridge_python,
             require_ims=require_ims,
         )
 
@@ -2989,7 +3060,7 @@ class OMEROBrowserDialog:
         if _looks_like_imaris_application(self.imaris):
             return True
         self._start_native_bridge_probe()
-        self._set_status("Checking native Imaris bridge...", "#fff3cd")
+        self._set_status("Checking Imaris same-session open support...", "#fff3cd")
         if not self._native_bridge_probe_done.wait(timeout=NATIVE_BRIDGE_PROBE_TIMEOUT):
             _xt_debug("Native bridge probe timed out before export")
             return False
@@ -2997,7 +3068,10 @@ class OMEROBrowserDialog:
             available = self._native_bridge_available
             bridge_error = self._native_bridge_probe_error
         if not available:
-            _xt_debug(f"Native bridge is unavailable before export: {bridge_error}")
+            _xt_debug(
+                "Imaris same-session open bridge is unavailable before export: "
+                f"{bridge_error}"
+            )
         return available
 
     def _connect(self):
@@ -3159,8 +3233,9 @@ class OMEROBrowserDialog:
                 and not self._ensure_native_open_ready_before_export()
             ):
                 raise RuntimeError(
-                    "Cannot open files in the running Imaris session because the native "
-                    "Imaris XT bridge is unavailable. Download/conversion was not started."
+                    "Cannot open files in the running Imaris session because no "
+                    "compatible Imaris bridge is available. Download/conversion "
+                    "was not started."
                 )
             if converter == "Imaris":
                 imaris_converter_executable = _find_imaris_file_converter_executable()
@@ -3249,10 +3324,7 @@ class OMEROBrowserDialog:
         except Exception as e:
             self._set_status("✗ Failed", "#f8d7da")
             self._show_error("Error", str(e))
-            import traceback
-
-            traceback.print_exc()
-            _xt_debug(f"Load worker failed: {e}")
+            _xt_debug(f"Load worker failed: {type(e).__name__}: {e}")
         finally:
             self._invoke_on_ui_thread(self._reenable_load_button, wait=False)
 

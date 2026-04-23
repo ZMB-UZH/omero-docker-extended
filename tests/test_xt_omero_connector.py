@@ -202,6 +202,8 @@ def test_client_treats_legacy_missing_image_capability_response_as_available(
 def test_client_rejects_non_legacy_capability_http_errors(monkeypatch):
     module = _load_xt_module()
     monkeypatch.setattr(module.urllib.error, "HTTPError", _FakeHTTPError)
+    messages = []
+    monkeypatch.setattr(module, "_xt_debug", messages.append)
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
     client.session_id = "session-123"
 
@@ -214,6 +216,8 @@ def test_client_rejects_non_legacy_capability_http_errors(monkeypatch):
     client.opener = _FakeOpener()
 
     assert client.has_omero_ims_export_capability() is False
+    assert "Invalid base_url parameter" not in "\n".join(messages)
+    assert "OMERO IMS export capability unavailable: HTTP 400" in messages
 
 
 def test_client_download_original_file_uses_archived_files_endpoint_and_safe_name(
@@ -343,9 +347,21 @@ def test_resolve_imaris_application_bridge_failure_message_keeps_runner_path(
     assert all("same-session open cannot work" not in message for message in messages)
 
 
-def test_open_file_in_imaris_returns_false_without_handle():
+def test_open_file_in_imaris_returns_false_without_handle(
+    tmp_path, monkeypatch, capsys
+):
     module = _load_xt_module()
-    assert module.open_file_in_imaris("C:\\temp\\demo.ims", None) is False
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    messages = []
+    monkeypatch.setattr(module, "_xt_debug", messages.append)
+
+    assert module.open_file_in_imaris(ims_path, None) is False
+
+    assert messages == [
+        "Direct Imaris application handle is not available in this Python"
+    ]
+    assert capsys.readouterr().out == ""
 
 
 def test_open_file_in_imaris_uses_live_handle_for_valid_ims(tmp_path):
@@ -746,6 +762,21 @@ def test_xt_log_sanitizer_redacts_session_material_and_user_paths(monkeypatch):
     assert f"{password_label}=<redacted>" in sanitized
 
 
+def test_safe_url_for_log_redacts_host_ids_and_query_values():
+    module = _load_xt_module()
+
+    safe_url = module._safe_url_for_log(
+        "http://172.23.208.90:4090/api/v0/m/projects/51/datasets/"
+        "?group=-1&base_url=http%3A%2F%2F172.23.208.90%3A4090"
+    )
+
+    assert safe_url == (
+        "/api/v0/m/projects/<id>/datasets/?group=<redacted>&base_url=<redacted>"
+    )
+    assert "172.23.208.90" not in safe_url
+    assert "51" not in safe_url
+
+
 def test_native_bridge_runner_rejects_non_ims_before_subprocess(tmp_path, monkeypatch):
     module = _load_xt_module()
     plain_path = tmp_path / "plain.txt"
@@ -837,7 +868,7 @@ def test_dialog_native_bridge_probe_runs_before_export_and_blocks_when_unavailab
     dialog._set_status = lambda text, _color="#ecf0f1": status_updates.append(text)
 
     assert dialog._ensure_native_open_ready_before_export() is False
-    assert status_updates == ["Checking native Imaris bridge..."]
+    assert status_updates == ["Checking Imaris same-session open support..."]
 
 
 def test_dialog_native_bridge_probe_does_not_trust_non_opening_handle():
@@ -855,7 +886,7 @@ def test_dialog_native_bridge_probe_does_not_trust_non_opening_handle():
     dialog._set_status = lambda text, _color="#ecf0f1": status_updates.append(text)
 
     assert dialog._ensure_native_open_ready_before_export() is False
-    assert status_updates == ["Checking native Imaris bridge..."]
+    assert status_updates == ["Checking Imaris same-session open support..."]
 
 
 def test_dialog_native_bridge_probe_uses_cached_python_for_open(monkeypatch):
@@ -870,7 +901,16 @@ def test_dialog_native_bridge_probe_uses_cached_python_for_open(monkeypatch):
     monkeypatch.setattr(
         module,
         "_resolve_imaris_application",
-        lambda *_args, **_kwargs: None,
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("direct bridge should not be retried")
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "open_file_in_imaris",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("direct handle should not be used")
+        ),
     )
     monkeypatch.setattr(
         module,
@@ -1195,6 +1235,42 @@ def test_load_worker_blocks_before_download_when_native_open_unavailable(tmp_pat
     assert download_calls == []
     assert len(errors) == 1
     assert "Download/conversion was not started" in errors[0]
+
+
+def test_load_worker_failure_logs_without_raw_traceback(tmp_path, monkeypatch, capsys):
+    module = _load_xt_module()
+    messages = []
+    errors = []
+    monkeypatch.setattr(module, "_xt_debug", messages.append)
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.export_dir = str(tmp_path)
+    dialog.temp_files = []
+    dialog.client = types.SimpleNamespace(
+        download_ims_export=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("download failed")
+        )
+    )
+    dialog._ensure_native_open_ready_before_export = lambda: True
+    dialog._set_status = lambda *_args, **_kwargs: None
+    dialog._show_info = lambda *_args, **_kwargs: None
+    dialog._show_error = lambda _title, message: errors.append(message)
+    dialog._reenable_load_button = lambda: None
+    dialog._invoke_on_ui_thread = lambda callback, wait=True: (
+        None if not wait else callback()
+    )
+
+    module.OMEROBrowserDialog._load_worker(
+        dialog,
+        {"id": 9, "name": "sample"},
+        "OMERO",
+    )
+
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.out
+    assert "Traceback" not in captured.err
+    assert errors == ["download failed"]
+    assert "Load worker failed: RuntimeError: download failed" in messages
 
 
 def test_load_worker_blocks_imaris_download_when_file_converter_missing(
