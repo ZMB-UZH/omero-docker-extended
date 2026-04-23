@@ -28,6 +28,7 @@ import re
 import tempfile
 import time
 import datetime
+import posixpath
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -42,8 +43,181 @@ EXPORT_TIMEOUT = 3600  # seconds
 EXPORT_POLL_INTERVAL = 2.0  # seconds
 IMARIS_HANDLE_RETRY_ATTEMPTS = 10
 IMARIS_HANDLE_RETRY_INTERVAL = 0.25
+NATIVE_BRIDGE_RUNNER_TIMEOUT = 600
+NATIVE_BRIDGE_PROBE_TIMEOUT = 60
 _XT_LOG_PATH: Optional[str] = None
 _XT_DLL_DIR_HANDLES: List[Any] = []
+_WINDOWS_RESERVED_FILENAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    "COM1",
+    "COM2",
+    "COM3",
+    "COM4",
+    "COM5",
+    "COM6",
+    "COM7",
+    "COM8",
+    "COM9",
+    "LPT1",
+    "LPT2",
+    "LPT3",
+    "LPT4",
+    "LPT5",
+    "LPT6",
+    "LPT7",
+    "LPT8",
+    "LPT9",
+}
+
+
+_NATIVE_BRIDGE_OPEN_HELPER = r"""
+import json
+import os
+import sys
+import time
+
+HDF5_SIGNATURE = b"\x89HDF\r\n\x1a\n"
+
+
+def _iter_imaris_xt_path_candidates(install_root):
+    yield install_root
+    yield os.path.join(install_root, "XT")
+    yield os.path.join(install_root, "XT", "python3")
+    yield os.path.join(install_root, "XT", "python3", "DLLs")
+    yield os.path.join(install_root, "XT", "bin")
+    yield os.path.join(install_root, "XT", "python3", "Lib")
+    yield os.path.join(install_root, "XT", "python3", "Lib", "site-packages")
+    yield os.path.join(install_root, "XT", "python3", "private")
+    yield os.path.join(install_root, "XT", "python3", "private", "Ice")
+    yield os.path.join(install_root, "XT", "python")
+    yield os.path.join(install_root, "XT", "lib")
+
+
+def _is_ims_file(file_path):
+    if not os.path.isfile(file_path):
+        return False
+    try:
+        with open(file_path, "rb") as handle:
+            return handle.read(len(HDF5_SIGNATURE)) == HDF5_SIGNATURE
+    except Exception:
+        return False
+
+
+def _prepare_imaris_xt_environment(install_roots):
+    path_parts = os.environ.get("PATH", "").split(os.pathsep)
+    add_dll_directory = getattr(os, "add_dll_directory", None)
+    added = []
+    for install_root in install_roots:
+        for candidate in _iter_imaris_xt_path_candidates(install_root):
+            if not os.path.isdir(candidate):
+                continue
+            normalized = os.path.normpath(candidate)
+            if normalized not in sys.path:
+                sys.path.insert(0, normalized)
+            if normalized not in path_parts:
+                path_parts.insert(0, normalized)
+            if callable(add_dll_directory):
+                try:
+                    add_dll_directory(normalized)
+                except Exception:
+                    pass
+            added.append(normalized)
+    os.environ["PATH"] = os.pathsep.join(path_parts)
+    return added
+
+
+def _get_imaris_application(app_id, retries, retry_interval):
+    import ImarisLib
+
+    attempts = max(1, int(retries or 1))
+    for attempt in range(attempts):
+        lib_factory = getattr(ImarisLib, "ImarisLib", None)
+        if callable(lib_factory):
+            lib = lib_factory()
+            get_application = getattr(lib, "GetApplication", None)
+            if callable(get_application):
+                app = get_application(app_id)
+                if app is not None:
+                    return app
+
+        get_application = getattr(ImarisLib, "GetApplication", None)
+        if callable(get_application):
+            app = get_application(app_id)
+            if app is not None:
+                return app
+
+        if attempt + 1 < attempts:
+            time.sleep(max(0.0, float(retry_interval)))
+
+    return None
+
+
+def _open_file_in_imaris(file_path, app):
+    for method_name, args in (
+        ("FileOpen", (file_path, "")),
+        ("FileOpen", (file_path,)),
+        ("OpenFile", (file_path,)),
+        ("LoadFile", (file_path,)),
+    ):
+        method = getattr(app, method_name, None)
+        if not callable(method):
+            continue
+        method(*args)
+        return True
+    return False
+
+
+def _has_open_method(app):
+    for method_name in ("FileOpen", "OpenFile", "LoadFile"):
+        if callable(getattr(app, method_name, None)):
+            return True
+    return False
+
+
+def main():
+    payload = json.loads(sys.stdin.read())
+    app_id = int(payload["app_id"])
+    install_roots = [os.fspath(path) for path in payload.get("install_roots", [])]
+    _prepare_imaris_xt_environment(install_roots)
+    app = _get_imaris_application(
+        app_id,
+        payload.get("retry_attempts", 1),
+        payload.get("retry_interval", 0.25),
+    )
+    if app is None:
+        print("BRIDGE_RUNNER_HANDLE_UNAVAILABLE")
+        return 2
+    if payload.get("mode") == "probe":
+        if not _has_open_method(app):
+            print("BRIDGE_RUNNER_OPEN_METHOD_UNAVAILABLE")
+            return 3
+        print("BRIDGE_RUNNER_PROBE_OK")
+        return 0
+    file_path = os.fspath(payload["file_path"])
+    require_ims = bool(payload.get("require_ims", True))
+    if not os.path.isfile(file_path):
+        print("BRIDGE_RUNNER_MISSING_FILE")
+        return 64
+    if require_ims and not _is_ims_file(file_path):
+        print("BRIDGE_RUNNER_INVALID_IMS")
+        return 64
+    if not _open_file_in_imaris(file_path, app):
+        print("BRIDGE_RUNNER_OPEN_FAILED")
+        return 3
+    print("BRIDGE_RUNNER_OPENED")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print("BRIDGE_RUNNER_EXCEPTION: " + str(exc))
+        raise
+"""
 
 
 def _coerce_path(value):
@@ -129,13 +303,13 @@ def is_ims_file(file_path):
         return False
 
 
-def open_file_in_imaris(file_path, imaris_app):
+def open_file_in_imaris(file_path, imaris_app, require_ims=True):
     """Attempt to open a file in Imaris using available API methods."""
     candidate = _existing_regular_file_path(file_path)
     if candidate is None:
         print("Imaris open failed: file does not exist.")
         return False
-    if not is_ims_file(candidate):
+    if require_ims and not is_ims_file(candidate):
         print("Imaris open failed: file is not a valid IMS file.")
         return False
 
@@ -177,6 +351,10 @@ def _looks_like_imaris_application(candidate):
         if callable(getattr(candidate, method_name, None)):
             return True
     return False
+
+
+def _tk_constant(name, fallback):
+    return getattr(tk, name, fallback)
 
 
 def _iter_imaris_executable_candidates():
@@ -292,6 +470,233 @@ def _iter_imaris_xt_path_candidates(install_root):
     yield os.path.join(install_root, "XT", "lib")
 
 
+def _parse_python_launcher_paths(output):
+    """Parse `py -0p` output into Python executable paths."""
+    paths = []
+    for line in str(output or "").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("-"):
+            continue
+        parts = stripped.split(None, 1)
+        if len(parts) != 2:
+            continue
+        candidate = parts[1].strip()
+        if candidate.endswith("*"):
+            candidate = candidate[:-1].strip()
+        if candidate:
+            paths.append(candidate)
+    return paths
+
+
+def _resolve_python_executable_candidate(candidate):
+    path = _existing_regular_file_path(candidate)
+    if path is None:
+        return None
+    if path.name.lower() not in {"python.exe", "pythonw.exe"}:
+        return None
+    try:
+        return str(path.resolve(strict=True))
+    except OSError:
+        return None
+
+
+def _iter_windows_python_launchers():
+    seen = set()
+    for env_name in ("SystemRoot", "WINDIR"):
+        root = os.environ.get(env_name, "").strip()
+        if not root:
+            continue
+        candidate = os.path.join(root, "py.exe")
+        path = _existing_regular_file_path(candidate)
+        if path is None or path.name.lower() != "py.exe":
+            continue
+        try:
+            resolved = str(path.resolve(strict=True))
+        except OSError:
+            continue
+        normalized = os.path.normcase(os.path.normpath(resolved))
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        yield resolved
+
+
+def _iter_native_bridge_python_executables():
+    """Yield installed Python executables other than the current process."""
+    if os.name != "nt":
+        return
+
+    import subprocess
+
+    current = _resolve_python_executable_candidate(sys.executable)
+    current_key = os.path.normcase(os.path.normpath(current)) if current else ""
+    seen = set()
+    for launcher in _iter_windows_python_launchers():
+        try:
+            completed = subprocess.run(
+                [launcher, "-0p"],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,
+                timeout=10,
+            )
+        except Exception as exc:
+            _xt_debug(f"Python launcher probe failed for {launcher}: {exc}")
+            continue
+        if completed.returncode != 0:
+            _xt_debug(
+                "Python launcher probe returned "
+                f"{completed.returncode} for {launcher}: {completed.stderr[:4000]}"
+            )
+            continue
+        for candidate in _parse_python_launcher_paths(completed.stdout):
+            resolved = _resolve_python_executable_candidate(candidate)
+            if not resolved:
+                continue
+            normalized = os.path.normcase(os.path.normpath(resolved))
+            if normalized == current_key or normalized in seen:
+                continue
+            seen.add(normalized)
+            yield resolved
+
+
+def _native_bridge_payload(imaris_id, mode, file_path=None, require_ims=True):
+    app_id = _coerce_imaris_id(imaris_id)
+    if app_id is None:
+        _xt_debug("Native bridge runner skipped: missing Imaris application id")
+        return None
+
+    payload = {
+        "mode": mode,
+        "app_id": app_id,
+        "install_roots": list(_iter_imaris_install_roots()),
+        "retry_attempts": IMARIS_HANDLE_RETRY_ATTEMPTS,
+        "retry_interval": IMARIS_HANDLE_RETRY_INTERVAL,
+    }
+    if file_path is not None:
+        payload["file_path"] = str(file_path)
+        payload["require_ims"] = bool(require_ims)
+    return payload
+
+
+def _run_native_bridge_helper(python_executable, payload, context, timeout):
+    """Run a fixed native bridge helper under a candidate Python executable."""
+    if payload is None:
+        return False
+
+    resolved_python = _resolve_python_executable_candidate(python_executable)
+    if resolved_python is None:
+        return False
+
+    import subprocess
+
+    _xt_debug(f"Trying native Imaris bridge runner ({context}) with {resolved_python}")
+    try:
+        completed = subprocess.run(
+            [resolved_python, "-c", _NATIVE_BRIDGE_OPEN_HELPER],
+            check=False,
+            input=json.dumps(payload),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            timeout=timeout,
+        )
+    except Exception as exc:
+        _xt_debug(f"Native Imaris bridge runner ({context}) failed to start: {exc}")
+        return False
+
+    stdout = (completed.stdout or "").strip()
+    stderr = (completed.stderr or "").strip()
+    if stdout:
+        _xt_debug(f"Native bridge runner ({context}) stdout: {stdout[:4000]}")
+    if stderr:
+        _xt_debug(f"Native bridge runner ({context}) stderr: {stderr[:4000]}")
+    _xt_debug(f"Native bridge runner ({context}) exit code: {completed.returncode}")
+    return completed.returncode == 0
+
+
+def _run_native_bridge_probe_helper(python_executable, imaris_id):
+    """Check whether a candidate Python can load ImarisLib and resolve the app."""
+    return _run_native_bridge_helper(
+        python_executable,
+        _native_bridge_payload(imaris_id, "probe"),
+        "probe",
+        NATIVE_BRIDGE_PROBE_TIMEOUT,
+    )
+
+
+def _run_native_bridge_open_helper(
+    python_executable, file_path, imaris_id, require_ims=True
+):
+    """Open an IMS via ImarisLib using a compatible native Python process."""
+    candidate = _existing_regular_file_path(file_path)
+    if candidate is None:
+        return False
+    if require_ims and not is_ims_file(candidate):
+        return False
+    return _run_native_bridge_helper(
+        python_executable,
+        _native_bridge_payload(
+            imaris_id,
+            "open",
+            file_path=candidate,
+            require_ims=require_ims,
+        ),
+        "open",
+        NATIVE_BRIDGE_RUNNER_TIMEOUT,
+    )
+
+
+def _find_compatible_native_bridge_python(imaris_id):
+    """Return an installed Python executable that can use Imaris' native bridge."""
+    if _coerce_imaris_id(imaris_id) is None:
+        return None
+    for python_executable in _iter_native_bridge_python_executables():
+        if _run_native_bridge_probe_helper(python_executable, imaris_id):
+            return python_executable
+    return None
+
+
+def _open_file_in_imaris_with_native_bridge_runner(
+    file_path, imaris_id, preferred_python_executable=None, require_ims=True
+):
+    """Try compatible installed Python runtimes while staying on ImarisLib/FileOpen."""
+    if os.name != "nt":
+        return False
+    if _coerce_imaris_id(imaris_id) is None:
+        _xt_debug("Native bridge runner unavailable: no numeric Imaris application id")
+        return False
+
+    attempted = False
+    candidates = []
+    if preferred_python_executable:
+        candidates.append(preferred_python_executable)
+    candidates.extend(_iter_native_bridge_python_executables())
+
+    seen = set()
+    for python_executable in candidates:
+        resolved = _resolve_python_executable_candidate(python_executable)
+        if not resolved:
+            continue
+        normalized = os.path.normcase(os.path.normpath(resolved))
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        attempted = True
+        if _run_native_bridge_open_helper(
+            resolved,
+            file_path,
+            imaris_id,
+            require_ims=require_ims,
+        ):
+            return True
+    if not attempted:
+        _xt_debug("Native bridge runner unavailable: no alternate Python found")
+    return False
+
+
 def _prepend_unique_path(values, candidate):
     normalized = os.path.normpath(candidate)
     if normalized in values:
@@ -346,6 +751,89 @@ def _probe_module_import(module_name):
         return {"ok": True, "error": ""}
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
+
+
+def _set_process_window_title(title):
+    """Best-effort Windows console title update without shelling out."""
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+
+        windll = getattr(ctypes, "windll", None)
+        kernel32 = getattr(windll, "kernel32", None)
+        set_console_title = getattr(kernel32, "SetConsoleTitleW", None)
+        if not callable(set_console_title):
+            return False
+        return bool(set_console_title(str(title)))
+    except Exception:
+        return False
+
+
+def _extract_content_disposition_filename(content_disposition):
+    """Extract an HTTP Content-Disposition filename without trusting path parts."""
+    header = str(content_disposition or "")
+    match = re.search(r"filename\*=UTF-8''([^;]+)", header, flags=re.IGNORECASE)
+    if match:
+        return urllib.parse.unquote(match.group(1).strip().strip('"'))
+    match = re.search(r'filename="([^"]+)"', header, flags=re.IGNORECASE)
+    if match:
+        return match.group(1)
+    match = re.search(r"filename=([^;]+)", header, flags=re.IGNORECASE)
+    if match:
+        return match.group(1).strip().strip('"')
+    return None
+
+
+def _safe_download_filename(filename, fallback_name, default_extension=None):
+    """Return a single safe filename for connector-managed downloads."""
+    fallback = str(fallback_name or "download")
+    if default_extension and not fallback.lower().endswith(default_extension.lower()):
+        fallback += default_extension
+
+    raw = str(filename or "").replace("\x00", "")
+    # Treat both URL and Windows separators as path separators even when tests
+    # run on a non-Windows host.
+    raw = raw.replace("\\", "/")
+    basename = posixpath.basename(raw).strip()
+    if not basename:
+        basename = fallback
+
+    safe = re.sub(r"[^A-Za-z0-9 ._-]", "_", basename).strip(" .")
+    if not safe:
+        safe = re.sub(r"[^A-Za-z0-9 ._-]", "_", fallback).strip(" .")
+    if not safe:
+        safe = "download"
+
+    root_name = os.path.splitext(safe)[0].upper()
+    if root_name in _WINDOWS_RESERVED_FILENAMES:
+        safe = f"_{safe}"
+
+    if default_extension and not safe.lower().endswith(default_extension.lower()):
+        safe += default_extension
+
+    if len(safe) > 180:
+        stem, ext = os.path.splitext(safe)
+        keep = max(1, 180 - len(ext))
+        safe = stem[:keep].rstrip(" .") + ext
+    return safe
+
+
+def _unique_download_path(download_dir, filename):
+    """Build a download path inside download_dir without overwriting locked files."""
+    safe_filename = _safe_download_filename(filename, "download")
+    candidate = os.path.join(download_dir, safe_filename)
+    if not os.path.exists(candidate):
+        return candidate
+
+    stem, ext = os.path.splitext(safe_filename)
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    for index in range(1, 1000):
+        suffix = f"__{timestamp}" if index == 1 else f"__{timestamp}_{index}"
+        candidate = os.path.join(download_dir, f"{stem}{suffix}{ext}")
+        if not os.path.exists(candidate):
+            return candidate
+    raise RuntimeError("Could not allocate a unique download filename.")
 
 
 def _collect_imaris_xt_diagnostics():
@@ -882,6 +1370,32 @@ class OMEROWebClient:
                 return response
         return None
 
+    def has_omero_ims_export_capability(self):
+        """Return True when this OMERO.web instance exposes server-side IMS export."""
+        if not self.session_id:
+            return False
+        base = self.base_url.rstrip("/")
+        capability_url = (
+            f"{base}/omeroweb_imaris_connector/imaris-export/?capabilities=1"
+        )
+        _xt_debug(f"Checking OMERO IMS export capability: {capability_url}")
+        req = self._create_request_with_cookies(capability_url)
+        try:
+            with self.opener.open(req, timeout=30) as response:
+                if self._check_login_redirect(response, "IMS export capability check"):
+                    return False
+                raw_body = response.read().decode("utf-8", errors="replace")
+                payload = json.loads(raw_body)
+        except Exception as exc:
+            _xt_debug(f"OMERO IMS export capability unavailable: {exc}")
+            return False
+        if not isinstance(payload, dict):
+            _xt_debug("OMERO IMS export capability returned non-object JSON")
+            return False
+        available = bool(payload.get("omero_ims_export"))
+        _xt_debug(f"OMERO IMS export capability available={available}")
+        return available
+
     def poll_activity(self, job_id, timeout=900, interval=2):
         """Poll a script activity until completion."""
         deadline = time.time() + timeout
@@ -1127,25 +1641,13 @@ class OMEROWebClient:
                     )
 
                 cd = response.headers.get("Content-Disposition", "")
-                filename = None
-                m = re.search(r"filename\*=UTF-8\'\'([^;]+)", cd)
-                if m:
-                    filename = urllib.parse.unquote(m.group(1))
-                else:
-                    m = re.search(r'filename="([^"]+)"', cd)
-                    if m:
-                        filename = m.group(1)
-
-                if not filename:
-                    filename = fallback_name
-                    if not filename.lower().endswith(".ims"):
-                        filename += ".ims"
-
-                safe_filename = re.sub(r"[^\w\s.-]", "_", filename).strip()
-                if not safe_filename:
-                    safe_filename = fallback_name
-
-                local_path = os.path.join(download_dir, safe_filename)
+                filename = _extract_content_disposition_filename(cd)
+                safe_filename = _safe_download_filename(
+                    filename,
+                    fallback_name,
+                    default_extension=".ims",
+                )
+                local_path = _unique_download_path(download_dir, safe_filename)
 
                 total_size = int(response.headers.get("content-length", 0) or 0)
                 downloaded = 0
@@ -1193,6 +1695,83 @@ class OMEROWebClient:
             ) from e
         except urllib.error.URLError as e:
             raise RuntimeError(f"IMS export failed (URLError): {e}") from e
+
+    def download_original_file(
+        self,
+        image_id,
+        download_dir,
+        fallback_name="original",
+    ):
+        """Download the archived original file for local Imaris conversion."""
+        if download_dir is None:
+            download_dir = os.path.join(
+                os.path.expanduser("~"), "Downloads", "OMERO_Imaris_Originals"
+            )
+        if not self.session_id:
+            raise RuntimeError("Not logged in to OMERO.web (missing session key).")
+
+        base = self.base_url.rstrip("/")
+        download_url = f"{base}/webgateway/archived_files/download/{int(image_id)}/"
+        _xt_debug(f"Requesting original file download from: {download_url}")
+        os.makedirs(download_dir, exist_ok=True)
+        req = self._create_request_with_cookies(download_url)
+
+        try:
+            with self.opener.open(req, timeout=EXPORT_TIMEOUT + 60) as response:
+                if self._check_login_redirect(response, "original file download"):
+                    raise RuntimeError(
+                        "Not authenticated to OMERO.web while downloading original file."
+                    )
+
+                cd = response.headers.get("Content-Disposition", "")
+                filename = _extract_content_disposition_filename(cd)
+                safe_filename = _safe_download_filename(filename, fallback_name)
+                local_path = _unique_download_path(download_dir, safe_filename)
+                total_size = int(response.headers.get("content-length", 0) or 0)
+                downloaded = 0
+                chunk_size = 1024 * 1024
+
+                _xt_debug(f"Downloading original file to: {local_path}")
+                with open(local_path, "wb") as f:
+                    while True:
+                        chunk = response.read(chunk_size)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size:
+                            percent = (downloaded / total_size) * 100.0
+                            print(
+                                f"  Progress: {percent:.1f}% ({downloaded / (1024 * 1024):.1f} MB)",
+                                end="\r",
+                            )
+
+                if total_size:
+                    print()
+
+            if not os.path.exists(local_path):
+                raise RuntimeError(
+                    f"Download completed but file not found at {local_path}"
+                )
+            if os.path.getsize(local_path) <= 0:
+                raise RuntimeError("Downloaded original file is empty")
+
+            _xt_debug(f"Original file downloaded OK: {local_path}")
+            return local_path
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="replace")
+            except Exception as exc:
+                logger.debug(
+                    "Suppressed non-fatal exception in XTOmeroConnector.py",
+                    exc_info=exc,
+                )
+            raise RuntimeError(
+                f"Original file download HTTPError {e.code}: {e.reason}\n{body[:2000]}"
+            ) from e
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"Original file download failed (URLError): {e}") from e
 
     @staticmethod
     def _normalize_url(url, base_url):
@@ -1245,16 +1824,23 @@ class OMEROBrowserDialog:
         self.images_data = []
         self.temp_files = []
         self._pid = None
+        self._native_bridge_probe_lock = threading.Lock()
+        self._native_bridge_probe_done = threading.Event()
+        self._native_bridge_probe_started = False
+        self._native_bridge_available = _looks_like_imaris_application(self.imaris)
+        self._native_bridge_python_executable = None
+        self._native_bridge_probe_error = ""
 
         # Get export directory
         self.export_dir = self._get_export_dir()
 
         self.root = tk.Tk()
-        self.root.title("OMERO → Imaris Connector")
+        self.root.title("OMERO Connector")
         self.root.geometry("1000x700")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_ui()
+        self._start_native_bridge_probe()
 
     def _on_close(self):
         """Handle window close - don't delete temp files as Imaris might still be using them."""
@@ -1346,6 +1932,17 @@ class OMEROBrowserDialog:
         actions = tk.Frame(self.root)
         actions.pack(fill=tk.X, padx=10, pady=10)
 
+        self.converter_var = tk.StringVar(value="")
+        self.converter_frame = tk.Frame(actions)
+        tk.Label(self.converter_frame, text="Converter:").pack(
+            side=tk.LEFT, padx=(0, 4)
+        )
+        self.converter_menu = tk.OptionMenu(
+            self.converter_frame, self.converter_var, ""
+        )
+        self.converter_menu.config(width=10)
+        self.converter_menu.pack(side=tk.LEFT)
+
         self.load_btn = tk.Button(
             actions,
             text="Load into Imaris",
@@ -1353,7 +1950,7 @@ class OMEROBrowserDialog:
             bg="#27ae60",
             fg="white",
             font=("Arial", 12, "bold"),
-            state=tk.DISABLED,
+            state=_tk_constant("DISABLED", "disabled"),
             height=2,
         )
         self.load_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
@@ -1379,6 +1976,50 @@ class OMEROBrowserDialog:
             font=("Arial", 9),
         )
         self.status.pack(fill=tk.X, side=tk.BOTTOM)
+
+    def _set_converter_options(self, options):
+        options = list(options or [])
+        menu = self.converter_menu["menu"]
+        menu.delete(0, _tk_constant("END", "end"))
+        if not options:
+            self.converter_var.set("")
+            self.converter_frame.pack_forget()
+            self.load_btn.config(state=_tk_constant("DISABLED", "disabled"))
+            return
+
+        for option in options:
+            menu.add_command(
+                label=option,
+                command=lambda value=option: self.converter_var.set(value),
+            )
+        self.converter_var.set(options[0])
+        self.converter_frame.pack(
+            side=tk.LEFT,
+            padx=(0, 8),
+            before=self.load_btn,
+        )
+        self.load_btn.config(state=_tk_constant("NORMAL", "normal"))
+
+    def _detect_converter_options_after_connection(self):
+        """Populate converter options only after login and native-open checks."""
+        self._start_native_bridge_probe()
+        if not self._native_bridge_probe_done.wait(timeout=NATIVE_BRIDGE_PROBE_TIMEOUT):
+            _xt_debug("Native bridge probe timed out during converter detection")
+            return []
+        with self._native_bridge_probe_lock:
+            native_available = self._native_bridge_available
+            bridge_error = self._native_bridge_probe_error
+        if not native_available:
+            _xt_debug(
+                f"No converter options: native bridge unavailable: {bridge_error}"
+            )
+            return []
+
+        options = ["Imaris"]
+        if self.client and self.client.has_omero_ims_export_capability():
+            options.insert(0, "OMERO")
+        _xt_debug(f"Detected converter options after connection: {options}")
+        return options
 
     @staticmethod
     def _get_export_dir():
@@ -1428,9 +2069,9 @@ class OMEROBrowserDialog:
             raise error
         return value
 
-    def _open_downloaded_file_in_imaris(self, downloaded_file):
-        """Resolve the Imaris handle on the UI thread and open the IMS file."""
-        self._set_status("Opening IMS in Imaris...", "#fff3cd")
+    def _open_downloaded_file_in_imaris(self, downloaded_file, require_ims=True):
+        """Resolve the Imaris handle on the UI thread and open the file."""
+        self._set_status("Opening file in Imaris...", "#fff3cd")
 
         if self.imaris is None:
             _xt_debug(
@@ -1454,7 +2095,78 @@ class OMEROBrowserDialog:
                 f"Using Imaris handle type={type(self.imaris).__name__} for file open"
             )
 
-        return open_file_in_imaris(downloaded_file, self.imaris)
+        if open_file_in_imaris(downloaded_file, self.imaris, require_ims=require_ims):
+            return True
+
+        _xt_debug(
+            "Current Python could not open through the live handle; "
+            "trying compatible native bridge runner"
+        )
+        with self._native_bridge_probe_lock:
+            bridge_python = self._native_bridge_python_executable
+        return _open_file_in_imaris_with_native_bridge_runner(
+            downloaded_file,
+            self.imaris_id,
+            preferred_python_executable=bridge_python,
+            require_ims=require_ims,
+        )
+
+    def _start_native_bridge_probe(self):
+        """Probe native Imaris opening capability in the background."""
+        with self._native_bridge_probe_lock:
+            if self._native_bridge_probe_started:
+                return
+            self._native_bridge_probe_started = True
+            if _looks_like_imaris_application(self.imaris):
+                self._native_bridge_available = True
+                self._native_bridge_probe_done.set()
+                _xt_debug("Native bridge probe skipped: current Imaris handle is live")
+                return
+
+        threading.Thread(target=self._native_bridge_probe_worker, daemon=True).start()
+
+    def _native_bridge_probe_worker(self):
+        bridge_python = None
+        bridge_error = ""
+        try:
+            if _coerce_imaris_id(self.imaris_id) is None:
+                bridge_error = "No numeric Imaris application id was provided."
+            else:
+                bridge_python = _find_compatible_native_bridge_python(self.imaris_id)
+                if bridge_python:
+                    _xt_debug(
+                        f"Native bridge probe found compatible Python: {bridge_python}"
+                    )
+                else:
+                    bridge_error = (
+                        "No installed Python listed by the Windows launcher could "
+                        "load ImarisLib/IcePy for the live Imaris application."
+                    )
+        except Exception as exc:
+            bridge_error = str(exc)
+            _xt_debug(f"Native bridge probe failed: {exc}")
+        finally:
+            with self._native_bridge_probe_lock:
+                self._native_bridge_python_executable = bridge_python
+                self._native_bridge_available = bool(bridge_python)
+                self._native_bridge_probe_error = bridge_error
+                self._native_bridge_probe_done.set()
+
+    def _ensure_native_open_ready_before_export(self):
+        """Return True only when the final open can use a native Imaris bridge."""
+        if _looks_like_imaris_application(self.imaris):
+            return True
+        self._start_native_bridge_probe()
+        self._set_status("Checking native Imaris bridge...", "#fff3cd")
+        if not self._native_bridge_probe_done.wait(timeout=NATIVE_BRIDGE_PROBE_TIMEOUT):
+            _xt_debug("Native bridge probe timed out before export")
+            return False
+        with self._native_bridge_probe_lock:
+            available = self._native_bridge_available
+            bridge_error = self._native_bridge_probe_error
+        if not available:
+            _xt_debug(f"Native bridge is unavailable before export: {bridge_error}")
+        return available
 
     def _connect(self):
         h = self.host_entry.get().strip()
@@ -1467,6 +2179,8 @@ class OMEROBrowserDialog:
                 "Missing Fields", "Please fill all connection fields"
             )
             return
+
+        self._set_converter_options([])
 
         port = _parse_port(p)
         if port is None:
@@ -1484,7 +2198,16 @@ class OMEROBrowserDialog:
         if self.client.connect():
             self._set_status(f"✓ Connected to {h}:{p} as {u}", "#d4edda")
             self._load_projects()
-            self.load_btn.config(state=tk.NORMAL)
+            self._set_status("Detecting converter capabilities...", "#fff3cd")
+            converter_options = self._detect_converter_options_after_connection()
+            self._set_converter_options(converter_options)
+            if converter_options:
+                self._set_status(f"✓ Connected to {h}:{p} as {u}", "#d4edda")
+            else:
+                self._set_status(
+                    "Connected, but no native Imaris converter path is available",
+                    "#f8d7da",
+                )
         else:
             self._set_status("✗ Connection failed", "#f8d7da")
             messagebox.showerror(
@@ -1493,10 +2216,10 @@ class OMEROBrowserDialog:
             )
 
     def _load_projects(self):
-        self.plist.delete(0, tk.END)
+        self.plist.delete(0, _tk_constant("END", "end"))
         self.projects_data = self.client.list_projects()
         for p in self.projects_data:
-            self.plist.insert(tk.END, p["name"])
+            self.plist.insert(_tk_constant("END", "end"), p["name"])
 
     def _sel_proj(self):
         sel = self.plist.curselection()
@@ -1515,14 +2238,14 @@ class OMEROBrowserDialog:
         self._load_imgs(d["id"])
 
     def _load_ds(self):
-        self.dlist.delete(0, tk.END)
-        self.ilist.delete(0, tk.END)
+        self.dlist.delete(0, _tk_constant("END", "end"))
+        self.ilist.delete(0, _tk_constant("END", "end"))
         self.datasets_data = self.client.list_datasets(self._pid)
         for d in self.datasets_data:
-            self.dlist.insert(tk.END, d["name"])
+            self.dlist.insert(_tk_constant("END", "end"), d["name"])
 
     def _load_imgs(self, did):
-        self.ilist.delete(0, tk.END)
+        self.ilist.delete(0, _tk_constant("END", "end"))
         self.images_data = self.client.list_images(did)
         for img in self.images_data:
             size_info = f"{img['sizeX']}×{img['sizeY']}×{img['sizeZ']}"
@@ -1530,7 +2253,9 @@ class OMEROBrowserDialog:
                 size_info += f" C{img['sizeC']}"
             if img["sizeT"] > 1:
                 size_info += f" T{img['sizeT']}"
-            self.ilist.insert(tk.END, f"{img['name']} [{size_info}]")
+            self.ilist.insert(
+                _tk_constant("END", "end"), f"{img['name']} [{size_info}]"
+            )
 
     def _load(self):
         sel = self.ilist.curselection()
@@ -1539,40 +2264,71 @@ class OMEROBrowserDialog:
             return
 
         img = self.images_data[sel[0]]
+        converter = self.converter_var.get()
+        if converter not in {"OMERO", "Imaris"}:
+            messagebox.showwarning(
+                "No Converter",
+                "Please connect to OMERO and select an available converter.",
+            )
+            return
 
         if not messagebox.askyesno(
             "Confirm Load",
-            f"Download and open:\n{img['name']}\n\n"
-            f"Conversion will run on the server if needed.",
+            f"Download and open:\n{img['name']}\n\nConverter: {converter}",
         ):
             return
 
-        self.load_btn.config(state=tk.DISABLED)
-        threading.Thread(target=self._load_worker, args=(img,), daemon=True).start()
+        self.load_btn.config(state=_tk_constant("DISABLED", "disabled"))
+        threading.Thread(
+            target=self._load_worker,
+            args=(img, converter),
+            daemon=True,
+        ).start()
 
     def _reenable_load_button(self):
-        self.load_btn.config(state=tk.NORMAL)
+        self.load_btn.config(state=_tk_constant("NORMAL", "normal"))
 
-    def _load_worker(self, img):
+    def _load_worker(self, img, converter):
         try:
-            _xt_debug(f"Load worker starting image_id={img['id']} name={img['name']}")
-            self._set_status(f"Exporting IMS for {img['name']}...", "#fff3cd")
+            _xt_debug(
+                f"Load worker starting image_id={img['id']} "
+                f"name={img['name']} converter={converter}"
+            )
+            if not self._ensure_native_open_ready_before_export():
+                raise RuntimeError(
+                    "Cannot open files in the running Imaris session because the native "
+                    "Imaris XT bridge is unavailable. Download/conversion was not started."
+                )
 
             # Download directory
             download_dir = os.path.join(self.export_dir, f"img_{img['id']}")
             os.makedirs(download_dir, exist_ok=True)
 
-            self._set_status("Running server-side IMS export...", "#fff3cd")
-            downloaded_file = self.client.download_ims_export(
-                img["id"],
-                download_dir,
-                fallback_name=f"img_{img['id']}.ims",
-            )
+            require_ims = converter == "OMERO"
+            if converter == "OMERO":
+                self._set_status(f"Exporting IMS for {img['name']}...", "#fff3cd")
+                self._set_status("Running server-side IMS export...", "#fff3cd")
+                downloaded_file = self.client.download_ims_export(
+                    img["id"],
+                    download_dir,
+                    fallback_name=f"img_{img['id']}.ims",
+                )
+            elif converter == "Imaris":
+                self._set_status(
+                    f"Downloading original file for {img['name']}...", "#fff3cd"
+                )
+                downloaded_file = self.client.download_original_file(
+                    img["id"],
+                    download_dir,
+                    fallback_name=img.get("name") or f"img_{img['id']}",
+                )
+            else:
+                raise RuntimeError(f"Unsupported converter: {converter}")
 
             if not downloaded_file or not os.path.exists(downloaded_file):
-                raise RuntimeError("Failed to download IMS export from OMERO.")
+                raise RuntimeError("Failed to download file from OMERO.")
 
-            if not is_ims_file(downloaded_file):
+            if require_ims and not is_ims_file(downloaded_file):
                 raise RuntimeError(
                     "Downloaded file is not a valid IMS (HDF5) file. "
                     "Refusing to open to avoid triggering Imaris File Converter. "
@@ -1589,14 +2345,17 @@ class OMEROBrowserDialog:
             # Open in Imaris on the UI thread so the XT handle stays in the
             # same thread/apartment as the original dialog.
             success = self._invoke_on_ui_thread(
-                lambda: self._open_downloaded_file_in_imaris(downloaded_file)
+                lambda: self._open_downloaded_file_in_imaris(
+                    downloaded_file,
+                    require_ims=require_ims,
+                )
             )
 
             if success:
                 self._set_status("✓ Opened in Imaris", "#d4edda")
                 self._show_info(
                     "Success",
-                    f"File opened in Imaris!\nOpened IMS file: {downloaded_file}",
+                    f"File opened in Imaris!\nOpened file: {downloaded_file}",
                 )
             else:
                 raise RuntimeError(
@@ -1656,6 +2415,7 @@ def _xt_show_fatal(title, message):
 
 def XTOmeroConnector(aImarisId):
     """Called by Imaris."""
+    _set_process_window_title("OMERO Connector")
     log_path = _xt_log_path()
     global _XT_LOG_PATH
     _XT_LOG_PATH = log_path
