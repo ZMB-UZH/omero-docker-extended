@@ -599,6 +599,38 @@ def test_open_file_in_imaris_raw_file_rejects_unobserved_fileopen(
     ]
 
 
+def test_open_file_in_imaris_raw_file_retries_with_options_after_typeerror(tmp_path):
+    module = _load_xt_module()
+    original_path = tmp_path / "demo.lif"
+    original_path.write_text("native converter input", encoding="utf-8")
+    opened = []
+
+    class _FakeImaris:
+        current = ""
+
+        def FileOpen(self, *args):
+            opened.append(args)
+            if len(args) == 1:
+                raise TypeError("missing required positional argument: 'aOptions'")
+            self.current = args[0]
+
+        def GetCurrentFileName(self):
+            return self.current
+
+    assert (
+        module.open_file_in_imaris(
+            original_path,
+            _FakeImaris(),
+            require_ims=False,
+        )
+        is True
+    )
+    assert opened == [
+        (str(original_path),),
+        (str(original_path), ""),
+    ]
+
+
 def test_open_files_in_imaris_uses_image_slots_for_multiple_files(tmp_path):
     module = _load_xt_module()
     first_path = tmp_path / "first.ims"
@@ -941,6 +973,71 @@ def test_native_bridge_helper_prefers_one_argument_fileopen_for_originals(tmp_pa
     assert completed.returncode == 0
     assert completed.stdout.strip() == "BRIDGE_RUNNER_OPENED"
     assert calls_path.read_text(encoding="utf-8").splitlines() == ["1"]
+
+
+def test_native_bridge_helper_retries_with_options_after_typeerror_for_originals(
+    tmp_path,
+):
+    module = _load_xt_module()
+    original_path = tmp_path / "demo.lif"
+    original_path.write_bytes(b"native input")
+    calls_path = tmp_path / "calls.txt"
+    fake_imarislib = tmp_path / "ImarisLib.py"
+    fake_imarislib.write_text(
+        "\n".join(
+            [
+                "import os",
+                "calls_path = os.environ['IMARIS_FAKE_CALLS']",
+                "",
+                "class App:",
+                "    def __init__(self):",
+                "        self.current = ''",
+                "",
+                "    def FileOpen(self, *args):",
+                "        with open(calls_path, 'a', encoding='utf-8') as handle:",
+                "            handle.write(str(len(args)) + '\\n')",
+                "        if len(args) == 1:",
+                "            raise TypeError(\"IApplicationPrx.FileOpen() missing 1 required positional argument: 'aOptions'\")",
+                "        self.current = args[0]",
+                "",
+                "    def GetCurrentFileName(self):",
+                "        return self.current",
+                "",
+                "class ImarisLib:",
+                "    def GetApplication(self, app_id):",
+                "        return App()",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    payload = {
+        "mode": "open",
+        "app_id": 17,
+        "install_roots": [str(tmp_path)],
+        "retry_attempts": 1,
+        "retry_interval": 0,
+        "file_path": str(original_path),
+        "require_ims": False,
+        "open_verify_timeout": 0.01,
+        "open_verify_interval": 0.01,
+    }
+    env = dict(os.environ)
+    env["IMARIS_FAKE_CALLS"] = str(calls_path)
+
+    completed = subprocess.run(
+        [sys.executable, "-c", module._NATIVE_BRIDGE_OPEN_HELPER],
+        check=False,
+        input=json.dumps(payload),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        env=env,
+        timeout=10,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_OPENED"
+    assert calls_path.read_text(encoding="utf-8").splitlines() == ["1", "2"]
 
 
 def test_native_bridge_helper_rejects_unobserved_original_fileopen(tmp_path):
