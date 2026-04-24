@@ -140,7 +140,7 @@ python3 tools/git_push_with_pat.py origin main
 ```
 
 This helper disables stale GitHub credential helpers for the command and keeps
-the PAT out of argv, remotes, logs, and long-lived git config.
+the PAT out of argv, remotes, logs, temp files, and long-lived git config.
 If a documented scanner command or helper causes a proven avoidable retry/error
 loop, first establish the correct scanner workflow end to end, then update the
 runbook or tool concisely with regression coverage.
