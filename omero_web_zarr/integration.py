@@ -22,6 +22,9 @@ from omero_plugin_common.env_utils import get_bool_env, ENV_FILE_OMEROWEB
 
 from .utils import encode_store_backed_pil_image
 from .utils import get_safe_image_tile_size
+from .utils import get_image_connection
+from .utils import prepare_image_rendering_engine
+from .utils import require_image_rendering_engine
 from .utils import get_store_backed_channel_overrides
 from .utils import get_store_backed_level_count
 from .utils import get_store_backed_level_sizes
@@ -260,7 +263,7 @@ def _marshal_regular_image_data_with_safe_tile_size(image, request):
         },
     }
     try:
-        rendering_engine_ready = image._prepareRenderingEngine()
+        rendering_engine_ready = prepare_image_rendering_engine(image)
         if not rendering_engine_ready:
             LOGGER.debug("Failed to prepare Rendering Engine for imageMarshal")
             return payload
@@ -271,12 +274,13 @@ def _marshal_regular_image_data_with_safe_tile_size(image, request):
         LOGGER.error(traceback.format_exc())
         return payload
 
-    levels = image._re.getResolutionLevels()
+    rendering_engine = require_image_rendering_engine(image)
+    levels = rendering_engine.getResolutionLevels()
     tiles = levels > 1
     payload["tiles"] = tiles
     if tiles:
         width, height = get_safe_image_tile_size(
-            image, conn=getattr(image, "_conn", None)
+            image, conn=get_image_connection(image)
         )
         payload.update(
             {
@@ -284,7 +288,7 @@ def _marshal_regular_image_data_with_safe_tile_size(image, request):
                 "levels": levels,
             }
         )
-        resolution_descriptions = image._re.getResolutionDescriptions()
+        resolution_descriptions = rendering_engine.getResolutionDescriptions()
         payload["resolutions"] = {
             index: {"sizeX": resolution.sizeX, "sizeY": resolution.sizeY}
             for index, resolution in enumerate(resolution_descriptions)
@@ -335,8 +339,8 @@ def _marshal_regular_image_data_with_safe_tile_size(image, request):
         payload["rdefs"] = {
             "model": image.isGreyscaleRenderingModel() and "greyscale" or "color",
             "projection": image.getProjection(),
-            "defaultZ": image._re.getDefaultZ(),
-            "defaultT": image._re.getDefaultT(),
+            "defaultZ": rendering_engine.getDefaultZ(),
+            "defaultT": rendering_engine.getDefaultT(),
             "invertAxis": image.isInvertedAxis(),
         }
     except TypeError:
@@ -368,7 +372,8 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
     from omeroweb.webgateway import views as webgateway_views
 
     server_id = request.session["connector"]["server_id"]
-    prepared_image = webgateway_views._get_prepared_image(
+    get_prepared_image = getattr(webgateway_views, "_get_prepared_image")
+    prepared_image = get_prepared_image(
         request,
         iid,
         server_id=server_id,
@@ -384,9 +389,10 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
 
     if tile:
         try:
-            image._prepareRenderingEngine()
+            prepare_image_rendering_engine(image)
             width, height = get_safe_image_tile_size(image, conn=conn)
-            max_viewer_level = image._re.getResolutionLevels() - 1
+            rendering_engine = require_image_rendering_engine(image)
+            max_viewer_level = rendering_engine.getResolutionLevels() - 1
 
             fields = tile.split(",")
             if len(fields) > 4:
@@ -507,8 +513,12 @@ def _install_safe_image_marshal_overrides(webgateway_marshal):
         )
 
     webgateway_marshal.imageMarshal = safe_image_marshal
-    webgateway_marshal._omero_web_zarr_original_image_marshal = original_image_marshal
-    webgateway_marshal._omero_web_zarr_safe_image_marshal_installed = True
+    setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_original_image_marshal",
+        original_image_marshal,
+    )
+    setattr(webgateway_marshal, "_omero_web_zarr_safe_image_marshal_installed", True)
 
     candidate_modules: list[Any] = []
     from omeroweb.webgateway import views as webgateway_views
@@ -620,7 +630,7 @@ def _store_backed_image_data(image, request):
     )
 
     tiles = level_count > 1
-    conn = getattr(image, "_conn", None)
+    conn = get_image_connection(image)
     if not tiles and conn is not None:
         try:
             max_plane_width, max_plane_height = conn.getMaxPlaneSize()
@@ -826,7 +836,7 @@ def install_webgateway_overrides():
 
     original_get_channels = webclient_gateway.ImageWrapper.getChannels
     original_image_data_json = webgateway_views.imageData_json
-    original_render_thumbnail = webgateway_views._render_thumbnail
+    original_render_thumbnail = getattr(webgateway_views, "_render_thumbnail")
     original_get_thumbnails_json = webgateway_views.get_thumbnails_json
     original_render_image = webgateway_views.render_image
     original_render_image_region = webgateway_views.render_image_region
@@ -1101,4 +1111,4 @@ def install_webgateway_overrides():
         },
     )
 
-    webgateway_views._omero_web_zarr_store_backed_overrides = True
+    setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", True)

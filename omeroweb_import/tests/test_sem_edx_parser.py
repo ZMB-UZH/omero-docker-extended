@@ -477,6 +477,28 @@ def test_sem_edx_plot_and_table_helpers_cover_png_generation_table_persistence_a
         )
         is None
     )
+    resource_calls = []
+
+    def _track_shared_resources():
+        resource_calls.append(True)
+        return _FakeResources(table=failing_table)
+
+    assert (
+        sem_edx_parser.create_spectrum_table(
+            SimpleNamespace(
+                getObject=lambda *_args, **_kwargs: _FakeImage([SimpleNamespace()]),
+                getUpdateService=SimpleNamespace,
+                c=SimpleNamespace(
+                    sf=SimpleNamespace(sharedResources=_track_shared_resources)
+                ),
+            ),
+            7,
+            [(1.0, 10.0)],
+            "sample.txt",
+        )
+        is None
+    )
+    assert resource_calls == []
     assert (
         sem_edx_parser.create_spectrum_table(
             SimpleNamespace(
