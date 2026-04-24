@@ -301,67 +301,99 @@ def is_relative_to(path: Path, parent: Path) -> bool:
     return True
 
 
+def tar_member_kind(member: tarfile.TarInfo) -> str:
+    """Return the supported archive member kind or reject it."""
+    if member.isfile():
+        return "file"
+    if member.isdir():
+        return "directory"
+    if member.issym():
+        return "symlink"
+    if member.islnk():
+        return "hardlink"
+    raise RuntimeError(f"Refusing to extract unsupported archive member: {member.name}")
+
+
+def checked_member_path(
+    member: tarfile.TarInfo, destination: Path, destination_root: Path
+) -> Path:
+    """Return the destination path for a tar member after containment checks."""
+    member_path = (destination / member.name).resolve()
+    if not is_relative_to(member_path, destination_root):
+        raise RuntimeError(f"Refusing to extract unsafe archive member: {member.name}")
+    return member_path
+
+
+def checked_link_target(
+    member: tarfile.TarInfo,
+    member_path: Path,
+    destination: Path,
+    destination_root: Path,
+) -> None:
+    """Validate that a symlink or hard link remains inside the extraction root."""
+    link_target = Path(member.linkname)
+    if link_target.is_absolute():
+        raise RuntimeError(f"Refusing to extract absolute link target: {member.name}")
+    link_root = member_path.parent if member.issym() else destination
+    resolved_link = (link_root / link_target).resolve()
+    if not is_relative_to(resolved_link, destination_root):
+        raise RuntimeError(f"Refusing to extract unsafe link target: {member.name}")
+
+
+def extract_directory_member(member: tarfile.TarInfo, member_path: Path) -> None:
+    """Create a tar directory member with archive permissions."""
+    member_path.mkdir(parents=True, exist_ok=True)
+    os.chmod(member_path, member.mode & 0o777)
+
+
+def extract_file_member(
+    archive: tarfile.TarFile, member: tarfile.TarInfo, member_path: Path
+) -> None:
+    """Extract one regular file member after overwrite checks."""
+    if member_path.exists() or member_path.is_symlink():
+        raise RuntimeError(f"Refusing to overwrite archive member: {member.name}")
+    member_path.parent.mkdir(parents=True, exist_ok=True)
+    extracted = archive.extractfile(member)
+    if extracted is None:
+        raise RuntimeError(f"Could not extract file: {member.name}")
+    with extracted, member_path.open("wb") as handle:
+        shutil.copyfileobj(extracted, handle)
+    os.chmod(member_path, member.mode & 0o777)
+
+
+def create_link_member(
+    member: tarfile.TarInfo, member_path: Path, destination: Path
+) -> None:
+    """Create a validated symlink or hard link member."""
+    if member_path.exists() or member_path.is_symlink():
+        raise RuntimeError(f"Refusing to overwrite archive link: {member.name}")
+    member_path.parent.mkdir(parents=True, exist_ok=True)
+    if member.issym():
+        os.symlink(member.linkname, member_path)
+        return
+    resolved_link = (destination / Path(member.linkname)).resolve()
+    if not resolved_link.is_file():
+        raise RuntimeError(f"Refusing hard link to missing file: {member.name}")
+    os.link(resolved_link, member_path)
+
+
 def safe_extract_tar_xz(archive_path: Path, destination: Path) -> None:
     """Extract a tar.xz archive without allowing path traversal."""
     destination_root = destination.resolve()
     with tarfile.open(archive_path, "r:xz") as archive:
-        members = archive.getmembers()
-        links = []
-        for member in members:
-            member_path = (destination / member.name).resolve()
-            if not is_relative_to(member_path, destination_root):
-                raise RuntimeError(
-                    f"Refusing to extract unsafe archive member: {member.name}"
-                )
-            if not (
-                member.isfile() or member.isdir() or member.issym() or member.islnk()
-            ):
-                raise RuntimeError(
-                    f"Refusing to extract unsupported archive member: {member.name}"
-                )
-            if member.issym() or member.islnk():
-                link_target = Path(member.linkname)
-                if link_target.is_absolute():
-                    raise RuntimeError(
-                        f"Refusing to extract absolute link target: {member.name}"
-                    )
-                link_root = member_path.parent if member.issym() else destination
-                resolved_link = (link_root / link_target).resolve()
-                if not is_relative_to(resolved_link, destination_root):
-                    raise RuntimeError(
-                        f"Refusing to extract unsafe link target: {member.name}"
-                    )
-            if member.isdir():
-                member_path.mkdir(parents=True, exist_ok=True)
-                os.chmod(member_path, member.mode & 0o777)
-            elif member.isfile():
-                if member_path.exists() or member_path.is_symlink():
-                    raise RuntimeError(
-                        f"Refusing to overwrite archive member: {member.name}"
-                    )
-                member_path.parent.mkdir(parents=True, exist_ok=True)
-                extracted = archive.extractfile(member)
-                if extracted is None:
-                    raise RuntimeError(f"Could not extract file: {member.name}")
-                with extracted, member_path.open("wb") as handle:
-                    shutil.copyfileobj(extracted, handle)
-                os.chmod(member_path, member.mode & 0o777)
-            else:
+        links: list[tuple[tarfile.TarInfo, Path]] = []
+        for member in archive.getmembers():
+            member_path = checked_member_path(member, destination, destination_root)
+            member_kind = tar_member_kind(member)
+            if member_kind in {"symlink", "hardlink"}:
+                checked_link_target(member, member_path, destination, destination_root)
                 links.append((member, member_path))
-        for member, member_path in links:
-            if member_path.exists() or member_path.is_symlink():
-                raise RuntimeError(f"Refusing to overwrite archive link: {member.name}")
-            member_path.parent.mkdir(parents=True, exist_ok=True)
-            link_target = Path(member.linkname)
-            if member.issym():
-                os.symlink(member.linkname, member_path)
+            elif member_kind == "directory":
+                extract_directory_member(member, member_path)
             else:
-                resolved_link = (destination / link_target).resolve()
-                if not resolved_link.is_file():
-                    raise RuntimeError(
-                        f"Refusing hard link to missing file: {member.name}"
-                    )
-                os.link(resolved_link, member_path)
+                extract_file_member(archive, member, member_path)
+        for member, member_path in links:
+            create_link_member(member, member_path, destination)
 
 
 def installed_node_version(node_dir: Path) -> str | None:
