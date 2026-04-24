@@ -80,6 +80,12 @@ class _FakeLink:
         self.child = child
 
 
+class _FakeImageRef:
+    def __init__(self, image_id, loaded):
+        self.image_id = image_id
+        self.loaded = loaded
+
+
 def _json_request(payload):
     factory = RequestFactory()
     return factory.post("/", data=json.dumps(payload), content_type="application/json")
@@ -200,15 +206,32 @@ def test_save_image_map_annotation_builds_expected_link(monkeypatch):
 
     monkeypatch.setattr(job_view, "MapAnnotationI", _FakeMapAnnotation)
     monkeypatch.setattr(job_view, "ImageAnnotationLinkI", _FakeLink)
+    monkeypatch.setattr(job_view, "ImageI", _FakeImageRef)
     monkeypatch.setattr(job_view, "NamedValue", lambda key, value: (key, value))
     monkeypatch.setattr(job_view, "rstring", lambda value: value)
-    monkeypatch.setattr(job_view, "get_id", lambda saved: 123)
+    monkeypatch.setattr(job_view, "get_id", lambda obj: getattr(obj, "id", 123))
 
     assert job_view._save_image_map_annotation(update, image, {"Plate": "P1"}) is True
 
-    assert saved_links[0].parent is image._obj
+    assert saved_links[0].parent.image_id == 7
+    assert saved_links[0].parent.loaded is False
+    assert saved_links[0].parent is not image._obj
     assert saved_links[0].child.ns == job_view.MAP_NS
     assert saved_links[0].child.values == [("Plate", "P1")]
+
+
+def test_save_image_map_annotation_rejects_missing_or_invalid_image_id(monkeypatch):
+    update = SimpleNamespace(saveAndReturnObject=lambda link: link)
+
+    monkeypatch.setattr(job_view, "get_id", lambda obj: None)
+    assert (
+        job_view._save_image_map_annotation(update, object(), {"Plate": "P1"}) is False
+    )
+
+    monkeypatch.setattr(job_view, "get_id", lambda obj: "not-an-id")
+    assert (
+        job_view._save_image_map_annotation(update, object(), {"Plate": "P1"}) is False
+    )
 
 
 def test_validate_user_password_handles_missing_details_and_auth_failure(monkeypatch):

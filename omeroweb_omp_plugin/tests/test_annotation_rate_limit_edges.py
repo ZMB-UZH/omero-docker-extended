@@ -177,18 +177,20 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     )
     assert plugin_cleanup_result == (0, 0, 0)
 
-    link_calls = {}
+    deleted_annotation_ids = set()
+    delete_attempts = []
 
     def _find_link_ids(_conn, annotation_id):
-        link_calls[annotation_id] = link_calls.get(annotation_id, 0) + 1
         if annotation_id == 13:
             raise RuntimeError("link query failed")
+        if annotation_id in deleted_annotation_ids:
+            return []
         if annotation_id == 11:
-            return [401, 402] if link_calls[annotation_id] == 1 else []
+            return [401, 402]
         if annotation_id == 12:
-            return [501] if link_calls[annotation_id] == 1 else []
+            return [501]
         if annotation_id == 14:
-            return [701] if link_calls[annotation_id] == 1 else []
+            return [701]
         return []
 
     monkeypatch.setattr(annotation_service, "find_annotation_link_ids", _find_link_ids)
@@ -199,17 +201,6 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
             RuntimeError("map lookup failed")
         ),
     )
-
-    class _LinkStub:
-        def __init__(self):
-            self.id = None
-
-        def setId(self, value):
-            if value == 402:
-                raise RuntimeError("stub creation failed")
-            self.id = value
-
-    monkeypatch.setattr(annotation_service, "ImageAnnotationLinkI", _LinkStub)
 
     class _BrokenLenMapValue:
         def __bool__(self):
@@ -225,11 +216,8 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
                 aid = params.values["aid"]
                 if aid == 14:
                     raise RuntimeError("projection failed")
-                return []
+                return [] if aid in deleted_annotation_ids else [[aid]]
             raise AssertionError(f"Unexpected HQL: {hql}")
-
-    deleted_objects = []
-    update = SimpleNamespace(deleteObject=deleted_objects.append)
 
     annotations = {
         11: SimpleNamespace(
@@ -254,6 +242,14 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
                 raise RuntimeError("annotation not reloadable")
             return annotations.get(obj_id)
 
+        @staticmethod
+        def deleteObjects(kind, object_ids, wait=True):
+            delete_attempts.extend((kind, object_id, wait) for object_id in object_ids)
+            for object_id in object_ids:
+                if object_id == 12:
+                    raise RuntimeError("delete failed")
+                deleted_annotation_ids.add(object_id)
+
     image = SimpleNamespace(
         id=55,
         listAnnotations=lambda: [
@@ -267,16 +263,20 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     deleted_sets, deleted_pairs, attempted = (
         annotation_service.delete_existing_annotations(
             _Conn(),
-            update,
+            SimpleNamespace(),
             image,
             var_names=[],
             mode="all",
         )
     )
 
-    assert (deleted_sets, deleted_pairs, attempted) == (2, 0, 4)
-    assert any(isinstance(obj, _LinkStub) and obj.id == 401 for obj in deleted_objects)
-    assert any(isinstance(obj, _LinkStub) and obj.id == 501 for obj in deleted_objects)
+    assert (deleted_sets, deleted_pairs, attempted) == (1, 0, 4)
+    assert delete_attempts == [
+        ("Annotation", 11, True),
+        ("Annotation", 12, True),
+        ("Annotation", 13, True),
+        ("Annotation", 14, True),
+    ]
 
 
 def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):

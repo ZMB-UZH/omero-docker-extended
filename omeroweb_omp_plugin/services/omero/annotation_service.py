@@ -8,7 +8,6 @@ import hashlib
 import hmac
 
 from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
-from omero.model import ImageAnnotationLinkI
 from omero.rtypes import rstring, rlong
 from omero.sys import ParametersI
 
@@ -311,7 +310,7 @@ def find_map_annotation_ids(conn, image_id):
         return []
 
 
-def delete_existing_annotations(conn, update, img, var_names, mode):
+def delete_existing_annotations(conn, _update, img, var_names, mode):
     """
     Delete MapAnnotations depending on deletion mode.
 
@@ -339,39 +338,6 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
     qs = conn.getQueryService()
     service_opts = getattr(conn, "SERVICE_OPTS", None)
 
-    def _delete_links_for_annotation(aid):
-        try:
-            link_ids = find_annotation_link_ids(conn, aid)
-            for lid in link_ids:
-                try:
-                    link_obj = conn.getObject("ImageAnnotationLink", int(lid))
-                except Exception:
-                    link_obj = None
-                if link_obj is not None:
-                    obj = getattr(link_obj, "_obj", link_obj)
-                    update.deleteObject(obj)
-                    continue
-
-                try:
-                    link_stub = ImageAnnotationLinkI()
-                    link_stub.setId(rlong(int(lid)))
-                    update.deleteObject(link_stub)
-                except Exception:
-                    logger.warning("Failed to build link stub for %s", lid)
-            remaining = find_annotation_link_ids(conn, aid)
-            if remaining:
-                logger.warning(
-                    "Annotation %s still has %s link(s) after delete attempt: %s",
-                    aid,
-                    len(remaining),
-                    remaining,
-                )
-                return False
-            return True
-        except Exception as e:
-            logger.warning("Failed to delete annotation links for %s: %s", aid, e)
-            return False
-
     def _annotation_exists(aid):
         try:
             params = ParametersI()
@@ -386,21 +352,34 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
             return True
 
     def _delete_by_id(aid):
-        links_deleted = _delete_links_for_annotation(aid)
-        if not links_deleted:
+        try:
+            conn.deleteObjects("Annotation", [int(aid)], wait=True)
+        except Exception as e:
             logger.warning(
-                "Skipping annotation %s delete because links still exist.",
+                "Failed to delete annotation %s through OMERO delete service: %s",
                 aid,
+                e,
             )
             return False
+
         try:
-            ann_obj = conn.getObject("MapAnnotation", int(aid))
-        except Exception:
-            ann_obj = None
-        if ann_obj is None:
-            return True
-        obj = getattr(ann_obj, "_obj", ann_obj)
-        update.deleteObject(obj)
+            remaining_links = find_annotation_link_ids(conn, aid)
+        except Exception as e:
+            logger.warning(
+                "Failed to confirm annotation %s link cleanup after delete: %s",
+                aid,
+                e,
+            )
+            return False
+        if remaining_links:
+            logger.warning(
+                "Annotation %s still has %s link(s) after delete attempt: %s",
+                aid,
+                len(remaining_links),
+                remaining_links,
+            )
+            return False
+
         return not _annotation_exists(aid)
 
     target_ids = set()
