@@ -861,6 +861,10 @@ def test_import_into_omero_starts_folder_worker_after_confirmation(
     selected_folder = tmp_path / "selected"
     selected_folder.mkdir()
 
+    busy_states = []
+    statuses = []
+    threads = []
+
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._import_in_progress = False
     dialog._connected = True
@@ -869,12 +873,8 @@ def test_import_into_omero_starts_folder_worker_after_confirmation(
     dialog._folder_import_reason = ""
     dialog.root = object()
     dialog._import_folder_worker = lambda *_args: None
-    dialog._set_actions_busy_for_import = lambda active: busy_states.append(active)
+    dialog._set_actions_busy_for_import = busy_states.append
     dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
-
-    busy_states = []
-    statuses = []
-    threads = []
 
     monkeypatch.setattr(
         module.filedialog,
@@ -973,6 +973,10 @@ def test_import_folder_worker_uploads_folder_and_reports_success(tmp_path):
         ]
     )
 
+    def _next_status(url):
+        client_calls.append(("status", url))
+        return next(status_sequence, {})
+
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.client = types.SimpleNamespace(
         start_folder_import_job=lambda folder_name, entries: (
@@ -992,9 +996,7 @@ def test_import_folder_worker_uploads_folder_and_reports_success(tmp_path):
         ),
         upload_folder_chunk=lambda *args: client_calls.append(("upload",) + args) or {},
         trigger_folder_import=lambda url: client_calls.append(("trigger", url)) or {},
-        get_folder_import_status=lambda url: (
-            client_calls.append(("status", url)) or next(status_sequence)
-        ),
+        get_folder_import_status=_next_status,
         confirm_folder_import=lambda url: client_calls.append(("confirm", url)) or {},
     )
     dialog._set_status = lambda text, color="#ecf0f1": status_updates.append(
@@ -1132,7 +1134,7 @@ def test_iter_native_bridge_python_executables_uses_py_launcher_and_skips_curren
     monkeypatch.setattr(
         module,
         "_resolve_python_executable_candidate",
-        lambda path: resolved.get(path),
+        resolved.get,
     )
 
     def _fake_run(cmd, **kwargs):

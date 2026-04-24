@@ -18,10 +18,59 @@ This repository uses [Ruff](https://github.com/astral-sh/ruff) as the canonical 
 
 ## Local workflow
 
-Install Ruff and the local hooks once:
+Host Ruff must match the repository-pinned version before claiming local
+verification. The pinned version is declared in `.ruff.toml` and mirrored by
+`.github/workflows/ruff.yml`; do not hand-type or guess it.
 
 ```bash
-python3 -m pip install ruff pre-commit
+ruff --version
+```
+
+Use this deterministic host install procedure when `ruff` is absent or the
+version is wrong. It derives the required version from `.ruff.toml`, verifies
+tool prerequisites, creates an explicit executable directory, installs in a
+disposable virtualenv, copies only the pinned `ruff` executable, and verifies
+the result.
+
+```bash
+set -eu
+command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 1; }
+command -v mktemp >/dev/null || { echo "mktemp is required" >&2; exit 1; }
+command -v install >/dev/null || { echo "install is required" >&2; exit 1; }
+required_ruff=$(
+  python3 - <<'PY'
+import pathlib
+import tomllib
+
+config = tomllib.loads(pathlib.Path(".ruff.toml").read_text(encoding="utf-8"))
+required = config["required-version"]
+if not required.startswith("=="):
+    raise SystemExit("Unsupported Ruff required-version format")
+print(required[2:])
+PY
+)
+tmpdir=$(mktemp -d)
+cleanup() { rm -rf "$tmpdir"; }
+trap cleanup EXIT
+python3 -m venv "$tmpdir/venv"
+"$tmpdir/venv/bin/python" -m pip install "ruff==$required_ruff"
+if [ -n "${RUFF_INSTALL_DIR:-}" ]; then
+  target_dir="$RUFF_INSTALL_DIR"
+elif [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ] && [ -d /usr/local/bin ]; then
+  target_dir=/usr/local/bin
+else
+  target_dir="${XDG_BIN_HOME:-${HOME:?HOME is required}/.local/bin}"
+fi
+mkdir -p "$target_dir"
+install -m 0755 "$tmpdir/venv/bin/ruff" "$target_dir/ruff"
+export PATH="$target_dir:$PATH"
+[ "$(ruff --version)" = "ruff $required_ruff" ]
+```
+
+Install local hooks only after verifying `pre-commit` is available:
+
+```bash
+command -v pre-commit >/dev/null || { echo "pre-commit is required" >&2; exit 1; }
 pre-commit install
 ```
 

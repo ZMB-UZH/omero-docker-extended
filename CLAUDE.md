@@ -22,8 +22,8 @@ Project-specific instructions for Claude Code sessions working on this repositor
 - Follow the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
 - If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill. It is for internal AI communication only, never for repo docs/comments/docstrings/function descriptions or user-facing copy, and it changes reply style only without changing routing, tool choice, verification scope, or uncertainty handling. Drop back to normal detail whenever safety, sequencing, or ambiguity matters.
-- Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.
-- Never edit `env/omero_secrets.env`.
+- Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, ports, or edit `env/omero_secrets.env`.
+- Do not search for, create, restore, or edit `.deepsource.toml`; DeepSource repo-file configuration is retired. Use `docs/operations/code-scanning.md` and `tools/scanner_inventory.py` for scanner counts and logs.
 - Update `docs/` when behavior or operating assumptions change.
 
 ## Repository anchors
@@ -55,8 +55,7 @@ ruff format --check .
 python3 tools/env_safety_guard.py check
 ```
 
-If `ruff` is unavailable as a binary on the active host, use
-`python3 -m ruff check .` and `python3 -m ruff format --check .` instead.
+If `ruff` is unavailable as a binary on the active host, use `python3 -m ruff check .` and `python3 -m ruff format --check .` instead. Host `ruff` must match the repo-pinned version before claiming local verification.
 
 Use the routing doc and `verification-loop` skill to select the smallest correct subset while iterating, then state the exact verification level achieved.
 

@@ -16,13 +16,14 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract, [docs/reference
 - It changes reply style only, not routing, tool choice, verification scope, or uncertainty handling. Return to normal detail for destructive actions, security guidance, or unresolved ambiguity.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.
 - Do not edit `env/omero_secrets.env`.
+- Do not search for, create, restore, or edit `.deepsource.toml`; DeepSource repo-file configuration is retired. Use `docs/operations/code-scanning.md` and `tools/scanner_inventory.py` for scanner counts and logs.
 - Prefer existing helpers, tests, docs, and `*_example*` files over new abstractions.
 - Open one domain doc and one nearest test module before broadening context.
 
 ## Verification rules
 
 - Run `python3 tools/lint_docs_structure.py` for doc and instruction-surface changes.
-- Use Ruff as the Python lint and format gate.
+- Use Ruff as the Python lint and format gate, and verify host `ruff` matches the repo-pinned version before claiming local verification.
 - Run split `pytest` suites separately. Never combine all suites into one `pytest` process.
 - Report the exact verification level achieved. Do not overstate coverage.
 

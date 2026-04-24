@@ -6,10 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
-import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -591,45 +591,52 @@ def list_code_scanning_alerts(
         page += 1
 
 
+_GITHUB_API_VERSION_CACHE: str | None = None
+
+
+def latest_github_api_version(token: str) -> str:
+    global _GITHUB_API_VERSION_CACHE
+    if _GITHUB_API_VERSION_CACHE is not None:
+        return _GITHUB_API_VERSION_CACHE
+
+    versions = _github_api_get_json("/versions", token, api_version=None)
+    if not isinstance(versions, list) or not versions:
+        raise RuntimeError(
+            "GitHub API versions request returned no supported versions."
+        )
+    if not all(isinstance(version, str) for version in versions):
+        raise RuntimeError("GitHub API versions request returned an invalid payload.")
+    _GITHUB_API_VERSION_CACHE = max(versions)
+    return _GITHUB_API_VERSION_CACHE
+
+
 def github_api_get_json(api_path: str, token: str) -> Any:
+    api_version = latest_github_api_version(token)
+    return _github_api_get_json(api_path, token, api_version=api_version)
+
+
+def _github_api_get_json(api_path: str, token: str, *, api_version: str | None) -> Any:
     if not api_path.startswith("/"):
         raise ValueError(f"GitHub API path must start with '/': {api_path!r}")
 
-    curl_bin = shutil.which("curl")
-    if curl_bin is None:
-        raise RuntimeError(
-            "GitHub API request failed: required executable 'curl' is not available."
-        )
-
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "security-delta-guard",
+    }
+    if api_version is not None:
+        headers["X-GitHub-Api-Version"] = api_version
+    request = urllib.request.Request(
+        f"https://api.github.com{api_path}",
+        headers=headers,
+    )
     try:
-        result = subprocess.run(
-            [
-                curl_bin,
-                "--silent",
-                "--show-error",
-                "--location",
-                "--header",
-                "Accept: application/vnd.github+json",
-                "--header",
-                f"Authorization: Bearer {token}",
-                "--header",
-                "X-GitHub-Api-Version: 2022-11-28",
-                "--header",
-                "User-Agent: security-delta-guard",
-                f"https://api.github.com{api_path}",
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"GitHub API request failed with HTTP {exc.code}.") from exc
+    except urllib.error.URLError as exc:
         raise RuntimeError(f"GitHub API request failed: {exc}") from exc
-
-    if result.returncode != 0:
-        stderr = result.stderr.strip() or "curl exited with a non-zero status."
-        raise RuntimeError(f"GitHub API request failed: {stderr}")
-    return json.loads(result.stdout)
 
 
 def get_default_branch(repository: str, token: str) -> str | None:

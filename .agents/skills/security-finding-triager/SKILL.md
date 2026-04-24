@@ -17,12 +17,14 @@ Use this skill for any security-relevant code change or scanner-driven remediati
 ## Mandatory workflow
 
 1. Refresh the live alert inventory from GitHub before coding.
-2. Classify the boundary: path/file, logging, SQL, outbound HTTP, CSRF/response, subprocess, Docker/workflow, or secrets.
-3. Name the helper or boundary you will harden.
-4. Name the regression tests you will run before editing code.
-5. Fix the root cause, not the scanner string.
-6. Re-run targeted tests, Ruff, and docs validation.
-7. Refresh the live alert inventory again after the push that is expected to close the alert.
+2. Use GitHub Actions logs for scanner runtime output when an alert lacks context.
+3. Do not look for `.deepsource.toml`; DeepSource repo-file configuration is retired for this repository, and GitHub PATs do not authenticate to DeepSource. If DeepSource auth is unavailable, report DeepSource counts as unavailable, not zero. If it is available, distinguish grouped issues from issue occurrences.
+4. Classify the boundary: path/file, logging, SQL, outbound HTTP, CSRF/response, subprocess, Docker/workflow, or secrets.
+5. Name the helper or boundary you will harden.
+6. Name the regression tests you will run before editing code.
+7. Fix the root cause, not the scanner string.
+8. Re-run targeted tests, Ruff, and docs validation.
+9. Refresh the live alert inventory again after the push that is expected to close the alert.
 
 ## Rules
 

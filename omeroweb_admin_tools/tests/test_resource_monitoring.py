@@ -378,7 +378,7 @@ def test_build_proxy_target_url_rejects_origin_drift(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view.urllib.parse.urlunparse",
-        lambda _parts: next(urlunparse_results),
+        lambda _parts: next(urlunparse_results, ""),
     )
 
     try:

@@ -1953,7 +1953,8 @@ class ImportPluginRegressionTests(TestCase):
 
         class FailingLock:
             def __init__(self, *_args, **_kwargs):
-                pass
+                self.args = _args
+                self.kwargs = _kwargs
 
             def __enter__(self):
                 raise core_functions.portalocker.exceptions.LockException("busy")

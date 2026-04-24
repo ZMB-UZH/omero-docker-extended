@@ -408,11 +408,10 @@ def _get_session_key(conn):
 
     # Try to get from underlying client
     try:
-        if hasattr(conn, "c") and conn.c:
-            if hasattr(conn.c, "getSessionId"):
-                session_id = conn.c.getSessionId()
-                if session_id:
-                    return session_id
+        if hasattr(conn, "c") and conn.c and hasattr(conn.c, "getSessionId"):
+            session_id = conn.c.getSessionId()
+            if session_id:
+                return session_id
     except Exception as e:
         logger.debug("conn.c.getSessionId() failed: %s", sanitize_log_value(e))
 

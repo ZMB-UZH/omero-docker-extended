@@ -3,6 +3,7 @@
 import os
 import sys
 from types import ModuleType
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -256,7 +257,7 @@ def _matches_isolated_prefix(module_name: str) -> bool:
     )
 
 
-def _snapshot_module_state() -> dict[str, tuple[object, dict[str, object]]]:
+def _snapshot_module_state() -> dict[str, tuple[object, dict[str, Any]]]:
     snapshot = {}
     for module_name, module in list(sys.modules.items()):
         if _matches_isolated_prefix(module_name):

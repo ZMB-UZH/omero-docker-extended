@@ -1,12 +1,13 @@
-import random
-import math
-
 """
 SEM EDX EMSA/MAS format parser and OMERO Table creator.
 
 This module parses SEM EDX spectrum files in EMSA/MAS format and creates
 one OMERO Table containing the spectrum X,Y data.
 """
+
+import math
+import random
+
 import logging
 import re
 import warnings

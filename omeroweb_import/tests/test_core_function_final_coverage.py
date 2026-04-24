@@ -245,7 +245,8 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
 
     class _DeletingLock:
         def __init__(self, *args, **kwargs):
-            pass
+            self.args = args
+            self.kwargs = kwargs
 
         def __enter__(self):
             job_path.unlink()
@@ -260,7 +261,8 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
 
     class _FailingLock:
         def __init__(self, *args, **kwargs):
-            pass
+            self.args = args
+            self.kwargs = kwargs
 
         def __enter__(self):
             raise core_functions.portalocker.exceptions.LockException("busy")
