@@ -13,7 +13,8 @@ Use this skill whenever a change touches env files, config loaders, startup scri
 - All configuration is environment-driven.
 - Never hard-code paths, credentials, ports, or endpoints in committed code.
 - Treat `env/*_example.env` and `installation_paths_example.env` as the canonical tracked contract.
-- Never create, edit, overwrite, or delete `env/omero_secrets.env`.
+- Never create, edit, overwrite, delete, normalize, or print values from non-example deployment env files unless the user explicitly grants a one-off exception for that exact operation.
+- Use `python3 tools/env_safety_guard.py template-check` to report env-template key drift without exposing values.
 - Prefer `omero_plugin_common.env_utils` for typed Python config loading.
 - Treat shell env parsing as a security boundary: config must be parsed as data, never executed as shell code.
 

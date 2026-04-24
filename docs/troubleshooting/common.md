@@ -5,9 +5,9 @@
 Checks:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env ps
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=10m omeroserver
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=10m omeroweb
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env ps
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs --since=10m omeroserver
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs --since=10m omeroweb
 ```
 
 Focus on:
@@ -22,8 +22,8 @@ Focus on:
 Checks:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env exec omeroweb env | rg CONFIG_omero_web_apps
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=10m omeroweb
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env exec omeroweb env | rg CONFIG_omero_web_apps
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs --since=10m omeroweb
 ```
 
 Ensure the plugin app name exists in `CONFIG_omero_web_apps` and OMERO.web was restarted after config change.
@@ -94,17 +94,17 @@ Security rationale:
 - Use the standard compose `tmpfs:` key to override `/dev/disk`, which blocks anonymous volume creation without exposing host block-device topology.
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env down
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env down
 ```
 
-If you run compose commands manually, always include all three env files for
-`build`, `up`, `down`, `ps`, `logs`, and `exec`.
+If scripts or agents run compose commands manually, include the full explicit
+env-file list for `build`, `up`, `down`, `ps`, `logs`, and `exec`.
 
 If you installed with `installation/installation_script.sh`, generated `.env` already sets
-`COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env:env/omeroserver.env`
-and mirrors `OMERO_DATA_DIR`, `OMERO_DB_PASS`, and `OMP_PLUGIN_DB_PASS`
-(mode `0600`), so plain `docker compose <command>` works from the installation
-root.
+`COMPOSE_ENV_FILES=installation_paths.env,env/omero_secrets.env,env/omeroserver.env,env/omeroweb.env,env/omero-celery.env,env/grafana.env`
+for shells/tools that honor it and mirrors the compose-interpolated paths,
+passwords, and build version pins (mode `0600`), so plain
+`docker compose <command>` works from the installation root.
 
 If you run the installer with `sudo`, the script now assigns `.env` ownership to
 the invoking sudo user (from `SUDO_UID:SUDO_GID`) while keeping mode `0600`, so
@@ -150,8 +150,8 @@ Security rationale:
 - Use the standard compose `tmpfs:` key to override `/dev/disk`, which blocks anonymous volume creation without exposing host block-device topology.
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env down
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env up -d
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env down
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env up -d
 
 docker volume ls
 # If a leftover anonymous volume still exists and is unused:
@@ -184,13 +184,13 @@ Check/verify commands:
 
 ```bash
 # 1) Recreate only cAdvisor with current compose config
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env up -d cadvisor
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env up -d cadvisor
 
 # 2) Confirm startup no longer prints usage/help
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=2m cadvisor | rg -n 'Starting cAdvisor version|Usage of|flag provided but not defined'
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs --since=2m cadvisor | rg -n 'Starting cAdvisor version|Usage of|flag provided but not defined'
 
 # 3) Confirm metrics endpoint is reachable inside the container network
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env exec -T cadvisor wget --no-verbose --tries=1 --spider http://localhost:8080/metrics
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env exec -T cadvisor wget --no-verbose --tries=1 --spider http://localhost:8080/metrics
 ```
 
 Expected result:
@@ -218,8 +218,8 @@ Fix:
 - Restart and inspect logs:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env up -d database omeroserver omeroweb
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=5m database omeroserver
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env up -d database omeroserver omeroweb
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs --since=5m database omeroserver
 ```
 
 Expected result:
@@ -254,7 +254,7 @@ Fix:
 Validation:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env exec omeroserver \
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env exec omeroserver \
   /opt/omero/server/OMERO.server/bin/omero config get omero.ldap.new_user_group
 ```
 
@@ -346,10 +346,10 @@ Next step:
 Validation:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env exec omeroserver \
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env exec omeroserver \
   cat /opt/omero/server/OMERO.server/var/repo-root-sync.status
 
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=10m omeroserver \
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs --since=10m omeroserver \
   | rg 'repo-root-bootstrap|normalized_prefix_count|failed_prefix_count'
 ```
 
@@ -407,11 +407,11 @@ Cause:
 Fix:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env config | rg '^\s+OMERO_TMP_PATH:' -n
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env config | rg '^\s+OMERO_TMP_PATH:' -n
 
 # if missing in config output, ensure compose service env wiring and restart
 bash installation/installation_script.sh
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env up -d --build omeroserver omeroweb
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env up -d --build omeroserver omeroweb
 ```
 
 Expected result:
@@ -443,7 +443,7 @@ docker compose exec omeroserver ls -ld /opt/omero/server/omero/tmp
 # fix ownership/permissions on the host path mounted at /opt/omero/server
 # so the legacy path is writable and warning-free on startup
 
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env up -d --build omeroserver
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env up -d --build omeroserver
 ```
 
 Expected result:
