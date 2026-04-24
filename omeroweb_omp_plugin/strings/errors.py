@@ -130,8 +130,7 @@ def unknown_job():
     return "unknown job"
 
 
-def invalid_regex_pattern(detail=None):
-    del detail
+def invalid_regex_pattern(_detail=None):
     return "Invalid regex pattern."
 
 

@@ -38,6 +38,14 @@ class _FailingLock:
         return False
 
 
+def test_timeout_expired_handles_invalid_negative_and_elapsed_values(monkeypatch):
+    monkeypatch.setattr(core_functions.time, "time", lambda: 15.0)
+    assert core_functions._timeout_expired(10.0, "bad") is False
+    assert core_functions._timeout_expired(10.0, -1) is False
+    assert core_functions._timeout_expired(10.0, 6) is False
+    assert core_functions._timeout_expired(10.0, 5) is True
+
+
 def test_job_storage_helpers_cover_missing_corrupt_and_lock_failure_paths(
     tmp_path, monkeypatch
 ):
