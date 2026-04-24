@@ -64,8 +64,8 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         runbook_text = self.read_text("docs/operations/code-scanning.md")
         normalized_runbook_text = " ".join(runbook_text.split())
         self.assertIn("GitHub reported **4 open alerts on `main`**", runbook_text)
-        self.assertIn("**11 grouped issues**", runbook_text)
-        self.assertIn("**291 issue occurrences**", runbook_text)
+        self.assertIn("**8 grouped issues**", runbook_text)
+        self.assertIn("**216 issue occurrences**", runbook_text)
         self.assertIn("**0 dependency vulnerability occurrences**", runbook_text)
         self.assertIn("latest_commit_oid", runbook_text)
         self.assertIn(
