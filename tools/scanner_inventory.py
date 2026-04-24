@@ -18,6 +18,7 @@ from typing import Any
 
 USER_AGENT = "omero-docker-extended-scanner-inventory"
 REPOSITORY_COMPONENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 120
 
 
 def curl_config_quote(value: str) -> str:
@@ -61,6 +62,7 @@ def parse_args() -> argparse.Namespace:
         default="GITHUB_TOKEN",
         help="Environment variable containing the GitHub token.",
     )
+    add_request_timeout_argument(github)
 
     deepsource = subparsers.add_parser(
         "deepsource",
@@ -76,6 +78,7 @@ def parse_args() -> argparse.Namespace:
         default="DEEPSOURCE_TOKEN",
         help="Environment variable containing the DeepSource token.",
     )
+    add_request_timeout_argument(deepsource)
     deepsource_issues = subparsers.add_parser(
         "deepsource-issues",
         help="List DeepSource grouped issues with sample occurrences.",
@@ -102,6 +105,7 @@ def parse_args() -> argparse.Namespace:
         default="DEEPSOURCE_TOKEN",
         help="Environment variable containing the DeepSource token.",
     )
+    add_request_timeout_argument(deepsource_issues)
     return parser.parse_args()
 
 
@@ -113,6 +117,18 @@ def positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("must be a positive integer")
     return parsed
+
+
+def add_request_timeout_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--request-timeout",
+        type=positive_int,
+        default=DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        help=(
+            "Per-request timeout in seconds for scanner API calls "
+            f"(default: {DEFAULT_REQUEST_TIMEOUT_SECONDS})."
+        ),
+    )
 
 
 def read_token(env_name: str, label: str) -> str:
@@ -157,6 +173,7 @@ def fetch_json(
     data: bytes | None = None,
     method: str | None = None,
     service: str,
+    timeout_seconds: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
 ) -> Any:
     parsed_url = urllib.parse.urlsplit(url)
     if parsed_url.scheme != "https" or not parsed_url.hostname:
@@ -186,7 +203,7 @@ def fetch_json(
             capture_output=True,
             input="\n".join(config_lines) + "\n",
             text=True,
-            timeout=30,
+            timeout=timeout_seconds,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise SystemExit(f"{service} request failed: {exc}") from None
@@ -199,7 +216,9 @@ def fetch_json(
         raise SystemExit(f"{service} request returned invalid JSON") from None
 
 
-def latest_github_api_version() -> str:
+def latest_github_api_version(
+    timeout_seconds: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
+) -> str:
     versions = fetch_json(
         "https://api.github.com/versions",
         headers={
@@ -207,6 +226,7 @@ def latest_github_api_version() -> str:
             "User-Agent": USER_AGENT,
         },
         service="GitHub versions",
+        timeout_seconds=timeout_seconds,
     )
     if not isinstance(versions, list) or not versions:
         raise SystemExit("GitHub versions request returned no supported versions")
@@ -219,7 +239,8 @@ def summarize_github_code_scanning(args: argparse.Namespace) -> dict[str, Any]:
     owner, repo = parse_github_repository(args.repository)
     repository = f"{owner}/{repo}"
     token = read_token(args.token_env, "GitHub")
-    api_version = latest_github_api_version()
+    timeout_seconds = getattr(args, "request_timeout", DEFAULT_REQUEST_TIMEOUT_SECONDS)
+    api_version = latest_github_api_version(timeout_seconds=timeout_seconds)
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
@@ -241,6 +262,7 @@ def summarize_github_code_scanning(args: argparse.Namespace) -> dict[str, Any]:
             f"https://api.github.com/repos/{repository}/code-scanning/alerts?{query}",
             headers=headers,
             service="GitHub code-scanning",
+            timeout_seconds=timeout_seconds,
         )
         if not isinstance(batch, list):
             raise SystemExit(
@@ -281,6 +303,7 @@ def parse_deepsource_repository(repository: str) -> tuple[str, str, str]:
 def summarize_deepsource(args: argparse.Namespace) -> dict[str, Any]:
     vcs_provider, login, name = parse_deepsource_repository(args.repository)
     token = read_token(args.token_env, "DeepSource")
+    timeout_seconds = getattr(args, "request_timeout", DEFAULT_REQUEST_TIMEOUT_SECONDS)
     payload = {
         "query": """
           query($name: String!, $login: String!, $vcsProvider: VCSProvider!) {
@@ -310,6 +333,7 @@ def summarize_deepsource(args: argparse.Namespace) -> dict[str, Any]:
         },
         method="POST",
         service="DeepSource API",
+        timeout_seconds=timeout_seconds,
     )
     if result.get("errors"):
         raise SystemExit("DeepSource API returned GraphQL errors")
@@ -333,6 +357,7 @@ def summarize_deepsource(args: argparse.Namespace) -> dict[str, Any]:
 def summarize_deepsource_issues(args: argparse.Namespace) -> dict[str, Any]:
     vcs_provider, login, name = parse_deepsource_repository(args.repository)
     token = read_token(args.token_env, "DeepSource")
+    timeout_seconds = getattr(args, "request_timeout", DEFAULT_REQUEST_TIMEOUT_SECONDS)
     payload = {
         "query": """
           query(
@@ -400,6 +425,7 @@ def summarize_deepsource_issues(args: argparse.Namespace) -> dict[str, Any]:
         },
         method="POST",
         service="DeepSource API",
+        timeout_seconds=timeout_seconds,
     )
     if result.get("errors"):
         raise SystemExit("DeepSource API returned GraphQL errors")

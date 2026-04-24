@@ -140,6 +140,8 @@ python3 tools/scanner_inventory.py deepsource-issues \
 
 `tools/scanner_inventory.py` reads tokens from `GITHUB_TOKEN` or
 `DEEPSOURCE_TOKEN` when present; otherwise it prompts without echo on a TTY.
+Each API request defaults to a 120-second timeout; use `--request-timeout N`
+only when a scanner API is slower than that, then report the value used.
 Never paste PATs into command arguments, remotes, repo files, or logs.
 If a GitHub PAT or DeepSource API key is required and unavailable, ask the user
 for the exact credential immediately and pause for input. Do not keep retrying
