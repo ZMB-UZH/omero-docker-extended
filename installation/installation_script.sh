@@ -92,11 +92,48 @@ if ! declare -F install_transcript_record_text >/dev/null 2>&1; then
     }
 fi
 
-# Returns true (0) if CrowdSec is enabled:
-# CROWDSEC_ENROLL_KEY must be set, non-empty, and not the placeholder value.
+is_non_negative_integer() {
+    case "${1:-}" in
+        ""|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+
+is_positive_integer() {
+    local value="${1:-}"
+
+    is_non_negative_integer "${value}" || return 1
+    case "${value}" in
+        *[1-9]*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+
+is_shell_variable_name() {
+    case "${1:-}" in
+        ""|[0-9]*|*[!A-Za-z0-9_]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+
+is_omero_group_name() {
+    case "${1:-}" in
+        ""|*[!A-Za-z0-9_.-]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+
 is_crowdsec_enabled() {
     local key="${CROWDSEC_ENROLL_KEY:-}"
-    [[ -n "${key}" && "${key}" != "CHANGEVALUE2" && "${key}" != "CHANGEVALUE3" ]]
+
+    case "${key}" in
+        ""|CHANGEVALUE2|CHANGEVALUE3) return 1 ;;
+        *) return 0 ;;
+    esac
 }
 
 
@@ -235,6 +272,10 @@ load_installation_paths_env() {
             [A-Za-z_]*=*)
                 env_key="${env_line%%=*}"
                 env_value="${env_line#*=}"
+                if ! is_shell_variable_name "${env_key}"; then
+                    echo "ERROR: Invalid environment variable name in ${env_file_path}: ${env_key}" >&2
+                    return 1
+                fi
                 if ! resolved_value="$(resolve_env_assignment_value "${env_value}")"; then
                     echo "ERROR: Refusing unsafe value for ${env_key} from ${env_file_path}" >&2
                     return 1
@@ -369,12 +410,12 @@ require_path_config_var() {
 }
 
 validate_retry_config() {
-    if ! [[ "${COMPOSE_UP_RETRIES}" =~ ^[0-9]+$ ]] || [ "${COMPOSE_UP_RETRIES}" -lt 1 ]; then
+    if ! is_positive_integer "${COMPOSE_UP_RETRIES}"; then
         echo "ERROR: COMPOSE_UP_RETRIES must be an integer >= 1. Got: ${COMPOSE_UP_RETRIES}" >&2
         return 1
     fi
 
-    if ! [[ "${COMPOSE_UP_RETRY_DELAY_SECONDS}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${COMPOSE_UP_RETRY_DELAY_SECONDS}"; then
         echo "ERROR: COMPOSE_UP_RETRY_DELAY_SECONDS must be an integer >= 0. Got: ${COMPOSE_UP_RETRY_DELAY_SECONDS}" >&2
         return 1
     fi
@@ -402,12 +443,12 @@ validate_tcp_port_config() {
 }
 
 validate_crowdsec_install_auto_restart_config() {
-    if ! [[ "${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}" =~ ^[0-9]+$ ]] || [ "${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}" -lt 0 ]; then
+    if ! is_non_negative_integer "${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}"; then
         echo "ERROR: CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS must be an integer >= 0. Got: ${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}" >&2
         return 1
     fi
 
-    if ! [[ "${CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS}" =~ ^[0-9]+$ ]] || [ "${CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS}" -lt 0 ]; then
+    if ! is_non_negative_integer "${CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS}"; then
         echo "ERROR: CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS must be an integer >= 0. Got: ${CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS}" >&2
         return 1
     fi
@@ -696,7 +737,7 @@ validate_numeric_id() {
     local id_label="$1"
     local id_value="$2"
 
-    if ! [[ "${id_value}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${id_value}"; then
         echo "ERROR: ${id_label} must be a numeric ID. Got: ${id_value}" >&2
         return 1
     fi
@@ -765,7 +806,7 @@ remove_stale_crowdsec_install_auto_restart_marker() {
     fi
 
     target_epoch="$(awk -F= '/^target_epoch=/{print $2; exit}' "${marker_path}" 2>/dev/null || true)"
-    if ! [[ "${target_epoch}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${target_epoch}"; then
         rm -f "${marker_path}" || true
         return 0
     fi
@@ -795,7 +836,7 @@ resolve_crowdsec_install_auto_restart_remaining_delay() {
 
     start_epoch="$(date -u -d "${started_at}" +%s 2>/dev/null || true)"
     now_epoch="$(date -u +%s)"
-    if ! [[ "${start_epoch}" =~ ^[0-9]+$ ]] || [ "${start_epoch}" -gt "${now_epoch}" ]; then
+    if ! is_non_negative_integer "${start_epoch}" || [ "${start_epoch}" -gt "${now_epoch}" ]; then
         printf '%s' "${remaining_delay_seconds}"
         return 0
     fi
@@ -957,10 +998,13 @@ validate_omero_install_group_list() {
 
     IFS="," read -r -a group_entries <<< "${normalized_group_list}"
     for group_entry in "${group_entries[@]}"; do
-        if [[ "${group_entry}" != *:* ]]; then
-            echo "ERROR: Invalid OMERO_INSTALL_GROUP_LIST entry (missing ':'): ${group_entry}" >&2
-            return 1
-        fi
+        case "${group_entry}" in
+            *:*) ;;
+            *)
+                echo "ERROR: Invalid OMERO_INSTALL_GROUP_LIST entry (missing ':'): ${group_entry}" >&2
+                return 1
+                ;;
+        esac
 
         group_name="${group_entry%%:*}"
         group_permission="${group_entry#*:}"
@@ -970,7 +1014,7 @@ validate_omero_install_group_list() {
             return 1
         fi
 
-        if ! [[ "${group_name}" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+        if ! is_omero_group_name "${group_name}"; then
             echo "ERROR: Invalid OMERO group name '${group_name}' in OMERO_INSTALL_GROUP_LIST. Allowed pattern: [A-Za-z0-9_.-]+" >&2
             return 1
         fi
@@ -1335,7 +1379,7 @@ wait_for_repo_root_sync_ready() {
         return 1
     }
 
-    if ! [[ "${stable_prefix_depth}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${stable_prefix_depth}"; then
         echo "ERROR: Invalid shared-prefix depth reported for CONFIG_omero_fs_repo_path: ${stable_prefix_depth}" >&2
         return 1
     fi
@@ -1345,10 +1389,10 @@ wait_for_repo_root_sync_ready() {
         return 0
     fi
 
-    if ! [[ "${retry_limit}" =~ ^[0-9]+$ ]] || [ "${retry_limit}" -lt 1 ]; then
+    if ! is_positive_integer "${retry_limit}"; then
         retry_limit=180
     fi
-    if ! [[ "${retry_delay_seconds}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${retry_delay_seconds}"; then
         retry_delay_seconds=2
     fi
 
@@ -1361,7 +1405,7 @@ wait_for_repo_root_sync_ready() {
         if [ -r "${status_file}" ]; then
             status="$(sed -n 's/^status=//p' "${status_file}" | tail -n 1)"
             last_success_epoch="$(sed -n 's/^last_success_epoch=//p' "${status_file}" | tail -n 1)"
-            if [ "${status}" = "ok" ] && [[ "${last_success_epoch}" =~ ^[0-9]+$ ]] && [ "${last_success_epoch}" -ge "${started_epoch}" ]; then
+            if [ "${status}" = "ok" ] && is_non_negative_integer "${last_success_epoch}" && [ "${last_success_epoch}" -ge "${started_epoch}" ]; then
                 echo "Managed-repository shared-prefix normalization is ready."
                 return 0
             fi
@@ -1407,11 +1451,11 @@ wait_for_dropbox_ice_bootstrap_ready() {
             ;;
     esac
 
-    if ! [[ "${startup_wait_seconds}" =~ ^[0-9]+$ ]] || [ "${startup_wait_seconds}" -lt 1 ]; then
+    if ! is_positive_integer "${startup_wait_seconds}"; then
         echo "ERROR: OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS must be a positive integer, got: ${startup_wait_seconds}" >&2
         return 1
     fi
-    if ! [[ "${poll_interval_seconds}" =~ ^[0-9]+$ ]] || [ "${poll_interval_seconds}" -lt 1 ]; then
+    if ! is_positive_integer "${poll_interval_seconds}"; then
         echo "ERROR: OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS must be a positive integer, got: ${poll_interval_seconds}" >&2
         return 1
     fi
@@ -1425,7 +1469,7 @@ wait_for_dropbox_ice_bootstrap_ready() {
         if [ -r "${status_file}" ]; then
             status="$(sed -n 's/^status=//p' "${status_file}" | tail -n 1)"
             last_success_epoch="$(sed -n 's/^last_success_epoch=//p' "${status_file}" | tail -n 1)"
-            if [ "${status}" = "ok" ] && [[ "${last_success_epoch}" =~ ^[0-9]+$ ]] && [ "${last_success_epoch}" -ge "${started_epoch}" ]; then
+            if [ "${status}" = "ok" ] && is_non_negative_integer "${last_success_epoch}" && [ "${last_success_epoch}" -ge "${started_epoch}" ]; then
                 echo "DropBox Ice bootstrap is ready."
                 return 0
             fi
@@ -1475,15 +1519,15 @@ wait_for_dropbox_user_dir_sync_ready() {
         return 1
     fi
 
-    if ! [[ "${retry_limit}" =~ ^[0-9]+$ ]] || [ "${retry_limit}" -lt 1 ]; then
+    if ! is_positive_integer "${retry_limit}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES must be a positive integer, got: ${retry_limit}" >&2
         return 1
     fi
-    if ! [[ "${retry_delay_seconds}" =~ ^[0-9]+$ ]] || [ "${retry_delay_seconds}" -lt 1 ]; then
+    if ! is_positive_integer "${retry_delay_seconds}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS must be a positive integer, got: ${retry_delay_seconds}" >&2
         return 1
     fi
-    if ! [[ "${startup_wait_seconds}" =~ ^[0-9]+$ ]] || [ "${startup_wait_seconds}" -lt 1 ]; then
+    if ! is_positive_integer "${startup_wait_seconds}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS must be a positive integer, got: ${startup_wait_seconds}" >&2
         return 1
     fi
@@ -1497,7 +1541,7 @@ wait_for_dropbox_user_dir_sync_ready() {
         if [ -r "${status_file}" ]; then
             status="$(sed -n 's/^status=//p' "${status_file}" | tail -n 1)"
             last_success_epoch="$(sed -n 's/^last_success_epoch=//p' "${status_file}" | tail -n 1)"
-            if [ "${status}" = "ok" ] && [[ "${last_success_epoch}" =~ ^[0-9]+$ ]] && [ "${last_success_epoch}" -ge "${started_epoch}" ]; then
+            if [ "${status}" = "ok" ] && is_non_negative_integer "${last_success_epoch}" && [ "${last_success_epoch}" -ge "${started_epoch}" ]; then
                 echo "DropBox user directory synchronization is ready."
                 return 0
             fi
@@ -2010,7 +2054,7 @@ DOTENV
     chmod 0600 "${dot_env_path}"
 
     if [ -n "${SUDO_UID:-}" ] && [ -n "${SUDO_GID:-}" ]; then
-        if ! [[ "${SUDO_UID}" =~ ^[0-9]+$ ]] || ! [[ "${SUDO_GID}" =~ ^[0-9]+$ ]]; then
+        if ! is_non_negative_integer "${SUDO_UID}" || ! is_non_negative_integer "${SUDO_GID}"; then
             echo "ERROR: SUDO_UID/SUDO_GID must be numeric when provided. Got SUDO_UID=${SUDO_UID:-unset}, SUDO_GID=${SUDO_GID:-unset}" >&2
             return 1
         fi
@@ -2243,7 +2287,7 @@ tty_read_line() {
     local __result_var="${1:?BUG: tty_read_line requires target variable name}"
     local __tty_read_value=""
 
-    if ! [[ "${__result_var}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    if ! is_shell_variable_name "${__result_var}"; then
         echo "ERROR: tty_read_line target must be a valid shell variable name: ${__result_var}" >&2
         return 1
     fi
@@ -3479,7 +3523,7 @@ discover_uid_gid_or_die() {
     fi
     docker rm -fv "${probe_name}" >/dev/null 2>&1 || true
 
-    if ! [[ "${out}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${out}"; then
         echo "ERROR: Discovered non-numeric id (${id_flag})='${out}' for user '${user_name}' in image '${image}'" >&2
         return 1
     fi
@@ -3556,7 +3600,7 @@ discover_uid_gid_from_passwd_or_die() {
     rm -f "${passwd_file}" || true
 
     if [ "${id_flag}" = "-u" ]; then
-        if ! [[ "${uid}" =~ ^[0-9]+$ ]]; then
+        if ! is_non_negative_integer "${uid}"; then
             echo "ERROR: Failed to resolve numeric UID for user '${user_name}' from image '${image}' /etc/passwd." >&2
             return 1
         fi
@@ -3565,7 +3609,7 @@ discover_uid_gid_from_passwd_or_die() {
     fi
 
     if [ "${id_flag}" = "-g" ]; then
-        if ! [[ "${gid}" =~ ^[0-9]+$ ]]; then
+        if ! is_non_negative_integer "${gid}"; then
             echo "ERROR: Failed to resolve numeric GID for user '${user_name}' from image '${image}' /etc/passwd." >&2
             return 1
         fi
@@ -3623,7 +3667,7 @@ discover_container_default_id_or_die() {
         docker rm -fv "${probe_container}" >/dev/null 2>&1 || true
         rm -f "${proc_status_file}" || true
 
-        if [[ "${proc_uid}" =~ ^[0-9]+$ ]] && [[ "${proc_gid}" =~ ^[0-9]+$ ]]; then
+        if is_non_negative_integer "${proc_uid}" && is_non_negative_integer "${proc_gid}"; then
             printf '%s:%s' "${proc_uid}" "${proc_gid}"
             return 0
         fi
@@ -3654,7 +3698,7 @@ discover_container_default_id_or_die() {
         runtime_uid="$(docker run --rm --entrypoint id "${image}" -u 2>/dev/null || true)"
         runtime_gid="$(docker run --rm --entrypoint id "${image}" -g 2>/dev/null || true)"
 
-        if [[ "${runtime_uid}" =~ ^[0-9]+$ ]] && [[ "${runtime_gid}" =~ ^[0-9]+$ ]]; then
+        if is_non_negative_integer "${runtime_uid}" && is_non_negative_integer "${runtime_gid}"; then
             if [ "${id_flag}" = "-u" ]; then
                 printf '%s' "${runtime_uid}"
                 return 0
@@ -3671,7 +3715,7 @@ discover_container_default_id_or_die() {
         runtime_uid="${runtime_id_pair%%:*}"
         runtime_gid="${runtime_id_pair#*:}"
 
-        if [[ "${runtime_uid}" =~ ^[0-9]+$ ]] && [[ "${runtime_gid}" =~ ^[0-9]+$ ]]; then
+        if is_non_negative_integer "${runtime_uid}" && is_non_negative_integer "${runtime_gid}"; then
             if [ "${id_flag}" = "-u" ]; then
                 printf '%s' "${runtime_uid}"
                 return 0
@@ -3701,10 +3745,10 @@ discover_container_default_id_or_die() {
         configured_group="${configured_user#*:}"
     fi
 
-    if [[ "${configured_account}" =~ ^[0-9]+$ ]]; then
+    if is_non_negative_integer "${configured_account}"; then
         resolved_uid="${configured_account}"
     fi
-    if [ -n "${configured_group}" ] && [[ "${configured_group}" =~ ^[0-9]+$ ]]; then
+    if [ -n "${configured_group}" ] && is_non_negative_integer "${configured_group}"; then
         resolved_gid="${configured_group}"
     fi
 
@@ -3741,12 +3785,12 @@ discover_container_default_id_or_die() {
     fi
 
     if [ -z "${resolved_gid}" ]; then
-        if [[ "${configured_account}" =~ ^[0-9]+$ ]] && [ -z "${configured_group}" ]; then
+        if is_non_negative_integer "${configured_account}" && [ -z "${configured_group}" ]; then
             resolved_gid="$(awk -F: -v uid="${configured_account}" '$3==uid {print $4; exit}' "${passwd_file}")"
         fi
 
         if [ -n "${configured_group}" ]; then
-            if [[ "${configured_group}" =~ ^[0-9]+$ ]]; then
+            if is_non_negative_integer "${configured_group}"; then
                 resolved_gid="${configured_group}"
             elif [ -s "${group_file}" ]; then
                 resolved_gid="$(awk -F: -v grp="${configured_group}" '$1==grp {print $3; exit}' "${group_file}")"
@@ -3761,7 +3805,7 @@ discover_container_default_id_or_die() {
     rm -f "${passwd_file}" "${group_file}" || true
 
     if [ "${id_flag}" = "-u" ]; then
-        if ! [[ "${resolved_uid}" =~ ^[0-9]+$ ]]; then
+        if ! is_non_negative_integer "${resolved_uid}"; then
             echo "ERROR: Failed to resolve numeric default runtime UID from image '${image}' (Config.User='${configured_user}')." >&2
             return 1
         fi
@@ -3770,7 +3814,7 @@ discover_container_default_id_or_die() {
     fi
 
     if [ "${id_flag}" = "-g" ]; then
-        if ! [[ "${resolved_gid}" =~ ^[0-9]+$ ]]; then
+        if ! is_non_negative_integer "${resolved_gid}"; then
             echo "ERROR: Failed to resolve numeric default runtime GID from image '${image}' (Config.User='${configured_user}')." >&2
             return 1
         fi

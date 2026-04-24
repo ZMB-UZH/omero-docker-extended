@@ -22,13 +22,18 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
         cls.helper_text = (
             cls.repo_root / "installation" / "env_assignment_utils.sh"
         ).read_text(encoding="utf-8")
+        cls.validation_helpers = cls._extract_script_block(
+            "is_non_negative_integer() {",
+            "crowdsec_install_auto_restart_marker_path() {",
+            cls.script_text,
+        )
         cls.env_loader_block = cls._extract_script_block(
             "load_installation_paths_env() {",
             "bootstrap_env_files_from_examples() {",
             cls.script_text,
         )
         cls.resolver_block = cls._extract_script_block(
-            "resolve_env_assignment_value() {",
+            "_env_assignment_is_name_start_char() {",
             None,
             cls.helper_text,
         )
@@ -96,6 +101,7 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
                     #!/bin/bash
                     set -euo pipefail
                     REPO_ROOT_DIR="/srv/repo"
+                    {self.validation_helpers}
                     {self.resolver_block}
                     {self.env_loader_block}
                     {self.collector_block}
@@ -136,6 +142,7 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
                     f"""\
                     #!/bin/bash
                     set -euo pipefail
+                    {self.validation_helpers}
                     {self.resolver_block}
                     {self.env_loader_block}
                     load_installation_paths_env "{env_file}"
@@ -147,10 +154,74 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
             self.assertFalse(marker_file.exists())
             self.assertIn("Refusing unsafe value", result.stderr)
 
+    def test_installation_env_loader_rejects_invalid_variable_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            env_file = temp_path / "installation_paths.env"
+            env_file.write_text("OMERO-DATA-PATH=/srv/omero\n", encoding="utf-8")
+
+            result = self._run_harness(
+                textwrap.dedent(
+                    f"""\
+                    #!/bin/bash
+                    set -euo pipefail
+                    {self.validation_helpers}
+                    {self.resolver_block}
+                    {self.env_loader_block}
+                    load_installation_paths_env "{env_file}"
+                    """
+                )
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Invalid environment variable name", result.stderr)
+
+    def test_env_assignment_resolver_expands_safe_references_without_eval(
+        self,
+    ) -> None:
+        result = self._run_harness(
+            textwrap.dedent(
+                f"""\
+                #!/bin/bash
+                set -euo pipefail
+                {self.resolver_block}
+                BASE_PATH=/srv/omero
+                CHILD_NAME=data
+                printf 'DOUBLE=%s\\n' "$(resolve_env_assignment_value '"$BASE_PATH/${{CHILD_NAME}}/files"')"
+                printf 'BARE=%s\\n' "$(resolve_env_assignment_value '$BASE_PATH/$CHILD_NAME/files')"
+                printf 'SINGLE=%s\\n' "$(resolve_env_assignment_value "'\\$BASE_PATH/\\${{CHILD_NAME}}'")"
+                """
+            )
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("DOUBLE=/srv/omero/data/files", result.stdout)
+        self.assertIn("BARE=/srv/omero/data/files", result.stdout)
+        self.assertIn("SINGLE=$BASE_PATH/${CHILD_NAME}", result.stdout)
+
+    def test_env_assignment_resolver_rejects_unsupported_parameter_expansion(
+        self,
+    ) -> None:
+        result = self._run_harness(
+            textwrap.dedent(
+                f"""\
+                #!/bin/bash
+                set -euo pipefail
+                {self.resolver_block}
+                BASE_PATH=/srv/omero
+                resolve_env_assignment_value '${{BASE_PATH:-/fallback}}'
+                """
+            )
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Unsupported parameter expansion", result.stderr)
+
     def test_installation_script_no_longer_re_evaluates_env_lines(self) -> None:
         self.assertNotIn('eval "${env_line}"', self.script_text)
         self.assertNotIn('eval "${env_key}', self.script_text)
         self.assertNotIn('eval "${env_line}"', self.helper_text)
+        self.assertNotIn("BASH_REMATCH", self.helper_text)
 
 
 if __name__ == "__main__":

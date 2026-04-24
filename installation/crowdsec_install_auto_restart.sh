@@ -6,7 +6,14 @@ marker_path="${CROWDSEC_AUTO_RESTART_MARKER:?Set CROWDSEC_AUTO_RESTART_MARKER}"
 delay_seconds="${CROWDSEC_AUTO_RESTART_DELAY_SECONDS:-0}"
 container_name="${CROWDSEC_AUTO_RESTART_CONTAINER_NAME:-crowdsec}"
 
-if ! [[ "${delay_seconds}" =~ ^[0-9]+$ ]] || [ "${delay_seconds}" -lt 0 ]; then
+is_non_negative_integer() {
+    case "${1:-}" in
+        ""|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+if ! is_non_negative_integer "${delay_seconds}"; then
     echo "ERROR: CROWDSEC_AUTO_RESTART_DELAY_SECONDS must be an integer >= 0. Got: ${delay_seconds}" >&2
     exit 1
 fi

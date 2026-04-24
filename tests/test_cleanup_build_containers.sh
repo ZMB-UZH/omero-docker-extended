@@ -126,7 +126,15 @@ case "$1" in
         filter_clean="${filter_clean#/}"
         while IFS='|' read -r name cid running; do
             [[ -z "${name}" ]] && continue
-            if [[ -z "${filter_name}" ]] || [[ "${name}" =~ ${filter_clean} ]]; then
+            if [[ -z "${filter_name}" ]]; then
+                matched=1
+            else
+                case "${name}" in
+                    *"${filter_clean}"*) matched=1 ;;
+                    *) matched=0 ;;
+                esac
+            fi
+            if [[ "${matched}" = "1" ]]; then
                 if [[ -n "${output_format}" ]]; then
                     echo "${cid} ${name}"
                 else

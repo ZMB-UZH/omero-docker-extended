@@ -3,7 +3,14 @@ set -euo pipefail
 
 interval_seconds="${ADMIN_TOOLS_QUOTA_RECONCILE_INTERVAL_SECONDS:-60}"
 
-if ! [[ "$interval_seconds" =~ ^[0-9]+$ ]] || [[ "$interval_seconds" -lt 10 ]]; then
+is_non_negative_integer() {
+  case "${1:-}" in
+    ""|*[!0-9]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+if ! is_non_negative_integer "$interval_seconds" || [ "$interval_seconds" -lt 10 ]; then
   echo "[quota-reconcile-loop] ADMIN_TOOLS_QUOTA_RECONCILE_INTERVAL_SECONDS must be an integer >= 10" >&2
   exit 1
 fi
