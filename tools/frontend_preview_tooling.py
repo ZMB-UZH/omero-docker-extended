@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import http.client
 import json
 import os
 import platform
@@ -233,23 +232,37 @@ def node_release_path(version: str, filename: str) -> str:
 def download_node_release_file(version: str, filename: str, destination: Path) -> None:
     """Download a validated Node.js release artifact from the official host."""
     path = node_release_path(version, filename)
-    connection = http.client.HTTPSConnection(NODE_RELEASE_HOST, timeout=60)
+    curl_bin = ensure_command_available("curl")
+    url = f"https://{NODE_RELEASE_HOST}{path}"
     try:
-        connection.request(
-            "GET",
-            path,
-            headers={"User-Agent": "omero-agent-frontend-preview-tooling"},
+        result = subprocess.run(
+            [
+                curl_bin,
+                "--fail",
+                "--location",
+                "--silent",
+                "--show-error",
+                "--proto",
+                "=https",
+                "--tlsv1.2",
+                "--user-agent",
+                "omero-agent-frontend-preview-tooling",
+                "--output",
+                str(destination),
+                url,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
-        response = connection.getresponse()
-        if response.status != 200:
-            raise RuntimeError(
-                f"Node.js release download failed for {filename}: "
-                f"HTTP {response.status} {response.reason}."
-            )
-        with destination.open("wb") as handle:
-            shutil.copyfileobj(response, handle)
-    finally:
-        connection.close()
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(
+            f"Node.js release download failed for {filename}: {exc}"
+        ) from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(f"Node.js release download failed for {filename}: {detail}")
 
 
 def sha256_hex(path: Path) -> str:
