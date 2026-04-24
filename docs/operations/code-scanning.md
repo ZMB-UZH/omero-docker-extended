@@ -21,6 +21,30 @@ The repository also includes a `security-delta` job inside `.github/workflows/se
 
 The current advanced CodeQL setup uses `build-mode: none` for the Python and JavaScript/TypeScript matrix, which matches GitHub's interpreted-language guidance and avoids an unnecessary `autobuild` step. The same workflow also enables CodeQL dependency caching, and the Bandit job restores and stores `pip` downloads keyed to `.github/requirements/security-code-scanning.txt`.
 
+## CodeQL File-Count Coverage
+
+CodeQL file totals are extractor/database source counts, not a count of every
+tracked repository file. The workflow now prints the tracked language
+candidates before CodeQL initialization so a lower GitHub UI count can be
+explained from the run log instead of guessed.
+
+- Python: the current repo has 310 tracked `.py` implementation files and 33
+  tracked `.pyi` type stubs. A `310/343` CodeQL count means the implementation
+  files were included and type stubs were not counted as Python source; stubs
+  are still covered by Ruff/Mypy contracts.
+- JavaScript/TypeScript: the current repo has 8 tracked JS-family files. The 2
+  files under `.agents/skills/frontend-preview/agents/` are tool config files
+  audited by workflow logs and repo lint/tests; the 6 application/test JS files
+  are the expected CodeQL product-surface candidates.
+- Do not force non-source stubs or agent-tool config files into CodeQL only to
+  make the numerator equal the denominator. First prove an implementation file
+  is missing from the CodeQL candidate audit, then adjust the workflow.
+
+Official references: GitHub documents CodeQL workflow options including
+`build-mode: none`, and CodeQL publishes the supported language and framework
+matrix. Use the GitHub Actions run log for this workflow when investigating
+scanner coverage.
+
 ## Local workflow parity gate
 
 Run the locally reproducible workflow gates before committing or pushing changes:
@@ -108,6 +132,15 @@ If a GitHub PAT or DeepSource API key is required and unavailable, ask the user
 for the exact credential immediately and pause for input. Do not keep retrying
 commands that cannot authenticate; continue only independent local tasks that do
 not need that credential.
+GitHub HTTPS Git operations require a PAT or credential manager, never an
+account password. For prompt-based pushes, use:
+
+```bash
+python3 tools/git_push_with_pat.py origin main
+```
+
+This helper disables stale GitHub credential helpers for the command and keeps
+the PAT out of argv, remotes, logs, and long-lived git config.
 If a documented scanner command or helper causes a proven avoidable retry/error
 loop, first establish the correct scanner workflow end to end, then update the
 runbook or tool concisely with regression coverage.
