@@ -42,6 +42,7 @@ These numeric caps are CI-validated by `python3 tools/lint_docs_structure.py`.
 | OMP Django views, annotation, AI parsing, user data | `docs/plugins/omp-plugin.md`, `docs/plugins/omp-plugin-workflow.md` | `omeroweb_omp_plugin/` | `django-patterns`, `django-security`, `django-verification` | `omeroweb_omp_plugin/tests/` |
 | Import plugin uploads, dataset routing, OMERO CLI import, SEM-EDX | `docs/plugins/import-plugin.md`, `docs/plugins/import-plugin-workflow.md`, `docs/reference/ai-agent-runtime-playbook.md` | `omeroweb_import/` | `django-patterns`, `omero-runtime-verifier`, `plugin-regression-triager`, `verification-loop` | `omeroweb_import/tests/` |
 | Admin Tools logs, Grafana/Prometheus proxy, quotas, diagnostics | `docs/plugins/admin-tools-plugin.md`, `docs/plugins/admin-tools-workflow.md`, `docs/operations/monitoring.md` | `omeroweb_admin_tools/` | `django-patterns`, `django-security`, `omero-runtime-verifier` | `omeroweb_admin_tools/tests/` |
+| Tools and Enhanced search plugin | `docs/plugins/tools-plugin.md`, `docs/reference/plugin-help-page-style-guide.md` | `omeroweb_tools/` | `django-patterns`, `django-security`, `frontend-preview`, `plugin-regression-triager` | `omeroweb_tools/tests/` |
 | Plugin user help pages, screenshots, and help-page collapse behavior | `docs/reference/plugin-help-page-style-guide.md`, nearest `docs/plugins/*.md` | plugin `templates/`, plugin `static/`, `docs/help/` | `frontend-preview`, `docs-knowledge-maintainer`, `django-verification` | focused plugin contract tests plus browser preview tests |
 | Imaris export task flow and scripts | `docs/plugins/imaris-connector-plugin.md`, `docs/plugins/imaris-connector-workflow.md` | `omeroweb_imaris_connector/` | `python-patterns`, `omero-runtime-verifier`, `plugin-regression-triager` | `omeroweb_imaris_connector/tests/` |
 | OMERO.web Zarr rendering and store-backed integration | `docs/plugins/omero-web-zarr-plugin.md`, `docs/plugins/omero-web-zarr-workflow.md` | `omero_web_zarr/` | `django-patterns`, `django-verification`, `python-testing` | `omero_web_zarr/tests/` |
@@ -57,6 +58,7 @@ These numeric caps are CI-validated by `python3 tools/lint_docs_structure.py`.
 - `omeroweb_admin_tools/tests/`: quotas, monitoring, logs, Grafana/Prometheus proxy
 - `omeroweb_omp_plugin/tests/`: OMP views, annotation services, AI credential handling
 - `omeroweb_import/tests/`: upload pipeline, import planning, dataset routing, SEM-EDX, native Zarr import
+- `omeroweb_tools/tests/`: Tools landing page, Enhanced search, acquisition metadata index, help UI
 - `omero_web_zarr/tests/`: store-backed image rendering and webgateway overrides
 
 Run only the touched lanes while iterating. Run the full split matrix before final push when the change spans multiple domains or shared infrastructure.

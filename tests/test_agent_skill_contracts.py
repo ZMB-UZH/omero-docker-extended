@@ -18,6 +18,16 @@ from tools import agent_skill_provenance
 ALLOWED_OPTIONAL_REPO_REFERENCES: frozenset[str] = frozenset(
     {"env/omero_secrets.env", "installation_paths.env"}
 )
+EXPECTED_SPLIT_TEST_SUITES: tuple[str, ...] = (
+    "tests/",
+    "omero_plugin_common/tests/",
+    "omeroweb_imaris_connector/tests/",
+    "omeroweb_admin_tools/tests/",
+    "omeroweb_omp_plugin/tests/",
+    "omeroweb_import/tests/",
+    "omeroweb_tools/tests/",
+    "omero_web_zarr/tests/",
+)
 FORBIDDEN_GENERIC_UPSTREAM_PHRASES: tuple[str, ...] = (
     "~/.claude/",
     "Task(subagent_type",
@@ -275,6 +285,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
             "error",
             "omeroweb_import/tests/test_cli_runtime_env.py",
             "omeroweb_import/tests/test_security_hardening.py",
+            "omeroweb_tools/tests/test_tools_module_contracts.py",
             "omeroweb_omp_plugin/tests/test_log_sanitization.py",
             "omeroweb_admin_tools/tests/test_log_query.py",
             "omeroweb_imaris_connector/tests/test_security_regressions.py",
@@ -389,7 +400,7 @@ class AgentSkillContractTests(unittest.TestCase):
         command = smoke_check.command
         if (
             smoke_check.fallback_command is not None
-            and not cls._host_python_has_django()
+            and not cls._host_python_has_plugin_runtime()
         ):
             command = smoke_check.fallback_command
         resolved_command = cls._resolve_smoke_command(command)
@@ -414,8 +425,14 @@ class AgentSkillContractTests(unittest.TestCase):
         return (sys.executable, *command[1:])
 
     @staticmethod
-    def _host_python_has_django() -> bool:
-        return importlib.util.find_spec("django") is not None
+    def _host_python_has_plugin_runtime() -> bool:
+        for module_name in ("django", "omeroweb"):
+            try:
+                if importlib.util.find_spec(module_name) is None:
+                    return False
+            except (ImportError, ValueError):
+                return False
+        return True
 
     def test_upstream_sources_doc_matches_adapted_skill_frontmatter(self) -> None:
         adapted_skill_names = {
@@ -525,6 +542,36 @@ class AgentSkillContractTests(unittest.TestCase):
         self.assertIn("python3 -m ruff --version", settings_text)
         self.assertIn("git rev-parse --show-toplevel", settings_text)
         self.assertIn("tools/env_safety_guard.py", settings_text)
+
+    def test_agent_split_test_surfaces_cover_every_repo_suite(self) -> None:
+        discovered = {"tests/"}
+        discovered.update(
+            f"{path.relative_to(self.repo_root).as_posix()}/"
+            for path in self.repo_root.glob("*/tests")
+            if path.is_dir()
+        )
+        self.assertEqual(set(EXPECTED_SPLIT_TEST_SUITES), discovered)
+
+        surfaces = {
+            "AGENTS.md": (self.repo_root / "AGENTS.md").read_text(encoding="utf-8"),
+            "CLAUDE.md": (self.repo_root / "CLAUDE.md").read_text(encoding="utf-8"),
+            "docs/reference/ai-agent-context-routing.md": (
+                self.repo_root / "docs" / "reference" / "ai-agent-context-routing.md"
+            ).read_text(encoding="utf-8"),
+            "docs/reference/ai-agent-runtime-playbook.md": (
+                self.repo_root / "docs" / "reference" / "ai-agent-runtime-playbook.md"
+            ).read_text(encoding="utf-8"),
+            ".agents/skills/plugin-regression-triager/SKILL.md": self.skill_texts[
+                "plugin-regression-triager"
+            ],
+            ".agents/skills/verification-loop/SKILL.md": self.skill_texts[
+                "verification-loop"
+            ],
+        }
+        for surface_name, surface_text in surfaces.items():
+            with self.subTest(surface=surface_name):
+                for suite in EXPECTED_SPLIT_TEST_SUITES:
+                    self.assertIn(suite, surface_text)
 
     def test_agent_surfaces_avoid_host_specific_clone_paths(self) -> None:
         surfaces = {

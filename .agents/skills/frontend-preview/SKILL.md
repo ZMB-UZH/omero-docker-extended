@@ -4,11 +4,9 @@ description: Preview HTML/CSS/JS changes in Django plugin templates with the pin
 origin: repo-local skill for AI agent frontend preview and DOM/browser validation
 ---
 
-# Frontend Preview (Vite + Vitest)
+# Frontend Preview
 
-Use this skill when you need to **visually validate** HTML, CSS, or JavaScript changes in plugin templates before committing, and when you need a **repeatable DOM or browser test lane** for frontend regressions.
-
-The repo now exposes a pinned host-side wrapper:
+Use this skill to visually validate plugin HTML/CSS/JS changes and add repeatable DOM or browser checks before live OMERO.web validation. Use only the pinned wrapper:
 
 ```bash
 python3 tools/frontend_preview_tooling.py bootstrap
@@ -17,76 +15,44 @@ python3 tools/frontend_preview_tooling.py vitest -- ...
 python3 tools/frontend_preview_tooling.py playwright -- ...
 ```
 
-Do not install ad-hoc frontend tooling inside the repository. The wrapper installs the pinned toolchain into a cache-backed host directory.
+Do not install ad-hoc frontend tooling inside the repository.
 
-## Related docs
+## Scope
 
-- `docs/reference/ai-agent-runtime-playbook.md` for Docker rebuild guidance
-- `docs/reference/ai-agent-skills.md` for the shared skill catalog
-
-## When to activate
-
-- Editing `styles.css`, `upload.js`, or `index.html` in any plugin's `static/` or `templates/` directory
-- Adjusting layout, spacing, colors, interactions, or responsive behavior
-- Adding or debugging form controls, datepickers, modals, or saved-state UI
-- Adding narrow DOM/browser regressions before a live browser check
-
-## When NOT to use
-
-- Backend-only changes (Python views, services, tests)
-- Changes that require a real OMERO session for the primary validation
-- Final validation on their own: always rebuild or redeploy and test the live page afterward
+- Use for plugin `static/` or `templates/` edits, layout/responsive checks, controls, modals, saved-state UI, and narrow frontend regressions.
+- Do not use for backend-only changes or as final acceptance. Rebuild or redeploy and test the live OMERO.web page afterward.
 
 ## Tooling contract
 
-- Host Node.js must satisfy the pinned toolchain minimum. The wrapper checks that automatically.
-- The wrapper reads `tools/frontend_preview_tooling_manifest.json` and installs the exact pinned versions into a cache-backed host directory.
-- The default install location is `${XDG_CACHE_HOME:-$HOME/.cache}/omero-agent-frontend-preview`.
-- Override that location with `OMERO_AGENT_FRONTEND_TOOLING_DIR=/path/to/cache`.
+- Host Node.js must satisfy `tools/frontend_preview_tooling_manifest.json`; the wrapper checks this before installing.
+- If bootstrap reports an old or missing Node.js, install or activate a compatible host Node.js first, then rerun once. Do not keep retrying the same failing wrapper command.
+- The wrapper installs exact pinned versions into `${XDG_CACHE_HOME:-$HOME/.cache}/omero-agent-frontend-preview`, or `OMERO_AGENT_FRONTEND_TOOLING_DIR` when set.
 - The wrapper does **not** install dependencies into the repository.
+- Config assets live at `.agents/skills/frontend-preview/agents/vite_django_preview.config.mjs` and `.agents/skills/frontend-preview/agents/vitest_django_preview.config.mjs`; both expect the wrapper's cache-backed tool directory.
 
-Bootstrap and inspect the installed versions:
+## Target setup
+
+Bootstrap once, then set and verify the target before Vite or Vitest:
 
 ```bash
 python3 tools/frontend_preview_tooling.py bootstrap --json
-```
-
-## Repo-provided config assets
-
-- `.agents/skills/frontend-preview/agents/vite_django_preview.config.mjs`
-- `.agents/skills/frontend-preview/agents/vitest_django_preview.config.mjs`
-
-Both configs assume the wrapper is running from its cache-backed tool directory.
-
-## Required environment variables
-
-Set these before running Vite or Vitest:
-
-```bash
-export REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+export REPO_ROOT="$(git rev-parse --show-toplevel)"
 export PLUGIN_ROOT="$REPO_ROOT/omeroweb_tools"
-export OMERO_STATIC_ROOT="${OMERO_STATIC_ROOT:-$REPO_ROOT/omero-web/omero/static}"
 export PREVIEW_TEMPLATE="enhanced_search.html"
+test -d "$PLUGIN_ROOT"
+test -f "$PLUGIN_ROOT/templates/$(basename "$PLUGIN_ROOT")/$PREVIEW_TEMPLATE"
 ```
 
-`PLUGIN_ROOT` may point at any plugin directory such as `omeroweb_import`, `omeroweb_omp_plugin`, or `omeroweb_admin_tools`.
+`PLUGIN_ROOT` may point at any plugin directory such as `omeroweb_import`, `omeroweb_omp_plugin`, `omeroweb_admin_tools`, or `omero_web_zarr`. Set `OMERO_STATIC_ROOT` only to an existing OMERO static directory when the target template references OMERO `3rdparty/` assets; do not guess a repo path.
 
-## Preview with Vite
-
-Start the temporary preview server with the repo-provided config:
+## Commands
 
 ```bash
 python3 tools/frontend_preview_tooling.py vite -- \
   --config "$REPO_ROOT/.agents/skills/frontend-preview/agents/vite_django_preview.config.mjs"
 ```
 
-The preview server listens on `http://127.0.0.1:5173` by default.
-
-The preview uses the `django-template-strip` middleware to strip Django template tags and serves plugin assets through the preview middleware. Use it for layout, spacing, and quick interaction checks before you touch Docker.
-
-## Run DOM tests with Vitest
-
-Create or point to narrow test files and run them through the repo-provided Vitest config:
+The preview uses the `django-template-strip` middleware to strip Django template tags and serve plugin assets.
 
 ```bash
 python3 tools/frontend_preview_tooling.py vitest -- \
@@ -94,18 +60,12 @@ python3 tools/frontend_preview_tooling.py vitest -- \
   --config "$REPO_ROOT/.agents/skills/frontend-preview/agents/vitest_django_preview.config.mjs"
 ```
 
-Optional environment knobs:
+Useful knobs:
 
 - `VITEST_INCLUDE=/absolute/or/glob/**/*.vitest.mjs` to point at a narrow temporary test file
 - `VITEST_BROWSER=1` to enable Vitest Browser Mode
 - `VITEST_BROWSER_NAME=chromium` to pick the Playwright browser instance
 - `VITEST_BROWSER_HEADLESS=0` to run browser mode visibly while debugging
-
-## Browser Mode
-
-The Vitest config supports Browser Mode through `@vitest/browser-playwright`.
-
-Example:
 
 ```bash
 export VITEST_BROWSER=1
@@ -115,25 +75,28 @@ python3 tools/frontend_preview_tooling.py vitest -- \
   --config "$REPO_ROOT/.agents/skills/frontend-preview/agents/vitest_django_preview.config.mjs"
 ```
 
-If Playwright browsers are missing on the host, install them explicitly before relying on browser mode:
-
 ```bash
 python3 tools/frontend_preview_tooling.py playwright -- install chromium
 ```
 
-If you need a real authenticated OMERO session, fall back to the live browser workflow after the Docker or runtime update.
+Install Playwright browsers only when Browser Mode needs them.
 
 ## Recommended workflow
 
 1. Bootstrap the pinned host-side tooling once per host or after version changes.
-2. Use Vite preview for fast layout and spacing checks.
-3. Add narrow Vitest DOM or Browser Mode checks for the risky interaction logic you are changing.
-4. Rebuild or redeploy the affected runtime.
-5. Verify the live OMERO.web page in a real browser session.
+2. Select and validate `PLUGIN_ROOT` plus `PREVIEW_TEMPLATE`.
+3. Use Vite preview for fast layout and spacing checks.
+4. Add narrow Vitest DOM or Browser Mode checks for risky interaction logic.
+5. Rebuild or redeploy the affected runtime and verify the live OMERO.web page in a real browser session.
 
 ## Limitations
 
 - Django template logic is still stripped in preview mode.
 - CSRF-protected POST endpoints and OMERO-backed data do not work in preview mode by themselves.
-- Browser Mode still validates the preview environment, not the fully authenticated live OMERO page.
+- Browser Mode validates the preview environment, not a fully authenticated OMERO session.
 - Final acceptance still requires a live browser check against the served page.
+
+## Read next
+
+- `docs/reference/ai-agent-runtime-playbook.md` for Docker rebuild and live validation guidance
+- `docs/reference/ai-agent-skills.md` for the shared skill catalog
