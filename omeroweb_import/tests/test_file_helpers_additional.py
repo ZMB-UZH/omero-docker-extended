@@ -29,6 +29,11 @@ def test_file_helpers_return_false_for_directory_creation_and_chmod_failures(
     )
     assert file_helpers.ensure_dir_with_permissions(existing_dir, 0o700) is False
 
+    existing_file = tmp_path / "not-a-directory"
+    existing_file.write_text("payload", encoding="utf-8")
+    assert file_helpers.ensure_dir(existing_file) is False
+    assert file_helpers.ensure_dir_with_permissions(existing_file, 0o700) is False
+
 
 def test_file_helpers_cover_cache_safe_names_and_remove_failures(tmp_path, monkeypatch):
     upload_root = tmp_path / "upload-root"
@@ -36,8 +41,8 @@ def test_file_helpers_cover_cache_safe_names_and_remove_failures(tmp_path, monke
     upload_root.mkdir()
     jobs_root.mkdir()
 
-    file_helpers._UPLOAD_ROOT_CACHE = None
-    file_helpers._JOBS_ROOT_CACHE = None
+    file_helpers._DIRECTORY_CACHE.upload_root = None
+    file_helpers._DIRECTORY_CACHE.jobs_root = None
     monkeypatch.setattr(file_helpers, "resolve_upload_root", lambda: upload_root)
     monkeypatch.setattr(file_helpers, "resolve_jobs_root", lambda: jobs_root)
     monkeypatch.setattr(
@@ -46,8 +51,10 @@ def test_file_helpers_cover_cache_safe_names_and_remove_failures(tmp_path, monke
         lambda self, mode: (_ for _ in ()).throw(OSError("chmod failed")),
     )
     file_helpers.initialize_directories()
-    assert file_helpers.get_upload_root() == upload_root
-    assert file_helpers.get_jobs_root() == jobs_root
+    with pytest.raises(RuntimeError, match="Upload root was not initialized"):
+        file_helpers.get_upload_root()
+    with pytest.raises(RuntimeError, match="Jobs root was not initialized"):
+        file_helpers.get_jobs_root()
 
     assert file_helpers.safe_relative_path("  ") == "unnamed"
     assert (
@@ -69,14 +76,32 @@ def test_file_helpers_cover_cache_safe_names_and_remove_failures(tmp_path, monke
     assert inside.exists()
 
 
+def test_file_helpers_do_not_cache_directory_paths_when_a_root_is_a_file(
+    tmp_path, monkeypatch
+):
+    upload_root = tmp_path / "upload-root"
+    jobs_root = tmp_path / "jobs-root"
+    upload_root.write_text("not a directory", encoding="utf-8")
+    jobs_root.mkdir()
+    file_helpers._DIRECTORY_CACHE.upload_root = None
+    file_helpers._DIRECTORY_CACHE.jobs_root = None
+    monkeypatch.setattr(file_helpers, "resolve_upload_root", lambda: upload_root)
+    monkeypatch.setattr(file_helpers, "resolve_jobs_root", lambda: jobs_root)
+
+    file_helpers.initialize_directories()
+
+    assert file_helpers._DIRECTORY_CACHE.upload_root is None
+    assert file_helpers._DIRECTORY_CACHE.jobs_root is None
+
+
 def test_file_helpers_cover_cached_initialization_getters_and_new_dir_creation(
     tmp_path, monkeypatch
 ):
     cached_upload = tmp_path / "cached-upload"
     cached_jobs = tmp_path / "cached-jobs"
 
-    monkeypatch.setattr(file_helpers, "_UPLOAD_ROOT_CACHE", cached_upload)
-    monkeypatch.setattr(file_helpers, "_JOBS_ROOT_CACHE", cached_jobs)
+    file_helpers._DIRECTORY_CACHE.upload_root = cached_upload
+    file_helpers._DIRECTORY_CACHE.jobs_root = cached_jobs
     monkeypatch.setattr(
         file_helpers,
         "resolve_upload_root",
@@ -88,43 +113,43 @@ def test_file_helpers_cover_cached_initialization_getters_and_new_dir_creation(
         lambda: (_ for _ in ()).throw(AssertionError("unexpected resolve")),
     )
     file_helpers.initialize_directories()
-    assert file_helpers._UPLOAD_ROOT_CACHE == cached_upload
-    assert file_helpers._JOBS_ROOT_CACHE == cached_jobs
+    assert file_helpers._DIRECTORY_CACHE.upload_root == cached_upload
+    assert file_helpers._DIRECTORY_CACHE.jobs_root == cached_jobs
 
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
-    monkeypatch.setattr(file_helpers, "_UPLOAD_ROOT_CACHE", None)
-    monkeypatch.setattr(file_helpers, "_JOBS_ROOT_CACHE", jobs_root)
+    file_helpers._DIRECTORY_CACHE.upload_root = None
+    file_helpers._DIRECTORY_CACHE.jobs_root = jobs_root
     monkeypatch.setattr(
         file_helpers,
         "initialize_directories",
-        lambda: setattr(file_helpers, "_UPLOAD_ROOT_CACHE", upload_root),
+        lambda: setattr(file_helpers._DIRECTORY_CACHE, "upload_root", upload_root),
     )
     assert file_helpers.get_upload_root() == upload_root
 
-    monkeypatch.setattr(file_helpers, "_UPLOAD_ROOT_CACHE", upload_root)
-    monkeypatch.setattr(file_helpers, "_JOBS_ROOT_CACHE", None)
+    file_helpers._DIRECTORY_CACHE.upload_root = upload_root
+    file_helpers._DIRECTORY_CACHE.jobs_root = None
     monkeypatch.setattr(
         file_helpers,
         "initialize_directories",
-        lambda: setattr(file_helpers, "_JOBS_ROOT_CACHE", jobs_root),
+        lambda: setattr(file_helpers._DIRECTORY_CACHE, "jobs_root", jobs_root),
     )
     assert file_helpers.get_jobs_root() == jobs_root
 
-    monkeypatch.setattr(file_helpers, "_UPLOAD_ROOT_CACHE", None)
-    monkeypatch.setattr(file_helpers, "_JOBS_ROOT_CACHE", jobs_root)
+    file_helpers._DIRECTORY_CACHE.upload_root = None
+    file_helpers._DIRECTORY_CACHE.jobs_root = jobs_root
     monkeypatch.setattr(file_helpers, "initialize_directories", lambda: None)
     try:
         with pytest.raises(RuntimeError, match="Upload root was not initialized"):
             file_helpers.get_upload_root()
 
-        monkeypatch.setattr(file_helpers, "_UPLOAD_ROOT_CACHE", upload_root)
-        monkeypatch.setattr(file_helpers, "_JOBS_ROOT_CACHE", None)
+        file_helpers._DIRECTORY_CACHE.upload_root = upload_root
+        file_helpers._DIRECTORY_CACHE.jobs_root = None
         with pytest.raises(RuntimeError, match="Jobs root was not initialized"):
             file_helpers.get_jobs_root()
     finally:
-        monkeypatch.setattr(file_helpers, "_UPLOAD_ROOT_CACHE", upload_root)
-        monkeypatch.setattr(file_helpers, "_JOBS_ROOT_CACHE", jobs_root)
+        file_helpers._DIRECTORY_CACHE.upload_root = upload_root
+        file_helpers._DIRECTORY_CACHE.jobs_root = jobs_root
 
     managed_dir = tmp_path / "managed"
     assert file_helpers.ensure_dir_with_permissions(managed_dir, 0o750) is True

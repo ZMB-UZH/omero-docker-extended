@@ -44,6 +44,9 @@ If `.env` is missing before first installation, export required values first:
 set -a
 source installation_paths.env
 source env/omeroserver.env
+source env/omeroweb.env
+source env/omero-celery.env
+source env/grafana.env
 source env/omero_secrets.env
 set +a
 ```
@@ -245,6 +248,6 @@ bash installation/cleanup_build_containers.sh
 
 ## External Reverse Proxy setup (IT-managed)
 
-1. Configure your external reverse proxy (for example, nginx managed via Ansible) to forward traffic to `http://omeroweb:4090`.
-2. Keep direct local HTTP access available at `http://localhost:4090` for troubleshooting when needed.
+1. Configure your external reverse proxy (for example, nginx managed via Ansible) to forward traffic to `omeroweb` on `CONFIG_omero_web_application__server_port`.
+2. Keep direct local HTTP access available on `OMERO_WEB_HOST_PORT` for troubleshooting when needed.
 3. Manage TLS certificates in your external proxy stack.

@@ -172,6 +172,11 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("OMERO_CLI_ZARR_VERSION=${OMERO_CLI_ZARR_VERSION}", script_text)
         self.assertIn("OME_ZARR_PY_VERSION=${OME_ZARR_PY_VERSION}", script_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=${BIOFORMATS2RAW_VERSION}", script_text)
+        self.assertIn("OMERO_WEB_HOST_PORT=${OMERO_WEB_HOST_PORT}", script_text)
+        self.assertIn(
+            "CONFIG_omero_web_application__server_port=${CONFIG_omero_web_application__server_port}",
+            script_text,
+        )
         self.assertIn(
             "Missing required configuration variable OMERO_CLI_ZARR_VERSION in ${server_env_source}",
             script_text,
@@ -186,6 +191,14 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn(
             "Missing required configuration variable BIOFORMATS2RAW_VERSION in ${server_env_source}",
+            script_text,
+        )
+        self.assertIn(
+            'validate_tcp_port_config "OMERO_WEB_HOST_PORT"',
+            script_text,
+        )
+        self.assertIn(
+            'validate_tcp_port_config "CONFIG_omero_web_application__server_port"',
             script_text,
         )
 

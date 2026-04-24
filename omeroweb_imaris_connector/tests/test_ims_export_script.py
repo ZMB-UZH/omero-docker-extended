@@ -414,10 +414,64 @@ def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks() -> Non
     )
     fileset = types.SimpleNamespace(listFiles=lambda: [managed_file])
     image = types.SimpleNamespace(getFileset=lambda: fileset)
+    conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(
+                getConfigService=lambda: types.SimpleNamespace(
+                    getConfigValue=lambda key: "/OMERO/ManagedRepository"
+                )
+            )
+        )
+    )
     assert (
-        module.get_original_file_path(object(), image)
+        module.get_original_file_path(conn, image)
         == "/OMERO/ManagedRepository/user/demo/sample.ome.tif"
     )
+    escaped_file = types.SimpleNamespace(
+        getPath=lambda: "../outside",
+        getName=lambda: "sample.ome.tif",
+    )
+    assert (
+        module.get_original_file_path(
+            conn,
+            types.SimpleNamespace(
+                getFileset=lambda: types.SimpleNamespace(
+                    listFiles=lambda: [escaped_file]
+                )
+            ),
+        )
+        is None
+    )
+    assert (
+        module._managed_original_file_path(
+            module.Path("/OMERO/ManagedRepository"),
+            "user/demo",
+            "",
+        )
+        is None
+    )
+    bad_conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(
+                getConfigService=lambda: (_ for _ in ()).throw(RuntimeError("config"))
+            )
+        )
+    )
+    assert module.get_original_file_path(bad_conn, image) is None
+    for config_service in (
+        None,
+        types.SimpleNamespace(
+            getConfigValue=lambda key: (_ for _ in ()).throw(RuntimeError("value"))
+        ),
+        types.SimpleNamespace(getConfigValue=lambda key: ""),
+        types.SimpleNamespace(getConfigValue=lambda key: "ManagedRepository"),
+    ):
+        current_conn = types.SimpleNamespace(
+            c=types.SimpleNamespace(
+                sf=types.SimpleNamespace(getConfigService=lambda: config_service)
+            )
+        )
+        assert module.get_original_file_path(current_conn, image) is None
     assert (
         module.get_original_file_path(
             object(), types.SimpleNamespace(getFileset=lambda: None)

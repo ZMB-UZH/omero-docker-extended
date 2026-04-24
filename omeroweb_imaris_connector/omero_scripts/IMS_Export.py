@@ -30,6 +30,7 @@ BIOFORMATS_JAR_NAME = "bioformats_package.jar"
 BIOFORMATS_MIN_SIZE_BYTES = 10_000_000
 DEFAULT_TIMEOUT_SECONDS = 600
 _PRIVATE_FILE_MODE = 0o600
+_CONFIG_MANAGED_DIR = "omero.managed.dir"
 subprocess = process_utils
 
 
@@ -279,6 +280,44 @@ def _get_voxel_size_from_image(image):
     return vx, vy, vz
 
 
+def _get_managed_repository_root(conn):
+    try:
+        config_service = conn.c.sf.getConfigService()
+    except Exception:
+        print("Error getting original file path: OMERO config service lookup failed")
+        return None
+    if config_service is None:
+        print("Error getting original file path: OMERO config service is unavailable")
+        return None
+    try:
+        managed_root = str(config_service.getConfigValue(_CONFIG_MANAGED_DIR) or "")
+    except Exception:
+        print(f"Error reading {_CONFIG_MANAGED_DIR}: lookup failed")
+        return None
+    managed_root = managed_root.strip()
+    if not managed_root:
+        print(f"Error reading {_CONFIG_MANAGED_DIR}: value is empty")
+        return None
+    if not os.path.isabs(managed_root):
+        print(f"Error reading {_CONFIG_MANAGED_DIR}: value must be absolute")
+        return None
+    return Path(managed_root).resolve(strict=False)
+
+
+def _managed_original_file_path(managed_root, file_path, file_name):
+    relative_dir = str(file_path or "").strip().strip("/\\")
+    relative_name = str(file_name or "").strip().strip("/\\")
+    if not relative_name:
+        return None
+    candidate = (managed_root / relative_dir / relative_name).resolve(strict=False)
+    try:
+        candidate.relative_to(managed_root)
+    except ValueError:
+        print("Error getting original file path: managed file path escapes repository")
+        return None
+    return str(candidate)
+
+
 def get_original_file_path(conn, image):
     try:
         fileset = image.getFileset()
@@ -288,13 +327,16 @@ def get_original_file_path(conn, image):
         if not files:
             return None
         original_file = files[0]
-        managed_repo_path = "/OMERO/ManagedRepository"
-        file_path = original_file.getPath()
-        file_name = original_file.getName()
-        full_path = os.path.join(managed_repo_path, file_path, file_name)
-        return full_path
-    except Exception as e:
-        print(f"Error getting original file path: {e}")
+        managed_root = _get_managed_repository_root(conn)
+        if managed_root is None:
+            return None
+        return _managed_original_file_path(
+            managed_root,
+            original_file.getPath(),
+            original_file.getName(),
+        )
+    except Exception:
+        print("Error getting original file path: lookup failed")
         return None
 
 
@@ -468,9 +510,11 @@ def run_script():
 
                     # Return the file annotation object so OMERO.web shows a download button
                     try:
-                        client.setOutput(
-                            "File_Annotation", omero.rtypes.robject(file_ann._obj)
-                        )
+                        file_ann_obj = getattr(file_ann, "_obj", None)
+                        if file_ann_obj is not None:
+                            client.setOutput(
+                                "File_Annotation", omero.rtypes.robject(file_ann_obj)
+                            )
                     except Exception as output_error:
                         print(
                             f"WARNING: Failed to set File_Annotation output: {output_error}"

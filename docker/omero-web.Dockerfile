@@ -478,4 +478,4 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
 # that OMERO.web is serving the web gateway before the container is considered
 # healthy.
 HEALTHCHECK --interval=10s --timeout=10s --start-period=20s --retries=30 \
-    CMD curl -fsS http://127.0.0.1:4090/webgateway/ >/dev/null || exit 1
+    CMD port="${CONFIG_omero_web_application__server_port:?Set CONFIG_omero_web_application__server_port}" && curl -fsS "http://127.0.0.1:${port}/webgateway/" >/dev/null || exit 1

@@ -38,6 +38,7 @@ PATH_USAGE_EXPORTER_GID="${PATH_USAGE_EXPORTER_GID:-}"
 CROWDSEC_UID="${CROWDSEC_UID:-}"
 CROWDSEC_GID="${CROWDSEC_GID:-}"
 OMERO_SERVER_ENV_FILE="${REPO_ROOT_DIR}/env/omeroserver.env"
+OMERO_WEB_ENV_FILE="${REPO_ROOT_DIR}/env/omeroweb.env"
 
 # Allow override, but default to the repo's current image names (adjust via env vars if you rename them in compose)
 OMERO_SERVER_IMAGE="${OMERO_SERVER_IMAGE:-omeroserver:custom}"
@@ -329,6 +330,12 @@ if [ -r "${OMERO_SERVER_ENV_FILE}" ]; then
     set +a
 fi
 
+if [ -r "${OMERO_WEB_ENV_FILE}" ]; then
+    set -a
+    load_installation_paths_env "${OMERO_WEB_ENV_FILE}"
+    set +a
+fi
+
 require_nonempty_config_var() {
     local variable_name="$1"
     local variable_source="$2"
@@ -367,6 +374,23 @@ validate_retry_config() {
 
     if ! [[ "${COMPOSE_UP_RETRY_DELAY_SECONDS}" =~ ^[0-9]+$ ]]; then
         echo "ERROR: COMPOSE_UP_RETRY_DELAY_SECONDS must be an integer >= 0. Got: ${COMPOSE_UP_RETRY_DELAY_SECONDS}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+validate_tcp_port_config() {
+    local variable_name="${1:?BUG: validate_tcp_port_config requires variable name}"
+    local variable_value="${2:-}"
+
+    if ! [[ "${variable_value}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: ${variable_name} must be an integer TCP port. Got: ${variable_value:-<empty>}" >&2
+        return 1
+    fi
+
+    if [ "${variable_value}" -lt 1 ] || [ "${variable_value}" -gt 65535 ]; then
+        echo "ERROR: ${variable_name} must be between 1 and 65535. Got: ${variable_value}" >&2
         return 1
     fi
 
@@ -1956,6 +1980,8 @@ OMERO_SERVER_LOGS_PATH=${OMERO_SERVER_LOGS_PATH}
 OMERO_WEB_VAR_PATH=${OMERO_WEB_VAR_PATH}
 OMERO_WEB_LOGS_PATH=${OMERO_WEB_LOGS_PATH}
 OMERO_WEB_SUPERVISOR_LOGS_PATH=${OMERO_WEB_SUPERVISOR_LOGS_PATH}
+OMERO_WEB_HOST_PORT=${OMERO_WEB_HOST_PORT}
+CONFIG_omero_web_application__server_port=${CONFIG_omero_web_application__server_port}
 PORTAINER_DATA_PATH=${PORTAINER_DATA_PATH}
 PROMETHEUS_DATA_PATH=${PROMETHEUS_DATA_PATH}
 GRAFANA_DATA_PATH=${GRAFANA_DATA_PATH}
@@ -2823,6 +2849,16 @@ require_path_config_var "OMERO_TMP_PATH" "${SCRIPT_ENV_FILE}"
 require_path_config_var "OMERO_DATA_DIR" "${SCRIPT_ENV_FILE}"
 require_nonempty_config_var "OMERO_DB_PASS" "${SECRETS_ENV_FILE}"
 require_nonempty_config_var "OMP_PLUGIN_DB_PASS" "${SECRETS_ENV_FILE}"
+require_nonempty_config_var "OMERO_WEB_HOST_PORT" "${OMERO_WEB_ENV_FILE}"
+require_nonempty_config_var "CONFIG_omero_web_application__server_port" "${OMERO_WEB_ENV_FILE}"
+
+if ! validate_tcp_port_config "OMERO_WEB_HOST_PORT" "${OMERO_WEB_HOST_PORT}"; then
+    exit 1
+fi
+
+if ! validate_tcp_port_config "CONFIG_omero_web_application__server_port" "${CONFIG_omero_web_application__server_port}"; then
+    exit 1
+fi
 
 if ! validate_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Invalid OMERO_INSTALLATION_PATH from ${SCRIPT_ENV_FILE}: ${OMERO_INSTALLATION_PATH}" >&2

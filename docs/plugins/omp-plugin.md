@@ -11,6 +11,7 @@ The OMP plugin provides a workflow for parsing scientific image filenames into s
 - AI-assisted parsing support (Claude, Gemini, Groq, Perplexity, xAI, Cohere, Local) for regex suggestions and value extraction.
 - Variable set save/load/delete with per-user PostgreSQL persistence in `database_plugin`.
 - Progress-tracked background jobs for metadata writing and deletion.
+- Acquisition metadata jobs mirror searchable values into MapAnnotations and store oversized values in an attached text FileAnnotation when OMERO persistence succeeds.
 - Hash-based annotation ownership for safe plugin-only deletion (`omp_hash` / `omphash_v1:` prefix); hashless annotations are preserved by normal plugin-only deletion.
 - Per-user rate limiting on major actions (6 actions / 60 seconds).
 - REMBI-aligned default variable names with scientific nomenclature-aware hyphen protection.

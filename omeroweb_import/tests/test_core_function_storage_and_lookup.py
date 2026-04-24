@@ -188,3 +188,19 @@ def test_batch_find_images_by_name_covers_dataset_global_and_failure_paths(monke
         )
         == {}
     )
+
+    timeout_checks = []
+    monkeypatch.setattr(
+        core_functions,
+        "_timeout_expired",
+        lambda start_time, timeout_seconds: (
+            timeout_checks.append((start_time, timeout_seconds)) or True
+        ),
+    )
+    timed = core_functions._batch_find_images_by_name(
+        conn,
+        ["alpha.tif"],
+        timeout_seconds=1,
+    )
+    assert sorted(timed) == ["alpha.tif", "beta.tif"]
+    assert timeout_checks and timeout_checks[-1][1] == 1

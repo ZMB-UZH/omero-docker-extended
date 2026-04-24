@@ -322,6 +322,7 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
     Returns:
         (confirmed_sets_deleted, confirmed_pairs_deleted, attempted_sets)
     """
+    del var_names
     if mode == "keep":
         return 0, 0, 0
 

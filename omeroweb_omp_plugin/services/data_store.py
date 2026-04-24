@@ -1,6 +1,7 @@
 import logging
 import re
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
@@ -37,16 +38,19 @@ class UserDataStoreError(Exception):
     """Raised when user data deletion fails."""
 
 
-_psycopg2_mod: Any | None = None
-_psycopg2_extras: Any | None = None
-_psycopg2_sql: Any | None = None
+@dataclass
+class _Psycopg2ModuleCache:
+    module: Any | None = None
+    extras: Any | None = None
+    sql: Any | None = None
+
+
+_PSYCOPG2_MODULES = _Psycopg2ModuleCache()
 
 
 def _load_psycopg2():
-    global _psycopg2_mod, _psycopg2_extras
-
-    if _psycopg2_mod is not None and _psycopg2_extras is not None:
-        return _psycopg2_mod, _psycopg2_extras
+    if _PSYCOPG2_MODULES.module is not None and _PSYCOPG2_MODULES.extras is not None:
+        return _PSYCOPG2_MODULES.module, _PSYCOPG2_MODULES.extras
 
     try:
         import psycopg2
@@ -54,24 +58,22 @@ def _load_psycopg2():
     except ImportError:
         raise VariableStoreError(errors.psycopg2_missing())
 
-    _psycopg2_mod = psycopg2
-    _psycopg2_extras = extras
-    return _psycopg2_mod, _psycopg2_extras
+    _PSYCOPG2_MODULES.module = psycopg2
+    _PSYCOPG2_MODULES.extras = extras
+    return _PSYCOPG2_MODULES.module, _PSYCOPG2_MODULES.extras
 
 
 def _load_psycopg2_sql():
-    global _psycopg2_sql
-
-    if _psycopg2_sql is not None:
-        return _psycopg2_sql
+    if _PSYCOPG2_MODULES.sql is not None:
+        return _PSYCOPG2_MODULES.sql
 
     try:
         from psycopg2 import sql
     except ImportError:
         raise VariableStoreError(errors.psycopg2_missing())
 
-    _psycopg2_sql = sql
-    return _psycopg2_sql
+    _PSYCOPG2_MODULES.sql = sql
+    return _PSYCOPG2_MODULES.sql
 
 
 def _safe_query(template, *identifiers):

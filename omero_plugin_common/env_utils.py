@@ -71,6 +71,7 @@ def get_optional_env(
     allow_empty: bool = False,
 ) -> str | None:
     """Return an environment variable or None when unset."""
+    del env_file
     value = os.environ.get(name)
     if value is None:
         return None

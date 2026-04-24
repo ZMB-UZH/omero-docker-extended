@@ -474,7 +474,7 @@ services:
       OMERO_TEMPDIR: "${OMERO_TMP_PATH}/omero-web/tmp"
       TMPDIR: "${OMERO_TMP_PATH}/omero-web/tmp"
     ports:
-      - "4090:4090"
+      - "${OMERO_WEB_HOST_PORT:?Set OMERO_WEB_HOST_PORT in env/omeroweb.env}:${CONFIG_omero_web_application__server_port:?Set CONFIG_omero_web_application__server_port in env/omeroweb.env}"
     volumes:
       - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/OMERO:rw
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
@@ -485,7 +485,11 @@ services:
       - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4090/webgateway/ >/dev/null"]
+      test:
+        [
+          "CMD-SHELL",
+          "port=\"$${CONFIG_omero_web_application__server_port:?Set CONFIG_omero_web_application__server_port}\"; curl -fsS \"http://127.0.0.1:$${port}/webgateway/\" >/dev/null",
+        ]
       interval: 10s
       timeout: 10s
       retries: 30

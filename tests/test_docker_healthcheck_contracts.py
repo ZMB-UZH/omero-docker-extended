@@ -69,7 +69,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
 
     def test_image_level_healthchecks_exist_for_hardened_auxiliary_images(self) -> None:
         expected_checks = {
-            "omero-web": "curl -fsS http://127.0.0.1:4090/webgateway/ >/dev/null || exit 1",
+            "omero-web": "CONFIG_omero_web_application__server_port",
             "omero-celery-worker": "/opt/venv/bin/python -c 'import celery, omeroweb_imaris_connector, omero_plugin_common' || exit 1",
             "pg-maintenance": "pgrep -x cron >/dev/null || exit 1",
             "crowdsec": "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1",
@@ -84,9 +84,12 @@ class DockerHealthcheckContractTests(unittest.TestCase):
 
     def test_omeroweb_and_compose_share_the_same_runtime_health_probe(self) -> None:
         dockerfile_text = self.dockerfiles["omero-web"]
-        probe = "curl -fsS http://127.0.0.1:4090/webgateway/ >/dev/null"
-        self.assertIn(probe, dockerfile_text)
-        self.assertIn(probe, self.compose_text)
+        self.assertIn("CONFIG_omero_web_application__server_port", dockerfile_text)
+        self.assertIn("CONFIG_omero_web_application__server_port", self.compose_text)
+        self.assertIn("/webgateway/", dockerfile_text)
+        self.assertIn("/webgateway/", self.compose_text)
+        self.assertNotIn("http://127.0.0.1:4090/webgateway/", dockerfile_text)
+        self.assertNotIn("http://127.0.0.1:4090/webgateway/", self.compose_text)
 
     def test_crowdsec_and_compose_share_the_same_runtime_health_probe(self) -> None:
         dockerfile_text = self.dockerfiles["crowdsec"]

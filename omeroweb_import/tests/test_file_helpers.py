@@ -6,8 +6,8 @@ from omeroweb_import.utils import file_helpers
 def test_initialize_directories_populates_caches_and_permissions(tmp_path, monkeypatch):
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
-    file_helpers._UPLOAD_ROOT_CACHE = None
-    file_helpers._JOBS_ROOT_CACHE = None
+    file_helpers._DIRECTORY_CACHE.upload_root = None
+    file_helpers._DIRECTORY_CACHE.jobs_root = None
 
     monkeypatch.setattr(file_helpers, "resolve_upload_root", lambda: upload_root)
     monkeypatch.setattr(file_helpers, "resolve_jobs_root", lambda: jobs_root)

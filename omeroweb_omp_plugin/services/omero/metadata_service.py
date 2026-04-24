@@ -3,12 +3,23 @@ OMERO metadata extraction services.
 """
 
 import logging
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 from omero.model import FileAnnotationI, ImageAnnotationLinkI, ImageI, OriginalFileI
 from omero.rtypes import rstring, rlong
 
 from ...utils.omero_helpers import get_id
 
 logger = logging.getLogger(__name__)
+
+
+def _long_value_marker(key, *, stored):
+    status = "STORED_IN_FILEANNOTATION" if stored else "NOT_STORED"
+    return f"[LONG_VALUE_{status} key={key}]"
+
+
+def _set_long_value_markers(cleaned, long_values, *, stored):
+    for key in long_values:
+        cleaned[key] = _long_value_marker(key, stored=stored)
 
 
 def extract_acquisition_metadata(img):
@@ -227,7 +238,7 @@ def extract_acquisition_metadata(img):
         v = str(v)
         if len(v) > 250:
             long_values[k] = v
-            cleaned[k] = f"[LONG_VALUE_STORED_IN_FILEANNOTATION key={k}]"
+            cleaned[k] = _long_value_marker(k, stored=False)
         else:
             cleaned[k] = v
 
@@ -237,50 +248,72 @@ def extract_acquisition_metadata(img):
     if long_values:
         image_id = get_id(img)
         if image_id is None:
+            logger.warning("Cannot store long acquisition metadata: missing image id")
             return cleaned
         try:
             image_id_int = int(image_id)
         except (TypeError, ValueError, OverflowError):
+            logger.warning(
+                "Cannot store long acquisition metadata: invalid image id %s",
+                sanitize_log_value(image_id),
+            )
             return cleaned
         image_parent = ImageI(image_id_int, False)
 
         text = "\n".join(f"{k} = {v}" for k, v in long_values.items())
         binary = text.encode("utf-8")
 
-        update = img._conn.getUpdateService()
-
-        of = OriginalFileI()
-        of.setName(rstring("acquisition_metadata.txt"))
-        of.setPath(rstring(f"img_{image_id_int}/"))
-        of.setSize(rlong(len(binary)))
-        of.setMimetype(rstring("text/plain"))
-
-        of = update.saveAndReturnObject(of)
-
-        store = img._conn.c.sf.createRawFileStore()
+        image_conn = getattr(img, "_conn", None)
+        if image_conn is None:
+            logger.warning(
+                "Cannot store long acquisition metadata for image %s: missing OMERO connection",
+                image_id_int,
+            )
+            return cleaned
         try:
-            store.setFileId(of.getId().getValue())
-            store.write(binary, 0, len(binary))
-            store.save()
-        finally:
+            update = image_conn.getUpdateService()
+
+            of = OriginalFileI()
+            of.setName(rstring("acquisition_metadata.txt"))
+            of.setPath(rstring(f"img_{image_id_int}/"))
+            of.setSize(rlong(len(binary)))
+            of.setMimetype(rstring("text/plain"))
+
+            of = update.saveAndReturnObject(of)
+
+            store = image_conn.c.sf.createRawFileStore()
             try:
-                store.close()
-            except Exception as exc:
-                logger.debug(
-                    "Suppressed non-fatal exception in metadata_service.py",
-                    exc_info=exc,
-                )
+                store.setFileId(of.getId().getValue())
+                store.write(binary, 0, len(binary))
+                store.save()
+            finally:
+                try:
+                    store.close()
+                except Exception as exc:
+                    logger.debug(
+                        "Suppressed non-fatal exception in metadata_service.py",
+                        exc_info=sanitized_exc_info(exc),
+                    )
 
-        fa = FileAnnotationI()
-        fa.setNs(rstring("acquisition.fullmetadata"))
-        fa.setFile(of)
+            fa = FileAnnotationI()
+            fa.setNs(rstring("acquisition.fullmetadata"))
+            fa.setFile(of)
 
-        link = ImageAnnotationLinkI()
-        link.setParent(image_parent)
-        link.setChild(fa)
+            link = ImageAnnotationLinkI()
+            link.setParent(image_parent)
+            link.setChild(fa)
 
-        update.saveAndReturnObject(link)
+            update.saveAndReturnObject(link)
+        except Exception as exc:
+            logger.warning(
+                "Cannot store long acquisition metadata for image %s: %s",
+                image_id_int,
+                sanitize_log_value(exc),
+                exc_info=sanitized_exc_info(exc),
+            )
+            return cleaned
 
+        _set_long_value_markers(cleaned, long_values, stored=True)
         cleaned["full_metadata_file"] = f"FileAnnotation:{of.getId().getValue()}"
 
     # ----------------------------------------------------

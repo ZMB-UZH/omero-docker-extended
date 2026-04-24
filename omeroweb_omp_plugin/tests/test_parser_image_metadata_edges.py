@@ -634,7 +634,7 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
         _image_with_identifier(None, missing_id_update, _RawStore())
     )
     assert missing_id_cleaned == {
-        "acquisition_date": "[LONG_VALUE_STORED_IN_FILEANNOTATION key=acquisition_date]",
+        "acquisition_date": "[LONG_VALUE_NOT_STORED key=acquisition_date]",
     }
     assert missing_id_update.saved_objects == []
 
@@ -643,6 +643,51 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
         _image_with_identifier("not-an-id", invalid_id_update, _RawStore())
     )
     assert invalid_id_cleaned == {
-        "acquisition_date": "[LONG_VALUE_STORED_IN_FILEANNOTATION key=acquisition_date]",
+        "acquisition_date": "[LONG_VALUE_NOT_STORED key=acquisition_date]",
     }
     assert invalid_id_update.saved_objects == []
+
+    class _ImageWithoutConnection:
+        @staticmethod
+        def getId():
+            return 11
+
+        @staticmethod
+        def getAcquisitionDate():
+            return _Value("z" * 260)
+
+        @staticmethod
+        def getObjectiveSettings():
+            return None
+
+        @staticmethod
+        def getChannels():
+            return []
+
+        @staticmethod
+        def getDetectorSettings():
+            return []
+
+        @staticmethod
+        def loadOriginalMetadata():
+            return None
+
+    no_connection_cleaned = metadata_service.extract_acquisition_metadata(
+        _ImageWithoutConnection()
+    )
+    assert no_connection_cleaned == {
+        "acquisition_date": "[LONG_VALUE_NOT_STORED key=acquisition_date]",
+    }
+
+    class _FailingRawStore(_RawStore):
+        def write(self, payload, offset, length):
+            raise RuntimeError("write failed")
+
+    failing_update = _UpdateService()
+    failing_cleaned = metadata_service.extract_acquisition_metadata(
+        _image_with_identifier(12, failing_update, _FailingRawStore())
+    )
+    assert failing_cleaned == {
+        "acquisition_date": "[LONG_VALUE_NOT_STORED key=acquisition_date]",
+    }
+    assert len(failing_update.saved_objects) == 1
