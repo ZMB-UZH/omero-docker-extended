@@ -83,6 +83,19 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(entries, [repo / "env/omeroweb.env"])
         self.assertTrue(entries[0].exists())
 
+    def test_load_manifest_rejects_absolute_or_traversal_entries(self):
+        for manifest_entry in (
+            "/etc/passwd",
+            "../secrets.env",
+            "env/../secret.env",
+            "env//secret.env",
+            "env/secret.env/",
+        ):
+            with self.subTest(manifest_entry=manifest_entry):
+                repo = self._make_repo([manifest_entry])
+                with self.assertRaises(SystemExit):
+                    env_safety_guard.load_manifest(repo)
+
     def test_derive_compose_project_name_uses_installation_basename(self):
         self.assertEqual(
             env_safety_guard.derive_compose_project_name("/srv/OMERO Live"),
@@ -199,6 +212,10 @@ class EnvSafetyGuardTests(unittest.TestCase):
 
         backup_dirs = list(backups_dir.iterdir())
         self.assertEqual(len(backup_dirs), 1)
+        self.assertEqual(
+            backup_dirs[0].stat().st_mode & 0o777,
+            env_safety_guard.PRIVATE_DIR_MODE,
+        )
 
         backup_files = list(backup_dirs[0].rglob("*"))
         file_names = {
@@ -262,6 +279,32 @@ class EnvSafetyGuardTests(unittest.TestCase):
             (repo / "env/omeroweb.env").read_text(encoding="utf-8"),
             "version_1",
         )
+
+    def test_restore_rejects_traversal_backup_name(self):
+        repo = self._make_repo(
+            ["env/omeroweb.env"],
+            {"env/omeroweb.env": "CONFIG=value"},
+        )
+        env_safety_guard.cmd_backup(repo)
+
+        self.assertEqual(env_safety_guard.cmd_restore(repo, backup_name="../x"), 1)
+
+    def test_restore_refuses_symlinked_backup_files(self):
+        repo = self._make_repo(
+            ["env/omeroweb.env"],
+            {"env/omeroweb.env": "CONFIG=value"},
+        )
+        backup_dir = repo / ".env_backups" / "manual"
+        backup_dir.mkdir(parents=True)
+        external = Path(tempfile.mkdtemp())
+        self.addCleanup(
+            lambda: __import__("shutil").rmtree(external, ignore_errors=True)
+        )
+        target = external / "leaked.env"
+        target.write_text("SECRET=value", encoding="utf-8")
+        (backup_dir / "leaked.env").symlink_to(target)
+
+        self.assertEqual(env_safety_guard.cmd_restore(repo, backup_name="manual"), 1)
 
     def test_restore_fails_when_no_backups_exist(self):
         repo = self._make_repo(["env/omeroweb.env"], {})

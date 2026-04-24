@@ -122,6 +122,22 @@ def test_github_api_get_json_requires_absolute_api_path() -> None:
         )
 
 
+def test_validate_github_repository_rejects_unsafe_api_path_components() -> None:
+    assert (
+        security_delta_guard.validate_github_repository("ZMB-UZH/omero-docker-extended")
+        == "ZMB-UZH/omero-docker-extended"
+    )
+
+    for repository in (
+        "ZMB-UZH",
+        "ZMB-UZH/../repo",
+        "ZMB-UZH/repo?x=1",
+        "ZMB-UZH/repo\nnext",
+    ):
+        with pytest.raises(ValueError, match="OWNER/REPO"):
+            security_delta_guard.validate_github_repository(repository)
+
+
 def test_select_push_delta_alerts_only_keeps_alerts_created_after_run_start() -> None:
     workflow_started_at = datetime(2026, 4, 2, 12, 0, tzinfo=UTC)
     alerts = [

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
 import struct
-import sys
 import zlib
 from pathlib import Path
 
@@ -142,20 +142,22 @@ def build_png_bytes() -> bytes:
     )
 
 
-def main(argv: list[str]) -> int:
-    """Write the fallback logo PNG to the requested path."""
-    if len(argv) != 2:
-        print(
-            "usage: write_branding_logo_fallback.py <output-path>",
-            file=sys.stderr,
-        )
-        return 1
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Write the deterministic fallback branding logo PNG."
+    )
+    parser.add_argument("output_path", type=Path, help="PNG output path")
+    return parser.parse_args(argv)
 
-    output_path = Path(argv[1]).resolve()
+
+def main(argv: list[str] | None = None) -> int:
+    """Write the fallback logo PNG to the requested path."""
+    args = parse_args(argv)
+    output_path = args.output_path.resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(build_png_bytes())
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))
+    raise SystemExit(main())

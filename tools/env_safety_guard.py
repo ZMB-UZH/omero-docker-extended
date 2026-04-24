@@ -27,12 +27,13 @@ import re
 import shutil
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 MANIFEST_NAME = ".env_manifest"
 BACKUP_DIR_NAME = ".env_backups"
 INSTALLATION_PATHS_ENV_NAME = "installation_paths.env"
 DOT_ENV_NAME = ".env"
+PRIVATE_DIR_MODE = 0o700
 
 # ---------------------------------------------------------------------------
 # Manifest helpers
@@ -55,8 +56,52 @@ def load_manifest(repo_root: Path) -> list[Path]:
         # repo root. Deployment worktrees intentionally use symlinked env files,
         # and resolving them here would escape the worktree and break repo-
         # relative bookkeeping for checks and backups.
-        entries.append(repo_root / line)
+        entries.append(repo_root / validate_relative_manifest_path(line))
     return entries
+
+
+def validate_relative_manifest_path(raw_path: str) -> Path:
+    """Validate and return a repo-relative manifest path."""
+    path_text = raw_path.strip()
+    raw_parts = path_text.split("/")
+    relative_path = PurePosixPath(path_text)
+    invalid = (
+        not path_text
+        or "\\" in path_text
+        or relative_path.is_absolute()
+        or any(part in {"", ".", ".."} for part in raw_parts)
+        or any(ord(character) < 32 for character in path_text)
+    )
+    if invalid:
+        raise SystemExit(
+            f"Invalid {MANIFEST_NAME} entry: {raw_path!r}. "
+            "Entries must be clean repo-relative paths."
+        )
+    return Path(relative_path)
+
+
+def ensure_private_dir(path: Path) -> None:
+    """Create a private directory or tighten an existing one."""
+    if path.is_symlink() or (path.exists() and not path.is_dir()):
+        raise RuntimeError(f"Refusing unsafe backup directory path: {path}")
+    path.mkdir(parents=True, exist_ok=True)
+    path.chmod(PRIVATE_DIR_MODE)
+
+
+def validate_backup_name(backup_name: str) -> str:
+    """Validate a backup directory name supplied by the operator."""
+    candidate = PurePosixPath(backup_name.strip())
+    invalid = (
+        not str(candidate)
+        or "\\" in backup_name
+        or candidate.is_absolute()
+        or len(candidate.parts) != 1
+        or candidate.parts[0] in {".", ".."}
+        or any(ord(character) < 32 for character in backup_name)
+    )
+    if invalid:
+        raise ValueError("Backup name must be one listed directory name.")
+    return candidate.parts[0]
 
 
 def load_env_assignments(env_path: Path) -> dict[str, str]:
@@ -205,7 +250,8 @@ def cmd_backup(repo_root: Path) -> int:
         return 1
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")
-    backup_dir = repo_root / BACKUP_DIR_NAME / timestamp
+    backups_root = repo_root / BACKUP_DIR_NAME
+    backup_dir = backups_root / timestamp
 
     # Avoid collisions when called in rapid succession
     suffix = 0
@@ -215,6 +261,7 @@ def cmd_backup(repo_root: Path) -> int:
 
     missing_count = 0
     backed_up = 0
+    backup_started = False
 
     for entry in entries:
         rel = entry.relative_to(repo_root)
@@ -223,8 +270,12 @@ def cmd_backup(repo_root: Path) -> int:
             missing_count += 1
             continue
 
+        if not backup_started:
+            ensure_private_dir(backups_root)
+            ensure_private_dir(backup_dir)
+            backup_started = True
         dest = backup_dir / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(dest.parent)
         shutil.copy2(entry, dest)
         backed_up += 1
 
@@ -256,15 +307,23 @@ def cmd_restore(repo_root: Path, backup_name: str | None = None) -> int:
         return 1
 
     if backup_name:
-        target = backups_root / backup_name
+        try:
+            safe_backup_name = validate_backup_name(backup_name)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        target = backups_root / safe_backup_name
         if not target.is_dir():
-            print(f"ERROR: Backup not found: {backup_name}", file=sys.stderr)
+            print(f"ERROR: Backup not found: {safe_backup_name}", file=sys.stderr)
             return 1
     else:
         target = available[0]
 
     restored = 0
     for backup_file in target.rglob("*"):
+        if backup_file.is_symlink():
+            print(f"ERROR: Refusing symlink in backup: {backup_file}", file=sys.stderr)
+            return 1
         if not backup_file.is_file():
             continue
         rel = backup_file.relative_to(target)
