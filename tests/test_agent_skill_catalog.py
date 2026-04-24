@@ -312,13 +312,14 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
     ),
     "plugin-regression-triager": SkillScenario(
         scenario=(
-            "A change touched `omeroweb_import/` and root helper files, and the "
+            "A change touched `omeroweb_tools/` and root helper files, and the "
             "agent needs the narrowest correct split pytest lanes instead of one "
             "large combined run."
         ),
         skill_phrases=(
             "path-to-suite mapping",
             "narrowest correct verification set",
+            "`omeroweb_tools/` -> `omeroweb_tools/tests/`",
             "running one giant `pytest` command across all suites",
             "tests/ plus the affected plugin suite",
         ),

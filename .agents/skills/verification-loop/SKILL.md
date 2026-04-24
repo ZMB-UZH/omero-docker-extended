@@ -51,6 +51,7 @@ python3 -m pytest omeroweb_imaris_connector/tests/ -v -p no:cacheprovider -W err
 python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
+python3 -m pytest omeroweb_tools/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
 ```
 

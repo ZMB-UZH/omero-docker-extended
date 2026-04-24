@@ -60,6 +60,12 @@ def test_frontend_preview_skill_points_to_wrapper_and_drops_stale_temp_setup():
     assert "python3 tools/frontend_preview_tooling.py playwright --" in skill_text
     assert "vite_django_preview.config.mjs" in skill_text
     assert "vitest_django_preview.config.mjs" in skill_text
+    template_check = (
+        'test -f "$PLUGIN_ROOT/templates/$(basename "$PLUGIN_ROOT")/$PREVIEW_TEMPLATE"'
+    )
+    assert template_check in skill_text
+    assert "do not guess a repo path" in skill_text
+    assert "$REPO_ROOT/omero-web/omero/static" not in skill_text
     assert "mktemp -d /tmp/vite-preview" not in skill_text
     assert "npm install vite@8.0.7" not in skill_text
 

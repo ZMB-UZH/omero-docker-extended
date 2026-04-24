@@ -87,15 +87,14 @@ Do not start coding until you can name the helper boundary you will harden and t
 ## Domain roots
 
 - Infrastructure: `docker-compose.yml`, `docker/`, `startup/`, `installation/`, `maintenance/`, `env/*_example.env`, `installation_paths_example.env`
-- Web plugins: `omeroweb_omp_plugin/`, `omeroweb_import/`, `omeroweb_admin_tools/`, `omeroweb_imaris_connector/`, `omero_web_zarr/`
+- Web plugins: `omeroweb_omp_plugin/`, `omeroweb_import/`, `omeroweb_admin_tools/`, `omeroweb_imaris_connector/`, `omeroweb_tools/`, `omero_web_zarr/`
 - Shared library: `omero_plugin_common/`
 - Monitoring: `monitoring/`, `docs/operations/monitoring.md`
-- Tests: `tests/`, `omero_plugin_common/tests/`, `omeroweb_imaris_connector/tests/`, `omeroweb_admin_tools/tests/`, `omeroweb_omp_plugin/tests/`, `omeroweb_import/tests/`, `omero_web_zarr/tests/`
+- Tests: `tests/`, `omero_plugin_common/tests/`, `omeroweb_imaris_connector/tests/`, `omeroweb_admin_tools/tests/`, `omeroweb_omp_plugin/tests/`, `omeroweb_import/tests/`, `omeroweb_tools/tests/`, `omero_web_zarr/tests/`
 
 ## Topology facts
 
-- This deployment has `21 Compose services` total and runs `19 long-running runtime containers by default`.
-- It runs `20 when the profile-gated` `crowdsec` service is enabled.
+- This deployment has `21 Compose services` total and runs `19 long-running runtime containers by default`; 20 when the profile-gated `crowdsec` service is enabled.
 - The `redis-sysctl-init` helper is a one-shot profile-gated service, not a long-running runtime container.
 - The `omeroweb` container runs OMERO.web plus the Imaris Celery worker under `supervisord`.
 
@@ -119,6 +118,7 @@ python3 -m pytest omeroweb_imaris_connector/tests/ -v -p no:cacheprovider -W err
 python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
+python3 -m pytest omeroweb_tools/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
 ruff check .
 ruff format --check .

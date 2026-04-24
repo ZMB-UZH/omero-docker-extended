@@ -31,7 +31,7 @@ Project-specific instructions for Claude Code sessions working on this repositor
 
 - Service orchestration: `docker-compose.yml`
 - Shared library: `omero_plugin_common/`
-- Plugins: `omeroweb_omp_plugin/`, `omeroweb_import/`, `omeroweb_admin_tools/`, `omeroweb_imaris_connector/`, `omero_web_zarr/`
+- Plugins: `omeroweb_omp_plugin/`, `omeroweb_import/`, `omeroweb_admin_tools/`, `omeroweb_imaris_connector/`, `omeroweb_tools/`, `omero_web_zarr/`
 - Configuration templates: `env/*_example.env`, `installation_paths_example.env`
 - Full doc hub: `docs/index.md`
 - Cross-agent adapter map: `docs/reference/ai-agent-integrations.md`
@@ -50,6 +50,7 @@ python3 -m pytest omeroweb_imaris_connector/tests/ -v -p no:cacheprovider -W err
 python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
+python3 -m pytest omeroweb_tools/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
 ruff check .
 ruff format --check .
