@@ -182,6 +182,10 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
         def getUpdateService():
             return _Update()
 
+        @staticmethod
+        def deleteObjects(kind, object_ids, wait=True):
+            deleted.extend((kind, object_id, wait) for object_id in object_ids)
+
     def fake_delete(conn, update, img, var_names, mode):
         raise AssertionError("legacy id-based fallback should handle this path")
 
@@ -203,7 +207,12 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
     result = core.delete_existing_annotations(_Conn(), 11, allow_legacy=False)
 
     assert result == (2, 2, 2)
-    assert deleted == [107, 108, 7, 8]
+    assert deleted == [
+        107,
+        108,
+        ("Annotation", 7, True),
+        ("Annotation", 8, True),
+    ]
 
 
 def test_help_page_and_user_settings_views_cover_success_and_error_paths(
@@ -337,6 +346,10 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
         def getUpdateService():
             return _Update()
 
+        @staticmethod
+        def deleteObjects(kind, object_ids, wait=True):
+            deleted.extend((kind, object_id, wait) for object_id in object_ids)
+
     monkeypatch.setattr(core, "MapAnnotationI", _Stub)
     monkeypatch.setattr(core, "ImageAnnotationLinkI", _Stub)
     monkeypatch.setattr(core, "rlong", lambda value: value)
@@ -351,4 +364,23 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
     assert result == (1, 1, 1)
     assert isinstance(deleted[0], _Stub)
     assert deleted[0].id == 101
-    assert deleted[1] == ("annotation", 7)
+    assert deleted[1] == ("Annotation", 7, True)
+
+    class _ConnWithLoadedLink:
+        @staticmethod
+        def getObject(object_type, object_id):
+            assert object_type == "ImageAnnotationLink"
+            return SimpleNamespace(_obj=("loaded-link", object_id))
+
+    deleted.clear()
+    assert (
+        core._delete_object_by_id(
+            _ConnWithLoadedLink(),
+            _Update(),
+            "ImageAnnotationLink",
+            _Stub,
+            202,
+        )
+        is True
+    )
+    assert deleted == [("loaded-link", 202)]

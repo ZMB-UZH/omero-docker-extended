@@ -149,6 +149,10 @@ def _try_normalize_annotation_id(value):
 
 
 def _delete_object_by_id(conn, update, object_type, stub_type, object_id):
+    if object_type == "MapAnnotation":
+        conn.deleteObjects("Annotation", [int(object_id)], wait=True)
+        return True
+
     try:
         obj = conn.getObject(object_type, int(object_id))
     except Exception:
