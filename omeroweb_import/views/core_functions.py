@@ -705,12 +705,20 @@ def _normalize_ngff_converter_settings(raw_settings):
 
 
 def _build_bioformats2raw_command(
-    input_path: str, output_path: str, settings: dict
+    input_path: str,
+    output_path: str,
+    converter_settings: dict | None = None,
+    **legacy_options,
 ) -> list[str]:
     """Build the bioformats2raw CLI command from normalized settings."""
+    if converter_settings is None and "settings" in legacy_options:
+        converter_settings = legacy_options.pop("settings")
+    if legacy_options:
+        unexpected = ", ".join(sorted(legacy_options))
+        raise TypeError(f"Unexpected converter option keyword(s): {unexpected}")
     cmd: list[str] = [BIOFORMATS2RAW_CLI]
 
-    s: dict[str, Any] = dict(settings or NGFF_CONVERTER_SETTINGS_DEFAULTS)
+    s: dict[str, Any] = dict(converter_settings or NGFF_CONVERTER_SETTINGS_DEFAULTS)
 
     compression = str(s.get("compression", "blosc"))
     if compression != "null":
@@ -4902,7 +4910,18 @@ def _write_job_file(job_id: str, job_dict):
                 logger.debug("Suppressed exception in cleanup", exc_info=True)
 
 
-def _apply_upload_updates(job_id: str, updates: list, errors: list):
+def _apply_upload_updates(
+    job_id: str,
+    updates: list,
+    upload_errors: list | None = None,
+    **legacy_options,
+):
+    if upload_errors is None and "errors" in legacy_options:
+        upload_errors = legacy_options.pop("errors")
+    if legacy_options:
+        unexpected = ", ".join(sorted(legacy_options))
+        raise TypeError(f"Unexpected upload update keyword(s): {unexpected}")
+
     def apply_updates(job_dict):
         entries_by_id = {
             entry.get("upload_id"): entry for entry in job_dict.get("files", [])
@@ -4914,8 +4933,8 @@ def _apply_upload_updates(job_id: str, updates: list, errors: list):
             entry["status"] = update.get("status", entry.get("status"))
             if update.get("errors"):
                 entry.setdefault("errors", []).extend(update["errors"])
-        if errors:
-            job_dict.setdefault("errors", []).extend(errors)
+        if upload_errors:
+            job_dict.setdefault("errors", []).extend(upload_errors)
         uploaded_bytes = sum(
             entry.get("size", 0)
             for entry in job_dict.get("files", [])

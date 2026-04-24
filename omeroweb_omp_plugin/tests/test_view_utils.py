@@ -40,6 +40,10 @@ def test_load_json_body_and_require_non_root_user(monkeypatch):
     assert allowed.status_code == 200
     assert blocked == {"conn": "conn", "url": "/api", "kwargs": {"flag": True}}
 
+    positional_allowed = root_view(RequestFactory().get("/"), "conn-2", "/api-2")
+    assert positional_allowed.status_code == 200
+    assert blocked == {"conn": "conn-2", "url": "/api-2", "kwargs": {}}
+
 
 def test_resolve_omero_host_port_prefers_connection_then_settings_then_env(monkeypatch):
     assert utils.resolve_omero_host_port(

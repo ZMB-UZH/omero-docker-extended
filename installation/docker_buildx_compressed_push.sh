@@ -161,9 +161,11 @@ run_buildx_bake_with_retries() {
     local output_file=""
     local saw_transient_lock="0"
     local saw_transient_cache_export="0"
+    local -a build_targets=()
 
     LAST_BUILDX_FAILURE_TRANSIENT_LOCK=0
     LAST_BUILDX_FAILURE_TRANSIENT_CACHE_EXPORT=0
+    read -r -a build_targets <<< "${DOCKER_BUILD_TARGETS}"
 
     while [ "${attempt}" -le "${max_attempts}" ]; do
         output_file="$(mktemp)"
@@ -171,9 +173,9 @@ run_buildx_bake_with_retries() {
         docker buildx bake \
             --file "${COMPOSE_FILE}" \
             --provenance "$(as_bool_literal "${DOCKER_BUILD_PROVENANCE}")" \
-            ${DOCKER_BUILD_TARGETS} \
+            "${build_targets[@]}" \
             "${TARGET_OVERRIDES[@]}" 2>&1 | tee "${output_file}"
-        local build_exit_code=${PIPESTATUS[0]}
+        local build_exit_code="${PIPESTATUS[0]}"
         set -e
 
         if [ "${build_exit_code}" -eq 0 ]; then

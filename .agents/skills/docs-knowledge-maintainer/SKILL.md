@@ -38,6 +38,12 @@ Use this skill whenever code changes alter behavior, operating assumptions, or u
 - single-env `docker compose` examples missing `env/omero_secrets.env`
 - root docs contradicting deep docs
 - undocumented new runtime assumptions
+- compact rewrites that pass line budgets while dropping required meaning;
+  update regression checks before changing a docs budget
+- bloated changes where fewer lines can prove full functional parity while
+  satisfying every repo rule
+- instructions or tools that caused a proven avoidable retry/error loop; update
+  only after the correct workflow is verified
 
 ## Required verification
 

@@ -74,7 +74,43 @@ def parse_args() -> argparse.Namespace:
         default="DEEPSOURCE_TOKEN",
         help="Environment variable containing the DeepSource token.",
     )
+    deepsource_issues = subparsers.add_parser(
+        "deepsource-issues",
+        help="List DeepSource grouped issues with sample occurrences.",
+    )
+    deepsource_issues.add_argument(
+        "--repository",
+        required=True,
+        help="Repository in gh/OWNER/REPO format.",
+    )
+    deepsource_issues.add_argument(
+        "--issue-limit",
+        type=positive_int,
+        default=100,
+        help="Maximum grouped issues to request.",
+    )
+    deepsource_issues.add_argument(
+        "--occurrence-limit",
+        type=positive_int,
+        default=5,
+        help="Maximum sample occurrences to request per grouped issue.",
+    )
+    deepsource_issues.add_argument(
+        "--token-env",
+        default="DEEPSOURCE_TOKEN",
+        help="Environment variable containing the DeepSource token.",
+    )
     return parser.parse_args()
+
+
+def positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be a positive integer") from None
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
 
 
 def read_token(env_name: str, label: str) -> str:
@@ -257,12 +293,141 @@ def summarize_deepsource(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def summarize_deepsource_issues(args: argparse.Namespace) -> dict[str, Any]:
+    vcs_provider, login, name = parse_deepsource_repository(args.repository)
+    token = read_token(args.token_env, "DeepSource")
+    payload = {
+        "query": """
+          query(
+            $name: String!,
+            $login: String!,
+            $vcsProvider: VCSProvider!,
+            $issueLimit: Int!,
+            $occurrenceLimit: Int!
+          ) {
+            repository(name: $name, login: $login, vcsProvider: $vcsProvider) {
+              defaultBranch
+              latestCommitOid
+              issues(first: $issueLimit) {
+                totalCount
+                edges {
+                  node {
+                    id
+                    issue {
+                      shortcode
+                      title
+                      category
+                      severity
+                      shortDescription
+                      tags
+                      analyzer {
+                        shortcode
+                        name
+                      }
+                    }
+                    occurrences(first: $occurrenceLimit) {
+                      totalCount
+                      edges {
+                        node {
+                          path
+                          beginLine
+                          beginColumn
+                          endLine
+                          endColumn
+                          title
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        """,
+        "variables": {
+            "name": name,
+            "login": login,
+            "vcsProvider": vcs_provider,
+            "issueLimit": args.issue_limit,
+            "occurrenceLimit": args.occurrence_limit,
+        },
+    }
+    result = fetch_json(
+        "https://api.deepsource.com/graphql/",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
+        },
+        method="POST",
+        service="DeepSource API",
+    )
+    if result.get("errors"):
+        raise SystemExit("DeepSource API returned GraphQL errors")
+    repository = (result.get("data") or {}).get("repository")
+    if not isinstance(repository, dict):
+        raise SystemExit("DeepSource repository was not found or returned invalid data")
+    issues = repository.get("issues")
+    if not isinstance(issues, dict):
+        raise SystemExit("DeepSource issue list returned invalid data")
+
+    grouped_issues: list[dict[str, Any]] = []
+    for edge in issues.get("edges") or []:
+        node = edge.get("node") or {}
+        issue = node.get("issue") or {}
+        analyzer = issue.get("analyzer") or {}
+        occurrences = node.get("occurrences") or {}
+        sample_occurrences = []
+        for occurrence_edge in occurrences.get("edges") or []:
+            occurrence = occurrence_edge.get("node") or {}
+            sample_occurrences.append(
+                {
+                    "path": occurrence.get("path"),
+                    "begin_line": occurrence.get("beginLine"),
+                    "begin_column": occurrence.get("beginColumn"),
+                    "end_line": occurrence.get("endLine"),
+                    "end_column": occurrence.get("endColumn"),
+                    "title": occurrence.get("title"),
+                }
+            )
+        grouped_issues.append(
+            {
+                "id": node.get("id"),
+                "shortcode": issue.get("shortcode"),
+                "title": issue.get("title"),
+                "category": issue.get("category"),
+                "severity": issue.get("severity"),
+                "short_description": issue.get("shortDescription"),
+                "tags": issue.get("tags") or [],
+                "analyzer": {
+                    "shortcode": analyzer.get("shortcode"),
+                    "name": analyzer.get("name"),
+                },
+                "occurrences": occurrences.get("totalCount"),
+                "sample_occurrences": sample_occurrences,
+            }
+        )
+
+    return {
+        "repository": args.repository,
+        "default_branch": repository.get("defaultBranch"),
+        "latest_commit_oid": repository.get("latestCommitOid"),
+        "grouped_issues": issues.get("totalCount"),
+        "returned_grouped_issues": len(grouped_issues),
+        "issues": grouped_issues,
+    }
+
+
 def main() -> int:
     args = parse_args()
     if args.command == "github-code-scanning":
         summary = summarize_github_code_scanning(args)
     elif args.command == "deepsource":
         summary = summarize_deepsource(args)
+    elif args.command == "deepsource-issues":
+        summary = summarize_deepsource_issues(args)
     else:  # pragma: no cover - argparse enforces known subcommands.
         raise SystemExit(f"Unsupported command: {args.command}")
     print(json.dumps(summary, indent=2))

@@ -476,6 +476,14 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
         assert "--overwrite" in cmd
         assert "--progress" in cmd
 
+    def test_legacy_settings_keyword_uses_converter_settings(self):
+        cmd = _build_bioformats2raw_command(
+            "/in",
+            "/out",
+            settings=self._defaults(overwrite=False),
+        )
+        assert "--overwrite" not in cmd
+
     def test_all_flags_combined(self):
         """A single run with all non-default options to verify no clashes."""
         s = self._defaults(
