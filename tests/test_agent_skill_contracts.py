@@ -534,14 +534,37 @@ class AgentSkillContractTests(unittest.TestCase):
         settings_text = (self.repo_root / ".claude" / "settings.json").read_text(
             encoding="utf-8"
         )
+        pinned_markdownlint = "npx --yes markdownlint-cli2@0.17.2"
         self.assertNotIn("/home/itservice/.local/bin/ruff", settings_text)
         self.assertNotIn("/opt/omero/tools/env_safety_guard.py", settings_text)
+        self.assertNotIn("npx markdownlint-cli2", settings_text)
         self.assertIn("command -v ruff", settings_text)
         self.assertIn("ruff check --fix --quiet", settings_text)
         self.assertIn("ruff format --quiet", settings_text)
         self.assertIn("python3 -m ruff --version", settings_text)
+        self.assertIn(pinned_markdownlint, settings_text)
         self.assertIn("git rev-parse --show-toplevel", settings_text)
         self.assertIn("tools/env_safety_guard.py", settings_text)
+
+    def test_root_test_stubs_support_importlib_discovery(self) -> None:
+        for module_name in (
+            "celery",
+            "celery.states",
+            "omero",
+            "omero.gateway",
+            "omeroweb",
+            "omeroweb.webclient",
+            "omeroweb.webgateway.views",
+        ):
+            with self.subTest(module=module_name):
+                try:
+                    spec = importlib.util.find_spec(module_name)
+                except ValueError as exc:
+                    self.fail(
+                        f"{module_name} test stub has invalid import metadata: {exc}"
+                    )
+                self.assertIsNotNone(spec)
+                self.assertEqual(module_name, spec.name)
 
     def test_agent_split_test_surfaces_cover_every_repo_suite(self) -> None:
         discovered = {"tests/"}

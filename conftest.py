@@ -1,37 +1,72 @@
 """Root conftest — mock heavy OMERO/Ice dependencies for test collection."""
 
+from importlib.machinery import ModuleSpec
 import os
 import sys
 import tempfile
 from types import ModuleType
-from typing import Any
+from typing import Any, Union
 from unittest.mock import MagicMock
 
 import pytest
 
 _TEST_TMP_ROOT = tempfile.gettempdir()
 
-os.environ.setdefault("OMERO_WEB_ROOT", _TEST_TMP_ROOT)
-os.environ.setdefault("OMERO_WEB_VENV", "venv")
-os.environ.setdefault("OMERO_TMP_PATH", _TEST_TMP_ROOT)
-os.environ.setdefault("OMERO_IMS_CELERY_BROKER_URL", "redis://localhost:6379/0")
-os.environ.setdefault("OMERO_IMS_CELERY_BACKEND_URL", "redis://localhost:6379/1")
-os.environ.setdefault("OMERO_IMS_CELERY_QUEUE", "imaris")
-os.environ.setdefault("OMERO_IMS_CELERY_RESULT_EXPIRES", "3600")
-os.environ.setdefault("OMERO_IMS_CELERY_TIME_LIMIT", "3600")
-os.environ.setdefault("OMERO_IMS_CELERY_MAX_RETRIES", "3")
-os.environ.setdefault("OMERO_IMS_CELERY_PREFETCH", "1")
-os.environ.setdefault("OMERO_IMS_EXPORT_TIMEOUT", "30")
-os.environ.setdefault("OMERO_IMS_EXPORT_POLL_INTERVAL", "0.01")
-os.environ.setdefault("OMERO_IMS_SCRIPT_NAME", "Batch_Image_Export_Imaris.py")
-os.environ.setdefault(
-    "OMERO_IMS_EXPORT_DIR", os.path.join(_TEST_TMP_ROOT, "imaris-exports")
-)
-os.environ.setdefault("OMERO_IMS_SCRIPT_START_TIMEOUT", "30")
-os.environ.setdefault("OMERO_IMS_SCRIPT_START_RETRY_INTERVAL", "0.1")
-os.environ.setdefault("OMERO_IMS_PROCESSOR_CONFIG_CACHE_TTL", "60")
-os.environ.setdefault("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "true")
-os.environ.setdefault("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
+_TEST_ENV_DEFAULTS = {
+    "OMERO_WEB_ROOT": _TEST_TMP_ROOT,
+    "OMERO_WEB_VENV": "venv",
+    "OMERO_TMP_PATH": _TEST_TMP_ROOT,
+    "OMERO_IMS_CELERY_BROKER_URL": "redis://localhost:6379/0",
+    "OMERO_IMS_CELERY_BACKEND_URL": "redis://localhost:6379/1",
+    "OMERO_IMS_CELERY_QUEUE": "imaris",
+    "OMERO_IMS_CELERY_RESULT_EXPIRES": "3600",
+    "OMERO_IMS_CELERY_TIME_LIMIT": "3600",
+    "OMERO_IMS_CELERY_MAX_RETRIES": "3",
+    "OMERO_IMS_CELERY_PREFETCH": "1",
+    "OMERO_IMS_EXPORT_TIMEOUT": "30",
+    "OMERO_IMS_EXPORT_POLL_INTERVAL": "0.01",
+    "OMERO_IMS_SCRIPT_NAME": "Batch_Image_Export_Imaris.py",
+    "OMERO_IMS_EXPORT_DIR": os.path.join(_TEST_TMP_ROOT, "imaris-exports"),
+    "OMERO_IMS_SCRIPT_START_TIMEOUT": "30",
+    "OMERO_IMS_SCRIPT_START_RETRY_INTERVAL": "0.1",
+    "OMERO_IMS_PROCESSOR_CONFIG_CACHE_TTL": "60",
+    "OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT": "true",
+    "OMERO_WEB_ZARR_ALTERNATIVE_RENDERING": "true",
+}
+
+for _env_name, _env_value in _TEST_ENV_DEFAULTS.items():
+    os.environ.setdefault(_env_name, _env_value)
+
+_PACKAGE_STUBS = {
+    "celery",
+    "omero",
+    "omero.model",
+    "omero_figure",
+    "omero_iviewer",
+    "omeroweb",
+    "omeroweb.webclient",
+    "omeroweb.webgateway",
+}
+_ModuleStub = Union[ModuleType, MagicMock]
+
+
+def _set_module_metadata(
+    module: _ModuleStub,
+    module_name: str,
+) -> _ModuleStub:
+    """Give test stubs enough import metadata for importlib discovery."""
+
+    is_package = module_name in _PACKAGE_STUBS
+    module.__name__ = module_name
+    module.__package__ = module_name if is_package else module_name.rpartition(".")[0]
+    module.__spec__ = ModuleSpec(module_name, loader=None, is_package=is_package)
+    if is_package:
+        module.__path__ = []
+    return module
+
+
+def _mock_module(module_name: str) -> MagicMock:
+    return _set_module_metadata(MagicMock(), module_name)
 
 
 def _passthrough_login_required(*args, **kwargs):
@@ -58,10 +93,14 @@ def _passthrough_login_required(*args, **kwargs):
 
 # Build proper mocks for omeroweb.decorators and omeroweb.webclient.decorators
 # with a real login_required so decorated view functions keep __wrapped__.
-_omeroweb_decorators = ModuleType("omeroweb.decorators")
+_omeroweb_decorators = _set_module_metadata(
+    ModuleType("omeroweb.decorators"), "omeroweb.decorators"
+)
 _omeroweb_decorators.login_required = _passthrough_login_required
 
-_omeroweb_webclient_decorators = ModuleType("omeroweb.webclient.decorators")
+_omeroweb_webclient_decorators = _set_module_metadata(
+    ModuleType("omeroweb.webclient.decorators"), "omeroweb.webclient.decorators"
+)
 _omeroweb_webclient_decorators.login_required = _passthrough_login_required
 
 
@@ -91,8 +130,8 @@ class _ColorHolder:
         return self._a
 
 
-_celery_module = ModuleType("celery")
-_celery_states = ModuleType("celery.states")
+_celery_module = _set_module_metadata(ModuleType("celery"), "celery")
+_celery_states = _set_module_metadata(ModuleType("celery.states"), "celery.states")
 for _name in (
     "PENDING",
     "RECEIVED",
@@ -155,7 +194,9 @@ for _mod in [
     "omero_iviewer",
     "omero_iviewer.views",
 ]:
-    sys.modules.setdefault(_mod, MagicMock())
+    _stub = sys.modules.setdefault(_mod, _mock_module(_mod))
+    if getattr(_stub, "__spec__", None) is None:
+        _set_module_metadata(_stub, _mod)
 
 sys.modules.setdefault("omeroweb.decorators", _omeroweb_decorators)
 sys.modules.setdefault("omeroweb.webclient.decorators", _omeroweb_webclient_decorators)

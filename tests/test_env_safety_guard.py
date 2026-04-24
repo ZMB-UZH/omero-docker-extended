@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -375,3 +377,39 @@ class EnvSafetyGuardTests(unittest.TestCase):
         repo_root = Path(__file__).resolve().parent.parent
         gitignore = (repo_root / ".gitignore").read_text(encoding="utf-8")
         self.assertIn(".env_backups/", gitignore)
+
+    def test_real_repo_gitignore_behavior_preserves_config_contract(self):
+        """Git must ignore local deployment config while keeping examples visible."""
+        repo_root = Path(__file__).resolve().parent.parent
+        git = shutil.which("git")
+        self.assertIsNotNone(git)
+
+        def is_ignored(path: str) -> bool:
+            result = subprocess.run(
+                [git, "check-ignore", "--no-index", "-q", path],
+                cwd=repo_root,
+                check=False,
+            )
+            self.assertIn(result.returncode, {0, 1}, path)
+            return result.returncode == 0
+
+        for path in (
+            "installation_paths.env",
+            "env/omeroweb.env",
+            "env/omero_secrets.env",
+            ".env_backups/backup.env",
+            "logo/logo.png",
+            "node_modules/package/index.js",
+            "var/runtime/file",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(is_ignored(path))
+
+        for path in (
+            "installation_paths_example.env",
+            "env/omeroweb_example.env",
+            "logo/logo_example.png",
+            ".github/workflows/tests.yml",
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(is_ignored(path))
