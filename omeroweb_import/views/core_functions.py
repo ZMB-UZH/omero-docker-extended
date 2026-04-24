@@ -3380,7 +3380,7 @@ def _import_file(
 
     Returns ``(success, stdout, stderr)`` – the same contract as before.
     """
-    del conn
+    _ = conn
     cmd = _build_omero_cli_command(["import"], session_key, host, port)
     cmd.extend(["--depth", str(OMERO_IMPORT_SCAN_DEPTH)])
     if dataset_id:
@@ -3751,7 +3751,9 @@ def _timeout_expired(start_time: float, timeout_seconds) -> bool:
         timeout = float(timeout_seconds)
     except (TypeError, ValueError):
         return False
-    return timeout >= 0 and time.time() - start_time >= timeout
+    if timeout < 0:
+        return False
+    return time.time() - start_time >= timeout
 
 
 def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_seconds=60):
@@ -4404,7 +4406,7 @@ def _attach_txt_to_image_service(
     Prefer a detached end-user session when available so user-owned objects do
     not depend on job-service administrator privileges.
     """
-    del conn
+    _ = conn
     from omero.model import FileAnnotationI, OriginalFileI
     from omero.gateway import FileAnnotationWrapper
     from ..services.omero.sem_edx_parser import attach_sem_edx_tables
@@ -5653,7 +5655,7 @@ def _check_import_compatibility(
     Uses 'omero import -f' which performs local file format analysis
     without requiring server connection or authentication.
     """
-    del session_key, host, port, dataset_id
+    _ = (session_key, host, port, dataset_id)
     if not file_path.exists():
         return {
             "status": "error",
@@ -6486,7 +6488,10 @@ def _import_zarr_via_cli(
     Stages the zarr into the OMERO managed repository via a server-side OMERO
     script, then runs ``omero zarr import`` against that final managed path.
     """
-    del progress_job
+    if progress_job is not None:
+        progress_job["import_progress_bytes"] = progress_job.get(
+            "import_progress_bytes", progress_job.get("imported_bytes", 0)
+        )
     if not username or not group_name:
         error_msg = (
             "Missing username or group name for managed-repository Zarr staging."
@@ -7178,7 +7183,7 @@ def _import_job_entry(
     username=None,
     group_name=None,
 ):
-    del session_key
+    _ = session_key
     rel_path = entry.get("relative_path")
     if not rel_path:
         return {"skip": True}
