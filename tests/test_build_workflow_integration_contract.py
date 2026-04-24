@@ -1317,6 +1317,86 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIn('wc -l -- "${DOCKERFILE_PATH}"', hadolint_audit_step["run"])
 
+    def test_workflow_scanner_scope_exclusions_are_limited_and_audited(
+        self,
+    ) -> None:
+        import yaml  # noqa: F811 - available in CI
+
+        workflow_paths = sorted(
+            (self.repo_root / ".github" / "workflows").glob("*.yml")
+        )
+        for workflow_path in workflow_paths:
+            workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+            triggers = workflow.get(True, {})
+            with self.subTest(workflow=workflow_path.name):
+                for event_name in ("pull_request", "push"):
+                    event_config = triggers.get(event_name)
+                    if isinstance(event_config, dict):
+                        self.assertNotIn("paths", event_config)
+                        self.assertNotIn("paths-ignore", event_config)
+
+        security_workflow = yaml.safe_load(
+            (
+                self.repo_root / ".github" / "workflows" / "security-code-scanning.yml"
+            ).read_text(encoding="utf-8")
+        )
+        security_jobs = security_workflow["jobs"]
+
+        semgrep_run = next_or_fail(
+            step
+            for step in security_jobs["semgrep"]["steps"]
+            if step.get("name") == "Run Semgrep scan"
+        )["run"]
+        self.assertEqual(
+            "semgrep scan --sarif --config auto . > semgrep-results.sarif", semgrep_run
+        )
+
+        trivy_with = next_or_fail(
+            step
+            for step in security_jobs["trivy-filesystem"]["steps"]
+            if step.get("name") == "Run Trivy vulnerability scan"
+        )["with"]
+        self.assertEqual("fs", trivy_with["scan-type"])
+        self.assertEqual("vuln,misconfig,secret,license", trivy_with["scanners"])
+        self.assertNotIn("skip-dirs", trivy_with)
+        self.assertNotIn("skip-files", trivy_with)
+        self.assertNotIn("trivyignores", trivy_with)
+
+        bandit_prod = next_or_fail(
+            step
+            for step in security_jobs["bandit"]["steps"]
+            if step.get("name")
+            == "Run Bandit scan (production code — excludes test directories)"
+        )["run"]
+        self.assertIn('--skip "B603,B404"', bandit_prod)
+        self.assertNotIn("B101", bandit_prod)
+        self.assertNotIn("B106", bandit_prod)
+
+        bandit_test = next_or_fail(
+            step
+            for step in security_jobs["bandit"]["steps"]
+            if step.get("name")
+            == "Run Bandit scan (test code — skips assert and test-credential rules)"
+        )["run"]
+        self.assertIn('--skip "B101,B106,B603,B404"', bandit_test)
+
+        devskim_with = next_or_fail(
+            step
+            for step in security_jobs["devskim"]["steps"]
+            if step.get("name") == "Run DevSkim scan"
+        )["with"]
+        self.assertEqual(
+            "**/.git/**,**/pgdata/**,**/omero_data/**,**/omero_temp/**",
+            devskim_with["ignore-globs"],
+        )
+        self.assertEqual("DS162092", devskim_with["exclude-rules"])
+
+        docs_text = (
+            self.repo_root / "docs" / "operations" / "code-scanning.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Do not narrow scanner scope to improve scores.", docs_text)
+        self.assertIn("DevSkim `DS162092`", docs_text)
+
     def test_security_sarif_upload_jobs_can_read_workflow_run_metadata(self) -> None:
         import yaml  # noqa: F811  — available in CI
 
