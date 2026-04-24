@@ -1,6 +1,10 @@
 # Service and Plugin Endpoints Reference
 
-## Infrastructure endpoints (host-exposed)
+## Infrastructure endpoints (default host-exposed)
+
+These are the shipped defaults. Treat live env files and Compose overrides as
+authoritative: before operational probes, discover current bindings from the
+running containers or `docker compose config`; do not assume these host ports.
 
 | Service | URL | Purpose |
 | --- | --- | --- |
@@ -139,12 +143,12 @@ Base: `/omeroweb_imaris_connector/`
 | --- | --- |
 | `/imaris-export/` | Start export, poll status, download result |
 
-## Health check endpoints (used by Docker)
+## Health check endpoints (used by Docker defaults)
 
 | Service | Health check method |
 | --- | --- |
 | `omeroserver` | OMERO CLI admin login |
-| `omeroweb` | `curl http://127.0.0.1:4090/webgateway/` |
+| `omeroweb` | container-local `curl` to `/webgateway/` on the configured OMERO.web port |
 | `database` | `pg_isready -U omero -d omero -p 5432` |
 | `database_plugin` | `pg_isready -U omero-plugin -d omero-plugin -p 5433` |
 | `redis` | `redis-cli ping` |

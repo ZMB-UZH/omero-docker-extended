@@ -186,8 +186,8 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
     return hmac.compare_digest(str(marker), str(expected))
 
 
-def find_plugin_annotation_ids(conn, image_id, allow_legacy=True):
-    """Return MapAnnotation IDs created by this plugin for an image."""
+def find_plugin_annotation_ids(conn, image_id, allow_legacy=False):
+    """Return plugin-owned MapAnnotation IDs; legacy matching is opt-in."""
 
     try:
         iid = int(image_id)
@@ -454,7 +454,7 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
     if mode == "plugin":
         try:
             target_ids.update(
-                find_plugin_annotation_ids(conn, get_id(img), allow_legacy=True)
+                find_plugin_annotation_ids(conn, get_id(img), allow_legacy=False)
             )
         except Exception:
             logger.warning(

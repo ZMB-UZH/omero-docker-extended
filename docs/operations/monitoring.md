@@ -216,9 +216,28 @@ If `node_network_address_info` is absent from `/metrics`, node-exporter is not e
 ### 4) Diagnose Grafana sign-in routing through OMERO proxy
 
 ```bash
-curl -sI http://127.0.0.1:4090/omeroweb_admin_tools/resource-monitoring/grafana-proxy/
-curl -sI http://127.0.0.1:4090/omeroweb_admin_tools/resource-monitoring/grafana-proxy/login
-curl -s http://127.0.0.1:4090/omeroweb_admin_tools/resource-monitoring/grafana-proxy/login | rg 'appSubUrl|appUrl|href="/|href="login"' | head -n 20
+container="$(docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env ps -q omeroweb)"
+base_url=""
+while read -r _arrow_prefix _arrow binding; do
+  [ -n "${binding:-}" ] || continue
+  host="${binding%:*}"
+  port="${binding##*:}"
+  host="${host#[}"
+  host="${host%]}"
+  case "$host" in
+    ""|0.0.0.0|::) host="127.0.0.1" ;;
+    *:*) host="[${host}]" ;;
+  esac
+  candidate="http://${host}:${port}"
+  if curl -fsS -o /dev/null "${candidate}/webgateway/"; then
+    base_url="$candidate"
+    break
+  fi
+done < <(docker port "$container")
+[ -n "$base_url" ] || { echo "OMERO.web binding not found" >&2; exit 1; }
+curl -sI "${base_url}/omeroweb_admin_tools/resource-monitoring/grafana-proxy/"
+curl -sI "${base_url}/omeroweb_admin_tools/resource-monitoring/grafana-proxy/login"
+curl -s "${base_url}/omeroweb_admin_tools/resource-monitoring/grafana-proxy/login" | rg 'appSubUrl|appUrl|href="/|href="login"' | head -n 20
 ```
 
 `/resource-monitoring/grafana-proxy/*` is protected by OMERO.web authentication. An unauthenticated `curl` request correctly receives `302` to `/webclient/login/...`; this does not indicate a Grafana proxy failure.

@@ -353,7 +353,10 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
         listAnnotations=lambda: [ann1, ann2, ann3],
     )
 
-    assert annotation_service.find_plugin_annotation_ids(conn, 55) == [1, 2]
+    assert annotation_service.find_plugin_annotation_ids(conn, 55) == [1]
+    assert annotation_service.find_plugin_annotation_ids(
+        conn, 55, allow_legacy=True
+    ) == [1, 2]
     assert annotation_service.find_annotation_link_ids(conn, 1) == [1001]
     assert annotation_service.find_map_annotation_ids(conn, 55) == [1, 4]
 
@@ -367,9 +370,10 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
         )
     )
 
-    assert (deleted_sets, deleted_pairs, attempted) == (2, 3, 2)
+    assert (deleted_sets, deleted_pairs, attempted) == (1, 2, 1)
     assert ("link", 1001) in update.deleted
     assert 1001 in deleted_link_ids
+    assert 1002 not in deleted_link_ids
 
 
 def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch):

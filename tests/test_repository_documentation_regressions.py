@@ -219,6 +219,8 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("tools/scanner_inventory.py deepsource", runbook_text)
         self.assertIn("tools/scanner_inventory.py deepsource-issues", runbook_text)
         self.assertIn("prompts without echo on a TTY", runbook_text)
+        self.assertIn("non-TTY agent shells", runbook_text)
+        self.assertIn("short-lived `GITHUB_TOKEN`", runbook_text)
         self.assertIn("Never paste PATs into command arguments", runbook_text)
         self.assertIn("GitHub HTTPS Git operations require a PAT", runbook_text)
         self.assertIn("tools/git_push_with_pat.py origin main", runbook_text)

@@ -18,6 +18,7 @@ from ..services.core import (
     load_job,
     save_job,
     _job_lock_path,
+    mark_job_lock_held,
     collect_images_in_project,
     get_id,
     get_text,
@@ -152,6 +153,34 @@ def _save_annotation_link(update, link):
     return bool(get_id(saved_link))
 
 
+def _unique_annotation_key(existing_mapping, base_key):
+    key_root = str(base_key or "").strip() or "Var"
+    key = key_root
+    suffix = 2
+    while key == HASH_KEY or key in existing_mapping:
+        key = f"{key_root}_{suffix}"
+        suffix += 1
+    return key
+
+
+def _with_plugin_hash(mapping):
+    annotation_mapping = dict(mapping)
+    if annotation_mapping:
+        annotation_mapping[HASH_KEY] = compute_plugin_hash(annotation_mapping)
+    return annotation_mapping
+
+
+def _save_image_map_annotation(update, img, mapping):
+    ann = MapAnnotationI()
+    ann.setNs(rstring(MAP_NS))
+    ann.setMapValue([NamedValue(k, v) for k, v in mapping.items()])
+
+    link = ImageAnnotationLinkI()
+    link.setParent(img._obj)
+    link.setChild(ann)
+    return _save_annotation_link(update, link)
+
+
 # ==============================================================================
 # START JOB
 # ==============================================================================
@@ -212,7 +241,7 @@ def start_job(request, conn=None, _url=None, **kwargs):
 
         job_id = uuid.uuid4().hex
 
-        # *** FIXED: DO NOT OVERRIDE separator / var_names / delete_mode ***
+        # Preserve user-selected parsing and deletion settings.
         job = {
             "job_id": job_id,
             "username": current_username(request, conn),
@@ -638,24 +667,16 @@ def job_progress(request, job_id, conn=None, _url=None, **kwargs):
                 # ACQUISITION METADATA MODE (NO DELETION – ONLY APPEND)
                 # ---------------------------------------------------------
                 if job.get("type") == "acq":
-                    mapping = extract_acquisition_metadata(img)
+                    metadata_mapping = dict(extract_acquisition_metadata(img) or {})
+                    annotation_mapping = _with_plugin_hash(metadata_mapping)
 
-                    if mapping:
-                        mapping[HASH_KEY] = compute_plugin_hash(mapping)
-
-                    if mapping:
-                        ann = MapAnnotationI()
-                        ann.setNs(rstring(MAP_NS))
-                        nv_list = [NamedValue(k, v) for k, v in mapping.items()]
-                        ann.setMapValue(nv_list)
-
-                        link = ImageAnnotationLinkI()
-                        link.setParent(img._obj)
-                        link.setChild(ann)
-                        saved = _save_annotation_link(update, link)
+                    if annotation_mapping:
+                        saved = _save_image_map_annotation(
+                            update, img, annotation_mapping
+                        )
                         if saved:
                             batch_logs.append(
-                                f"Image {iid} ({filename}): saved {len(mapping)} acquisition entries."
+                                f"Image {iid} ({filename}): saved {len(metadata_mapping)}+1 acquisition entries."
                             )
                         else:
                             batch_logs.append(
@@ -669,44 +690,25 @@ def job_progress(request, job_id, conn=None, _url=None, **kwargs):
 
                 parts = parse_filename(filename, sep_pattern)
 
-                mapping = {}
+                mapping: dict[str, str] = {}
                 for i, part in enumerate(parts):
                     if i < len(var_names) and str(var_names[i]).strip():
                         base_key = str(var_names[i]).strip()
                     else:
                         base_key = f"Var{i + 1}"
-                    key = base_key
-                    if key in mapping:
-                        suffix = 2
-                        while f"{base_key}_{suffix}" in mapping:
-                            suffix += 1
-                        key = f"{base_key}_{suffix}"
+                    key = _unique_annotation_key(mapping, base_key)
                     mapping[key] = str(part)
-                if mapping:
-                    mapping[HASH_KEY] = compute_plugin_hash(mapping)
+                annotation_mapping = _with_plugin_hash(mapping)
 
                 # DELETE FIRST
                 delete_existing_annotations(conn, update, img, var_names, delete_mode)
 
-                # -------------------------------
-                # FIX: WRITE ONLY ONE ANNOTATION
-                # -------------------------------
-                if mapping:
-                    ann = MapAnnotationI()
-                    ann.setNs(rstring(MAP_NS))
-                    nv_list = [NamedValue(k, v) for k, v in mapping.items()]
-                    ann.setMapValue(nv_list)
-
-                    # Link FIRST -> save once
-                    link = ImageAnnotationLinkI()
-                    link.setParent(img._obj)
-                    link.setChild(ann)
-
-                    saved = _save_annotation_link(update, link)
+                # Write one annotation containing user keys plus the plugin marker.
+                if annotation_mapping:
+                    saved = _save_image_map_annotation(update, img, annotation_mapping)
                     if saved:
-                        saved_total = len(parts) + 1
                         batch_logs.append(
-                            f"Image {iid} ({filename}): saved {saved_total - 1}+1 variables."
+                            f"Image {iid} ({filename}): saved {len(mapping)}+1 variables."
                         )
                     else:
                         batch_logs.append(
@@ -726,7 +728,8 @@ def job_progress(request, job_id, conn=None, _url=None, **kwargs):
                 )
 
         job["index"] = end
-        save_job(job)
+        with mark_job_lock_held(job_id):
+            save_job(job)
 
         done = end
         elapsed = time.time() - started
