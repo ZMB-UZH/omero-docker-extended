@@ -5,7 +5,7 @@ import os
 import sys
 import tempfile
 from types import ModuleType
-from typing import Any, Union
+from typing import Any, TypeVar
 from unittest.mock import MagicMock
 
 import pytest
@@ -47,13 +47,13 @@ _PACKAGE_STUBS = {
     "omeroweb.webclient",
     "omeroweb.webgateway",
 }
-_ModuleStub = Union[ModuleType, MagicMock]
+_ModuleStubT = TypeVar("_ModuleStubT", ModuleType, MagicMock)
 
 
 def _set_module_metadata(
-    module: _ModuleStub,
+    module: _ModuleStubT,
     module_name: str,
-) -> _ModuleStub:
+) -> _ModuleStubT:
     """Give test stubs enough import metadata for importlib discovery."""
 
     is_package = module_name in _PACKAGE_STUBS
@@ -61,7 +61,7 @@ def _set_module_metadata(
     module.__package__ = module_name if is_package else module_name.rpartition(".")[0]
     module.__spec__ = ModuleSpec(module_name, loader=None, is_package=is_package)
     if is_package:
-        module.__path__ = []
+        setattr(module, "__path__", [])
     return module
 
 
@@ -332,9 +332,9 @@ def _restore_module_state(
         current_dict.update(saved_dict)
 
 
-def pytest_collection_finish(session) -> None:
-    global _MODULE_STATE_BASELINE
-    _MODULE_STATE_BASELINE = _snapshot_module_state()
+def pytest_collection_finish() -> None:
+    _MODULE_STATE_BASELINE.clear()
+    _MODULE_STATE_BASELINE.update(_snapshot_module_state())
 
 
 @pytest.fixture(autouse=True)
