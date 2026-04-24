@@ -9,6 +9,7 @@ origin: repo-local skill for AI agent frontend preview and DOM/browser validatio
 Use this skill to visually validate plugin HTML/CSS/JS changes and add repeatable DOM or browser checks before live OMERO.web validation. Use only the pinned wrapper:
 
 ```bash
+python3 tools/frontend_preview_tooling.py install-node
 python3 tools/frontend_preview_tooling.py bootstrap
 python3 tools/frontend_preview_tooling.py vite -- ...
 python3 tools/frontend_preview_tooling.py vitest -- ...
@@ -24,8 +25,16 @@ Do not install ad-hoc frontend tooling inside the repository.
 
 ## Tooling contract
 
-- Host Node.js must satisfy `tools/frontend_preview_tooling_manifest.json`; the wrapper checks this before installing.
-- If bootstrap reports an old or missing Node.js, install or activate a compatible host Node.js first, then rerun once. Do not keep retrying the same failing wrapper command.
+- Host Node.js must exactly match the LTS `node_version` in `tools/frontend_preview_tooling_manifest.json`; the wrapper checks this before installing frontend packages.
+- If bootstrap reports missing or mismatched Node.js, install and activate the pinned Linux binary once:
+
+```bash
+export PATH="$(python3 tools/frontend_preview_tooling.py install-node --print-bin):$PATH"
+python3 tools/frontend_preview_tooling.py bootstrap --json
+```
+
+Do not keep retrying the same failing wrapper command.
+
 - The wrapper installs exact pinned versions into `${XDG_CACHE_HOME:-$HOME/.cache}/omero-agent-frontend-preview`, or `OMERO_AGENT_FRONTEND_TOOLING_DIR` when set.
 - The wrapper does **not** install dependencies into the repository.
 - Config assets live at `.agents/skills/frontend-preview/agents/vite_django_preview.config.mjs` and `.agents/skills/frontend-preview/agents/vitest_django_preview.config.mjs`; both expect the wrapper's cache-backed tool directory.
@@ -35,6 +44,7 @@ Do not install ad-hoc frontend tooling inside the repository.
 Bootstrap once, then set and verify the target before Vite or Vitest:
 
 ```bash
+export PATH="$(python3 tools/frontend_preview_tooling.py install-node --print-bin):$PATH"
 python3 tools/frontend_preview_tooling.py bootstrap --json
 export REPO_ROOT="$(git rev-parse --show-toplevel)"
 export PLUGIN_ROOT="$REPO_ROOT/omeroweb_tools"

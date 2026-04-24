@@ -192,6 +192,19 @@ def test_save_user_settings_view_rejects_non_post_and_invalid_json(monkeypatch):
         conn=object(),
     )
     assert bad_response.status_code == 400
+    list_payload_request = RequestFactory().post(
+        "/omeroweb_tools/enhanced-search/settings/",
+        data=json.dumps([]),
+        content_type="application/json",
+    )
+    list_payload_response = inspect.unwrap(index_view.save_user_settings_view)(
+        list_payload_request,
+        conn=object(),
+    )
+    assert list_payload_response.status_code == 400
+    assert json.loads(list_payload_response.content.decode("utf-8")) == {
+        "error": view_utils.JSON_OBJECT_REQUIRED_ERROR
+    }
 
 
 def test_saved_query_views_cover_validation_delete_and_fallback_redirect(
@@ -218,6 +231,19 @@ def test_saved_query_views_cover_validation_delete_and_fallback_redirect(
         conn=object(),
     )
     assert save_bad_json_response.status_code == 400
+    save_list_payload = RequestFactory().post(
+        "/omeroweb_tools/enhanced-search/saved-queries/save/",
+        data=json.dumps([]),
+        content_type="application/json",
+    )
+    save_list_payload_response = inspect.unwrap(index_view.save_query_view)(
+        save_list_payload,
+        conn=object(),
+    )
+    assert save_list_payload_response.status_code == 400
+    assert json.loads(save_list_payload_response.content.decode("utf-8")) == {
+        "error": view_utils.JSON_OBJECT_REQUIRED_ERROR
+    }
 
     save_bad_payload = RequestFactory().post(
         "/omeroweb_tools/enhanced-search/saved-queries/save/",
@@ -252,6 +278,19 @@ def test_saved_query_views_cover_validation_delete_and_fallback_redirect(
         conn=object(),
     )
     assert delete_bad_json_response.status_code == 400
+    delete_list_payload = RequestFactory().post(
+        "/omeroweb_tools/enhanced-search/saved-queries/delete/",
+        data=json.dumps([]),
+        content_type="application/json",
+    )
+    delete_list_payload_response = inspect.unwrap(index_view.delete_query_view)(
+        delete_list_payload,
+        conn=object(),
+    )
+    assert delete_list_payload_response.status_code == 400
+    assert json.loads(delete_list_payload_response.content.decode("utf-8")) == {
+        "error": view_utils.JSON_OBJECT_REQUIRED_ERROR
+    }
 
     delete_bad_id = RequestFactory().post(
         "/omeroweb_tools/enhanced-search/saved-queries/delete/",
@@ -274,6 +313,16 @@ def test_saved_query_views_cover_validation_delete_and_fallback_redirect(
         conn=object(),
     )
     assert delete_missing_id_response.status_code == 400
+    delete_bool_id = RequestFactory().post(
+        "/omeroweb_tools/enhanced-search/saved-queries/delete/",
+        data=json.dumps({"query_id": True}),
+        content_type="application/json",
+    )
+    delete_bool_id_response = inspect.unwrap(index_view.delete_query_view)(
+        delete_bool_id,
+        conn=object(),
+    )
+    assert delete_bool_id_response.status_code == 400
 
     monkeypatch.setattr(
         index_view, "remove_saved_query", lambda username, query_id: False
@@ -288,6 +337,27 @@ def test_saved_query_views_cover_validation_delete_and_fallback_redirect(
         conn=object(),
     )
     assert delete_missing_response.status_code == 404
+
+    monkeypatch.setattr(
+        index_view,
+        "remove_saved_query",
+        lambda username, query_id: (_ for _ in ()).throw(
+            index_view.EnhancedSearchStoreError("db offline")
+        ),
+    )
+    delete_failed = RequestFactory().post(
+        "/omeroweb_tools/enhanced-search/saved-queries/delete/",
+        data=json.dumps({"query_id": 5}),
+        content_type="application/json",
+    )
+    delete_failed_response = inspect.unwrap(index_view.delete_query_view)(
+        delete_failed,
+        conn=object(),
+    )
+    assert delete_failed_response.status_code == 503
+    assert json.loads(delete_failed_response.content.decode("utf-8")) == {
+        "error": index_view.SAVED_QUERY_DELETE_ERROR
+    }
 
     monkeypatch.setattr(
         index_view, "remove_saved_query", lambda username, query_id: True
@@ -311,6 +381,27 @@ def test_saved_query_views_cover_validation_delete_and_fallback_redirect(
         "saved_queries": [{"id": 9, "query_name": "Saved"}],
     }
 
+    monkeypatch.setattr(
+        index_view,
+        "saved_queries",
+        lambda username: (_ for _ in ()).throw(
+            index_view.EnhancedSearchStoreError("db offline")
+        ),
+    )
+    delete_reload_failed = RequestFactory().post(
+        "/omeroweb_tools/enhanced-search/saved-queries/delete/",
+        data=json.dumps({"query_id": 9}),
+        content_type="application/json",
+    )
+    delete_reload_failed_response = inspect.unwrap(index_view.delete_query_view)(
+        delete_reload_failed,
+        conn=object(),
+    )
+    assert delete_reload_failed_response.status_code == 503
+    assert json.loads(delete_reload_failed_response.content.decode("utf-8")) == {
+        "error": index_view.SAVED_QUERY_LOAD_ERROR
+    }
+
     monkeypatch.setattr(index_view, "saved_queries", lambda username: [{"id": 3}])
     fallback_request = RequestFactory().get(
         "/omeroweb_tools/enhanced-search/saved-queries/999/"
@@ -323,6 +414,22 @@ def test_saved_query_views_cover_validation_delete_and_fallback_redirect(
         )
     assert fallback_response.status_code == 302
     assert fallback_response["Location"].endswith("/enhanced-search/")
+
+    monkeypatch.setattr(
+        index_view,
+        "saved_queries",
+        lambda username: (_ for _ in ()).throw(
+            index_view.EnhancedSearchStoreError("db offline")
+        ),
+    )
+    with override_settings(ROOT_URLCONF="omeroweb_tools.urls"):
+        fallback_db_response = inspect.unwrap(index_view.apply_saved_query_view)(
+            fallback_request,
+            conn=object(),
+            query_id=999,
+        )
+    assert fallback_db_response.status_code == 302
+    assert fallback_db_response["Location"].endswith("/enhanced-search/")
 
 
 def test_save_query_view_returns_saved_queries_after_success(monkeypatch):
@@ -354,7 +461,17 @@ def test_save_query_view_returns_saved_queries_after_success(monkeypatch):
         "ok": True,
         "saved_queries": [{"id": 1, "query_name": "My query"}],
     }
-    assert saved == [("alice", "My query", {"query_text": "lsm"})]
+    assert saved == [
+        (
+            "alice",
+            "My query",
+            {
+                "query_text": "lsm",
+                "indexed_scope": "all_indexed_scopes",
+                "page": 1,
+            },
+        )
+    ]
 
 
 def test_save_query_view_normalizes_name_and_handles_store_failure(monkeypatch):
@@ -382,7 +499,36 @@ def test_save_query_view_normalizes_name_and_handles_store_failure(monkeypatch):
     response = inspect.unwrap(index_view.save_query_view)(request, conn=object())
 
     assert response.status_code == 200
-    assert saved == [("alice", "My query name", {"query_text": "lsm"})]
+    assert saved == [
+        (
+            "alice",
+            "My query name",
+            {
+                "query_text": "lsm",
+                "indexed_scope": "all_indexed_scopes",
+                "page": 1,
+            },
+        )
+    ]
+
+    invalid_payload_request = RequestFactory().post(
+        "/omeroweb_tools/enhanced-search/saved-queries/save/",
+        data=json.dumps(
+            {
+                "query_name": "Invalid query",
+                "query_payload": {"indexed_scope": "deleted_scope"},
+            }
+        ),
+        content_type="application/json",
+    )
+    invalid_payload_response = inspect.unwrap(index_view.save_query_view)(
+        invalid_payload_request,
+        conn=object(),
+    )
+    assert invalid_payload_response.status_code == 400
+    assert json.loads(invalid_payload_response.content.decode("utf-8")) == {
+        "error": index_view.SAVED_QUERY_PAYLOAD_INVALID_ERROR
+    }
 
     monkeypatch.setattr(
         index_view,
@@ -395,6 +541,23 @@ def test_save_query_view_normalizes_name_and_handles_store_failure(monkeypatch):
     assert failed_response.status_code == 503
     assert json.loads(failed_response.content.decode("utf-8")) == {
         "error": index_view.SAVED_QUERY_SAVE_ERROR
+    }
+
+    monkeypatch.setattr(index_view, "save_query", lambda *args: None)
+    monkeypatch.setattr(
+        index_view,
+        "saved_queries",
+        lambda username: (_ for _ in ()).throw(
+            index_view.EnhancedSearchStoreError("db offline")
+        ),
+    )
+    reload_failed_response = inspect.unwrap(index_view.save_query_view)(
+        request,
+        conn=object(),
+    )
+    assert reload_failed_response.status_code == 503
+    assert json.loads(reload_failed_response.content.decode("utf-8")) == {
+        "error": index_view.SAVED_QUERY_LOAD_ERROR
     }
 
 
@@ -410,6 +573,7 @@ def test_view_utils_cover_json_root_guard_host_resolution_and_validation(monkeyp
         view_utils, "parse_json_body", lambda request: ({"ok": True}, None)
     )
     assert view_utils.load_json_body(object()) == ({"ok": True}, None)
+    assert view_utils.load_json_object(object()) == ({"ok": True}, None)
 
     monkeypatch.setattr(
         view_utils,
@@ -417,6 +581,13 @@ def test_view_utils_cover_json_root_guard_host_resolution_and_validation(monkeyp
         lambda request: (None, "Invalid JSON payload."),
     )
     assert view_utils.load_json_body(object()) == (None, "Invalid JSON payload.")
+    assert view_utils.load_json_object(object()) == (None, "Invalid JSON payload.")
+
+    monkeypatch.setattr(view_utils, "parse_json_body", lambda request: ([], None))
+    assert view_utils.load_json_object(object()) == (
+        None,
+        view_utils.JSON_OBJECT_REQUIRED_ERROR,
+    )
 
     guarded_calls = []
 
@@ -428,6 +599,13 @@ def test_view_utils_cover_json_root_guard_host_resolution_and_validation(monkeyp
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "root")
     root_response = _guarded_view(SimpleNamespace(), conn=object())
     assert root_response.status_code == 403
+
+    monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "")
+    missing_user_response = _guarded_view(SimpleNamespace(), conn=object())
+    assert missing_user_response.status_code == 403
+    assert json.loads(missing_user_response.content.decode("utf-8")) == {
+        "error": view_utils.CURRENT_USER_REQUIRED_ERROR
+    }
 
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     assert _guarded_view(SimpleNamespace(), conn="conn", url="url") == {"ok": True}

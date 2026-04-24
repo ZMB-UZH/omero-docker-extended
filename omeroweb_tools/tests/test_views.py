@@ -71,6 +71,54 @@ def test_enhanced_search_view_blocks_root_without_running_search(monkeypatch):
     assert captured["template"] == "omeroweb_tools/enhanced_search.html"
 
 
+def test_enhanced_search_view_blocks_unresolved_user_without_store_access(monkeypatch):
+    monkeypatch.setattr(
+        index_view,
+        "render",
+        lambda request, template, context: context,
+    )
+    monkeypatch.setattr(index_view, "current_username", lambda request, conn: "")
+    monkeypatch.setattr(
+        index_view,
+        "parse_search_query",
+        lambda params: (index_view.SearchQuery(query_text="lsm"), []),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "search",
+        lambda conn, query, acquisition_metadata_enabled: pytest.fail(
+            "search must not run without a resolved user"
+        ),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "saved_queries",
+        lambda username: pytest.fail("saved queries must not load without a user"),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "ensure_user_index_sync",
+        lambda conn, username, settings_payload=None: pytest.fail(
+            "auto sync must not run without a resolved user"
+        ),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "runtime_config",
+        lambda: SimpleNamespace(max_results=50),
+    )
+
+    request = RequestFactory().get("/omeroweb_tools/enhanced-search/?query_text=lsm")
+    response = inspect.unwrap(index_view.enhanced_search_view)(request, conn=object())
+
+    assert response["blocked_for_root"] is True
+    assert response["saved_queries"] == []
+    assert response["indexed_scope_storage_key"] == (
+        "omeroweb_tools:enhanced_search:indexed_scope:"
+        f"{hashlib.sha256(b'').hexdigest()}"
+    )
+
+
 def test_enhanced_search_view_builds_pagination_querystrings(monkeypatch):
     captured = {}
     monkeypatch.setattr(
@@ -546,5 +594,32 @@ def test_validate_user_password_does_not_close_session_when_login_fails(monkeypa
     valid, error = view_utils.validate_user_password(object(), credential_value)
 
     assert valid is False
-    assert error == "Password validation failed: nope"
+    assert error == view_utils.AUTH_VALIDATION_FAILED_ERROR
     assert closed == []
+
+
+def test_validate_user_password_suppresses_close_failure_after_success(monkeypatch):
+    credential_value = "opaque-value"
+
+    class _Client:
+        @staticmethod
+        def createSession(username, provided_value):
+            assert username == "alice"
+            assert provided_value == credential_value
+
+        @staticmethod
+        def closeSession():
+            raise RuntimeError("close failed")
+
+    monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(
+        view_utils,
+        "resolve_omero_host_port",
+        lambda conn: ("omeroserver", 4064),
+    )
+    monkeypatch.setattr(view_utils.omero, "client", lambda host, port: _Client())
+
+    valid, error = view_utils.validate_user_password(object(), credential_value)
+
+    assert valid is True
+    assert error is None

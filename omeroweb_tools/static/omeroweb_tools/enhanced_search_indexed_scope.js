@@ -63,6 +63,40 @@
         return serverBackedParams.some((name) => params.has(name));
     };
 
+    const persistScope = (windowRef, storageKey, selectEl) => {
+        const validValues = indexedScopeValues(selectEl);
+        if (validValues.has(selectEl.value)) {
+            writeBrowserStorage(windowRef, storageKey, selectEl.value);
+            return;
+        }
+        removeBrowserStorage(windowRef, storageKey);
+    };
+
+    const restoreStoredScope = ({
+        windowRef,
+        storageKey,
+        selectEl,
+        serverBackedParams,
+        onStoredScopeApplied,
+    }) => {
+        const validValues = indexedScopeValues(selectEl);
+        const storedScope = readBrowserStorage(windowRef, storageKey);
+        if (storedScope !== null && !validValues.has(storedScope)) {
+            removeBrowserStorage(windowRef, storageKey);
+            return;
+        }
+        if (hasServerBackedSearchQuery(windowRef, serverBackedParams)) {
+            return;
+        }
+        if (!validValues.has(storedScope)) {
+            return;
+        }
+        selectEl.value = storedScope;
+        if (typeof onStoredScopeApplied === 'function') {
+            onStoredScopeApplied(selectEl.value);
+        }
+    };
+
     const init = (options = {}) => {
         const windowRef = options.windowRef || window;
         const documentRef = options.documentRef || windowRef.document;
@@ -78,29 +112,14 @@
             ? options.serverBackedParams
             : DEFAULT_SERVER_BACKED_PARAMS;
 
-        const persist = () => {
-            const validValues = indexedScopeValues(selectEl);
-            if (validValues.has(selectEl.value)) {
-                writeBrowserStorage(windowRef, storageKey, selectEl.value);
-            } else {
-                removeBrowserStorage(windowRef, storageKey);
-            }
-        };
-
-        const validValues = indexedScopeValues(selectEl);
-        const storedScope = readBrowserStorage(windowRef, storageKey);
-        if (storedScope !== null && !validValues.has(storedScope)) {
-            removeBrowserStorage(windowRef, storageKey);
-        }
-        if (
-            !hasServerBackedSearchQuery(windowRef, serverBackedParams)
-            && validValues.has(storedScope)
-        ) {
-            selectEl.value = storedScope;
-            if (typeof options.onStoredScopeApplied === 'function') {
-                options.onStoredScopeApplied(selectEl.value);
-            }
-        }
+        const persist = () => persistScope(windowRef, storageKey, selectEl);
+        restoreStoredScope({
+            windowRef,
+            storageKey,
+            selectEl,
+            serverBackedParams,
+            onStoredScopeApplied: options.onStoredScopeApplied,
+        });
         persist();
         selectEl.addEventListener('change', persist);
         return {
