@@ -67,6 +67,8 @@ flowchart TD
 ### 1. Log exploration
 
 - The Logs page queries Loki via LogQL with container filtering and configurable lookback.
+- Container selections and internal log filenames are validated against known
+  source keys and basename rules before LogQL construction.
 - Severity normalization maps mixed Loki/source labels (including missing/`unknown`) to canonical severities (`debug`, `info`, `warn`, `error`, `fatal`) using stream labels plus message-pattern inference.
 - Traceback-continuation lines and RedisBloom `bf-error-rate` entries are classified as non-error noise.
 - Internal log file selections are batched to avoid one-Loki-query-per-file fan-out.
@@ -77,6 +79,7 @@ flowchart TD
 - Embedded Grafana dashboards are served through an authenticated reverse proxy (`/resource-monitoring/grafana-proxy/<subpath>`).
 - The Grafana proxy rewrites `appSubUrl`, `appUrl`, cookie paths, and auth headers so Grafana sessions work correctly behind the plugin route.
 - Prometheus queries are proxied as standard request/response traffic; the SSE notifications endpoint is short-circuited with `204 No Content`.
+- The Prometheus proxy root redirects to `/targets`.
 - Docker container stats and system info are fetched via the mounted Docker socket (read-only).
 
 ### 3. Storage analytics

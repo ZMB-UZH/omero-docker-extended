@@ -1093,7 +1093,8 @@ def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
 
     assert response.status_code == 302
     assert (
-        "/admin_tools/resource-monitoring/prometheus-proxy/d/" in response["Location"]
+        response["Location"]
+        == "/admin_tools/resource-monitoring/prometheus-proxy/targets"
     )
 
 
@@ -1392,6 +1393,36 @@ def test_grafana_proxy_root_redirects_to_default_dashboard(monkeypatch) -> None:
     )
 
 
+def test_prometheus_proxy_root_redirects_to_targets(monkeypatch) -> None:
+    from omeroweb_admin_tools.views.index_view import prometheus_proxy
+
+    request = RequestFactory().get(
+        "/omeroweb_admin_tools/resource-monitoring/prometheus-proxy/"
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._proxy_http_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("root path should redirect before proxying")
+        ),
+    )
+
+    response = prometheus_proxy(request, subpath="")
+
+    assert response.status_code == 302
+    assert (
+        response["Location"]
+        == "/omeroweb_admin_tools/resource-monitoring/prometheus-proxy/targets"
+    )
+
+
 def test_grafana_proxy_root_redirect_sanitizes_env_segments(monkeypatch) -> None:
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "https://evil.example")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "../escape")
@@ -1410,7 +1441,7 @@ def test_grafana_proxy_root_redirect_sanitizes_env_segments(monkeypatch) -> None
 def test_logs_data_runtime_error_is_sanitized(monkeypatch) -> None:
     request = RequestFactory().get(
         "/omeroweb_admin_tools/logs/data/",
-        data={"container": ["omero-omeroweb-1"]},
+        data={"container": ["omeroweb"]},
     )
 
     monkeypatch.setattr(
@@ -1483,7 +1514,6 @@ def test_logs_data_filters_entries_and_validates_inputs(monkeypatch) -> None:
             ("internal_file", "omeroserver_internal/master.err"),
             ("internal_file", "omeroweb_internal/web.log"),
             ("internal_file", "bad-entry"),
-            ("internal_file", "redis/dump.rdb"),
             ("lookback", "120"),
             ("limit", "25"),
             ("query", "error"),
@@ -1579,6 +1609,23 @@ def test_logs_data_rejects_invalid_query_parameters(monkeypatch) -> None:
         ),
         conn=None,
     )
+    invalid_container = logs_data(
+        RequestFactory().get(
+            "/omeroweb_admin_tools/logs/data/",
+            data={"container": ['omeroweb"} |~ ".+']},
+        ),
+        conn=None,
+    )
+    invalid_internal_file = logs_data(
+        RequestFactory().get(
+            "/omeroweb_admin_tools/logs/data/",
+            data=[
+                ("container", "omeroserver_internal"),
+                ("internal_file", "redis/dump.rdb"),
+            ],
+        ),
+        conn=None,
+    )
 
     assert (
         json.loads(invalid_limit.content)["error"] == "Invalid lookback or limit value."
@@ -1588,6 +1635,16 @@ def test_logs_data_rejects_invalid_query_parameters(monkeypatch) -> None:
     assert invalid_since.status_code == 400
     assert json.loads(invalid_level.content)["error"] == "Invalid log level."
     assert invalid_level.status_code == 400
+    assert (
+        json.loads(invalid_container.content)["error"]
+        == "Invalid log container selection."
+    )
+    assert invalid_container.status_code == 400
+    assert (
+        json.loads(invalid_internal_file.content)["error"]
+        == "Invalid internal log selection."
+    )
+    assert invalid_internal_file.status_code == 400
 
 
 def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -> None:
