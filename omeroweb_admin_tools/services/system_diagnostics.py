@@ -26,16 +26,22 @@ _DOCKER_RUNTIME_ERROR_SUMMARY = "Docker runtime inspection failed"
 _DIRECT_SQL_ERROR_SUMMARY = "Direct SQL sanity test failed"
 
 _PSYCOPG2_UNSET = object()
-_PSYCOPG2_CACHED_MODULE: Any = _PSYCOPG2_UNSET
+
+
+@dataclass
+class _ModuleCache:
+    value: Any = _PSYCOPG2_UNSET
+
+
+_PSYCOPG2_CACHE = _ModuleCache()
 
 
 def _get_cached_psycopg2_module():
-    return _PSYCOPG2_CACHED_MODULE
+    return _PSYCOPG2_CACHE.value
 
 
 def _set_cached_psycopg2_module(module) -> None:
-    global _PSYCOPG2_CACHED_MODULE
-    _PSYCOPG2_CACHED_MODULE = module
+    _PSYCOPG2_CACHE.value = module
 
 
 @dataclass(frozen=True)
@@ -376,7 +382,11 @@ def _resolve_hostname(check_id: str, label: str, host: str) -> DiagnosticCheckRe
     try:
         addresses = socket.getaddrinfo(host, None)
     except socket.gaierror as exc:
-        logger.warning("Failed to resolve hostname %s: %s", host, exc)
+        logger.warning(
+            "Failed to resolve hostname %s: %s",
+            sanitize_log_value(host),
+            sanitize_log_value(exc),
+        )
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
@@ -411,7 +421,12 @@ def _tcp_connect(
                 details="Socket opened and closed successfully.",
             )
     except OSError as exc:
-        logger.warning("TCP connection failed for %s:%s: %s", host, port, exc)
+        logger.warning(
+            "TCP connection failed for %s:%s: %s",
+            sanitize_log_value(host),
+            sanitize_log_value(port),
+            sanitize_log_value(exc),
+        )
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,

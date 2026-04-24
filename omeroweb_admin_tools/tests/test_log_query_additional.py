@@ -71,7 +71,7 @@ def test_execute_loki_query_wraps_non_json_http_and_timeout_errors(
         "get",
         lambda url, timeout: _DummyResponse(b"upstream failed", status=502),
     )
-    with pytest.raises(RuntimeError, match="Loki HTTP error 502: upstream failed"):
+    with pytest.raises(RuntimeError, match="Loki HTTP error 502"):
         _execute_loki_query(config, '{compose_service="omeroserver"}', 60, 20)
 
     monkeypatch.setattr(

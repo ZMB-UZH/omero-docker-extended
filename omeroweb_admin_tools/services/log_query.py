@@ -33,6 +33,8 @@ _DEFAULT_LABEL_CACHE_MAX_BYTES = 8 * 1024 * 1024
 _CACHE_MAX_ITEMS = 128
 _MAX_PARALLEL_LOKI_QUERIES = 4
 _INTERNAL_FILE_QUERY_BATCH_SIZE = 12
+_COMPOSE_SERVICE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+_INTERNAL_LOG_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$")
 
 _INTERNAL_LOG_GLOB_PATTERNS = {
     "omeroserver": (
@@ -257,6 +259,36 @@ def _normalize_internal_service(service: str) -> str:
     return service
 
 
+def _validated_compose_service(service: str) -> str:
+    """Return a normalized compose service name for Loki labels."""
+    normalized = _normalize_internal_service(str(service or "").strip())
+    if not _COMPOSE_SERVICE_RE.fullmatch(normalized):
+        raise ValueError("Invalid compose service name")
+    return normalized
+
+
+def validate_compose_service_name(service: str) -> str:
+    """Return a safe compose service name accepted by Loki query helpers."""
+    return _validated_compose_service(service)
+
+
+def _validated_internal_log_filename(filename: str) -> str:
+    """Return a safe internal log basename for Loki filepath matching."""
+    normalized = str(filename or "").strip()
+    if (
+        not _INTERNAL_LOG_FILENAME_RE.fullmatch(normalized)
+        or "/" in normalized
+        or "\\" in normalized
+    ):
+        raise ValueError("Invalid internal log filename")
+    return normalized
+
+
+def validate_internal_log_filename(filename: str) -> str:
+    """Return a safe internal log basename accepted by Loki query helpers."""
+    return _validated_internal_log_filename(filename)
+
+
 def _split_internal_container(container: str) -> Optional[Tuple[str, str]]:
     """Split a container string like 'omeroserver_internal/Blitz-0.log'."""
     if "_internal/" not in container:
@@ -305,7 +337,9 @@ def build_loki_query(containers: List[str]) -> str:
         raise ValueError("At least one container must be selected for log query.")
 
     # Loki uses RE2 regex. Escape any user-provided values so they cannot break the query.
-    selector = "|".join(re.escape(c) for c in containers)
+    selector = "|".join(
+        re.escape(_validated_compose_service(container)) for container in containers
+    )
     return f'{{compose_service=~"^({selector})$"}}'
 
 
@@ -525,16 +559,14 @@ def _execute_loki_query(
         ) from exc
 
     if response.status_code >= 400:
-        snippet = response.text[:800]
-        raise RuntimeError(f"Loki HTTP error {response.status_code}: {snippet}")
+        raise RuntimeError(f"Loki HTTP error {response.status_code}")
 
     raw = response.content
     try:
         return json.loads(raw.decode("utf-8", errors="replace"))
     except json.JSONDecodeError as exc:
-        snippet = raw[:800].decode("utf-8", errors="replace")
         raise RuntimeError(
-            f"Loki returned non-JSON response (status {response.status_code}): {snippet}"
+            f"Loki returned non-JSON response (status {response.status_code})"
         ) from exc
 
 
@@ -637,9 +669,11 @@ def fetch_loki_logs(
 
 def _build_docker_query(container: str) -> str:
     """Build a Loki selector for a Docker container stream."""
-    if container in {"omeroserver", "omeroweb"}:
-        return f'{{compose_service="{container}", container_id=~".+"}}'
-    return f'{{compose_service="{container}"}}'
+    service = _validated_compose_service(container)
+    escaped_service = _escape_logql_string(service)
+    if service in {"omeroserver", "omeroweb"}:
+        return f'{{compose_service="{escaped_service}", container_id=~".+"}}'
+    return f'{{compose_service="{escaped_service}"}}'
 
 
 def _prepare_query_jobs(
@@ -681,11 +715,11 @@ def _prepare_query_jobs(
                 )
             continue
 
-        normalized = _normalize_internal_service(service)
+        normalized = _validated_compose_service(service)
         jobs.append(
             _QueryJob(
                 query=_append_text_filter(
-                    f'{{compose_service="{normalized}", log_type="internal"}}',
+                    f'{{compose_service="{_escape_logql_string(normalized)}", log_type="internal"}}',
                     text_query,
                 ),
                 source_type="internal_all",
@@ -783,9 +817,9 @@ def _fetch_loki_logs_uncached(
                 if job.source_type == "internal_batch" and job.selected_files:
                     logger.warning(
                         "Internal log query failed for %s/%s: %s",
-                        job.source_name,
-                        ",".join(job.selected_files),
-                        exc,
+                        sanitize_log_value(job.source_name),
+                        sanitize_log_value(",".join(job.selected_files)),
+                        sanitize_log_value(exc),
                     )
                 else:
                     logger.warning(
@@ -793,8 +827,8 @@ def _fetch_loki_logs_uncached(
                         "Internal"
                         if job.source_type.startswith("internal")
                         else "Docker",
-                        job.source_name,
-                        exc,
+                        sanitize_log_value(job.source_name),
+                        sanitize_log_value(exc),
                     )
                 continue
 
@@ -879,11 +913,12 @@ def _build_internal_file_query(
     service: str, filename: str, label_key: str = "filepath"
 ) -> str:
     """Build a Loki query for a specific internal log file."""
-    normalized = _normalize_internal_service(service)
+    normalized = _validated_compose_service(service)
+    filename = _validated_internal_log_filename(filename)
     # LogQL string parsing consumes backslashes before the regex engine sees
     # them, so regex escapes must be doubled to survive into the matcher.
     escaped = re.escape(filename).replace("\\", "\\\\")
-    return f'{{compose_service="{normalized}", log_type="internal", {label_key}=~"(^|.*/){escaped}$"}}'
+    return f'{{compose_service="{_escape_logql_string(normalized)}", log_type="internal", {label_key}=~"(^|.*/){escaped}$"}}'
 
 
 def _build_internal_files_query(
@@ -892,13 +927,14 @@ def _build_internal_files_query(
     """Build a Loki query that matches any of the selected internal log files."""
     if not filenames:
         raise ValueError("At least one filename is required for an internal log query.")
-    normalized = _normalize_internal_service(service)
+    normalized = _validated_compose_service(service)
     escaped_parts = [
-        re.escape(filename).replace("\\", "\\\\") for filename in sorted(set(filenames))
+        re.escape(_validated_internal_log_filename(filename)).replace("\\", "\\\\")
+        for filename in sorted(set(filenames))
     ]
     pattern = "|".join(escaped_parts)
     return (
-        f'{{compose_service="{normalized}", log_type="internal", '
+        f'{{compose_service="{_escape_logql_string(normalized)}", log_type="internal", '
         f'{label_key}=~"(^|.*/)({pattern})$"}}'
     )
 

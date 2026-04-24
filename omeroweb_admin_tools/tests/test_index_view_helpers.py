@@ -205,6 +205,9 @@ def test_proxy_backend_helpers_build_expected_urls_and_fallbacks(monkeypatch):
     ) == [GRAFANA_URL, EXTERNAL_GRAFANA_URL]
 
     home = index_view._grafana_proxy_home_fallback_response("/admin/grafana")
+    prometheus_home = index_view._prometheus_proxy_home_fallback_response(
+        "/admin/prometheus"
+    )
     unavailable = index_view._grafana_unavailable_response(
         proxy_prefix="/admin/grafana",
         attempted_backends=[GRAFANA_URL, EXTERNAL_GRAFANA_URL],
@@ -213,6 +216,8 @@ def test_proxy_backend_helpers_build_expected_urls_and_fallbacks(monkeypatch):
 
     assert home.status_code == 302
     assert home["Location"] == "/admin/grafana/d/infra/server-overview"
+    assert prometheus_home.status_code == 302
+    assert prometheus_home["Location"] == "/admin/prometheus/targets"
     assert unavailable.status_code == 503
     assert "grafana.example.test:3000" in unavailable.content.decode("utf-8")
     assert unavailable["Retry-After"] == "30"
@@ -228,11 +233,13 @@ def test_request_and_public_url_helpers_cover_reverse_proxy_cases():
         HTTP_HOST="omero.example.org:4080",
     )
     direct = factory.get("/", HTTP_HOST="localhost:4080")
+    ipv6_direct = factory.get("/", HTTP_HOST="[2001:db8::10]:4080")
 
     assert index_view._is_internal_hostname("grafana") is True
     assert index_view._is_internal_hostname("example.org") is False
     assert index_view._is_behind_reverse_proxy(proxied) is True
     assert index_view._safe_request_host(direct) == "localhost"
+    assert index_view._safe_request_host(ipv6_direct) == "2001:db8::10"
     assert (
         index_view._build_public_service_url(
             f"{GRAFANA_URL}/grafana",
@@ -252,6 +259,26 @@ def test_request_and_public_url_helpers_cover_reverse_proxy_cases():
             3000,
         )
         == "https://[2001:db8::1]:3000"
+    )
+
+
+def test_grafana_dashboard_urls_sanitize_configured_dashboard_segments(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "https://evil.example")
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "../escape")
+
+    urls = index_view._grafana_dashboard_urls(
+        "https://monitor.example.org/grafana",
+        "orgId=1",
+    )
+
+    assert (
+        urls["dashboard_url"] == "/d/omero-infrastructure/server-infrastructure?orgId=1"
+    )
+    assert (
+        urls["dashboard_external_url"]
+        == "https://monitor.example.org/grafana/d/omero-infrastructure/server-infrastructure?orgId=1"
     )
 
 

@@ -39,6 +39,8 @@ from ..services.log_query import (
     fetch_loki_logs,
     fetch_internal_log_labels,
     serialize_entries,
+    validate_compose_service_name,
+    validate_internal_log_filename,
 )
 from ..services.system_diagnostics import run_diagnostic_script
 from ..services.system_diagnostics import serialize_scripts
@@ -90,7 +92,12 @@ def _to_int_env(name: str, default: int) -> int:
     try:
         return int(raw_value)
     except ValueError:
-        logger.warning("Invalid integer for %s=%s; using %d", name, raw_value, default)
+        logger.warning(
+            "Invalid integer for %s=%s; using %d",
+            name,
+            sanitize_log_value(raw_value),
+            default,
+        )
         return default
 
 
@@ -593,7 +600,8 @@ def _copy_set_cookie_headers(
                     max_age = int(morsel["max-age"])
                 except ValueError:
                     logger.warning(
-                        "Skipping invalid cookie max-age: %s", morsel["max-age"]
+                        "Skipping invalid cookie max-age: %s",
+                        sanitize_log_value(morsel["max-age"]),
                     )
             response.set_cookie(
                 morsel.key,
@@ -643,6 +651,14 @@ def _grafana_proxy_home_fallback_response(proxy_prefix: str) -> HttpResponse:
 
     response = HttpResponse(status=302)
     response["Location"] = dashboard_path
+    return response
+
+
+def _prometheus_proxy_home_fallback_response(proxy_prefix: str) -> HttpResponse:
+    """Redirect Prometheus root requests to its targets page."""
+    normalized_prefix = _normalize_proxy_prefix(proxy_prefix)
+    response = HttpResponse(status=302)
+    response["Location"] = f"{normalized_prefix}/targets"
     return response
 
 
@@ -747,13 +763,21 @@ def _safe_request_host(request) -> str:
     try:
         host_value = request.get_host()
     except Exception as exc:
-        logger.warning("Unable to resolve request host from get_host(): %s", exc)
+        logger.warning(
+            "Unable to resolve request host from get_host(): %s",
+            sanitize_log_value(exc),
+        )
         host_value = (
             request.META.get("HTTP_HOST", "")
             or request.META.get("SERVER_NAME", "")
             or "localhost"
         )
-    return str(host_value).split(":", 1)[0].strip() or "localhost"
+    normalized = str(host_value or "").strip()
+    if normalized.startswith("[") and "]" in normalized:
+        return normalized[1 : normalized.index("]")].strip() or "localhost"
+    if normalized.count(":") == 1:
+        return normalized.split(":", 1)[0].strip() or "localhost"
+    return normalized or "localhost"
 
 
 def _build_public_service_url(
@@ -1173,6 +1197,9 @@ def logs_view(request, _conn=None, _url=None, **kwargs):
 def _parse_log_limits(request, log_config) -> tuple[int, int]:
     lookback_seconds = int(request.GET.get("lookback", log_config.lookback_seconds))
     max_entries = int(request.GET.get("limit", log_config.max_entries))
+    if lookback_seconds <= 0 or max_entries <= 0:
+        raise ValueError("Log lookback and limit must be positive.")
+    max_entries = min(max_entries, int(log_config.max_entries), LOG_TABLE_ROW_CAP)
     return lookback_seconds, max_entries
 
 
@@ -1183,14 +1210,37 @@ def _parse_optional_since_ns(request) -> int | None:
     return _parse_since_ns(since_raw)
 
 
+def _valid_log_container_keys() -> set[str]:
+    return {source["container"] for source in _build_log_sources()} | set(
+        _INTERNAL_LOG_SERVICES
+    )
+
+
+def _log_containers_from_request(request) -> list[str]:
+    containers = [
+        str(value or "").strip() for value in request.GET.getlist("container")
+    ]
+    containers = [value for value in containers if value]
+    valid_containers = _valid_log_container_keys()
+    invalid = [value for value in containers if value not in valid_containers]
+    if invalid:
+        raise ValueError("Invalid log container selection.")
+    for container in containers:
+        validate_compose_service_name(container)
+    return containers
+
+
 def _internal_log_files_from_query(values: list[str]) -> dict[str, set[str]]:
     internal_files: dict[str, set[str]] = {}
     for value in values:
         if not value or "/" not in value:
             continue
         service, filename = value.split("/", 1)
-        if service in _INTERNAL_LOG_SERVICES and filename:
-            internal_files.setdefault(service, set()).add(filename)
+        if service not in _INTERNAL_LOG_SERVICES:
+            raise ValueError("Invalid internal log service.")
+        internal_files.setdefault(service, set()).add(
+            validate_internal_log_filename(filename)
+        )
     return internal_files
 
 
@@ -1223,7 +1273,10 @@ def logs_data(request, conn=None, _url=None, **kwargs):
             {"error": "ADMIN_TOOLS_LOKI_URL is not configured."},
             status=503,
         )
-    containers = request.GET.getlist("container")
+    try:
+        containers = _log_containers_from_request(request)
+    except ValueError:
+        return JsonResponse({"error": "Invalid log container selection."}, status=400)
     internal_files_raw = request.GET.getlist("internal_file")
     if not containers:
         return JsonResponse({"entries": []})
@@ -1251,8 +1304,13 @@ def logs_data(request, conn=None, _url=None, **kwargs):
             since_ns=since_ns,
             text_query=text_query,
         )
+    except ValueError:
+        return JsonResponse({"error": "Invalid internal log selection."}, status=400)
     except RuntimeError as exc:  # pragma: no cover - network errors
-        logger.warning("Failed to fetch logs from Loki: %s", exc)
+        logger.warning(
+            "Failed to fetch logs from Loki: %s",
+            sanitize_log_value(exc),
+        )
         return JsonResponse(
             {"error": "Failed to fetch logs."},
             status=502,
@@ -1302,7 +1360,10 @@ def _load_compose_service_names(compose_file: str = "docker-compose.yml") -> Lis
     else:
         compose_path = os.path.join(_REPO_ROOT, compose_file)
     if not os.path.exists(compose_path):
-        logger.warning("Compose file not found at %s", compose_path)
+        logger.warning(
+            "Compose file not found at %s",
+            sanitize_log_value(compose_path),
+        )
         return []
 
     service_names: List[str] = []
@@ -1412,7 +1473,10 @@ def _docker_compose_json(command: List[str]) -> Optional[object]:
     try:
         return json.loads(stdout)
     except json.JSONDecodeError:
-        logger.warning("Failed to decode JSON from command: %s", " ".join(command))
+        logger.warning(
+            "Failed to decode JSON from command: %s",
+            sanitize_log_value(" ".join(command)),
+        )
         return None
 
 
@@ -1459,7 +1523,11 @@ def _docker_api_json(path: str, timeout_seconds: float = 3.0) -> Optional[object
         )
         return None
     except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("Docker API request failed for %s: %s", path, exc)
+        logger.warning(
+            "Docker API request failed for %s: %s",
+            sanitize_log_value(path),
+            sanitize_log_value(exc),
+        )
         return None
     finally:
         connection.close()
@@ -1478,7 +1546,10 @@ def _docker_identity_diagnostics(diag: dict[str, object]) -> list[int]:
             diag["current_user"] = f"uid={os.getuid()}"
         return current_gids
     except Exception as exc:
-        logger.warning("Unable to resolve current user for Docker diagnostics: %s", exc)
+        logger.warning(
+            "Unable to resolve current user for Docker diagnostics: %s",
+            sanitize_log_value(exc),
+        )
         diag["current_user"] = "error"
         return []
 
@@ -1501,7 +1572,11 @@ def _docker_socket_diagnostics(
             int(gid) for gid in current_gids
         }
     except Exception as exc:
-        logger.warning("Unable to stat Docker socket %s: %s", docker_socket, exc)
+        logger.warning(
+            "Unable to stat Docker socket %s: %s",
+            sanitize_log_value(docker_socket),
+            sanitize_log_value(exc),
+        )
         diag["socket_stat"] = "stat unavailable"
 
 
@@ -1549,7 +1624,10 @@ def _docker_api_diagnostics(diag: dict[str, object]) -> None:
         diag["containers_with_health"] = health_count
         diag["sample_statuses"] = samples
     except Exception as exc:
-        logger.warning("Docker API diagnostics failed: %s", exc)
+        logger.warning(
+            "Docker API diagnostics failed: %s",
+            sanitize_log_value(exc),
+        )
         diag["api_error"] = "Docker API request failed"
 
 
@@ -1968,11 +2046,13 @@ def _grafana_dashboard_urls(
     grafana_public_base_url: str,
     dashboard_query: str,
 ) -> dict[str, str]:
-    dashboard_uid = os.environ.get(
-        "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
+    dashboard_uid = _safe_dashboard_uid(
+        os.environ.get("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", ""),
+        "omero-infrastructure",
     )
-    dashboard_slug = os.environ.get(
-        "ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-infrastructure"
+    dashboard_slug = _safe_redirect_segment(
+        os.environ.get("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", ""),
+        "server-infrastructure",
     )
     dashboards = {
         "dashboard": (
@@ -2263,7 +2343,7 @@ def prometheus_proxy(request, subpath: str, conn=None, _url=None, **kwargs):
     )
 
     if not subpath:
-        return _grafana_proxy_home_fallback_response(proxy_prefix)
+        return _prometheus_proxy_home_fallback_response(proxy_prefix)
 
     last_response = None
     for backend_url in backend_urls:
@@ -2385,7 +2465,10 @@ def _storage_disk_usage(data_root: str) -> tuple[int | None, int | None, int | N
     try:
         return shutil.disk_usage(data_root)
     except Exception:
-        logger.warning("Could not read disk usage for data root %s", data_root)
+        logger.warning(
+            "Could not read disk usage for data root %s",
+            sanitize_log_value(data_root),
+        )
         return None, None, None
 
 

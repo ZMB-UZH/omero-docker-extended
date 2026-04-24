@@ -7,6 +7,8 @@ The admin tools plugin exposes operational interfaces for log exploration, syste
 ## Main capabilities
 
 - Log query via Loki (LogQL) with container filtering and internal log file browsing.
+- Log API requests accept only known Compose log-source keys and safe internal
+  log basenames before any LogQL is built.
 - Log retrieval is optimized for large log volumes: the UI applies text/severity filters locally after load, auto-refresh uses incremental fetches, repeated identical requests are served from process-local RAM cache, and internal log file selections are batched to avoid one-Loki-query-per-file fan-out.
 - Log severity normalization maps mixed Loki/source labels (including missing/`unknown`) to canonical severities (`debug`, `info`, `warn`, `error`, `fatal`) using stream labels plus message-pattern inference, with traceback-continuation and RedisBloom `bf-error-rate` lines treated as non-error noise.
 - Embedded/proxied Grafana dashboards and Prometheus query interface.
@@ -114,7 +116,7 @@ independently. Cookie `Path` attributes are rewritten to
 sessions continue to work when Grafana is accessed through the plugin proxy
 route.
 The proxy also rewrites Grafana boot settings (`appSubUrl` and `appUrl`) to the proxy prefix, preventing top-right **Sign in** redirects from escaping to an unmapped root route. Grafana root requests (`/`) through the proxy now redirect users directly to the configured default OMERO dashboard route under the proxy prefix (for example when users click **Home** or complete **Sign in**).
-Prometheus requests are proxied as standard request/response traffic only. The live notifications SSE endpoint (`/api/v1/notifications/live`) is intentionally short-circuited with `204 No Content` because the Django proxy does not stream chunked event responses; slow upstream reads return `504 Gateway Timeout` instead of surfacing a Django `500`.
+Prometheus requests are proxied as standard request/response traffic only; the proxy root redirects to the Prometheus targets page. The live notifications SSE endpoint (`/api/v1/notifications/live`) is intentionally short-circuited with `204 No Content` because the Django proxy does not stream chunked event responses; slow upstream reads return `504 Gateway Timeout` instead of surfacing a Django `500`.
 
 ## Typical admin workflow
 
