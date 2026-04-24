@@ -21,6 +21,18 @@ The repository also includes a `security-delta` job inside `.github/workflows/se
 
 The current advanced CodeQL setup uses `build-mode: none` for the Python and JavaScript/TypeScript matrix, which matches GitHub's interpreted-language guidance and avoids an unnecessary `autobuild` step. The same workflow also enables CodeQL dependency caching, and the Bandit job restores and stores `pip` downloads keyed to `.github/requirements/security-code-scanning.txt`.
 
+Do not narrow scanner scope to improve scores. New path filters, rule skips,
+ignored globs, SARIF cleanup categories, or workflow trigger filters require
+documented false-positive or runtime-scope proof, an audit-log line that shows
+what is excluded, and a contract test.
+
+The current allowed scanner-scope exclusions are: Bandit production/test split
+with test-only `B101`/`B106` skips, global Bandit informational `B603`/`B404`
+skips, DevSkim `DS162092` for container-internal localhost infrastructure,
+Super-Linter exclusion of vendored `third_party` upstream references, and
+generated runtime data directories that must never be tracked or scanned as
+source.
+
 ## CodeQL File-Count Coverage
 
 CodeQL file totals are extractor/database source counts, not a count of every
