@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import contextlib
 import json
 import sys
 import tempfile
@@ -219,6 +220,7 @@ def _install_omp_dependency_stubs() -> None:
     core_module.load_job = lambda job_id: None
     core_module.save_job = lambda job: True
     core_module._job_lock_path = lambda job_id: str(TEST_TMP_ROOT / f"{job_id}.lock")
+    core_module.mark_job_lock_held = contextlib.nullcontext
     core_module.collect_images_by_selected_datasets = lambda *args, **kwargs: []
     core_module.collect_dataset_summaries = lambda *args, **kwargs: []
     core_module.parse_filename = lambda *args, **kwargs: []

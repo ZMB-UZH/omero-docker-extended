@@ -107,18 +107,21 @@ Three separator modes are supported:
 - For write jobs: filenames are parsed with the configured separator, variables are mapped to key-value pairs, and a single `MapAnnotation` is created per image with namespace `openmicroscopy.org/omero/client/mapAnnotation`.
 - Each annotation includes a plugin ownership hash (`omp_hash` key with `omphash_v1:` prefix) computed from the annotation content using an optional HMAC secret (`FMP_HASH_SECRET`).
 - Duplicate variable names are auto-suffixed (e.g. `Var1`, `Var1_2`).
+- The reserved `omp_hash` marker is never used for user metadata; colliding
+  variable names are suffixed before the marker is added, and progress logs
+  report visible entries separately from the `+1` plugin marker.
 
 ### 8. Annotation deletion
 
 - **Delete-all**: removes all `MapAnnotation` objects from selected images via OMERO CLI batch delete (chunks of 100 images).
-- **Delete plugin-only**: removes only annotations whose `omp_hash` key matches the current plugin hash, leaving third-party annotations intact.
+- **Delete plugin-only**: removes only annotations whose `omp_hash` key matches the current plugin hash, leaving third-party and hashless annotations intact.
 - Job-based delete modes (`del_all`, `del_plugin`) process images through the same chunked progress loop as write jobs, using the OMERO update service.
 - Direct (non-job) delete endpoints (`/delete_all/`, `/delete_plugin/`) use OMERO CLI subprocess calls for bulk operations.
 
 ## Design rules
 
 - Annotations are always created as a single `MapAnnotation` per image per job execution, not one annotation per variable.
-- Plugin hash verification prevents accidental deletion of annotations created by other tools.
+- Plugin hash verification prevents accidental deletion of annotations created by other tools; hashless legacy handling is explicit maintenance-only behavior.
 - Rate limiting applies uniformly to all major actions regardless of job type.
 - Regex patterns are validated and compiled before use; unsafe patterns are rejected at the request boundary.
 - Job ownership is enforced: only the user who created a job can poll its progress.

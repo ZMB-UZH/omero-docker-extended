@@ -194,10 +194,31 @@ Verify all required services are `healthy` or `running`.
 ## 5) Basic Connectivity Checks
 
 ```bash
-curl -I http://localhost:4090
+container="$(docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env ps -q omeroweb)"
+base_url=""
+while read -r _arrow_prefix _arrow binding; do
+  [ -n "${binding:-}" ] || continue
+  host="${binding%:*}"
+  port="${binding##*:}"
+  host="${host#[}"
+  host="${host%]}"
+  case "$host" in
+    ""|0.0.0.0|::) host="127.0.0.1" ;;
+    *:*) host="[${host}]" ;;
+  esac
+  candidate="http://${host}:${port}"
+  if curl -fsS -o /dev/null "${candidate}/webgateway/"; then
+    base_url="$candidate"
+    break
+  fi
+done < <(docker port "$container")
+[ -n "$base_url" ] || { echo "OMERO.web binding not found" >&2; exit 1; }
+curl -I "$base_url"
 ```
 
-Adjust host/port if your deployment maps OMERO.web differently.
+This discovers the active host binding by probing the running container's
+published ports; do not assume the shipped default port if Compose or env values
+were changed.
 
 ## 6) First Operational Checks
 

@@ -148,7 +148,7 @@ for the exact credential immediately and pause for input. Do not keep retrying
 commands that cannot authenticate; continue only independent local tasks that do
 not need that credential.
 GitHub HTTPS Git operations require a PAT or credential manager, never an
-account password. For prompt-based pushes, use:
+account password. For TTY pushes, use:
 
 ```bash
 python3 tools/git_push_with_pat.py origin main
@@ -156,6 +156,8 @@ python3 tools/git_push_with_pat.py origin main
 
 This helper disables stale GitHub credential helpers for the command and keeps
 the PAT out of argv, remotes, logs, temp files, and long-lived git config.
+In non-TTY agent shells, set a short-lived `GITHUB_TOKEN` only for that helper
+invocation instead of retrying the prompt path.
 If a documented scanner command or helper causes a proven avoidable retry/error
 loop, first establish the correct scanner workflow end to end, then update the
 runbook or tool concisely with regression coverage.

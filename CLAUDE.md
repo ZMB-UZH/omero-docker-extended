@@ -18,8 +18,7 @@ Project-specific instructions for Claude Code sessions working on this repositor
 
 - Treat `AGENTS.md` as the universal baseline and this file as a Claude-specific adapter.
 - Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI agent <>`; AI co-author trailers use `Co-authored-by: AI agent` with no email; audits include anonymous contributors (`contributors?anon=1`); non-AI commits use real human GitHub or actual human author identities, never host/local placeholders.
-- Keep context small: load one task class, one code root, one nearest test module, and one matching skill before broadening scope.
-- Follow the routing doc's numeric caps before broadening scope.
+- Keep context small: load one task class, one code root, one nearest test module, and one matching skill, and follow the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
 - If the user asks for lower-token replies, use opt-in `caveman`; it is only for internal AI communication, never repo docs/comments/docstrings/function descriptions/user-facing copy, and changes reply style only, not routing, tool choice, verification scope, or uncertainty handling. Drop it when safety, sequencing, or ambiguity matters.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, ports, or edit/normalize/print values from non-example deployment env files such as `env/omero_secrets.env` without an explicit one-off user exception.
@@ -75,6 +74,7 @@ python3 tools/env_safety_guard.py backup   # create timestamped backup
 ## Runtime reminders
 
 - Agent/script Docker Compose commands use the full explicit env-file list from the runtime playbook.
+- Discover live host bindings, container IDs, and OMERO.web virtualenv paths from Compose/container state; default ports and paths are not probe inputs.
 - Switch from host `localhost` probes to container-network probes after the first sandbox miss.
 - Never run OMERO CLI as `root` inside OMERO containers.
 - Use the runtime playbook for Git ownership issues, Docker socket permissions, joined-session rules, and log triage.
