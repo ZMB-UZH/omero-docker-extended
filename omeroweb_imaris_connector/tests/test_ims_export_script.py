@@ -458,6 +458,14 @@ def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks() -> Non
         )
     )
     assert module.get_original_file_path(bad_conn, image) is None
+
+    class ConfigServiceHolder:
+        def __init__(self, config_service):
+            self.config_service = config_service
+
+        def getConfigService(self):
+            return self.config_service
+
     for config_service in (
         None,
         types.SimpleNamespace(
@@ -466,11 +474,8 @@ def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks() -> Non
         types.SimpleNamespace(getConfigValue=lambda key: ""),
         types.SimpleNamespace(getConfigValue=lambda key: "ManagedRepository"),
     ):
-        active_config_service = config_service
         current_conn = types.SimpleNamespace(
-            c=types.SimpleNamespace(
-                sf=types.SimpleNamespace(getConfigService=lambda: active_config_service)
-            )
+            c=types.SimpleNamespace(sf=ConfigServiceHolder(config_service))
         )
         assert module.get_original_file_path(current_conn, image) is None
     assert (
