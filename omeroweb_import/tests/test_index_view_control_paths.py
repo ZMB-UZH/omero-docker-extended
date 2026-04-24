@@ -625,9 +625,7 @@ def test_upload_helpers_non_chunked_paths_and_preparation_errors(tmp_path, monke
         "error": errors.upload_folder_not_writable(),
     }
 
-    monkeypatch.setattr(
-        index_view, "_ensure_dir", lambda path: True if path == upload_root else True
-    )
+    monkeypatch.setattr(index_view, "_ensure_dir", lambda path: True)
     missing_response = index_view.json_error(errors.upload_job_not_found())
     monkeypatch.setattr(
         index_view,

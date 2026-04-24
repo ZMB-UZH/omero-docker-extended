@@ -10,6 +10,11 @@ alert count. Its `token=` URL parameter is the badge-rendering URL parameter
 copied from the repository's DeepSource **Settings > Badges** page, not an API
 key or private credential.
 
+DeepSource repo-file configuration is retired for this repository. Do not
+search for, create, restore, or edit `.deepsource.toml`. A GitHub PAT is not a
+DeepSource API credential; start scanner triage from the GitHub code-scanning
+API, GitHub Actions logs, and this runbook instead.
+
 The repository also includes a `security-delta` job inside `.github/workflows/security-code-scanning.yml`. That job fails when a pull request introduces any open code-scanning alert or when a default-branch security scan creates new open alerts.
 
 The current advanced CodeQL setup uses `build-mode: none` for the Python and JavaScript/TypeScript matrix, which matches GitHub's interpreted-language guidance and avoids an unnecessary `autobuild` step. The same workflow also enables CodeQL dependency caching, and the Bandit job restores and stores `pip` downloads keyed to `.github/requirements/security-code-scanning.txt`.
@@ -54,6 +59,43 @@ version's published signature.
 - **Manual dispatch**: incident response or post-remediation verification.
 - Every job in `.github/workflows/security-code-scanning.yml` is additionally gated with the current default-branch context, so non-default refs can create workflow runs but do not consume runner minutes.
 
+## Scanner Sources And Logs
+
+- Alert inventory: GitHub REST API, scoped to `state=open` and `branch=main`.
+- GitHub REST API version: query `https://api.github.com/versions` and use the newest supported version for the current request; do not pin stale dates.
+- Workflow logs: GitHub Actions run logs for `security-code-scanning.yml`.
+- Local config: `.github/workflows/security-code-scanning.yml`, scanner config files it references, and committed test contracts.
+- Retired source: `.deepsource.toml`; do not look for it or recreate it.
+- DeepSource counts: only report them after a successful DeepSource API or CLI query using a DeepSource credential. A GitHub PAT is insufficient; without DeepSource auth, report the count as unavailable, not zero. Distinguish grouped issues from issue occurrences.
+
+Useful GitHub Actions log commands:
+
+```bash
+command -v gh >/dev/null || { echo "gh is required" >&2; exit 1; }
+gh run list --workflow security-code-scanning.yml --branch main --limit 5
+gh run view <run-id> --log-failed
+gh run view <run-id> --job <job-id> --log
+```
+
+Useful GitHub code-scanning API command:
+
+```bash
+python3 tools/scanner_inventory.py github-code-scanning \
+  --repository ZMB-UZH/omero-docker-extended \
+  --branch main
+```
+
+Useful DeepSource count command:
+
+```bash
+python3 tools/scanner_inventory.py deepsource \
+  --repository gh/ZMB-UZH/omero-docker-extended
+```
+
+`tools/scanner_inventory.py` reads tokens from `GITHUB_TOKEN` or
+`DEEPSOURCE_TOKEN` when present; otherwise it prompts without echo on a TTY.
+Never paste PATs into command arguments, remotes, repo files, or logs.
+
 ## Repository requirements
 
 1. **Settings > Security & analysis**: enable Code scanning, Dependabot alerts, Secret scanning.
@@ -62,9 +104,9 @@ version's published signature.
 
 ## Alert inventory
 
-Last live API refresh: **2026-04-22**.
+Last live API refresh: **2026-04-24**.
 
-GitHub reported **4 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
+GitHub reported **8 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
 These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
 
@@ -79,20 +121,22 @@ To prevent documentation drift:
 
 ### Mandatory agent workflow
 
-1. Pull the latest open-alert total and exact alert list from the GitHub API before editing any code.
-2. Read the matching section in `docs/reference/ai-agent-security-prevention-playbook.md` before you code.
-3. Pull the closed-alert history from `docs/reference/code-scanning-resolved-findings.md` and copy the matching prevention rule into your working notes before you start coding.
-4. Fix root causes, not scanner strings. Avoid suppressions unless you can prove a false positive and document that proof.
-5. Prefer the narrowest safe rewrite that removes the vulnerable pattern at the helper boundary so sibling call sites inherit the fix.
-6. Re-run targeted tests for every touched package, plus repo-wide `ruff check`, `ruff format --check`, and `python3 tools/lint_docs_structure.py` when those tools are available in the active environment.
-7. After pushing, refresh the live GitHub alert total again. Do not assume a local fix cleared an alert until GitHub reports it.
+1. Pull the latest open-alert total and exact alert list from the GitHub API before editing any code. Do not look for `.deepsource.toml`; it is not a valid scanner source in this repository.
+2. If scanner output is unclear, inspect the matching GitHub Actions run logs before editing code.
+3. Read the matching section in `docs/reference/ai-agent-security-prevention-playbook.md` before you code.
+4. Pull the closed-alert history from `docs/reference/code-scanning-resolved-findings.md` and copy the matching prevention rule into your working notes before you start coding.
+5. Fix root causes, not scanner strings. Avoid suppressions unless you can prove a false positive and document that proof.
+6. Prefer the narrowest safe rewrite that removes the vulnerable pattern at the helper boundary so sibling call sites inherit the fix.
+7. Re-run targeted tests for every touched package, plus repo-wide `ruff check`, `ruff format --check`, and `python3 tools/lint_docs_structure.py` when those tools are available in the active environment.
+8. After pushing, refresh the live GitHub alert total again. Do not assume a local fix cleared an alert until GitHub reports it.
 
 ### Live by-tool snapshot
 
-| Scanner     | Open alerts |
-| ----------- | ----------: |
-| Scorecard   | 4           |
-| **Total**   | **4**       |
+| Scanner   | Open alerts |
+| --------- | ----------: |
+| CodeQL    | 4           |
+| Scorecard | 4           |
+| **Total** | **8**       |
 
 2026-04-22 Docker `USER` remediation note: GitHub closed the Trivy `DS002`,
 Semgrep `last-user-is-root`, and Hadolint `DL3002` alerts on
@@ -103,9 +147,11 @@ defaults both images to their application users and keeps the required root
 bootstrap as an explicit Compose handoff for mounted runtime-path
 reconciliation.
 
-The remaining 4 open alerts are repository-level Scorecard findings with no
-file location: `MaintainedID`, `CodeReviewID`, `CIIBestPracticesID`, and
-`BranchProtectionID`.
+At the 2026-04-24 refresh, the 4 CodeQL alerts were file-level findings in
+`XTOmeroConnector.py`: `py/empty-except` (2), `py/exit-from-finally` (1), and
+`py/multiple-definition` (1). The 4 Scorecard alerts were repository-level
+findings with no file location: `MaintainedID`, `CodeReviewID`,
+`CIIBestPracticesID`, and `BranchProtectionID`.
 
 ### Historical snapshots below
 
@@ -285,10 +331,8 @@ These categories may contain genuine issues that should be reviewed:
 
 5. **Periodic refresh**: When running a full security scan, compare the live alert count from the GitHub API against this file. Update all tables to match current state. Use:
 
-   ```bash
-   curl -sL -H "Authorization: Bearer $GITHUB_TOKEN" \
-     "https://api.github.com/repos/ZMB-UZH/omero-docker-extended/code-scanning/alerts?per_page=100&state=open&page=1"
-   ```
+   Use the GitHub code-scanning API command above with `state=open` and
+   `branch=main`.
 
 6. **Never include exploitation details**: Document what the vulnerability is and where it is located. Do not include proof-of-concept code, payload examples, or step-by-step exploitation instructions.
 

@@ -706,9 +706,10 @@ def _is_no_processor_available(exc: Exception) -> bool:
     ):
         no_processor_types = (no_processor_type,)
     elif isinstance(no_processor_type, tuple):
+        no_processor_candidates: tuple[object, ...] = no_processor_type
         no_processor_types = tuple(
             candidate
-            for candidate in no_processor_type
+            for candidate in no_processor_candidates
             if isinstance(candidate, type) and issubclass(candidate, BaseException)
         )
     for err in _iter_exception_chain(exc):

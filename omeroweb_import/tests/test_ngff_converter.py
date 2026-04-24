@@ -620,10 +620,6 @@ class TestNgffConverterInStartUpload(unittest.TestCase):
 
     @staticmethod
     def test_ngff_settings_stored_in_job_when_ngff_selected():
-        from omeroweb_import.views.core_functions import (
-            _normalize_ngff_converter_settings,
-        )
-
         raw = {"compression": "zlib", "tile_width": 2048, "series": "0,1"}
         normalized = _normalize_ngff_converter_settings(raw)
         assert normalized["compression"] == "zlib"
@@ -638,10 +634,6 @@ class TestNgffConverterInStartUpload(unittest.TestCase):
 
     @staticmethod
     def test_ngff_settings_empty_when_sem_selected():
-        from omeroweb_import.views.core_functions import (
-            _normalize_ngff_converter_settings,
-        )
-
         raw = {"compression": "zlib"}
         # When special_upload != ngff_converter, settings should be empty
         # This mimics the logic in index_view.py

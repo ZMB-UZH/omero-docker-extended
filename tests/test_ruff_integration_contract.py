@@ -60,9 +60,40 @@ class RuffIntegrationContractTests(unittest.TestCase):
 
     def test_agents_document_ruff_commands(self) -> None:
         agents_text = self.read_text("AGENTS.md")
+        self.assertIn("Use Ruff as the canonical Python formatter", agents_text)
+        self.assertIn("lint gate", agents_text)
         self.assertIn(
-            "Use Ruff as the canonical Python formatter and lint gate.", agents_text
+            "host `ruff` must match the repo-pinned version",
+            agents_text,
         )
+        doc_text = self.read_text("docs/reference/python-style-and-linting.md")
+        self.assertIn("do not hand-type or guess it", doc_text)
+        self.assertIn("required_ruff=$(", doc_text)
+        self.assertIn('config["required-version"]', doc_text)
+        self.assertIn("command -v python3", doc_text)
+        self.assertIn("command -v mktemp", doc_text)
+        self.assertIn("command -v install", doc_text)
+        self.assertIn("tmpdir=$(mktemp -d)", doc_text)
+        self.assertIn("trap cleanup EXIT", doc_text)
+        self.assertIn("RUFF_INSTALL_DIR", doc_text)
+        self.assertIn("XDG_BIN_HOME", doc_text)
+        self.assertIn("HOME is required", doc_text)
+        self.assertIn("mkdir -p", doc_text)
+        self.assertIn("install -m 0755", doc_text)
+        self.assertIn('"$target_dir/ruff"', doc_text)
+        self.assertIn('[ "$(ruff --version)" = "ruff $required_ruff" ]', doc_text)
+        self.assertIn("command -v pre-commit", doc_text)
+        for adapter_path in (
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md",
+            ".cursor/rules/10-python-django.mdc",
+        ):
+            self.assertIn(
+                "repo-pinned version",
+                self.read_text(adapter_path),
+                adapter_path,
+            )
         self.assertIn("ruff check .", agents_text)
         self.assertIn("ruff format --check .", agents_text)
         self.assertIn(

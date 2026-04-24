@@ -14,5 +14,5 @@ alwaysApply: true
 - Use `docs/reference/ai-agent-context-routing.md` to keep the loaded context narrow.
 - Honor the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
-- Keep configuration environment-driven and never edit `env/omero_secrets.env`.
+- Keep configuration environment-driven, never edit `env/omero_secrets.env`, and do not search for, create, restore, or edit retired `.deepsource.toml`.
 - Prefer existing repo helpers, tests, docs, and `*_example*` files over new abstractions.

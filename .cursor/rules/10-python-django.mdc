@@ -8,5 +8,6 @@ globs:
 
 - Use `.agents/skills/python-patterns/`, `.agents/skills/python-testing/`, `.agents/skills/django-patterns/`, `.agents/skills/django-security/`, and `.agents/skills/django-verification/` when relevant.
 - Respect plugin boundaries: plugins depend on `omero_plugin_common`, never on each other.
+- Verify host `ruff` matches the repo-pinned version before claiming local verification.
 - Run split `pytest` suites separately with `-p no:cacheprovider -W error`.
 - For security-sensitive edits, follow the mandatory read order in `AGENTS.md`.

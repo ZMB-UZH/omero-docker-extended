@@ -438,7 +438,7 @@ def _proxy_http_request(
             {"error": "Backend timed out."},
             status=504,
         )
-    except (requests.RequestException, HTTPException, OSError) as exc:
+    except (HTTPException, OSError) as exc:
         logger.warning(
             "Proxy backend unreachable target=%s reason=%s",
             sanitize_url_for_logging(target_url),

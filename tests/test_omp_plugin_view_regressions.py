@@ -87,7 +87,8 @@ def _install_import_stubs() -> None:
 
     class Lock:
         def __init__(self, *args, **kwargs):
-            pass
+            self.args = args
+            self.kwargs = kwargs
 
         @staticmethod
         def acquire():

@@ -1082,8 +1082,6 @@ def test_install_webgateway_overrides_propagates_tile_failure_when_safe_renderin
 
     integration.install_webgateway_overrides()
 
-    import pytest
-
     request = RequestFactory().get("/webclient/imgData/7/")
     request.session = {}
 

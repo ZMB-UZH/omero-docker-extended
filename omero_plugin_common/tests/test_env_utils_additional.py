@@ -9,10 +9,10 @@ from omero_plugin_common import env_utils, omero_helpers, tmp_cleanup, tmp_utils
 
 class _Value:
     def __init__(self, value):
-        self._value = value
+        self._stored_value = value
 
     def getValue(self):
-        return self._value
+        return self._stored_value
 
 
 def test_env_utils_cover_reference_messages_and_optional_required_values(

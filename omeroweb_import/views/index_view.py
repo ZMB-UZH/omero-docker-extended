@@ -244,8 +244,7 @@ def _start_upload(request, conn):
             size = int(raw_size)
         except (TypeError, ValueError):
             size = 0
-        if size < 0:
-            size = 0
+        size = max(size, 0)
         upload_id = uuid.uuid4().hex
         compatibility_skip = bool(entry.get("compatibility_skip"))
         import_skip = bool(entry.get("import_skip"))

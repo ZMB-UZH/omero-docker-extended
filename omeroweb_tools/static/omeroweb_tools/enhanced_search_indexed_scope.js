@@ -1,6 +1,6 @@
-(function () {
-    'use strict';
+'use strict';
 
+(function () {
     const DEFAULT_SERVER_BACKED_PARAMS = [
         'query_text',
         'indexed_scope',

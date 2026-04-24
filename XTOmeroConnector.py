@@ -1169,11 +1169,10 @@ def _hex_to_rgb(value, fallback=(128, 128, 128)):
 
 
 def _rgb_to_hex(rgb):
-    return "#{:02x}{:02x}{:02x}".format(
-        max(0, min(255, int(rgb[0]))),
-        max(0, min(255, int(rgb[1]))),
-        max(0, min(255, int(rgb[2]))),
-    )
+    red = max(0, min(255, int(rgb[0])))
+    green = max(0, min(255, int(rgb[1])))
+    blue = max(0, min(255, int(rgb[2])))
+    return f"#{red:02x}{green:02x}{blue:02x}"
 
 
 def _blend_colors(first, second, second_weight):
@@ -2605,7 +2604,6 @@ class OMEROWebClient:
         for key, value in list((headers or {}).items()):
             req.add_header(key, value)
 
-        status_code = 200
         raw_body = b""
         try:
             with self.opener.open(req, timeout=timeout) as response:
@@ -2823,8 +2821,7 @@ class OMEROWebClient:
                 size = int(entry.get("size") or 0)
             except (TypeError, ValueError):
                 size = 0
-            if size < 0:
-                size = 0
+            size = max(size, 0)
             files.append({"relative_path": relative_path, "size": size})
         if not files:
             raise RuntimeError("The selected folder does not contain any files.")
@@ -4033,7 +4030,7 @@ class OMEROBrowserDialog:
             _xt_debug(f"Folder import failed: {type(exc).__name__}: {exc}")
         finally:
             self._invoke_on_ui_thread(
-                lambda: self._set_actions_busy_for_import(False),
+                self._clear_actions_busy_for_import,
                 wait=False,
             )
 
@@ -4677,14 +4674,14 @@ class OMEROBrowserDialog:
         if callable(activate):
             try:
                 activate(index)
-            except Exception:
-                pass
+            except Exception as exc:
+                _xt_debug(f"Listbox activate failed: {type(exc).__name__}")
         selection_anchor = getattr(listbox, "selection_anchor", None)
         if callable(selection_anchor):
             try:
                 selection_anchor(index)
-            except Exception:
-                pass
+            except Exception as exc:
+                _xt_debug(f"Listbox anchor failed: {type(exc).__name__}")
 
     def _on_image_listbox_click(self, event):
         listbox = getattr(event, "widget", None)
@@ -4828,6 +4825,9 @@ class OMEROBrowserDialog:
             "Imaris",
         }:
             self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
+
+    def _clear_actions_busy_for_import(self):
+        self._set_actions_busy_for_import(False)
 
     def _refresh_browser(self):
         if self._refresh_in_progress:
@@ -5073,16 +5073,18 @@ class OMEROBrowserDialog:
                 raise RuntimeError("Selected image is missing an OMERO image id.")
             image_name = self._image_display_name(img)
             _xt_debug(f"Load worker starting image_id={image_id} converter={converter}")
-            if converter in {"OMERO", "Imaris"}:
-                if not self._ensure_native_open_ready_before_export():
-                    blocked_action = (
-                        "Download/conversion" if converter == "OMERO" else "Download"
-                    )
-                    raise RuntimeError(
-                        "Cannot open files in the running Imaris session because no "
-                        f"compatible Imaris bridge is available. {blocked_action} "
-                        "was not started."
-                    )
+            if (
+                converter in {"OMERO", "Imaris"}
+                and not self._ensure_native_open_ready_before_export()
+            ):
+                blocked_action = (
+                    "Download/conversion" if converter == "OMERO" else "Download"
+                )
+                raise RuntimeError(
+                    "Cannot open files in the running Imaris session because no "
+                    f"compatible Imaris bridge is available. {blocked_action} "
+                    "was not started."
+                )
 
             # Download directory
             download_dir = os.path.join(
@@ -5341,9 +5343,7 @@ def _xt_write_log(log_path, msg):
 
 def _xt_show_fatal(title, message):
     try:
-        import tkinter.messagebox as _mb
-
-        _mb.showerror(title, message)
+        messagebox.showerror(title, message)
     except Exception:
         print(title + ": " + message)
 
