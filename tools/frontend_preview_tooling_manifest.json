@@ -1,6 +1,6 @@
 {
   "name": "omero-agent-frontend-preview-tooling",
-  "node_min_version": "20.19.0",
+  "node_version": "24.15.0",
   "dependencies": {
     "vite": "8.0.7",
     "vitest": "4.1.4",

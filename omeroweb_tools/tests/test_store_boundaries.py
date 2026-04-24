@@ -67,9 +67,8 @@ def test_psycopg_loaders_cover_success_cache_and_missing_driver(monkeypatch):
     fake_psycopg2.extras = fake_extras
     fake_psycopg2.sql = fake_sql
     monkeypatch.setitem(sys.modules, "psycopg2", fake_psycopg2)
-    monkeypatch.setattr(store, "_psycopg2_mod", None)
-    monkeypatch.setattr(store, "_psycopg2_extras", None)
-    monkeypatch.setattr(store, "_psycopg2_sql", None)
+    store._load_psycopg2.cache_clear()
+    store._load_psycopg2_sql.cache_clear()
 
     loaded_psycopg2, loaded_extras = store._load_psycopg2()
     loaded_sql = store._load_psycopg2_sql()
@@ -85,9 +84,8 @@ def test_psycopg_loaders_cover_success_cache_and_missing_driver(monkeypatch):
     )
 
     monkeypatch.delitem(sys.modules, "psycopg2", raising=False)
-    monkeypatch.setattr(store, "_psycopg2_mod", None)
-    monkeypatch.setattr(store, "_psycopg2_extras", None)
-    monkeypatch.setattr(store, "_psycopg2_sql", None)
+    store._load_psycopg2.cache_clear()
+    store._load_psycopg2_sql.cache_clear()
     original_import = builtins.__import__
 
     def _missing_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):

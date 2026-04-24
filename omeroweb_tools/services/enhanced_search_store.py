@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import weakref
 from contextlib import contextmanager
+from functools import cache
 from typing import Any, Iterable
 
 from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
@@ -27,9 +28,6 @@ ENV_HOST = "OMP_DATA_HOST"
 ENV_DB = "OMP_DATA_DB"
 ENV_PORT = "OMP_DATA_PORT"
 
-_psycopg2_mod: Any | None = None
-_psycopg2_extras: Any | None = None
-_psycopg2_sql: Any | None = None
 _SCHEMA_READY_CONNECTIONS: weakref.WeakKeyDictionary[object, bool] = (
     weakref.WeakKeyDictionary()
 )
@@ -64,10 +62,8 @@ def _clear_schema_ready(conn) -> None:
         _SCHEMA_READY_CONNECTION_IDS.discard(id(conn))
 
 
+@cache
 def _load_psycopg2():
-    global _psycopg2_mod, _psycopg2_extras
-    if _psycopg2_mod is not None and _psycopg2_extras is not None:
-        return _psycopg2_mod, _psycopg2_extras
     try:
         import psycopg2
         from psycopg2 import extras
@@ -75,23 +71,18 @@ def _load_psycopg2():
         raise EnhancedSearchStoreError(
             "psycopg2 is required for enhanced search."
         ) from exc
-    _psycopg2_mod = psycopg2
-    _psycopg2_extras = extras
-    return _psycopg2_mod, _psycopg2_extras
+    return psycopg2, extras
 
 
+@cache
 def _load_psycopg2_sql():
-    global _psycopg2_sql
-    if _psycopg2_sql is not None:
-        return _psycopg2_sql
     try:
         from psycopg2 import sql
     except ImportError as exc:
         raise EnhancedSearchStoreError(
             "psycopg2 is required for enhanced search."
         ) from exc
-    _psycopg2_sql = sql
-    return _psycopg2_sql
+    return sql
 
 
 def _safe_query(template, *identifiers):
@@ -936,6 +927,98 @@ def prune_orphan_documents(conn) -> int:
     return deleted
 
 
+_SEARCH_ROW_COLUMNS_SQL = """
+            images.image_id,
+            images.group_id,
+            images.group_name,
+            images.owner_id,
+            images.owner_name,
+            images.image_name,
+            images.dataset_id,
+            images.dataset_name,
+            images.project_id,
+            images.project_name,
+            images.acquisition_date,
+            images.instrument_manufacturer,
+            images.instrument_model,
+            images.objective_model,
+            images.objective_magnification,
+            images.objective_na,
+            images.detector_model,
+            images.detector_binning,
+            images.detector_gain,
+            images.pixel_size_x_um,
+            images.pixel_size_y_um,
+            images.z_step_um,
+            images.channel_summary,
+            images.indexed_at
+"""
+
+_SEARCH_FROM_WHERE_SQL = """
+        FROM {} images
+        JOIN {} scope_items ON scope_items.image_id = images.image_id
+        WHERE
+            (%s::text IS NULL OR scope_items.scope_type = %s)
+            AND (%s::bigint IS NULL OR scope_items.scope_id = %s)
+            AND
+            (%s::bigint[] IS NULL OR images.group_id = ANY(%s::bigint[]))
+            AND (
+                (%s::bigint IS NULL AND images.group_can_read = TRUE)
+                OR (
+                    %s::bigint IS NOT NULL
+                    AND (images.group_can_read = TRUE OR images.owner_id = %s)
+                )
+            )
+            AND (
+                %s = ''
+                OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', NULLIF(%s, ''))
+                OR images.image_id IN (
+                    SELECT attributes.image_id
+                    FROM {} attributes
+                    WHERE to_tsvector(
+                            'simple',
+                            replace(attributes.attribute_key, '_', ' ')
+                            || ' '
+                            || attributes.attribute_text
+                          ) @@ to_tsquery('simple', NULLIF(%s, ''))
+                )
+            )
+            AND (%s::timestamptz IS NULL OR images.acquisition_date >= %s)
+            AND (%s::timestamptz IS NULL OR images.acquisition_date <= %s)
+"""
+
+_SEARCH_ORDER_SQL = """
+        ORDER BY images.acquisition_date DESC NULLS LAST, images.image_id DESC
+"""
+
+
+def _search_count_sql():
+    return _safe_query(
+        f"""
+        SELECT COUNT(DISTINCT images.image_id)
+{_SEARCH_FROM_WHERE_SQL}
+        """,
+        TABLE_IMAGE,
+        TABLE_SCOPE_ITEM,
+        TABLE_ATTRIBUTE,
+    )
+
+
+def _search_rows_sql(*, paged: bool):
+    pagination_sql = "\n        LIMIT %s OFFSET %s" if paged else ""
+    return _safe_query(
+        f"""
+        SELECT DISTINCT
+{_SEARCH_ROW_COLUMNS_SQL}
+{_SEARCH_FROM_WHERE_SQL}
+{_SEARCH_ORDER_SQL}{pagination_sql}
+        """,
+        TABLE_IMAGE,
+        TABLE_SCOPE_ITEM,
+        TABLE_ATTRIBUTE,
+    )
+
+
 def search_index_rows(
     conn,
     *,
@@ -988,174 +1071,10 @@ def search_index_rows(
         filters.get("acquisition_date_to"),
         filters.get("acquisition_date_to"),
     ]
-    count_sql = _safe_query(
-        """
-        SELECT COUNT(DISTINCT images.image_id)
-        FROM {} images
-        JOIN {} scope_items ON scope_items.image_id = images.image_id
-        WHERE
-            (%s::text IS NULL OR scope_items.scope_type = %s)
-            AND (%s::bigint IS NULL OR scope_items.scope_id = %s)
-            AND
-            (%s::bigint[] IS NULL OR images.group_id = ANY(%s::bigint[]))
-            AND (
-                (%s::bigint IS NULL AND images.group_can_read = TRUE)
-                OR (
-                    %s::bigint IS NOT NULL
-                    AND (images.group_can_read = TRUE OR images.owner_id = %s)
-                )
-            )
-            AND (
-                %s = ''
-                OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', NULLIF(%s, ''))
-                OR images.image_id IN (
-                    SELECT attributes.image_id
-                    FROM {} attributes
-                    WHERE to_tsvector(
-                            'simple',
-                            replace(attributes.attribute_key, '_', ' ')
-                            || ' '
-                            || attributes.attribute_text
-                          ) @@ to_tsquery('simple', NULLIF(%s, ''))
-                )
-            )
-            AND (%s::timestamptz IS NULL OR images.acquisition_date >= %s)
-            AND (%s::timestamptz IS NULL OR images.acquisition_date <= %s)
-        """,
-        TABLE_IMAGE,
-        TABLE_SCOPE_ITEM,
-        TABLE_ATTRIBUTE,
-    )
-    rows_sql = _safe_query(
-        """
-        SELECT DISTINCT
-            images.image_id,
-            images.group_id,
-            images.group_name,
-            images.owner_id,
-            images.owner_name,
-            images.image_name,
-            images.dataset_id,
-            images.dataset_name,
-            images.project_id,
-            images.project_name,
-            images.acquisition_date,
-            images.instrument_manufacturer,
-            images.instrument_model,
-            images.objective_model,
-            images.objective_magnification,
-            images.objective_na,
-            images.detector_model,
-            images.detector_binning,
-            images.detector_gain,
-            images.pixel_size_x_um,
-            images.pixel_size_y_um,
-            images.z_step_um,
-            images.channel_summary,
-            images.indexed_at
-        FROM {} images
-        JOIN {} scope_items ON scope_items.image_id = images.image_id
-        WHERE
-            (%s::text IS NULL OR scope_items.scope_type = %s)
-            AND (%s::bigint IS NULL OR scope_items.scope_id = %s)
-            AND
-            (%s::bigint[] IS NULL OR images.group_id = ANY(%s::bigint[]))
-            AND (
-                (%s::bigint IS NULL AND images.group_can_read = TRUE)
-                OR (
-                    %s::bigint IS NOT NULL
-                    AND (images.group_can_read = TRUE OR images.owner_id = %s)
-                )
-            )
-            AND (
-                %s = ''
-                OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', NULLIF(%s, ''))
-                OR images.image_id IN (
-                    SELECT attributes.image_id
-                    FROM {} attributes
-                    WHERE to_tsvector(
-                            'simple',
-                            replace(attributes.attribute_key, '_', ' ')
-                            || ' '
-                            || attributes.attribute_text
-                          ) @@ to_tsquery('simple', NULLIF(%s, ''))
-                )
-            )
-            AND (%s::timestamptz IS NULL OR images.acquisition_date >= %s)
-            AND (%s::timestamptz IS NULL OR images.acquisition_date <= %s)
-        ORDER BY images.acquisition_date DESC NULLS LAST, images.image_id DESC
-        """,
-        TABLE_IMAGE,
-        TABLE_SCOPE_ITEM,
-        TABLE_ATTRIBUTE,
-    )
-    paged_rows_sql = rows_sql
+    count_sql = _search_count_sql()
+    paged_rows_sql = _search_rows_sql(paged=limit is not None)
     paged_params = list(base_params)
     if limit is not None:
-        paged_rows_sql = _safe_query(
-            """
-            SELECT DISTINCT
-                images.image_id,
-                images.group_id,
-                images.group_name,
-                images.owner_id,
-                images.owner_name,
-                images.image_name,
-                images.dataset_id,
-                images.dataset_name,
-                images.project_id,
-                images.project_name,
-                images.acquisition_date,
-                images.instrument_manufacturer,
-                images.instrument_model,
-                images.objective_model,
-                images.objective_magnification,
-                images.objective_na,
-                images.detector_model,
-                images.detector_binning,
-                images.detector_gain,
-                images.pixel_size_x_um,
-                images.pixel_size_y_um,
-                images.z_step_um,
-                images.channel_summary,
-                images.indexed_at
-            FROM {} images
-            JOIN {} scope_items ON scope_items.image_id = images.image_id
-            WHERE
-                (%s::text IS NULL OR scope_items.scope_type = %s)
-                AND (%s::bigint IS NULL OR scope_items.scope_id = %s)
-                AND
-                (%s::bigint[] IS NULL OR images.group_id = ANY(%s::bigint[]))
-                AND (
-                    (%s::bigint IS NULL AND images.group_can_read = TRUE)
-                    OR (
-                        %s::bigint IS NOT NULL
-                        AND (images.group_can_read = TRUE OR images.owner_id = %s)
-                    )
-                )
-                AND (
-                    %s = ''
-                    OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', NULLIF(%s, ''))
-                    OR images.image_id IN (
-                        SELECT attributes.image_id
-                        FROM {} attributes
-                        WHERE to_tsvector(
-                                'simple',
-                                replace(attributes.attribute_key, '_', ' ')
-                                || ' '
-                                || attributes.attribute_text
-                              ) @@ to_tsquery('simple', NULLIF(%s, ''))
-                    )
-                )
-                AND (%s::timestamptz IS NULL OR images.acquisition_date >= %s)
-                AND (%s::timestamptz IS NULL OR images.acquisition_date <= %s)
-            ORDER BY images.acquisition_date DESC NULLS LAST, images.image_id DESC
-            LIMIT %s OFFSET %s
-            """,
-            TABLE_IMAGE,
-            TABLE_SCOPE_ITEM,
-            TABLE_ATTRIBUTE,
-        )
         paged_params.extend([limit, offset])
 
     with conn.cursor() as cur:

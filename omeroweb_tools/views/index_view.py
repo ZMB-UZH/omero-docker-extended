@@ -30,7 +30,7 @@ from ..services.enhanced_search_service import (
     user_settings_save_error_message,
 )
 from ..services.enhanced_search_store import EnhancedSearchStoreError
-from .utils import current_username, load_json_body, require_non_root_user
+from .utils import current_username, load_json_object, require_non_root_user
 
 __all__ = ["SearchQuery"]
 
@@ -39,7 +39,15 @@ SAVED_QUERY_NAME_REQUIRED_ERROR = "Query name is required."
 SAVED_QUERY_NAME_TOO_LONG_ERROR = (
     f"Query name must be {SAVED_QUERY_NAME_MAX_LENGTH} characters or fewer."
 )
+SAVED_QUERY_DELETE_ERROR = (
+    "Could not delete saved search query. Database is not accessible."
+)
+SAVED_QUERY_LOAD_ERROR = (
+    "Could not load saved search queries. Database is not accessible."
+)
 SAVED_QUERY_SAVE_ERROR = "Could not save search query. Database is not accessible."
+SAVED_QUERY_PAYLOAD_REQUIRED_ERROR = "Query payload is required."
+SAVED_QUERY_PAYLOAD_INVALID_ERROR = "Saved query payload is invalid."
 
 
 def _indexed_scope_storage_key(username: str) -> str:
@@ -53,6 +61,24 @@ def _is_root_user(request, conn) -> bool:
 
 def _normalize_saved_query_name(value: object) -> str:
     return " ".join(str(value or "").split())
+
+
+def _normalize_saved_query_payload(value: object) -> tuple[dict[str, Any], str]:
+    if not isinstance(value, dict):
+        return {}, SAVED_QUERY_PAYLOAD_REQUIRED_ERROR
+    query, errors = parse_search_query(value)
+    if errors:
+        return {}, SAVED_QUERY_PAYLOAD_INVALID_ERROR
+    return query.with_page(1).to_payload(), ""
+
+
+def _parse_saved_query_id(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ValueError
+    query_id = int(str(value).strip())
+    if query_id < 1:
+        raise ValueError
+    return query_id
 
 
 def _load_user_settings_context(
@@ -102,8 +128,8 @@ def root_status(request, conn=None, _url=None, **kwargs):
 @login_required()
 @ensure_csrf_cookie
 def enhanced_search_view(request, conn=None, _url=None, **kwargs):
-    username = str(current_username(request, conn) or "")
-    blocked_for_root = username == "root"
+    username = str(current_username(request, conn) or "").strip()
+    blocked_for_root = not username or username == "root"
     (
         settings_payload,
         settings_available,
@@ -189,7 +215,7 @@ def enhanced_search_view(request, conn=None, _url=None, **kwargs):
 def start_scope_sync_view(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
-    _payload, error = load_json_body(request)
+    _payload, error = load_json_object(request)
     if error:
         return JsonResponse({"error": error}, status=400)
     username = str(current_username(request, conn) or "")
@@ -254,12 +280,12 @@ def sync_state_view(request, conn=None, _url=None, **kwargs):
 def save_user_settings_view(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
-    payload, error = load_json_body(request)
+    payload, error = load_json_object(request)
     if error:
         return JsonResponse({"error": error}, status=400)
     username = str(current_username(request, conn) or "")
     try:
-        saved = save_user_settings(conn, username, payload or {})
+        saved = save_user_settings(conn, username, payload)
     except EnhancedSearchStoreError:
         return JsonResponse({"error": user_settings_save_error_message()}, status=503)
     return JsonResponse({"ok": True, **saved})
@@ -270,23 +296,28 @@ def save_user_settings_view(request, conn=None, _url=None, **kwargs):
 def save_query_view(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
-    payload, error = load_json_body(request)
+    payload, error = load_json_object(request)
     if error:
         return JsonResponse({"error": error}, status=400)
-    query_name = _normalize_saved_query_name((payload or {}).get("query_name"))
-    query_payload = (payload or {}).get("query_payload")
+    query_name = _normalize_saved_query_name(payload.get("query_name"))
+    query_payload = payload.get("query_payload")
     if not query_name:
         return JsonResponse({"error": SAVED_QUERY_NAME_REQUIRED_ERROR}, status=400)
     if len(query_name) > SAVED_QUERY_NAME_MAX_LENGTH:
         return JsonResponse({"error": SAVED_QUERY_NAME_TOO_LONG_ERROR}, status=400)
-    if not isinstance(query_payload, dict):
-        return JsonResponse({"error": "Query payload is required."}, status=400)
+    normalized_payload, payload_error = _normalize_saved_query_payload(query_payload)
+    if payload_error:
+        return JsonResponse({"error": payload_error}, status=400)
     username = str(current_username(request, conn) or "")
     try:
-        save_query(username, query_name, query_payload)
+        save_query(username, query_name, normalized_payload)
     except EnhancedSearchStoreError:
         return JsonResponse({"error": SAVED_QUERY_SAVE_ERROR}, status=503)
-    return JsonResponse({"ok": True, "saved_queries": saved_queries(username)})
+    try:
+        updated_saved_queries = saved_queries(username)
+    except EnhancedSearchStoreError:
+        return JsonResponse({"error": SAVED_QUERY_LOAD_ERROR}, status=503)
+    return JsonResponse({"ok": True, "saved_queries": updated_saved_queries})
 
 
 @login_required()
@@ -294,29 +325,36 @@ def save_query_view(request, conn=None, _url=None, **kwargs):
 def delete_query_view(request, conn=None, _url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
-    payload, error = load_json_body(request)
+    payload, error = load_json_object(request)
     if error:
         return JsonResponse({"error": error}, status=400)
-    payload_dict = payload if isinstance(payload, dict) else {}
     try:
-        query_id_value = payload_dict.get("query_id")
-        if query_id_value is None:
-            raise ValueError
-        query_id = int(query_id_value)
+        query_id = _parse_saved_query_id(payload.get("query_id"))
     except (TypeError, ValueError):
         return JsonResponse({"error": "Query id is required."}, status=400)
     username = str(current_username(request, conn) or "")
-    deleted = remove_saved_query(username, query_id)
+    try:
+        deleted = remove_saved_query(username, query_id)
+    except EnhancedSearchStoreError:
+        return JsonResponse({"error": SAVED_QUERY_DELETE_ERROR}, status=503)
     if not deleted:
         return JsonResponse({"error": "Saved query not found."}, status=404)
-    return JsonResponse({"ok": True, "saved_queries": saved_queries(username)})
+    try:
+        updated_saved_queries = saved_queries(username)
+    except EnhancedSearchStoreError:
+        return JsonResponse({"error": SAVED_QUERY_LOAD_ERROR}, status=503)
+    return JsonResponse({"ok": True, "saved_queries": updated_saved_queries})
 
 
 @login_required()
 @require_non_root_user
 def apply_saved_query_view(request, conn=None, _url=None, query_id=None, **kwargs):
     username = str(current_username(request, conn) or "")
-    for saved in saved_queries(username):
+    try:
+        user_saved_queries = saved_queries(username)
+    except EnhancedSearchStoreError:
+        user_saved_queries = []
+    for saved in user_saved_queries:
         if int(saved["id"]) != int(query_id):
             continue
         return redirect(saved_query_redirect_url(saved.get("query_payload") or {}))
