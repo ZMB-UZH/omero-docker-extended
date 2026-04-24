@@ -41,6 +41,7 @@ def _plugin_suite_fallback() -> int:
     for relative_path in (
         "omeroweb_import/tests/test_cli_runtime_env.py",
         "omeroweb_import/tests/test_security_hardening.py",
+        "omeroweb_tools/tests/test_tools_module_contracts.py",
         "omeroweb_omp_plugin/tests/test_log_sanitization.py",
     ):
         py_compile.compile(
