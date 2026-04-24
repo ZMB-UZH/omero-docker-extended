@@ -267,6 +267,53 @@ def get_chunk_shape(image):
     return chunks
 
 
+def _read_lower_pyramid_plane(
+    image,
+    level,
+    z,
+    c,
+    t,
+    tile_x,
+    tile_y,
+    tile_w,
+    tile_h,
+    np_type,
+):
+    image_connection = get_image_connection(image)
+    if image_connection is None:
+        raise Http404("image connection unavailable")
+
+    pix = image_connection.c.sf.createRawPixelsStore()
+    try:
+        max_level = len(image.getZoomLevelScaling()) - 1
+        pix.setPixelsId(image.getPixelsId(), False)
+        pix.setResolutionLevel(max_level - level)
+        tile_bytes = pix.getTile(z, c, t, tile_x, tile_y, tile_w, tile_h)
+    finally:
+        pix.close()
+
+    tile_array = np.frombuffer(tile_bytes, dtype=np_type)
+    return tile_array.reshape((tile_h, tile_w))
+
+
+def _read_runtime_chunk_plane(image, level, z, c, t, tile, np_type):
+    tile_x, tile_y, tile_w, tile_h = tile
+    if image.requiresPixelsPyramid() and level > 0:
+        return _read_lower_pyramid_plane(
+            image,
+            level,
+            z,
+            c,
+            t,
+            tile_x,
+            tile_y,
+            tile_w,
+            tile_h,
+            np_type,
+        )
+    return image.getPrimaryPixels().getTile(z, c, t, tile)
+
+
 @login_required()
 def image_zarray(request, iid, level, conn=None, **kwargs):
     level = int(level)
@@ -319,25 +366,7 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
     tile_h = min(shape[-2] - tile_y, tile_h)
     tile = [tile_x, tile_y, tile_w, tile_h]
 
-    if image.requiresPixelsPyramid() and level > 0:
-        image_connection = get_image_connection(image)
-        if image_connection is None:
-            raise Http404("image connection unavailable")
-        pix = image_connection.c.sf.createRawPixelsStore()
-        pid = image.getPixelsId()
-        try:
-            max_level = len(image.getZoomLevelScaling()) - 1
-            level = max_level - level
-            pix.setPixelsId(pid, False)
-            pix.setResolutionLevel(level)
-            tile_bytes = pix.getTile(z, c, t, tile_x, tile_y, tile_w, tile_h)
-        finally:
-            pix.close()
-
-        tile_array = np.frombuffer(tile_bytes, dtype=np_type)
-        plane = tile_array.reshape((tile_h, tile_w))
-    else:
-        plane = image.getPrimaryPixels().getTile(z, c, t, tile)
+    plane = _read_runtime_chunk_plane(image, level, z, c, t, tile, np_type)
     if chunks[-1] != tile_w or chunks[-2] != tile_h:
         plane2 = np.zeros((chunks[-2], chunks[-1]), dtype=plane.dtype)
         plane2[0:tile_h, 0:tile_w] = plane
