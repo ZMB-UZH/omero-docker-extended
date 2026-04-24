@@ -295,6 +295,8 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
     original_parse_import_groups = core_functions._parse_import_groups
 
     class _CandidatePath:
+        __hash__ = None
+
         def __init__(self, should_match=False):
             self.should_match = should_match
 

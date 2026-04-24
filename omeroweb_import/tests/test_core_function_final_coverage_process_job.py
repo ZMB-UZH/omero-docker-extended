@@ -640,7 +640,8 @@ def test_start_import_thread_covers_missing_job_and_thread_start_failures(
 
     class _BrokenThread:
         def __init__(self, *args, **kwargs):
-            pass
+            self.args = args
+            self.kwargs = kwargs
 
         @staticmethod
         def start():

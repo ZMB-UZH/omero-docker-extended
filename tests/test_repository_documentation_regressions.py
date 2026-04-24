@@ -43,16 +43,73 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self,
     ) -> None:
         runbook_text = self.read_text("docs/operations/code-scanning.md")
-        self.assertIn("GitHub reported **4 open alerts on `main`**", runbook_text)
+        self.assertIn("GitHub reported **8 open alerts on `main`**", runbook_text)
+        self.assertIn("`py/empty-except` (2)", runbook_text)
+        self.assertIn("`py/exit-from-finally` (1)", runbook_text)
+        self.assertIn("`py/multiple-definition` (1)", runbook_text)
         self.assertIn(
             "GitHub closed the Trivy `DS002`,",
             runbook_text,
         )
-        self.assertIn("The remaining 4 open alerts are repository-level", runbook_text)
+        self.assertIn("4 Scorecard alerts were repository-level", runbook_text)
         self.assertNotIn("should clear on the next workflow refresh", runbook_text)
         self.assertIn(
             "~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**",
             runbook_text,
+        )
+
+    def test_deepsource_repo_file_is_retired_from_agent_routing(self) -> None:
+        expected_phrase = (
+            "Do not search for, create, restore, or edit `.deepsource.toml`"
+        )
+        expected_runbook_phrase = "Do not look for `.deepsource.toml`"
+        self.assertFalse(
+            (self.repo_root / ".deepsource.toml").exists(),
+            "DeepSource repo-file configuration must remain retired.",
+        )
+        runbook_text = self.read_text("docs/operations/code-scanning.md")
+        normalized_runbook_text = " ".join(runbook_text.split())
+        self.assertIn(expected_phrase, " ".join(self.read_text("AGENTS.md").split()))
+        for adapter_path in (
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md",
+            ".cursor/rules/00-omero-core.mdc",
+        ):
+            self.assertIn(".deepsource.toml", self.read_text(adapter_path))
+        self.assertIn(expected_phrase, normalized_runbook_text)
+        self.assertIn(
+            "GitHub PAT is not a DeepSource API credential", normalized_runbook_text
+        )
+        self.assertIn(
+            "report the count as unavailable, not zero", normalized_runbook_text
+        )
+        self.assertIn("grouped issues from issue occurrences", normalized_runbook_text)
+        self.assertIn("command -v gh", runbook_text)
+        self.assertIn("gh run view <run-id> --log-failed", runbook_text)
+        self.assertIn("tools/scanner_inventory.py github-code-scanning", runbook_text)
+        self.assertIn("tools/scanner_inventory.py deepsource", runbook_text)
+        self.assertIn("prompts without echo on a TTY", runbook_text)
+        self.assertIn("Never paste PATs into command arguments", runbook_text)
+        self.assertIn("newest supported version", runbook_text)
+        self.assertIn("do not pin stale dates", runbook_text)
+        self.assertNotIn('"X-GitHub-Api-Version": "2022-11-28"', runbook_text)
+        self.assertNotIn("Authorization: Bearer $GITHUB_TOKEN", runbook_text)
+        self.assertIn("branch=main", runbook_text)
+        scanner_tool_text = self.read_text("tools/scanner_inventory.py")
+        self.assertIn("getpass.getpass", scanner_tool_text)
+        self.assertIn("https://api.github.com/versions", scanner_tool_text)
+        self.assertIn(
+            "GitHub versions request returned no supported versions", scanner_tool_text
+        )
+        self.assertIn('"X-GitHub-Api-Version": api_version', scanner_tool_text)
+        self.assertIn("https://api.deepsource.com/graphql/", scanner_tool_text)
+        self.assertIn("DeepSource API returned GraphQL errors", scanner_tool_text)
+        self.assertIn("issueOccurrences(first: 1)", scanner_tool_text)
+        self.assertIn("dependencyVulnerabilityOccurrences(first: 1)", scanner_tool_text)
+        self.assertIn(
+            expected_runbook_phrase,
+            self.read_text(".agents/skills/security-finding-triager/SKILL.md"),
         )
 
     def test_explicit_manual_compose_examples_include_required_env_files(

@@ -33,7 +33,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from omero.gateway import BlitzGateway
 from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
-from omero.rtypes import rstring
+from omero.rtypes import rlong, rstring
 from omeroweb.decorators import login_required
 from typing import Any, NamedTuple, Optional
 from ..constants import (
@@ -2711,13 +2711,13 @@ def _prepare_job_import_datasets(
     if not upload_root.exists():
         error_message = errors.upload_folder_missing_on_server()
 
-        def mark_error(current_job):
+        def mark_upload_root_missing(current_job):
             current_job["status"] = "error"
             _append_job_error(current_job, error_message)
             current_job["updated"] = time.time()
             return current_job
 
-        updated_job = _update_job(job_id, mark_error) or job_dict
+        updated_job = _update_job(job_id, mark_upload_root_missing) or job_dict
         return updated_job, error_message
 
     entries_to_import = _build_import_units(job_dict, upload_root)
@@ -2727,13 +2727,13 @@ def _prepare_job_import_datasets(
     if not datasets_ready:
         error_message = dataset_error or errors.unable_prepare_import_destination()
 
-        def mark_error(current_job):
+        def mark_dataset_target_error(current_job):
             current_job["status"] = "error"
             _append_job_error(current_job, error_message)
             current_job["updated"] = time.time()
             return current_job
 
-        updated_job = _update_job(job_id, mark_error) or job_dict
+        updated_job = _update_job(job_id, mark_dataset_target_error) or job_dict
         return updated_job, error_message
 
     if not _save_job(job_dict):
@@ -3597,8 +3597,6 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
     if not file_name:
         return None
 
-    import time
-
     start_time = time.time()
 
     try:
@@ -3743,8 +3741,6 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
     if not file_names:
         return {}
 
-    import time
-
     start_time = time.time()
     results = {}
 
@@ -3846,9 +3842,6 @@ def _create_dataset_via_admin_connection(
     project_id: Optional[int] = None,
 ) -> Optional[int]:
     """Create a Dataset using an independent admin impersonation path."""
-    import omero.rtypes as rtypes
-    from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
-
     admin_conn = _open_admin_connection(host, port)
     if admin_conn is None:
         return None
@@ -3869,7 +3862,7 @@ def _create_dataset_via_admin_connection(
             conn.SERVICE_OPTS.setOmeroGroup(group_name)
 
         ds = DatasetI()
-        ds.setName(rtypes.rstring(name))
+        ds.setName(rstring(name))
         ds = conn.getUpdateService().saveAndReturnObject(ds, conn.SERVICE_OPTS)
         ds_id = ds.getId().getValue()
 
@@ -4381,7 +4374,6 @@ def _attach_txt_to_image_service(
     not depend on job-service administrator privileges.
     """
     from omero.model import FileAnnotationI, OriginalFileI
-    from omero.rtypes import rstring, rlong
     from omero.gateway import FileAnnotationWrapper
     from ..services.omero.sem_edx_parser import attach_sem_edx_tables
 

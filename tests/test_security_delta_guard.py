@@ -3,6 +3,7 @@ from __future__ import annotations
 from iter_test_helpers import next_or_fail
 
 import importlib.util
+import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -58,23 +59,39 @@ def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
 
 
 def test_github_api_get_json_uses_https_connection(monkeypatch) -> None:
-    calls = {}
+    security_delta_guard._GITHUB_API_VERSION_CACHE = None
+    calls = []
 
-    monkeypatch.setattr(
-        security_delta_guard.shutil, "which", lambda command: f"/usr/bin/{command}"
-    )
+    class FakeResponse:
+        def __init__(self, payload: object) -> None:
+            self.payload = payload
 
-    def fake_run(command: list[str], **kwargs):
-        calls["command"] = command
-        calls["kwargs"] = kwargs
-        return security_delta_guard.subprocess.CompletedProcess(
-            args=command,
-            returncode=0,
-            stdout='{"default_branch": "main"}',
-            stderr="",
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(self.payload).encode("utf-8")
+
+    def fake_urlopen(request, *, timeout: int):
+        headers = {key.lower(): value for key, value in request.header_items()}
+        calls.append(
+            {
+                "url": request.full_url,
+                "headers": headers,
+                "timeout": timeout,
+            }
         )
+        payload: object
+        if request.full_url == "https://api.github.com/versions":
+            payload = ["2026-03-10", "2022-11-28"]
+        else:
+            payload = {"default_branch": "main"}
+        return FakeResponse(payload)
 
-    monkeypatch.setattr(security_delta_guard.subprocess, "run", fake_run)
+    monkeypatch.setattr(security_delta_guard.urllib.request, "urlopen", fake_urlopen)
 
     payload = security_delta_guard.github_api_get_json(
         "/repos/ZMB-UZH/omero-docker-extended",
@@ -82,27 +99,17 @@ def test_github_api_get_json_uses_https_connection(monkeypatch) -> None:
     )
 
     assert payload == {"default_branch": "main"}
-    assert calls["command"] == [
-        "/usr/bin/curl",
-        "--silent",
-        "--show-error",
-        "--location",
-        "--header",
-        "Accept: application/vnd.github+json",
-        "--header",
-        f"Authorization: Bearer {TEST_GITHUB_CREDENTIAL}",
-        "--header",
-        "X-GitHub-Api-Version: 2022-11-28",
-        "--header",
-        "User-Agent: security-delta-guard",
-        "https://api.github.com/repos/ZMB-UZH/omero-docker-extended",
-    ]
-    assert calls["kwargs"] == {
-        "check": False,
-        "capture_output": True,
-        "text": True,
-        "timeout": 30,
-    }
+    assert calls[0]["url"] == "https://api.github.com/versions"
+    assert calls[1]["url"] == (
+        "https://api.github.com/repos/ZMB-UZH/omero-docker-extended"
+    )
+    assert calls[0]["headers"]["accept"] == "application/vnd.github+json"
+    assert calls[0]["headers"]["authorization"] == (f"Bearer {TEST_GITHUB_CREDENTIAL}")
+    assert calls[0]["headers"]["user-agent"] == "security-delta-guard"
+    assert "x-github-api-version" not in calls[0]["headers"]
+    assert calls[1]["headers"]["x-github-api-version"] == "2026-03-10"
+    assert calls[0]["timeout"] == 30
+    assert calls[1]["timeout"] == 30
 
 
 def test_github_api_get_json_requires_absolute_api_path() -> None:

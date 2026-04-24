@@ -10,7 +10,7 @@
         if (parsed?.value) {
             document.documentElement.classList.add('special-upload-active');
         }
-    } catch (error) {
+    } catch {
         // Ignore storage access errors.
     }
 })();

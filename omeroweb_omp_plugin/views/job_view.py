@@ -185,12 +185,13 @@ def start_job(request, conn=None, _url=None, **kwargs):
         if separator_mode not in ("chars", "regex", "ai_regex"):
             separator_mode = "chars"
 
-        if separator_mode in ("regex", "ai_regex"):
-            if not _is_safe_separator_regex(raw_seps):
-                return JsonResponse(
-                    {"error": error_messages.invalid_regex_pattern_title()},
-                    status=400,
-                )
+        if separator_mode in ("regex", "ai_regex") and not _is_safe_separator_regex(
+            raw_seps
+        ):
+            return JsonResponse(
+                {"error": error_messages.invalid_regex_pattern_title()},
+                status=400,
+            )
 
         if delete_mode not in ("keep", "all", "plugin"):
             delete_mode = "keep"
@@ -511,15 +512,17 @@ def job_progress(request, job_id, conn=None, _url=None, **kwargs):
                 }
             )
 
+        if separator_mode in ("regex", "ai_regex") and not _is_safe_separator_regex(
+            raw_seps
+        ):
+            return JsonResponse(
+                {
+                    "error": error_messages.invalid_regex_pattern_title(),
+                    "finished": True,
+                },
+                status=400,
+            )
         if separator_mode in ("regex", "ai_regex"):
-            if not _is_safe_separator_regex(raw_seps):
-                return JsonResponse(
-                    {
-                        "error": error_messages.invalid_regex_pattern_title(),
-                        "finished": True,
-                    },
-                    status=400,
-                )
             sep_pattern = raw_seps
         else:
             seps_escaped = "".join(re.escape(c) for c in raw_seps)
@@ -727,7 +730,7 @@ def job_progress(request, job_id, conn=None, _url=None, **kwargs):
 
         done = end
         elapsed = time.time() - started
-        eta = (elapsed / done * (total - done)) if (done > 0 and done < total) else 0
+        eta = (elapsed / done * (total - done)) if 0 < done < total else 0
         percent = (done / total * 100) if total else 0
         finished = done >= total
 
