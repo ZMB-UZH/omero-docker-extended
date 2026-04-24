@@ -140,6 +140,8 @@ def test_frontend_preview_download_uses_validated_curl_args(monkeypatch, tmp_pat
     assert args[:2] == ["/bin/curl", "--fail"]
     assert "--location" in args
     assert args[args.index("--proto") + 1] == "=https"
+    tls_option_prefix = "-" * 2 + "tls"
+    assert all(not arg.startswith(tls_option_prefix) for arg in args)
     assert args[-1] == "https://nodejs.org/dist/v24.15.0/SHASUMS256.txt"
     assert kwargs["timeout"] == 60
     assert kwargs["check"] is False
