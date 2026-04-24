@@ -63,6 +63,24 @@
         return serverBackedParams.some((name) => params.has(name));
     };
 
+    const selectElementForOptions = (documentRef, options) => (
+        documentRef.getElementById(options.selectId || 'indexed_scope')
+    );
+
+    const storageKeyForOptions = (documentRef, options) => (
+        options.storageKey || parseJsonScript(
+            documentRef,
+            options.storageKeyScriptId || 'tools-search-indexed-scope-storage-key'
+        )
+    );
+
+    const serverBackedParamsForOptions = (options) => {
+        if (Array.isArray(options.serverBackedParams)) {
+            return options.serverBackedParams;
+        }
+        return DEFAULT_SERVER_BACKED_PARAMS;
+    };
+
     const persistScope = (windowRef, storageKey, selectEl) => {
         const validValues = indexedScopeValues(selectEl);
         if (validValues.has(selectEl.value)) {
@@ -70,6 +88,35 @@
             return;
         }
         removeBrowserStorage(windowRef, storageKey);
+    };
+
+    const discardInvalidStoredScope = (
+        windowRef,
+        storageKey,
+        validValues,
+        storedScope
+    ) => {
+        if (storedScope === null || validValues.has(storedScope)) {
+            return false;
+        }
+        removeBrowserStorage(windowRef, storageKey);
+        return true;
+    };
+
+    const shouldApplyStoredScope = (
+        windowRef,
+        serverBackedParams,
+        validValues,
+        storedScope
+    ) => (
+        !hasServerBackedSearchQuery(windowRef, serverBackedParams)
+        && validValues.has(storedScope)
+    );
+
+    const notifyStoredScopeApplied = (callback, value) => {
+        if (typeof callback === 'function') {
+            callback(value);
+        }
     };
 
     const restoreStoredScope = ({
@@ -81,36 +128,35 @@
     }) => {
         const validValues = indexedScopeValues(selectEl);
         const storedScope = readBrowserStorage(windowRef, storageKey);
-        if (storedScope !== null && !validValues.has(storedScope)) {
-            removeBrowserStorage(windowRef, storageKey);
+        if (discardInvalidStoredScope(
+            windowRef,
+            storageKey,
+            validValues,
+            storedScope
+        )) {
             return;
         }
-        if (hasServerBackedSearchQuery(windowRef, serverBackedParams)) {
-            return;
-        }
-        if (!validValues.has(storedScope)) {
+        if (!shouldApplyStoredScope(
+            windowRef,
+            serverBackedParams,
+            validValues,
+            storedScope
+        )) {
             return;
         }
         selectEl.value = storedScope;
-        if (typeof onStoredScopeApplied === 'function') {
-            onStoredScopeApplied(selectEl.value);
-        }
+        notifyStoredScopeApplied(onStoredScopeApplied, selectEl.value);
     };
 
     const init = (options = {}) => {
         const windowRef = options.windowRef || window;
         const documentRef = options.documentRef || windowRef.document;
-        const selectEl = documentRef.getElementById(options.selectId || 'indexed_scope');
+        const selectEl = selectElementForOptions(documentRef, options);
         if (!selectEl) {
             return null;
         }
-        const storageKey = options.storageKey || parseJsonScript(
-            documentRef,
-            options.storageKeyScriptId || 'tools-search-indexed-scope-storage-key'
-        );
-        const serverBackedParams = Array.isArray(options.serverBackedParams)
-            ? options.serverBackedParams
-            : DEFAULT_SERVER_BACKED_PARAMS;
+        const storageKey = storageKeyForOptions(documentRef, options);
+        const serverBackedParams = serverBackedParamsForOptions(options);
 
         const persist = () => persistScope(windowRef, storageKey, selectEl);
         restoreStoredScope({

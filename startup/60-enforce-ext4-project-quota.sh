@@ -79,7 +79,7 @@ project_id=""
 if grep -Eq "^${group_name}:" "$projid_file"; then
   project_id="$(sed -n "s/^${group_name}:\([0-9][0-9]*\)$/\1/p" "$projid_file" | tail -n1)"
 fi
-escaped_group_path_regex="$(printf '%s' "$resolved_group_path" | sed 's/[.[\*^$()+?{}|]/\\&/g')"
+escaped_group_path_regex="$(printf '%s' "$resolved_group_path" | sed "s/[.[\\*^\$()+?{}|]/\\\\&/g")"
 escaped_group_path_sed="$(printf '%s' "$resolved_group_path" | sed 's/[\\/&]/\\\\&/g')"
 
 if [[ -z "$project_id" ]] && grep -Eq "^[0-9]+:${escaped_group_path_regex}$" "$projects_file"; then
