@@ -24,6 +24,7 @@ from .jobs.job_storage import (
     save_job,
     get_job_path as _job_path,
     get_job_lock_path as _job_lock_path,
+    mark_job_lock_held,
 )
 
 # OMERO helper functions (commonly used)
@@ -69,7 +70,7 @@ def is_plugin_annotation(annotation):
     return _annotation_service.is_plugin_annotation(annotation)
 
 
-def find_plugin_annotation_ids(conn, image_id, allow_legacy=True):
+def find_plugin_annotation_ids(conn, image_id, allow_legacy=False):
     return _annotation_service.find_plugin_annotation_ids(
         conn, image_id, allow_legacy=allow_legacy
     )
@@ -110,7 +111,7 @@ def _call_legacy_annotation_delete(
     image_id,
     annotation_ids=None,
     link_ids=None,
-    allow_legacy=True,
+    allow_legacy=False,
 ):
     legacy_delete_existing_annotations = _legacy_annotation_delete_callable()
     legacy_kwargs = {
@@ -163,7 +164,7 @@ def _delete_object_by_id(conn, update, object_type, stub_type, object_id):
 
 
 def _delete_existing_annotations_by_ids(
-    conn, image_id, *, annotation_ids=None, link_ids=None, allow_legacy=True
+    conn, image_id, *, annotation_ids=None, link_ids=None, allow_legacy=False
 ):
     resolved_annotation_ids = _normalize_annotation_ids(
         annotation_ids
@@ -206,7 +207,7 @@ def _delete_existing_annotations_by_ids(
 
 
 def delete_existing_annotations(
-    conn, *args, annotation_ids=None, link_ids=None, allow_legacy=True
+    conn, *args, annotation_ids=None, link_ids=None, allow_legacy=False
 ):
     uses_legacy_id_api = (
         annotation_ids is not None or link_ids is not None or len(args) == 1
@@ -257,6 +258,7 @@ __all__ = [
     "save_job",
     "_job_path",
     "_job_lock_path",
+    "mark_job_lock_held",
     # OMERO helpers
     "get_id",
     "get_text",

@@ -546,7 +546,7 @@ Fix:
 2. Run targeted pytest with `${LOCAL_WORKFLOW_GATE_VENV:-.cache/local-workflow-gates/python-venv}/bin/python`.
 3. Use the OMERO.web runtime interpreter only for installed-container or live-runtime verification.
 4. If a test module is intentionally self-contained, run it directly with `python3 <path-to-test>.py` so it bypasses repository `conftest.py`.
-5. For in-container pytest, unset deprecated `OMERO_TEMPDIR` and set `OMERO_TMPDIR` plus `TMPDIR` to a writable temp path before collecting tests.
+5. For in-container pytest, unset deprecated `OMERO_TEMPDIR`, set `OMERO_TMPDIR` plus `TMPDIR` to a writable temp path, and run tests only from a checkout or mounted test tree that includes repo-level helpers.
 
 Example host-side pattern:
 
@@ -559,17 +559,35 @@ python3 tools/run_local_workflow_gates.py --setup-only
 Example full-runtime pattern:
 
 ```bash
-docker exec -i omero-omeroweb-1 bash -lc '
-  unset OMERO_TEMPDIR
-  export OMERO_TMPDIR=/tmp/omero-web-pytest
-  export TMPDIR=/tmp/omero-web-pytest
-  mkdir -p "$OMERO_TMPDIR"
-  chown omero-web:omero-web "$OMERO_TMPDIR"
-  su omero-web -s /bin/bash -c "
-    cd /opt/omero &&
-    /opt/omero/web/venv-3.12/bin/python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
-  "
-'
+docker exec -i <omeroweb-container> bash -s <<'SH'
+set -euo pipefail
+unset OMERO_TEMPDIR
+runtime_user="${OMERO_WEB_RUNTIME_USER:-${OMERO_WEB_RUN_USER:-omero-web}}"
+runtime_home="$(getent passwd "$runtime_user" | awk -F: '{print $6}')"
+: "${runtime_home:?runtime home not found}"
+export OMERO_TMPDIR="$(mktemp -d)"
+trap 'rm -rf "$OMERO_TMPDIR"' EXIT
+export TMPDIR="$OMERO_TMPDIR"
+chown "$runtime_user:$runtime_user" "$OMERO_TMPDIR"
+python_bin=""
+: "${OMERO_WEB_ROOT:?OMERO_WEB_ROOT is required}"
+if [ -n "${OMERO_WEB_VENV:-}" ]; then
+  case "$OMERO_WEB_VENV" in
+    /*) candidate_roots="$OMERO_WEB_VENV" ;;
+    *) candidate_roots="${OMERO_WEB_ROOT}/${OMERO_WEB_VENV}" ;;
+  esac
+else
+  candidate_roots=""
+fi
+for root in $candidate_roots "$OMERO_WEB_ROOT"/venv*; do
+  for executable in "$root/bin/python3" "$root/bin/python"; do
+    if [ -x "$executable" ]; then python_bin="$executable"; break 2; fi
+  done
+done
+[ -n "$python_bin" ] || { echo "OMERO.web Python not found" >&2; exit 1; }
+runuser -u "$runtime_user" -- env HOME="$runtime_home" OMERO_TMPDIR="$OMERO_TMPDIR" TMPDIR="$TMPDIR" "$python_bin" \
+  -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
+SH
 ```
 
 Expected result:

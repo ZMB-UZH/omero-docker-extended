@@ -10,7 +10,10 @@ Deep operational guidance for AI agents. `AGENTS.md` should route here instead o
 - Worktrees and related clones can exist under `/tmp/omero-*`. Search them before declaring a commit missing.
 - Before rebasing, refresh tracking refs explicitly with `git fetch origin <branch>:refs/remotes/origin/<branch> --force`.
 - GitHub HTTPS Git operations require a PAT or credential manager, never an account password. A `Password for 'https://github.com'` prompt is asking for a token-class credential.
-- For prompt-based pushes, use `python3 tools/git_push_with_pat.py origin main`; it prompts without echo, disables stale GitHub credential helpers for that command, and keeps the token out of argv, remotes, logs, temp files, and long-lived git config.
+- For TTY pushes, use `python3 tools/git_push_with_pat.py origin main`; it prompts without echo, disables stale GitHub credential helpers for that command, and keeps the token out of argv, remotes, logs, temp files, and long-lived git config.
+- In non-TTY agent shells, provide the PAT only as a short-lived `GITHUB_TOKEN`
+  environment variable for that helper invocation; never paste it into argv,
+  remotes, logs, temp files, or long-lived Git config.
 - If a stale `gh auth git-credential` helper intercepts GitHub HTTPS auth, inspect `git config --show-origin --get-all credential.https://github.com.helper` and `gh auth status`, then use the prompt helper above or repair the credential manager before retrying.
 
 ## Cross-repository sync safety
@@ -31,6 +34,10 @@ Deep operational guidance for AI agents. `AGENTS.md` should route here instead o
 - AI agents may inspect non-example deployment env files and run `python3 tools/env_safety_guard.py template-check`, but must not create, edit, overwrite, delete, normalize, or print values from non-example env files unless the user explicitly grants a one-off exception for that exact operation.
 - Functional OMERO, installation, Compose, startup, plugin-behavior, and env-contract changes require fresh-code live verification before commit/push when live testing makes sense or the user explicitly requests it: reconcile the canonical live root to the exact checkout under test, then rebuild, inject, or restart affected services so containers cannot run stale code.
 - A stale or dirty canonical live root is cleanup work, not a reason to skip live verification. Inspect `git status` before rebuilds; preserve unrelated dirty work non-destructively with a commit, stash, patch, or user-approved cleanup; then update the live root, rerun env guards, rebuild/restart, and test. Stop only when safe reconciliation is impossible.
+- Treat env files and Compose as mutable administrator-owned contracts. Product
+  code, tests, tools, and live probes must read configured values or discover
+  active runtime state instead of assuming default host ports, container names,
+  absolute paths, service users, or enabled profiles.
 - Treat a Docker socket permission error as a sandbox or privilege problem, not proof that Docker is down.
 - Treat plugin tmp helpers as non-mutating path resolvers unless the immediate runtime sink truly needs the directory to exist. Import-time or root-context helper calls that eagerly create `OMERO_TMP_PATH` plugin subtrees can leave `omeroweb-*` paths owned by the wrong UID and break later non-root request handling.
 
@@ -76,6 +83,9 @@ Examples:
 ## Host sandbox vs container network
 
 - Do not keep retrying host-side `localhost` probes after one failure.
+- For OMERO.web route checks, enumerate the running service's published
+  bindings and verify `/webgateway/`; default endpoint docs are reference
+  topology, not live probe input.
 - Switch to the Docker network path from inside a running container, usually `omeroweb`, using service DNS names such as `http://loki:3100`.
 - Prefer the runtime interpreter inside the OMERO.web virtualenv for container-local Python checks.
 
@@ -87,22 +97,22 @@ Examples:
   errors such as `Could not find lockable tmp dir`.
 - Use the service account with explicit `HOME`, `TMPDIR`, `OMERO_TMPDIR`, and
   `OMERO_TEMPDIR`, matching the startup scripts' `runuser -- env ...` pattern.
+- For in-container pytest with `-W error`, unset deprecated `OMERO_TEMPDIR`
+  and run from a checkout or mounted test tree that includes repo-level helpers.
+- For in-container Django view probes, set
+  `DJANGO_SETTINGS_MODULE=omeroweb.settings`, call `django.setup()` before
+  `RequestFactory`, and clean OMP job files through
+  `omeroweb_omp_plugin/services/core.py` helpers `_job_path` and
+  `_job_lock_path`.
 - Put OMERO auth flags before the subcommand.
-- Resolve the active virtualenv first if the exact interpreter path is uncertain.
+- Resolve the active virtualenv first. `OMERO_WEB_VENV` may be relative inside
+  the container; do not assume an absolute `/opt/omero/web/venv-*` path.
 - For OMERO.web import validation, authenticate as a regular OMERO user; the Import plugin intentionally blocks `root`.
 - If repository modules are missing inside a container, switch to the runtime virtualenv instead of retrying plain `python3`.
 
 ## Multiline container probes
 
 Prefer:
-
-```bash
-docker exec -i omero-omeroweb-1 python3 - <<'PY'
-...
-PY
-```
-
-or:
 
 ```bash
 docker exec -i <container> bash -s <<'SH'
@@ -126,12 +136,16 @@ Avoid deeply nested heredocs inside `docker exec ... bash -lc "..."`.
   that instruction or tool concisely with regression coverage.
 - Run each test directory as a separate `pytest` invocation.
 - In root-owned clones, keep `-p no:cacheprovider -W error`.
-- Tests and live verification must not assume pre-existing OMERO images,
-  datasets, users, groups, files, acquisition metadata, plugin index rows, or
-  host-specific paths. If a test needs image data or metadata, create
-  deterministic disposable fixtures in that test or verification flow and
-  isolate them by unique names. User-specified live objects are allowed only as
-  diagnostic probes, not as reusable regression fixtures.
+- Tests and live verification must not assume pre-existing non-root users,
+  groups, images, datasets, projects, screens, files, annotations, script IDs,
+  acquisition metadata, plugin index rows, or host-specific paths. If a check
+  needs one, create a deterministic disposable fixture inside that check and
+  clean or uniquely isolate it. User-specified live objects are diagnostic
+  probes only, not reusable regression fixtures.
+- For synthetic live OMERO images, pass an iterator to
+  `createImageFromNumpySeq`, reload the saved image before annotation writes,
+  and assert against metadata extracted from the reloaded image rather than
+  client-side labels that OMERO may not persist.
 - Live verification must exercise the changed mechanisms end to end after the
   relevant containers reflect the current checkout. For plugin work, include
   importability, served views/static assets, changed service paths, logs for the
@@ -175,7 +189,25 @@ If the active host exposes Ruff only through the Python module entrypoint, use
 Preferred Loki pattern:
 
 ```bash
-docker exec -i omero-omeroweb-1 /opt/omero/web/venv-3.12/bin/python3 - <<'PY'
+docker exec -i <omeroweb-container> bash -s <<'SH'
+set -euo pipefail
+python_bin=""
+: "${OMERO_WEB_ROOT:?OMERO_WEB_ROOT is required}"
+if [ -n "${OMERO_WEB_VENV:-}" ]; then
+  case "$OMERO_WEB_VENV" in
+    /*) candidate_roots="$OMERO_WEB_VENV" ;;
+    *) candidate_roots="${OMERO_WEB_ROOT}/${OMERO_WEB_VENV}" ;;
+  esac
+else
+  candidate_roots=""
+fi
+for root in $candidate_roots "$OMERO_WEB_ROOT"/venv*; do
+  for executable in "$root/bin/python3" "$root/bin/python"; do
+    if [ -x "$executable" ]; then python_bin="$executable"; break 2; fi
+  done
+done
+[ -n "$python_bin" ] || { echo "OMERO.web Python not found" >&2; exit 1; }
+"$python_bin" - <<'PY'
 import json, urllib.parse, urllib.request
 params = urllib.parse.urlencode({
     "query": '{compose_service="omeroserver", log_type="internal"} |~ "(?i)error"',
@@ -187,6 +219,7 @@ params = urllib.parse.urlencode({
 with urllib.request.urlopen(f"http://loki:3100/loki/api/v1/query_range?{params}", timeout=20) as response:
     print(json.loads(response.read().decode("utf-8", errors="replace")))
 PY
+SH
 ```
 
 ## Joined-session and import-thread rules

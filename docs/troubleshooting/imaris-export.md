@@ -80,7 +80,8 @@ Observed behavior:
 - `omero admin diagnostics` later showed `Processor-0 active`,
 - `omero script params <script_id>` succeeded,
 - `omero script launch <script_id> Image_ID=<id>` succeeded from both the
-  server container and the `omeroweb` container,
+  server container and the `omeroweb` container with an image explicitly chosen
+  for this diagnostic,
 - the Celery worker code path using `ScriptService.runScript()` still reported
   `NoProcessorAvailable`.
 
@@ -298,9 +299,34 @@ If you see this pattern, verify the runtime temp-slot logic in
 ### 5. Confirm script registration
 
 ```bash
-docker compose exec omeroserver /opt/omero/server/OMERO.server/bin/omero script list
-docker compose exec omeroserver /opt/omero/server/OMERO.server/bin/omero script params 1301
-docker compose exec omeroserver tail -n 200 /opt/omero/server/OMERO.server/var/log/register-official-scripts.log
+docker compose exec -T omeroserver bash -s <<'SH'
+set -euo pipefail
+runtime_user="${OMERO_CLI_USER:?OMERO_CLI_USER is required}"
+runtime_home="$(getent passwd "$runtime_user" | awk -F: '{print $6}')"
+: "${runtime_home:?runtime home not found}"
+: "${OMERO_TMPDIR:?OMERO_TMPDIR is required}"
+omero_bin=""
+for candidate in "${SERVER_HOME:-}"/bin/omero /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do
+  if [ -x "$candidate" ]; then omero_bin="$candidate"; break; fi
+done
+[ -n "$omero_bin" ] || { echo "OMERO CLI not found" >&2; exit 1; }
+script_id="$(
+  runuser -u "$runtime_user" -- env HOME="$runtime_home" TMPDIR="$OMERO_TMPDIR" OMERO_TMPDIR="$OMERO_TMPDIR" OMERO_TEMPDIR="$OMERO_TMPDIR" \
+    "$omero_bin" script list | awk '/IMS_Export[.]py/ {print $1; exit}'
+)"
+: "${script_id:?IMS_Export.py is not registered}"
+runuser -u "$runtime_user" -- env HOME="$runtime_home" TMPDIR="$OMERO_TMPDIR" OMERO_TMPDIR="$OMERO_TMPDIR" OMERO_TEMPDIR="$OMERO_TMPDIR" \
+  "$omero_bin" script params "$script_id"
+SH
+docker compose exec -T omeroserver bash -s <<'SH'
+set -euo pipefail
+log_path="${SERVER_HOME:-/opt/omero/server/OMERO.server}/var/log/register-official-scripts.log"
+if [ -f "$log_path" ]; then
+  tail -n 200 "$log_path"
+else
+  printf 'registration log not present at discovered path\n' >&2
+fi
+SH
 ```
 
 `IMS_Export.py` must appear in the script list. If it does not:
@@ -311,16 +337,71 @@ docker compose exec omeroserver tail -n 200 /opt/omero/server/OMERO.server/var/l
 
 ### 6. Prove the export script independently of the web worker
 
+Direct script launch needs a real Image. In a blank installation, create a
+disposable verification image first or skip this launch check; never guess a
+numeric ID.
+
 First from the server container:
 
 ```bash
-docker compose exec omeroserver /opt/omero/server/OMERO.server/bin/omero script launch 1301 Image_ID=4
+export IMAGE_ID=<image-id-created-or-explicitly-chosen-for-this-diagnostic>
+docker compose exec -e IMAGE_ID -T omeroserver bash -s <<'SH'
+set -euo pipefail
+runtime_user="${OMERO_CLI_USER:?OMERO_CLI_USER is required}"
+runtime_home="$(getent passwd "$runtime_user" | awk -F: '{print $6}')"
+: "${runtime_home:?runtime home not found}"
+: "${IMAGE_ID:?IMAGE_ID is required}"
+: "${OMERO_TMPDIR:?OMERO_TMPDIR is required}"
+omero_bin=""
+for candidate in "${SERVER_HOME:-}"/bin/omero /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do
+  if [ -x "$candidate" ]; then omero_bin="$candidate"; break; fi
+done
+[ -n "$omero_bin" ] || { echo "OMERO CLI not found" >&2; exit 1; }
+script_id="$(
+  runuser -u "$runtime_user" -- env HOME="$runtime_home" TMPDIR="$OMERO_TMPDIR" OMERO_TMPDIR="$OMERO_TMPDIR" OMERO_TEMPDIR="$OMERO_TMPDIR" \
+    "$omero_bin" script list | awk '/IMS_Export[.]py/ {print $1; exit}'
+)"
+: "${script_id:?IMS_Export.py is not registered}"
+runuser -u "$runtime_user" -- env HOME="$runtime_home" TMPDIR="$OMERO_TMPDIR" OMERO_TMPDIR="$OMERO_TMPDIR" OMERO_TEMPDIR="$OMERO_TMPDIR" \
+  "$omero_bin" script launch "$script_id" Image_ID="$IMAGE_ID"
+SH
 ```
 
 Then from the `omeroweb` container as the runtime user:
 
 ```bash
-docker compose exec omeroweb bash -lc 'runuser -u omero-web -- env HOME=/opt/omero/web/OMERO.web/var OMERO_USERDIR=/tmp/omero-cli OMERO_SESSIONDIR=/tmp/omero-cli/sessions OMERO_TMPDIR=/tmp/omero-cli/tmp /opt/omero/web/venv-3.12/bin/omero -s omeroserver -p 4064 -u root -w "$ROOTPASS" script launch 1301 Image_ID=4'
+export SCRIPT_ID=<script-id-discovered-above>
+export IMAGE_ID=<image-id-created-or-explicitly-chosen-for-this-diagnostic>
+docker compose exec -e SCRIPT_ID -e IMAGE_ID -T omeroweb bash -s <<'SH'
+set -euo pipefail
+runtime_user="${OMERO_WEB_RUNTIME_USER:-${OMERO_WEB_RUN_USER:-omero-web}}"
+runtime_home="$(getent passwd "$runtime_user" | awk -F: '{print $6}')"
+: "${runtime_home:?runtime home not found}"
+: "${SCRIPT_ID:?SCRIPT_ID is required}"
+: "${IMAGE_ID:?IMAGE_ID is required}"
+: "${OMEROHOST:?OMEROHOST is required}"
+: "${OMERO_PORT:?OMERO_PORT is required}"
+: "${ROOTPASS:?ROOTPASS is required}"
+omero_bin=""
+: "${OMERO_WEB_ROOT:?OMERO_WEB_ROOT is required}"
+if [ -n "${OMERO_WEB_VENV:-}" ]; then
+  case "$OMERO_WEB_VENV" in
+    /*) candidate_roots="$OMERO_WEB_VENV" ;;
+    *) candidate_roots="${OMERO_WEB_ROOT}/${OMERO_WEB_VENV}" ;;
+  esac
+else
+  candidate_roots=""
+fi
+for root in $candidate_roots "$OMERO_WEB_ROOT"/venv*; do
+  candidate="$root/bin/omero"
+  if [ -x "$candidate" ]; then omero_bin="$candidate"; break; fi
+done
+[ -n "$omero_bin" ] || { echo "OMERO CLI not found" >&2; exit 1; }
+cli_tmp="$(mktemp -d)"
+trap 'rm -rf "$cli_tmp"' EXIT
+runuser -u "$runtime_user" -- env HOME="$runtime_home" OMERO_USERDIR="$cli_tmp" OMERO_SESSIONDIR="$cli_tmp/sessions" OMERO_TMPDIR="$cli_tmp/tmp" TMPDIR="$cli_tmp/tmp" \
+  "$omero_bin" -s "$OMEROHOST" -p "$OMERO_PORT" -u root -w "$ROOTPASS" script launch "$SCRIPT_ID" Image_ID="$IMAGE_ID"
+SH
 ```
 
 Interpretation:
@@ -354,7 +435,8 @@ problems. Use it to confirm:
 After server-side checks pass:
 
 1. log in through the standalone connector,
-2. browse projects, datasets, and images,
+2. browse projects, datasets, and images, or confirm the empty-state behavior
+   before creating disposable test data,
 3. trigger an export,
 4. poll until finished,
 5. download the resulting file,
@@ -385,7 +467,7 @@ These indicate the system is healthy enough for export:
 - `omero admin diagnostics` shows `Processor-0 active`,
 - `omero script list` includes `IMS_Export.py`,
 - `omero script launch ... Image_ID=<id>` succeeds in both `omeroserver` and
-  `omeroweb`,
+  `omeroweb` for an image created or explicitly selected for this diagnostic,
 - the export returns `Export_Path` and `Export_Name`.
 
 ## Recovery Actions

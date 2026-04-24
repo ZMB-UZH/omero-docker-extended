@@ -50,11 +50,38 @@ docker compose --env-file .env --env-file installation_paths.env --env-file env/
 
 ### 4. Verify plugin availability
 
-Open OMERO.web at `http://localhost:4090` and confirm:
+Discover the active OMERO.web binding and open that URL:
+
+```bash
+container="$(docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env ps -q omeroweb)"
+base_url=""
+while read -r _arrow_prefix _arrow binding; do
+  [ -n "${binding:-}" ] || continue
+  host="${binding%:*}"
+  port="${binding##*:}"
+  host="${host#[}"
+  host="${host%]}"
+  case "$host" in
+    ""|0.0.0.0|::) host="127.0.0.1" ;;
+    *:*) host="[${host}]" ;;
+  esac
+  candidate="http://${host}:${port}"
+  if curl -fsS -o /dev/null "${candidate}/webgateway/"; then
+    base_url="$candidate"
+    break
+  fi
+done < <(docker port "$container")
+[ -n "$base_url" ] || { echo "OMERO.web binding not found" >&2; exit 1; }
+printf '%s\n' "$base_url"
+```
+
+Then confirm:
 
 - Login works with valid OMERO credentials.
-- Plugin menu entries are visible in the top navigation (OMP Plugin, Import, Tools, Admin Tools).
+- Plugin menu entries are visible for an account that is allowed to use them.
 - Each plugin page loads without errors.
+- If no regular users or data exist yet, create disposable verification
+  fixtures or verify only the blank-state behavior.
 
 ### 5. Verify monitoring
 

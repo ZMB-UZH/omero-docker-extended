@@ -34,8 +34,9 @@ Do not start coding until you can name the helper boundary you will harden and t
 
 - All configuration is environment-driven. Never hard-code paths, credentials, or endpoints.
 - In committed code and tests, do not hard-code installation-specific clone paths or host paths unless the product intentionally guarantees that runtime path.
+- For live checks, discover active container IDs, published host bindings, service ports, and runtime interpreter paths from Compose and container state. Documented default ports are reference facts, not probe inputs.
 - Custom import workflows must keep upload and conversion work in tmp/shared-transfer space and move data into `ManagedRepository` only at the final persistent import handoff.
-- Do not assume any Dataset, Project, Screen, or other OMERO object already exists in a live installation unless the current task explicitly provisions it first.
+- Do not assume any non-root user, group, Dataset, Project, Screen, Image, file, annotation, script ID, plugin row, or other OMERO object already exists in a live installation unless the current task explicitly provisions it first.
 - When tests or live verification need OMERO images, files, annotations, acquisition metadata, users, groups, or plugin index rows, create deterministic disposable fixtures inside the test or verification flow and clean or isolate them by unique names. A user-named live object may be inspected only as a diagnostic target, never as a product assumption or required test precondition.
 - Keep changes deterministic, explicit, minimal, and reproducible; less is more when fewer lines prove full functional parity and satisfy every repo rule.
 - If the user explicitly asks for lower-token replies, use the opt-in

@@ -153,6 +153,64 @@ def test_job_view_helper_guards_cover_ownership_host_resolution_and_link_save(
     )
 
 
+def test_annotation_mapping_helpers_preserve_user_keys_and_hash_marker(monkeypatch):
+    monkeypatch.setattr(job_view, "compute_plugin_hash", lambda mapping: "hash")
+
+    mapping = {}
+    first = job_view._unique_annotation_key(mapping, "")
+    mapping[first] = "alpha"
+    second = job_view._unique_annotation_key(mapping, None)
+    mapping[second] = "beta"
+    reserved = job_view._unique_annotation_key(mapping, job_view.HASH_KEY)
+    mapping[reserved] = "gamma"
+    duplicate_reserved = job_view._unique_annotation_key(mapping, job_view.HASH_KEY)
+    mapping[duplicate_reserved] = "delta"
+
+    assert mapping == {
+        "Var": "alpha",
+        "Var_2": "beta",
+        f"{job_view.HASH_KEY}_2": "gamma",
+        f"{job_view.HASH_KEY}_3": "delta",
+    }
+
+    hashed = job_view._with_plugin_hash(mapping)
+
+    assert mapping == {
+        "Var": "alpha",
+        "Var_2": "beta",
+        f"{job_view.HASH_KEY}_2": "gamma",
+        f"{job_view.HASH_KEY}_3": "delta",
+    }
+    assert hashed == {
+        **mapping,
+        job_view.HASH_KEY: "hash",
+    }
+    assert job_view._with_plugin_hash({}) == {}
+
+
+def test_save_image_map_annotation_builds_expected_link(monkeypatch):
+    saved_links = []
+    image = _Image(7, "sample.ome.tif")
+
+    def save_link(link):
+        saved_links.append(link)
+        return link
+
+    update = SimpleNamespace(saveAndReturnObject=save_link)
+
+    monkeypatch.setattr(job_view, "MapAnnotationI", _FakeMapAnnotation)
+    monkeypatch.setattr(job_view, "ImageAnnotationLinkI", _FakeLink)
+    monkeypatch.setattr(job_view, "NamedValue", lambda key, value: (key, value))
+    monkeypatch.setattr(job_view, "rstring", lambda value: value)
+    monkeypatch.setattr(job_view, "get_id", lambda saved: 123)
+
+    assert job_view._save_image_map_annotation(update, image, {"Plate": "P1"}) is True
+
+    assert saved_links[0].parent is image._obj
+    assert saved_links[0].child.ns == job_view.MAP_NS
+    assert saved_links[0].child.values == [("Plate", "P1")]
+
+
 def test_validate_user_password_handles_missing_details_and_auth_failure(monkeypatch):
     conn = _Conn()
     missing_host_conn = _Conn(host=None, port=None)
@@ -420,6 +478,7 @@ def test_job_progress_processes_acquisition_batches(monkeypatch):
     request = RequestFactory().get("/")
     request.user = SimpleNamespace(username="alice")
     saved_jobs = []
+    saved_links = []
     job = {
         "job_id": "b" * 32,
         "username": "alice",
@@ -457,7 +516,11 @@ def test_job_progress_processes_acquisition_batches(monkeypatch):
     monkeypatch.setattr(
         job_view, "extract_acquisition_metadata", lambda image: {"Laser": "405"}
     )
-    monkeypatch.setattr(job_view, "_save_annotation_link", lambda update, link: True)
+    monkeypatch.setattr(
+        job_view,
+        "_save_annotation_link",
+        lambda update, link: saved_links.append(link) or True,
+    )
     monkeypatch.setattr(job_view, "MapAnnotationI", _FakeMapAnnotation)
     monkeypatch.setattr(job_view, "ImageAnnotationLinkI", _FakeLink)
     monkeypatch.setattr(job_view, "NamedValue", lambda key, value: (key, value))
@@ -473,9 +536,13 @@ def test_job_progress_processes_acquisition_batches(monkeypatch):
         "percent": 100.0,
         "eta_seconds": 0,
         "finished": True,
-        "last_log": "Image 11 (acq.ome.tif): saved 2 acquisition entries.",
+        "last_log": "Image 11 (acq.ome.tif): saved 1+1 acquisition entries.",
     }
     assert saved_jobs[-1]["index"] == 1
+    assert saved_links[0].child.values == [
+        ("Laser", "405"),
+        (job_view.HASH_KEY, "hash"),
+    ]
 
 
 def test_job_progress_processes_filename_mapping_and_duplicate_variable_names(
@@ -552,6 +619,69 @@ def test_job_progress_processes_filename_mapping_and_duplicate_variable_names(
     assert saved_links[0].child.values == [
         ("Channel", "a"),
         ("Channel_2", "01"),
+        (job_view.HASH_KEY, "hash"),
+    ]
+
+
+def test_job_progress_preserves_reserved_hash_variable_name(monkeypatch):
+    conn = _Conn()
+    request = RequestFactory().get("/")
+    request.user = SimpleNamespace(username="alice")
+    saved_links = []
+    job = {
+        "job_id": "d" * 32,
+        "username": "alice",
+        "type": "parse",
+        "index": 0,
+        "total": 1,
+        "var_names": [job_view.HASH_KEY, job_view.HASH_KEY],
+        "delete_mode": "keep",
+        "separator": "_",
+        "image_ids": [33],
+        "started": 30.0,
+        "chunk_size": 5,
+    }
+
+    class Lock:
+        def __init__(self, *_args, **_kwargs):
+            return None
+
+        @staticmethod
+        def acquire():
+            return None
+
+        @staticmethod
+        def release():
+            return None
+
+    monkeypatch.setattr(job_view, "load_job", lambda *_args: job)
+    monkeypatch.setattr(job_view.portalocker, "Lock", Lock)
+    monkeypatch.setattr(job_view, "save_job", lambda payload: True)
+    monkeypatch.setattr(
+        job_view,
+        "fetch_images_by_ids",
+        lambda *_args: {33: _Image(33, "reserved_a_01.tif")},
+    )
+    monkeypatch.setattr(job_view, "parse_filename", lambda *_args: ["a", "01"])
+    monkeypatch.setattr(job_view, "delete_existing_annotations", lambda *_args: None)
+    monkeypatch.setattr(
+        job_view,
+        "_save_annotation_link",
+        lambda update, link: saved_links.append(link) or True,
+    )
+    monkeypatch.setattr(job_view, "MapAnnotationI", _FakeMapAnnotation)
+    monkeypatch.setattr(job_view, "ImageAnnotationLinkI", _FakeLink)
+    monkeypatch.setattr(job_view, "NamedValue", lambda key, value: (key, value))
+    monkeypatch.setattr(job_view, "rstring", lambda value: value)
+    monkeypatch.setattr(job_view, "compute_plugin_hash", lambda mapping: "hash")
+    monkeypatch.setattr(job_view.time, "time", lambda: 32.0)
+
+    response = inspect.unwrap(job_view.job_progress)(request, "d" * 32, conn=conn)
+
+    assert "saved 2+1 variables" in _json_payload(response)["last_log"]
+    assert saved_links[0].child.values == [
+        (f"{job_view.HASH_KEY}_2", "a"),
+        (f"{job_view.HASH_KEY}_3", "01"),
         (job_view.HASH_KEY, "hash"),
     ]
 
