@@ -27,6 +27,10 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.script_path = cls.repo_root / "installation" / "installation_script.sh"
         cls.script_text = cls.script_path.read_text(encoding="utf-8")
+        cls.validation_helpers = cls._extract_script_block(
+            "is_non_negative_integer() {",
+            "crowdsec_install_auto_restart_marker_path() {",
+        )
         cls.prompt_functions = cls._extract_script_block(
             "is_valid_linux_path() {",
             "resolve_flatten_final_image_choice() {",
@@ -59,7 +63,9 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _build_harness(*blocks: str, body: str) -> str:
-        joined_blocks = "\n".join(blocks)
+        joined_blocks = "\n".join(
+            [InstallationInteractivePromptRegressionTests.validation_helpers, *blocks]
+        )
         return textwrap.dedent(
             f"""\
             #!/bin/bash

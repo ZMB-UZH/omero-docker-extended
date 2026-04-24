@@ -30,6 +30,13 @@ usage() {
     echo "Usage: $0 --tmp-dir <DIR> [--max-age-seconds <SECONDS>]" >&2
 }
 
+is_non_negative_integer() {
+    case "${1:-}" in
+        ""|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --tmp-dir)
@@ -75,7 +82,7 @@ if [[ ${#TMP_DIR} -lt 10 && "${TMP_DIR}" != *omero* ]]; then
     exit 3
 fi
 
-if ! [[ "${MAX_AGE_SECONDS}" =~ ^[0-9]+$ ]]; then
+if ! is_non_negative_integer "${MAX_AGE_SECONDS}"; then
     echo "ERROR: --max-age-seconds must be an integer." >&2
     exit 2
 fi
@@ -94,7 +101,7 @@ read_retention_expiry() {
     fi
     IFS= read -r expiry < "${marker}" || true
     expiry="${expiry//[$' \t\r\n']/}"
-    if [[ ! "${expiry}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${expiry}"; then
         return 1
     fi
     printf '%s\n' "${expiry}"

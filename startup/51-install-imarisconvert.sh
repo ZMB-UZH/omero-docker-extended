@@ -25,6 +25,19 @@ is_valid_bioformats_jar() {
     [[ -s "${jar_path}" ]] && [[ "$(stat -c%s "${jar_path}")" -ge "${BIOFORMATS_MIN_SIZE_BYTES}" ]]
 }
 
+is_lowercase_sha256_hex() {
+    local value="${1:-}"
+
+    if [ "${#value}" -ne 64 ]; then
+        return 1
+    fi
+
+    case "${value}" in
+        *[!0-9a-f]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
 sha256_matches_manifest() {
     local source_path="$1"
     local sha_path="$2"
@@ -36,7 +49,7 @@ sha256_matches_manifest() {
     fi
 
     expected_sha="$(awk '{print tolower($1)}' "${sha_path}")"
-    if [[ ! "${expected_sha}" =~ ^[0-9a-f]{64}$ ]]; then
+    if ! is_lowercase_sha256_hex "${expected_sha}"; then
         return 1
     fi
 

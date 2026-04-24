@@ -17,6 +17,20 @@ project_id_min="${ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN:-200000}"
 minimum_quota_gb="${ADMIN_TOOLS_MIN_QUOTA_GB:-0.10}"
 lock_path="${ADMIN_TOOLS_QUOTA_LOCK_PATH:-/tmp/omero-ext4-quota.lock}"
 
+is_non_negative_integer() {
+  case "${1:-}" in
+    ""|*[!0-9]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+is_safe_group_name() {
+  case "${1:-}" in
+    ""|*[!A-Za-z0-9._-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --group) group_name="${2:-}"; shift 2 ;;
@@ -32,12 +46,17 @@ if [[ -z "$group_name" || -z "$group_path" || -z "$quota_gb" || -z "$mount_point
   exit 2
 fi
 
-if [[ ! "$group_name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+if ! is_safe_group_name "$group_name"; then
   echo "Unsafe group name '$group_name'. Allowed pattern: [A-Za-z0-9._-]+" >&2
   exit 1
 fi
 
-for cmd in chattr setquota awk flock grep sed; do
+if ! is_non_negative_integer "$project_id_min"; then
+  echo "ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN must be a non-negative integer. Got: $project_id_min" >&2
+  exit 1
+fi
+
+for cmd in chattr setquota awk flock; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "Required command '$cmd' is not available" >&2
     exit 1
@@ -75,20 +94,42 @@ flock -x 9
 
 touch "$projects_file" "$projid_file"
 
-project_id=""
-if grep -Eq "^${group_name}:" "$projid_file"; then
-  project_id="$(sed -n "s/^${group_name}:\([0-9][0-9]*\)$/\1/p" "$projid_file" | tail -n1)"
-fi
-escaped_group_path_regex="$(printf '%s' "$resolved_group_path" | sed "s/[.[\\*^\$()+?{}|]/\\\\&/g")"
-escaped_group_path_sed="$(printf '%s' "$resolved_group_path" | sed 's/[\\/&]/\\\\&/g')"
+project_id="$(
+  awk -F: -v group="$group_name" '
+    $1 == group && $2 ~ /^[0-9]+$/ { value=$2 }
+    END { print value }
+  ' "$projid_file"
+)"
 
-if [[ -z "$project_id" ]] && grep -Eq "^[0-9]+:${escaped_group_path_regex}$" "$projects_file"; then
-  project_id="$(sed -n "s/^\([0-9][0-9]*\):${escaped_group_path_sed}$/\1/p" "$projects_file" | tail -n1)"
+if [ -z "$project_id" ]; then
+  project_id="$(
+    awk -v target_path="$resolved_group_path" '
+      {
+        separator_index = index($0, ":")
+        project_id = (separator_index > 1) ? substr($0, 1, separator_index - 1) : ""
+        current_path = (separator_index > 0) ? substr($0, separator_index + 1) : ""
+        if (project_id ~ /^[0-9]+$/ && current_path == target_path) {
+          value = project_id
+        }
+      }
+      END { print value }
+    ' "$projects_file"
+  )"
 fi
 
 if [[ -z "$project_id" ]]; then
   max_existing="$(
-    awk -F: 'NF>=2 && $1 ~ /^[0-9]+$/ { if ($1 > max) max=$1 } END { print max+0 }' "$projects_file" "$projid_file"
+    awk -F: '
+      NF >= 2 && $1 ~ /^[0-9]+$/ { candidate = $1 }
+      NF >= 2 && $1 !~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ { candidate = $2 }
+      candidate != "" {
+        if (candidate > max) {
+          max = candidate
+        }
+        candidate = ""
+      }
+      END { print max + 0 }
+    ' "$projects_file" "$projid_file"
   )"
   if [[ "$max_existing" -lt "$project_id_min" ]]; then
     project_id="$project_id_min"
@@ -97,7 +138,17 @@ if [[ -z "$project_id" ]]; then
   fi
 fi
 
-if ! grep -Eq "^${project_id}:${escaped_group_path_regex}$" "$projects_file"; then
+if ! awk -v expected_id="$project_id" -v expected_path="$resolved_group_path" '
+    {
+      separator_index = index($0, ":")
+      project_id = (separator_index > 1) ? substr($0, 1, separator_index - 1) : ""
+      current_path = (separator_index > 0) ? substr($0, separator_index + 1) : ""
+      if (project_id == expected_id && current_path == expected_path) {
+        found = 1
+      }
+    }
+    END { exit found ? 0 : 1 }
+  ' "$projects_file"; then
   awk -F: -v path="$resolved_group_path" '
     {
       separator_index = index($0, ":")
@@ -111,8 +162,12 @@ if ! grep -Eq "^${project_id}:${escaped_group_path_regex}$" "$projects_file"; th
   printf '%s:%s\n' "$project_id" "$resolved_group_path" >> "$projects_file"
 fi
 
-if ! grep -Eq "^${group_name}:${project_id}$" "$projid_file"; then
-  sed -i "/^${group_name}:[0-9][0-9]*$/d" "$projid_file"
+if ! awk -F: -v group="$group_name" -v expected_id="$project_id" '
+    $1 == group && $2 == expected_id { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$projid_file"; then
+  awk -F: -v group="$group_name" '$1 != group { print $0 }' "$projid_file" > "${projid_file}.tmp"
+  mv "${projid_file}.tmp" "$projid_file"
   printf '%s:%s\n' "$group_name" "$project_id" >> "$projid_file"
 fi
 
