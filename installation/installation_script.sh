@@ -17,6 +17,8 @@ BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_R
 INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE:-0}" # set to 1 to run fully non-interactive (no /dev/tty prompts)
 COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-3}"
 COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-5}"
+OMERO_WEB_HOST_PORT="${OMERO_WEB_HOST_PORT:-}"
+CONFIG_omero_web_application__server_port="${CONFIG_omero_web_application__server_port:-}"
 OMERO_SERVER_UID="${OMERO_SERVER_UID:-}"
 OMERO_SERVER_GID="${OMERO_SERVER_GID:-}"
 OMERO_WEB_UID="${OMERO_WEB_UID:-}"
@@ -384,10 +386,12 @@ validate_tcp_port_config() {
     local variable_name="${1:?BUG: validate_tcp_port_config requires variable name}"
     local variable_value="${2:-}"
 
-    if ! [[ "${variable_value}" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: ${variable_name} must be an integer TCP port. Got: ${variable_value:-<empty>}" >&2
-        return 1
-    fi
+    case "${variable_value}" in
+        ""|*[!0-9]*)
+            echo "ERROR: ${variable_name} must be an integer TCP port. Got: ${variable_value:-<empty>}" >&2
+            return 1
+            ;;
+    esac
 
     if [ "${variable_value}" -lt 1 ] || [ "${variable_value}" -gt 65535 ]; then
         echo "ERROR: ${variable_name} must be between 1 and 65535. Got: ${variable_value}" >&2

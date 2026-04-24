@@ -71,7 +71,8 @@ def get_optional_env(
     allow_empty: bool = False,
 ) -> str | None:
     """Return an environment variable or None when unset."""
-    del env_file
+    if not env_file:
+        raise ValueError("env_file must identify the configuration contract.")
     value = os.environ.get(name)
     if value is None:
         return None

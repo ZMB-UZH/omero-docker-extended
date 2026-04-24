@@ -172,6 +172,11 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("OMERO_CLI_ZARR_VERSION=${OMERO_CLI_ZARR_VERSION}", script_text)
         self.assertIn("OME_ZARR_PY_VERSION=${OME_ZARR_PY_VERSION}", script_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=${BIOFORMATS2RAW_VERSION}", script_text)
+        self.assertIn('OMERO_WEB_HOST_PORT="${OMERO_WEB_HOST_PORT:-}"', script_text)
+        self.assertIn(
+            'CONFIG_omero_web_application__server_port="${CONFIG_omero_web_application__server_port:-}"',
+            script_text,
+        )
         self.assertIn("OMERO_WEB_HOST_PORT=${OMERO_WEB_HOST_PORT}", script_text)
         self.assertIn(
             "CONFIG_omero_web_application__server_port=${CONFIG_omero_web_application__server_port}",
@@ -201,6 +206,8 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             'validate_tcp_port_config "CONFIG_omero_web_application__server_port"',
             script_text,
         )
+        self.assertIn('case "${variable_value}" in', script_text)
+        self.assertNotIn('[[ "${variable_value}" =~ ^[0-9]+$ ]]', script_text)
 
 
 if __name__ == "__main__":

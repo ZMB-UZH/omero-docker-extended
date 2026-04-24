@@ -55,6 +55,8 @@ def test_env_utils_cover_reference_messages_and_optional_required_values(
         )
         == "   "
     )
+    with pytest.raises(ValueError, match="configuration contract"):
+        env_utils.get_optional_env("OPTIONAL_SETTING", env_file="")
 
     monkeypatch.delenv("REQUIRED_SETTING", raising=False)
     with pytest.raises(RuntimeError, match="Missing required environment variable"):

@@ -466,9 +466,10 @@ def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks() -> Non
         types.SimpleNamespace(getConfigValue=lambda key: ""),
         types.SimpleNamespace(getConfigValue=lambda key: "ManagedRepository"),
     ):
+        active_config_service = config_service
         current_conn = types.SimpleNamespace(
             c=types.SimpleNamespace(
-                sf=types.SimpleNamespace(getConfigService=lambda: config_service)
+                sf=types.SimpleNamespace(getConfigService=lambda: active_config_service)
             )
         )
         assert module.get_original_file_path(current_conn, image) is None
