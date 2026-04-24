@@ -23,8 +23,28 @@ def test_parse_deepsource_repository_accepts_only_github_repository_ids() -> Non
         "gh/ZMB-UZH/omero-docker-extended"
     ) == ("GITHUB", "ZMB-UZH", "omero-docker-extended")
 
-    with pytest.raises(SystemExit, match="gh/OWNER/REPO"):
-        scanner_inventory.parse_deepsource_repository("ZMB-UZH/omero-docker-extended")
+    for repository in (
+        "ZMB-UZH/omero-docker-extended",
+        "gh/ZMB-UZH/../repo",
+        "gh/ZMB-UZH/repo?x=1",
+    ):
+        with pytest.raises(SystemExit, match="gh/OWNER/REPO"):
+            scanner_inventory.parse_deepsource_repository(repository)
+
+
+def test_parse_github_repository_rejects_unsafe_api_path_components() -> None:
+    assert scanner_inventory.parse_github_repository(
+        "ZMB-UZH/omero-docker-extended"
+    ) == ("ZMB-UZH", "omero-docker-extended")
+
+    for repository in (
+        "ZMB-UZH",
+        "ZMB-UZH/../repo",
+        "ZMB-UZH/repo?x=1",
+        "ZMB-UZH/repo\nnext",
+    ):
+        with pytest.raises(SystemExit, match="OWNER/REPO"):
+            scanner_inventory.parse_github_repository(repository)
 
 
 def test_fetch_json_keeps_authorization_out_of_curl_argv(monkeypatch) -> None:

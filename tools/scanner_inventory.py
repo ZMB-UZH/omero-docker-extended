@@ -7,6 +7,7 @@ import argparse
 import getpass
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,7 @@ from typing import Any
 
 
 USER_AGENT = "omero-docker-extended-scanner-inventory"
+REPOSITORY_COMPONENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 def curl_config_quote(value: str) -> str:
@@ -125,6 +127,29 @@ def read_token(env_name: str, label: str) -> str:
     return token
 
 
+def validate_repository_component(value: str) -> bool:
+    """Return True when a repository path component is safe for API paths."""
+    return (
+        bool(value)
+        and value not in {".", ".."}
+        and REPOSITORY_COMPONENT_RE.fullmatch(value) is not None
+    )
+
+
+def parse_github_repository(repository: str) -> tuple[str, str]:
+    """Return a validated GitHub OWNER/REPO tuple."""
+    parts = repository.split("/")
+    if (
+        len(parts) != 2
+        or not validate_repository_component(parts[0])
+        or not validate_repository_component(parts[1])
+    ):
+        raise SystemExit(
+            "GitHub repository must use OWNER/REPO format with safe path components"
+        )
+    return parts[0], parts[1]
+
+
 def fetch_json(
     url: str,
     *,
@@ -168,7 +193,10 @@ def fetch_json(
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
         raise SystemExit(f"{service} request failed: {detail}")
-    return json.loads(result.stdout)
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        raise SystemExit(f"{service} request returned invalid JSON") from None
 
 
 def latest_github_api_version() -> str:
@@ -188,6 +216,8 @@ def latest_github_api_version() -> str:
 
 
 def summarize_github_code_scanning(args: argparse.Namespace) -> dict[str, Any]:
+    owner, repo = parse_github_repository(args.repository)
+    repository = f"{owner}/{repo}"
     token = read_token(args.token_env, "GitHub")
     api_version = latest_github_api_version()
     headers = {
@@ -208,7 +238,7 @@ def summarize_github_code_scanning(args: argparse.Namespace) -> dict[str, Any]:
             }
         )
         batch = fetch_json(
-            f"https://api.github.com/repos/{args.repository}/code-scanning/alerts?{query}",
+            f"https://api.github.com/repos/{repository}/code-scanning/alerts?{query}",
             headers=headers,
             service="GitHub code-scanning",
         )
@@ -225,7 +255,7 @@ def summarize_github_code_scanning(args: argparse.Namespace) -> dict[str, Any]:
         str((alert.get("tool") or {}).get("name") or "unknown") for alert in alerts
     )
     return {
-        "repository": args.repository,
+        "repository": repository,
         "branch": args.branch,
         "state": args.state,
         "api_version": api_version,
@@ -236,8 +266,15 @@ def summarize_github_code_scanning(args: argparse.Namespace) -> dict[str, Any]:
 
 def parse_deepsource_repository(repository: str) -> tuple[str, str, str]:
     parts = repository.split("/")
-    if len(parts) != 3 or parts[0] != "gh" or not parts[1] or not parts[2]:
-        raise SystemExit("DeepSource repository must use gh/OWNER/REPO format")
+    if (
+        len(parts) != 3
+        or parts[0] != "gh"
+        or not validate_repository_component(parts[1])
+        or not validate_repository_component(parts[2])
+    ):
+        raise SystemExit(
+            "DeepSource repository must use gh/OWNER/REPO format with safe path components"
+        )
     return "GITHUB", parts[1], parts[2]
 
 
