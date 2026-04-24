@@ -124,9 +124,10 @@ Last live API refresh: **2026-04-24**.
 
 GitHub reported **4 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
-DeepSource reported **18 grouped issues**, **313 issue occurrences**, and
-**0 dependency vulnerability occurrences** for commit
-`59f334dc1eb0b175da46fc23bb9432c2974b41d1` during the same refresh.
+DeepSource reported **11 grouped issues**, **291 issue occurrences**, and
+**0 dependency vulnerability occurrences** for the default branch during the
+same refresh. The API `latest_commit_oid` matched the pushed revision when this
+snapshot was taken.
 
 These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
 
@@ -167,13 +168,12 @@ defaults both images to their application users and keeps the required root
 bootstrap as an explicit Compose handoff for mounted runtime-path
 reconciliation.
 
-At the 2026-04-24 refresh after commit
-`59f334dc1eb0b175da46fc23bb9432c2974b41d1`, the 4 remaining alerts were
-repository-level Scorecard findings with no file location: `MaintainedID`,
-`CodeReviewID`, `CIIBestPracticesID`, and `BranchProtectionID`. The previous
-CodeQL file-level findings in `XTOmeroConnector.py` and the transient Semgrep
-transport findings from the first remediation push were no longer open after
-the successful default-branch security workflow.
+At the 2026-04-24 refresh after the successful default-branch security
+workflow, the 4 remaining alerts were repository-level Scorecard findings with
+no file location: `MaintainedID`, `CodeReviewID`, `CIIBestPracticesID`, and
+`BranchProtectionID`. The previous CodeQL file-level findings in
+`XTOmeroConnector.py` and the transient Semgrep transport findings from the
+first remediation push were no longer open.
 
 ### Historical snapshots below
 
