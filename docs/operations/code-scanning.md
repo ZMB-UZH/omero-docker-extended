@@ -174,10 +174,10 @@ Last live API refresh: **2026-04-24**.
 
 GitHub reported **4 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
-DeepSource reported **5 grouped issues**, **185 issue occurrences**, and
+DeepSource reported **4 grouped issues**, **137 issue occurrences**, and
 **0 dependency vulnerability occurrences** for the default branch during the
 same refresh. The API `latest_commit_oid` was
-`addf9791cb953552727c5acd27b22807f6260c94`, the pushed default-branch
+`748e4964d2b1bde124b3b00982c392247b725c8e`, the pushed default-branch
 revision when this snapshot was taken.
 
 These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
