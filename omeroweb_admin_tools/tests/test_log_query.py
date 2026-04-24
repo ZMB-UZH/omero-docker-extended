@@ -8,6 +8,7 @@ from omeroweb_admin_tools.services.log_query import (
     LogEntry,
     _build_internal_file_query,
     _build_internal_files_query,
+    _build_docker_query,
     _cap_entries_per_container,
     _estimate_label_cache_size,
     _estimate_log_entries_size,
@@ -28,6 +29,15 @@ def test_build_loki_query_requires_containers() -> None:
 def test_build_loki_query_builds_regex() -> None:
     query = build_loki_query(["omeroserver", "omeroweb"])
     assert query == '{compose_service=~"^(omeroserver|omeroweb)$"}'
+
+
+def test_log_query_rejects_unsafe_service_and_filename_values() -> None:
+    with pytest.raises(ValueError):
+        build_loki_query(['omeroserver"} |~ ".+'])
+    with pytest.raises(ValueError):
+        _build_docker_query('redis"} |~ ".+')
+    with pytest.raises(ValueError):
+        _build_internal_file_query("omeroserver_internal", "../Blitz-0.log")
 
 
 def test_strip_message_prefix_removes_timestamp_and_level() -> None:
