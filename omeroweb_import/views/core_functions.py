@@ -1585,11 +1585,31 @@ def _units_length_by_normalized_name():
 
     return {
         _normalize_units_length_name(unit.name): unit
-        for unit in sorted(
-            UnitsLength._enumerators.values(),
-            key=lambda enum_value: getattr(enum_value, "name", str(enum_value)),
-        )
+        for unit in sorted(_iter_units_length_values(UnitsLength), key=_unit_sort_key)
     }
+
+
+def _unit_sort_key(enum_value):
+    return getattr(enum_value, "name", str(enum_value))
+
+
+def _iter_units_length_values(units_length_class):
+    values_by_name = {}
+    for attribute_name in dir(units_length_class):
+        if attribute_name.startswith("_"):
+            continue
+        value = getattr(units_length_class, attribute_name, None)
+        unit_name = getattr(value, "name", None)
+        if unit_name:
+            values_by_name[str(unit_name)] = value
+
+    if values_by_name:
+        return list(values_by_name.values())
+
+    enumerators = getattr(units_length_class, "_enumerators", {})
+    if isinstance(enumerators, dict):
+        return list(enumerators.values())
+    return []
 
 
 @lru_cache(maxsize=1)

@@ -41,6 +41,8 @@ from omeroweb.webgateway.marshal import channelMarshal
 from .utils import generate_coordinate_transformations
 from .utils import collect_store_metadata_documents
 from .utils import get_store_backed_axis_names
+from .utils import get_image_connection
+from .utils import require_image_rendering_engine
 from .utils import get_safe_image_tile_size
 from .utils import load_store_backed_image_node
 from .utils import sanitize_download_basename
@@ -182,9 +184,11 @@ def image_zattrs(request, iid, version, conn=None, **kwargs):
 
     levels = [0]
     if image.requiresPixelsPyramid():
-        image.getZoomLevelScaling()
-        res_descs = image._re.getResolutionDescriptions()
+        rendering_engine = require_image_rendering_engine(image, initialize=True)
+        res_descs = rendering_engine.getResolutionDescriptions()
         levels = list(range(len(res_descs)))
+    else:
+        rendering_engine = require_image_rendering_engine(image, initialize=True)
 
     datasets = [{"path": str(level)} for level in levels]
 
@@ -206,8 +210,8 @@ def image_zattrs(request, iid, version, conn=None, **kwargs):
             "channels": [channelMarshal(x) for x in image.getChannels()],
             "id": image.id,
             "rdefs": {
-                "defaultT": image._re.getDefaultT(),
-                "defaultZ": image._re.getDefaultZ(),
+                "defaultT": rendering_engine.getDefaultT(),
+                "defaultZ": rendering_engine.getDefaultZ(),
                 "model": image.isGreyscaleRenderingModel() and "greyscale" or "color",
             },
         },
@@ -238,8 +242,8 @@ def get_image_shapes(image):
     base_shape = [size for size in shape if size > 1]
     shapes = [base_shape]
     if image.requiresPixelsPyramid():
-        image.getZoomLevelScaling()
-        levels = image._re.getResolutionDescriptions()
+        rendering_engine = require_image_rendering_engine(image, initialize=True)
+        levels = rendering_engine.getResolutionDescriptions()
         for level in levels[1:]:
             shape = base_shape[:]
             shape[-1] = level.sizeX
@@ -316,7 +320,10 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
     tile = [tile_x, tile_y, tile_w, tile_h]
 
     if image.requiresPixelsPyramid() and level > 0:
-        pix = image._conn.c.sf.createRawPixelsStore()
+        image_connection = get_image_connection(image)
+        if image_connection is None:
+            raise Http404("image connection unavailable")
+        pix = image_connection.c.sf.createRawPixelsStore()
         pid = image.getPixelsId()
         try:
             max_level = len(image.getZoomLevelScaling()) - 1

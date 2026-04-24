@@ -132,6 +132,44 @@ def resolve_image_backing_zarr_store(image):
     return resolve_local_zarr_store(lsid)
 
 
+def get_image_connection(image):
+    """Return the OMERO gateway connection attached to an ImageWrapper."""
+    return getattr(image, "_conn", None)
+
+
+def prepare_image_rendering_engine(image, *, required=True):
+    """Prepare an ImageWrapper rendering engine through an OMERO adapter."""
+    prepare = getattr(image, "prepareRenderingEngine", None)
+    if not callable(prepare):
+        prepare = getattr(image, "_prepareRenderingEngine", None)
+    if not callable(prepare):
+        if required:
+            raise AttributeError("OMERO image rendering engine preparer is unavailable")
+        return False
+    return prepare()
+
+
+def get_image_rendering_engine(image, *, initialize=False):
+    """Return the OMERO rendering engine attached to an ImageWrapper, if present."""
+    if initialize:
+        zoom_level_scaling = getattr(image, "getZoomLevelScaling", None)
+        if callable(zoom_level_scaling):
+            zoom_level_scaling()
+    rendering_engine = getattr(image, "_re", None)
+    if rendering_engine is None and initialize:
+        prepare_image_rendering_engine(image, required=False)
+        rendering_engine = getattr(image, "_re", None)
+    return rendering_engine
+
+
+def require_image_rendering_engine(image, *, initialize=False):
+    """Return the ImageWrapper rendering engine or fail with a clear adapter error."""
+    rendering_engine = get_image_rendering_engine(image, initialize=initialize)
+    if rendering_engine is None:
+        raise AttributeError("OMERO image rendering engine is unavailable")
+    return rendering_engine
+
+
 def _resolve_image_external_lsid(image):
     details = image.getDetails()
     external_info = getattr(details, "externalInfo", None)
@@ -139,7 +177,7 @@ def _resolve_image_external_lsid(image):
     if lsid:
         return lsid
 
-    conn = getattr(image, "_conn", None)
+    conn = get_image_connection(image)
     if conn is None:
         return None
 
@@ -1010,7 +1048,7 @@ def _configured_max_tile_length(conn, default=1024):
 
 
 def _fallback_tile_size(image, conn=None):
-    max_tile_length = _configured_max_tile_length(conn or getattr(image, "_conn", None))
+    max_tile_length = _configured_max_tile_length(conn or get_image_connection(image))
     return (
         max(1, min(int(image.getSizeX()), max_tile_length)),
         max(1, min(int(image.getSizeY()), max_tile_length)),
@@ -1018,12 +1056,10 @@ def _fallback_tile_size(image, conn=None):
 
 
 def get_safe_image_tile_size(image, conn=None):
-    rendering_engine = getattr(image, "_re", None)
+    rendering_engine = get_image_rendering_engine(image)
     if rendering_engine is None:
-        prepare = getattr(image, "_prepareRenderingEngine", None)
-        if callable(prepare):
-            prepare()
-        rendering_engine = getattr(image, "_re", None)
+        prepare_image_rendering_engine(image, required=False)
+        rendering_engine = get_image_rendering_engine(image)
     if rendering_engine is None:
         return _fallback_tile_size(image, conn=conn)
 

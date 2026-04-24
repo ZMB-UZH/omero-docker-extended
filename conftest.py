@@ -209,11 +209,15 @@ sys.modules["omero.gateway"].ColorHolder = _ColorHolder
 sys.modules["omero.rtypes"].rstring = lambda value: value
 sys.modules["omero.rtypes"].rint = lambda value: value
 _webgateway_views = sys.modules["omeroweb.webgateway.views"]
-_webgateway_views._get_prepared_image = getattr(
-    _webgateway_views, "_get_prepared_image", lambda *args, **kwargs: None
+setattr(
+    _webgateway_views,
+    "_get_prepared_image",
+    getattr(_webgateway_views, "_get_prepared_image", lambda *args, **kwargs: None),
 )
-_webgateway_views._render_thumbnail = getattr(
-    _webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None
+setattr(
+    _webgateway_views,
+    "_render_thumbnail",
+    getattr(_webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None),
 )
 _webgateway_views.get_thumbnails_json = getattr(
     _webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {}

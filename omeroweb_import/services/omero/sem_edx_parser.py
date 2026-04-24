@@ -897,6 +897,15 @@ def create_spectrum_table(
             )
             return None
 
+        dataset_object = getattr(dataset, "_obj", None)
+        if dataset_object is None:
+            logger.warning(
+                "Dataset wrapper for image %d has no OMERO object; skipping SEM EDX table creation for %s",
+                image_id,
+                txt_filename,
+            )
+            return None
+
         from omero.grid import DoubleColumn, LongColumn
         from omero.model import OriginalFileI
         from omero.rtypes import rstring
@@ -957,7 +966,7 @@ def create_spectrum_table(
             ann = conn.getUpdateService().saveAndReturnObject(ann)
 
             link = DatasetAnnotationLinkI()
-            link.setParent(dataset._obj)
+            link.setParent(dataset_object)
             link.setChild(ann)
             conn.getUpdateService().saveObject(link)
 
