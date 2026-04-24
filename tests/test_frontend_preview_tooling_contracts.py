@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 import sys
@@ -97,6 +98,62 @@ def test_frontend_preview_safe_extract_rejects_path_traversal():
 
         with pytest.raises(RuntimeError, match="unsafe archive member"):
             tooling.safe_extract_tar_xz(archive_path, destination)
+
+
+def test_frontend_preview_node_release_path_allows_only_expected_artifacts():
+    tooling = load_frontend_preview_tooling()
+
+    assert (
+        tooling.node_release_path("24.15.0", "node-v24.15.0-linux-x64.tar.xz")
+        == "/dist/v24.15.0/node-v24.15.0-linux-x64.tar.xz"
+    )
+    assert (
+        tooling.node_release_path("24.15.0", "SHASUMS256.txt")
+        == "/dist/v24.15.0/SHASUMS256.txt"
+    )
+    with pytest.raises(RuntimeError, match="Invalid Node.js version"):
+        tooling.node_release_path("../24.15.0", "SHASUMS256.txt")
+    with pytest.raises(RuntimeError, match="Unexpected Node.js release artifact"):
+        tooling.node_release_path("24.15.0", "node-v25.0.0-linux-x64.tar.xz")
+    with pytest.raises(RuntimeError, match="Unexpected Node.js release artifact"):
+        tooling.node_release_path("24.15.0", "node-v24.15.0-linux-../x64.tar.xz")
+
+
+def test_frontend_preview_safe_extract_does_not_call_extractall(monkeypatch):
+    tooling = load_frontend_preview_tooling()
+
+    def _fail_extractall(*args, **kwargs):
+        raise AssertionError("extractall must not be used")
+
+    monkeypatch.setattr(tarfile.TarFile, "extractall", _fail_extractall)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        archive_path = tmp_path / "safe.tar.xz"
+        destination = tmp_path / "destination"
+        destination.mkdir()
+        payload = b"#!/bin/sh\nexit 0\n"
+        with tarfile.open(archive_path, "w:xz") as archive:
+            directory = tarfile.TarInfo("node/bin")
+            directory.type = tarfile.DIRTYPE
+            directory.mode = 0o755
+            archive.addfile(directory)
+
+            script = tarfile.TarInfo("node/bin/tool")
+            script.size = len(payload)
+            script.mode = 0o755
+            archive.addfile(script, io.BytesIO(payload))
+
+            link = tarfile.TarInfo("node/bin/tool-link")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "tool"
+            archive.addfile(link)
+
+        tooling.safe_extract_tar_xz(archive_path, destination)
+
+        extracted = destination / "node" / "bin" / "tool"
+        assert extracted.read_bytes() == payload
+        assert extracted.stat().st_mode & 0o111
+        assert (destination / "node" / "bin" / "tool-link").is_symlink()
 
 
 def test_frontend_preview_skill_points_to_wrapper_and_drops_stale_temp_setup():
