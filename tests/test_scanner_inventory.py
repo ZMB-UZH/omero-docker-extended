@@ -87,7 +87,9 @@ def test_fetch_json_keeps_authorization_out_of_curl_argv(monkeypatch) -> None:
     ]
     assert "token" not in calls[0]["command"]
     assert "Authorization: Bearer token" in calls[0]["kwargs"]["input"]
-    assert calls[0]["kwargs"]["timeout"] == 30
+    assert calls[0]["kwargs"]["timeout"] == (
+        scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS
+    )
 
 
 def test_summarize_github_code_scanning_paginates_and_counts_tools(
@@ -95,7 +97,11 @@ def test_summarize_github_code_scanning_paginates_and_counts_tools(
 ) -> None:
     monkeypatch.setattr(scanner_inventory, "read_token", lambda *_args: "token")
     monkeypatch.setattr(
-        scanner_inventory, "latest_github_api_version", lambda: "2026-03-10"
+        scanner_inventory,
+        "latest_github_api_version",
+        lambda timeout_seconds=scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS: (
+            "2026-03-10"
+        ),
     )
     requested_urls: list[str] = []
     requested_headers: list[dict[str, str]] = []
@@ -107,6 +113,7 @@ def test_summarize_github_code_scanning_paginates_and_counts_tools(
         data: bytes | None = None,
         method: str | None = None,
         service: str,
+        timeout_seconds: int = scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
     ) -> Any:
         requested_urls.append(url)
         requested_headers.append(headers)
@@ -126,6 +133,7 @@ def test_summarize_github_code_scanning_paginates_and_counts_tools(
             branch="main",
             state="open",
             token_env="GITHUB_TOKEN",
+            request_timeout=scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
     )
 
@@ -154,6 +162,7 @@ def test_summarize_deepsource_reports_group_and_occurrence_counts(monkeypatch) -
         data: bytes | None = None,
         method: str | None = None,
         service: str,
+        timeout_seconds: int = scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
     ) -> Any:
         requested_payloads.append(data)
         assert url == "https://api.deepsource.com/graphql/"
@@ -178,6 +187,7 @@ def test_summarize_deepsource_reports_group_and_occurrence_counts(monkeypatch) -
         argparse.Namespace(
             repository="gh/ZMB-UZH/omero-docker-extended",
             token_env="DEEPSOURCE_TOKEN",
+            request_timeout=scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
     )
 
@@ -207,6 +217,7 @@ def test_summarize_deepsource_issues_reports_grouped_issue_details(
         data: bytes | None = None,
         method: str | None = None,
         service: str,
+        timeout_seconds: int = scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
     ) -> Any:
         requested_payloads.append(data)
         assert url == "https://api.deepsource.com/graphql/"
@@ -267,6 +278,7 @@ def test_summarize_deepsource_issues_reports_grouped_issue_details(
             issue_limit=100,
             occurrence_limit=5,
             token_env="DEEPSOURCE_TOKEN",
+            request_timeout=scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
     )
 
