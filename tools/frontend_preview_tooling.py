@@ -244,7 +244,6 @@ def download_node_release_file(version: str, filename: str, destination: Path) -
                 "--show-error",
                 "--proto",
                 "=https",
-                "--tlsv1.2",
                 "--user-agent",
                 "omero-agent-frontend-preview-tooling",
                 "--output",
