@@ -119,6 +119,32 @@ def test_frontend_preview_node_release_path_allows_only_expected_artifacts():
         tooling.node_release_path("24.15.0", "node-v24.15.0-linux-../x64.tar.xz")
 
 
+def test_frontend_preview_download_uses_validated_curl_args(monkeypatch, tmp_path):
+    tooling = load_frontend_preview_tooling()
+    calls = []
+
+    def _fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout="", stderr=""
+        )
+
+    monkeypatch.setattr(
+        tooling, "ensure_command_available", lambda command: "/bin/curl"
+    )
+    monkeypatch.setattr(tooling.subprocess, "run", _fake_run)
+
+    tooling.download_node_release_file("24.15.0", "SHASUMS256.txt", tmp_path / "out")
+
+    args, kwargs = calls[0]
+    assert args[:2] == ["/bin/curl", "--fail"]
+    assert "--location" in args
+    assert args[args.index("--proto") + 1] == "=https"
+    assert args[-1] == "https://nodejs.org/dist/v24.15.0/SHASUMS256.txt"
+    assert kwargs["timeout"] == 60
+    assert kwargs["check"] is False
+
+
 def test_frontend_preview_safe_extract_does_not_call_extractall(monkeypatch):
     tooling = load_frontend_preview_tooling()
 
