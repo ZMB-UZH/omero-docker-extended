@@ -131,6 +131,7 @@ def unknown_job():
 
 
 def invalid_regex_pattern(detail=None):
+    del detail
     return "Invalid regex pattern."
 
 

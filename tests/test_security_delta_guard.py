@@ -58,7 +58,7 @@ def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
 
 
 def test_github_api_get_json_uses_curl_config_stdin(monkeypatch) -> None:
-    security_delta_guard._GITHUB_API_VERSION_CACHE = None
+    security_delta_guard._GITHUB_API_VERSION_CACHE.value = None
     calls = []
 
     monkeypatch.setattr(

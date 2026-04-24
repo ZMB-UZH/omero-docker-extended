@@ -405,6 +405,18 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             + "\n".join(offenders),
         )
 
+    def test_quickstart_missing_dot_env_exports_full_compose_contract(self) -> None:
+        quickstart = self.read_text("docs/deployment/quickstart.md")
+        for env_file in (
+            "installation_paths.env",
+            "env/omero_secrets.env",
+            "env/omeroserver.env",
+            "env/omeroweb.env",
+            "env/omero-celery.env",
+            "env/grafana.env",
+        ):
+            self.assertIn(f"source {env_file}", quickstart)
+
     def test_service_topology_docs_match_compose_terms(self) -> None:
         self.assertEqual(21, len(self.services))
         self.assertIn("redis-sysctl-init", self.services)

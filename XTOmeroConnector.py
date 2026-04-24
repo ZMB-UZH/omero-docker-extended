@@ -35,6 +35,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import http.cookiejar
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, List, Optional
 
@@ -64,7 +65,6 @@ IMARIS_OPEN_VERIFY_TIMEOUT = 10.0
 IMARIS_OPEN_VERIFY_INTERVAL = 0.25
 OMERO_CONNECTOR_WINDOW_WIDTH = 1000
 OMERO_CONNECTOR_WINDOW_HEIGHT = 700
-_XT_LOG_PATH: Optional[str] = None
 _XT_DLL_DIR_HANDLES: List[Any] = []
 _WINDOWS_RESERVED_FILENAMES = {
     "CON",
@@ -90,6 +90,14 @@ _WINDOWS_RESERVED_FILENAMES = {
     "LPT8",
     "LPT9",
 }
+
+
+@dataclass
+class _XtRuntimeState:
+    log_path: Optional[str] = None
+
+
+_XT_RUNTIME_STATE = _XtRuntimeState()
 
 
 _NATIVE_BRIDGE_OPEN_HELPER = r"""
@@ -770,8 +778,8 @@ def _xt_debug(message):
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {_sanitize_xt_log_message(message)}"
     print(line)
-    if _XT_LOG_PATH:
-        _xt_write_log(_XT_LOG_PATH, line)
+    if _XT_RUNTIME_STATE.log_path:
+        _xt_write_log(_XT_RUNTIME_STATE.log_path, line)
 
 
 def _parse_port(port_value):
@@ -5352,8 +5360,7 @@ def XTOmeroConnector(aImarisId):
     """Called by Imaris."""
     _set_process_window_title("OMERO Connector")
     log_path = _xt_log_path()
-    global _XT_LOG_PATH
-    _XT_LOG_PATH = log_path
+    _XT_RUNTIME_STATE.log_path = log_path
     try:
         _xt_write_log(log_path, "=== XTOmeroConnector starting ===")
         _xt_write_log(log_path, f"Python: {sys.version}")

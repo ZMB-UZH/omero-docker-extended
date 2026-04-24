@@ -3,6 +3,7 @@ File and path utility functions for import plugin.
 """
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 from omero_plugin_common.logging_utils import sanitize_log_value
@@ -10,8 +11,14 @@ from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 logger = logging.getLogger(__name__)
 
-_UPLOAD_ROOT_CACHE: Path | None = None
-_JOBS_ROOT_CACHE: Path | None = None
+
+@dataclass
+class _DirectoryCache:
+    upload_root: Path | None = None
+    jobs_root: Path | None = None
+
+
+_DIRECTORY_CACHE = _DirectoryCache()
 
 
 def resolve_upload_root() -> Path:
@@ -40,49 +47,56 @@ def ensure_parent_dir(path: Path) -> bool:
         return False
 
 
-def initialize_directories():
+def initialize_directories() -> None:
     """Initialize upload and jobs directories."""
-    global _UPLOAD_ROOT_CACHE, _JOBS_ROOT_CACHE
-
-    if _UPLOAD_ROOT_CACHE is not None and _JOBS_ROOT_CACHE is not None:
+    if (
+        _DIRECTORY_CACHE.upload_root is not None
+        and _DIRECTORY_CACHE.jobs_root is not None
+    ):
         return
 
-    upload_root = resolve_upload_root()
-    jobs_root = resolve_jobs_root()
-
-    for root in (upload_root, jobs_root):
+    roots = (resolve_upload_root(), resolve_jobs_root())
+    initialized_roots: list[Path] = []
+    for root in roots:
         try:
             if not root.exists():
                 root.mkdir(parents=True, exist_ok=True, mode=0o755)
-            else:
+            elif root.is_dir():
                 root.chmod(0o755)
+            else:
+                logger.error(
+                    "Upload directory path exists but is not a directory: %s",
+                    sanitize_log_value(root),
+                )
+                return
+            initialized_roots.append(root)
         except Exception as e:
             logger.error(
                 "Failed to initialize directory %s: %s",
                 sanitize_log_value(root),
                 sanitize_log_value(e),
             )
+            return
 
-    _UPLOAD_ROOT_CACHE = upload_root
-    _JOBS_ROOT_CACHE = jobs_root
+    _DIRECTORY_CACHE.upload_root, _DIRECTORY_CACHE.jobs_root = initialized_roots
 
 
 def get_upload_root() -> Path:
     """Get cached upload root, initializing if needed."""
-    if _UPLOAD_ROOT_CACHE is None:
+    if _DIRECTORY_CACHE.upload_root is None:
         initialize_directories()
-    if _UPLOAD_ROOT_CACHE is None:
+    if _DIRECTORY_CACHE.upload_root is None:
         raise RuntimeError("Upload root was not initialized.")
-    return _UPLOAD_ROOT_CACHE
+    return _DIRECTORY_CACHE.upload_root
 
 
 def get_jobs_root() -> Path:
     """Get cached jobs root, initializing if needed."""
-    if _JOBS_ROOT_CACHE is None:
+    if _DIRECTORY_CACHE.jobs_root is None:
         initialize_directories()
-    if _JOBS_ROOT_CACHE is None:
+    if _DIRECTORY_CACHE.jobs_root is None:
         raise RuntimeError("Jobs root was not initialized.")
-    return _JOBS_ROOT_CACHE
+    return _DIRECTORY_CACHE.jobs_root
 
 
 def ensure_dir(path: Path) -> bool:
@@ -90,7 +104,7 @@ def ensure_dir(path: Path) -> bool:
     try:
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
-        return True
+        return path.is_dir()
     except Exception as e:
         logger.error(
             "Failed to create directory %s: %s",
@@ -105,8 +119,14 @@ def ensure_dir_with_permissions(path: Path, mode: int) -> bool:
     try:
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True, mode=mode)
-        else:
+        elif path.is_dir():
             path.chmod(mode)
+        else:
+            logger.error(
+                "Managed directory path exists but is not a directory: %s",
+                sanitize_log_value(path),
+            )
+            return False
         return True
     except Exception as e:
         logger.error(

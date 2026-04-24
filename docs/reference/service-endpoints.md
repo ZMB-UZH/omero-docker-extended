@@ -165,6 +165,6 @@ Base: `/omeroweb_imaris_connector/`
 
 For OMERO.web proxying from your external reverse proxy (e.g., nginx managed via Ansible):
 
-- Forward to: `http://omeroweb:4090` on the Docker network.
+- Forward to `omeroweb` on `CONFIG_omero_web_application__server_port`.
 - Scheme: `http` (TLS terminates at the proxy).
-- Direct local access remains available at `http://localhost:4090`.
+- Direct local access uses `OMERO_WEB_HOST_PORT`.
