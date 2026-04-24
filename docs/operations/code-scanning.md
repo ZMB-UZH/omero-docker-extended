@@ -174,7 +174,7 @@ Last live API refresh: **2026-04-24**.
 
 GitHub reported **4 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
-DeepSource reported **11 grouped issues**, **291 issue occurrences**, and
+DeepSource reported **8 grouped issues**, **216 issue occurrences**, and
 **0 dependency vulnerability occurrences** for the default branch during the
 same refresh. The API `latest_commit_oid` matched the pushed revision when this
 snapshot was taken.
