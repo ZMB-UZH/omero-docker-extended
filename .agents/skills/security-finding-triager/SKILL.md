@@ -21,14 +21,15 @@ Use this skill for any security-relevant code change or scanner-driven remediati
 3. Do not look for `.deepsource.toml`; DeepSource repo-file configuration is retired for this repository, and GitHub PATs do not authenticate to DeepSource.
    If DeepSource auth is unavailable, report DeepSource counts as unavailable, not zero.
    If it is available, distinguish grouped issues from issue occurrences and check `latest_commit_oid`; if it does not match the commit under review, report the count as a lagged snapshot.
-4. If GitHub or DeepSource auth is required and no valid credential is available, ask for it immediately and pause; do not retry auth failures. Continue only independent local tasks.
-5. Classify the boundary: path/file, logging, SQL, outbound HTTP, CSRF/response, subprocess, Docker/workflow, or secrets.
-6. Name the helper or boundary you will harden.
-7. Name the regression tests you will run before editing code.
-8. Fix the root cause, not the scanner string.
-9. Re-run targeted tests, Ruff, and docs validation.
-10. After every push, confirm GitHub workflows are green.
-11. When DeepSource auth is available, compare grouped issues and issue occurrences for the pushed commit against the pre-push baseline; if either count increased, fetch grouped issue details and repeat the fix/test/push verification loop.
+4. For GitHub HTTPS Git operations, use a PAT or credential manager, never an account password; prefer `tools/git_push_with_pat.py` for prompt-based pushes.
+5. If GitHub or DeepSource auth is required and no valid credential is available, ask for it immediately and pause; do not retry auth failures. Continue only independent local tasks.
+6. Classify the boundary: path/file, logging, SQL, outbound HTTP, CSRF/response, subprocess, Docker/workflow, or secrets.
+7. Name the helper or boundary you will harden.
+8. Name the regression tests you will run before editing code.
+9. Fix the root cause, not the scanner string.
+10. Re-run targeted tests, Ruff, and docs validation.
+11. After every push, confirm GitHub workflows are green.
+12. When DeepSource auth is available, compare grouped issues and issue occurrences for the pushed commit against the pre-push baseline; if either count increased, fetch grouped issue details and repeat the fix/test/push verification loop.
 
 ## Rules
 

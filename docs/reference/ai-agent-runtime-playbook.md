@@ -9,6 +9,9 @@ Deep operational guidance for AI agents. `AGENTS.md` should route here instead o
 - Do not `chown` bind-mounted data directories such as `postgresdb/`, `omero_data/`, or `omero_temp/` to a non-service user.
 - Worktrees and related clones can exist under `/tmp/omero-*`. Search them before declaring a commit missing.
 - Before rebasing, refresh tracking refs explicitly with `git fetch origin <branch>:refs/remotes/origin/<branch> --force`.
+- GitHub HTTPS Git operations require a PAT or credential manager, never an account password. A `Password for 'https://github.com'` prompt is asking for a token-class credential.
+- For prompt-based pushes, use `python3 tools/git_push_with_pat.py origin main`; it prompts without echo, disables stale GitHub credential helpers for that command, and keeps the token out of argv, remotes, logs, and long-lived git config.
+- If a stale `gh auth git-credential` helper intercepts GitHub HTTPS auth, inspect `git config --show-origin --get-all credential.https://github.com.helper` and `gh auth status`, then use the prompt helper above or repair the credential manager before retrying.
 
 ## Cross-repository sync safety
 
