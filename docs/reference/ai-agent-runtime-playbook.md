@@ -22,9 +22,15 @@ Deep operational guidance for AI agents. `AGENTS.md` should route here instead o
 
 ## Docker compose and env files
 
-- In this repo, explicit `docker compose build`, `up`, and `config` commands normally require `--env-file installation_paths.env`, `--env-file env/omero_secrets.env`, and `--env-file env/omeroserver.env`.
-- `docker compose --env-file installation_paths.env ps` fails when the required secrets/server env files are absent. Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as the fallback probe.
+- In this repo, agent/script `docker compose build`, `up`, `config`, `ps`, `logs`, and `exec` commands should use the full explicit env-file list from the installed root:
+  `--env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env`.
+  If `.env` is missing, omit only `--env-file .env`.
+- `COMPOSE_ENV_FILES` is comma-separated when exported in the shell, but do not rely on a value inside `.env` to activate additional env files for first-attempt agent commands. Use explicit `--env-file` arguments.
+- `docker compose --env-file installation_paths.env ps` fails when the required secrets/server/web/Celery/Grafana env files are absent. Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as the fallback probe.
 - Before any `docker compose` command, run `python3 tools/env_safety_guard.py check` and `python3 tools/env_safety_guard.py compose-guard`. The compose guard refuses non-canonical worktrees and `.env` files whose `COMPOSE_PROJECT_NAME` does not match the installation path, preventing a second Compose project from attaching to the same live bind mounts.
+- AI agents may inspect non-example deployment env files and run `python3 tools/env_safety_guard.py template-check`, but must not create, edit, overwrite, delete, normalize, or print values from non-example env files unless the user explicitly grants a one-off exception for that exact operation.
+- Functional OMERO, installation, Compose, startup, plugin-behavior, and env-contract changes require fresh-code live verification before commit/push when live testing makes sense or the user explicitly requests it: reconcile the canonical live root to the exact checkout under test, then rebuild, inject, or restart affected services so containers cannot run stale code.
+- A stale or dirty canonical live root is cleanup work, not a reason to skip live verification. Inspect `git status` before rebuilds; preserve unrelated dirty work non-destructively with a commit, stash, patch, or user-approved cleanup; then update the live root, rerun env guards, rebuild/restart, and test. Stop only when safe reconciliation is impossible.
 - Treat a Docker socket permission error as a sandbox or privilege problem, not proof that Docker is down.
 - Treat plugin tmp helpers as non-mutating path resolvers unless the immediate runtime sink truly needs the directory to exist. Import-time or root-context helper calls that eagerly create `OMERO_TMP_PATH` plugin subtrees can leave `omeroweb-*` paths owned by the wrong UID and break later non-root request handling.
 
@@ -126,6 +132,11 @@ Avoid deeply nested heredocs inside `docker exec ... bash -lc "..."`.
   deterministic disposable fixtures in that test or verification flow and
   isolate them by unique names. User-specified live objects are allowed only as
   diagnostic probes, not as reusable regression fixtures.
+- Live verification must exercise the changed mechanisms end to end after the
+  relevant containers reflect the current checkout. For plugin work, include
+  importability, served views/static assets, changed service paths, logs for the
+  affected service, and a fresh rebuild/injection/restart path whenever runtime
+  behavior can depend on container state.
 - If host `pytest` cannot import Django or optional test dependencies such as
   `numpy`, `numcodecs`, or `matplotlib`, run
   `python3 tools/run_local_workflow_gates.py --setup-only` and use

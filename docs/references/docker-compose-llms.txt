@@ -50,11 +50,11 @@ Volume mount patterns:
 
 Compose commands (explicit manual form: include installation paths, secrets,
 and OMERO.server env files when not relying on repo-root `.env`):
-- docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env build
-- docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env up -d
-- docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env ps
-- docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env down
-- docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs -f <service>
+- docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env build
+- docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env up -d
+- docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env ps
+- docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env down
+- docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs -f <service>
 
 Network: single "omero" bridge network. All services communicate by service name/alias.
 Only 7 services expose host ports: omeroserver (4064), omeroweb (4090), portainer (9000/9443), prometheus (9090), grafana (3000), loki (3100), crowdsec (8080).

@@ -164,10 +164,14 @@ class BuildVersionEnvContractTests(unittest.TestCase):
     ) -> None:
         script_text = self.read_text("installation/installation_script.sh")
         self.assertIn(
-            "COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env:env/omeroserver.env",
+            "COMPOSE_ENV_FILES=installation_paths.env,env/omero_secrets.env,env/omeroserver.env,env/omeroweb.env,env/omero-celery.env,env/grafana.env",
             script_text,
         )
         self.assertIn("COMPOSE_PROJECT_NAME=${OMERO_COMPOSE_PROJECT_NAME}", script_text)
+        self.assertIn("OMERO_DROPBOX_VERSION=${OMERO_DROPBOX_VERSION}", script_text)
+        self.assertIn("OMERO_CLI_ZARR_VERSION=${OMERO_CLI_ZARR_VERSION}", script_text)
+        self.assertIn("OME_ZARR_PY_VERSION=${OME_ZARR_PY_VERSION}", script_text)
+        self.assertIn("BIOFORMATS2RAW_VERSION=${BIOFORMATS2RAW_VERSION}", script_text)
         self.assertIn(
             "Missing required configuration variable OMERO_CLI_ZARR_VERSION in ${server_env_source}",
             script_text,

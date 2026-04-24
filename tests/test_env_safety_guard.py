@@ -105,6 +105,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
         )
 
     def test_compose_guard_passes_for_canonical_installation_root(self):
+        compose_env_files = ",".join(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES)
         repo = self._make_repo(
             [
                 "installation_paths.env",
@@ -129,12 +130,20 @@ class EnvSafetyGuardTests(unittest.TestCase):
             encoding="utf-8",
         )
         (repo / ".env").write_text(
-            f"COMPOSE_PROJECT_NAME={compose_project_name}\n", encoding="utf-8"
+            "\n".join(
+                [
+                    f"COMPOSE_ENV_FILES={compose_env_files}",
+                    f"COMPOSE_PROJECT_NAME={compose_project_name}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
         )
 
         self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 0)
 
     def test_compose_guard_fails_for_non_canonical_worktree(self):
+        compose_env_files = ",".join(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES)
         repo = self._make_repo(
             [
                 "installation_paths.env",
@@ -163,7 +172,14 @@ class EnvSafetyGuardTests(unittest.TestCase):
             encoding="utf-8",
         )
         (repo / ".env").write_text(
-            f"COMPOSE_PROJECT_NAME={compose_project_name}\n", encoding="utf-8"
+            "\n".join(
+                [
+                    f"COMPOSE_ENV_FILES={compose_env_files}",
+                    f"COMPOSE_PROJECT_NAME={compose_project_name}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
         )
 
         self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 1)
@@ -196,6 +212,107 @@ class EnvSafetyGuardTests(unittest.TestCase):
         )
 
         self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 1)
+
+    def test_dot_env_check_fails_when_dot_env_uses_stale_env_file_list(self):
+        repo = self._make_repo(
+            [
+                "installation_paths.env",
+                "env/omeroweb.env",
+                "env/omeroserver.env",
+                "env/omero_secrets.env",
+                "env/grafana.env",
+                "env/omero-celery.env",
+            ],
+            {
+                "installation_paths.env": "",
+                "env/omeroweb.env": "CONFIG=value",
+                "env/omeroserver.env": "CONFIG=value",
+                "env/omero_secrets.env": "SECRET=value",
+                "env/grafana.env": "GF=value",
+                "env/omero-celery.env": "QUEUE=value",
+            },
+        )
+        compose_project_name = env_safety_guard.derive_compose_project_name(repo)
+        (repo / "installation_paths.env").write_text(
+            f"OMERO_INSTALLATION_PATH={repo}\n",
+            encoding="utf-8",
+        )
+        (repo / ".env").write_text(
+            "\n".join(
+                [
+                    "COMPOSE_ENV_FILES=installation_paths.env,env/omero_secrets.env,env/omeroserver.env,env/omeroweb.env,env/omero-celery.env,env/grafana.env",
+                    f"COMPOSE_PROJECT_NAME={compose_project_name}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 0)
+        self.assertEqual(env_safety_guard.cmd_dot_env_check(repo), 1)
+
+    def test_dot_env_check_passes_for_complete_generated_dot_env_shape(self):
+        compose_env_files = ",".join(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES)
+        repo = self._make_repo(
+            [
+                "installation_paths.env",
+                "env/omeroweb.env",
+                "env/omeroserver.env",
+                "env/omero_secrets.env",
+                "env/grafana.env",
+                "env/omero-celery.env",
+            ],
+            {
+                "installation_paths.env": "",
+                "env/omeroweb.env": "CONFIG=value",
+                "env/omeroserver.env": "CONFIG=value",
+                "env/omero_secrets.env": "SECRET=value",
+                "env/grafana.env": "GF=value",
+                "env/omero-celery.env": "QUEUE=value",
+            },
+        )
+        compose_project_name = env_safety_guard.derive_compose_project_name(repo)
+        (repo / "installation_paths.env").write_text(
+            f"OMERO_INSTALLATION_PATH={repo}\n",
+            encoding="utf-8",
+        )
+        dot_env_lines = [
+            f"COMPOSE_ENV_FILES={compose_env_files}",
+            f"COMPOSE_PROJECT_NAME={compose_project_name}",
+        ]
+        dot_env_lines.extend(
+            f"{key}=value"
+            for key in env_safety_guard.DOT_ENV_REQUIRED_KEYS
+            if key != "COMPOSE_PROJECT_NAME"
+        )
+        (repo / ".env").write_text("\n".join(dot_env_lines) + "\n", encoding="utf-8")
+
+        self.assertEqual(env_safety_guard.cmd_dot_env_check(repo), 0)
+
+    def test_template_check_passes_when_env_keys_match_examples(self):
+        files: dict[str, str] = {}
+        manifest_lines = []
+        for example_rel, actual_rel in env_safety_guard.ENV_TEMPLATE_PAIRS:
+            files[example_rel] = "# comment\nA=example\n\nB=example\n"
+            files[actual_rel] = "# different comments are allowed\nA=live\nB=live\n"
+            manifest_lines.append(actual_rel)
+        repo = self._make_repo(manifest_lines, files)
+
+        self.assertEqual(env_safety_guard.cmd_template_check(repo), 0)
+
+    def test_template_check_reports_missing_extra_and_reordered_keys_only(self):
+        files: dict[str, str] = {}
+        manifest_lines = []
+        for example_rel, actual_rel in env_safety_guard.ENV_TEMPLATE_PAIRS:
+            files[example_rel] = "A=example\nB=example\n"
+            files[actual_rel] = "B=live\nA=live\n"
+            manifest_lines.append(actual_rel)
+        first_example, first_actual = env_safety_guard.ENV_TEMPLATE_PAIRS[0]
+        files[first_example] = "A=example\nB=example\n"
+        files[first_actual] = "A=secret-live\nC=secret-live\n"
+        repo = self._make_repo(manifest_lines, files)
+
+        self.assertEqual(env_safety_guard.cmd_template_check(repo), 1)
 
     # ---- backup command ----
 
@@ -340,6 +457,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
         entry_names = {e.relative_to(repo_root).as_posix() for e in entries}
 
         expected = {
+            ".env",
             "installation_paths.env",
             "env/omeroweb.env",
             "env/omeroserver.env",
@@ -362,6 +480,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
 
         # Simple check: each path or its parent glob must appear in gitignore
         for entry_line in [
+            ".env",
             "installation_paths.env",
             "env/*",
         ]:
@@ -394,6 +513,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
             return result.returncode == 0
 
         for path in (
+            ".env",
             "installation_paths.env",
             "env/omeroweb.env",
             "env/omero_secrets.env",
