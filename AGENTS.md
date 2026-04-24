@@ -67,7 +67,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Native adapter files exist for GitHub Copilot, Cursor, Claude, and Gemini. Treat `AGENTS.md` as the universal baseline; adapters are additive only.
 - Never create, edit, overwrite, or delete `env/omero_secrets.env` as an AI agent.
 - Run `python3 tools/env_safety_guard.py check` and `python3 tools/env_safety_guard.py compose-guard` before any `docker compose` operation to verify deployment env files are intact and the checkout matches the live installation root.
-- Validate Markdown with `npx --yes markdownlint-cli2@0.17.2` after editing `.md` files; the unpinned latest release requires newer Node than some supported hosts provide.
+- Validate Markdown with `npx --yes markdownlint-cli2@0.17.2` after editing `.md` files; for frontend preview, run `export PATH="$(python3 tools/frontend_preview_tooling.py install-node --print-bin):$PATH"` before bootstrap if Node.js mismatches. Add workflow `setup-node` only when a workflow actually runs host Node.js; Super-Linter uses its pinned container.
 - Before committing or pushing code, tests, workflow, or documentation changes, run `python3 tools/run_local_workflow_gates.py --setup --profile ci`. Use `--profile all` when the Docker-backed Super-Linter gate must be mirrored locally.
 - `tools/run_local_workflow_gates.py` installs Python-backed workflow tools from the same hash-pinned requirement files used by GitHub Actions and runs the locally reproducible workflow gates. GitHub-only services such as SARIF upload, OIDC publishing, CodeQL hosted analysis, repository Scorecard checks, and Codecov upload still require the post-push workflow result.
 

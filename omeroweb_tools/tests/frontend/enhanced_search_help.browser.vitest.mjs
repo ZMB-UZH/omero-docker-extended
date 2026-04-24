@@ -1,5 +1,3 @@
-import { describe, expect, it } from 'vitest';
-
 const fetchText = async (url) => {
   const response = await fetch(url);
   expect(response.ok).toBe(true);

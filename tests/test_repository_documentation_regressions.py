@@ -308,7 +308,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("git ls-files '*.pyi'", workflow_text)
         self.assertIn("git ls-files '*.js' '*.jsx' '*.mjs'", workflow_text)
 
-    def test_markdownlint_command_is_node18_compatible(self) -> None:
+    def test_markdownlint_command_is_pinned(self) -> None:
         expected = "npx --yes markdownlint-cli2@0.17.2"
         self.assertIn(expected, self.read_text("AGENTS.md"))
         self.assertIn(
