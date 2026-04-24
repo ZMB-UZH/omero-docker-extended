@@ -28,8 +28,6 @@ _psycopg2_sql: Any | None = None
 
 
 def _load_psycopg2():
-    global _psycopg2_mod, _psycopg2_extras
-
     if _psycopg2_mod is not None and _psycopg2_extras is not None:
         return _psycopg2_mod, _psycopg2_extras
 
@@ -39,14 +37,10 @@ def _load_psycopg2():
     except ImportError:
         raise UserSettingsStoreError(errors.psycopg2_missing())
 
-    _psycopg2_mod = psycopg2
-    _psycopg2_extras = extras
-    return _psycopg2_mod, _psycopg2_extras
+    return psycopg2, extras
 
 
 def _load_psycopg2_sql():
-    global _psycopg2_sql
-
     if _psycopg2_sql is not None:
         return _psycopg2_sql
 
@@ -55,8 +49,7 @@ def _load_psycopg2_sql():
     except ImportError:
         raise UserSettingsStoreError(errors.psycopg2_missing())
 
-    _psycopg2_sql = sql
-    return _psycopg2_sql
+    return sql
 
 
 def _safe_query(template, *identifiers):

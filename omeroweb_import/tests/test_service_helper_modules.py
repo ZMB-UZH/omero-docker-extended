@@ -17,6 +17,8 @@ from django.test import RequestFactory
 from omeroweb_import import apps, urls
 from omeroweb_import.services import compat, ome_zarr_support as support
 from omeroweb_import.services.omero import dataset_service
+from omeroweb_import.services.omero import connection_service, import_service
+from omeroweb_import.services.import_management import workflow_service
 from omeroweb_import.utils import omero_helpers
 from omeroweb_import.views import core_functions, help_view, utils as view_utils
 from omero_plugin_common import omero_helpers as common_omero_helpers
@@ -273,6 +275,27 @@ def test_import_module_contracts_and_reexports(monkeypatch):
         omero_helpers._has_read_write_permissions
         is common_omero_helpers._has_read_write_permissions
     )
+
+
+def test_import_compatibility_facades_use_public_core_aliases():
+    alias_pairs = (
+        (import_service, "_append_job_error", "append_job_error"),
+        (import_service, "_get_import_timeout_seconds", "get_import_timeout_seconds"),
+        (connection_service, "_get_session_key", "get_session_key"),
+        (connection_service, "_open_service_connection", "open_service_connection"),
+        (
+            workflow_service,
+            "_build_sem_edx_associations_from_entries",
+            "build_sem_edx_associations_from_entries",
+        ),
+        (workflow_service, "_start_import_thread", "start_import_thread"),
+    )
+    for facade, legacy_name, public_core_name in alias_pairs:
+        assert getattr(facade, legacy_name) is getattr(core_functions, public_core_name)
+
+    for module in (import_service, connection_service, workflow_service):
+        module_text = Path(module.__file__).read_text(encoding="utf-8")
+        assert "_core._" not in module_text
 
 
 def test_dataset_service_wrapper_uses_canonical_core_functions(

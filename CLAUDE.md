@@ -22,9 +22,9 @@ Project-specific instructions for Claude Code sessions working on this repositor
 - Follow the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
 - If the user asks for lower-token replies, use opt-in `caveman`; it is only for internal AI communication, never repo docs/comments/docstrings/function descriptions/user-facing copy, and changes reply style only, not routing, tool choice, verification scope, or uncertainty handling. Drop it when safety, sequencing, or ambiguity matters.
-- Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, ports, or edit `env/omero_secrets.env`.
+- Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, ports, or edit/normalize/print values from non-example deployment env files such as `env/omero_secrets.env` without an explicit one-off user exception.
 - Do not search for, create, restore, or edit `.deepsource.toml`; use `docs/operations/code-scanning.md` and `tools/scanner_inventory.py` for scanner counts/logs. GitHub HTTPS Git needs a PAT/credential manager, never an account password; use `tools/git_push_with_pat.py`. If GitHub PAT/DeepSource API key is missing, ask immediately and pause for input; continue only unrelated local work.
-- After every push, confirm GitHub workflows are green and, when DeepSource auth is available, ensure grouped issues and issue occurrences did not increase for the pushed commit.
+- For functional OMERO/installation changes, live-test when appropriate or requested: reconcile dirty/stale live roots non-destructively, rebuild/inject/restart affected containers from the exact checkout, and test changed mechanisms before commit/push. After every push, confirm green GitHub workflows and no DeepSource count increase when auth is available.
 - Update `docs/` when behavior or operating assumptions change; less is more only when fewer lines prove full parity and all repo rules; fix proven bad instructions/tools only after the correct workflow is verified.
 
 ## Repository anchors
@@ -74,7 +74,7 @@ python3 tools/env_safety_guard.py backup   # create timestamped backup
 
 ## Runtime reminders
 
-- Docker compose commands normally need installation paths, secrets, and OMERO.server env files.
+- Agent/script Docker Compose commands use the full explicit env-file list from the runtime playbook.
 - Switch from host `localhost` probes to container-network probes after the first sandbox miss.
 - Never run OMERO CLI as `root` inside OMERO containers.
 - Use the runtime playbook for Git ownership issues, Docker socket permissions, joined-session rules, and log triage.

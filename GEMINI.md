@@ -13,9 +13,9 @@ Use [AGENTS.md](AGENTS.md) as the universal project contract, [docs/reference/ai
 - Honor the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` when a skill matches the task.
 - If the user asks for lower-token replies, use opt-in `caveman`; it is only for internal AI communication, never repo docs/comments/docstrings/function descriptions/user-facing copy, and changes reply style only, not routing, tool choice, verification scope, or uncertainty handling. Fall back to normal detail when safety or clarity is at risk.
-- Keep config environment-driven; never edit `env/omero_secrets.env`; never touch retired `.deepsource.toml`; use PAT/credential manager for GitHub HTTPS Git; ask immediately for missing credentials; after pushes verify green GitHub workflows and no DeepSource count increase; fewer lines only with proven parity/rules; fix proven bad instructions/tools only after correct workflow is known.
-- Prefer repo-native docs, tests, helpers, and `*_example*` files over new abstractions.
-- Load one domain doc and one nearest test module before broadening scope.
+- Keep config environment-driven; never edit/normalize/print values from non-example deployment env files such as `env/omero_secrets.env` without an explicit one-off user exception; never use retired `.deepsource.toml`; use PAT/credential manager for GitHub HTTPS Git; ask immediately for missing credentials.
+- Live-test functional OMERO/installation changes when appropriate or requested: reconcile dirty/stale live roots non-destructively, rebuild/inject/restart from the exact checkout before commit/push, then verify green GitHub workflows and no DeepSource count increase after pushes.
+- Prefer repo-native docs, tests, helpers, and `*_example*`; load one domain doc and one nearest test module before broadening scope; fewer lines only with proven parity/rules; fix proven bad instructions/tools only after correct workflow is known.
 
 ## Verification and security
 

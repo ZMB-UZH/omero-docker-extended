@@ -32,20 +32,20 @@ bash installation/installation_script.sh
 Or manually:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env build
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env up -d
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env build
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env up -d
 ```
 
 ### 3. Verify service health
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env ps
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env ps
 ```
 
 All services should show `healthy` or `running` status. Check logs if any service is unhealthy:
 
 ```bash
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env logs --since=10m <service-name>
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs --since=10m <service-name>
 ```
 
 ### 4. Verify plugin availability

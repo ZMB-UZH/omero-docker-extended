@@ -26,35 +26,36 @@ OMERO_IMPORT_SCAN_DEPTH = _core.OMERO_IMPORT_SCAN_DEPTH
 logger = _core.logger
 sanitize_log_value = _core.sanitize_log_value
 
-_append_job_error = _core._append_job_error
-_append_job_message = _core._append_job_message
-_append_txt_attachment_message = _core._append_txt_attachment_message
-_apply_upload_updates = _core._apply_upload_updates
-_attach_txt_to_image_service = _core._attach_txt_to_image_service
-_batch_find_images_by_name = _core._batch_find_images_by_name
-_build_omero_cli_command = _core._build_omero_cli_command
-_check_import_compatibility = _core._check_import_compatibility
-_classify_compatibility_output = _core._classify_compatibility_output
-_extract_import_candidates = _core._extract_import_candidates
-_find_image_by_name = _core._find_image_by_name
-_get_env_int = _core._get_env_int
-_get_import_lock = _core._get_import_lock
-_get_job_service_credentials = _core._get_job_service_credentials
-_get_jobs_root = _core._get_jobs_root
-_normalize_job_service_credentials = _core._normalize_job_service_credentials
-_get_upload_root = _core._get_upload_root
-_has_import_candidates_in_output = _core._has_import_candidates_in_output
-_open_session_connection = _core._open_session_connection
-_parse_candidate_path_line = _core._parse_candidate_path_line
-_parse_cli_id = _core._parse_cli_id
-_reconnect_session = _core._reconnect_session
-_run_compatibility_check = _core._run_compatibility_check
-_run_omero_cli = _core._run_omero_cli
-_safe_job_id = _core._safe_job_id
-_start_compatibility_check_thread = _core._start_compatibility_check_thread
-_update_job = _core._update_job
-_validate_session = _core._validate_session
-_verify_import = _core._verify_import
+_append_job_error = _core.append_job_error
+_append_job_message = _core.append_job_message
+_append_txt_attachment_message = _core.append_txt_attachment_message
+_apply_upload_updates = _core.apply_upload_updates
+_attach_txt_to_image_service = _core.attach_txt_to_image_service
+_batch_find_images_by_name = _core.batch_find_images_by_name
+_build_omero_cli_command = _core.build_omero_cli_command
+_check_import_compatibility = _core.check_import_compatibility
+_classify_compatibility_output = _core.classify_compatibility_output
+_extract_import_candidates = _core.extract_import_candidates
+_find_image_by_name = _core.find_image_by_name
+_get_env_int = _core.get_env_int
+_get_import_lock = _core.get_import_lock
+_get_import_timeout_seconds = _core.get_import_timeout_seconds
+_get_job_service_credentials = _core.get_job_service_credentials
+_get_jobs_root = _core.get_jobs_root
+_normalize_job_service_credentials = _core.normalize_job_service_credentials
+_get_upload_root = _core.get_upload_root
+_has_import_candidates_in_output = _core.has_import_candidates_in_output
+_open_session_connection = _core.open_session_connection
+_parse_candidate_path_line = _core.parse_candidate_path_line
+_parse_cli_id = _core.parse_cli_id
+_reconnect_session = _core.reconnect_session
+_run_compatibility_check = _core.run_compatibility_check
+_run_omero_cli = _core.run_omero_cli
+_safe_job_id = _core.safe_job_id
+_start_compatibility_check_thread = _core.start_compatibility_check_thread
+_update_job = _core.update_job
+_validate_session = _core.validate_session
+_verify_import = _core.verify_import
 
 
 def _import_file(
@@ -66,8 +67,8 @@ def _import_file(
     dataset_id=None,
     import_name=None,
     progress_job=None,
-):
-    """Run the canonical CLI import path with legacy monkeypatch points."""
+):  # pylint: disable=unused-argument
+    """Run the CLI import path while preserving legacy patch points."""
     cmd = _build_omero_cli_command(["import"], session_key, host, port)
     cmd.extend(["--depth", str(OMERO_IMPORT_SCAN_DEPTH)])
     if dataset_id:
@@ -75,7 +76,7 @@ def _import_file(
     if import_name:
         cmd.extend(["-n", str(import_name)])
     cmd.append(str(path))
-    result = _run_omero_cli(cmd, timeout=_core._get_import_timeout_seconds())
+    result = _run_omero_cli(cmd, timeout=_get_import_timeout_seconds())
     return result.returncode == 0, result.stdout, result.stderr
 
 

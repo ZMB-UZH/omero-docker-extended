@@ -57,7 +57,12 @@ python3 -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
 
 Boundary helper change: rerun the helper's own suite plus every directly affected package suite.
 
-### 5. Diff review
+### 5. Live runtime checks
+
+For functional OMERO, installation, Compose, startup, plugin-behavior, or env-contract changes, live-test whenever it makes sense or the user explicitly requests it. Reconcile the canonical live root to the exact checkout first, preserve unrelated dirty work non-destructively, run env guards, rebuild/inject/restart affected containers, and test the changed mechanisms end to end.
+Do not treat stale or dirty live state as a reason to skip required live verification.
+
+### 6. Diff review
 
 Check for:
 

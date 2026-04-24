@@ -15,6 +15,7 @@ Use this skill for live runtime debugging, service-health checks, and container-
 3. Switch to container-network probes when host `localhost` is not reachable from the agent environment.
 4. Resolve the active runtime virtualenv before Python import checks.
 5. Use the service account, not `root`, for OMERO CLI commands.
+6. For functional OMERO or plugin changes, reconcile the canonical live root, rebuild/inject/restart affected containers, and verify they reflect the exact checkout before testing.
 
 ## Hard rules
 
@@ -27,6 +28,7 @@ Use this skill for live runtime debugging, service-health checks, and container-
 - Do not trust host-shell `localhost` probes from a sandboxed agent shell.
 - Do not use plain container `python3` when the code is installed inside a virtualenv.
 - Prefer `docker exec -i ... <<'EOF'` patterns over heavily escaped nested heredocs.
+- Do not validate stale live state. A stale or dirty live root must be cleaned or reconciled non-destructively before live verification; stop only before destructive cleanup or when env guards cannot pass.
 
 ## Correct runtime patterns
 
@@ -44,6 +46,7 @@ docker exec <container> runuser -u <service-user> -- env HOME=<home> TMPDIR=<tmp
 
 - service health and container status
 - runtime venv path and importability
+- exact-checkout live code injection, rebuild, or restart for changed services
 - Loki-backed logs and diagnostics
 - OMERO CLI connectivity using the correct user and flag ordering
 - Celery worker/process startup behavior when relevant

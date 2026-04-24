@@ -142,6 +142,35 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn("proven bad instructions/tools", adapter_text)
                 self.assertIn("correct workflow", adapter_text)
 
+    def test_agent_instructions_require_fresh_code_live_runtime_verification(
+        self,
+    ) -> None:
+        runtime_text = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
+        verifier_text = self.read_text(".agents/skills/omero-runtime-verifier/SKILL.md")
+        verification_text = self.read_text(".agents/skills/verification-loop/SKILL.md")
+
+        self.assertIn("fresh-code live verification before commit/push", runtime_text)
+        self.assertIn("exact checkout under test", runtime_text)
+        self.assertIn("not a reason to skip live verification", runtime_text)
+        self.assertIn("preserve unrelated dirty work non-destructively", runtime_text)
+        self.assertIn("changed mechanisms end to end", runtime_text)
+        self.assertIn("rebuild/inject/restart affected containers", verifier_text)
+        self.assertIn("exact checkout before testing", verifier_text)
+        self.assertIn("Do not treat stale or dirty live state", verification_text)
+        for adapter_path in (
+            "AGENTS.md",
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md",
+            ".cursor/rules/00-omero-core.mdc",
+        ):
+            with self.subTest(adapter_path=adapter_path):
+                adapter_text = " ".join(self.read_text(adapter_path).split())
+                self.assertIn("exact", adapter_text)
+                self.assertIn("before commit/push", adapter_text)
+                self.assertIn("dirty", adapter_text)
+                self.assertIn("rebuild", adapter_text)
+
     def test_deepsource_repo_file_is_retired_from_agent_routing(self) -> None:
         expected_phrase = (
             "Do not search for, create, restore, or edit `.deepsource.toml`"

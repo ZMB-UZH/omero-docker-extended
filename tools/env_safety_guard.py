@@ -34,6 +34,53 @@ BACKUP_DIR_NAME = ".env_backups"
 INSTALLATION_PATHS_ENV_NAME = "installation_paths.env"
 DOT_ENV_NAME = ".env"
 PRIVATE_DIR_MODE = 0o700
+EXPECTED_COMPOSE_ENV_FILES = (
+    "installation_paths.env",
+    "env/omero_secrets.env",
+    "env/omeroserver.env",
+    "env/omeroweb.env",
+    "env/omero-celery.env",
+    "env/grafana.env",
+)
+ENV_TEMPLATE_PAIRS = (
+    ("installation_paths_example.env", "installation_paths.env"),
+    ("env/omeroweb_example.env", "env/omeroweb.env"),
+    ("env/omeroserver_example.env", "env/omeroserver.env"),
+    ("env/omero-celery_example.env", "env/omero-celery.env"),
+    ("env/grafana_example.env", "env/grafana.env"),
+    ("env/omero_secrets_example.env", "env/omero_secrets.env"),
+)
+DOT_ENV_REQUIRED_KEYS = (
+    "COMPOSE_PROJECT_NAME",
+    "OMERO_INSTALLATION_PATH",
+    "OMERO_DATABASE_PATH",
+    "OMERO_PLUGIN_DATABASE_PATH",
+    "OMERO_DATA_PATH",
+    "OMERO_TMP_PATH",
+    "OMERO_DATA_DIR",
+    "OMERO_USER_DATA_PATH",
+    "OMERO_IMPORT_PATH",
+    "OMERO_SERVER_VAR_PATH",
+    "OMERO_SERVER_LOGS_PATH",
+    "OMERO_WEB_VAR_PATH",
+    "OMERO_WEB_LOGS_PATH",
+    "OMERO_WEB_SUPERVISOR_LOGS_PATH",
+    "PORTAINER_DATA_PATH",
+    "PROMETHEUS_DATA_PATH",
+    "GRAFANA_DATA_PATH",
+    "LOKI_DATA_PATH",
+    "ALLOY_DATA_PATH",
+    "PG_MAINTENANCE_DATA_PATH",
+    "NODE_EXPORTER_TEXTFILE_PATH",
+    "CROWDSEC_DB_PATH",
+    "CROWDSEC_CONFIG_PATH",
+    "OMERO_DROPBOX_VERSION",
+    "OMERO_CLI_ZARR_VERSION",
+    "OME_ZARR_PY_VERSION",
+    "BIOFORMATS2RAW_VERSION",
+    "OMERO_DB_PASS",
+    "OMP_PLUGIN_DB_PASS",
+)
 
 # ---------------------------------------------------------------------------
 # Manifest helpers
@@ -120,6 +167,24 @@ def load_env_assignments(env_path: Path) -> dict[str, str]:
             continue
         assignments[key] = value.strip().strip("\"'")
     return assignments
+
+
+def parse_env_keys(env_path: Path) -> list[str]:
+    """Return env assignment keys in file order without exposing values."""
+    keys: list[str] = []
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key = line.split("=", 1)[0].strip().removeprefix("export ").strip()
+        if key:
+            keys.append(key)
+    return keys
+
+
+def parse_compose_env_files(raw_value: str) -> list[str]:
+    """Return normalized COMPOSE_ENV_FILES entries."""
+    return [part.strip() for part in raw_value.split(",") if part.strip()]
 
 
 def derive_compose_project_name(installation_path: str | Path) -> str:
@@ -239,6 +304,99 @@ def cmd_compose_guard(repo_root: Path) -> int:
         "OK: Compose guard passed for "
         f"{current_root} (project {expected_project_name})."
     )
+    return 0
+
+
+def cmd_dot_env_check(repo_root: Path) -> int:
+    """Verify generated .env shape without printing deployment values."""
+    dot_env_path = repo_root / DOT_ENV_NAME
+    if not dot_env_path.exists():
+        print(f"ERROR: Missing {DOT_ENV_NAME}.", file=sys.stderr)
+        return 1
+
+    dot_env = load_env_assignments(dot_env_path)
+    failures: list[str] = []
+    expected_project_name = expected_compose_project_name(repo_root)
+    configured_project_name = dot_env.get("COMPOSE_PROJECT_NAME", "").strip()
+    if configured_project_name != expected_project_name:
+        failures.append(
+            ".env COMPOSE_PROJECT_NAME does not match the canonical project name: "
+            f"{configured_project_name or '<missing>'} != {expected_project_name}"
+        )
+
+    if "COMPOSE_ENV_FILES" in dot_env:
+        configured_env_files = parse_compose_env_files(dot_env["COMPOSE_ENV_FILES"])
+        if tuple(configured_env_files) != EXPECTED_COMPOSE_ENV_FILES:
+            failures.append(
+                ".env COMPOSE_ENV_FILES must be comma-separated if present: "
+                f"{','.join(EXPECTED_COMPOSE_ENV_FILES)}"
+            )
+
+    missing_keys = [key for key in DOT_ENV_REQUIRED_KEYS if not dot_env.get(key)]
+    if missing_keys:
+        failures.append(
+            ".env is missing compose interpolation keys: " + ", ".join(missing_keys)
+        )
+
+    if failures:
+        print(
+            f"ERROR: {DOT_ENV_NAME} is not in the generated expected shape.",
+            file=sys.stderr,
+        )
+        for failure in failures:
+            print(f"  - {failure}", file=sys.stderr)
+        print("No values were printed.", file=sys.stderr)
+        return 1
+
+    print(f"OK: {DOT_ENV_NAME} contains the expected compose interpolation keys.")
+    return 0
+
+
+def cmd_template_check(repo_root: Path) -> int:
+    """Verify deployment env files keep the same assignment keys as templates."""
+    failures = 0
+    for example_rel, actual_rel in ENV_TEMPLATE_PAIRS:
+        example_path = repo_root / example_rel
+        actual_path = repo_root / actual_rel
+        if not example_path.is_file():
+            print(f"ERROR: Missing template: {example_rel}", file=sys.stderr)
+            failures += 1
+            continue
+        if not actual_path.is_file():
+            print(f"ERROR: Missing deployment env file: {actual_rel}", file=sys.stderr)
+            failures += 1
+            continue
+
+        example_keys = parse_env_keys(example_path)
+        actual_keys = parse_env_keys(actual_path)
+        if actual_keys == example_keys:
+            continue
+
+        example_set = set(example_keys)
+        actual_set = set(actual_keys)
+        missing = [key for key in example_keys if key not in actual_set]
+        extra = [key for key in actual_keys if key not in example_set]
+        print(
+            f"ERROR: {actual_rel} does not match {example_rel} assignment keys.",
+            file=sys.stderr,
+        )
+        if missing:
+            print(f"  Missing keys: {', '.join(missing)}", file=sys.stderr)
+        if extra:
+            print(f"  Extra keys: {', '.join(extra)}", file=sys.stderr)
+        if not missing and not extra:
+            print("  Key set matches, but order differs.", file=sys.stderr)
+        failures += 1
+
+    if failures:
+        print(
+            "No values were printed. Do not edit deployment env files unless the "
+            "user explicitly grants a one-off exception.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"OK: All {len(ENV_TEMPLATE_PAIRS)} deployment env files match templates.")
     return 0
 
 
@@ -381,6 +539,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Refuse compose operations from a non-canonical checkout or project name.",
     )
     sub.add_parser(
+        "dot-env-check",
+        help="Check generated .env shape without printing deployment values.",
+    )
+    sub.add_parser(
+        "template-check",
+        help="Compare deployment env assignment keys against tracked templates.",
+    )
+    sub.add_parser(
         "backup", help="Create a timestamped backup of all manifest entries."
     )
 
@@ -410,6 +576,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_check(repo_root)
     if args.command == "compose-guard":
         return cmd_compose_guard(repo_root)
+    if args.command == "dot-env-check":
+        return cmd_dot_env_check(repo_root)
+    if args.command == "template-check":
+        return cmd_template_check(repo_root)
     if args.command == "backup":
         return cmd_backup(repo_root)
     if args.command == "restore":

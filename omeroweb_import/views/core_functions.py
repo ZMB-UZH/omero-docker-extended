@@ -8654,6 +8654,91 @@ def _start_import_thread(job_id: str):
         )
 
 
+append_job_error = _append_job_error
+append_job_message = _append_job_message
+append_txt_attachment_message = _append_txt_attachment_message
+apply_upload_updates = _apply_upload_updates
+attach_txt_to_image_service = _attach_txt_to_image_service
+batch_find_images_by_name = _batch_find_images_by_name
+build_omero_cli_command = _build_omero_cli_command
+build_sem_edx_associations_from_entries = _build_sem_edx_associations_from_entries
+check_import_compatibility = _check_import_compatibility
+classify_compatibility_output = _classify_compatibility_output
+extract_import_candidates = _extract_import_candidates
+find_image_by_name = _find_image_by_name
+get_env_int = _get_env_int
+get_import_lock = _get_import_lock
+get_import_timeout_seconds = _get_import_timeout_seconds
+get_job_service_credentials = _get_job_service_credentials
+get_jobs_root = _get_jobs_root
+get_or_create_dataset = _get_or_create_dataset
+get_session_key = _get_session_key
+get_upload_root = _get_upload_root
+has_import_candidates_in_output = _has_import_candidates_in_output
+import_job_entry = _import_job_entry
+normalize_job_service_credentials = _normalize_job_service_credentials
+normalize_sem_edx_associations = _normalize_sem_edx_associations
+open_service_connection = _open_service_connection
+open_session_connection = _open_session_connection
+parse_candidate_path_line = _parse_candidate_path_line
+parse_cli_id = _parse_cli_id
+process_import_job = _process_import_job
+reconnect_session = _reconnect_session
+resolve_omero_host_port = _resolve_omero_host_port
+run_compatibility_check = _run_compatibility_check
+run_omero_cli = _run_omero_cli
+safe_job_id = _safe_job_id
+start_compatibility_check_thread = _start_compatibility_check_thread
+start_import_thread = _start_import_thread
+update_job = _update_job
+validate_session = _validate_session
+verify_import = _verify_import
+
+__all__.extend(
+    [
+        "append_job_error",
+        "append_job_message",
+        "append_txt_attachment_message",
+        "apply_upload_updates",
+        "attach_txt_to_image_service",
+        "batch_find_images_by_name",
+        "build_omero_cli_command",
+        "build_sem_edx_associations_from_entries",
+        "check_import_compatibility",
+        "classify_compatibility_output",
+        "extract_import_candidates",
+        "find_image_by_name",
+        "get_env_int",
+        "get_import_lock",
+        "get_import_timeout_seconds",
+        "get_job_service_credentials",
+        "get_jobs_root",
+        "get_or_create_dataset",
+        "get_session_key",
+        "get_upload_root",
+        "has_import_candidates_in_output",
+        "import_job_entry",
+        "normalize_job_service_credentials",
+        "normalize_sem_edx_associations",
+        "open_service_connection",
+        "open_session_connection",
+        "parse_candidate_path_line",
+        "parse_cli_id",
+        "process_import_job",
+        "reconnect_session",
+        "resolve_omero_host_port",
+        "run_compatibility_check",
+        "run_omero_cli",
+        "safe_job_id",
+        "start_compatibility_check_thread",
+        "start_import_thread",
+        "update_job",
+        "validate_session",
+        "verify_import",
+    ]
+)
+
+
 # --------------------------------------------------------------------------
 # VIEWS
 # --------------------------------------------------------------------------
