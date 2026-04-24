@@ -136,7 +136,8 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         normalized_runbook_text = " ".join(runbook_text.split())
         normalized_agents_text = " ".join(self.read_text("AGENTS.md").split())
         self.assertIn(
-            "do not search for, create, restore, or edit", normalized_agents_text
+            "do not search for, create, restore, or edit",
+            normalized_agents_text.lower(),
         )
         self.assertIn("`.deepsource.toml`", normalized_agents_text)
         for adapter_path in (
@@ -171,6 +172,8 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("tools/scanner_inventory.py deepsource-issues", runbook_text)
         self.assertIn("prompts without echo on a TTY", runbook_text)
         self.assertIn("Never paste PATs into command arguments", runbook_text)
+        self.assertIn("GitHub HTTPS Git operations require a PAT", runbook_text)
+        self.assertIn("tools/git_push_with_pat.py origin main", runbook_text)
         self.assertIn("newest supported version", runbook_text)
         self.assertIn("do not pin stale dates", runbook_text)
         self.assertNotIn('"X-GitHub-Api-Version": "2022-11-28"', runbook_text)
@@ -188,6 +191,11 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("issueOccurrences(first: 1)", scanner_tool_text)
         self.assertIn("dependencyVulnerabilityOccurrences(first: 1)", scanner_tool_text)
         self.assertIn("occurrences(first: $occurrenceLimit)", scanner_tool_text)
+        git_push_tool_text = self.read_text("tools/git_push_with_pat.py")
+        self.assertIn("getpass.getpass", git_push_tool_text)
+        self.assertIn("GIT_ASKPASS", git_push_tool_text)
+        self.assertIn("credential.https://github.com.helper=", git_push_tool_text)
+        self.assertIn("GIT_TERMINAL_PROMPT", git_push_tool_text)
         self.assertIn(
             expected_runbook_phrase,
             self.read_text(".agents/skills/security-finding-triager/SKILL.md"),
@@ -204,6 +212,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             self.assertIn(".deepsource.toml", adapter_text)
             self.assertIn("ask immediately", normalized_adapter_text)
             self.assertIn("credential", normalized_adapter_text)
+            self.assertIn("PAT", normalized_adapter_text)
             self.assertIn("GitHub workflows", normalized_adapter_text)
             self.assertIn("DeepSource", normalized_adapter_text)
             self.assertRegex(
@@ -216,6 +225,9 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             self.read_text(".github/copilot-instructions.md"),
         )
         self.assertIn("GitHub PAT", normalized_agents_text)
+        self.assertIn(
+            "GitHub HTTPS Git operations require a PAT", normalized_agents_text
+        )
         self.assertIn("DeepSource API key", normalized_agents_text)
         self.assertIn("needed and unavailable", normalized_agents_text)
         self.assertIn("ask immediately and pause", normalized_agents_text)
@@ -232,6 +244,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             self.read_text(".agents/skills/security-finding-triager/SKILL.md"),
         )
         self.assertIn(
+            "tools/git_push_with_pat.py",
+            self.read_text(".agents/skills/security-finding-triager/SKILL.md"),
+        )
+        self.assertIn(
             "against the pre-push baseline",
             self.read_text(".agents/skills/security-finding-triager/SKILL.md"),
         )
@@ -241,6 +257,37 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("confirm GitHub workflows are green", prevention_text)
         self.assertIn("compare grouped issues plus issue occurrences", prevention_text)
         self.assertIn("against the pre-push baseline", prevention_text)
+
+    def test_codeql_file_count_coverage_is_explained(self) -> None:
+        runbook_text = self.read_text("docs/operations/code-scanning.md")
+        normalized_runbook_text = " ".join(runbook_text.split())
+        workflow_text = self.read_text(".github/workflows/security-code-scanning.yml")
+
+        self.assertIn("CodeQL File-Count Coverage", runbook_text)
+        self.assertIn(
+            "310 tracked `.py` implementation files and 33 tracked `.pyi` type stubs",
+            normalized_runbook_text,
+        )
+        self.assertIn("`310/343` CodeQL count", normalized_runbook_text)
+        self.assertIn("8 tracked JS-family files", normalized_runbook_text)
+        self.assertIn(".agents/skills/frontend-preview/agents/", runbook_text)
+        self.assertIn("6 application/test JS files", runbook_text)
+        self.assertIn("Audit — explain CodeQL language candidates", workflow_text)
+        self.assertIn("git ls-files '*.py'", workflow_text)
+        self.assertIn("git ls-files '*.pyi'", workflow_text)
+        self.assertIn("git ls-files '*.js' '*.jsx' '*.mjs'", workflow_text)
+
+    def test_markdownlint_command_is_node18_compatible(self) -> None:
+        expected = "npx --yes markdownlint-cli2@0.17.2"
+        self.assertIn(expected, self.read_text("AGENTS.md"))
+        self.assertIn(
+            expected,
+            self.read_text("docs/reference/plugin-help-page-style-guide.md"),
+        )
+        self.assertIn(
+            expected,
+            self.read_text("docs/reference/ai-agent-integrations.md"),
+        )
 
     def test_missing_host_pytest_dependencies_route_to_workflow_venv(self) -> None:
         troubleshooting_text = self.read_text("docs/troubleshooting/common.md")

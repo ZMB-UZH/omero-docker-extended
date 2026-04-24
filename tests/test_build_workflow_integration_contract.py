@@ -1079,6 +1079,19 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             )
         )
 
+        audit_step = next_or_fail(
+            step
+            for step in steps
+            if step.get("name") == "Audit — explain CodeQL language candidates"
+        )
+        self.assertEqual("bash", audit_step["shell"])
+        self.assertIn("RUNNER_TEMP", audit_step["run"])
+        self.assertIn("git ls-files '*.py'", audit_step["run"])
+        self.assertIn("git ls-files '*.pyi'", audit_step["run"])
+        self.assertIn("git ls-files '*.js' '*.jsx' '*.mjs'", audit_step["run"])
+        self.assertIn("grep -v '^\\.agents/'", audit_step["run"])
+        self.assertIn("grep '^\\.agents/'", audit_step["run"])
+
     def test_super_linter_workflow_is_pinned_and_covers_repo_hygiene_surfaces(
         self,
     ) -> None:

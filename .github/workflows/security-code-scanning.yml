@@ -40,6 +40,37 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Audit — explain CodeQL language candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp_dir="${RUNNER_TEMP:?RUNNER_TEMP is required}"
+          python_sources="$(mktemp "${tmp_dir%/}/codeql-python-sources.XXXXXX")"
+          python_stubs="$(mktemp "${tmp_dir%/}/codeql-python-stubs.XXXXXX")"
+          js_candidates="$(mktemp "${tmp_dir%/}/codeql-js-candidates.XXXXXX")"
+          trap 'rm -f "$python_sources" "$python_stubs" "$js_candidates"' EXIT
+
+          git ls-files '*.py' > "$python_sources"
+          git ls-files '*.pyi' > "$python_stubs"
+          git ls-files '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' > "$js_candidates"
+
+          echo "::group::CodeQL language candidate files"
+          if [ "${{ matrix.language }}" = "python" ]; then
+            echo "CodeQL Python implementation source candidates (.py): $(wc -l < "$python_sources" | tr -d ' ')"
+            echo "Python type stubs not counted as CodeQL Python source (.pyi): $(wc -l < "$python_stubs" | tr -d ' ')"
+            echo "--- .py implementation files ---"
+            cat "$python_sources"
+            echo "--- .pyi type stubs checked by Ruff/Mypy, not CodeQL Python source ---"
+            cat "$python_stubs"
+          else
+            echo "Tracked JavaScript/TypeScript-family candidates: $(wc -l < "$js_candidates" | tr -d ' ')"
+            echo "--- Application/test JS/TS candidates ---"
+            grep -v '^\.agents/' "$js_candidates" || true
+            echo "--- Agent/tool JS configs audited here, but may be outside CodeQL UI source counts ---"
+            grep '^\.agents/' "$js_candidates" || true
+          fi
+          echo "::endgroup::"
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
         with:
