@@ -77,6 +77,9 @@ Never imply that full pytest passed when only `py_compile`, `bash -n`, or narrow
 
 ## Common blockers
 
-- Host Python missing Django: switch to the dependency-complete runtime or use the fallback verification order documented in `AGENTS.md`
+- Host Python missing Django or optional test dependencies such as `numpy`,
+  `numcodecs`, or `matplotlib`: run
+  `python3 tools/run_local_workflow_gates.py --setup-only`, then run targeted
+  pytest with `${LOCAL_WORKFLOW_GATE_VENV:-.cache/local-workflow-gates/python-venv}/bin/python`.
 - Docker socket unavailable: do not keep retrying the same runtime probe
 - Root-owned repo or cache warnings: keep `-p no:cacheprovider`

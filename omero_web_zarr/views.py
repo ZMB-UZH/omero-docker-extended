@@ -452,8 +452,8 @@ def _iter_store_backed_ome_tiff_planes(array):
         yield np.asarray(array).reshape(plane_shape)
         return
 
-    for index in product(*(range(size) for size in leading_shape)):
-        yield np.asarray(array[index]).reshape(plane_shape)
+    for plane_index in product(*(range(size) for size in leading_shape)):
+        yield np.asarray(array[plane_index]).reshape(plane_shape)
 
 
 def _store_backed_ome_tiff_metadata(image, node, axes):

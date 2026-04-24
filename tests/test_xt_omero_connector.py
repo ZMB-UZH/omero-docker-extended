@@ -50,7 +50,8 @@ class _FakeHTTPResponse:
     def __enter__(self):
         return self
 
-    def __exit__(self, *_args):
+    @staticmethod
+    def __exit__(*_args):
         return False
 
     def read(self, size=-1):
@@ -104,7 +105,8 @@ class _FakeListbox:
     def selection_set(self, index):
         self.selection.add(int(index))
 
-    def nearest(self, index):
+    @staticmethod
+    def nearest(index):
         return int(index)
 
     def size(self):
@@ -891,6 +893,9 @@ def test_import_into_omero_starts_folder_worker_after_confirmation(
 
     class _FakeThread:
         def __init__(self, target, args, daemon):
+            self.target = target
+            self.args = args
+            self.daemon = daemon
             threads.append({"target": target, "args": args, "daemon": daemon})
 
         @staticmethod
@@ -2005,7 +2010,8 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
         def delete(self, start, end):
             self.deleted = (start, end)
 
-        def add_command(self, label, command):
+        @staticmethod
+        def add_command(label, command):
             raise AssertionError("no command should be added without options")
 
     class DummyFrame:
@@ -2115,13 +2121,15 @@ def test_scrolled_listbox_disables_active_underline(monkeypatch):
             self.orient = orient
             self.command = None
 
-        def pack(self, **_kwargs):
+        @staticmethod
+        def pack(**_kwargs):
             return None
 
         def config(self, **kwargs):
             self.command = kwargs.get("command")
 
-        def set(self, *_args):
+        @staticmethod
+        def set(*_args):
             return None
 
     class _FakeListbox:
@@ -2134,13 +2142,16 @@ def test_scrolled_listbox_disables_active_underline(monkeypatch):
         def config(self, **kwargs):
             self.config_calls.append(kwargs)
 
-        def pack(self, **_kwargs):
+        @staticmethod
+        def pack(**_kwargs):
             return None
 
-        def yview(self, *_args):
+        @staticmethod
+        def yview(*_args):
             return None
 
-        def xview(self, *_args):
+        @staticmethod
+        def xview(*_args):
             return None
 
     monkeypatch.setattr(
@@ -2391,6 +2402,9 @@ def test_load_routes_single_selection_to_single_worker(monkeypatch):
 
     class _FakeThread:
         def __init__(self, target, args, daemon):
+            self.target = target
+            self.args = args
+            self.daemon = daemon
             threads.append({"target": target, "args": args, "daemon": daemon})
 
         @staticmethod
@@ -2439,6 +2453,9 @@ def test_load_routes_multi_selection_to_multi_worker(monkeypatch):
 
     class _FakeThread:
         def __init__(self, target, args, daemon):
+            self.target = target
+            self.args = args
+            self.daemon = daemon
             threads.append({"target": target, "args": args, "daemon": daemon})
 
         @staticmethod

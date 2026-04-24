@@ -2,13 +2,15 @@
 
 This project enables automated security scanning via `.github/workflows/security-code-scanning.yml`. All scanners produce SARIF output uploaded to the GitHub Security tab.
 
-GitHub-native code scanning is the supported repository scanning surface here.
+GitHub-native code scanning is the committed repository scanning gate here.
 Retired third-party scanning integrations are intentionally not part of the
-tracked workflow set. The README DeepSource badge is display-only and must not
-introduce an API key, private credential, workflow gate, or source-of-truth
-alert count. Its `token=` URL parameter is the badge-rendering URL parameter
-copied from the repository's DeepSource **Settings > Badges** page, not an API
-key or private credential.
+tracked workflow set. DeepSource may be queried as external API inventory when
+a DeepSource credential is explicitly available, but it must not introduce a
+repo-file config, private credential, workflow gate, or replacement
+source-of-truth alert count. The README DeepSource badge is display-only. Its
+`token=` URL parameter is the badge-rendering URL parameter copied from the
+repository's DeepSource **Settings > Badges** page, not an API key or private
+credential.
 
 DeepSource repo-file configuration is retired for this repository. Do not
 search for, create, restore, or edit `.deepsource.toml`. A GitHub PAT is not a
@@ -66,7 +68,7 @@ version's published signature.
 - Workflow logs: GitHub Actions run logs for `security-code-scanning.yml`.
 - Local config: `.github/workflows/security-code-scanning.yml`, scanner config files it references, and committed test contracts.
 - Retired source: `.deepsource.toml`; do not look for it or recreate it.
-- DeepSource counts: only report them after a successful DeepSource API or CLI query using a DeepSource credential. A GitHub PAT is insufficient; without DeepSource auth, report the count as unavailable, not zero. Distinguish grouped issues from issue occurrences.
+- DeepSource counts: only report them after a successful DeepSource API or CLI query using a DeepSource credential. A GitHub PAT is insufficient; without DeepSource auth, report the count as unavailable, not zero. Distinguish grouped issues from issue occurrences. Check `latest_commit_oid`; if it does not match the commit under review, label the count as a lagged snapshot.
 
 Useful GitHub Actions log commands:
 
@@ -92,9 +94,23 @@ python3 tools/scanner_inventory.py deepsource \
   --repository gh/ZMB-UZH/omero-docker-extended
 ```
 
+Useful DeepSource grouped-issue detail command:
+
+```bash
+python3 tools/scanner_inventory.py deepsource-issues \
+  --repository gh/ZMB-UZH/omero-docker-extended
+```
+
 `tools/scanner_inventory.py` reads tokens from `GITHUB_TOKEN` or
 `DEEPSOURCE_TOKEN` when present; otherwise it prompts without echo on a TTY.
 Never paste PATs into command arguments, remotes, repo files, or logs.
+If a GitHub PAT or DeepSource API key is required and unavailable, ask the user
+for the exact credential immediately and pause for input. Do not keep retrying
+commands that cannot authenticate; continue only independent local tasks that do
+not need that credential.
+If a documented scanner command or helper causes a proven avoidable retry/error
+loop, first establish the correct scanner workflow end to end, then update the
+runbook or tool concisely with regression coverage.
 
 ## Repository requirements
 
@@ -106,7 +122,11 @@ Never paste PATs into command arguments, remotes, repo files, or logs.
 
 Last live API refresh: **2026-04-24**.
 
-GitHub reported **8 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
+GitHub reported **4 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
+
+DeepSource reported **18 grouped issues**, **313 issue occurrences**, and
+**0 dependency vulnerability occurrences** for commit
+`59f334dc1eb0b175da46fc23bb9432c2974b41d1` during the same refresh.
 
 These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
 
@@ -128,15 +148,15 @@ To prevent documentation drift:
 5. Fix root causes, not scanner strings. Avoid suppressions unless you can prove a false positive and document that proof.
 6. Prefer the narrowest safe rewrite that removes the vulnerable pattern at the helper boundary so sibling call sites inherit the fix.
 7. Re-run targeted tests for every touched package, plus repo-wide `ruff check`, `ruff format --check`, and `python3 tools/lint_docs_structure.py` when those tools are available in the active environment.
-8. After pushing, refresh the live GitHub alert total again. Do not assume a local fix cleared an alert until GitHub reports it.
+8. After pushing, confirm all GitHub workflows are green and refresh the live GitHub alert total. Do not assume a local fix cleared an alert until GitHub reports it.
+9. When DeepSource auth is available, query DeepSource for the pushed commit and compare grouped issues plus issue occurrences against the pre-push baseline. If either count increased, run `deepsource-issues`, fix the regression root cause, rerun targeted tests, push again, and repeat this verification.
 
 ### Live by-tool snapshot
 
 | Scanner   | Open alerts |
 | --------- | ----------: |
-| CodeQL    | 4           |
 | Scorecard | 4           |
-| **Total** | **8**       |
+| **Total** | **4**       |
 
 2026-04-22 Docker `USER` remediation note: GitHub closed the Trivy `DS002`,
 Semgrep `last-user-is-root`, and Hadolint `DL3002` alerts on
@@ -147,11 +167,13 @@ defaults both images to their application users and keeps the required root
 bootstrap as an explicit Compose handoff for mounted runtime-path
 reconciliation.
 
-At the 2026-04-24 refresh, the 4 CodeQL alerts were file-level findings in
-`XTOmeroConnector.py`: `py/empty-except` (2), `py/exit-from-finally` (1), and
-`py/multiple-definition` (1). The 4 Scorecard alerts were repository-level
-findings with no file location: `MaintainedID`, `CodeReviewID`,
-`CIIBestPracticesID`, and `BranchProtectionID`.
+At the 2026-04-24 refresh after commit
+`59f334dc1eb0b175da46fc23bb9432c2974b41d1`, the 4 remaining alerts were
+repository-level Scorecard findings with no file location: `MaintainedID`,
+`CodeReviewID`, `CIIBestPracticesID`, and `BranchProtectionID`. The previous
+CodeQL file-level findings in `XTOmeroConnector.py` and the transient Semgrep
+transport findings from the first remediation push were no longer open after
+the successful default-branch security workflow.
 
 ### Historical snapshots below
 

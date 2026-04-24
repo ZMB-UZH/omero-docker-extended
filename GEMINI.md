@@ -13,7 +13,7 @@ Use [AGENTS.md](AGENTS.md) as the universal project contract, [docs/reference/ai
 - Honor the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` when a skill matches the task.
 - If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill. It is for internal AI communication only, never for repo docs/comments/docstrings/function descriptions or user-facing copy, and it changes reply style only without changing routing, tool choice, verification scope, or uncertainty handling. Fall back to normal detail when safety or clarity is at risk.
-- Keep configuration environment-driven, never edit `env/omero_secrets.env`, and do not search for, create, restore, or edit retired `.deepsource.toml`.
+- Keep configuration environment-driven, never edit `env/omero_secrets.env`, never touch retired `.deepsource.toml`, ask immediately for missing GitHub/DeepSource credentials, verify GitHub workflows plus no DeepSource count increase after pushes, prefer fewer lines only when parity/rules are proven, and fix proven bad instructions/tools only after the correct workflow is known.
 - Prefer repo-native docs, tests, helpers, and `*_example*` files over new abstractions.
 - Load one domain doc and one nearest test module before broadening scope.
 

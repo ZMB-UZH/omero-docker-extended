@@ -17,7 +17,9 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract, [docs/reference
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.
 - Do not edit `env/omero_secrets.env`.
 - Do not search for, create, restore, or edit `.deepsource.toml`; DeepSource repo-file configuration is retired. Use `docs/operations/code-scanning.md` and `tools/scanner_inventory.py` for scanner counts and logs.
-- Prefer existing helpers, tests, docs, and `*_example*` files over new abstractions.
+- If a GitHub PAT or DeepSource API key is required and unavailable, ask immediately and pause for input instead of retrying auth failures; continue only unrelated local work.
+- After every push, confirm GitHub workflows are green and, when DeepSource auth is available, ensure grouped issues and issue occurrences did not increase for the pushed commit.
+- Prefer existing helpers, tests, docs, and `*_example*`; use fewer lines only when parity/rules are proven, and fix proven bad instructions/tools only after the correct workflow is verified.
 - Open one domain doc and one nearest test module before broadening context.
 
 ## Verification rules
