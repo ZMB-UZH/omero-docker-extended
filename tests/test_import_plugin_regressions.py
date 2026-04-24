@@ -2688,6 +2688,21 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("margin-left: 0;", styles)
         self.assertIn("padding-left: 0;", styles)
 
+    def test_upload_preload_script_scopes_persisted_selection_restore(self):
+        script = (
+            REPO_ROOT / "omeroweb_import/static/omeroweb_import/upload.js"
+        ).read_text()
+
+        self.assertTrue(
+            script.startswith("(function restoreSpecialUploadSelection() {")
+        )
+        self.assertTrue(script.rstrip().endswith("}());"))
+        self.assertNotRegex(script, r"(?s)^\{\s*try\s*\{")
+        self.assertIn(
+            "document.documentElement.classList.add('special-upload-active');",
+            script,
+        )
+
 
 class ManageZarrManagedRepositoryScriptTests(TestCase):
     @staticmethod

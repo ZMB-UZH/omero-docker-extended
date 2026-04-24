@@ -1,4 +1,4 @@
-{
+(function restoreSpecialUploadSelection() {
     try {
         const { userId: rawUserId } = document.documentElement.dataset;
         const userId = rawUserId ? Number(rawUserId) : null;
@@ -14,4 +14,4 @@
     } catch {
         // Ignore storage access errors.
     }
-}
+}());
