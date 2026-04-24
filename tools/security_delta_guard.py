@@ -6,10 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -619,6 +619,11 @@ def _github_api_get_json(api_path: str, token: str, *, api_version: str | None) 
     if not api_path.startswith("/"):
         raise ValueError(f"GitHub API path must start with '/': {api_path!r}")
 
+    curl_bin = shutil.which("curl")
+    if curl_bin is None:
+        raise RuntimeError(
+            "GitHub API request failed: required executable 'curl' is not available."
+        )
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
@@ -626,17 +631,42 @@ def _github_api_get_json(api_path: str, token: str, *, api_version: str | None) 
     }
     if api_version is not None:
         headers["X-GitHub-Api-Version"] = api_version
-    request = urllib.request.Request(
-        f"https://api.github.com{api_path}",
-        headers=headers,
-    )
+    config_lines = [f"url = {_curl_config_quote(f'https://api.github.com{api_path}')}"]
+    for name, value in headers.items():
+        config_lines.append(f"header = {_curl_config_quote(f'{name}: {value}')}")
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"GitHub API request failed with HTTP {exc.code}.") from exc
-    except urllib.error.URLError as exc:
+        result = subprocess.run(
+            [
+                curl_bin,
+                "--silent",
+                "--show-error",
+                "--location",
+                "--fail-with-body",
+                "--config",
+                "-",
+            ],
+            check=False,
+            capture_output=True,
+            input="\n".join(config_lines) + "\n",
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError(f"GitHub API request failed: {exc}") from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(f"GitHub API request failed: {detail}")
+    return json.loads(result.stdout)
+
+
+def _curl_config_quote(value: str) -> str:
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+    )
+    return f'"{escaped}"'
 
 
 def get_default_branch(repository: str, token: str) -> str | None:

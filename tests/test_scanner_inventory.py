@@ -27,6 +27,49 @@ def test_parse_deepsource_repository_accepts_only_github_repository_ids() -> Non
         scanner_inventory.parse_deepsource_repository("ZMB-UZH/omero-docker-extended")
 
 
+def test_fetch_json_keeps_authorization_out_of_curl_argv(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        scanner_inventory.shutil, "which", lambda command: f"/usr/bin/{command}"
+    )
+
+    def fake_run(command: list[str], **kwargs):
+        calls.append({"command": command, "kwargs": kwargs})
+        return scanner_inventory.subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout='{"ok": true}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(scanner_inventory.subprocess, "run", fake_run)
+
+    payload = scanner_inventory.fetch_json(
+        "https://example.invalid/graphql",
+        headers={
+            "Accept": "application/json",
+            "Authorization": "Bearer token",
+        },
+        data=b'{"query": "query { ok }"}',
+        method="POST",
+        service="Example",
+    )
+
+    assert payload == {"ok": True}
+    assert calls[0]["command"] == [
+        "/usr/bin/curl",
+        "--silent",
+        "--show-error",
+        "--location",
+        "--fail-with-body",
+        "--config",
+        "-",
+    ]
+    assert "token" not in calls[0]["command"]
+    assert "Authorization: Bearer token" in calls[0]["kwargs"]["input"]
+    assert calls[0]["kwargs"]["timeout"] == 30
+
+
 def test_summarize_github_code_scanning_paginates_and_counts_tools(
     monkeypatch,
 ) -> None:

@@ -3,7 +3,6 @@ from __future__ import annotations
 from iter_test_helpers import next_or_fail
 
 import importlib.util
-import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -58,40 +57,30 @@ def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
     assert [alert["number"] for alert in result] == [11]
 
 
-def test_github_api_get_json_uses_https_connection(monkeypatch) -> None:
+def test_github_api_get_json_uses_curl_config_stdin(monkeypatch) -> None:
     security_delta_guard._GITHUB_API_VERSION_CACHE = None
     calls = []
 
-    class FakeResponse:
-        def __init__(self, payload: object) -> None:
-            self.payload = payload
+    monkeypatch.setattr(
+        security_delta_guard.shutil, "which", lambda command: f"/usr/bin/{command}"
+    )
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_exc: object) -> None:
-            return None
-
-        def read(self) -> bytes:
-            return json.dumps(self.payload).encode("utf-8")
-
-    def fake_urlopen(request, *, timeout: int):
-        headers = {key.lower(): value for key, value in request.header_items()}
-        calls.append(
-            {
-                "url": request.full_url,
-                "headers": headers,
-                "timeout": timeout,
-            }
+    def fake_run(command: list[str], **kwargs):
+        calls.append({"command": command, "kwargs": kwargs})
+        config = kwargs["input"]
+        stdout = (
+            '["2026-03-10", "2022-11-28"]'
+            if 'url = "https://api.github.com/versions"' in config
+            else '{"default_branch": "main"}'
         )
-        payload: object
-        if request.full_url == "https://api.github.com/versions":
-            payload = ["2026-03-10", "2022-11-28"]
-        else:
-            payload = {"default_branch": "main"}
-        return FakeResponse(payload)
+        return security_delta_guard.subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+        )
 
-    monkeypatch.setattr(security_delta_guard.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(security_delta_guard.subprocess, "run", fake_run)
 
     payload = security_delta_guard.github_api_get_json(
         "/repos/ZMB-UZH/omero-docker-extended",
@@ -99,17 +88,31 @@ def test_github_api_get_json_uses_https_connection(monkeypatch) -> None:
     )
 
     assert payload == {"default_branch": "main"}
-    assert calls[0]["url"] == "https://api.github.com/versions"
-    assert calls[1]["url"] == (
-        "https://api.github.com/repos/ZMB-UZH/omero-docker-extended"
+    for call in calls:
+        assert call["command"] == [
+            "/usr/bin/curl",
+            "--silent",
+            "--show-error",
+            "--location",
+            "--fail-with-body",
+            "--config",
+            "-",
+        ]
+        assert TEST_GITHUB_CREDENTIAL not in call["command"]
+        assert call["kwargs"]["check"] is False
+        assert call["kwargs"]["capture_output"] is True
+        assert call["kwargs"]["text"] is True
+        assert call["kwargs"]["timeout"] == 30
+    assert 'url = "https://api.github.com/versions"' in calls[0]["kwargs"]["input"]
+    assert (
+        f"Authorization: Bearer {TEST_GITHUB_CREDENTIAL}" in calls[0]["kwargs"]["input"]
     )
-    assert calls[0]["headers"]["accept"] == "application/vnd.github+json"
-    assert calls[0]["headers"]["authorization"] == (f"Bearer {TEST_GITHUB_CREDENTIAL}")
-    assert calls[0]["headers"]["user-agent"] == "security-delta-guard"
-    assert "x-github-api-version" not in calls[0]["headers"]
-    assert calls[1]["headers"]["x-github-api-version"] == "2026-03-10"
-    assert calls[0]["timeout"] == 30
-    assert calls[1]["timeout"] == 30
+    assert "X-GitHub-Api-Version" not in calls[0]["kwargs"]["input"]
+    assert (
+        'url = "https://api.github.com/repos/ZMB-UZH/omero-docker-extended"'
+        in calls[1]["kwargs"]["input"]
+    )
+    assert "X-GitHub-Api-Version: 2026-03-10" in calls[1]["kwargs"]["input"]
 
 
 def test_github_api_get_json_requires_absolute_api_path() -> None:
