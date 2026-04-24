@@ -49,6 +49,14 @@ def _safe_rendering_enabled():
     return get_bool_env(_SAFE_RENDERING_ENV, env_file=ENV_FILE_OMEROWEB)
 
 
+def _require_webgateway_callable(module, name):
+    hook = getattr(module, name, None)
+    if callable(hook):
+        return hook
+    module_name = getattr(module, "__name__", type(module).__name__)
+    raise AttributeError(f"{module_name}.{name} is unavailable")
+
+
 class _StoreBackedChannelWrapper:
     def __init__(self, channel, override):
         self._channel = channel
@@ -372,7 +380,9 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
     from omeroweb.webgateway import views as webgateway_views
 
     server_id = request.session["connector"]["server_id"]
-    get_prepared_image = getattr(webgateway_views, "_get_prepared_image")
+    get_prepared_image = _require_webgateway_callable(
+        webgateway_views, "_get_prepared_image"
+    )
     prepared_image = get_prepared_image(
         request,
         iid,
@@ -836,7 +846,9 @@ def install_webgateway_overrides():
 
     original_get_channels = webclient_gateway.ImageWrapper.getChannels
     original_image_data_json = webgateway_views.imageData_json
-    original_render_thumbnail = getattr(webgateway_views, "_render_thumbnail")
+    original_render_thumbnail = _require_webgateway_callable(
+        webgateway_views, "_render_thumbnail"
+    )
     original_get_thumbnails_json = webgateway_views.get_thumbnails_json
     original_render_image = webgateway_views.render_image
     original_render_image_region = webgateway_views.render_image_region
