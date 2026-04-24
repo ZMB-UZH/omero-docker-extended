@@ -7,10 +7,12 @@ import argparse
 import getpass
 import os
 import shutil
+import socket
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
@@ -22,8 +24,9 @@ TokenReader = Callable[[str], str]
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run git push with a temporary askpass helper so GitHub PATs never "
-            "appear in argv, remotes, logs, or long-lived credential stores."
+            "Run git push with a socket-backed askpass helper so GitHub PATs "
+            "never appear in argv, remotes, logs, temp files, or long-lived "
+            "credential stores."
         )
     )
     parser.add_argument("remote", help="Git remote name or URL.")
@@ -65,27 +68,82 @@ def _read_token(env: Mapping[str, str], env_name: str, reader: TokenReader) -> s
     return token
 
 
-def _write_secret_file(path: Path, content: str) -> None:
-    path.write_text(content, encoding="utf-8")
-    path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-
-
 def _write_askpass(path: Path) -> None:
+    executable = sys.executable or "/usr/bin/env python3"
     path.write_text(
         "\n".join(
             (
-                "#!/bin/sh",
-                'case "$1" in',
-                "  *sername*) printf '%s\\n' \"${GIT_PAT_USERNAME:?}\" ;;",
-                '  *assword*) cat "${GIT_PAT_FILE:?}" ;;',
-                "  *) exit 1 ;;",
-                "esac",
+                f"#!{executable}",
+                "from __future__ import annotations",
+                "",
+                "import os",
+                "import socket",
+                "import sys",
+                "",
+                "prompt = sys.argv[1] if len(sys.argv) > 1 else ''",
+                "if 'sername' in prompt:",
+                "    username = os.environ.get('GIT_PAT_USERNAME', '')",
+                "    if not username:",
+                "        raise SystemExit(1)",
+                "    print(username)",
+                "elif 'assword' in prompt:",
+                "    socket_path = os.environ.get('GIT_PAT_SOCKET', '')",
+                "    if not socket_path:",
+                "        raise SystemExit(1)",
+                "    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:",
+                "        client.connect(socket_path)",
+                "        chunks = []",
+                "        while True:",
+                "            chunk = client.recv(4096)",
+                "            if not chunk:",
+                "                break",
+                "            chunks.append(chunk)",
+                "    if not chunks:",
+                "        raise SystemExit(1)",
+                "    sys.stdout.buffer.write(b''.join(chunks))",
+                "else:",
+                "    raise SystemExit(1)",
                 "",
             )
         ),
         encoding="utf-8",
     )
     path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+
+
+def _serve_credential_once(
+    socket_path: Path,
+    credential: str,
+) -> tuple[threading.Event, threading.Thread]:
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(str(socket_path))
+    socket_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    server.listen(1)
+    server.settimeout(0.2)
+
+    stop = threading.Event()
+    payload = f"{credential}\n".encode("utf-8")
+
+    def serve() -> None:
+        try:
+            while not stop.is_set():
+                try:
+                    connection, _ = server.accept()
+                except socket.timeout:
+                    continue
+                with connection:
+                    connection.sendall(payload)
+                return
+        finally:
+            server.close()
+
+    thread = threading.Thread(
+        target=serve,
+        name="git-pat-askpass",
+        daemon=True,
+    )
+    thread.start()
+    return stop, thread
 
 
 def run_push(
@@ -107,16 +165,18 @@ def run_push(
 
     temp_root = Path(tempfile.mkdtemp(prefix="git-pat-askpass-"))
     temp_root.chmod(stat.S_IRWXU)
-    askpass_path = temp_root / "askpass.sh"
-    token_path = temp_root / "token"
+    askpass_path = temp_root / "askpass.py"
+    socket_path = temp_root / "credential.sock"
+    stop_server: threading.Event | None = None
+    server_thread: threading.Thread | None = None
     try:
-        _write_secret_file(token_path, token)
         _write_askpass(askpass_path)
+        stop_server, server_thread = _serve_credential_once(socket_path, token)
         push_env = base_env.copy()
         push_env.update(
             {
                 "GIT_ASKPASS": str(askpass_path),
-                "GIT_PAT_FILE": str(token_path),
+                "GIT_PAT_SOCKET": str(socket_path),
                 "GIT_PAT_USERNAME": args.username,
                 "GIT_TERMINAL_PROMPT": "0",
             }
@@ -135,6 +195,10 @@ def run_push(
         result = runner(command, env=push_env, check=False)
         return result.returncode
     finally:
+        if stop_server is not None:
+            stop_server.set()
+        if server_thread is not None:
+            server_thread.join(timeout=2)
         shutil.rmtree(temp_root, ignore_errors=True)
 
 

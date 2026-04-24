@@ -174,6 +174,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("Never paste PATs into command arguments", runbook_text)
         self.assertIn("GitHub HTTPS Git operations require a PAT", runbook_text)
         self.assertIn("tools/git_push_with_pat.py origin main", runbook_text)
+        self.assertIn("temp files", runbook_text)
         self.assertIn("newest supported version", runbook_text)
         self.assertIn("do not pin stale dates", runbook_text)
         self.assertNotIn('"X-GitHub-Api-Version": "2022-11-28"', runbook_text)
@@ -194,6 +195,9 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         git_push_tool_text = self.read_text("tools/git_push_with_pat.py")
         self.assertIn("getpass.getpass", git_push_tool_text)
         self.assertIn("GIT_ASKPASS", git_push_tool_text)
+        self.assertIn("GIT_PAT_SOCKET", git_push_tool_text)
+        self.assertNotIn("GIT_PAT_FILE", git_push_tool_text)
+        self.assertNotIn("write_text(token", git_push_tool_text)
         self.assertIn("credential.https://github.com.helper=", git_push_tool_text)
         self.assertIn("GIT_TERMINAL_PROMPT", git_push_tool_text)
         self.assertIn(
