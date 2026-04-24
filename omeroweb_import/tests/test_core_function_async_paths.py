@@ -130,6 +130,24 @@ def test_find_image_by_name_prefers_dataset_search_and_global_fallback(monkeypat
         "id": 11
     }
     assert looked_up == [("Image", 11)]
+    looked_up.clear()
+
+    timeout_checks = []
+    monkeypatch.setattr(
+        core_functions,
+        "_timeout_expired",
+        lambda start_time, timeout_seconds: (
+            timeout_checks.append((start_time, timeout_seconds)) or True
+        ),
+    )
+    assert (
+        core_functions._find_image_by_name(
+            conn, "sample.ome.tif", dataset_id=7, timeout_seconds=30
+        )
+        is None
+    )
+    assert timeout_checks and timeout_checks[-1][1] == 30
+    assert looked_up == []
     assert core_functions._find_image_by_name(conn, "", dataset_id=7) is None
 
 

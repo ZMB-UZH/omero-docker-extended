@@ -242,9 +242,9 @@ def test_import_and_connection_helpers_raise_store_errors_on_backend_failures(
         return original_import(name, global_vars, local_vars, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", failing_import)
-    monkeypatch.setattr(data_store, "_psycopg2_mod", None)
-    monkeypatch.setattr(data_store, "_psycopg2_extras", None)
-    monkeypatch.setattr(data_store, "_psycopg2_sql", None)
+    data_store._PSYCOPG2_MODULES.module = None
+    data_store._PSYCOPG2_MODULES.extras = None
+    data_store._PSYCOPG2_MODULES.sql = None
 
     with pytest.raises(data_store.VariableStoreError):
         data_store._load_psycopg2()
@@ -365,15 +365,15 @@ def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
     sentinel_mod = object()
     sentinel_extras = object()
     sentinel_sql = object()
-    monkeypatch.setattr(data_store, "_psycopg2_mod", sentinel_mod)
-    monkeypatch.setattr(data_store, "_psycopg2_extras", sentinel_extras)
-    monkeypatch.setattr(data_store, "_psycopg2_sql", sentinel_sql)
+    data_store._PSYCOPG2_MODULES.module = sentinel_mod
+    data_store._PSYCOPG2_MODULES.extras = sentinel_extras
+    data_store._PSYCOPG2_MODULES.sql = sentinel_sql
 
     assert data_store._load_psycopg2() == (sentinel_mod, sentinel_extras)
     assert data_store._load_psycopg2_sql() is sentinel_sql
 
-    monkeypatch.setattr(data_store, "_psycopg2_mod", None)
-    monkeypatch.setattr(data_store, "_psycopg2_extras", None)
+    data_store._PSYCOPG2_MODULES.module = None
+    data_store._PSYCOPG2_MODULES.extras = None
     monkeypatch.setattr(
         data_store,
         "get_env",
@@ -503,9 +503,9 @@ def test_specific_store_error_paths_and_confirmation_failures_are_propagated(
 
 
 def test_real_psycopg2_loader_paths_cover_success_imports(monkeypatch):
-    monkeypatch.setattr(data_store, "_psycopg2_mod", None)
-    monkeypatch.setattr(data_store, "_psycopg2_extras", None)
-    monkeypatch.setattr(data_store, "_psycopg2_sql", None)
+    data_store._PSYCOPG2_MODULES.module = None
+    data_store._PSYCOPG2_MODULES.extras = None
+    data_store._PSYCOPG2_MODULES.sql = None
 
     psycopg2_mod, extras_mod = data_store._load_psycopg2()
     sql_mod = data_store._load_psycopg2_sql()

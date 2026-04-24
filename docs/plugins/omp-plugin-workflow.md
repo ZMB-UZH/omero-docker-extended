@@ -110,6 +110,9 @@ Three separator modes are supported:
 - The reserved `omp_hash` marker is never used for user metadata; colliding
   variable names are suffixed before the marker is added, and progress logs
   report visible entries separately from the `+1` plugin marker.
+- Acquisition jobs store oversized metadata values in a text FileAnnotation and
+  write a MapAnnotation marker only after that storage succeeds; failed storage
+  is marked as not stored instead of claiming a missing attachment exists.
 
 ### 8. Annotation deletion
 

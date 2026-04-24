@@ -24,7 +24,7 @@ This repository expresses those OMERO properties in env files with the existing 
 - `env/omeroserver_example.env` -> `env/omeroserver.env`: OMERO.server runtime, DB, script processor options, and managed-repository settings such as `CONFIG_omero_managed_dir` and `CONFIG_omero_fs_repo_path`.
 - `env/omeroweb_example.env` -> `env/omeroweb.env`: OMERO.web apps, UI links,
   Open With registrations, right-panel plugin entries, plugin settings, admin
-  tool endpoints, the default login-logo setting
+  tool endpoints, host/internal web ports, the default login-logo setting
   (`CONFIG_omero_web_login__logo=/static/branding/logo.png`), and Gunicorn
   startup overrides such as `OMERO_WEB_WSGI_ARGS`. When a deployment-local
   `logo/logo.png` exists at build time, the `omeroweb` image build copies it
@@ -519,6 +519,7 @@ For OMERO.web forwarding from your external reverse proxy (for example, nginx ma
 
 - Scheme: `http`
 - Forward Hostname / IP: `omeroweb`
-- Forward Port: `4090`
+- Forward Port: `CONFIG_omero_web_application__server_port`
 
-This keeps direct internal access to OMERO.web (`http://omeroweb:4090`) available while IT-managed proxy configuration is applied.
+The host-published troubleshooting port is `OMERO_WEB_HOST_PORT`; both values
+default to `4090` in `env/omeroweb_example.env`.

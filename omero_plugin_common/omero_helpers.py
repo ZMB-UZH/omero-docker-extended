@@ -24,7 +24,9 @@ def get_text(value_obj):
 def get_id(obj):
     """Extract ID from OMERO object."""
     try:
-        return obj._obj.id.val
+        model_obj = getattr(obj, "_obj", None)
+        if model_obj is not None:
+            return model_obj.id.val
     except Exception as exc:
         logger.debug("Falling back to getId() for %r: %s", obj, exc)
     try:

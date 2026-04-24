@@ -99,11 +99,8 @@ __all__ = [
     "UPLOAD_CONCURRENCY_ENV",
     "_CLI_ID_PATTERN",
     "_IMPORT_OBJECT_PATTERN",
-    "_DIRS_INITIALIZED",
     "_IMPORT_LOCKS",
     "_IMPORT_LOCKS_GUARD",
-    "_JOBS_ROOT_CACHE",
-    "_UPLOAD_ROOT_CACHE",
     "_append_job_error",
     "_append_job_message",
     "_append_txt_attachment_message",
@@ -366,10 +363,15 @@ NGFF_CONVERTER_SETTINGS_DEFAULTS = {
     "progress": True,
 }
 
-# Cache for directory paths (initialized once per application lifecycle)
-_UPLOAD_ROOT_CACHE = None
-_JOBS_ROOT_CACHE = None
-_DIRS_INITIALIZED = False
+
+@dataclass
+class _DirectoryCache:
+    upload_root: Optional[Path] = None
+    jobs_root: Optional[Path] = None
+    initialized: bool = False
+
+
+_DIRECTORY_CACHE = _DirectoryCache()
 
 
 # --------------------------------------------------------------------------
@@ -409,9 +411,7 @@ def _initialize_directories():
 
     Called automatically by _get_upload_root() and _get_jobs_root()
     """
-    global _DIRS_INITIALIZED
-
-    if _DIRS_INITIALIZED:
+    if _DIRECTORY_CACHE.initialized:
         return  # Already initialized, skip
 
     upload_root = _resolve_upload_root()
@@ -420,14 +420,15 @@ def _initialize_directories():
     if not _ensure_parent_dir(upload_root) or not _ensure_parent_dir(jobs_root):
         return
 
-    # Create upload directory with 0o700
-    _ensure_dir_with_permissions(upload_root, 0o700)
-
-    # Create jobs directory with 0o700
-    _ensure_dir_with_permissions(jobs_root, 0o700)
+    upload_ready = _ensure_dir_with_permissions(upload_root, 0o700)
+    jobs_ready = _ensure_dir_with_permissions(jobs_root, 0o700)
+    if not upload_ready or not jobs_ready:
+        return
 
     # Mark as initialized so we don't check again
-    _DIRS_INITIALIZED = True
+    _DIRECTORY_CACHE.upload_root = upload_root
+    _DIRECTORY_CACHE.jobs_root = jobs_root
+    _DIRECTORY_CACHE.initialized = True
     logger.info("Upload directories initialized successfully")
 
 
@@ -437,14 +438,13 @@ def _get_upload_root() -> Path:
 
     Uses cached path after first initialization to avoid repeated filesystem checks.
     """
-    global _UPLOAD_ROOT_CACHE
-
     # Use cached path if available
-    if _UPLOAD_ROOT_CACHE is None:
+    if _DIRECTORY_CACHE.upload_root is None:
         _initialize_directories()
-        _UPLOAD_ROOT_CACHE = _resolve_upload_root()
+    if _DIRECTORY_CACHE.upload_root is None:
+        raise RuntimeError("Upload root was not initialized.")
 
-    return _UPLOAD_ROOT_CACHE
+    return _DIRECTORY_CACHE.upload_root
 
 
 def _get_jobs_root() -> Path:
@@ -453,14 +453,13 @@ def _get_jobs_root() -> Path:
 
     Uses cached path after first initialization to avoid repeated filesystem checks.
     """
-    global _JOBS_ROOT_CACHE
-
     # Use cached path if available
-    if _JOBS_ROOT_CACHE is None:
+    if _DIRECTORY_CACHE.jobs_root is None:
         _initialize_directories()
-        _JOBS_ROOT_CACHE = _resolve_jobs_root()
+    if _DIRECTORY_CACHE.jobs_root is None:
+        raise RuntimeError("Jobs root was not initialized.")
 
-    return _JOBS_ROOT_CACHE
+    return _DIRECTORY_CACHE.jobs_root
 
 
 def _ensure_dir(path: Path) -> bool:
@@ -474,7 +473,7 @@ def _ensure_dir(path: Path) -> bool:
         if not _directory_is_usable(managed_path):
             return False
         return True
-    except (OSError, ValueError) as exc:
+    except (OSError, RuntimeError, ValueError) as exc:
         logger.warning(
             "Unable to create directory %s: %s",
             sanitize_log_value(path),
@@ -544,7 +543,7 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
                 )
                 return False
 
-            return True
+            return _directory_is_usable(path)
         else:
             # Directory exists - check and fix permissions if necessary
             # NEVER delete any files
@@ -1934,7 +1933,9 @@ def _finalize_imported_zarr_image_metadata(
 
 def _get_id(obj):
     try:
-        return obj._obj.id.val
+        model_obj = getattr(obj, "_obj", None)
+        if model_obj is not None:
+            return model_obj.id.val
     except Exception as exc:
         logger.debug("Falling back to getId() for object %r: %s", obj, exc)
     try:
@@ -3379,6 +3380,7 @@ def _import_file(
 
     Returns ``(success, stdout, stderr)`` – the same contract as before.
     """
+    del conn
     cmd = _build_omero_cli_command(["import"], session_key, host, port)
     cmd.extend(["--depth", str(OMERO_IMPORT_SCAN_DEPTH)])
     if dataset_id:
@@ -3639,6 +3641,13 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
             except Exception as exc:
                 logger.warning("Dataset search failed for '%s': %s", file_name, exc)
 
+        if _timeout_expired(start_time, timeout_seconds):
+            logger.warning(
+                "Image search for '%s' exceeded timeout before global lookup",
+                file_name,
+            )
+            return None
+
         # Global search as fallback
         try:
             query = "SELECT i FROM Image i WHERE i.name = :name"
@@ -3737,6 +3746,14 @@ def _params_page(params, offset, size):
         page(offset, size)
 
 
+def _timeout_expired(start_time: float, timeout_seconds) -> bool:
+    try:
+        timeout = float(timeout_seconds)
+    except (TypeError, ValueError):
+        return False
+    return timeout >= 0 and time.time() - start_time >= timeout
+
+
 def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_seconds=60):
     """
     Find multiple images in a single query - MUCH faster than individual lookups.
@@ -3789,6 +3806,12 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
             len(file_names),
             elapsed,
         )
+        if _timeout_expired(start_time, timeout_seconds):
+            logger.warning(
+                "Batch image search exceeded timeout %.2fs after %.2fs",
+                float(timeout_seconds),
+                elapsed,
+            )
 
         missing = set(file_names) - set(results.keys())
         if missing:
@@ -4381,6 +4404,7 @@ def _attach_txt_to_image_service(
     Prefer a detached end-user session when available so user-owned objects do
     not depend on job-service administrator privileges.
     """
+    del conn
     from omero.model import FileAnnotationI, OriginalFileI
     from omero.gateway import FileAnnotationWrapper
     from ..services.omero.sem_edx_parser import attach_sem_edx_tables
@@ -5629,6 +5653,7 @@ def _check_import_compatibility(
     Uses 'omero import -f' which performs local file format analysis
     without requiring server connection or authentication.
     """
+    del session_key, host, port, dataset_id
     if not file_path.exists():
         return {
             "status": "error",
@@ -6461,6 +6486,7 @@ def _import_zarr_via_cli(
     Stages the zarr into the OMERO managed repository via a server-side OMERO
     script, then runs ``omero zarr import`` against that final managed path.
     """
+    del progress_job
     if not username or not group_name:
         error_msg = (
             "Missing username or group name for managed-repository Zarr staging."
@@ -7152,6 +7178,7 @@ def _import_job_entry(
     username=None,
     group_name=None,
 ):
+    del session_key
     rel_path = entry.get("relative_path")
     if not rel_path:
         return {"skip": True}
@@ -7594,11 +7621,11 @@ def _mark_failed_job_for_deferred_cleanup(job_id: str) -> bool:
 
 
 def _process_import_job(job_id: str):
-    safe_job_id = sanitize_log_value(job_id)
-    logger.info("Import thread started for job %s", safe_job_id)
+    safe_job_id_for_log = sanitize_log_value(job_id)
+    logger.info("Import thread started for job %s", safe_job_id_for_log)
     job = _load_job(job_id)
     if not job:
-        logger.error("Import thread: job %s not found, aborting", safe_job_id)
+        logger.error("Import thread: job %s not found, aborting", safe_job_id_for_log)
         return
 
     try:
@@ -7610,7 +7637,7 @@ def _process_import_job(job_id: str):
         logger.info(
             "Import thread: acquiring lock for user %s (job %s)",
             safe_username,
-            safe_job_id,
+            safe_job_id_for_log,
         )
         acquired = lock.acquire(timeout=LOCK_TIMEOUT)
         if not acquired:
@@ -7632,7 +7659,7 @@ def _process_import_job(job_id: str):
         logger.info(
             "Import thread: lock acquired for user %s (job %s)",
             safe_username,
-            safe_job_id,
+            safe_job_id_for_log,
         )
         try:
             job = _load_job(job_id)
@@ -7729,7 +7756,7 @@ def _process_import_job(job_id: str):
                     "Import thread: pre-skipped %d non-importable + %d incompatible files for job %s",
                     skipped_count,
                     incompatible_skipped,
-                    safe_job_id,
+                    safe_job_id_for_log,
                 )
                 _save_job(job)
 
@@ -7929,7 +7956,7 @@ def _process_import_job(job_id: str):
             logger.info(
                 "Import thread: %d logical import units to import for job %s (batch_size=%d)",
                 len(entries_to_import),
-                safe_job_id,
+                safe_job_id_for_log,
                 batch_size,
             )
 
@@ -7940,7 +7967,7 @@ def _process_import_job(job_id: str):
                     start,
                     start + len(batch),
                     len(entries_to_import),
-                    safe_job_id,
+                    safe_job_id_for_log,
                 )
                 # Serialize live imports through a single CLI process.
                 # The live stack shows intermittent OMERO.java/import-init failures when
@@ -8073,7 +8100,7 @@ def _process_import_job(job_id: str):
                 else:
                     logger.info(
                         "SEM EDX mode enabled for job %s but no TXT/image associations could be derived; skipping TXT attachments",
-                        safe_job_id,
+                        safe_job_id_for_log,
                     )
                     _append_job_message(
                         job,
@@ -8111,7 +8138,7 @@ def _process_import_job(job_id: str):
                             logger.info(
                                 "Processing %d SEM EDX text attachments for job %s",
                                 total_attachments,
-                                safe_job_id,
+                                safe_job_id_for_log,
                             )
 
                             # CRITICAL FIX: Batch lookup ALL images at once instead of one-by-one
@@ -8340,7 +8367,7 @@ def _process_import_job(job_id: str):
                                     if staged_error:
                                         logger.warning(
                                             "Rejected SEM-EDX text staged path for job %s: txt=%s staged=%s error=%s",
-                                            safe_job_id,
+                                            safe_job_id_for_log,
                                             sanitize_log_value(txt_rel),
                                             sanitize_log_value(staged_path),
                                             sanitize_log_value(staged_error),
@@ -8407,7 +8434,7 @@ def _process_import_job(job_id: str):
                                         if staged_plot_error:
                                             logger.warning(
                                                 "Rejected SEM-EDX plot staged path for job %s: rel=%s staged=%s error=%s",
-                                                safe_job_id,
+                                                safe_job_id_for_log,
                                                 sanitize_log_value(plot_import_rel),
                                                 sanitize_log_value(plot_staged_rel),
                                                 sanitize_log_value(staged_plot_error),
@@ -8550,7 +8577,7 @@ def _process_import_job(job_id: str):
                             _save_job(job)
                             logger.info(
                                 "Completed SEM EDX attachment processing for job %s: %d/%d processed",
-                                safe_job_id,
+                                safe_job_id_for_log,
                                 attachment_count,
                                 total_attachments,
                             )
@@ -8567,7 +8594,7 @@ def _process_import_job(job_id: str):
                 except Exception as exc:
                     logger.error(
                         "SEM EDX txt attachment failed for job %s: %s",
-                        safe_job_id,
+                        safe_job_id_for_log,
                         sanitize_log_value(exc),
                         exc_info=sanitized_exc_info(exc),
                     )
@@ -8577,7 +8604,7 @@ def _process_import_job(job_id: str):
                 job["status"] = "error"
                 logger.warning(
                     "Import thread: job %s finished with errors (%d errors, %d messages)",
-                    safe_job_id,
+                    safe_job_id_for_log,
                     len(job.get("errors", [])),
                     len(job.get("messages", [])),
                 )
@@ -8586,7 +8613,7 @@ def _process_import_job(job_id: str):
                 logger.info(
                     "Import thread: job %s completed successfully "
                     "(imported_bytes=%s, total_bytes=%s, messages=%d)",
-                    safe_job_id,
+                    safe_job_id_for_log,
                     job.get("imported_bytes", 0),
                     job.get("total_bytes", 0),
                     len(job.get("messages", [])),
@@ -8600,18 +8627,18 @@ def _process_import_job(job_id: str):
                 except Exception as exc:
                     logger.warning(
                         "Post-success cleanup failed for job %s: %s",
-                        safe_job_id,
+                        safe_job_id_for_log,
                         sanitize_log_value(exc),
                     )
             else:
                 _mark_failed_job_for_deferred_cleanup(job_id)
         finally:
             lock.release()
-            logger.info("Import thread: lock released for job %s", safe_job_id)
+            logger.info("Import thread: lock released for job %s", safe_job_id_for_log)
     except Exception as exc:
         logger.error(
             "Import job %s failed unexpectedly: %s",
-            safe_job_id,
+            safe_job_id_for_log,
             sanitize_log_value(exc),
             exc_info=sanitized_exc_info(exc),
         )

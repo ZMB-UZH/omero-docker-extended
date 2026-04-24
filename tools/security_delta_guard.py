@@ -617,13 +617,17 @@ def list_code_scanning_alerts(
         page += 1
 
 
-_GITHUB_API_VERSION_CACHE: str | None = None
+@dataclass
+class _GitHubApiVersionCache:
+    value: str | None = None
+
+
+_GITHUB_API_VERSION_CACHE = _GitHubApiVersionCache()
 
 
 def latest_github_api_version(token: str) -> str:
-    global _GITHUB_API_VERSION_CACHE
-    if _GITHUB_API_VERSION_CACHE is not None:
-        return _GITHUB_API_VERSION_CACHE
+    if _GITHUB_API_VERSION_CACHE.value is not None:
+        return _GITHUB_API_VERSION_CACHE.value
 
     versions = _github_api_get_json("/versions", token, api_version=None)
     if not isinstance(versions, list) or not versions:
@@ -632,8 +636,8 @@ def latest_github_api_version(token: str) -> str:
         )
     if not all(isinstance(version, str) for version in versions):
         raise RuntimeError("GitHub API versions request returned an invalid payload.")
-    _GITHUB_API_VERSION_CACHE = max(versions)
-    return _GITHUB_API_VERSION_CACHE
+    _GITHUB_API_VERSION_CACHE.value = max(versions)
+    return _GITHUB_API_VERSION_CACHE.value
 
 
 def github_api_get_json(api_path: str, token: str) -> Any:

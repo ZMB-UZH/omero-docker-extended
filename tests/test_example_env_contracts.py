@@ -182,6 +182,7 @@ EXPECTED_EXAMPLE_ENV_KEYS: dict[str, frozenset[str]] = {
             "OMEROHOST",
             "OMERO_PORT",
             "OMERO_WEB_ROOT",
+            "OMERO_WEB_HOST_PORT",
             "CONFIG_omero_security_transport",
             "CONFIG_omero_security_ssl",
             "OMP_DATA_USER",
