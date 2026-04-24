@@ -36,6 +36,10 @@ Use this skill for live runtime debugging, service-health checks, and container-
   `createImageFromNumpySeq`, reload the saved image before annotation writes,
   and compare acquisition checks with metadata extracted from that reloaded
   image.
+- For disposable OMERO table fixtures, use one unique name prefix, delete the
+  `FileAnnotation`/`Annotation` first, then re-query `OriginalFile` rows by
+  prefix before deleting remaining files; do not retry stale file IDs captured
+  before annotation deletion.
 - Do not repeat a Docker-socket permission error as if it were a product failure.
 - Do not trust host-shell `localhost` probes from a sandboxed agent shell.
 - Discover the live OMERO.web endpoint by enumerating the running service's

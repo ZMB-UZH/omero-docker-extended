@@ -146,6 +146,11 @@ Avoid deeply nested heredocs inside `docker exec ... bash -lc "..."`.
   `createImageFromNumpySeq`, reload the saved image before annotation writes,
   and assert against metadata extracted from the reloaded image rather than
   client-side labels that OMERO may not persist.
+- For disposable live OMERO table fixtures, name every object with one unique
+  prefix, delete the `FileAnnotation`/`Annotation` first, then re-query
+  `OriginalFile` rows by that prefix before deleting any remaining files. Do
+  not retry deletion of an `OriginalFile` ID captured before annotation
+  deletion; OMERO may have already removed it.
 - Live verification must exercise the changed mechanisms end to end after the
   relevant containers reflect the current checkout. For plugin work, include
   importability, served views/static assets, changed service paths, logs for the
