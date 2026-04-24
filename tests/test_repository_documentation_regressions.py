@@ -43,20 +43,84 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self,
     ) -> None:
         runbook_text = self.read_text("docs/operations/code-scanning.md")
-        self.assertIn("GitHub reported **8 open alerts on `main`**", runbook_text)
-        self.assertIn("`py/empty-except` (2)", runbook_text)
-        self.assertIn("`py/exit-from-finally` (1)", runbook_text)
-        self.assertIn("`py/multiple-definition` (1)", runbook_text)
+        normalized_runbook_text = " ".join(runbook_text.split())
+        self.assertIn("GitHub reported **4 open alerts on `main`**", runbook_text)
+        self.assertIn("**18 grouped issues**", runbook_text)
+        self.assertIn("**313 issue occurrences**", runbook_text)
+        self.assertIn("`59f334dc1eb0b175da46fc23bb9432c2974b41d1`", runbook_text)
         self.assertIn(
             "GitHub closed the Trivy `DS002`,",
             runbook_text,
         )
-        self.assertIn("4 Scorecard alerts were repository-level", runbook_text)
+        self.assertIn("CodeQL file-level findings in", runbook_text)
+        self.assertIn("transient Semgrep", runbook_text)
+        self.assertIn(
+            "4 remaining alerts were repository-level", normalized_runbook_text
+        )
         self.assertNotIn("should clear on the next workflow refresh", runbook_text)
         self.assertIn(
             "~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**",
             runbook_text,
         )
+
+    def test_doc_compaction_requires_objective_meaning_preservation(self) -> None:
+        agents_text = self.read_text("AGENTS.md")
+        runtime_text = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
+        docs_skill_text = self.read_text(
+            ".agents/skills/docs-knowledge-maintainer/SKILL.md"
+        )
+
+        self.assertIn("preserve every required meaning", agents_text)
+        self.assertIn("objective regression checks", agents_text)
+        self.assertIn("If a line-count budget must change", runtime_text)
+        self.assertIn("explicit phrase or behavior invariants", runtime_text)
+        self.assertIn("Less is more", runtime_text)
+        self.assertIn("prove full functional parity", agents_text)
+        self.assertIn("satisfy every repo rule", agents_text)
+        self.assertIn("fewer lines can prove full functional parity", docs_skill_text)
+        for adapter_path in (
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md",
+            ".cursor/rules/00-omero-core.mdc",
+        ):
+            with self.subTest(adapter_path=adapter_path):
+                adapter_text = " ".join(self.read_text(adapter_path).split())
+                self.assertIn("fewer lines", adapter_text)
+                self.assertRegex(adapter_text, r"(parity|full parity)")
+        self.assertIn("compact rewrites", docs_skill_text)
+        self.assertIn("dropping required meaning", docs_skill_text)
+
+    def test_agent_instructions_close_proven_retry_loops_after_verification(
+        self,
+    ) -> None:
+        agents_text = self.read_text("AGENTS.md")
+        runtime_text = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
+        runbook_text = self.read_text("docs/operations/code-scanning.md")
+        docs_skill_text = self.read_text(
+            ".agents/skills/docs-knowledge-maintainer/SKILL.md"
+        )
+
+        self.assertIn("proven avoidable retry/error loop", agents_text)
+        self.assertIn("only after the correct workflow is verified", agents_text)
+        self.assertIn("repo instruction, runbook, script, or helper", runtime_text)
+        self.assertIn("establish the correct workflow end to end", runtime_text)
+        self.assertIn("regression coverage", runtime_text)
+        self.assertIn("documented scanner command or helper", runbook_text)
+        self.assertIn("correct scanner workflow end to end", runbook_text)
+        self.assertIn("proven avoidable retry/error loop", docs_skill_text)
+
+        adapter_paths = (
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md",
+            ".cursor/rules/00-omero-core.mdc",
+        )
+        for adapter_path in adapter_paths:
+            with self.subTest(adapter_path=adapter_path):
+                adapter_text = " ".join(self.read_text(adapter_path).split())
+                self.assertIn("proven bad instructions/tools", adapter_text)
+                self.assertIn("correct workflow", adapter_text)
 
     def test_deepsource_repo_file_is_retired_from_agent_routing(self) -> None:
         expected_phrase = (
@@ -69,7 +133,11 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
         runbook_text = self.read_text("docs/operations/code-scanning.md")
         normalized_runbook_text = " ".join(runbook_text.split())
-        self.assertIn(expected_phrase, " ".join(self.read_text("AGENTS.md").split()))
+        normalized_agents_text = " ".join(self.read_text("AGENTS.md").split())
+        self.assertIn(
+            "do not search for, create, restore, or edit", normalized_agents_text
+        )
+        self.assertIn("`.deepsource.toml`", normalized_agents_text)
         for adapter_path in (
             "CLAUDE.md",
             "GEMINI.md",
@@ -82,13 +150,24 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             "GitHub PAT is not a DeepSource API credential", normalized_runbook_text
         )
         self.assertIn(
+            "ask the user for the exact credential immediately",
+            normalized_runbook_text,
+        )
+        self.assertIn("Do not keep retrying", runbook_text)
+        self.assertIn("confirm all GitHub workflows are green", runbook_text)
+        self.assertIn("compare grouped issues plus issue occurrences", runbook_text)
+        self.assertIn("If either count increased", runbook_text)
+        self.assertIn(
             "report the count as unavailable, not zero", normalized_runbook_text
         )
         self.assertIn("grouped issues from issue occurrences", normalized_runbook_text)
+        self.assertIn("latest_commit_oid", normalized_runbook_text)
+        self.assertIn("lagged snapshot", normalized_runbook_text)
         self.assertIn("command -v gh", runbook_text)
         self.assertIn("gh run view <run-id> --log-failed", runbook_text)
         self.assertIn("tools/scanner_inventory.py github-code-scanning", runbook_text)
         self.assertIn("tools/scanner_inventory.py deepsource", runbook_text)
+        self.assertIn("tools/scanner_inventory.py deepsource-issues", runbook_text)
         self.assertIn("prompts without echo on a TTY", runbook_text)
         self.assertIn("Never paste PATs into command arguments", runbook_text)
         self.assertIn("newest supported version", runbook_text)
@@ -107,9 +186,83 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("DeepSource API returned GraphQL errors", scanner_tool_text)
         self.assertIn("issueOccurrences(first: 1)", scanner_tool_text)
         self.assertIn("dependencyVulnerabilityOccurrences(first: 1)", scanner_tool_text)
+        self.assertIn("occurrences(first: $occurrenceLimit)", scanner_tool_text)
         self.assertIn(
             expected_runbook_phrase,
             self.read_text(".agents/skills/security-finding-triager/SKILL.md"),
+        )
+        expected_auth_phrase = "ask immediately and pause for input"
+        for adapter_path in (
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md",
+            ".cursor/rules/00-omero-core.mdc",
+        ):
+            adapter_text = self.read_text(adapter_path)
+            normalized_adapter_text = " ".join(adapter_text.split())
+            self.assertIn(".deepsource.toml", adapter_text)
+            self.assertIn("ask immediately", normalized_adapter_text)
+            self.assertIn("credential", normalized_adapter_text)
+            self.assertIn("GitHub workflows", normalized_adapter_text)
+            self.assertIn("DeepSource", normalized_adapter_text)
+            self.assertRegex(
+                normalized_adapter_text,
+                r"(did not increase|no DeepSource count increase)",
+            )
+        self.assertIn(expected_auth_phrase, self.read_text("CLAUDE.md"))
+        self.assertIn(
+            expected_auth_phrase,
+            self.read_text(".github/copilot-instructions.md"),
+        )
+        self.assertIn("GitHub PAT", normalized_agents_text)
+        self.assertIn("DeepSource API key", normalized_agents_text)
+        self.assertIn("needed and unavailable", normalized_agents_text)
+        self.assertIn("ask immediately and pause", normalized_agents_text)
+        self.assertIn("do not retry auth failures", normalized_agents_text)
+        self.assertIn(
+            "After every push, verify GitHub workflows are green",
+            self.read_text("AGENTS.md"),
+        )
+        self.assertIn(
+            "issue occurrences for the pushed commit", self.read_text("AGENTS.md")
+        )
+        self.assertIn(
+            "ask for it immediately and pause",
+            self.read_text(".agents/skills/security-finding-triager/SKILL.md"),
+        )
+        self.assertIn(
+            "against the pre-push baseline",
+            self.read_text(".agents/skills/security-finding-triager/SKILL.md"),
+        )
+        prevention_text = self.read_text(
+            "docs/reference/ai-agent-security-prevention-playbook.md"
+        )
+        self.assertIn("confirm GitHub workflows are green", prevention_text)
+        self.assertIn("compare grouped issues plus issue occurrences", prevention_text)
+        self.assertIn("against the pre-push baseline", prevention_text)
+
+    def test_missing_host_pytest_dependencies_route_to_workflow_venv(self) -> None:
+        troubleshooting_text = self.read_text("docs/troubleshooting/common.md")
+        normalized_troubleshooting_text = " ".join(troubleshooting_text.split())
+
+        self.assertIn(
+            "lacks Django or optional test dependencies", troubleshooting_text
+        )
+        self.assertIn(
+            "python3 tools/run_local_workflow_gates.py --setup-only",
+            troubleshooting_text,
+        )
+        self.assertIn("LOCAL_WORKFLOW_GATE_VENV", troubleshooting_text)
+        self.assertIn("numpy", troubleshooting_text)
+        self.assertIn("numcodecs", troubleshooting_text)
+        self.assertIn("matplotlib", troubleshooting_text)
+        self.assertIn(
+            "Use the OMERO.web runtime interpreter only for installed-container or live-runtime verification",
+            normalized_troubleshooting_text,
+        )
+        self.assertNotIn(
+            "Prefer the OMERO.web runtime interpreter for full pytest runs.",
+            troubleshooting_text,
         )
 
     def test_explicit_manual_compose_examples_include_required_env_files(

@@ -523,14 +523,17 @@ Expected result:
 - `omero zarr import` proceeds past the managed-path lookup instead of failing
   before object creation.
 
-## 17. Host-side `pytest` fails with `ModuleNotFoundError: No module named 'django'`
+## 17. Host-side `pytest` lacks Django or optional test dependencies
 
 Symptom:
 
-- `python3 -m pytest ...` fails immediately while loading `/opt/omero/conftest.py`.
+- `python3 -m pytest ...` fails immediately while loading repository
+  `conftest.py`.
 - The traceback includes:
-  - `ImportError while loading conftest '/opt/omero/conftest.py'`
+  - `ImportError while loading conftest`
   - `ModuleNotFoundError: No module named 'django'`
+  - or missing optional dependencies such as `numpy`, `numcodecs`, or
+    `matplotlib`
 
 Cause:
 
@@ -539,9 +542,19 @@ Cause:
 
 Fix:
 
-1. Prefer the OMERO.web runtime interpreter for full pytest runs.
-2. If a test module is intentionally self-contained, run it directly with `python3 <path-to-test>.py` so it bypasses repository `conftest.py`.
-3. For in-container pytest, unset deprecated `OMERO_TEMPDIR` and set `OMERO_TMPDIR` plus `TMPDIR` to a writable temp path before collecting tests.
+1. For host-side repository tests, first run `python3 tools/run_local_workflow_gates.py --setup-only`.
+2. Run targeted pytest with `${LOCAL_WORKFLOW_GATE_VENV:-.cache/local-workflow-gates/python-venv}/bin/python`.
+3. Use the OMERO.web runtime interpreter only for installed-container or live-runtime verification.
+4. If a test module is intentionally self-contained, run it directly with `python3 <path-to-test>.py` so it bypasses repository `conftest.py`.
+5. For in-container pytest, unset deprecated `OMERO_TEMPDIR` and set `OMERO_TMPDIR` plus `TMPDIR` to a writable temp path before collecting tests.
+
+Example host-side pattern:
+
+```bash
+python3 tools/run_local_workflow_gates.py --setup-only
+"${LOCAL_WORKFLOW_GATE_VENV:-.cache/local-workflow-gates/python-venv}/bin/python" \
+  -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
+```
 
 Example full-runtime pattern:
 
@@ -561,5 +574,7 @@ docker exec -i omero-omeroweb-1 bash -lc '
 
 Expected result:
 
-- Pytest collects with the runtime environment that already has Django installed.
+- Host-side pytest collects with the workflow-pinned local environment, or
+  container pytest collects with the runtime environment that already has
+  Django installed.
 - If you still need a quick targeted regression check outside that environment, direct-module execution remains valid for self-contained tests only.

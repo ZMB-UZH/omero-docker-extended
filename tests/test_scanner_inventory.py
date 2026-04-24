@@ -172,3 +172,117 @@ def test_summarize_deepsource_reports_group_and_occurrence_counts(monkeypatch) -
     assert requested_payloads and b"dependencyVulnerabilityOccurrences" in (
         requested_payloads[0] or b""
     )
+
+
+def test_summarize_deepsource_issues_reports_grouped_issue_details(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(scanner_inventory, "read_token", lambda *_args: "token")
+    requested_payloads: list[bytes | None] = []
+
+    def fake_fetch_json(
+        url: str,
+        *,
+        headers: dict[str, str],
+        data: bytes | None = None,
+        method: str | None = None,
+        service: str,
+    ) -> Any:
+        requested_payloads.append(data)
+        assert url == "https://api.deepsource.com/graphql/"
+        assert headers["Authorization"] == "Bearer token"
+        assert method == "POST"
+        assert service == "DeepSource API"
+        return {
+            "data": {
+                "repository": {
+                    "defaultBranch": "main",
+                    "latestCommitOid": "abc123",
+                    "issues": {
+                        "totalCount": 18,
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": "issue-id",
+                                    "issue": {
+                                        "shortcode": "PYL-R0201",
+                                        "title": "Consider staticmethod",
+                                        "category": "PERFORMANCE",
+                                        "severity": "MAJOR",
+                                        "shortDescription": "No instance access",
+                                        "tags": ["python"],
+                                        "analyzer": {
+                                            "shortcode": "python",
+                                            "name": "Python",
+                                        },
+                                    },
+                                    "occurrences": {
+                                        "totalCount": 9,
+                                        "edges": [
+                                            {
+                                                "node": {
+                                                    "path": "tests/example.py",
+                                                    "beginLine": 10,
+                                                    "beginColumn": 5,
+                                                    "endLine": 12,
+                                                    "endColumn": 1,
+                                                    "title": "Method can be static",
+                                                }
+                                            }
+                                        ],
+                                    },
+                                }
+                            }
+                        ],
+                    },
+                }
+            }
+        }
+
+    monkeypatch.setattr(scanner_inventory, "fetch_json", fake_fetch_json)
+
+    summary = scanner_inventory.summarize_deepsource_issues(
+        argparse.Namespace(
+            repository="gh/ZMB-UZH/omero-docker-extended",
+            issue_limit=100,
+            occurrence_limit=5,
+            token_env="DEEPSOURCE_TOKEN",
+        )
+    )
+
+    assert summary == {
+        "repository": "gh/ZMB-UZH/omero-docker-extended",
+        "default_branch": "main",
+        "latest_commit_oid": "abc123",
+        "grouped_issues": 18,
+        "returned_grouped_issues": 1,
+        "issues": [
+            {
+                "id": "issue-id",
+                "shortcode": "PYL-R0201",
+                "title": "Consider staticmethod",
+                "category": "PERFORMANCE",
+                "severity": "MAJOR",
+                "short_description": "No instance access",
+                "tags": ["python"],
+                "analyzer": {
+                    "shortcode": "python",
+                    "name": "Python",
+                },
+                "occurrences": 9,
+                "sample_occurrences": [
+                    {
+                        "path": "tests/example.py",
+                        "begin_line": 10,
+                        "begin_column": 5,
+                        "end_line": 12,
+                        "end_column": 1,
+                        "title": "Method can be static",
+                    }
+                ],
+            }
+        ],
+    }
+    assert requested_payloads and b"occurrences(first: $occurrenceLimit)" in (
+        requested_payloads[0] or b""
+    )

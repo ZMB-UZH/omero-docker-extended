@@ -2,15 +2,18 @@
 
 import os
 import sys
+import tempfile
 from types import ModuleType
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-os.environ.setdefault("OMERO_WEB_ROOT", "/tmp")
+_TEST_TMP_ROOT = tempfile.gettempdir()
+
+os.environ.setdefault("OMERO_WEB_ROOT", _TEST_TMP_ROOT)
 os.environ.setdefault("OMERO_WEB_VENV", "venv")
-os.environ.setdefault("OMERO_TMP_PATH", "/tmp")
+os.environ.setdefault("OMERO_TMP_PATH", _TEST_TMP_ROOT)
 os.environ.setdefault("OMERO_IMS_CELERY_BROKER_URL", "redis://localhost:6379/0")
 os.environ.setdefault("OMERO_IMS_CELERY_BACKEND_URL", "redis://localhost:6379/1")
 os.environ.setdefault("OMERO_IMS_CELERY_QUEUE", "imaris")
@@ -21,7 +24,9 @@ os.environ.setdefault("OMERO_IMS_CELERY_PREFETCH", "1")
 os.environ.setdefault("OMERO_IMS_EXPORT_TIMEOUT", "30")
 os.environ.setdefault("OMERO_IMS_EXPORT_POLL_INTERVAL", "0.01")
 os.environ.setdefault("OMERO_IMS_SCRIPT_NAME", "Batch_Image_Export_Imaris.py")
-os.environ.setdefault("OMERO_IMS_EXPORT_DIR", "/tmp/imaris-exports")
+os.environ.setdefault(
+    "OMERO_IMS_EXPORT_DIR", os.path.join(_TEST_TMP_ROOT, "imaris-exports")
+)
 os.environ.setdefault("OMERO_IMS_SCRIPT_START_TIMEOUT", "30")
 os.environ.setdefault("OMERO_IMS_SCRIPT_START_RETRY_INTERVAL", "0.1")
 os.environ.setdefault("OMERO_IMS_PROCESSOR_CONFIG_CACHE_TTL", "60")
@@ -247,7 +252,7 @@ _ISOLATED_MODULE_PREFIXES = (
     "portalocker",
 )
 
-_MODULE_STATE_BASELINE: dict[str, tuple[object, dict[str, object]]] = {}
+_MODULE_STATE_BASELINE: dict[str, tuple[ModuleType, dict[str, Any]]] = {}
 
 
 def _matches_isolated_prefix(module_name: str) -> bool:
@@ -257,8 +262,8 @@ def _matches_isolated_prefix(module_name: str) -> bool:
     )
 
 
-def _snapshot_module_state() -> dict[str, tuple[object, dict[str, Any]]]:
-    snapshot = {}
+def _snapshot_module_state() -> dict[str, tuple[ModuleType, dict[str, Any]]]:
+    snapshot: dict[str, tuple[ModuleType, dict[str, Any]]] = {}
     for module_name, module in list(sys.modules.items()):
         if _matches_isolated_prefix(module_name):
             snapshot[module_name] = (module, dict(getattr(module, "__dict__", {})))
@@ -266,7 +271,7 @@ def _snapshot_module_state() -> dict[str, tuple[object, dict[str, Any]]]:
 
 
 def _restore_module_state(
-    snapshot: dict[str, tuple[object, dict[str, object]]],
+    snapshot: dict[str, tuple[ModuleType, dict[str, Any]]],
 ) -> None:
     if not snapshot:
         return

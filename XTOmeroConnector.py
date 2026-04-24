@@ -4966,12 +4966,12 @@ class OMEROBrowserDialog:
         self._set_status("OMERO browser refreshed", "#d4edda")
         self._finish_refresh_buttons()
 
-    def _finish_refresh_error(self, generation, exc):
+    def _finish_refresh_error(self, generation, refresh_error):
         if generation != self._refresh_generation:
             return
         self._set_status("Refresh failed", "#f8d7da")
-        self._show_error("Refresh Failed", str(exc))
-        _xt_debug(f"Refresh failed: {type(exc).__name__}: {exc}")
+        self._show_error("Refresh Failed", str(refresh_error))
+        _xt_debug(f"Refresh failed: {type(refresh_error).__name__}: {refresh_error}")
         self._finish_refresh_buttons()
 
     def _finish_refresh_buttons(self):

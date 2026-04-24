@@ -73,7 +73,7 @@ Before editing security-relevant code:
 5. Name the regression tests you will add before you touch code.
 6. Decide how you will prove no credential, session, stack trace, or internal path leaks to the user or logs.
 7. After the change, run the narrowest fast tests first, then the runtime-complete verification path if available.
-8. After pushing, refresh the live GitHub code-scanning count again. Do not infer closure from local reasoning alone.
+8. After pushing, confirm GitHub workflows are green, refresh the live GitHub code-scanning count, and when DeepSource auth is available compare grouped issues plus issue occurrences against the pre-push baseline. Do not infer closure from local reasoning alone.
 
 ## Core rules with concrete examples
 

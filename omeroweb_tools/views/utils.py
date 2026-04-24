@@ -27,14 +27,21 @@ def load_json_body(request):
 
 def require_non_root_user(view_func):
     @wraps(view_func)
-    def _wrapped(request, conn=None, url=None, *args, **kwargs):
+    def _wrapped(request, *args, conn=None, url=None, **kwargs):
+        remaining_args = args
+        if remaining_args and conn is None:
+            conn = remaining_args[0]
+            remaining_args = remaining_args[1:]
+        if remaining_args and url is None:
+            url = remaining_args[0]
+            remaining_args = remaining_args[1:]
         username = current_username(request, conn)
         if username == "root":
             return JsonResponse(
                 {"error": "PLEASE LOGIN AS REGULAR USER\nTO USE THIS PLUGIN"},
                 status=403,
             )
-        return view_func(request, conn=conn, url=url, *args, **kwargs)
+        return view_func(request, *remaining_args, conn=conn, url=url, **kwargs)
 
     return _wrapped
 

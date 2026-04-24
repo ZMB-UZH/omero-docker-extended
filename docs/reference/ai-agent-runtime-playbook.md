@@ -106,6 +106,15 @@ Avoid deeply nested heredocs inside `docker exec ... bash -lc "..."`.
 ## Testing policy
 
 - Fix production code instead of weakening tests.
+- When rewriting or compacting docs or instruction files, preserve every
+  required meaning. If a line-count budget must change, update tests with
+  explicit phrase or behavior invariants that prove the required context still
+  exists.
+- Less is more: prefer fewer lines of code or docs only when tests, review, and
+  repo rules prove full functional parity.
+- If a repo instruction, runbook, script, or helper causes a proven avoidable
+  retry/error loop, first establish the correct workflow end to end, then update
+  that instruction or tool concisely with regression coverage.
 - Run each test directory as a separate `pytest` invocation.
 - In root-owned clones, keep `-p no:cacheprovider -W error`.
 - Tests and live verification must not assume pre-existing OMERO images,
@@ -114,7 +123,11 @@ Avoid deeply nested heredocs inside `docker exec ... bash -lc "..."`.
   deterministic disposable fixtures in that test or verification flow and
   isolate them by unique names. User-specified live objects are allowed only as
   diagnostic probes, not as reusable regression fixtures.
-- If host `pytest` cannot import Django, switch to the dependency-complete runtime first.
+- If host `pytest` cannot import Django or optional test dependencies such as
+  `numpy`, `numcodecs`, or `matplotlib`, run
+  `python3 tools/run_local_workflow_gates.py --setup-only` and use
+  `${LOCAL_WORKFLOW_GATE_VENV:-.cache/local-workflow-gates/python-venv}/bin/python`
+  for targeted pytest commands.
 - If full runtime verification is blocked, use direct-module or syntax validation only as an explicit fallback and report that limitation accurately.
 - After rebuilding `omeroweb`, verify existing plugin temp subtrees under `OMERO_TMP_PATH` inside the live container. `startup/10-web-bootstrap.sh` is expected to repair non-server top-level plugin trees such as `omeroweb-import/` back to the OMERO.web runtime UID before supervisord drops privileges.
 

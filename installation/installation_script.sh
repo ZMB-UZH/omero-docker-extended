@@ -191,6 +191,26 @@ prepare_crowdsec_install_bootstrap_enrollment() {
     return 0
 }
 
+print_crowdsec_install_bootstrap_status() {
+    case "${CROWDSEC_INSTALL_BOOTSTRAP_STATUS:-disabled}" in
+        disabled)
+            return 0
+            ;;
+        install_startup)
+            echo "CrowdSec install enrollment mode: fresh install startup."
+            return 0
+            ;;
+        reinstall_existing_runtime_state)
+            echo "CrowdSec install enrollment mode: existing runtime state with renewed dashboard enrollment."
+            return 0
+            ;;
+        *)
+            echo "CrowdSec install enrollment mode: ${CROWDSEC_INSTALL_BOOTSTRAP_STATUS}"
+            return 0
+            ;;
+    esac
+}
+
 
 load_installation_paths_env() {
     local env_file_path="${1:?BUG: load_installation_paths_env requires a path}"
@@ -2175,10 +2195,9 @@ tty_echo() {
     install_transcript_record_line "${message}"
 }
 
-tty_printf() {
-    local rendered_message=""
+tty_write_text() {
+    local rendered_message="${1:-}"
 
-    printf -v rendered_message "$@"
     if [ -r /dev/tty ]; then
         printf '%s' "${rendered_message}" > /dev/tty
     fi
@@ -2328,6 +2347,7 @@ resolve_path_with_default_prompt() {
     local path_label="$2"
     local reply=""
     local chosen_path=""
+    local prompt_message=""
 
     while true; do
         reply="$(prompt_yes_no "Use default ${path_label} (${default_path})? Y/n (Default: Y)" "yes")"
@@ -2338,7 +2358,8 @@ resolve_path_with_default_prompt() {
         fi
 
         while true; do
-            tty_printf '%s: (Current: %s) ' "${path_label}" "${default_path}"
+            printf -v prompt_message '%s: (Current: %s) ' "${path_label}" "${default_path}"
+            tty_write_text "${prompt_message}"
 
             if ! tty_read_line chosen_path; then
                 printf '%s' "${default_path}"
@@ -2371,7 +2392,7 @@ prompt_yes_no() {
 
     while true; do
         tty_echo "${prompt_message}"
-        tty_printf '> '
+        tty_write_text '> '
 
         if ! tty_read_line reply; then
             printf '%s' "${default_choice}"
@@ -3146,7 +3167,7 @@ run_docker_scout_summary() {
     # build:/dockerfile: directives.  These are the custom-built images.
     local -a built_images=() built_bases=()
     local -a thirdparty_images=()
-    local dockerfile="" df_basename="" base_image="" built_tag=""
+    local dockerfile="" base_image="" built_tag=""
 
     # Map each Dockerfile referenced in docker-compose.yml to its image tag.
     local compose_config=""
@@ -4122,6 +4143,7 @@ echo "================================================"
 echo ""
 
 prepare_crowdsec_install_bootstrap_enrollment
+print_crowdsec_install_bootstrap_status
 
 if [ "${START_CONTAINERS}" -eq 1 ]; then
     if [ "${CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED}" = "1" ]; then

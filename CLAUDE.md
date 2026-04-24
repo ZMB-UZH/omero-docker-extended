@@ -24,7 +24,9 @@ Project-specific instructions for Claude Code sessions working on this repositor
 - If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill. It is for internal AI communication only, never for repo docs/comments/docstrings/function descriptions or user-facing copy, and it changes reply style only without changing routing, tool choice, verification scope, or uncertainty handling. Drop back to normal detail whenever safety, sequencing, or ambiguity matters.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, ports, or edit `env/omero_secrets.env`.
 - Do not search for, create, restore, or edit `.deepsource.toml`; DeepSource repo-file configuration is retired. Use `docs/operations/code-scanning.md` and `tools/scanner_inventory.py` for scanner counts and logs.
-- Update `docs/` when behavior or operating assumptions change.
+- If a GitHub PAT or DeepSource API key is required and unavailable, ask immediately and pause for input instead of retrying auth failures; continue only unrelated local work.
+- After every push, confirm GitHub workflows are green and, when DeepSource auth is available, ensure grouped issues and issue occurrences did not increase for the pushed commit.
+- Update `docs/` when behavior or operating assumptions change; less is more only when fewer lines prove full parity and all repo rules; fix proven bad instructions/tools only after the correct workflow is verified.
 
 ## Repository anchors
 
