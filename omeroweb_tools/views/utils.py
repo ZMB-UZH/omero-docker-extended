@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from contextlib import suppress
 from functools import wraps
 
 import omero
@@ -8,14 +8,11 @@ from django.conf import settings
 from django.http import JsonResponse
 
 from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
-from omero_plugin_common.logging_utils import sanitize_log_value
 from omero_plugin_common.request_utils import (
     current_username as _current_username,
     parse_json_body,
 )
 
-
-logger = logging.getLogger(__name__)
 
 AUTH_VALIDATION_FAILED_ERROR = "Credential validation failed."
 CURRENT_USER_REQUIRED_ERROR = "Could not resolve the current OMERO user."
@@ -99,19 +96,9 @@ def validate_user_password(conn, password):
         client.createSession(username, password)
         session_created = True
     except Exception:
-        logger.warning(
-            "Password validation failed for user %s.",
-            sanitize_log_value(username),
-            exc_info=True,
-        )
         return False, AUTH_VALIDATION_FAILED_ERROR
     finally:
         if session_created and client is not None:
-            try:
+            with suppress(Exception):
                 client.closeSession()
-            except Exception:
-                logger.debug(
-                    "Suppressed non-fatal close error after password validation.",
-                    exc_info=True,
-                )
     return True, None

@@ -5,20 +5,26 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
-import urllib.request
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = Path(__file__).with_name("frontend_preview_tooling_manifest.json")
+NODE_RELEASE_HOST = "nodejs.org"
+NODE_VERSION_RE = re.compile(r"^[0-9]+[.][0-9]+[.][0-9]+$")
+NODE_ARCHIVE_RE = re.compile(
+    r"^node-v(?P<version>[0-9]+[.][0-9]+[.][0-9]+)-linux-(x64|arm64)[.]tar[.]xz$"
+)
 
 
 def load_manifest() -> dict[str, object]:
@@ -211,11 +217,39 @@ def node_linux_arch() -> str:
     )
 
 
-def download_file(url: str, destination: Path) -> None:
-    """Download a URL to a local path."""
-    with urllib.request.urlopen(url, timeout=60) as response:
+def node_release_path(version: str, filename: str) -> str:
+    """Return a validated Node.js release download path."""
+    if not NODE_VERSION_RE.fullmatch(version):
+        raise RuntimeError(f"Invalid Node.js version in manifest: {version}.")
+    archive_match = NODE_ARCHIVE_RE.fullmatch(filename)
+    is_release_archive = (
+        archive_match is not None and archive_match.group("version") == version
+    )
+    if filename != "SHASUMS256.txt" and not is_release_archive:
+        raise RuntimeError(f"Unexpected Node.js release artifact: {filename}.")
+    return f"/dist/v{version}/{filename}"
+
+
+def download_node_release_file(version: str, filename: str, destination: Path) -> None:
+    """Download a validated Node.js release artifact from the official host."""
+    path = node_release_path(version, filename)
+    connection = http.client.HTTPSConnection(NODE_RELEASE_HOST, timeout=60)
+    try:
+        connection.request(
+            "GET",
+            path,
+            headers={"User-Agent": "omero-agent-frontend-preview-tooling"},
+        )
+        response = connection.getresponse()
+        if response.status != 200:
+            raise RuntimeError(
+                f"Node.js release download failed for {filename}: "
+                f"HTTP {response.status} {response.reason}."
+            )
         with destination.open("wb") as handle:
             shutil.copyfileobj(response, handle)
+    finally:
+        connection.close()
 
 
 def sha256_hex(path: Path) -> str:
@@ -260,6 +294,7 @@ def safe_extract_tar_xz(archive_path: Path, destination: Path) -> None:
     destination_root = destination.resolve()
     with tarfile.open(archive_path, "r:xz") as archive:
         members = archive.getmembers()
+        links = []
         for member in members:
             member_path = (destination / member.name).resolve()
             if not is_relative_to(member_path, destination_root):
@@ -284,10 +319,37 @@ def safe_extract_tar_xz(archive_path: Path, destination: Path) -> None:
                     raise RuntimeError(
                         f"Refusing to extract unsafe link target: {member.name}"
                     )
-        try:
-            archive.extractall(destination, members, filter="data")
-        except TypeError:
-            archive.extractall(destination, members)
+            if member.isdir():
+                member_path.mkdir(parents=True, exist_ok=True)
+                os.chmod(member_path, member.mode & 0o777)
+            elif member.isfile():
+                if member_path.exists() or member_path.is_symlink():
+                    raise RuntimeError(
+                        f"Refusing to overwrite archive member: {member.name}"
+                    )
+                member_path.parent.mkdir(parents=True, exist_ok=True)
+                extracted = archive.extractfile(member)
+                if extracted is None:
+                    raise RuntimeError(f"Could not extract file: {member.name}")
+                with extracted, member_path.open("wb") as handle:
+                    shutil.copyfileobj(extracted, handle)
+                os.chmod(member_path, member.mode & 0o777)
+            else:
+                links.append((member, member_path))
+        for member, member_path in links:
+            if member_path.exists() or member_path.is_symlink():
+                raise RuntimeError(f"Refusing to overwrite archive link: {member.name}")
+            member_path.parent.mkdir(parents=True, exist_ok=True)
+            link_target = Path(member.linkname)
+            if member.issym():
+                os.symlink(member.linkname, member_path)
+            else:
+                resolved_link = (destination / link_target).resolve()
+                if not resolved_link.is_file():
+                    raise RuntimeError(
+                        f"Refusing hard link to missing file: {member.name}"
+                    )
+                os.link(resolved_link, member_path)
 
 
 def installed_node_version(node_dir: Path) -> str | None:
@@ -320,7 +382,6 @@ def install_pinned_node(node_dir: Path, version: str) -> Path:
         )
 
     filename = f"node-v{version}-linux-{arch}.tar.xz"
-    release_url = f"https://nodejs.org/dist/v{version}"
     node_dir.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(
         prefix="node-install-", dir=node_dir.parent
@@ -328,8 +389,8 @@ def install_pinned_node(node_dir: Path, version: str) -> Path:
         tmp_path = Path(tmp)
         archive_path = tmp_path / filename
         shasums_path = tmp_path / "SHASUMS256.txt"
-        download_file(f"{release_url}/{filename}", archive_path)
-        download_file(f"{release_url}/SHASUMS256.txt", shasums_path)
+        download_node_release_file(version, filename, archive_path)
+        download_node_release_file(version, "SHASUMS256.txt", shasums_path)
         verify_sha256(archive_path, shasums_path, filename)
         extract_root = tmp_path / "extract"
         extract_root.mkdir()
