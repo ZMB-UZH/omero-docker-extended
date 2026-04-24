@@ -7,15 +7,25 @@ import argparse
 import getpass
 import json
 import os
+import shutil
+import subprocess
 import sys
-import urllib.error
 import urllib.parse
-import urllib.request
 from collections import Counter
 from typing import Any
 
 
 USER_AGENT = "omero-docker-extended-scanner-inventory"
+
+
+def curl_config_quote(value: str) -> str:
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+    )
+    return f'"{escaped}"'
 
 
 def parse_args() -> argparse.Namespace:
@@ -87,19 +97,42 @@ def fetch_json(
     method: str | None = None,
     service: str,
 ) -> Any:
-    request = urllib.request.Request(
-        url,
-        data=data,
-        headers=headers,
-        method=method,
-    )
+    parsed_url = urllib.parse.urlsplit(url)
+    if parsed_url.scheme != "https" or not parsed_url.hostname:
+        raise SystemExit(f"{service} request requires an HTTPS URL")
+    curl_bin = shutil.which("curl")
+    if curl_bin is None:
+        raise SystemExit(f"{service} request failed: curl is required")
+    config_lines = [f"url = {curl_config_quote(url)}"]
+    if method is not None:
+        config_lines.append(f"request = {curl_config_quote(method)}")
+    for name, value in headers.items():
+        config_lines.append(f"header = {curl_config_quote(f'{name}: {value}')}")
+    if data is not None:
+        config_lines.append(f"data-binary = {curl_config_quote(data.decode('utf-8'))}")
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as exc:
-        raise SystemExit(f"{service} request failed with HTTP {exc.code}") from None
-    except urllib.error.URLError as exc:
-        raise SystemExit(f"{service} request failed: {exc.reason}") from None
+        result = subprocess.run(
+            [
+                curl_bin,
+                "--silent",
+                "--show-error",
+                "--location",
+                "--fail-with-body",
+                "--config",
+                "-",
+            ],
+            check=False,
+            capture_output=True,
+            input="\n".join(config_lines) + "\n",
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise SystemExit(f"{service} request failed: {exc}") from None
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise SystemExit(f"{service} request failed: {detail}")
+    return json.loads(result.stdout)
 
 
 def latest_github_api_version() -> str:
