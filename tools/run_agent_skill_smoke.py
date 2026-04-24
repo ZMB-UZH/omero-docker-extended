@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import py_compile
 import subprocess
 import sys
@@ -49,14 +50,17 @@ def _plugin_suite_fallback() -> int:
     return 0
 
 
-def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print(
-            "Usage: python3 tools/run_agent_skill_smoke.py <profile>", file=sys.stderr
-        )
-        return 2
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run a named composite smoke profile for agent-surface tests."
+    )
+    parser.add_argument("profile", help="Smoke profile to run")
+    return parser.parse_args(argv)
 
-    profile = argv[1]
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    profile = args.profile
     if profile == "plugin-suite-fallback":
         return _plugin_suite_fallback()
 
@@ -65,4 +69,4 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))
+    raise SystemExit(main())

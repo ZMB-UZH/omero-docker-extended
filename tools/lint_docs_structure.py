@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from pathlib import Path
 import sys
@@ -131,9 +132,24 @@ def run_validations(repo_root: Path) -> Sequence[ValidationError]:
     return errors
 
 
-def main() -> int:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Validate repository documentation structure and agent surfaces."
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=Path(__file__).resolve().parents[1],
+        help="Repository root to validate.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
     """Program entrypoint."""
-    repo_root: Path = Path(__file__).resolve().parents[1]
+    args = parse_args(argv)
+    repo_root = args.repo_root
     errors: Sequence[ValidationError] = run_validations(repo_root)
     if errors:
         for error in errors:

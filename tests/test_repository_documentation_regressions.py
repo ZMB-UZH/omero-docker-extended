@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -19,6 +21,23 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
 
     def read_text(self, relative_path: str) -> str:
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
+
+    def git_file_count(self, *patterns: str) -> int:
+        git_path = shutil.which("git")
+        self.assertIsNotNone(git_path)
+        output = subprocess.check_output(
+            [
+                git_path,
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                *patterns,
+            ],
+            cwd=self.repo_root,
+            text=True,
+        )
+        return len([line for line in output.splitlines() if line])
 
     def test_root_security_policy_exists_and_points_to_canonical_docs(self) -> None:
         root_security = self.repo_root / "SECURITY.md"
@@ -268,11 +287,19 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         workflow_text = self.read_text(".github/workflows/security-code-scanning.yml")
 
         self.assertIn("CodeQL File-Count Coverage", runbook_text)
+        py_count = self.git_file_count("*.py")
+        pyi_count = self.git_file_count("*.pyi")
+        total_python_count = py_count + pyi_count
         self.assertIn(
-            "310 tracked `.py` implementation files and 33 tracked `.pyi` type stubs",
+            f"{py_count} tracked `.py` implementation files "
+            f"and {pyi_count} tracked `.pyi` type stubs",
             normalized_runbook_text,
         )
-        self.assertIn("`310/343` CodeQL count", normalized_runbook_text)
+        self.assertIn(
+            f"`{py_count}/{total_python_count}` CodeQL count",
+            normalized_runbook_text,
+        )
+        self.assertIn("earlier `310/343` UI count", normalized_runbook_text)
         self.assertIn("8 tracked JS-family files", normalized_runbook_text)
         self.assertIn(".agents/skills/frontend-preview/agents/", runbook_text)
         self.assertIn("6 application/test JS files", runbook_text)

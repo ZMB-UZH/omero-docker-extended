@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,7 @@ SleepFn = Callable[[float], None]
 ClockFn = Callable[[], float]
 DefaultBranchResolver = Callable[[str], str | None]
 RunStartResolver = Callable[[str, str], datetime | None]
+REPOSITORY_COMPONENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 @dataclass(frozen=True)
@@ -98,6 +100,29 @@ def _first_non_empty(*values: Any) -> str:
         if normalized:
             return normalized
     return ""
+
+
+def validate_repository_component(value: str) -> bool:
+    """Return True when a repository path component is safe for API paths."""
+    return (
+        bool(value)
+        and value not in {".", ".."}
+        and REPOSITORY_COMPONENT_RE.fullmatch(value) is not None
+    )
+
+
+def validate_github_repository(repository: str) -> str:
+    """Return a validated GitHub OWNER/REPO identifier."""
+    parts = repository.split("/")
+    if (
+        len(parts) != 2
+        or not validate_repository_component(parts[0])
+        or not validate_repository_component(parts[1])
+    ):
+        raise ValueError(
+            "GitHub repository must use OWNER/REPO format with safe path components"
+        )
+    return f"{parts[0]}/{parts[1]}"
 
 
 def payload_repository_full_name(event_payload: dict[str, Any]) -> str:
@@ -565,6 +590,7 @@ def list_code_scanning_alerts(
     ref: str | None = None,
     pr: int | None = None,
 ) -> list[dict[str, Any]]:
+    repository = validate_github_repository(repository)
     query = {
         "state": "open",
         "sort": "created",
@@ -656,7 +682,10 @@ def _github_api_get_json(api_path: str, token: str, *, api_version: str | None) 
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
         raise RuntimeError(f"GitHub API request failed: {detail}")
-    return json.loads(result.stdout)
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("GitHub API request returned invalid JSON.") from exc
 
 
 def _curl_config_quote(value: str) -> str:
@@ -670,6 +699,7 @@ def _curl_config_quote(value: str) -> str:
 
 
 def get_default_branch(repository: str, token: str) -> str | None:
+    repository = validate_github_repository(repository)
     payload = github_api_get_json(f"/repos/{repository}", token)
     if not isinstance(payload, dict):
         raise RuntimeError(f"Unexpected GitHub API payload type: {type(payload)!r}")
@@ -679,6 +709,7 @@ def get_default_branch(repository: str, token: str) -> str | None:
 def get_workflow_run_started_at(
     repository: str, token: str, run_id: str
 ) -> datetime | None:
+    repository = validate_github_repository(repository)
     normalized_run_id = _first_non_empty(run_id)
     if not normalized_run_id:
         raise RuntimeError(
@@ -724,6 +755,11 @@ def main() -> int:
     if not args.repository:
         print("ERROR: --repository is required.", file=sys.stderr)
         return 2
+    try:
+        repository = validate_github_repository(args.repository)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
 
     token = os.environ.get(args.token_env, "").strip()
     if not token:
@@ -738,7 +774,7 @@ def main() -> int:
 
         def fetch_alerts(**kwargs: Any) -> list[dict[str, Any]]:
             return list_code_scanning_alerts(
-                args.repository,
+                repository,
                 token,
                 **kwargs,
             )
@@ -765,7 +801,7 @@ def main() -> int:
             result = evaluate_direct_event(
                 args.event_name,
                 event_payload,
-                repository=args.repository,
+                repository=repository,
                 ref=args.ref,
                 run_id=args.run_id,
                 fetch_alerts=fetch_alerts,

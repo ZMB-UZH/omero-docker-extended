@@ -28,10 +28,11 @@ tracked repository file. The workflow now prints the tracked language
 candidates before CodeQL initialization so a lower GitHub UI count can be
 explained from the run log instead of guessed.
 
-- Python: the current repo has 310 tracked `.py` implementation files and 33
-  tracked `.pyi` type stubs. A `310/343` CodeQL count means the implementation
+- Python: the current repo has 313 tracked `.py` implementation files and 33
+  tracked `.pyi` type stubs. A `313/346` CodeQL count means the implementation
   files were included and type stubs were not counted as Python source; stubs
-  are still covered by Ruff/Mypy contracts.
+  are still covered by Ruff/Mypy contracts. The earlier `310/343` UI count had
+  the same meaning before three tracked Python files were added.
 - JavaScript/TypeScript: the current repo has 8 tracked JS-family files. The 2
   files under `.agents/skills/frontend-preview/agents/` are tool config files
   audited by workflow logs and repo lint/tests; the 6 application/test JS files

@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+import textwrap
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXTRACTOR = REPO_ROOT / "tools" / "extract_dockerfile_pip_deps.py"
@@ -63,6 +64,37 @@ def test_extractor_excludes_shell_variable_references():
     for line in result.stdout.strip().splitlines():
         assert "${" not in line, f"Shell variable reference in output: {line}"
         assert "$(" not in line, f"Shell subcommand in output: {line}"
+
+
+def test_extractor_accepts_common_version_specifiers(tmp_path):
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text(
+        textwrap.dedent(
+            """
+            FROM python:3.14.4
+            RUN python -m pip install --no-cache-dir \\
+                "example~=1.2" \\
+                "another>=1,<2" \\
+                "package[extra]==3.4.5" \\
+                "pip~=26.0" \\
+                "${DYNAMIC_PACKAGE}"
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(EXTRACTOR), str(dockerfile)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "another>=1,<2",
+        "example~=1.2",
+        "package[extra]==3.4.5",
+    ]
 
 
 def test_extractor_fails_on_missing_file():
