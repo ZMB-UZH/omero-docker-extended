@@ -52,7 +52,8 @@ class _RequestsResponse:
     def json(self):
         return json.loads(self.content.decode("utf-8"))
 
-    def close(self) -> None:
+    @staticmethod
+    def close() -> None:
         return None
 
 
@@ -438,7 +439,8 @@ def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
             captured["timeout"] = timeout
             self.closed = False
 
-        def request(self, method, target, *, body, headers):
+        @staticmethod
+        def request(method, target, *, body, headers):
             captured["method"] = method
             captured["target"] = target
             captured["body"] = body
