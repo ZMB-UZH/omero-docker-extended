@@ -78,10 +78,24 @@ validate_toggle() {
     return 0
 }
 
-validate_positive_integer() {
-    local variable_name="${1:?BUG: validate_positive_integer requires variable name}"
+is_non_negative_integer() {
+    case "${1:-}" in
+        ""|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+is_build_target_name() {
+    case "${1:-}" in
+        ""|*[!A-Za-z0-9._-]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+validate_non_negative_integer() {
+    local variable_name="${1:?BUG: validate_non_negative_integer requires variable name}"
     local variable_value="${2-}"
-    if ! [[ "${variable_value}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${variable_value}"; then
         echo "ERROR (${SCRIPT_NAME}): ${variable_name} must be a non-negative integer. Got: ${variable_value}" >&2
         return 1
     fi
@@ -249,7 +263,7 @@ validate_compression_type() {
 }
 
 validate_compression_level() {
-    if ! [[ "${DOCKER_BUILD_COMPRESSION_LEVEL}" =~ ^[0-9]+$ ]]; then
+    if ! is_non_negative_integer "${DOCKER_BUILD_COMPRESSION_LEVEL}"; then
         echo "ERROR (${SCRIPT_NAME}): DOCKER_BUILD_COMPRESSION_LEVEL must be an integer. Got: ${DOCKER_BUILD_COMPRESSION_LEVEL}" >&2
         return 1
     fi
@@ -272,7 +286,7 @@ validate_build_targets() {
     local target=""
     require_non_empty "DOCKER_BUILD_TARGETS" "${DOCKER_BUILD_TARGETS}"
     for target in ${DOCKER_BUILD_TARGETS}; do
-        if [[ "${target}" =~ [^a-zA-Z0-9._-] ]]; then
+        if ! is_build_target_name "${target}"; then
             echo "ERROR (${SCRIPT_NAME}): Invalid build target '${target}'. Allowed characters: a-z A-Z 0-9 . _ -" >&2
             return 1
         fi
@@ -936,8 +950,8 @@ ensure_builder() {
     local -a driver_opts=()
     local attempt
 
-    validate_positive_integer "DOCKER_BUILDX_BOOTSTRAP_TIMEOUT_SECONDS" "${bootstrap_timeout}"
-    validate_positive_integer "DOCKER_BUILDX_BOOTSTRAP_ATTEMPTS" "${bootstrap_attempts}"
+    validate_non_negative_integer "DOCKER_BUILDX_BOOTSTRAP_TIMEOUT_SECONDS" "${bootstrap_timeout}"
+    validate_non_negative_integer "DOCKER_BUILDX_BOOTSTRAP_ATTEMPTS" "${bootstrap_attempts}"
     if [ "${bootstrap_timeout}" -lt 1 ]; then
         echo "ERROR (${SCRIPT_NAME}): DOCKER_BUILDX_BOOTSTRAP_TIMEOUT_SECONDS must be >= 1. Got: ${bootstrap_timeout}" >&2
         return 1
@@ -1216,8 +1230,8 @@ main() {
     validate_toggle "DOCKER_BUILD_FLATTEN_FINAL_IMAGE" "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"
     validate_toggle "DOCKER_BUILD_FLATTEN_ONLY" "${DOCKER_BUILD_FLATTEN_ONLY}"
     validate_local_cache_mode
-    validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_COUNT" "${DOCKER_BUILD_BAKE_RETRY_COUNT}"
-    validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS" "${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
+    validate_non_negative_integer "DOCKER_BUILD_BAKE_RETRY_COUNT" "${DOCKER_BUILD_BAKE_RETRY_COUNT}"
+    validate_non_negative_integer "DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS" "${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
     validate_buildx_driver
     validate_toggle "DOCKER_BUILDX_FORCE_RECREATE_BUILDER" "${DOCKER_BUILDX_FORCE_RECREATE_BUILDER}"
     validate_toggle "DOCKER_BUILDX_KEEP_BUILDER" "${DOCKER_BUILDX_KEEP_BUILDER}"

@@ -93,10 +93,23 @@ require_binary() {
     fi
 }
 
+is_positive_integer() {
+    local value="${1:-}"
+
+    case "${value}" in
+        ""|*[!0-9]*) return 1 ;;
+    esac
+
+    case "${value}" in
+        *[1-9]*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 validate_positive_integer() {
     local value="$1"
     local label="$2"
-    if ! [[ "${value}" =~ ^[0-9]+$ ]] || [ "${value}" -eq 0 ]; then
+    if ! is_positive_integer "${value}"; then
         log_error "${label} must be a positive integer. Received: ${value}"
         exit 1
     fi

@@ -18,6 +18,11 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         cls.installation_script = (
             cls.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
+        cls.installation_validators = cls._slice_function(
+            cls.installation_script,
+            "is_non_negative_integer() {",
+            "crowdsec_install_auto_restart_marker_path() {",
+        )
         cls.server_bootstrap_script = (
             cls.repo_root / "startup" / "10-server-bootstrap.sh"
         ).read_text(encoding="utf-8")
@@ -165,10 +170,15 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertIn("failed_prefix_count=0", result.stdout)
 
     def test_installation_wait_accepts_current_repo_root_sync_status(self) -> None:
-        function_text = self._slice_function(
-            self.installation_script,
-            "repo_root_sync_stable_prefix_depth() {",
-            "stop_old_installation_containers() {",
+        function_text = "\n".join(
+            [
+                self.installation_validators,
+                self._slice_function(
+                    self.installation_script,
+                    "repo_root_sync_stable_prefix_depth() {",
+                    "stop_old_installation_containers() {",
+                ),
+            ]
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -205,10 +215,15 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             self._run_bash(script)
 
     def test_installation_wait_skips_when_no_stable_shared_prefix(self) -> None:
-        function_text = self._slice_function(
-            self.installation_script,
-            "repo_root_sync_stable_prefix_depth() {",
-            "stop_old_installation_containers() {",
+        function_text = "\n".join(
+            [
+                self.installation_validators,
+                self._slice_function(
+                    self.installation_script,
+                    "repo_root_sync_stable_prefix_depth() {",
+                    "stop_old_installation_containers() {",
+                ),
+            ]
         )
         script = textwrap.dedent(
             f"""\
@@ -232,10 +247,15 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_installation_wait_accepts_current_dropbox_user_dir_sync_status(
         self,
     ) -> None:
-        function_text = self._slice_function(
-            self.installation_script,
-            "repo_root_sync_stable_prefix_depth() {",
-            "stop_old_installation_containers() {",
+        function_text = "\n".join(
+            [
+                self.installation_validators,
+                self._slice_function(
+                    self.installation_script,
+                    "repo_root_sync_stable_prefix_depth() {",
+                    "stop_old_installation_containers() {",
+                ),
+            ]
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -280,10 +300,15 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_installation_wait_accepts_current_dropbox_ice_bootstrap_status(
         self,
     ) -> None:
-        function_text = self._slice_function(
-            self.installation_script,
-            "repo_root_sync_stable_prefix_depth() {",
-            "stop_old_installation_containers() {",
+        function_text = "\n".join(
+            [
+                self.installation_validators,
+                self._slice_function(
+                    self.installation_script,
+                    "repo_root_sync_stable_prefix_depth() {",
+                    "stop_old_installation_containers() {",
+                ),
+            ]
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:

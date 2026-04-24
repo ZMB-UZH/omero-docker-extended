@@ -94,10 +94,17 @@ safe_filename_fragment() {
   printf '%s' "$1" | tr '/:@ ' '____' | tr -cd 'A-Za-z0-9._-'
 }
 
-validate_positive_integer() {
+is_non_negative_integer() {
+  case "${1:-}" in
+    ""|*[!0-9]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+validate_non_negative_integer() {
   local value="$1"
   local name="$2"
-  if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+  if ! is_non_negative_integer "$value"; then
     log_error "$name must be a non-negative integer. Got: $value"
     return 1
   fi
@@ -632,8 +639,8 @@ main() {
   fi
   DEBUG_MODE="$debug"
 
-  validate_positive_integer "$probe_timeout_seconds" "probe timeout seconds" || return 2
-  validate_positive_integer "$max_report_bytes" "max report bytes" || return 2
+  validate_non_negative_integer "$probe_timeout_seconds" "probe timeout seconds" || return 2
+  validate_non_negative_integer "$max_report_bytes" "max report bytes" || return 2
 
   if [ "$probe_timeout_seconds" -eq 0 ]; then
     log_warn "Probe timeout set to 0 seconds. Container probe commands may fail immediately when timeout is available."

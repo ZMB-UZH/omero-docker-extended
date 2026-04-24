@@ -40,8 +40,8 @@ tracked repository file. The workflow now prints the tracked language
 candidates before CodeQL initialization so a lower GitHub UI count can be
 explained from the run log instead of guessed.
 
-- Python: the current repo has 313 tracked `.py` implementation files and 33
-  tracked `.pyi` type stubs. A `313/346` CodeQL count means the implementation
+- Python: the current repo has 315 tracked `.py` implementation files and 33
+  tracked `.pyi` type stubs. A `315/348` CodeQL count means the implementation
   files were included and type stubs were not counted as Python source; stubs
   are still covered by Ruff/Mypy contracts. The earlier `310/343` UI count had
   the same meaning before three tracked Python files were added.
@@ -174,10 +174,11 @@ Last live API refresh: **2026-04-24**.
 
 GitHub reported **4 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
-DeepSource reported **8 grouped issues**, **216 issue occurrences**, and
+DeepSource reported **5 grouped issues**, **185 issue occurrences**, and
 **0 dependency vulnerability occurrences** for the default branch during the
-same refresh. The API `latest_commit_oid` matched the pushed revision when this
-snapshot was taken.
+same refresh. The API `latest_commit_oid` was
+`addf9791cb953552727c5acd27b22807f6260c94`, the pushed default-branch
+revision when this snapshot was taken.
 
 These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
 

@@ -653,8 +653,8 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
-        self.assertIn('"CHANGEVALUE2"', script_text)
-        self.assertIn('"CHANGEVALUE3"', script_text)
+        self.assertIn('case "${key}" in', script_text)
+        self.assertIn('""|CHANGEVALUE2|CHANGEVALUE3) return 1 ;;', script_text)
 
     def test_installation_script_schedules_one_shot_crowdsec_restart_only_when_needed(
         self,
