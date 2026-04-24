@@ -9,7 +9,7 @@ import portalocker
 import re
 import omero
 
-from omero.model import MapAnnotationI, NamedValue, ImageAnnotationLinkI
+from omero.model import ImageI, MapAnnotationI, NamedValue, ImageAnnotationLinkI
 from omero.rtypes import rstring
 
 from ..constants import CHUNK_SIZE, MAP_NS, HASH_KEY
@@ -171,12 +171,20 @@ def _with_plugin_hash(mapping):
 
 
 def _save_image_map_annotation(update, img, mapping):
+    image_id = get_id(img)
+    if image_id is None:
+        return False
+    try:
+        image_parent = ImageI(int(image_id), False)
+    except (TypeError, ValueError, OverflowError):
+        return False
+
     ann = MapAnnotationI()
     ann.setNs(rstring(MAP_NS))
     ann.setMapValue([NamedValue(k, v) for k, v in mapping.items()])
 
     link = ImageAnnotationLinkI()
-    link.setParent(img._obj)
+    link.setParent(image_parent)
     link.setChild(ann)
     return _save_annotation_link(update, link)
 

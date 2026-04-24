@@ -328,11 +328,6 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
 
         def deleteObject(self, obj):
             self.deleted.append(obj)
-            if isinstance(obj, tuple) and obj[0] == "link":
-                deleted_link_ids.add(obj[1])
-                deleted_annotation_ids.add(obj[1] - 1000)
-            elif isinstance(obj, _MapAnnotation):
-                deleted_annotation_ids.add(obj.id)
 
     ann1 = _MapAnnotation(1, plugin_mapping)
     ann2 = _MapAnnotation(2, legacy_mapping, ns="other-ns")
@@ -347,6 +342,9 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
             if kind == "ImageAnnotationLink"
             else annotations.get(obj_id)
         ),
+        deleteObjects=lambda kind, object_ids, wait=True: [
+            deleted_annotation_ids.add(object_id) for object_id in object_ids
+        ],
     )
     image = SimpleNamespace(
         id=55,
@@ -371,8 +369,8 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
     )
 
     assert (deleted_sets, deleted_pairs, attempted) == (1, 2, 1)
-    assert ("link", 1001) in update.deleted
-    assert 1001 in deleted_link_ids
+    assert update.deleted == []
+    assert 1 in deleted_annotation_ids
     assert 1002 not in deleted_link_ids
 
 
@@ -401,12 +399,7 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
         mode="all",
     ) == (0, 0, 0)
 
-    deleted_link_ids = set()
     deleted_annotation_ids = set()
-
-    class _LinkStub:
-        def setId(self, value):
-            self.link_id = value.getValue() if hasattr(value, "getValue") else value
 
     class _QueryService:
         @staticmethod
@@ -427,11 +420,6 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
 
         def deleteObject(self, obj):
             self.deleted.append(obj)
-            if isinstance(obj, _LinkStub):
-                deleted_link_ids.add(obj.link_id)
-                deleted_annotation_ids.add(7)
-            elif getattr(obj, "id", None) == 7:
-                deleted_annotation_ids.add(7)
 
     ann = _MapAnnotation(7, {"alpha": "1"})
     update = _UpdateService()
@@ -443,8 +431,10 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
             if kind == "ImageAnnotationLink"
             else (None if obj_id in deleted_annotation_ids else ann)
         ),
+        deleteObjects=lambda kind, object_ids, wait=True: [
+            deleted_annotation_ids.add(object_id) for object_id in object_ids
+        ],
     )
-    monkeypatch.setattr(annotation_service, "ImageAnnotationLinkI", _LinkStub)
     monkeypatch.setattr(
         annotation_service,
         "find_map_annotation_ids",
@@ -465,7 +455,8 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
     )
 
     assert (deleted_sets, deleted_pairs, attempted) == (1, 1, 1)
-    assert deleted_link_ids == {401}
+    assert update.deleted == []
+    assert deleted_annotation_ids == {7}
 
 
 def test_annotation_query_helpers_cover_invalid_inputs_and_legacy_controls(monkeypatch):
@@ -564,6 +555,9 @@ def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annota
             if kind == "ImageAnnotationLink"
             else (ann if kind == "MapAnnotation" and obj_id == 7 else None)
         ),
+        deleteObjects=lambda kind, object_ids, wait=True: deleted.append(
+            (kind, tuple(object_ids), wait)
+        ),
     )
     image = SimpleNamespace(id=55, listAnnotations=lambda: [ann])
 
@@ -578,7 +572,7 @@ def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annota
     )
 
     assert (deleted_sets, deleted_pairs, attempted) == (0, 0, 1)
-    assert len(deleted) == 1
+    assert deleted == [("Annotation", (7,), True)]
 
 
 class _FakeOriginalFile:
@@ -627,6 +621,12 @@ class _FakeImageAnnotationLink:
 
     def setChild(self, value):
         self.child = value
+
+
+class _FakeImageRef:
+    def __init__(self, image_id, loaded):
+        self.image_id = image_id
+        self.loaded = loaded
 
 
 class _FakeRawFileStore:
@@ -724,6 +724,7 @@ def test_extract_acquisition_metadata_collects_searchable_fields_and_attaches_lo
     monkeypatch.setattr(
         metadata_service, "ImageAnnotationLinkI", _FakeImageAnnotationLink
     )
+    monkeypatch.setattr(metadata_service, "ImageI", _FakeImageRef)
     monkeypatch.setattr(metadata_service, "rstring", lambda value: value)
     monkeypatch.setattr(metadata_service, "rlong", lambda value: value)
 
@@ -739,6 +740,8 @@ def test_extract_acquisition_metadata_collects_searchable_fields_and_attaches_lo
     assert cleaned["full_metadata_file"] == "FileAnnotation:501"
     assert b"LongNote = " in raw_store.buffer
     assert raw_store.saved is True
+    assert image._update.saved[-1].parent.image_id == 99
+    assert image._update.saved[-1].parent.loaded is False
     assert raw_store.closed is True
 
 

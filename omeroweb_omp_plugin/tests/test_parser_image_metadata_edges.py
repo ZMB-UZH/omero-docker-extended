@@ -504,6 +504,11 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
         def setChild(self, value):
             self.child = value
 
+    class _ImageStub:
+        def __init__(self, image_id, loaded):
+            self.image_id = image_id
+            self.loaded = loaded
+
     class _RawStore:
         def __init__(self):
             self.file_id = None
@@ -541,6 +546,7 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
         "ImageAnnotationLinkI",
         _ImageAnnotationLinkStub,
     )
+    monkeypatch.setattr(metadata_service, "ImageI", _ImageStub)
     monkeypatch.setattr(metadata_service, "rstring", lambda value: value)
     monkeypatch.setattr(metadata_service, "rlong", lambda value: value)
 
@@ -584,3 +590,59 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
     assert raw_store.file_id == 321
     assert raw_store.saved is True
     assert raw_store.saved_payload.startswith(b"acquisition_date = ")
+    assert update_service.saved_objects[-1].parent.image_id == 7
+    assert update_service.saved_objects[-1].parent.loaded is False
+
+    def _image_with_identifier(image_id, update_service, raw_store):
+        class _ImageWithIdentifier:
+            _obj = "image-object"
+            _conn = SimpleNamespace(
+                getUpdateService=lambda: update_service,
+                c=SimpleNamespace(
+                    sf=SimpleNamespace(createRawFileStore=lambda: raw_store)
+                ),
+            )
+
+            @staticmethod
+            def getId():
+                return image_id
+
+            @staticmethod
+            def getAcquisitionDate():
+                return _Value("y" * 260)
+
+            @staticmethod
+            def getObjectiveSettings():
+                return None
+
+            @staticmethod
+            def getChannels():
+                return []
+
+            @staticmethod
+            def getDetectorSettings():
+                return []
+
+            @staticmethod
+            def loadOriginalMetadata():
+                return None
+
+        return _ImageWithIdentifier()
+
+    missing_id_update = _UpdateService()
+    missing_id_cleaned = metadata_service.extract_acquisition_metadata(
+        _image_with_identifier(None, missing_id_update, _RawStore())
+    )
+    assert missing_id_cleaned == {
+        "acquisition_date": "[LONG_VALUE_STORED_IN_FILEANNOTATION key=acquisition_date]",
+    }
+    assert missing_id_update.saved_objects == []
+
+    invalid_id_update = _UpdateService()
+    invalid_id_cleaned = metadata_service.extract_acquisition_metadata(
+        _image_with_identifier("not-an-id", invalid_id_update, _RawStore())
+    )
+    assert invalid_id_cleaned == {
+        "acquisition_date": "[LONG_VALUE_STORED_IN_FILEANNOTATION key=acquisition_date]",
+    }
+    assert invalid_id_update.saved_objects == []

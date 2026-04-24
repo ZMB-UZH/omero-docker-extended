@@ -3,8 +3,10 @@ OMERO metadata extraction services.
 """
 
 import logging
-from omero.model import FileAnnotationI, OriginalFileI, ImageAnnotationLinkI
+from omero.model import FileAnnotationI, ImageAnnotationLinkI, ImageI, OriginalFileI
 from omero.rtypes import rstring, rlong
+
+from ...utils.omero_helpers import get_id
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +235,15 @@ def extract_acquisition_metadata(img):
     # 4. If long values exist → create FileAnnotation
     # ----------------------------------------------------
     if long_values:
+        image_id = get_id(img)
+        if image_id is None:
+            return cleaned
+        try:
+            image_id_int = int(image_id)
+        except (TypeError, ValueError, OverflowError):
+            return cleaned
+        image_parent = ImageI(image_id_int, False)
+
         text = "\n".join(f"{k} = {v}" for k, v in long_values.items())
         binary = text.encode("utf-8")
 
@@ -240,7 +251,7 @@ def extract_acquisition_metadata(img):
 
         of = OriginalFileI()
         of.setName(rstring("acquisition_metadata.txt"))
-        of.setPath(rstring(f"img_{img.getId()}/"))
+        of.setPath(rstring(f"img_{image_id_int}/"))
         of.setSize(rlong(len(binary)))
         of.setMimetype(rstring("text/plain"))
 
@@ -265,7 +276,7 @@ def extract_acquisition_metadata(img):
         fa.setFile(of)
 
         link = ImageAnnotationLinkI()
-        link.setParent(img._obj)
+        link.setParent(image_parent)
         link.setChild(fa)
 
         update.saveAndReturnObject(link)
