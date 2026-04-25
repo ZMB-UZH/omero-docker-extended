@@ -37,7 +37,7 @@ verification, or required workflow checks.
 ## AI commit identity
 
 - AI agents that create, amend, merge, cherry-pick, squash, rebase, or rewrite commits must use `AI agent <>` for author and committer, and any AI co-author trailer must be `Co-authored-by: AI agent` with no email. Use command-scoped config such as `git -c user.name='AI agent' -c user.email= commit ...`; never reuse human, host, GitHub, previous-commit, or global identity.
-- If a tool cannot produce the empty email field shown as `<>`, or would insert a named AI tool, host, local account, fake address, or vendor identity into a commit or trailer, stop before committing. Human contributors are not required to use the AI identity.
+- If a tool cannot produce the empty email field shown as `<>`, or would insert a named AI tool, host, local account, fake address, vendor identity, or profile-mapped AI address such as `ai-agent@users.noreply.github.com`, `codex@openai.com`, or `codex@openai.invalid`, stop before committing. Human contributors are not required to use the AI identity.
 - Identity audits must check authors, committers, `Co-authored-by` trailers, and GitHub anonymous contributors (`contributors?anon=1`) from fresh branch-head fetches; report PR-head refs separately. Non-AI commit identities must be real human GitHub identities or actual human author names with real email addresses, never host/local placeholders or fake emails.
 
 ## Single-session rule
