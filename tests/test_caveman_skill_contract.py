@@ -163,6 +163,9 @@ class CavemanSkillContractTests(unittest.TestCase):
         )
         self.assertNotIn("https://img.shields.io/badge/caveman-555", readme_text)
         self.assertIn("https://github.com/JuliusBrussee/caveman", readme_text)
+        self.assertIn(
+            "https://github.com/forrestchang/andrej-karpathy-skills", readme_text
+        )
 
 
 if __name__ == "__main__":

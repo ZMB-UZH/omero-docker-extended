@@ -76,6 +76,10 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block.index("[![caveman]("),
         )
         self.assertLess(
+            badge_block.index("[![caveman]("),
+            badge_block.index("[![andrej-karpathy-skills]("),
+        )
+        self.assertLess(
             badge_block.index("[![GitHub commit activity]("),
             badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
         )
@@ -171,6 +175,14 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertIn(
             "https://github.com/JuliusBrussee/caveman",
+            badge_block,
+        )
+        self.assertIn(
+            "https://img.shields.io/static/v1?label=&message=andrej-karpathy-skills&color=555&logo=github&logoColor=white",
+            badge_block,
+        )
+        self.assertIn(
+            "https://github.com/forrestchang/andrej-karpathy-skills",
             badge_block,
         )
         self.assertIn(

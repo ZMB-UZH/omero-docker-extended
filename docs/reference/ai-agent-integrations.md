@@ -19,6 +19,14 @@ Apply guidance in this order:
 
 Harness-specific files are additive. They must not override the repo's security read order, absolute single-session rule, environment-driven configuration model, or split-pytest policy. The single-session rule prohibits background agents, subagents, spawned agents, delegated agents, and any separate agent session.
 
+## Karpathy baseline
+
+`AGENTS.md` carries a compact, pinned Karpathy agent baseline sourced from
+`forrestchang/andrej-karpathy-skills@2c606141936f1eeef17fa3043a72095b4765b9c2`.
+It is centralized in the universal entrypoint so Claude, Gemini, Copilot, and
+Cursor inherit the same four-principle behavior without duplicating full prompt
+text in each adapter.
+
 ## AI commit identity
 
 Every AI-facing adapter inherits the commit-identity rule from `AGENTS.md`. Any AI tool that creates or rewrites a commit object must set both author and committer to `AI agent <>`, using an empty email field. Any AI co-author trailer must be `Co-authored-by: AI agent` with no email.
@@ -76,6 +84,7 @@ The upstream `caveman` hooks, plugin auto-loading, `.codex` hook config, natural
 
 - engineering skills relevant to this repo: Python, Django, testing, verification, Docker, deployment, PostgreSQL, security, research, and context-budget control
 - the opt-in `caveman` overlay for lower-token replies when the user explicitly requests terseness
+- the compact, pinned Karpathy baseline in `AGENTS.md`
 - ECC provenance and license material for the selected upstream skills
 - harness-specific adapters that route agents into the repo's existing docs and tests
 
@@ -94,6 +103,7 @@ The adapter set is designed to improve accuracy first, then reduce wasted contex
 
 - route agents into `AGENTS.md`, `docs/reference/ai-agent-context-routing.md`, and the nearest domain doc before broad repo reads
 - keep the routing doc's numeric caps CI-validated so first-pass reads, refine loops, and escalation stay bounded
+- keep the Karpathy baseline centralized in `AGENTS.md` instead of duplicating it across adapters
 - expose reusable workflows through `.agents/skills/`
 - prefer `context-budget` for input reduction and the opt-in `caveman` overlay for output reduction
 - add path-specific Copilot and Cursor guidance so agents do not rediscover the same rules every time
