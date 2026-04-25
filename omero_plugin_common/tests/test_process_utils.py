@@ -272,7 +272,8 @@ def test_run_streaming_collects_process_finished_at_timeout_boundary(
         pid = 12345
         returncode = 0
 
-        def communicate(self, timeout=None):
+        @staticmethod
+        def communicate(timeout=None):
             assert timeout == 0
             return b"done\n", b""
 
