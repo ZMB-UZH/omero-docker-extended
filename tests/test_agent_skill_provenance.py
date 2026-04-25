@@ -23,12 +23,13 @@ class AgentSkillProvenanceTests(TestCase):
         self.assertEqual("/static/v1", parsed.path)
         self.assertEqual(
             {
-                "label": ["everything-claude-code"],
-                "message": ["ECC v1.10.0 skills"],
-                "color": ["0F766E"],
+                "label": [""],
+                "message": ["everything-claude-code"],
+                "color": ["555"],
                 "logo": ["github"],
+                "logoColor": ["white"],
             },
-            parse_qs(parsed.query),
+            parse_qs(parsed.query, keep_blank_values=True),
         )
         self.assertNotIn(self.sources.repo_slug, self.sources.badge_image_url)
         self.assertEqual("everything-claude-code", self.sources.badge_title)

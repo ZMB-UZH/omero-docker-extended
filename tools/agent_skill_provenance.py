@@ -64,10 +64,7 @@ class AgentSkillUpstreamSources:
 
     @property
     def badge_label(self) -> str:
-        snapshot_name = self.snapshot_dir_name
-        if snapshot_name.startswith("ecc-"):
-            return f"ECC {snapshot_name.removeprefix('ecc-')} skills"
-        return f"{snapshot_name} skills"
+        return self.repo_name
 
     @property
     def badge_title(self) -> str:
@@ -85,10 +82,11 @@ class AgentSkillUpstreamSources:
     def badge_image_url(self) -> str:
         query = urlencode(
             {
-                "label": self.badge_title,
+                "label": "",
                 "message": self.badge_label,
-                "color": "0F766E",
+                "color": "555",
                 "logo": "github",
+                "logoColor": "white",
             }
         )
         return f"https://img.shields.io/static/v1?{query}"
