@@ -86,6 +86,16 @@ class RegressionGuardEngineTests(unittest.TestCase):
         )
         self.assertFalse(any(f.rule_id == "RG001" for f in findings))
 
+    def test_runtime_data_roots_are_not_scanned_as_source(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="rg_runtime_") as tmp:
+            root = Path(tmp)
+            runtime_file = root / "omero_data" / "ManagedRepository" / "secret.txt"
+            runtime_file.parent.mkdir(parents=True)
+            runtime_file.write_text("token=" + "ghp_" + ("A" * 36), encoding="utf-8")
+
+            self.assertEqual(regression_guard.scan_paths(root, paths=None), [])
+            self.assertEqual(regression_guard.scan_paths(root, [runtime_file]), [])
+
     def test_chmod_safe_mode_is_not_flagged(self) -> None:
         findings = self._scan_one(
             "module/safe_chmod.py",
