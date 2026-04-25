@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
-import threading
+import subprocess
 import time
 from dataclasses import dataclass
+from math import isfinite
 from typing import Callable, Mapping, Sequence
 
 
@@ -39,9 +39,7 @@ class CalledProcessError(RuntimeError):
         self.cmd = tuple(cmd)
         self.stdout = stdout
         self.stderr = stderr
-        super().__init__(
-            f"Command {self.cmd!r} returned non-zero exit status {self.returncode}."
-        )
+        super().__init__(f"Command returned non-zero exit status {self.returncode}.")
 
 
 class TimeoutExpired(TimeoutError):
@@ -59,7 +57,7 @@ class TimeoutExpired(TimeoutError):
         self.timeout = timeout
         self.stdout = stdout
         self.stderr = stderr
-        super().__init__(f"Command {self.cmd!r} timed out after {timeout} seconds.")
+        super().__init__(f"Command timed out after {timeout} seconds.")
 
 
 def _normalize_command(args: Sequence[CommandArg]) -> tuple[str, ...]:
@@ -68,22 +66,20 @@ def _normalize_command(args: Sequence[CommandArg]) -> tuple[str, ...]:
     normalized = tuple(os.fsdecode(os.fspath(part)) for part in args)
     if not normalized or not normalized[0]:
         raise ValueError("Command must include a non-empty executable path.")
-    for part in normalized:
-        if "\x00" in part:
-            raise ValueError("Command arguments must not contain NUL bytes.")
+    if any("\x00" in part for part in normalized):
+        raise ValueError("Command arguments must not contain NUL bytes.")
     return normalized
 
 
 def _normalize_env(env: Mapping[str, str] | None) -> dict[str, str] | None:
     if env is None:
         return None
-    normalized: dict[str, str] = {}
-    for key, value in env.items():
-        normalized_key = os.fsdecode(os.fspath(key))
-        normalized_value = os.fsdecode(os.fspath(value))
-        if "\x00" in normalized_key or "\x00" in normalized_value:
-            raise ValueError("Environment variables must not contain NUL bytes.")
-        normalized[normalized_key] = normalized_value
+    normalized = {
+        os.fsdecode(os.fspath(key)): os.fsdecode(os.fspath(value))
+        for key, value in env.items()
+    }
+    if any("\x00" in key or "\x00" in value for key, value in normalized.items()):
+        raise ValueError("Environment variables must not contain NUL bytes.")
     return normalized
 
 
@@ -96,167 +92,97 @@ def _normalize_cwd(cwd: CommandArg | None) -> str | None:
     return normalized
 
 
-def _decode_output(payload: bytes | None) -> str:
-    if not payload:
-        return ""
-    return payload.decode("utf-8", errors="replace")
-
-
-async def _run_async(
-    command: tuple[str, ...],
-    *,
-    timeout: float | int | None,
-    env: dict[str, str] | None,
-    cwd: str | None,
-    check: bool,
-) -> CompletedProcess:
-    process = await asyncio.create_subprocess_exec(
-        *command,
-        stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=env,
-        cwd=cwd,
-    )
-    stdout_lines: list[str] = []
-    stderr_lines: list[str] = []
-    stdout_task = asyncio.create_task(_consume_stream(process.stdout, stdout_lines))
-    stderr_task = asyncio.create_task(_consume_stream(process.stderr, stderr_lines))
-    if timeout is None:
-        await process.wait()
-    else:
-        timeout_seconds = float(timeout)
-        try:
-            await asyncio.wait_for(process.wait(), timeout_seconds)
-        except asyncio.TimeoutError as exc:
-            if process.returncode is None:
-                process.kill()
-            await process.wait()
-            await asyncio.gather(stdout_task, stderr_task)
-            raise TimeoutExpired(
-                command,
-                timeout_seconds,
-                stdout="".join(stdout_lines),
-                stderr="".join(stderr_lines),
-            ) from exc
-    await asyncio.gather(stdout_task, stderr_task)
-
-    completed = CompletedProcess(
-        args=command,
-        returncode=int(process.returncode or 0),
-        stdout="".join(stdout_lines),
-        stderr="".join(stderr_lines),
-    )
-    if check and completed.returncode != 0:
-        raise CalledProcessError(
-            completed.returncode,
-            completed.args,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
-        )
-    return completed
-
-
-async def _consume_stream(
-    stream: asyncio.StreamReader | None, destination: list[str]
-) -> None:
-    if stream is None:
-        return
-    while True:
-        chunk = await stream.read(65536)
-        if not chunk:
-            return
-        destination.append(_decode_output(chunk))
-
-
-async def _run_streaming_async(
-    command: tuple[str, ...],
-    *,
-    timeout: float | int | None,
-    env: dict[str, str] | None,
-    cwd: str | None,
-    check: bool,
-    tick_interval: float,
-    on_tick: TickCallback | None,
-) -> CompletedProcess:
-    process = await asyncio.create_subprocess_exec(
-        *command,
-        stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=env,
-        cwd=cwd,
-    )
-    stdout_lines: list[str] = []
-    stderr_lines: list[str] = []
-    stdout_task = asyncio.create_task(_consume_stream(process.stdout, stdout_lines))
-    stderr_task = asyncio.create_task(_consume_stream(process.stderr, stderr_lines))
-    started_at = time.monotonic()
-
-    if on_tick is not None:
-        on_tick(process.pid, 0.0)
-
-    while process.returncode is None:
-        elapsed = time.monotonic() - started_at
-        if timeout is not None and elapsed > timeout:
-            process.kill()
-            await process.wait()
-            await asyncio.gather(stdout_task, stderr_task)
-            raise TimeoutExpired(
-                command,
-                timeout,
-                stdout="".join(stdout_lines),
-                stderr="".join(stderr_lines),
-            )
-        if on_tick is not None and elapsed > 0:
-            on_tick(process.pid, elapsed)
-        try:
-            await asyncio.wait_for(process.wait(), timeout=tick_interval)
-        except asyncio.TimeoutError:
-            continue
-
-    await asyncio.gather(stdout_task, stderr_task)
-
-    completed = CompletedProcess(
-        args=command,
-        returncode=int(process.returncode or 0),
-        stdout="".join(stdout_lines),
-        stderr="".join(stderr_lines),
-    )
-    if check and completed.returncode != 0:
-        raise CalledProcessError(
-            completed.returncode,
-            completed.args,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
-        )
-    return completed
-
-
-def _run_coro_sync(coro):
+def _finite_seconds(value: float | int, label: str) -> float:
     try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
+        seconds = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be a finite number of seconds.") from exc
+    if not isfinite(seconds):
+        raise ValueError(f"{label} must be a finite number of seconds.")
+    return seconds
 
-    result: dict[str, object] = {}
-    error: dict[str, Exception] = {}
-    done = threading.Event()
 
-    def _runner() -> None:
+def _normalize_timeout(timeout: float | int | None) -> float | None:
+    if timeout is None:
+        return None
+    seconds = _finite_seconds(timeout, "timeout")
+    if seconds < 0:
+        raise ValueError("timeout must be greater than or equal to zero.")
+    return seconds
+
+
+def _normalize_tick_interval(tick_interval: float | int) -> float:
+    seconds = _finite_seconds(tick_interval, "tick_interval")
+    if seconds <= 0:
+        raise ValueError("tick_interval must be greater than zero.")
+    return seconds
+
+
+def _decode_output(payload: bytes | None) -> str:
+    return "" if not payload else payload.decode("utf-8", errors="replace")
+
+
+def _completed(
+    command: tuple[str, ...],
+    returncode: int | None,
+    stdout: bytes | None,
+    stderr: bytes | None,
+    *,
+    check: bool,
+) -> CompletedProcess:
+    completed = CompletedProcess(
+        args=command,
+        returncode=int(returncode or 0),
+        stdout=_decode_output(stdout),
+        stderr=_decode_output(stderr),
+    )
+    if check and completed.returncode != 0:
+        raise CalledProcessError(
+            completed.returncode,
+            completed.args,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        )
+    return completed
+
+
+def _popen(
+    command: tuple[str, ...],
+    *,
+    env: dict[str, str] | None,
+    cwd: str | None,
+) -> subprocess.Popen[bytes]:
+    return subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        cwd=cwd,
+    )
+
+
+def _terminate(process: subprocess.Popen[bytes]) -> tuple[bytes | None, bytes | None]:
+    if process.poll() is None:
         try:
-            result["value"] = asyncio.run(coro)
-        except Exception as exc:  # pragma: no cover - mirrored into caller
-            error["exc"] = exc
-        finally:
-            done.set()
+            process.kill()
+        except ProcessLookupError:
+            pass
+    return process.communicate()
 
-    thread = threading.Thread(target=_runner, daemon=True)
-    thread.start()
-    done.wait()
-    if "exc" in error:
-        raise error["exc"]
-    return result.get("value")
+
+def _notify_tick(
+    process: subprocess.Popen[bytes],
+    on_tick: TickCallback | None,
+    elapsed: float,
+) -> None:
+    if on_tick is None:
+        return
+    try:
+        on_tick(process.pid, elapsed)
+    except Exception:
+        _terminate(process)
+        raise
 
 
 def run(
@@ -268,17 +194,20 @@ def run(
     cwd: CommandArg | None = None,
 ) -> CompletedProcess:
     """Run a fixed argv command with captured text output and no shell."""
-
     command = _normalize_command(args)
-    return _run_coro_sync(
-        _run_async(
+    timeout_seconds = _normalize_timeout(timeout)
+    process = _popen(command, env=_normalize_env(env), cwd=_normalize_cwd(cwd))
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        partial_stdout, partial_stderr = _terminate(process)
+        raise TimeoutExpired(
             command,
-            timeout=timeout,
-            env=_normalize_env(env),
-            cwd=_normalize_cwd(cwd),
-            check=check,
-        )
-    )
+            exc.timeout,
+            stdout=_decode_output(partial_stdout),
+            stderr=_decode_output(partial_stderr),
+        ) from exc
+    return _completed(command, process.returncode, stdout, stderr, check=check)
 
 
 def run_streaming(
@@ -291,17 +220,40 @@ def run_streaming(
     tick_interval: float = 0.5,
     on_tick: TickCallback | None = None,
 ) -> CompletedProcess:
-    """Run a fixed argv command while streaming stdout/stderr and polling state."""
-
+    """Run a fixed argv command while polling state and capturing output."""
     command = _normalize_command(args)
-    return _run_coro_sync(
-        _run_streaming_async(
-            command,
-            timeout=timeout,
-            env=_normalize_env(env),
-            cwd=_normalize_cwd(cwd),
-            check=check,
-            tick_interval=float(tick_interval),
-            on_tick=on_tick,
+    timeout_seconds = _normalize_timeout(timeout)
+    tick_interval = _normalize_tick_interval(tick_interval)
+
+    process = _popen(command, env=_normalize_env(env), cwd=_normalize_cwd(cwd))
+    started_at = time.monotonic()
+    _notify_tick(process, on_tick, 0.0)
+
+    while True:
+        elapsed = time.monotonic() - started_at
+        remaining = None
+        if timeout_seconds is not None:
+            remaining = timeout_seconds - elapsed
+        if timeout_seconds is not None and remaining is not None and remaining <= 0:
+            try:
+                stdout, stderr = process.communicate(timeout=0)
+                break
+            except subprocess.TimeoutExpired:
+                partial_stdout, partial_stderr = _terminate(process)
+                raise TimeoutExpired(
+                    command,
+                    timeout_seconds,
+                    stdout=_decode_output(partial_stdout),
+                    stderr=_decode_output(partial_stderr),
+                ) from None
+        if elapsed > 0:
+            _notify_tick(process, on_tick, elapsed)
+        wait_seconds = (
+            tick_interval if remaining is None else min(tick_interval, remaining)
         )
-    )
+        try:
+            stdout, stderr = process.communicate(timeout=wait_seconds)
+            break
+        except subprocess.TimeoutExpired:
+            continue
+    return _completed(command, process.returncode, stdout, stderr, check=check)

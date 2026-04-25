@@ -6,16 +6,53 @@ Common functions for extracting data from OMERO objects.
 
 import logging
 
+from .logging_utils import sanitize_log_value
+
 logger = logging.getLogger(__name__)
+
+
+def _value_or_raw(value):
+    return value.getValue() if hasattr(value, "getValue") else value
+
+
+def _call_or_none(obj, method_name: str):
+    method = getattr(obj, method_name, None)
+    if not callable(method):
+        return None
+    try:
+        return method()
+    except Exception:
+        return None
+
+
+def _owner_candidates(obj):
+    details = _call_or_none(obj, "getDetails")
+    details_owner = _call_or_none(details, "getOwner") if details is not None else None
+    method_owner = _call_or_none(obj, "getOwner")
+    owners = []
+    seen_ids = set()
+    for owner in (details_owner, method_owner):
+        if owner is not None and id(owner) not in seen_ids:
+            owners.append(owner)
+            seen_ids.add(id(owner))
+    return tuple(owners)
+
+
+def _owner_from_details_or_method(obj):
+    return next(iter(_owner_candidates(obj)), None)
+
+
+def _safe_debug(message: str, *values) -> None:
+    logger.debug(message, *(sanitize_log_value(value) for value in values))
 
 
 def get_text(value_obj):
     """Extract text value from OMERO rtype objects."""
     try:
         return (
-            value_obj.getValue()
+            _value_or_raw(value_obj)
             if hasattr(value_obj, "getValue")
-            else getattr(value_obj, "val", str(value_obj))
+            else value_obj.val
         )
     except Exception:
         return str(value_obj)
@@ -28,10 +65,9 @@ def get_id(obj):
         if model_obj is not None:
             return model_obj.id.val
     except Exception as exc:
-        logger.debug("Falling back to getId() for %r: %s", obj, exc)
+        _safe_debug("Falling back to getId() after internal ID lookup failed: %s", exc)
     try:
-        gid = obj.getId()
-        return gid.getValue() if hasattr(gid, "getValue") else gid
+        return _value_or_raw(obj.getId())
     except Exception:
         return None
 
@@ -40,21 +76,11 @@ def get_owner_id(obj):
     """Extract owner ID from OMERO object."""
     if obj is None:
         return None
-    try:
-        details = obj.getDetails()
-        owner = details.getOwner() if details else None
-        if owner is not None:
-            oid = owner.getId()
-            return oid.getValue() if hasattr(oid, "getValue") else oid
-    except Exception as exc:
-        logger.debug("Failed to resolve owner via details for %r: %s", obj, exc)
-    try:
-        owner = obj.getOwner()
-        if owner is not None:
-            oid = owner.getId()
-            return oid.getValue() if hasattr(oid, "getValue") else oid
-    except Exception as exc:
-        logger.debug("Failed to resolve owner via getOwner() for %r: %s", obj, exc)
+    for owner in _owner_candidates(obj):
+        try:
+            return _value_or_raw(owner.getId())
+        except Exception as exc:
+            _safe_debug("Failed to resolve owner ID: %s", exc)
     return None
 
 
@@ -75,8 +101,7 @@ def _current_user_id(conn):
     try:
         user = conn.getUser()
         if user is not None:
-            uid = user.getId()
-            return uid.getValue() if hasattr(uid, "getValue") else uid
+            return _value_or_raw(user.getId())
     except Exception:
         return None
     return None
@@ -85,30 +110,20 @@ def _current_user_id(conn):
 def _get_owner_username(obj):
     if obj is None:
         return ""
-    owner = None
-    try:
-        details = obj.getDetails()
-        owner = details.getOwner() if details else None
-    except Exception:
-        owner = None
-    if owner is None:
-        try:
-            owner = obj.getOwner()
-        except Exception:
-            owner = None
-    if owner is None:
-        return ""
-    for attr in ("getOmeName", "getName", "getFirstName"):
-        try:
-            if hasattr(owner, attr):
-                value = get_text(getattr(owner, attr)())
-                if value:
-                    return value
-        except Exception:
-            logger.debug("Failed to get owner name via %s", attr)
-            continue
-    owner_id = get_id(owner)
-    return str(owner_id) if owner_id is not None else ""
+    for owner in _owner_candidates(obj):
+        for attr in ("getOmeName", "getName", "getFirstName"):
+            try:
+                if hasattr(owner, attr):
+                    value = get_text(getattr(owner, attr)())
+                    if value:
+                        return value
+            except Exception as exc:
+                _safe_debug("Failed to get owner name via %s: %s", attr, exc)
+                continue
+        owner_id = get_id(owner)
+        if owner_id is not None:
+            return str(owner_id)
+    return ""
 
 
 def _has_read_write_permissions(obj):
@@ -119,8 +134,8 @@ def _has_read_write_permissions(obj):
         if callable(checker):
             try:
                 return bool(checker())
-            except Exception:
-                logger.debug("Permission check via %s failed", attr)
+            except Exception as exc:
+                _safe_debug("Permission check via %s failed: %s", attr, exc)
                 continue
     try:
         details = obj.getDetails()

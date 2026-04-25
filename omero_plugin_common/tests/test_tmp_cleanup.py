@@ -77,6 +77,54 @@ def test_tmp_cleanup_helpers_reject_invalid_roots_and_symlinked_children(tmp_pat
     assert nested.exists()
 
 
+def test_tmp_cleanup_resolution_failures_from_symlink_loops_are_safe(tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+    loop = root / "loop"
+    loop.symlink_to(loop)
+
+    assert tmp_cleanup.is_within_root(loop, root) is False
+    assert tmp_cleanup.safe_remove_tree(loop, root) is False
+    assert loop.is_symlink()
+
+
+def test_tmp_cleanup_refuses_root_deletion_and_unsafe_job_ids(tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "payload.txt").write_text("payload", encoding="utf-8")
+
+    assert tmp_cleanup.safe_remove_tree(root, root) is False
+    assert root.exists()
+    assert tmp_cleanup.safe_remove_job_data("../escape", root) is False
+    assert tmp_cleanup.safe_remove_job_data("bad/name", root) is False
+
+
+def test_tmp_cleanup_missing_paths_must_stay_within_root(tmp_path):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+
+    assert tmp_cleanup.safe_remove_tree(root / "missing", root) is True
+    assert tmp_cleanup.safe_remove_tree(outside / "missing", root) is False
+    assert (
+        tmp_cleanup.safe_mark_path_for_deferred_cleanup(
+            root / "missing",
+            root,
+            ttl_seconds=60,
+        )
+        is True
+    )
+    assert (
+        tmp_cleanup.safe_mark_path_for_deferred_cleanup(
+            outside / "missing",
+            root,
+            ttl_seconds=60,
+        )
+        is False
+    )
+
+
 def test_safe_mark_path_for_deferred_cleanup_rejects_invalid_inputs_and_cleans_temp_file(
     tmp_path, monkeypatch
 ):
