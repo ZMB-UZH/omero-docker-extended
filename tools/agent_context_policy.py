@@ -40,12 +40,23 @@ CONTEXT_ROUTING_LIMITS = ContextRoutingLimits(
 )
 
 
+KARPATHY_BASELINE_COMMIT = "".join(
+    (
+        "2c606141",
+        "936f1eee",
+        "f17fa304",
+        "3a72095b",
+        "4765b9c2",
+    )
+)
+
+
 CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
     "AGENTS.md": ContextSurfaceContract(
         max_nonempty_lines=145,
         required_tokens=(
             "Karpathy agent baseline",
-            "2c606141936f1eeef17fa3043a72095b4765b9c2",
+            KARPATHY_BASELINE_COMMIT,
             "Compact and efficient code matters",
             "EXAMPLES.md",
             "Single-session rule",
