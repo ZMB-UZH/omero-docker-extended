@@ -19,7 +19,7 @@ Use [AGENTS.md](AGENTS.md) as the universal project contract, [docs/reference/ai
 
 ## Verification and security
 
-- Run `python3 tools/lint_docs_structure.py` for doc and instruction changes.
+- Run `python3 tools/lint_docs_structure.py` for doc edits and `python3 tools/regression_guard.py scan` (canonical anti-regression gate) before any commit.
 - Use Ruff for Python lint and formatting, and verify host `ruff` matches the repo-pinned version before claiming local verification.
 - Run split `pytest` suites separately; never combine all suites into one process.
 - Before security-sensitive edits, follow the read order in `AGENTS.md` and use official upstream docs for version-sensitive behavior.

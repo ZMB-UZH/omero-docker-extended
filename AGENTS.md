@@ -14,11 +14,11 @@ Repository entrypoint for coding agents. Keep it small: load only the smallest c
 
 ## Mandatory security read order
 
-Before writing or rewriting code or tests that touch filesystem paths, file I/O, logs, HTTP responses, outbound HTTP, SQL, subprocesses, Dockerfiles, workflows, secrets, authentication, or authorization, read these documents in order:
+Before writing or rewriting code or tests that touch filesystem paths, file I/O, logs, HTTP responses, outbound HTTP, SQL, subprocesses, Dockerfiles, workflows, secrets, authentication, or authorization, consult these in order:
 
-1. `docs/reference/ai-agent-security-prevention-playbook.md`
-2. `docs/reference/code-scanning-resolved-findings.md`
-3. `docs/operations/code-scanning.md`
+1. `python3 tools/regression_guard.py catalog` and `python3 tools/regression_guard.py scan` — the canonical machine-checked anti-regression gate (catalog rules cover every recurring closed-alert family).
+2. `docs/reference/ai-agent-security-prevention-playbook.md` for normative coding patterns and external best-practice links.
+3. `docs/reference/code-scanning-resolved-findings.md` and `docs/operations/code-scanning.md` for closed-alert history and the live alert workflow (reference only).
 
 Do not start coding until you can name the helper boundary you will harden and the regression tests that will prove the fix.
 
@@ -133,5 +133,5 @@ Use the routing doc and `verification-loop` skill to choose the minimal subset d
 ## Deep references
 
 - Operational pitfalls, Docker socket/network procedure, OMERO CLI rules, testing fallbacks, log triage, and joined-session constraints live in `docs/reference/ai-agent-runtime-playbook.md`.
-- Security guidance lives in `docs/reference/ai-agent-security-prevention-playbook.md`, `docs/reference/code-scanning-resolved-findings.md`, and `docs/operations/code-scanning.md`.
+- Anti-regression gate is `tools/regression_guard.py` (machine-checked catalog); `docs/reference/ai-agent-security-prevention-playbook.md`, `docs/reference/code-scanning-resolved-findings.md`, and `docs/operations/code-scanning.md` are reference-only history.
 - When a reusable environment-specific failure is discovered, update the relevant deep doc in the same change so later agents do not rediscover it.

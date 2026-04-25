@@ -40,11 +40,12 @@ tracked repository file. The workflow now prints the tracked language
 candidates before CodeQL initialization so a lower GitHub UI count can be
 explained from the run log instead of guessed.
 
-- Python: the current repo has 315 tracked `.py` implementation files and 33
-  tracked `.pyi` type stubs. A `315/348` CodeQL count means the implementation
+- Python: the current repo has 317 tracked `.py` implementation files and 33
+  tracked `.pyi` type stubs. A `317/350` CodeQL count means the implementation
   files were included and type stubs were not counted as Python source; stubs
   are still covered by Ruff/Mypy contracts. The earlier `310/343` UI count had
-  the same meaning before three tracked Python files were added.
+  the same meaning before tracked Python files such as `tools/regression_guard.py`
+  and its companion test module were added.
 - JavaScript/TypeScript: the current repo has 8 tracked JS-family files. The 2
   files under `.agents/skills/frontend-preview/agents/` are tool config files
   audited by workflow logs and repo lint/tests; the 6 application/test JS files
@@ -186,9 +187,10 @@ These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory 
 
 To prevent documentation drift:
 
+- **Anti-regression gate (canonical)**: `tools/regression_guard.py` (`scan`, `catalog`, `selfcheck`). This is the machine-checked rule list and the only authoritative source for "what shapes of code we never accept again". Documents below are reference-only background.
 - Use this runbook for **live** open-alert totals, refresh dates, SLAs, and remediation workflow.
 - Use `docs/reference/ai-agent-security-prevention-playbook.md` for canonical coding patterns, concrete bad/good examples, external best-practice links, and anti-drift rules.
-- Use `docs/reference/code-scanning-resolved-findings.md` for **closed-history** counts, hotspot files, and per-rule lessons.
+- Use `docs/reference/code-scanning-resolved-findings.md` and `docs/reference/closed-alert-archive.md` for **closed-history** counts, hotspot files, and per-rule lessons.
 - Use `AGENTS.md` and `docs/index.md` only to route agents to the correct document. They should not duplicate volatile alert totals.
 
 ### Mandatory agent workflow

@@ -1,13 +1,11 @@
-# Code Scanning — Resolved Findings Ledger
+# Code Scanning — Resolved Findings Ledger (reference)
 
-This document catalogs resolved code scanning alert patterns from the closed-alert history. The latest full-history API count captured here is **2 040 closed alerts** on **2026-03-31**; later timeline rows record additional verified batches. Its purpose is twofold:
+> **Reference only.** The canonical anti-regression gate is `tools/regression_guard.py` (`scan`, `catalog`, `selfcheck`). Run that tool before commit; the per-rule prevention table below is kept as historical context that explains *why* the tool's catalog flags what it flags. The freshest closed-alert snapshot lives in `docs/reference/closed-alert-archive.md` (2026-04-25, 2373 closed alerts).
 
-1. **Institutional memory** — so the same classes of issues are never reintroduced.
-2. **Agent directive** — AI agents modifying this codebase must consult this ledger before writing new code. Every pattern listed below has been fixed at least once; introducing the same pattern again is a regression.
+Earlier full-history API count captured here is **2 040 closed alerts** on **2026-03-31**. Use the archive snapshot for the current totals; this ledger preserves the per-rule lessons.
 
-> **Canonical reference for live open alerts**: `docs/operations/code-scanning.md` tracks _open_ alerts and triage SLAs.
-> **Canonical prevention guide**: `docs/reference/ai-agent-security-prevention-playbook.md` holds the normative coding rules, external best-practice links, and bad/good examples.
-> **Live refresh note**: The counts in this document were refreshed from the GitHub code-scanning API on **2026-03-31**. Re-query the API before acting on exact totals.
+> **Live open alerts**: query via `tools/scanner_inventory.py`; `docs/operations/code-scanning.md` is the workflow runbook.
+> **Normative coding patterns (reference)**: `docs/reference/ai-agent-security-prevention-playbook.md`.
 
 ## How to use this document
 
