@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import time
@@ -12,6 +13,8 @@ from typing import Callable, Mapping, Sequence
 
 CommandArg = str | os.PathLike[str]
 TickCallback = Callable[[int, float], None]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -167,7 +170,10 @@ def _terminate(process: subprocess.Popen[bytes]) -> tuple[bytes | None, bytes | 
         try:
             process.kill()
         except ProcessLookupError:
-            pass
+            logger.debug(
+                "Process exited before it could be killed during subprocess cleanup.",
+                exc_info=True,
+            )
     return process.communicate()
 
 
