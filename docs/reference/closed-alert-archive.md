@@ -123,4 +123,3 @@
 - **Normative coding patterns (reference):** `docs/reference/ai-agent-security-prevention-playbook.md`.
 - **Per-rule lessons (reference):** `docs/reference/code-scanning-resolved-findings.md`.
 - **Live alert workflow (reference):** `docs/operations/code-scanning.md`.
-
