@@ -2,6 +2,38 @@
 
 Repository entrypoint for coding agents. Keep it small: load only the smallest correct context for the current task, then stop expanding.
 
+## Pinned Karpathy agent baseline
+
+Adapted from
+<https://github.com/forrestchang/andrej-karpathy-skills> at
+`2c606141936f1eeef17fa3043a72095b4765b9c2`.
+Apply this agent-neutral baseline before the repo-specific rules below, but do
+not weaken stricter repository rules such as the single-session rule, commit
+identity, environment-driven configuration, security read order, live
+verification, or required workflow checks.
+
+- Think before coding: state assumptions, surface ambiguity and tradeoffs, and
+  ask when uncertainty would otherwise become a guess.
+- Simplicity first: solve the requested problem with the minimum maintainable
+  code; avoid speculative features, abstractions, configurability, or new
+  defensive branches that repo contracts prove unnecessary.
+- Compact and efficient code matters, not just lower token usage. Prefer
+  shorter, clearer implementations that preserve behavior; do not trade away
+  security, environment safety, live-verification evidence, or OMERO runtime
+  correctness for fewer lines.
+- Surgical changes: touch only what the task requires and preserve local
+  contracts. Match existing style only when it is already clear, efficient,
+  and consistent; otherwise improve style only where the task gives evidence
+  and scope to do so. Clean up only orphans created by your change and mention
+  unrelated debt instead of editing it.
+- Goal-driven execution: turn work into verifiable success criteria, reproduce
+  bugs with a test or concrete failing check when practical, loop until the
+  relevant checks pass, and report the exact verification performed.
+- Treat upstream `EXAMPLES.md` as optional rationale for maintaining this
+  baseline only. Do not load it by default, import it wholesale, or let its
+  generic examples override this repo's OMERO, security, environment, live
+  verification, testing, or single-session rules.
+
 ## AI commit identity
 
 - AI agents that create, amend, merge, cherry-pick, squash, rebase, or rewrite commits must use `AI agent <>` for author and committer, and any AI co-author trailer must be `Co-authored-by: AI agent` with no email. Use command-scoped config such as `git -c user.name='AI agent' -c user.email= commit ...`; never reuse human, host, GitHub, previous-commit, or global identity.

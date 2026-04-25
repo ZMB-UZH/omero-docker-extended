@@ -13,6 +13,7 @@
 [![Vulture](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/vulture.yml?branch=main&logo=python&label=Vulture)](https://github.com/jendrikseipp/vulture)
 [![everything-claude-code](https://img.shields.io/static/v1?label=&message=everything-claude-code&color=555&logo=github&logoColor=white)](https://github.com/affaan-m/everything-claude-code)
 [![caveman](https://img.shields.io/static/v1?label=&message=caveman&color=555&logo=github&logoColor=white)](https://github.com/JuliusBrussee/caveman)
+[![andrej-karpathy-skills](https://img.shields.io/static/v1?label=&message=andrej-karpathy-skills&color=555&logo=github&logoColor=white)](https://github.com/forrestchang/andrej-karpathy-skills)
 <!-- END GENERATED BADGES -->
 
 Production-grade (see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom OMERO.web plugins for microscopy metadata workflows, file upload/import management, direct Imaris 11 integration, administrator tools, and a full server monitoring stack.
@@ -402,7 +403,7 @@ function descriptions, and user-facing text stay in standard prose.
 | [`GEMINI.md`](GEMINI.md) | Gemini CLI project context |
 | [`docs/reference/ai-agent-skills.md`](docs/reference/ai-agent-skills.md) | Harness-neutral skill catalog for recurring AI-agent workflows |
 | [`docs/reference/ai-agent-integrations.md`](docs/reference/ai-agent-integrations.md) | Native adapter map for Copilot, Cursor, Claude, Gemini, and shared skills |
-| [`docs/reference/ai-agent-upstream-sources.md`](docs/reference/ai-agent-upstream-sources.md) | Pinned upstream provenance for ECC-derived local skills and vendored caveman prompt references |
+| [`docs/reference/ai-agent-upstream-sources.md`](docs/reference/ai-agent-upstream-sources.md) | Pinned upstream provenance for ECC-derived local skills, Karpathy baseline, and vendored caveman prompt references |
 | [`docs/index.md`](docs/index.md) | Full documentation index with cross-links |
 | [`docs/deployment/quickstart.md`](docs/deployment/quickstart.md) | Step-by-step deployment guide |
 | [`docs/deployment/configuration.md`](docs/deployment/configuration.md) | Configuration reference |

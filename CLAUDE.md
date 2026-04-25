@@ -1,6 +1,7 @@
 # Claude Code instructions
 
 Project-specific instructions for Claude Code sessions working on this repository.
+Start with `AGENTS.md`, including its pinned Karpathy agent baseline.
 
 ## Single-session rule
 
