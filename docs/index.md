@@ -75,7 +75,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `reference/ai-agent-skills.md` -- harness-neutral catalog for repo-local AI-agent skills under `.agents/skills/`
 - `reference/ai-agent-web-research-stack.md` -- safe public-web research, extraction, browser fallback, and source-audit pattern for AI agents
 - `reference/ai-agent-integrations.md` -- platform adapter map for Copilot, Cursor, Claude, Gemini, shared skill loaders, and the single-session policy
-- `reference/ai-agent-upstream-sources.md` -- pinned upstream provenance for ECC-derived local skills and vendored caveman prompt references
+- `reference/ai-agent-upstream-sources.md` -- pinned upstream provenance for ECC-derived local skills, Karpathy baseline, and vendored caveman prompt references
 - `reference/ai-agent-security-prevention-playbook.md` -- canonical anti-regression security playbook for AI agents; external best-practice links, concrete examples, and document ownership rules
 - `reference/plugin-help-page-style-guide.md` -- canonical user-help formatting, screenshot, collapse, and verification rules for plugin help pages
 - `reference/service-endpoints.md` -- infrastructure ports, plugin routes, proxy forwarding

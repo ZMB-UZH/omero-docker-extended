@@ -1,6 +1,11 @@
 # GitHub Copilot Instructions
 
-Use [AGENTS.md](../AGENTS.md) as the universal project contract, [docs/reference/ai-agent-context-routing.md](../docs/reference/ai-agent-context-routing.md) as the narrow-context router, and [docs/reference/ai-agent-skills.md](../docs/reference/ai-agent-skills.md) as the skill catalog.
+Use [AGENTS.md](../AGENTS.md) as the universal project contract, including its
+pinned Karpathy agent baseline; use
+[docs/reference/ai-agent-context-routing.md](../docs/reference/ai-agent-context-routing.md)
+as the narrow-context router, and
+[docs/reference/ai-agent-skills.md](../docs/reference/ai-agent-skills.md) as the
+skill catalog.
 
 ## Single-session rule
 

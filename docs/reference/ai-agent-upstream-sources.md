@@ -32,6 +32,19 @@ The vendor snapshot includes only the ECC skills that map cleanly onto this repo
 | `ai-regression-testing` | `third_party/ecc-v1.10.0/skills/ai-regression-testing/SKILL.md` |
 | `context-budget` | `third_party/ecc-v1.10.0/skills/context-budget/SKILL.md` |
 
+## Karpathy baseline
+
+- Repository: `forrestchang/andrej-karpathy-skills`
+- Pinned latest commit: `2c606141936f1eeef17fa3043a72095b4765b9c2`
+- Local surface: compact agent-neutral baseline in `AGENTS.md`; Claude,
+  Gemini, Copilot, and Cursor adapters point back to that section.
+- Integration rule: keep the four principles centralized to reduce duplicated
+  always-on context while preserving the repo-specific single-session,
+  security, environment, and verification rules.
+- `EXAMPLES.md` rule: keep upstream examples as optional rationale for
+  maintaining the baseline only. Do not load them by default or let generic
+  examples override OMERO-specific rules.
+
 ## Local overlay rule
 
 The files under `.agents/skills/` are the active repo-specific overlays. They are intentionally shorter than the upstream ECC files and route agents into this repo's actual docs, tests, env contracts, and security rules.

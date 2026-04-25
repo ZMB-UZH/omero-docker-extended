@@ -42,8 +42,12 @@ CONTEXT_ROUTING_LIMITS = ContextRoutingLimits(
 
 CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
     "AGENTS.md": ContextSurfaceContract(
-        max_nonempty_lines=110,
+        max_nonempty_lines=145,
         required_tokens=(
+            "Karpathy agent baseline",
+            "2c606141936f1eeef17fa3043a72095b4765b9c2",
+            "Compact and efficient code matters",
+            "EXAMPLES.md",
             "Single-session rule",
             "AI agent <>",
             "Co-authored-by: AI agent",
@@ -59,8 +63,9 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         ),
     ),
     "CLAUDE.md": ContextSurfaceContract(
-        max_nonempty_lines=60,
+        max_nonempty_lines=65,
         required_tokens=(
+            "Karpathy agent baseline",
             "Single-session rule",
             "AI agent <>",
             "contributors?anon=1",
@@ -73,8 +78,9 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         ),
     ),
     "GEMINI.md": ContextSurfaceContract(
-        max_nonempty_lines=25,
+        max_nonempty_lines=35,
         required_tokens=(
+            "Karpathy agent baseline",
             "Single-session rule",
             "AI agent <>",
             "contributors?anon=1",
@@ -86,8 +92,9 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         ),
     ),
     ".github/copilot-instructions.md": ContextSurfaceContract(
-        max_nonempty_lines=30,
+        max_nonempty_lines=40,
         required_tokens=(
+            "Karpathy agent baseline",
             "Single-session rule",
             "AI agent <>",
             "contributors?anon=1",
@@ -101,6 +108,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
     ".cursor/rules/00-omero-core.mdc": ContextSurfaceContract(
         max_nonempty_lines=15,
         required_tokens=(
+            "Karpathy agent baseline",
             "separate agent session",
             "AI agent <>",
             "contributors?anon=1",

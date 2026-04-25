@@ -25,6 +25,12 @@ CAVEMAN_BADGE_IMAGE_URL = (
     "&logo=github&logoColor=white"
 )
 CAVEMAN_BADGE_TARGET_URL = "https://github.com/JuliusBrussee/caveman"
+KARPATHY_BADGE_TITLE = "andrej-karpathy-skills"
+KARPATHY_BADGE_IMAGE_URL = (
+    "https://img.shields.io/static/v1?label=&message=andrej-karpathy-skills"
+    "&color=555&logo=github&logoColor=white"
+)
+KARPATHY_BADGE_TARGET_URL = "https://github.com/forrestchang/andrej-karpathy-skills"
 DEEPSOURCE_BADGE_TITLE = "DeepSource"
 DEEPSOURCE_BADGE_IMAGE_URL = (
     "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended.svg/"
@@ -217,6 +223,7 @@ def render_badge_block(
         f"[![Vulture](https://img.shields.io/github/actions/workflow/status/{github_path}/vulture.yml?branch={branch}&logo=python&label=Vulture)](https://github.com/jendrikseipp/vulture)",
         f"[![{upstream_sources.badge_title}]({upstream_sources.badge_image_url})]({upstream_sources.repo_url})",
         f"[![{CAVEMAN_BADGE_TITLE}]({CAVEMAN_BADGE_IMAGE_URL})]({CAVEMAN_BADGE_TARGET_URL})",
+        f"[![{KARPATHY_BADGE_TITLE}]({KARPATHY_BADGE_IMAGE_URL})]({KARPATHY_BADGE_TARGET_URL})",
         BADGE_BLOCK_END,
     ]
     return "\n".join(lines)
