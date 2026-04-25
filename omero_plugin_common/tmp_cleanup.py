@@ -1,15 +1,7 @@
-"""Host-agnostic temporary artifact cleanup helpers.
-
-This module is intentionally small and dependency-free. It is used by
-plugins to remove their own temporary artifacts *immediately* after a
-successful job, without relying on user clicks or view loads.
-
-Longer-term cleanup is performed by the host-side systemd timer installed by
-scripts/install-tmp-cleaner.sh. Specific paths may request a longer retention
-window by writing a small marker that the host-side cleaner honors.
-"""
+"""Host-agnostic temporary artifact cleanup helpers."""
 
 import os
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -19,12 +11,36 @@ RETENTION_DIR_MARKER_NAME = ".omero-retain-until"
 RETENTION_FILE_MARKER_SUFFIX = ".retain-until"
 
 
+def _resolve_existing(path: Path) -> Path | None:
+    try:
+        return path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+
+
+def _resolve_child_candidate(path: Path) -> Path | None:
+    if path.exists() or path.is_symlink():
+        return _resolve_existing(path)
+    parent = _resolve_existing(path.parent)
+    if parent is None:
+        return None
+    return parent / path.name
+
+
+def _is_safe_path_component(value: str) -> bool:
+    return (
+        value not in {"", ".", ".."}
+        and "/" not in value
+        and "\\" not in value
+        and "\x00" not in value
+    )
+
+
 def is_within_root(path: Path, root: Path) -> bool:
     """Return True if *path* is contained within *root* after resolving symlinks."""
-    try:
-        root_resolved = root.resolve(strict=True)
-        path_resolved = path.resolve(strict=False)
-    except OSError:
+    root_resolved = _resolve_existing(root)
+    path_resolved = _resolve_child_candidate(path)
+    if root_resolved is None or path_resolved is None:
         return False
     try:
         path_resolved.relative_to(root_resolved)
@@ -33,18 +49,15 @@ def is_within_root(path: Path, root: Path) -> bool:
         return False
 
 
-def safe_remove_tree(path: Path, root: Path, *, follow_symlinks: bool = False) -> bool:
-    """Safely delete a directory tree.
-
-    Safety properties:
-      - refuses to delete symlinks
-      - refuses to delete anything outside *root*
-      - refuses to traverse symlinked children
-
-    Returns True on success, False otherwise.
-    """
+def safe_remove_tree(path: Path, root: Path) -> bool:
+    """Safely delete a directory tree under *root*."""
     if not path.exists():
-        return True
+        return is_within_root(path, root)
+
+    root_resolved = _resolve_existing(root)
+    path_resolved = _resolve_existing(path)
+    if root_resolved is None or path_resolved is None or path_resolved == root_resolved:
+        return False
 
     if path.is_symlink():
         return False
@@ -54,7 +67,7 @@ def safe_remove_tree(path: Path, root: Path, *, follow_symlinks: bool = False) -
 
     # Pre-scan for symlinks to avoid following unexpected paths.
     try:
-        for root_dir, dirnames, filenames in os.walk(path, followlinks=follow_symlinks):
+        for root_dir, dirnames, filenames in os.walk(path, followlinks=False):
             for name in dirnames:
                 candidate = Path(root_dir) / name
                 if candidate.is_symlink():
@@ -67,31 +80,16 @@ def safe_remove_tree(path: Path, root: Path, *, follow_symlinks: bool = False) -
         return False
 
     try:
-        for root_dir, dirnames, filenames in os.walk(
-            path, topdown=False, followlinks=follow_symlinks
-        ):
-            for name in filenames:
-                try:
-                    (Path(root_dir) / name).unlink()
-                except OSError:
-                    return False
-            for name in dirnames:
-                try:
-                    (Path(root_dir) / name).rmdir()
-                except OSError:
-                    return False
-        path.rmdir()
+        shutil.rmtree(path)
         return True
     except OSError:
         return False
 
 
 def safe_remove_job_data(job_id: str, upload_root: Path) -> bool:
-    """Remove the upload data directory for *job_id* under *upload_root*.
-
-    This intentionally does *not* delete the job JSON file in the jobs folder.
-    The UI may still need to show the final status and messages for a while.
-    """
+    """Remove the upload data directory for *job_id* under *upload_root*."""
+    if not _is_safe_path_component(str(job_id)):
+        return False
     job_dir = upload_root / job_id
     return safe_remove_tree(job_dir, upload_root)
 
@@ -129,7 +127,7 @@ def safe_mark_path_for_deferred_cleanup(
         return False
 
     if not path.exists():
-        return True
+        return is_within_root(path, root)
 
     if path.is_symlink():
         return False

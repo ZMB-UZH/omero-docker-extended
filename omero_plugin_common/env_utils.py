@@ -3,18 +3,29 @@
 from __future__ import annotations
 
 import os
-from typing import Callable
+from collections.abc import Callable
+from typing import TypeVar
 
 ENV_FILE_OMEROWEB = "env/omeroweb.env"
 ENV_FILE_OMEROSERVER = "env/omeroserver.env"
 ENV_FILE_OMERO_CELERY = "env/omero-celery.env"
 
+_BOOL_VALUES = {
+    "1": True,
+    "true": True,
+    "yes": True,
+    "on": True,
+    "0": False,
+    "false": False,
+    "no": False,
+    "off": False,
+}
+_T = TypeVar("_T")
+
 
 def _env_reference(env_file: str, docs_url: str | None) -> str:
     reference = f"Set it in {env_file} (referenced by docker-compose.yml)."
-    if docs_url:
-        reference = f"{reference} See {docs_url}."
-    return reference
+    return f"{reference} See {docs_url}." if docs_url else reference
 
 
 def _missing_env_message(
@@ -24,11 +35,11 @@ def _missing_env_message(
     hint: str | None = None,
     docs_url: str | None = None,
 ) -> str:
-    message = f"Missing required environment variable: {name}. "
-    message += _env_reference(env_file, docs_url)
-    if hint:
-        message = f"{message} {hint}"
-    return message
+    message = (
+        f"Missing required environment variable: {name}. "
+        f"{_env_reference(env_file, docs_url)}"
+    )
+    return f"{message} {hint}" if hint else message
 
 
 def _invalid_env_message(
@@ -39,11 +50,40 @@ def _invalid_env_message(
     expected: str,
     docs_url: str | None = None,
 ) -> str:
-    message = (
+    return (
         f"Invalid value for {name} in {env_file}: {value!r}. Expected {expected}. "
         f"{_env_reference(env_file, docs_url)}"
     )
-    return message
+
+
+def _read_env(name: str, *, env_file: str, allow_empty: bool) -> str | None:
+    if not env_file:
+        raise ValueError("env_file must identify the configuration contract.")
+    value = os.environ.get(name)
+    return None if value is None or (not allow_empty and value.strip() == "") else value
+
+
+def _coerce(
+    name: str,
+    value: str,
+    *,
+    env_file: str,
+    expected: str,
+    parser: Callable[[str], _T],
+    docs_url: str | None = None,
+) -> _T:
+    try:
+        return parser(value)
+    except (LookupError, TypeError, ValueError) as exc:
+        raise ValueError(
+            _invalid_env_message(
+                name,
+                value,
+                env_file,
+                expected=expected,
+                docs_url=docs_url,
+            )
+        ) from exc
 
 
 def get_env(
@@ -71,14 +111,7 @@ def get_optional_env(
     allow_empty: bool = False,
 ) -> str | None:
     """Return an environment variable or None when unset."""
-    if not env_file:
-        raise ValueError("env_file must identify the configuration contract.")
-    value = os.environ.get(name)
-    if value is None:
-        return None
-    if not allow_empty and str(value).strip() == "":
-        return None
-    return value
+    return _read_env(name, env_file=env_file, allow_empty=allow_empty)
 
 
 def require_env(
@@ -90,79 +123,48 @@ def require_env(
     docs_url: str | None = None,
 ) -> str:
     """Return a required environment variable or raise."""
-    value = os.environ.get(name)
-    if value is None or (not allow_empty and str(value).strip() == ""):
+    value = _read_env(name, env_file=env_file, allow_empty=allow_empty)
+    if value is None:
         raise RuntimeError(
             _missing_env_message(name, env_file, hint=hint, docs_url=docs_url)
         )
     return value
 
 
-def get_int_env(
-    name: str,
-    *,
-    env_file: str,
-    docs_url: str | None = None,
-) -> int:
+def get_int_env(name: str, *, env_file: str, docs_url: str | None = None) -> int:
     """Return a required integer environment variable with validation."""
-    raw = require_env(name, env_file=env_file, docs_url=docs_url)
-    try:
-        return int(raw)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            _invalid_env_message(
-                name,
-                raw,
-                env_file,
-                expected="an integer",
-                docs_url=docs_url,
-            )
-        ) from exc
+    return _coerce(
+        name,
+        require_env(name, env_file=env_file, docs_url=docs_url),
+        env_file=env_file,
+        expected="an integer",
+        parser=int,
+        docs_url=docs_url,
+    )
 
 
-def get_float_env(
-    name: str,
-    *,
-    env_file: str,
-    docs_url: str | None = None,
-) -> float:
+def get_float_env(name: str, *, env_file: str, docs_url: str | None = None) -> float:
     """Return a required float environment variable with validation."""
-    raw = require_env(name, env_file=env_file, docs_url=docs_url)
-    try:
-        return float(raw)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            _invalid_env_message(
-                name,
-                raw,
-                env_file,
-                expected="a number",
-                docs_url=docs_url,
-            )
-        ) from exc
+    return _coerce(
+        name,
+        require_env(name, env_file=env_file, docs_url=docs_url),
+        env_file=env_file,
+        expected="a number",
+        parser=float,
+        docs_url=docs_url,
+    )
 
 
-def get_bool_env(
-    name: str,
-    *,
-    env_file: str,
-    docs_url: str | None = None,
-) -> bool:
+def get_bool_env(name: str, *, env_file: str, docs_url: str | None = None) -> bool:
     """Return a required boolean environment variable with validation."""
     raw = require_env(name, env_file=env_file, docs_url=docs_url)
-    normalized = str(raw).strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise ValueError(
-        _invalid_env_message(
-            name,
-            raw,
-            env_file,
-            expected="a boolean (true/false)",
-            docs_url=docs_url,
-        )
+    return _coerce(
+        name,
+        raw,
+        env_file=env_file,
+        expected="a boolean (true/false)",
+        parser=lambda value: _BOOL_VALUES[value.strip().lower()],
+        docs_url=docs_url,
     )
 
 
@@ -177,7 +179,7 @@ def get_sanitized_int_env(
 ) -> int:
     """Return a required sanitized integer environment variable with bounds."""
     raw = require_env(name, env_file=env_file, docs_url=docs_url)
-    sanitized = sanitizer(str(raw))
+    sanitized = sanitizer(raw)
     if sanitized.strip() == "":
         raise ValueError(
             _invalid_env_message(
@@ -188,16 +190,12 @@ def get_sanitized_int_env(
                 docs_url=docs_url,
             )
         )
-    try:
-        value = int(sanitized)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            _invalid_env_message(
-                name,
-                raw,
-                env_file,
-                expected="an integer",
-                docs_url=docs_url,
-            )
-        ) from exc
+    value = _coerce(
+        name,
+        sanitized,
+        env_file=env_file,
+        expected="an integer",
+        parser=int,
+        docs_url=docs_url,
+    )
     return max(min_value, min(max_value, value))

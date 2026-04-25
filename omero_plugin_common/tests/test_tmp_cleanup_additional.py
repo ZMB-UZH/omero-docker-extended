@@ -29,9 +29,9 @@ def test_tmp_cleanup_safe_remove_tree_returns_false_when_walk_or_delete_fails(
 
     monkeypatch.setattr(tmp_cleanup.os, "walk", os.walk)
     monkeypatch.setattr(
-        type(payload),
-        "unlink",
-        lambda self: (_ for _ in ()).throw(OSError("unlink failed")),
+        tmp_cleanup.shutil,
+        "rmtree",
+        lambda path: (_ for _ in ()).throw(OSError("rmtree failed")),
     )
     assert tmp_cleanup.safe_remove_tree(target, root) is False
 
@@ -47,14 +47,11 @@ def test_tmp_cleanup_safe_remove_tree_returns_false_when_file_unlink_fails_in_de
     payload = target / "payload.txt"
     payload.write_text("payload", encoding="utf-8")
 
-    real_unlink = Path.unlink
-
-    def _fail_payload_unlink(self, *args, **kwargs):
-        if self == payload:
-            raise OSError("unlink failed")
-        return real_unlink(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "unlink", _fail_payload_unlink)
+    monkeypatch.setattr(
+        tmp_cleanup.shutil,
+        "rmtree",
+        lambda path: (_ for _ in ()).throw(OSError("rmtree failed")),
+    )
     assert tmp_cleanup.safe_remove_tree(target, root) is False
 
 
@@ -110,30 +107,12 @@ def test_tmp_cleanup_covers_symlink_directory_cleanup_and_marker_cleanup_failure
     payload = nested / "payload.txt"
     payload.write_text("payload", encoding="utf-8")
 
-    real_rmdir = Path.rmdir
-
-    def _fail_nested_rmdir(self):
-        if self == nested:
-            raise OSError("nested rmdir failed")
-        return real_rmdir(self)
-
-    monkeypatch.setattr(Path, "rmdir", _fail_nested_rmdir)
+    monkeypatch.setattr(
+        tmp_cleanup.shutil,
+        "rmtree",
+        lambda path: (_ for _ in ()).throw(OSError("rmtree failed")),
+    )
     assert tmp_cleanup.safe_remove_tree(target, root) is False
-
-    monkeypatch.setattr(Path, "rmdir", real_rmdir)
-
-    target.mkdir(exist_ok=True)
-    (target / "payload.txt").write_text("payload", encoding="utf-8")
-
-    def _fail_root_rmdir(self):
-        if self == target:
-            raise OSError("target rmdir failed")
-        return real_rmdir(self)
-
-    monkeypatch.setattr(Path, "rmdir", _fail_root_rmdir)
-    assert tmp_cleanup.safe_remove_tree(target, root) is False
-
-    monkeypatch.setattr(Path, "rmdir", real_rmdir)
 
     artifact = root / "artifact.txt"
     artifact.write_text("payload", encoding="utf-8")

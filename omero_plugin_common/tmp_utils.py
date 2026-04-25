@@ -1,37 +1,35 @@
-"""Centralized temporary directory management for OMERO plugins.
-
-Provides a single mechanism for all plugins to obtain persistent,
-automatically namespaced temporary directories on the host-mounted
-OMERO_TMP_PATH volume.
-
-The calling plugin is auto-detected from the Python call stack so that
-each plugin gets its own subfolder without hardcoding plugin names.
-"""
+"""Environment-backed temporary directory management for OMERO plugins."""
 
 from __future__ import annotations
 
 import inspect
 import logging
 import os
+from collections.abc import Iterable
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Environment variable name – matches the host-side variable in
-# installation_paths.env (single source of truth mounted into containers).
 TMP_PATH_ENV = "OMERO_TMP_PATH"
 
 
-def get_tmp_base() -> Path:
-    """Return the root temporary directory from the environment.
+def _validate_path_component(value: str, *, label: str) -> str:
+    if value in {"", ".", ".."} or "/" in value or "\\" in value or "\x00" in value:
+        raise ValueError(f"{label} must be a single safe path component.")
+    return value
 
-    Raises
-    ------
-    RuntimeError
-        If ``OMERO_TMP_PATH`` is not set.
-    """
+
+def _append_components(base: Path, components: Iterable[str]) -> Path:
+    path = base
+    for component in components:
+        path /= _validate_path_component(str(component), label="temporary subdirectory")
+    return path
+
+
+def get_tmp_base() -> Path:
+    """Return the configured root temporary directory."""
     value = os.environ.get(TMP_PATH_ENV)
-    if not value:
+    if not value or value.strip() == "":
         raise RuntimeError(
             f"{TMP_PATH_ENV} environment variable is not set. "
             "Ensure it is defined via installation_paths.env and passed into the "
@@ -41,54 +39,21 @@ def get_tmp_base() -> Path:
 
 
 def get_plugin_tmp_dir(subdir: str | None = None, *, create: bool = False) -> Path:
-    """Return a plugin-specific temporary directory path.
-
-    The owning plugin is determined automatically from the call stack by
-    finding the first module whose top-level package starts with
-    ``omeroweb_``.
-
-    Parameters
-    ----------
-    subdir:
-        Optional subdirectory within the plugin's temp folder.
-        For example ``"jobs"`` or ``"data"``.
-    create:
-        When ``True``, create the resolved directory tree. Keep this ``False``
-        for import-time constants so a root-context module import cannot
-        silently create plugin temp state owned by the wrong user.
-
-    Returns
-    -------
-    Path
-        Fully resolved path. The directory exists only when ``create=True``.
-
-    Examples
-    --------
-    Called from ``omeroweb_import/utils/file_helpers.py``::
-
-        get_plugin_tmp_dir("data")
-        # → /opt/omero/omero_temp/omeroweb-import/data
-
-    Called from ``omeroweb_omp_plugin/constants.py``::
-
-        get_plugin_tmp_dir("jobs")
-        # → /opt/omero/omero_temp/omeroweb-omp-plugin/jobs
-    """
-    caller_plugin = _detect_caller_plugin()
+    """Return a caller-namespaced temp path, creating it only on request."""
+    caller_plugin = _validate_path_component(
+        _detect_caller_plugin(),
+        label="plugin temporary directory",
+    )
     path = get_tmp_base() / caller_plugin
     if subdir:
-        path = path / subdir
+        path = _append_components(path, Path(subdir).parts)
     if create:
         path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def _detect_caller_plugin() -> str:
-    """Walk the call stack to find the calling plugin's package name.
-
-    Returns a hyphenated directory-safe name such as ``omeroweb-import``
-    derived from the top-level Python package ``omeroweb_import``.
-    """
+    """Return the hyphenated top-level ``omeroweb_*`` caller package."""
     for frame_info in inspect.stack():
         module = inspect.getmodule(frame_info[0])
         if module is None:
