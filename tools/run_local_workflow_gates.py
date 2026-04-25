@@ -281,6 +281,19 @@ def run_docs(context: GateContext) -> None:
     )
 
 
+def run_regression_guard(context: GateContext) -> None:
+    _run(
+        (context.python, "tools/regression_guard.py", "scan", "--fail-on", "info"),
+        cwd=context.repo_root,
+        label="regression-guard scan",
+    )
+    _run(
+        (context.python, "tools/regression_guard.py", "selfcheck"),
+        cwd=context.repo_root,
+        label="regression-guard selfcheck",
+    )
+
+
 def run_ruff(context: GateContext) -> None:
     ruff = _require_executable("ruff", context)
     _run_many(
@@ -563,11 +576,21 @@ PROFILES: dict[str, tuple[GateRunner, ...]] = {
     "vulture": (run_vulture,),
     "tests": (run_tests,),
     "bandit": (run_bandit,),
+    "regression-guard": (run_regression_guard,),
     "super-linter": (run_super_linter,),
     "python": (run_ruff, run_mypy, run_vulture),
-    "ci": (run_docs, run_ruff, run_mypy, run_vulture, run_tests, run_bandit),
+    "ci": (
+        run_docs,
+        run_regression_guard,
+        run_ruff,
+        run_mypy,
+        run_vulture,
+        run_tests,
+        run_bandit,
+    ),
     "all": (
         run_docs,
+        run_regression_guard,
         run_ruff,
         run_mypy,
         run_vulture,
