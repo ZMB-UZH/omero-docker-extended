@@ -52,16 +52,40 @@ def test_sanitize_log_value_handles_non_string_values() -> None:
     assert logging_utils.sanitize_log_value(123) == "123"
 
 
-def test_sanitize_url_for_logging_redacts_sensitive_query_values() -> None:
-    sanitized = logging_utils.sanitize_url_for_logging(
-        "https://example.org/api?token=secret&ok=value&session_key=abc123"
+def test_sanitize_log_value_handles_unprintable_values() -> None:
+    class Unprintable:
+        def __str__(self):
+            raise RuntimeError("bad\nstring")
+
+    assert (
+        logging_utils.sanitize_log_value(Unprintable()) == "<unprintable Unprintable>"
+    )
+    assert (
+        logging_utils.sanitize_url_for_logging(Unprintable())
+        == "<unprintable Unprintable>"
+    )
+    assert "stdout_chars=25" in logging_utils.summarize_process_output(
+        Unprintable(), None
     )
 
-    assert "token=%2A%2A%2A" in sanitized
-    assert "session_key=%2A%2A%2A" in sanitized
+
+def test_sanitize_url_for_logging_redacts_sensitive_query_values() -> None:
+    sanitized = logging_utils.sanitize_url_for_logging(
+        "https://example.org/api?token=secret&ok=value&session_key=abc123&auth=key"
+    )
+    fragment_sanitized = logging_utils.sanitize_url_for_logging(
+        "https://example.org/callback?ok=value#access_token=fragment-secret"
+    )
+
+    assert "token=REDACTED" in sanitized
+    assert "session_key=REDACTED" in sanitized
+    assert "auth=REDACTED" in sanitized
     assert "ok=value" in sanitized
     assert "secret" not in sanitized
     assert "abc123" not in sanitized
+    assert "auth=key" not in sanitized
+    assert fragment_sanitized == "https://example.org/callback?ok=value"
+    assert "fragment-secret" not in fragment_sanitized
 
 
 def test_sanitize_url_for_logging_redacts_userinfo() -> None:
@@ -70,6 +94,26 @@ def test_sanitize_url_for_logging_redacts_userinfo() -> None:
     )
 
     assert sanitized == "https://alice:***@example.org/path"
+
+
+def test_sanitize_url_for_logging_redacts_userinfo_with_invalid_port() -> None:
+    sanitized = logging_utils.sanitize_url_for_logging(
+        "https://alice:supersecret@example.org:bad-port/path"
+    )
+
+    assert sanitized == "https://alice:***@example.org/path"
+    assert "supersecret" not in sanitized
+
+
+def test_sanitize_url_for_logging_redacts_userinfo_when_username_is_malformed() -> None:
+    sanitized = logging_utils.sanitize_url_for_logging(
+        "https://bad\ud800:supersecret@example.org/path?token=secret"
+    )
+
+    assert sanitized == "https://REDACTED:***@example.org/path?token=REDACTED"
+    assert "supersecret" not in sanitized
+    assert "secret" not in sanitized
+    assert "\ud800" not in sanitized
 
 
 def test_sanitized_exc_info_escapes_exception_message() -> None:
@@ -84,5 +128,5 @@ def test_sanitized_exc_info_escapes_exception_message() -> None:
     assert str(sanitized_exc) == "secret\\\\nline"
     assert tb is not None
     formatted = "".join(traceback.format_exception(exc_type, sanitized_exc, tb))
-    assert "secret\\nline" in formatted
+    assert str(sanitized_exc) in formatted
     assert "secret\nline" not in formatted

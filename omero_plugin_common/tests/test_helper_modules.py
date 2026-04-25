@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 from omero_plugin_common import omero_helpers, request_utils, string_utils
@@ -48,6 +49,12 @@ class _OwnerStub:
         return _ValueBox(self._first_name)
 
 
+class _OwnerWithBrokenId:
+    @staticmethod
+    def getId():
+        raise RuntimeError("broken owner id")
+
+
 class _DetailsStub:
     def __init__(self, *, owner=None, permissions=None):
         self._owner = owner
@@ -84,6 +91,10 @@ def test_omero_helper_accessors_cover_value_resolution_owner_fallbacks_and_permi
         getDetails=lambda: (_ for _ in ()).throw(RuntimeError("no details")),
         getOwner=lambda: owner,
     )
+    fallback_owner_object = SimpleNamespace(
+        getDetails=lambda: _DetailsStub(owner=_OwnerWithBrokenId()),
+        getOwner=lambda: owner,
+    )
     missing_owner = SimpleNamespace(getDetails=lambda: _DetailsStub(owner=None))
     conn = SimpleNamespace(getUser=lambda: SimpleNamespace(getId=lambda: _ValueBox(23)))
     broken_conn = SimpleNamespace(
@@ -117,8 +128,10 @@ def test_omero_helper_accessors_cover_value_resolution_owner_fallbacks_and_permi
     assert omero_helpers.get_id(missing) is None
     assert omero_helpers.get_owner_id(details_object) == 11
     assert omero_helpers.get_owner_id(owner_object) == 11
+    assert omero_helpers.get_owner_id(fallback_owner_object) == 11
     assert omero_helpers.get_owner_id(missing_owner) is None
     assert omero_helpers.is_owned_by_user(details_object, "11") is True
+    assert omero_helpers.is_owned_by_user(fallback_owner_object, 11) is True
     assert omero_helpers.is_owned_by_user(details_object, 99) is False
     assert omero_helpers.is_owned_by_user(missing_owner, 11) is False
     assert omero_helpers.is_owned_by_user(missing_owner, None) is True
@@ -152,6 +165,7 @@ def test_omero_helper_accessors_cover_value_resolution_owner_fallbacks_and_permi
         )
         == "10"
     )
+    assert omero_helpers._get_owner_username(fallback_owner_object) == "alice"
     assert omero_helpers._get_owner_username(None) == ""
     assert omero_helpers._has_read_write_permissions(editable) is True
     assert omero_helpers._has_read_write_permissions(writable) is True
@@ -207,3 +221,22 @@ def test_request_and_string_helpers_cover_user_resolution_json_fallbacks_and_pay
         "confirmIrreversible": "Proceed?",
         "retryUploadJob": "Retry the upload?",
     }
+
+
+def test_omero_helper_debug_logs_sanitize_exception_text(caplog):
+    class ObjectWithUnsafeInternalId:
+        @property
+        def _obj(self):
+            raise RuntimeError("bad\nid")
+
+        @staticmethod
+        def getId():
+            return _ValueBox(31)
+
+    caplog.set_level(logging.DEBUG, logger=omero_helpers.__name__)
+
+    assert omero_helpers.get_id(ObjectWithUnsafeInternalId()) == 31
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("bad\\\\nid" in message for message in messages)
+    assert all("bad\nid" not in message for message in messages)
