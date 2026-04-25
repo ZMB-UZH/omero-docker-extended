@@ -81,7 +81,8 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `reference/service-endpoints.md` -- infrastructure ports, plugin routes, proxy forwarding
 - `reference/release-notes.md` -- release history and change documentation template
 - `reference/python-style-and-linting.md` -- Ruff formatter/lint policy, Vulture dead-code gate, CI workflow, pre-commit usage
-- `reference/code-scanning-resolved-findings.md` -- resolved scanner history and per-rule prevention lessons from the full closed-alert set
+- `reference/code-scanning-resolved-findings.md` -- resolved scanner history and per-rule prevention lessons (reference; canonical gate is `tools/regression_guard.py`)
+- `reference/closed-alert-archive.md` -- 2026-04-25 closed-alert snapshot (2373 GitHub alerts + DeepSource history)
 - `generated/db-schema.md` -- generated schema artifacts (reserved)
 - `references/design-system-reference-llms.txt` -- agent-facing design system notes
 - `references/docker-compose-llms.txt` -- agent-facing Docker Compose reference notes

@@ -100,6 +100,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
         self.assertEqual(
             (
                 self.tool.run_docs,
+                self.tool.run_regression_guard,
                 self.tool.run_ruff,
                 self.tool.run_mypy,
                 self.tool.run_vulture,

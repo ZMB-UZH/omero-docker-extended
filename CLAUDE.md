@@ -22,7 +22,7 @@ Project-specific instructions for Claude Code sessions working on this repositor
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
 - If the user asks for lower-token replies, use opt-in `caveman`; it is only for internal AI communication, never repo docs/comments/docstrings/function descriptions/user-facing copy, and changes reply style only, not routing, tool choice, verification scope, or uncertainty handling. Drop it when safety, sequencing, or ambiguity matters.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, ports, or edit/normalize/print values from non-example deployment env files such as `env/omero_secrets.env` without an explicit one-off user exception.
-- Do not search for, create, restore, or edit `.deepsource.toml`; use `docs/operations/code-scanning.md` and `tools/scanner_inventory.py` for scanner counts/logs. GitHub HTTPS Git needs a PAT/credential manager, never an account password; use `tools/git_push_with_pat.py`. If GitHub PAT/DeepSource API key is missing, ask immediately and pause for input; continue only unrelated local work.
+- Do not search for, create, restore, or edit `.deepsource.toml`; use `tools/scanner_inventory.py` for live counts and `tools/regression_guard.py` (canonical anti-regression catalog) before any commit. GitHub HTTPS Git needs a PAT/credential manager, never an account password; use `tools/git_push_with_pat.py`. If GitHub PAT/DeepSource API key is missing, ask immediately and pause for input; continue only unrelated local work.
 - For functional OMERO/installation changes, live-test when appropriate or requested: reconcile dirty/stale live roots non-destructively, rebuild/inject/restart affected containers from the exact checkout, and test changed mechanisms before commit/push. After every push, confirm green GitHub workflows and no DeepSource count increase when auth is available.
 - Update `docs/` when behavior or operating assumptions change; less is more only when fewer lines prove full parity and all repo rules; fix proven bad instructions/tools only after the correct workflow is verified.
 
@@ -53,7 +53,7 @@ python3 -m pytest omeroweb_tools/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
 ruff check .
 ruff format --check .
-python3 tools/env_safety_guard.py check
+python3 tools/regression_guard.py scan
 ```
 
 If `ruff` is unavailable as a binary on the active host, use `python3 -m ruff check .` and `python3 -m ruff format --check .` instead. Host `ruff` must match the repo-pinned version before claiming local verification.

@@ -1,14 +1,15 @@
-# AI Agent Security Prevention Playbook
+# AI Agent Security Prevention Playbook (reference)
 
-This is the repository's **primary anti-regression security playbook for AI agents**.
+> **Reference only.** The canonical anti-regression gate is `tools/regression_guard.py` (`scan`, `catalog`, `selfcheck`). Run that tool before any commit; this playbook stays as the human-readable rationale for the patterns the tool enforces. Closed-alert numbers and per-rule resolution data live in `docs/reference/closed-alert-archive.md`.
 
-Use it together with:
+Use this playbook together with:
 
 - `AGENTS.md` for the repo entry contract and mandatory read order.
+- `tools/regression_guard.py` for the machine-checked rule catalog (the gate; this doc is the explanation).
 - `docs/operations/code-scanning.md` for the **live** open-alert inventory, SLAs, and remediation workflow.
-- `docs/reference/code-scanning-resolved-findings.md` for the **closed-alert history** and per-rule lessons learned.
+- `docs/reference/code-scanning-resolved-findings.md` and `docs/reference/closed-alert-archive.md` for closed-alert history and per-rule lessons learned.
 
-This playbook exists because repeated AI edit rounds can otherwise reintroduce the same vulnerabilities in slightly different forms. Its job is to turn the repository's full closed-alert history and external best practices into **one canonical set of coding rules** with concrete examples.
+This playbook exists because repeated AI edit rounds can otherwise reintroduce the same vulnerabilities in slightly different forms. The catalog in `tools/regression_guard.py` makes those rules machine-checkable; the prose here turns the closed-alert history and external best practices into one canonical set of coding rules with concrete examples.
 
 ## Document ownership and anti-drift rules
 
