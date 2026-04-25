@@ -561,7 +561,7 @@ def load_store_backed_image_node(image):
     return None
 
 
-def get_store_backed_channel_overrides(image, channels=None):
+def _cached_channel_overrides(image, channels):
     cached = getattr(image, "_omero_web_zarr_channel_overrides", _MISSING)
     if (
         cached is not _MISSING
@@ -569,14 +569,20 @@ def get_store_backed_channel_overrides(image, channels=None):
         and (channels is None or len(cached) == len(channels))
     ):
         return cached
+    return _MISSING
 
-    node = load_store_backed_image_node(image)
-    metadata = getattr(node, "metadata", {}) or {} if node is not None else {}
-    channel_names = metadata.get("channel_names") or []
-    visible = metadata.get("visible") or []
-    contrast_limits = metadata.get("contrast_limits") or []
-    colormap = metadata.get("colormap") or []
 
+def _channel_override_metadata(node):
+    metadata = (getattr(node, "metadata", {}) or {}) if node is not None else {}
+    return (
+        metadata.get("channel_names") or [],
+        metadata.get("visible") or [],
+        metadata.get("contrast_limits") or [],
+        metadata.get("colormap") or [],
+    )
+
+
+def _store_backed_channel_count(image, channels, sequences):
     channel_count = 1
     if channels is not None:
         channel_count = max(channel_count, len(channels))
@@ -584,42 +590,93 @@ def get_store_backed_channel_overrides(image, channels=None):
         channel_count = max(channel_count, int(image.getSizeC()))
     except Exception:
         LOGGER.debug("Suppressed exception reading channel count", exc_info=True)
-    for sequence in (channel_names, visible, contrast_limits, colormap):
+    for sequence in sequences:
         if isinstance(sequence, (list, tuple)):
             channel_count = max(channel_count, len(sequence))
+    return channel_count
 
-    overrides = []
-    for index in range(channel_count):
-        override = {
-            "active": bool(visible[index]) if index < len(visible) else True,
-            "color": _channel_color(
-                colormap[index] if index < len(colormap) else None,
-                index,
-            ),
-            "inverted": False,
-        }
-        if index < len(channel_names):
-            label = channel_names[index]
-            if label is not None and str(label).strip():
-                override["label"] = str(label)
 
-        if index < len(contrast_limits):
-            limits = contrast_limits[index]
-            if isinstance(limits, (list, tuple)) and len(limits) >= 2:
-                override["window"] = (float(limits[0]), float(limits[1]))
+def _sequence_value(sequence, index, default=None):
+    try:
+        if index < len(sequence):
+            return sequence[index]
+    except TypeError:
+        return default
+    return default
 
-        if "window" not in override and channels is not None and index < len(channels):
-            channel = channels[index]
-            window_start = channel.getWindowStart()
-            if window_start is None:
-                window_start = channel.getWindowMin()
-            window_end = channel.getWindowEnd()
-            if window_end is None:
-                window_end = channel.getWindowMax()
-            if window_start is not None and window_end is not None:
-                override["window"] = (float(window_start), float(window_end))
 
-        overrides.append(override)
+def _channel_label(channel_names, index):
+    label = _sequence_value(channel_names, index)
+    if label is not None and str(label).strip():
+        return str(label)
+    return None
+
+
+def _metadata_window(contrast_limits, index):
+    limits = _sequence_value(contrast_limits, index)
+    if isinstance(limits, (list, tuple)) and len(limits) >= 2:
+        return (float(limits[0]), float(limits[1]))
+    return None
+
+
+def _omero_channel_window(channels, index):
+    if channels is None or index >= len(channels):
+        return None
+    channel = channels[index]
+    window_start = channel.getWindowStart()
+    if window_start is None:
+        window_start = channel.getWindowMin()
+    window_end = channel.getWindowEnd()
+    if window_end is None:
+        window_end = channel.getWindowMax()
+    if window_start is not None and window_end is not None:
+        return (float(window_start), float(window_end))
+    return None
+
+
+def _channel_override(
+    index, channel_names, visible, contrast_limits, colormap, channels
+):
+    override = {
+        "active": bool(_sequence_value(visible, index))
+        if index < len(visible)
+        else True,
+        "color": _channel_color(_sequence_value(colormap, index), index),
+        "inverted": False,
+    }
+    label = _channel_label(channel_names, index)
+    if label is not None:
+        override["label"] = label
+
+    window = _metadata_window(contrast_limits, index)
+    if window is None:
+        window = _omero_channel_window(channels, index)
+    if window is not None:
+        override["window"] = window
+    return override
+
+
+def get_store_backed_channel_overrides(image, channels=None):
+    cached = _cached_channel_overrides(image, channels)
+    if cached is not _MISSING:
+        return cached
+
+    node = load_store_backed_image_node(image)
+    channel_names, visible, contrast_limits, colormap = _channel_override_metadata(node)
+    channel_count = _store_backed_channel_count(
+        image, channels, (channel_names, visible, contrast_limits, colormap)
+    )
+    overrides = [
+        _channel_override(
+            index,
+            channel_names,
+            visible,
+            contrast_limits,
+            colormap,
+            channels,
+        )
+        for index in range(channel_count)
+    ]
 
     setattr(image, "_omero_web_zarr_channel_overrides", overrides)
     return overrides
