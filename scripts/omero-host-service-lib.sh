@@ -103,7 +103,7 @@ omero_render_systemd_unit() {
         text="${text//__${placeholder}__/$(omero_systemd_escape "${value}")}"
     done
 
-    if [[ "${text}" =~ __[A-Z0-9_]+__ ]]; then
+    if printf '%s\n' "${text}" | grep -Eq '__[A-Z0-9_]+__'; then
         omero_die "Unresolved placeholder while rendering ${source_file}."
     fi
 

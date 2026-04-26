@@ -8,9 +8,10 @@ Deep operational guidance for AI agents. `AGENTS.md` should route here instead o
 - If a read-only `git` command reports dubious ownership, use `git -c safe.directory=<repo> ...` for inspection.
 - Do not `chown` bind-mounted data directories such as `postgresdb/`, `omero_data/`, or `omero_temp/` to a non-service user.
 - Worktrees and related clones can exist under `/tmp/omero-*`. Search them before declaring a commit missing.
+- Develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch. Resolve it dynamically; never create feature branches, PR branches, temporary remote branches, or draft PRs just to run workflows or scanner checks.
 - Before rebasing, refresh tracking refs explicitly with `git fetch origin <branch>:refs/remotes/origin/<branch> --force`.
 - GitHub HTTPS Git operations require a PAT or credential manager, never an account password. A `Password for 'https://github.com'` prompt is asking for a token-class credential.
-- For TTY pushes, use `python3 tools/git_push_with_pat.py origin main`; it prompts without echo, disables stale GitHub credential helpers for that command, and keeps the token out of argv, remotes, logs, temp files, and long-lived git config.
+- For TTY pushes, resolve the default branch first, then use `python3 tools/git_push_with_pat.py origin "HEAD:${default_branch}"`; it prompts without echo, disables stale GitHub credential helpers for that command, and keeps the token out of argv, remotes, logs, temp files, and long-lived git config.
 - In non-TTY agent shells, provide the PAT only as a short-lived `GITHUB_TOKEN`
   environment variable for that helper invocation; never paste it into argv,
   remotes, logs, temp files, or long-lived Git config.

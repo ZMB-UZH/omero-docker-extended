@@ -63,7 +63,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
     ) -> None:
         runbook_text = self.read_text("docs/operations/code-scanning.md")
         normalized_runbook_text = " ".join(runbook_text.split())
-        self.assertIn("GitHub reported **4 open alerts on `main`**", runbook_text)
+        self.assertIn(
+            "GitHub reported **4 open alerts on the default branch",
+            runbook_text,
+        )
         self.assertIn("**4 grouped issues**", runbook_text)
         self.assertIn("**137 issue occurrences**", runbook_text)
         self.assertIn("**0 dependency vulnerability occurrences**", runbook_text)
@@ -223,13 +226,16 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("short-lived `GITHUB_TOKEN`", runbook_text)
         self.assertIn("Never paste PATs into command arguments", runbook_text)
         self.assertIn("GitHub HTTPS Git operations require a PAT", runbook_text)
-        self.assertIn("tools/git_push_with_pat.py origin main", runbook_text)
+        self.assertIn(
+            'tools/git_push_with_pat.py origin "HEAD:${default_branch}"',
+            runbook_text,
+        )
         self.assertIn("temp files", runbook_text)
         self.assertIn("newest supported version", runbook_text)
         self.assertIn("do not pin stale dates", runbook_text)
         self.assertNotIn('"X-GitHub-Api-Version": "2022-11-28"', runbook_text)
         self.assertNotIn("Authorization: Bearer $GITHUB_TOKEN", runbook_text)
-        self.assertIn("branch=main", runbook_text)
+        self.assertIn('--branch "${default_branch}"', runbook_text)
         scanner_tool_text = self.read_text("tools/scanner_inventory.py")
         self.assertIn("getpass.getpass", scanner_tool_text)
         self.assertIn("https://api.github.com/versions", scanner_tool_text)
@@ -338,6 +344,45 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("git ls-files '*.py'", workflow_text)
         self.assertIn("git ls-files '*.pyi'", workflow_text)
         self.assertIn("git ls-files '*.js' '*.jsx' '*.mjs'", workflow_text)
+
+    def test_agent_instructions_require_current_default_branch_development(
+        self,
+    ) -> None:
+        entrypoints = (
+            "AGENTS.md",
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md",
+            ".cursor/rules/00-omero-core.mdc",
+            "docs/reference/ai-agent-runtime-playbook.md",
+            "docs/reference/ai-agent-integrations.md",
+        )
+        for path in entrypoints:
+            with self.subTest(path=path):
+                text = " ".join(self.read_text(path).split())
+                self.assertIn("current remote default branch", text)
+                self.assertIn("unless the user explicitly names another branch", text)
+                self.assertRegex(
+                    text,
+                    r"([Dd]o not|never|must not) create feature branches, PR branches",
+                )
+                self.assertIn("draft PRs", text)
+
+        agents_text = self.read_text("AGENTS.md")
+        runtime_text = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
+        runbook_text = self.read_text("docs/operations/code-scanning.md")
+        self.assertIn("never hard-code `main`", agents_text)
+        self.assertIn("temporary remote branches", agents_text)
+        self.assertIn(
+            'tools/git_push_with_pat.py origin "HEAD:${default_branch}"',
+            runtime_text,
+        )
+        self.assertNotIn("tools/git_push_with_pat.py origin main", runbook_text)
+        self.assertNotIn("--branch main", runbook_text)
+        self.assertIn(
+            "current-remote-default-branch development rule",
+            self.read_text("docs/reference/ai-agent-integrations.md"),
+        )
 
     def test_markdownlint_command_is_pinned(self) -> None:
         expected = "npx --yes markdownlint-cli2@0.17.2"

@@ -16,7 +16,7 @@ Apply guidance in this order:
 4. the relevant skill in `.agents/skills/`
 5. harness-specific files such as `CLAUDE.md`
 
-The skill surface is additive. It must not override the repo's absolute single-session rule, security read order, split-pytest policy, or environment-driven configuration model.
+The skill surface is additive. It must not override the repo's absolute single-session rule, current-remote-default-branch development rule, security read order, split-pytest policy, or environment-driven configuration model.
 
 Opt-in compression skills are advisory only. They never override risk handling, safety warnings, exact dates, or clarity-first explanations.
 
@@ -31,7 +31,7 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 | `browser-fallback` | `.agents/skills/browser-fallback/SKILL.md` | when direct fetch is not enough because a page is JS-heavy or stateful | browser use stays deterministic and limited to real need |
 | `source-audit` | `.agents/skills/source-audit/SKILL.md` | before giving advice or claims based on web research | final answers separate confirmed facts, inference, and open gaps |
 | `compliance-and-rate-limit` | `.agents/skills/compliance-and-rate-limit/SKILL.md` | when repeated requests, crawling, or larger-scope extraction could create policy or load risk | collection stays cache-aware, paced, and non-evasive |
-| `verification-loop` | `.agents/skills/verification-loop/SKILL.md` | after non-trivial changes and before PRs | verification states exactly what was checked and what was blocked |
+| `verification-loop` | `.agents/skills/verification-loop/SKILL.md` | after non-trivial changes and before commit/push | verification states exactly what was checked and what was blocked |
 | `caveman` | `.agents/skills/caveman/SKILL.md` | when the user explicitly asks for lower-token replies or terse mode in AI communication | output tokens drop without losing technical substance or safety |
 | `docs-knowledge-maintainer` | `.agents/skills/docs-knowledge-maintainer/SKILL.md` | when behavior, env contracts, topology, or troubleshooting guidance changes | docs stay aligned with the code and routing model |
 | `plugin-regression-triager` | `.agents/skills/plugin-regression-triager/SKILL.md` | when selecting the correct split pytest suites | the narrowest correct regression set is chosen |

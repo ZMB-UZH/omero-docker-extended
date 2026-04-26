@@ -15,6 +15,7 @@ skill catalog.
 
 - Start with `AGENTS.md`, then load the smallest correct task slice from the routing doc.
 - Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI agent <>`; AI co-author trailers use `Co-authored-by: AI agent` with no email; audits include anonymous contributors (`contributors?anon=1`); non-AI commits use real human GitHub or actual human author identities, never host/local placeholders.
+- Develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch; resolve it dynamically and do not create feature branches, PR branches, temporary remote branches, or draft PRs for routine work.
 - Honor the routing doc's numeric caps before broadening context.
 - Use repo-local skills from `.agents/skills/` when they match the task.
 - If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill. It is for internal AI communication only, never for repo docs, comments, docstrings, function descriptions, or user-facing copy.

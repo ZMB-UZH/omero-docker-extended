@@ -17,7 +17,7 @@ Apply guidance in this order:
 7. `docs/reference/ai-agent-skills.md` and `.agents/skills/`
 8. harness-specific adapter files
 
-Harness-specific files are additive. They must not override the repo's security read order, absolute single-session rule, environment-driven configuration model, or split-pytest policy. The single-session rule prohibits background agents, subagents, spawned agents, delegated agents, and any separate agent session.
+Harness-specific files are additive. They must not override the repo's security read order, absolute single-session rule, current-remote-default-branch development rule, environment-driven configuration model, or split-pytest policy. The single-session rule prohibits background agents, subagents, spawned agents, delegated agents, and any separate agent session.
 
 ## Karpathy baseline
 
@@ -36,6 +36,10 @@ AI tools must not infer identity from global Git config, prior commits, GitHub a
 Identity cleanup must check fresh branch-head authors, committers, `Co-authored-by` trailers, and GitHub anonymous contributors (`contributors?anon=1`); a normal contributors check without anonymous entries is incomplete. GitHub PR-head refs are managed snapshots and must be reported separately from current branch heads.
 
 Non-AI commit identities must be real human GitHub identities or actual human author names with real email addresses. Host usernames, computer names, local account names, placeholder domains, generated fake names, and fake emails are invalid commit identities.
+
+## Default-branch development
+
+Every AI-facing adapter inherits the default-branch rule from `AGENTS.md`. AI agents must develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch, must resolve that branch from the remote instead of hard-coding `main`, and must not create feature branches, PR branches, temporary remote branches, or draft PRs for routine work.
 
 ## Supported instruction surfaces
 

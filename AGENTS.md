@@ -44,6 +44,11 @@ verification, or required workflow checks.
 
 - AI agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
 
+## Default-branch development rule
+
+- AI agents must develop, commit, push, and verify on the repository's current remote default branch unless the user explicitly names another branch. Resolve it from the remote, for example with `git remote show origin` or `git symbolic-ref refs/remotes/origin/HEAD`, and never hard-code `main` in agent workflow decisions.
+- Do not create feature branches, PR branches, temporary remote branches, or draft PRs for routine coding, verification, workflow checks, or scanner checks. If one is created accidentally, move the work back to the resolved default branch, delete the temporary branch, close any PR, and continue there.
+
 ## Mandatory security read order
 
 Before writing or rewriting code or tests that touch filesystem paths, file I/O, logs, HTTP responses, outbound HTTP, SQL, subprocesses, Dockerfiles, workflows, secrets, authentication, or authorization, consult these in order:
