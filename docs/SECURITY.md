@@ -88,7 +88,8 @@ The OMP plugin enforces per-user rate limits on major actions (job starts, bulk 
 ## Network exposure
 
 - By default, only `omeroserver` (4064), `omeroweb` (`OMERO_WEB_HOST_PORT`, default 4090), `portainer` (9000/9443), `prometheus` (9090), `grafana` (3000), and `loki` (3100) are exposed to the host.
-- All other services (databases, Redis, exporters, alloy, blackbox, cadvisor, node-exporter) are internal to the `omero` Docker network.
+- When the `crowdsec` profile is enabled, CrowdSec uses host networking and exposes its LAPI on host port 8080.
+- All other services (databases, Redis, Ollama, exporters, alloy, blackbox, cadvisor, node-exporter) are internal to the `omero` Docker network.
 - Restrict public access to monitoring interfaces (Grafana, Prometheus, Portainer) using firewall rules or a reverse proxy with authentication.
 - OMERO.web should be behind a TLS-terminating reverse proxy for production use.
 - Docker socket is mounted read-only in `omeroweb` for container stats (admin tools plugin).

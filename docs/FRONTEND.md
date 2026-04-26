@@ -6,9 +6,9 @@ This repository extends OMERO.web via Django plugin packages. Each plugin provid
 
 Each plugin has a self-contained frontend under its own namespace:
 
-- Templates: `omeroweb_<name>/templates/omeroweb_<name>/`
-- Static assets (CSS/JS): `omeroweb_<name>/static/omeroweb_<name>/`
-- URL routing: `omeroweb_<name>/urls.py`
+- Templates: `<plugin_package>/templates/<plugin_package>/`
+- Static assets (CSS/JS): `<plugin_package>/static/<plugin_package>/`
+- URL routing: `<plugin_package>/urls.py`
 
 Plugins register in OMERO.web via `CONFIG_omero_web_apps` in `env/omeroweb.env` and appear as top-level links via `CONFIG_omero_web_ui_top__links`.
 
@@ -18,6 +18,7 @@ Plugins register in OMERO.web via `CONFIG_omero_web_apps` in `env/omeroweb.env` 
 - **Import Plugin** (`/omeroweb_import/`): upload session management, file transfer, import progress, SEM-EDX method settings. Template: `index.html` with `upload.js` for file handling.
 - **Tools Plugin** (`/omeroweb_tools/`): Admin-Tools-style landing page plus the `Enhanced search` workspace for regular users. Templates: `index.html`, `enhanced_search.html`. Shares structural CSS with Admin Tools but keeps plugin-scoped styles and user-only behavior.
 - **Admin Tools** (`/omeroweb_admin_tools/`): multi-page interface with tabs for logs, resource monitoring, storage, and server diagnostics. Templates: `index.html`, `logs.html`, `resource_monitoring.html`, `storage.html`, `server_database_testing.html`. Embeds Grafana iframes via proxy endpoints.
+- **OMERO.web Zarr** (`/zarr/`): authenticated OME-Zarr preview and raw/preview endpoint integration. Templates: `image_preview.html`, `right_plugin.preview.js.html`, plus an OMERO.web toolbar include override.
 - **Imaris Connector**: API-only endpoint (`/imaris-export/`), no dedicated UI template.
 
 ## Development conventions

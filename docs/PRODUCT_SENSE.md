@@ -33,7 +33,7 @@ Engineers who extend or modify the platform. They need:
 ## Product principles
 
 1. **Reliability over speed**: favor recoverability and correctness over rapid but fragile feature additions. A failed upload or lost annotation is worse than a slower workflow.
-2. **Operational impact awareness**: ensure operational impact is documented before merge. Changes to startup scripts, Docker configuration, or monitoring affect the entire platform.
+2. **Operational impact awareness**: ensure operational impact is documented before a default-branch push or release. Changes to startup scripts, Docker configuration, or monitoring affect the entire platform.
 3. **Preserve contracts**: minimize surprise by preserving existing plugin API contracts, URL routes, and configuration variables unless explicitly versioned and documented.
 4. **Explicit over implicit**: users and operators should not need to guess what a setting does or where a log file lives. Error messages should point to the correct env file and variable name.
 5. **Autonomous maintenance**: the platform should run unattended between deployments. Database maintenance, log rotation, and health monitoring operate automatically.

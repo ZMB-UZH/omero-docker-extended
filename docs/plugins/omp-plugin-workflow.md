@@ -76,7 +76,7 @@ Three separator modes are supported:
 
 - **Character mode** (`chars`): the user picks one or more separator characters (e.g. `_`, `-`, `.`). The plugin escapes them and builds a character-class regex.
 - **Regex mode** (`regex`): the user provides a custom regex pattern directly. The plugin validates it against an unsafe-pattern denylist (no backreferences, no unbounded quantifiers) and compiles it before use.
-- **AI regex mode** (`ai_regex`): the plugin sends sample filenames to a configured AI provider (Claude, Gemini, Groq, Perplexity, xAI, Cohere, or Local) and receives a suggested regex. The suggestion is validated the same way as manual regex before use.
+- **AI regex mode** (`ai_regex`): the plugin sends sample filenames to a configured AI provider (Local/Ollama, Groq, Gemini, Claude, Perplexity, xAI, or Cohere) and receives a suggested regex. The suggestion is validated the same way as manual regex before use.
 
 ### 3. Preview and variable naming
 

@@ -150,6 +150,7 @@ The table below lists the long-running services available in the full profile se
 | `database` | postgres:16.12 | Primary OMERO PostgreSQL database | 5432 (internal) |
 | `database_plugin` | postgres:16.12 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
 | `redis` | redis:8.6.2-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
+| `ollama` | ollama/ollama:0.21.0 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
 | `pg-maintenance` | Custom (postgres:16.12) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
 | `portainer` | portainer/portainer-ce:2.40.0-alpine | Docker container management UI | 9000, 9443 |
 | `prometheus` | prom/prometheus:v3.11.2 | Metrics scraping and storage | 9090 |
@@ -174,7 +175,7 @@ The table below lists the long-running services available in the full profile se
 
 Filename-to-metadata extraction workflow. Parses scientific image filenames into structured key-value annotations and writes them to OMERO.
 
-- Regex-based and AI-assisted filename parsing (supports OpenAI, Anthropic, Google, Mistral)
+- Regex-based and AI-assisted filename parsing (supports Local/Ollama, Groq, Gemini, Claude, Perplexity, xAI, and Cohere)
 - Variable set management with per-user PostgreSQL persistence
 - Background job execution with progress tracking
 - Hash-based ownership for safe plugin-only annotation deletion
@@ -341,17 +342,17 @@ Create deployment-local runtime files by copying these templates and removing `_
 
 ```bash
 # Stop services without removing resources
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env stop
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env stop
 
 # Stop and remove containers
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env down
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env down
 
 # Follow logs for a specific service
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs -f omeroweb
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs -f omeroweb
 
 # Rebuild a single service
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env build omeroweb
-docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d omeroweb
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env build omeroweb
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env up -d omeroweb
 # Remove optional post-build leftovers (redis-sysctl-init + buildx buildkit)
 bash installation/cleanup_build_containers.sh
 ```
@@ -367,7 +368,9 @@ This is currently disabled, but easy to enable, at least without strong certific
 
 The observability stack provides:
 
-- **Prometheus** scrapes 9 exporters/services, plus blackbox HTTP probes for 12 endpoints and TCP probes for 4 ports (databases, Redis, OMERO.server).
+- **Prometheus** scrapes 10 direct metric targets, plus blackbox HTTP probes
+  for the configured service endpoints and TCP probes for 5 internal endpoints
+  (databases, Redis, OMERO.server SSL, and OMERO.server).
 - **Alloy** collects Docker container logs and OMERO server/web internal log files, pushes to Loki.
 - **Grafana** ships with 4 pre-provisioned dashboards: OMERO infrastructure, database metrics, plugin database metrics, Redis metrics.
 - **Blackbox exporter** validates HTTP 2xx for all web endpoints and TCP connectivity for critical internal services.

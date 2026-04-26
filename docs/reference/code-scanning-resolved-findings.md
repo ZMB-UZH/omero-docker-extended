@@ -144,7 +144,7 @@ Use the playbook when you need the current normative coding pattern. Use this le
 | Rule ID | Count | Root cause | Fix applied | Prevention rule |
 | --- | ---: | --- | --- | --- |
 | `sqlalchemy-execute-raw-query` | 165 | Direct `execute("SELECT ...")` with string SQL | Extracted `_safe_query()` helpers; separated SQL composition from execution | **Separate SQL composition from execution.** Build SQL with `sql.SQL()` in a distinct function; call `execute()` only with the composed object. |
-| `csrf-exempt` | 29 (open) | `@csrf_exempt` on Django views because JS doesn't send CSRF tokens | 29 remain open — requires coordinated template + view changes | **When adding new views**: add `X-CSRFToken` header in template JS and omit `@csrf_exempt`. |
+| `csrf-exempt` | 29 in the historical 2026-03-31 snapshot | `@csrf_exempt` on Django views because JS did not send CSRF tokens | Tracked as coordinated template + view debt in the historical snapshot; re-query live scanners before treating any instance as open. | **When adding new views**: add `X-CSRFToken` header in template JS and omit `@csrf_exempt`. |
 | `direct-use-of-httpresponse` | 9 | `HttpResponse(string)` without escaping | Used `JsonResponse` for JSON; `format_html()` for HTML; explicit `content_type` | **Use `JsonResponse` for JSON data.** Use `format_html()` or `render()` for HTML. Set `content_type` explicitly. |
 | `reflected-data-httpresponsebadrequest` | 2 | User input reflected in error message body | HTML-escaped user data; set `content_type="text/plain"` | **Escape all user data in error responses.** Use `text/plain` content type for error messages. |
 | `avoid-mark-safe` | 1 | `mark_safe()` with manually-escaped content | Replaced with `format_html_join()` which auto-escapes | **Never use `mark_safe()`.** Use `format_html()` / `format_html_join()` instead. |
@@ -196,6 +196,7 @@ These files have historically generated the most scanning alerts. Extra review a
 | 2026-04-20 | 20 | 7 | Code fixes | Renamed the managed-Zarr template marker local that Bandit misclassified as a credential, made CrowdSec and pg-maintenance images default to non-root users with explicit root-only Compose handoffs, and fixed CrowdSec nftables FORWARD-chain setup to wait for bouncer-created sets before installing Docker bridge protection |
 | 2026-04-22 | 12 | 8 | Code fixes | Made the OMERO.server and OMERO.web images default to their application users while keeping the root-only Compose startup handoff for bind-mounted runtime-path reconciliation |
 | 2026-04-24 | 8 | 4 | Code fixes | Cleared the remaining `XTOmeroConnector.py` CodeQL file-level findings (`py/empty-except`, `py/exit-from-finally`, `py/multiple-definition`) and kept the prompt-based scanner helper out of Semgrep transport findings by sending curl headers through stdin config rather than argv or dynamic urllib calls |
+| 2026-04-26 | 4 | — | Snapshot | Live GitHub code scanning showed only repository-level Scorecard findings (`MaintainedID`, `CodeReviewID`, `CIIBestPracticesID`, `BranchProtectionID`) and no open file-level alerts. |
 
 ---
 

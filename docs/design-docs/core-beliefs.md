@@ -6,7 +6,7 @@ Operating principles that guide all decisions in this repository.
 
 2. **Short navigation docs over monolithic instructions.** `AGENTS.md` is a table of contents, not an encyclopedia. `docs/index.md` is a navigation hub with cross-links. Deep content lives in domain-specific documents. When everything is "important," nothing is.
 
-3. **Mechanical checks enforce structure and freshness.** The documentation structure is validated by `tools/lint_docs_structure.py` and CI. Required files, cross-links, and index entries are checked automatically. Drift is caught before merge.
+3. **Mechanical checks enforce structure and freshness.** The documentation structure is validated by `tools/lint_docs_structure.py` and CI. Required files, cross-links, and index entries are checked automatically. Drift is caught before default-branch acceptance.
 
 4. **Architectural boundaries must be explicit and verifiable.** Plugin packages depend on `omero_plugin_common`, never the reverse. Plugins do not depend on each other. Startup scripts consume only environment variables. These rules are documented in `ARCHITECTURE.md` and can be verified by inspection.
 

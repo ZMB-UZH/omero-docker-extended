@@ -286,9 +286,8 @@ Configuration values in `env/omeroweb.env`:
 
 | Variable                                           | Purpose                                                                                                                                                                                                                 |
 | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UPLOAD_CONCURRENT_LIMIT`                          | Maximum simultaneous upload jobs                                                                                                                                                                                        |
-| `UPLOAD_BATCH_SIZE`                                | Files per import batch                                                                                                                                                                                                  |
-| `OMERO_IMPORT_PATH`                                | Host path for temporary upload storage                                                                                                                                                                                  |
+| `OMERO_WEB_UPLOAD_CONCURRENCY`                     | Maximum simultaneous upload jobs                                                                                                                                                                                        |
+| `OMERO_WEB_UPLOAD_BATCH_FILES`                     | Default files processed per import batch                                                                                                                                                                                |
 | `OMERO_WEB_WSGI_ARGS`                              | Gunicorn arguments for OMERO.web; include a long `--timeout` for slow upload requests (default example: `--timeout 7200`)                                                                                               |
 | `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS`           | OMERO CLI keepalive interval for long-running imports (default `30`)                                                                                                                                                    |
 | `OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS`      | Timeout for OMERO CLI dry-run compatibility/grouping scans (default `7200`)                                                                                                                                             |
@@ -299,7 +298,19 @@ Configuration values in `env/omeroweb.env`:
 | `OMERO_WEB_UPLOAD_NATIVE_ZARR_GZIP_LEVEL`          | Gzip level used when the disposable native-import copy must rewrite Blosc-backed image arrays for render-safe import                                                                                                    |
 | `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` | Failed-job deferred cleanup window (default `172800`)                                                                                                                                                                   |
 
-The import step runs OMERO CLI with `HOME` and `XDG_CACHE_HOME` set to `${OMERO_IMPORT_PATH}/.omero-cli-home` to guarantee writable cache space for OMERO.java downloads in non-root containers.
+Upload data, job JSON, compatibility scan state, CLI home, and native-Zarr
+transfer state are derived from `OMERO_TMP_PATH` through
+`omero_plugin_common.tmp_utils.get_plugin_tmp_dir()`. The active Import plugin
+subtree is `${OMERO_TMP_PATH}/omeroweb-import/`, with purpose-specific
+subdirectories such as `data/`, `jobs/`, `compat-check/`, and
+`managed-zarr-transfer/`. `OMERO_IMPORT_PATH` may still appear in installation
+path templates and safety guards as the derived legacy path record, but it is
+not a plugin override and should not be used to move Import plugin runtime
+state independently from `OMERO_TMP_PATH`.
+
+The import step runs OMERO CLI with `HOME` and `XDG_CACHE_HOME` set under the
+resolved Import plugin upload root (`data/.omero-cli-home`) to guarantee
+writable cache space for OMERO.java downloads in non-root containers.
 The managed-repository helper launch also requires `ROOTPASS` from `env/omero_secrets.env`, because OMERO.web starts that helper through an independent OMERO CLI login instead of reusing any browser session.
 
 Build-time native Zarr version pins live in `env/omeroserver.env` / `env/omeroserver_example.env`:

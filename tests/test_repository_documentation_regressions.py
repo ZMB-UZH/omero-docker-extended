@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import re
 import shutil
 import subprocess
 import unittest
@@ -22,7 +24,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
     def read_text(self, relative_path: str) -> str:
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
 
-    def git_file_count(self, *patterns: str) -> int:
+    def git_files(self, *patterns: str) -> list[str]:
         git_path = shutil.which("git")
         self.assertIsNotNone(git_path)
         output = subprocess.check_output(
@@ -37,7 +39,22 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             cwd=self.repo_root,
             text=True,
         )
-        return len([line for line in output.splitlines() if line])
+        return [line for line in output.splitlines() if line]
+
+    def git_file_count(self, *patterns: str) -> int:
+        return len(self.git_files(*patterns))
+
+    def literal_assignment(self, relative_path: str, name: str) -> object:
+        module = ast.parse(self.read_text(relative_path))
+        for node in module.body:
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == name
+            ):
+                return ast.literal_eval(node.value)
+        self.fail(f"{relative_path} is missing {name}")
 
     def test_root_security_policy_exists_and_points_to_canonical_docs(self) -> None:
         root_security = self.repo_root / "SECURITY.md"
@@ -73,11 +90,11 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("**0 dependency vulnerability occurrences**", runbook_text)
         expected_scanner_snapshot_commit = "".join(
             (
-                "fe29fb5e",
-                "ba857df3",
-                "3362049d",
-                "f40ff678",
-                "8ffc5b98",
+                "92cee4a6",
+                "2e09971f",
+                "ec82fccc",
+                "7f8d9b8e",
+                "0b867653",
             )
         )
         self.assertIn(expected_scanner_snapshot_commit, runbook_text)
@@ -98,6 +115,161 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             "~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**",
             runbook_text,
         )
+
+        resolved_text = self.read_text(
+            "docs/reference/code-scanning-resolved-findings.md"
+        )
+        self.assertIn(
+            "Live GitHub code scanning showed only repository-level", resolved_text
+        )
+        self.assertIn("historical 2026-03-31 snapshot", resolved_text)
+        self.assertNotIn("remain open", resolved_text)
+
+    def test_docs_match_supervisord_program_topology(self) -> None:
+        supervisord_text = self.read_text("supervisord.conf")
+        programs = sorted(re.findall(r"^\[program:([^\]]+)\]", supervisord_text, re.M))
+        self.assertEqual(
+            [
+                "imaris-celery-worker",
+                "omero-web",
+                "storage-quota-reconcile-loop",
+                "tools-celery-worker",
+            ],
+            programs,
+        )
+
+        expected_phrases = {
+            "AGENTS.md": "storage-quota reconciliation loop under `supervisord`",
+            "ARCHITECTURE.md": "The `omeroweb` container runs four processes via supervisord",
+            "docs/RELIABILITY.md": "The `omeroweb` container runs four processes via supervisord",
+            "docs/architecture/system-overview.md": "as four supervised processes",
+            "docs/references/docker-compose-llms.txt": "storage-quota reconciliation loop via supervisord",
+        }
+        for relative_path, phrase in expected_phrases.items():
+            with self.subTest(relative_path=relative_path):
+                self.assertIn(phrase, self.read_text(relative_path))
+
+    def test_docs_planning_uses_default_branch_change_records(self) -> None:
+        planning_paths = (
+            "docs/PLANS.md",
+            "docs/index.md",
+            "docs/PRODUCT_SENSE.md",
+            "docs/QUALITY_SCORE.md",
+            "docs/design-docs/core-beliefs.md",
+            "docs/exec-plans/tech-debt-tracker.md",
+            "docs/exec-plans/completed/README.md",
+        )
+        stale_tokens = (
+            "single PR",
+            "multi-PR",
+            "PR-level",
+            "pull request description",
+            "PR link",
+            "reference it in the PR",
+            "before merge",
+        )
+        for relative_path in planning_paths:
+            text = self.read_text(relative_path)
+            with self.subTest(relative_path=relative_path):
+                for token in stale_tokens:
+                    self.assertNotIn(token, text)
+
+        for relative_path in (
+            "docs/PLANS.md",
+            "docs/index.md",
+            "docs/PRODUCT_SENSE.md",
+            "docs/design-docs/core-beliefs.md",
+        ):
+            with self.subTest(default_branch_path=relative_path):
+                self.assertIn("default-branch", self.read_text(relative_path))
+
+    def test_completed_knowledge_base_plan_is_not_active(self) -> None:
+        active_plan = (
+            self.repo_root / "docs/exec-plans/active/knowledge-base-bootstrap.md"
+        )
+        completed_plan = (
+            self.repo_root / "docs/exec-plans/completed/knowledge-base-bootstrap.md"
+        )
+        self.assertFalse(active_plan.exists())
+        self.assertTrue(completed_plan.exists())
+        self.assertIn(
+            "completed docs knowledge-base bootstrap outcomes",
+            self.read_text("docs/index.md"),
+        )
+        completed_text = completed_plan.read_text(encoding="utf-8")
+        self.assertIn("Status: completed.", completed_text)
+        self.assertIn("tools/lint_docs_structure.py", completed_text)
+
+    def test_quality_docs_reflect_current_plugin_test_baseline(self) -> None:
+        quality_text = self.read_text("docs/QUALITY_SCORE.md")
+        tracker_text = self.read_text("docs/exec-plans/tech-debt-tracker.md")
+        backlog_text = self.read_text(
+            "docs/exec-plans/active/repo-improvements-and-fixes-backlog.md"
+        )
+        self.assertIn("broad OMP/Import regression suites", quality_text)
+        self.assertIn("deployment/live integration", quality_text)
+        self.assertNotIn("limited unit test coverage for OMP and Import", quality_text)
+        self.assertNotIn("Add unit test coverage for OMP", tracker_text)
+        self.assertNotIn("Add unit test coverage for Import", tracker_text)
+        self.assertIn("OMP has 19", backlog_text)
+        self.assertIn("Import has 37", backlog_text)
+        self.assertIn("33,000 test-source lines", backlog_text)
+
+    def test_generated_schema_docs_match_plugin_data_stores(self) -> None:
+        schema_text = self.read_text("docs/generated/db-schema.md")
+        self.assertIn("OMP, Import, and Tools enhanced search", schema_text)
+        self.assertIn("omeroweb_tools/services/enhanced_search_store.py", schema_text)
+        self.assertIn("Enhanced-search sync state", schema_text)
+        self.assertNotIn("OMP and Upload", schema_text)
+
+        for relative_path in (
+            "omeroweb_omp_plugin/services/data_store.py",
+            "omeroweb_import/services/data_store.py",
+            "omeroweb_tools/services/enhanced_search_store.py",
+        ):
+            with self.subTest(relative_path=relative_path):
+                self.assertIn(
+                    "CREATE TABLE IF NOT EXISTS", self.read_text(relative_path)
+                )
+
+    def test_ollama_and_ai_provider_docs_match_code_and_compose(self) -> None:
+        compose_text = self.read_text("docker-compose.yml")
+        provider_options = self.literal_assignment(
+            "omeroweb_omp_plugin/services/ai_providers.py",
+            "AI_PROVIDER_OPTIONS",
+        )
+        self.assertIsInstance(provider_options, list)
+        provider_labels = [option["label"] for option in provider_options]
+        self.assertEqual(
+            ["Local", "Groq", "Gemini", "Claude", "Perplexity", "xAI", "Cohere"],
+            provider_labels,
+        )
+        self.assertIn('image: "ollama/ollama:0.21.0"', compose_text)
+        self.assertIn(
+            '_OLLAMA_PORT = "11434"', self.read_text("omeroweb_omp_plugin/constants.py")
+        )
+
+        expected_provider_text = "Local/Ollama, Groq, Gemini, Claude, Perplexity, xAI"
+        for relative_path in (
+            "README.md",
+            "docs/architecture/system-overview.md",
+            "docs/deployment/configuration.md",
+            "docs/plugins/omp-plugin.md",
+            "docs/plugins/omp-plugin-workflow.md",
+        ):
+            with self.subTest(relative_path=relative_path):
+                self.assertIn(expected_provider_text, self.read_text(relative_path))
+
+        expected_ollama_docs = {
+            "README.md": "ollama/ollama:0.21.0",
+            "docs/architecture/system-overview.md": "### Local AI inference (`ollama`)",
+            "docs/reference/service-endpoints.md": "ollama:11434",
+            "docs/references/docker-compose-llms.txt": "Ollama 0.21.0",
+            "env/omeroweb_example.env": "OMP_OLLAMA_MODEL=qwen2.5:3b",
+        }
+        for relative_path, phrase in expected_ollama_docs.items():
+            with self.subTest(ollama_path=relative_path):
+                self.assertIn(phrase, self.read_text(relative_path))
 
     def test_doc_compaction_requires_objective_meaning_preservation(self) -> None:
         agents_text = self.read_text("AGENTS.md")
@@ -358,6 +530,40 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("git ls-files '*.pyi'", workflow_text)
         self.assertIn("git ls-files '*.js' '*.jsx' '*.mjs'", workflow_text)
 
+    def test_python_acceleration_doc_counts_match_current_tree(self) -> None:
+        doc_text = self.read_text("docs/design-docs/python-acceleration-options.md")
+        production_paths = self.git_files(
+            "*.py",
+            ":!:tests/*",
+            ":!:*/tests/*",
+            ":!:third_party/*",
+            ":!:.agents/*",
+        )
+        test_paths = self.git_files("tests/*.py", "*/tests/*.py")
+
+        production_lines = sum(
+            len(self.read_text(path).splitlines()) for path in production_paths
+        )
+        test_lines = sum(len(self.read_text(path).splitlines()) for path in test_paths)
+
+        self.assertIn(f"Production Python files: `{len(production_paths)}`", doc_text)
+        self.assertIn(f"Production Python lines: `{production_lines:,}`", doc_text)
+        self.assertIn(f"Test Python files: `{len(test_paths)}`", doc_text)
+        self.assertIn(f"Test Python lines: `{test_lines:,}`", doc_text)
+
+        for relative_path in (
+            "omeroweb_import/views/core_functions.py",
+            "omeroweb_admin_tools/views/index_view.py",
+            "omero_web_zarr/utils.py",
+            "omeroweb_imaris_connector/imaris_service.py",
+            "omeroweb_omp_plugin/views/index_view.py",
+            "omeroweb_import/services/omero/sem_edx_parser.py",
+            "omeroweb_import/services/ome_zarr_support.py",
+        ):
+            with self.subTest(relative_path=relative_path):
+                line_count = len(self.read_text(relative_path).splitlines())
+                self.assertIn(f"`{relative_path}`: `{line_count:,}` lines", doc_text)
+
     def test_agent_instructions_require_current_default_branch_development(
         self,
     ) -> None:
@@ -437,6 +643,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self,
     ) -> None:
         tracked_docs = [
+            "README.md",
             "CLAUDE.md",
             "docs/deployment/quickstart.md",
             "docs/product-specs/new-user-onboarding.md",
@@ -475,6 +682,60 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         ):
             self.assertIn(f"source {env_file}", quickstart)
 
+    def test_onboarding_creates_required_runtime_env_files(self) -> None:
+        onboarding = self.read_text("docs/product-specs/new-user-onboarding.md")
+        for template, runtime in (
+            ("installation_paths_example.env", "installation_paths.env"),
+            ("env/omeroserver_example.env", "env/omeroserver.env"),
+            ("env/omeroweb_example.env", "env/omeroweb.env"),
+            ("env/omero-celery_example.env", "env/omero-celery.env"),
+            ("env/grafana_example.env", "env/grafana.env"),
+            ("env/omero_secrets_example.env", "env/omero_secrets.env"),
+        ):
+            self.assertIn(f"cp {template} {runtime}", onboarding)
+
+    def test_import_plugin_docs_match_current_temp_and_upload_env_contract(
+        self,
+    ) -> None:
+        import_doc = self.read_text("docs/plugins/import-plugin.md")
+        import_core = self.read_text("omeroweb_import/views/core_functions.py")
+        file_helpers = self.read_text("omeroweb_import/utils/file_helpers.py")
+
+        self.assertIn(
+            'UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"',
+            import_core,
+        )
+        self.assertIn(
+            'UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"', import_core
+        )
+        self.assertIn('return get_plugin_tmp_dir("data")', file_helpers)
+        self.assertIn('return get_plugin_tmp_dir("jobs")', file_helpers)
+
+        self.assertIn("`OMERO_WEB_UPLOAD_CONCURRENCY`", import_doc)
+        self.assertIn("`OMERO_WEB_UPLOAD_BATCH_FILES`", import_doc)
+        self.assertIn("derived from `OMERO_TMP_PATH`", import_doc)
+        self.assertIn("`data/.omero-cli-home`", import_doc)
+        self.assertIn("not a plugin override", import_doc)
+        self.assertNotIn("`UPLOAD_CONCURRENT_LIMIT`", import_doc)
+        self.assertNotIn("`UPLOAD_BATCH_SIZE`", import_doc)
+        self.assertNotIn("${OMERO_IMPORT_PATH}/.omero-cli-home", import_doc)
+
+    def test_frontend_docs_cover_current_template_packages(self) -> None:
+        frontend_text = self.read_text("docs/FRONTEND.md")
+        self.assertIn("<plugin_package>/templates/<plugin_package>/", frontend_text)
+        self.assertIn("OMERO.web Zarr", frontend_text)
+        self.assertIn("image_preview.html", frontend_text)
+        self.assertIn("right_plugin.preview.js.html", frontend_text)
+        for relative_path in (
+            "omeroweb_omp_plugin/templates/omeroweb_omp_plugin/index.html",
+            "omeroweb_import/templates/omeroweb_import/index.html",
+            "omeroweb_tools/templates/omeroweb_tools/enhanced_search.html",
+            "omeroweb_admin_tools/templates/omeroweb_admin_tools/index.html",
+            "omero_web_zarr/templates/omero_web_zarr/image_preview.html",
+        ):
+            with self.subTest(relative_path=relative_path):
+                self.assertTrue((self.repo_root / relative_path).exists())
+
     def test_service_topology_docs_match_compose_terms(self) -> None:
         self.assertEqual(21, len(self.services))
         self.assertIn("redis-sysctl-init", self.services)
@@ -503,6 +764,53 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             text = self.read_text(relative_path)
             for phrase in expected_phrases:
                 self.assertIn(phrase, text, f"{relative_path} is missing: {phrase}")
+
+    def test_service_endpoint_health_table_covers_compose_healthchecks(self) -> None:
+        endpoint_text = self.read_text("docs/reference/service-endpoints.md")
+        expected_services = sorted(
+            service_name
+            for service_name, service_config in self.services.items()
+            if "healthcheck" in service_config
+        )
+        self.assertNotIn("redis-sysctl-init", expected_services)
+        for service_name in expected_services:
+            with self.subTest(service_name=service_name):
+                self.assertIn(f"`{service_name}`", endpoint_text)
+
+    def test_monitoring_docs_match_prometheus_probe_counts(self) -> None:
+        prometheus_data = yaml.safe_load(
+            (self.repo_root / "monitoring/prometheus/prometheus.yml").read_text(
+                encoding="utf-8"
+            )
+        )
+        scrape_configs = prometheus_data["scrape_configs"]
+        direct_jobs = [
+            config
+            for config in scrape_configs
+            if config["job_name"] not in {"blackbox_http", "blackbox_tcp"}
+        ]
+        blackbox_http = next(
+            config for config in scrape_configs if config["job_name"] == "blackbox_http"
+        )
+        blackbox_tcp = next(
+            config for config in scrape_configs if config["job_name"] == "blackbox_tcp"
+        )
+        http_targets = blackbox_http["static_configs"][0]["targets"]
+        tcp_targets = blackbox_tcp["static_configs"][0]["targets"]
+        self.assertEqual(10, len(direct_jobs))
+        self.assertEqual(13, len(http_targets))
+        self.assertEqual(5, len(tcp_targets))
+
+        expected_phrases = {
+            "README.md": "Prometheus** scrapes 10 direct metric targets",
+            "ARCHITECTURE.md": "Prometheus scrapes 10 direct metric targets",
+            "docs/architecture/system-overview.md": "scrapes 10 direct metric targets",
+            "docs/operations/monitoring.md": "13 HTTP probe targets",
+            "docs/references/docker-compose-llms.txt": "10 direct targets",
+        }
+        for relative_path, phrase in expected_phrases.items():
+            with self.subTest(relative_path=relative_path):
+                self.assertIn(phrase, self.read_text(relative_path))
 
     def test_plugin_help_pages_are_concise_user_help(self) -> None:
         expected_phrases = {

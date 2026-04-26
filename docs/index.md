@@ -48,16 +48,16 @@ Central navigation hub for all project documentation. Start here, then follow li
 
 - `DESIGN.md` -- design principles: explicit contracts, modularity, environment-driven config
 - `FRONTEND.md` -- Django template patterns, plugin-scoped UI, asset management
-- `PLANS.md` -- planning model for changes (PR-level, execution plans, debt tracking)
+- `PLANS.md` -- planning model for default-branch changes, execution plans, and debt tracking
 - `PRODUCT_SENSE.md` -- user personas, reliability over speed, operational impact awareness
 - `QUALITY_SCORE.md` -- quality scorecard by domain with grades and improvement targets
 - `design-docs/index.md` -- design document catalog
 - `design-docs/acquisition-metadata-search-options.md` -- research-backed design study and five selective-index plans for OMERO.web acquisition-metadata search
 - `design-docs/python-acceleration-options.md` -- investigation of automatic Python acceleration options, Cython limits, and ranked future paths for this repository
-- `exec-plans/active/knowledge-base-bootstrap.md` -- active execution plan
 - `exec-plans/active/repo-feature-capability-roadmap.md` -- grounded roadmap of candidate new product and platform capabilities
 - `exec-plans/active/repo-quality-skills-hooks-actions.md` -- skills, git hooks, GitHub Actions, and repo settings to raise quality
 - `exec-plans/active/repo-improvements-and-fixes-backlog.md` -- prioritized backlog of concrete fixes and maintainability work
+- `exec-plans/completed/knowledge-base-bootstrap.md` -- completed docs knowledge-base bootstrap outcomes
 - `exec-plans/tech-debt-tracker.md` -- known technical debt items
 - `product-specs/index.md` -- product specification catalog
 - `product-specs/new-user-onboarding.md` -- new user onboarding product specification

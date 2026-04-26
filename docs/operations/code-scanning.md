@@ -17,7 +17,7 @@ search for, create, restore, or edit `.deepsource.toml`. A GitHub PAT is not a
 DeepSource API credential; start scanner triage from the GitHub code-scanning
 API, GitHub Actions logs, and this runbook instead.
 
-The repository also includes a `security-delta` job inside `.github/workflows/security-code-scanning.yml`. That job fails when a pull request introduces any open code-scanning alert or when a default-branch security scan creates new open alerts.
+The repository also includes a `security-delta` job inside `.github/workflows/security-code-scanning.yml`. That job fails when a default-branch security scan creates new open code-scanning alerts.
 
 The current advanced CodeQL setup uses `build-mode: none` for the Python and JavaScript/TypeScript matrix, which matches GitHub's interpreted-language guidance and avoids an unnecessary `autobuild` step. The same workflow also enables CodeQL dependency caching, and the Bandit job restores and stores `pip` downloads keyed to `.github/requirements/security-code-scanning.txt`.
 
@@ -94,10 +94,11 @@ version's published signature.
 ## Trigger model
 
 - **Push** to the current default branch: full scan.
-- **Pull requests** targeting the current default branch: full scan.
 - **Weekly schedule** (Monday 03:23 UTC): catches newly disclosed CVEs.
 - **Manual dispatch**: incident response or post-remediation verification.
-- Every job in `.github/workflows/security-code-scanning.yml` is additionally gated with the current default-branch context, so non-default refs can create workflow runs but do not consume runner minutes.
+- Workflow `on:` push triggers do not hard-code `main`; every job is gated with
+  the current default-branch context so a maintainer can rename the default
+  branch without editing the workflow.
 
 ## Scanner Sources And Logs
 
@@ -179,13 +180,13 @@ runbook or tool concisely with regression coverage.
 
 Last live API refresh: **2026-04-26**.
 
-GitHub reported **4 open alerts on the default branch (`main` at refresh time)** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
+GitHub reported **4 open alerts on the default branch (`main` at refresh time)** at the time of the live snapshot used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
 DeepSource reported **3 grouped issues**, **109 issue occurrences**, and
 **0 dependency vulnerability occurrences** for the default branch during the
 same refresh. The API `latest_commit_oid` was
-`fe29fb5eba857df33362049df40ff6788ffc5b98`, the pushed default-branch
-revision when this snapshot was taken.
+`92cee4a62e09971fec82fccc7f8d9b8e0b867653`, the pushed default-branch
+revision used for this snapshot.
 
 These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
 
@@ -235,10 +236,11 @@ no file location: `MaintainedID`, `CodeReviewID`, `CIIBestPracticesID`, and
 first remediation push were no longer open.
 
 The same 2026-04-26 DeepSource refresh confirmed the `SH-3015` shell
-portability finding in `scripts/omero-host-service-lib.sh` was closed after
-commit `fe29fb5eba857df33362049df40ff6788ffc5b98`. The remaining grouped
-DeepSource issues were existing `SCT-1000` secrets findings, existing
-`SCT-A000` audit findings, and existing `PY-R1000` complexity findings.
+portability finding in `scripts/omero-host-service-lib.sh` remained closed on
+`92cee4a62e09971fec82fccc7f8d9b8e0b867653` after being remediated earlier
+that day. The remaining grouped DeepSource issues were existing `SCT-1000`
+secrets findings, existing `SCT-A000` audit findings, and existing `PY-R1000`
+complexity findings.
 
 ### Historical snapshots below
 
@@ -354,13 +356,13 @@ Most Note-level findings have been resolved through a combination of code fixes 
 
 ### Severity-based SLA
 
-| Severity | Response SLA           | Merge policy                               |
-| -------- | ---------------------- | ------------------------------------------ |
-| Critical | 24 hours               | Block all merges until resolved            |
-| High     | 7 days                 | Block merges introducing new high findings |
-| Medium   | 30 days                | Track in sprint backlog                    |
-| Warning  | Next maintenance cycle | Address during related work                |
-| Note     | Opportunistic          | Fix during refactoring of affected code    |
+| Severity | Response SLA           | Default-branch acceptance policy                    |
+| -------- | ---------------------- | --------------------------------------------------- |
+| Critical | 24 hours               | Block acceptance until resolved                     |
+| High     | 7 days                 | Block accepting changes that introduce new findings |
+| Medium   | 30 days                | Track in sprint backlog                             |
+| Warning  | Next maintenance cycle | Address during related work                         |
+| Note     | Opportunistic          | Fix during refactoring of affected code             |
 
 ### Known acceptable risks
 
@@ -376,9 +378,10 @@ Some findings are expected in this architecture and do not require remediation:
 - **B311 (random module)**: Used for non-security-critical purposes (job IDs, jitter). Not used for cryptographic operations.
 - **SC2012 (ls in Dockerfile)**: Cosmetic shell lint in Dockerfile RUN commands.
 
-### Findings requiring investigation
+### Historical finding categories requiring investigation if they reappear
 
-These categories may contain genuine issues that should be reviewed:
+These categories were present in the historical 2026-03-31 snapshot and may
+contain genuine issues if a future scan reintroduces them:
 
 1. **Critical SSRF** (`py/partial-ssrf`): Review URL construction in admin tools proxy and AI assist service to confirm inputs are validated against an allowlist.
 2. **Path injection** (`py/path-injection`): Review all file path construction to confirm traversal prevention is in place.
@@ -391,9 +394,9 @@ These categories may contain genuine issues that should be reviewed:
 
 ## Hardening roadmap
 
-1. Add branch protection requiring all security scanning checks to pass on pull requests.
-2. ~~Add CI policy to fail builds when new `CRITICAL` or `HIGH` alerts are introduced.~~ **Done**: the `security-delta` job in `.github/workflows/security-code-scanning.yml` now enforces a zero-added-alert policy for pull requests and flags newly created default-branch alerts after default-branch security scans.
-3. Pin all GitHub Actions to full commit SHAs (addresses 32 Scorecard `PinnedDependenciesID` findings).
+1. Add or keep a current-default-branch ruleset requiring security scanning checks to pass before accepting default-branch changes. Maintainers may add explicitly requested pull-request protections, but agents must not make separate branches or PRs unless the user asks for them.
+2. ~~Add CI policy to fail builds when new `CRITICAL` or `HIGH` alerts are introduced.~~ **Done**: the `security-delta` job in `.github/workflows/security-code-scanning.yml` now enforces a zero-added-alert policy after default-branch security scans.
+3. ~~Pin all GitHub Actions to full commit SHAs.~~ **Done in-tree**: workflow action references are SHA-pinned. Keep adding workflow-policy linting so future edits cannot drift back to tag-based action references.
 4. ~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**: the repository root now includes `SECURITY.md`, which points GitHub-native security surfaces at the canonical `docs/SECURITY.md` guidance. The Scorecard `SecurityPolicyID` finding is no longer open in the 2026-04-22 live refresh.
 5. ~~Add image-level vulnerability scans for each built Docker image.~~
    **Done**: Docker Scout two-phase scanning (pre-build baseline + post-build
@@ -406,15 +409,19 @@ These categories may contain genuine issues that should be reviewed:
 
 ## AI agent maintenance instructions
 
-**This file is the authoritative tracker for code scanning findings.** AI agents working on this repository must follow these rules:
+This file is the operational runbook for code-scanning workflow, live snapshot
+format, and triage rules. `tools/regression_guard.py` is the canonical
+machine-checked anti-regression gate, and the reference docs listed above own
+closed-history lessons. AI agents working on this repository must follow these
+rules:
 
-1. **After fixing a vulnerability**: Update the alert counts in this file. Remove the finding from the relevant table if the fix eliminates all instances. Decrement counts if partial. Update the "Last updated" date.
+1. **After fixing a vulnerability**: Refresh the GitHub API and, when authenticated, DeepSource. Update only the live snapshot and any directly affected historical/closed-history notes with the exact refresh date and verification evidence.
 
 2. **After removing or deleting code**: If the removed code was associated with findings listed here, update the counts and tables accordingly. Re-run the security workflow to verify closure.
 
 3. **After editing GitHub Actions workflows**: Re-verify every touched GitHub Action or reusable workflow against its official GitHub Releases/Tags page, update to the latest published version available at edit time, and pin by full commit SHA. Treat stale action pins as maintenance defects, not optional follow-up.
 
-4. **After adding new code**: If new code introduces patterns flagged by any scanner, document the finding here with its triage status (fix planned, acceptable risk, or false positive).
+4. **After adding new code**: If new code introduces patterns flagged by any scanner, document the finding here with its triage status (fix planned, acceptable risk, or false positive), then fix or justify it before accepting the default-branch change.
 
 5. **Periodic refresh**: When running a full security scan, compare the live alert count from the GitHub API against this file. Update all tables to match current state. Use:
 
@@ -441,7 +448,7 @@ These categories may contain genuine issues that should be reviewed:
 
    Example: `Fix CodeQL/py/path-injection: validate upload path against managed root`
 
-9. **Stale-count rule**: Never quote an open-alert total from memory or from this document alone. Always refresh it from the GitHub API first and include the refresh date in your notes or PR text.
+9. **Stale-count rule**: Never quote an open-alert total from memory or from this document alone. Always refresh it from the GitHub API first and include the refresh date in your notes or verification summary.
 
 ## AI agent coding guidelines — preventing new findings
 

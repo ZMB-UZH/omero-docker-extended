@@ -194,6 +194,21 @@ When adding or removing a plugin:
 The tracked `omeroweb` env places the `Tools` shortcut between `Import` and
 `Admin tools` in the OMERO.web top navigation.
 
+### OMP AI provider configuration
+
+`omeroweb_omp_plugin` exposes AI-assisted regex and filename parsing through
+the provider list declared in `omeroweb_omp_plugin/services/ai_providers.py`:
+Local/Ollama, Groq, Gemini, Claude, Perplexity, xAI, and Cohere. External provider
+API keys are stored per user in the plugin database. The Local provider calls
+the internal `ollama` Compose service by default.
+
+Related optional `env/omeroweb.env` controls:
+
+- `OMP_OLLAMA_BASE_URL` -- override the Local provider endpoint; default is
+  `http://ollama:11434` on the Docker network.
+- `OMP_OLLAMA_MODEL` -- override the Local provider model; default is
+  `qwen2.5:3b`.
+
 ### Tools enhanced-search configuration
 
 `omeroweb_tools` exposes the user-facing `Tools` launcher and the current

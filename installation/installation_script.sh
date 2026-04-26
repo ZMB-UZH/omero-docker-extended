@@ -4005,11 +4005,10 @@ echo ""
 # =====================================================
 # Conditional CrowdSec monitoring probe
 #
-# The checked-in prometheus.yml omits the CrowdSec health probe by default.
-# When CrowdSec is enabled, the installation script injects the probe target
-# at the CROWDSEC_PROBE_MARKER comment so blackbox-exporter monitors CrowdSec.
-# When CrowdSec is disabled, any previously injected probe line is removed
-# so blackbox-exporter does not produce error logs for a missing service.
+# prometheus.yml contains the CROWDSEC_PROBE_MARKER and may contain the
+# CrowdSec health probe line. This install step makes the tracked/runtime file
+# match the active credentials: enabled installations keep or inject the probe,
+# disabled installations remove it to avoid recurring connection-refused probes.
 # =====================================================
 PROMETHEUS_CONFIG="${OMERO_INSTALLATION_PATH%/}/monitoring/prometheus/prometheus.yml"
 CROWDSEC_PROBE_LINE="          - http://crowdsec:8080/health"  # DevSkim: ignore DS137138

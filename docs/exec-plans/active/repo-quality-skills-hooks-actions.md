@@ -18,7 +18,9 @@ the infrastructure-heavy parts of this repo.
 - The checked-in workflows now include `tests.yml`, which runs the split pytest suites, plus dedicated `ruff.yml`, `vulture.yml`, and `super-linter.yml` gates.
 - The repo already has a visible local hook and lint surface through `.pre-commit-config.yaml` and `.ruff.toml`, but it still lacks broader checked-in hooks for shell/workflow linting and related fast infrastructure checks.
 - The codebase is large and operationally sensitive: Docker Compose, startup scripts, OMERO session handling, plugin databases, and runtime bootstrap logic all need deterministic behavior.
-- The existing security scan notes still call out meaningful classes of findings, including path injection, log injection, raw SQL usage, `@csrf_exempt` views, subprocess-injection review points, and Dockerfile USER issues.
+- The current code-scanning runbook keeps historical finding classes for trend
+  analysis, while the 2026-04-26 live GitHub snapshot has no open file-level
+  findings. Remaining open GitHub alerts are repository-level Scorecard items.
 - Workflow hygiene is stronger than before: GitHub Actions are pinned by commit SHA, but the repo still relies on manual review instead of a dedicated workflow-policy or `actionlint` lane.
 - The repo already documents a precise split-pytest policy in `AGENTS.md`, and `tests.yml` now enforces it directly.
 - The code-scanning runbook still provides the evidence basis for supply-chain and policy hardening work, even though the root `SECURITY.md` and action-SHA pinning gaps have been fixed in-tree.
@@ -35,14 +37,14 @@ These are repo-local or agent-facing capabilities that would improve the quality
 | `security-finding-triager`       | The repo already carries an explicit code-scanning backlog. Someone needs to map scanner language back to real code and real risk.           | CodeQL/Semgrep/Bandit/Scorecard findings                       | Now      |
 | `env-contract-reviewer`          | Configuration is intentionally environment-driven. Drift toward hard-coded paths, ports, or defaults is one of the main failure modes.       | Env file, startup, or compose changes                          | Now      |
 | `session-lifecycle-reviewer`     | The Import and Imaris paths both rely on joined sessions, background work, and CLI launches that can accidentally kill live sessions.        | Joined session, background connection, or Celery work          | Now      |
-| `import-pipeline-refactor-guide` | The import code is mid-transition between giant legacy modules and service-layer extraction. Refactors need a stable playbook.               | `omeroweb_import` refactor or cleanup PRs                      | Next     |
+| `import-pipeline-refactor-guide` | The import code is mid-transition between giant legacy modules and service-layer extraction. Refactors need a stable playbook.               | `omeroweb_import` refactor or cleanup changes                  | Next     |
 | `workflow-supply-chain-reviewer` | GitHub Actions, Dependabot, and security policy changes affect the repo's integrity even when app code is unchanged.                         | Workflow or Dependabot edits                                   | Next     |
 | `incident-to-regression-test`    | The repo already values regression tests strongly. Every production fix should become a durable test rather than a one-off patch.            | Bugfixes after incidents or operator reports                   | Next     |
 | `release-readiness-reviewer`     | Startup, Dockerfile, env-template, and docs changes need coordinated validation and release-note discipline.                                 | Alpha/main release prep                                        | Later    |
 
 ## Recommended Hooks
 
-These should be local, fast, and deterministic. They are meant to fail early before a pull request is opened. Existing Ruff and docs hooks are already in place; the items below focus on the remaining gaps.
+These should be local, fast, and deterministic. They are meant to fail early before a default-branch push or an explicitly requested review. Existing Ruff and docs hooks are already in place; the items below focus on the remaining gaps.
 
 | Hook | What it should run | Why it matters here | Priority |
 | --- | --- | --- | --- |
@@ -53,7 +55,7 @@ These should be local, fast, and deterministic. They are meant to fail early bef
 | `pre-commit:dockerfile-lint` | `hadolint` on changed Dockerfiles | The repo already treats Dockerfiles as security-sensitive infrastructure code. | Now |
 | `pre-commit:secret-surface` | block edits and commits of operator-managed secrets and runtime-only env files | The repo explicitly forbids AI edits to `env/omero_secrets.env` and relies on example files as canonical templates. | Now |
 | `pre-push:split-pytest` | run only the relevant test directory, one suite at a time | `AGENTS.md` explicitly requires split pytest execution to avoid conftest cross-contamination. | Next |
-| `pre-push:docs-drift` | check for stale plugin names, stale topology facts, and missing env-file guidance | The repo has already fixed compose-command and service-count drift once, while stale `omeroweb_upload` references still remain. | Next |
+| `pre-push:docs-drift` | check for stale plugin names, stale topology facts, supervisord process drift, and missing env-file guidance | The repo has already fixed compose-command and service-count drift; remaining `omeroweb_upload` references are intentional compatibility or history and should be distinguished from new stale names. | Next |
 | `pre-push:compose-contract` | lightweight compose and workflow sanity checks when Docker or env templates change | Compose failures in this repo often come from env interpolation and runtime permissions, not syntax alone. | Next |
 
 ## Recommended GitHub Actions
@@ -66,8 +68,8 @@ The current workflows already cover docs validation, split tests, Ruff, Vulture,
 | lightweight local-quality mirror lane | run `python3 -m py_compile`, docs lint, and lightweight static checks on changed files | The repo has strong CI gates now, but local and changed-file feedback is still thinner. | Next |
 | `shell-and-workflow-lint.yml` | run `shellcheck`, `actionlint`, and YAML validation | The repo has many shell and workflow files but no dedicated enforcement lane. | Now |
 | `docker-smoke.yml` | build changed Dockerfiles and run targeted smoke and contract tests | Dockerfiles and startup wrappers are central to repo correctness. | Now |
-| `docs-drift.yml` | catch stale plugin names, stale topology facts, and missing index entries | The repo already benefits from narrower docs-drift regression tests, but stale plugin-name cleanup and broader drift enforcement are still incomplete. | Now |
-| `security-code-scanning.yml` `security-delta` job | fail when new code-scanning alerts are introduced by the current security workflow run | The security runbook already defines severity SLAs and merge expectations. | Done |
+| `docs-drift.yml` | catch stale plugin names, stale topology facts, supervisord process drift, and missing index entries | The repo already benefits from narrower docs-drift regression tests, but broader drift enforcement is still incomplete. | Now |
+| `security-code-scanning.yml` `security-delta` job | fail when new code-scanning alerts are introduced by the current security workflow run | The security runbook already defines severity SLAs and default-branch acceptance expectations. | Done |
 | `action-pin-policy.yml` | verify GitHub Actions stay pinned to approved SHAs and least-privilege permissions | SHA pinning is in place now, but the repo still lacks an automated guard against regression. | Next |
 | `release-hygiene.yml` | require release-note and docs updates when startup, env, or operator behavior changes | The repo says docs must change when behavior changes, but the rule is not automated. | Next |
 | `dependency-hygiene.yml` | validate Dependabot coverage and optionally inventory dependency surfaces | Dependabot exists but only covers a narrow subset of the repo. | Later |
@@ -75,8 +77,8 @@ The current workflows already cover docs validation, split tests, Ruff, Vulture,
 
 ## Related Repo Settings
 
-- Require `docs-knowledge-base`, `tests`, `ruff`, `vulture`, `super-linter`, and security scanning to pass before merge.
-- Add branch protection for `main` and `alpha` if both are expected to accept production changes.
+- Require `docs-knowledge-base`, `tests`, `ruff`, `vulture`, `super-linter`, and security scanning to pass before default-branch acceptance.
+- Add or maintain a branch ruleset for the current remote default branch. Add rules for other branches only when maintainers explicitly designate them as production-change targets.
 - Add `CODEOWNERS` coverage for `.github/workflows/`, `startup/`, `installation/`, `docker/`, `env/*_example.env`, and `docs/operations/`.
 - Require review for changes to workflows, startup scripts, Dockerfiles, and environment templates.
 - Limit GitHub token permissions in workflows to the minimum needed for each job.
@@ -88,7 +90,7 @@ The current workflows already cover docs validation, split tests, Ruff, Vulture,
 
 1. Add `shell-and-workflow-lint.yml`, `docker-smoke.yml`, and docs-drift checks so infrastructure changes stop bypassing the existing CI gates.
 2. Add a change-aware test-selection or lightweight local-quality mirror lane to complement the already-present full `tests.yml` workflow.
-3. Tighten workflow hygiene further with automated pin-policy checks, `CODEOWNERS`, and branch protection.
+3. Tighten workflow hygiene further with automated pin-policy checks, `CODEOWNERS`, and current-default-branch protection.
 4. Expand Dependabot and add slower nightly or manual full-stack validation only after the infrastructure lanes are stable.
 5. Revisit the skill set after the automation layer lands and trim or merge skills based on real maintenance behavior.
 
@@ -97,6 +99,7 @@ The current workflows already cover docs validation, split tests, Ruff, Vulture,
 - 2026-03-22: Drafted the planning scope after surveying repository docs, workflows, plugin code, and existing quality trackers.
 - 2026-03-22: Identified the earlier quality baseline before the current `tests`, `ruff`, `vulture`, and `super-linter` workflows landed.
 - 2026-03-22: Expanded the plan into concrete skill, hook, workflow, and repo-setting recommendations tied to the checked-in gaps.
+- 2026-04-26: Refreshed scanner, stale-name, and default-branch language against current docs, workflows, and tests.
 
 ## Decision Log
 

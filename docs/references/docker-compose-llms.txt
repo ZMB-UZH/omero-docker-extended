@@ -9,10 +9,11 @@ Service topology (docker-compose.yml):
 
 Core services:
 - omeroserver (port 4064): OMERO.server, custom Dockerfile, depends on database.
-- omeroweb (port 4090): OMERO.web + plugins + Celery worker via supervisord, depends on omeroserver + redis.
+- omeroweb (port 4090): OMERO.web + plugins + Celery workers + storage-quota reconciliation loop via supervisord, depends on omeroserver + redis.
 - database (port 5432): PostgreSQL 16.12, OMERO core database.
 - database_plugin (port 5433): PostgreSQL 16.12, OMERO plugin database.
 - redis (port 6379): Redis 8.6.2-alpine, in-memory only (no persistence), 512MB LRU, tmpfs-backed.
+- ollama (port 11434 internal): Ollama 0.21.0 local AI inference for OMP's Local provider, model data under OLLAMA_DATA_PATH or /disks/omero_temp/ollama.
 
 Supporting services:
 - redis-sysctl-init: profile-gated (sysctl-init) one-shot Alpine sidecar, sets vm.overcommit_memory=1, exits immediately. Not needed during normal operation when sysctl is persisted on host.
@@ -20,7 +21,7 @@ Supporting services:
 - portainer (ports 9000, 9443): container management UI, portainer/portainer-ce:2.40.0-alpine.
 
 Monitoring services:
-- prometheus (port 9090): metrics scraping with 9 scrape targets + blackbox probes, prom/prometheus:v3.11.2.
+- prometheus (port 9090): metrics scraping with 10 direct targets plus blackbox HTTP/TCP probes, prom/prometheus:v3.11.2.
 - grafana (port 3000): 4 auto-provisioned dashboards, grafana/grafana:13.0.1.
 - loki (port 3100): log aggregation backend, grafana/loki:3.7.1.
 - alloy (port 12345): log collection from Docker containers + OMERO log files, grafana/alloy:v1.15.1.

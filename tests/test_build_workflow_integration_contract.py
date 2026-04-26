@@ -907,7 +907,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual("read", security_delta_job["permissions"]["actions"])
         self.assertEqual("read", security_delta_job["permissions"]["contents"])
         self.assertEqual("read", security_delta_job["permissions"]["security-events"])
-        self.assertEqual("read", security_delta_job["permissions"]["pull-requests"])
+        self.assertNotIn("pull-requests", security_delta_job["permissions"])
         self.assertEqual("ubuntu-24.04", security_delta_job["runs-on"])
         self.assertEqual(
             [
@@ -1102,9 +1102,14 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         triggers = workflow[True]
 
         self.assertEqual("super-linter", workflow["name"])
-        self.assertEqual(["main"], triggers["pull_request"]["branches"])
-        self.assertEqual(["main"], triggers["push"]["branches"])
+        self.assertNotIn("pull_request", triggers)
+        self.assertIn("push", triggers)
+        self.assertIsNone(triggers["push"])
         self.assertIn("workflow_dispatch", triggers)
+        self.assertEqual(
+            self.DEFAULT_BRANCH_JOB_GUARD,
+            workflow["jobs"]["super-linter"]["if"],
+        )
         self.assertEqual("read", workflow["permissions"]["contents"])
         self.assertEqual("ubuntu-24.04", workflow["jobs"]["super-linter"]["runs-on"])
 
@@ -1329,11 +1334,14 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
             triggers = workflow.get(True, {})
             with self.subTest(workflow=workflow_path.name):
-                for event_name in ("pull_request", "push"):
-                    event_config = triggers.get(event_name)
-                    if isinstance(event_config, dict):
-                        self.assertNotIn("paths", event_config)
-                        self.assertNotIn("paths-ignore", event_config)
+                self.assertNotIn("pull_request", triggers)
+                self.assertIn("push", triggers)
+                event_config = triggers.get("push")
+                if isinstance(event_config, dict):
+                    self.assertNotIn("branches", event_config)
+                    self.assertNotIn("branches-ignore", event_config)
+                    self.assertNotIn("paths", event_config)
+                    self.assertNotIn("paths-ignore", event_config)
 
         security_workflow = yaml.safe_load(
             (

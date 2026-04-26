@@ -1,5 +1,37 @@
 # Release Notes
 
+## 2026-04-26 Documentation Audit Refresh
+
+This refresh audited the documentation set against the current repository code,
+tests, workflows, and scanner runbooks.
+
+### Highlights
+
+- Updated OMERO.web supervisord topology docs to match the four declared
+  programs in `supervisord.conf`.
+- Moved the completed knowledge-base bootstrap plan from active planning into
+  completed execution-plan history.
+- Updated planning, quality, and backlog docs to use current-default-branch
+  change records instead of routine branch/PR language.
+- Refreshed code-scanning guidance so historical critical/high findings are not
+  mistaken for current open file-level alerts.
+- Updated plugin-database documentation for OMP, Import, and Tools enhanced
+  search data stores.
+- Corrected Import plugin upload configuration docs to use the current
+  `OMERO_WEB_UPLOAD_*` environment contract and the shared `OMERO_TMP_PATH`
+  runtime subtree.
+- Refreshed the Python acceleration design note's tracked file and line counts
+  against the current repository tree.
+- Removed routine pull-request triggers and hard-coded `main` branch filters
+  from checked-in workflows; workflow jobs now rely on the current default
+  branch guard.
+
+### Validation Focus
+
+- Documentation structure and required index links.
+- Regression checks for scanner snapshot wording and topology facts.
+- Markdown linting and workflow-local gates before accepting the change.
+
 ## Current Documentation Refresh
 
 This release restructures project documentation for public consumption and maintainability.
