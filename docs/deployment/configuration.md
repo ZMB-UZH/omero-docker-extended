@@ -502,6 +502,9 @@ Queue names and broker URLs must be consistent between job producer and worker.
 ## Quota Enforcer
 
 The installation script automatically installs the host-side quota enforcer systemd units if the OMERO user data directory is on an **ext4** filesystem mounted with `prjquota` and the `project` feature enabled in the superblock. If these conditions are not met, the installation continues without blocking, but the Quotas tab in the Admin Tools plugin will be disabled.
+Each reinstall replaces the repo-managed quota service, timer, and path units
+from the active installation paths after removing stale unit files, drop-ins,
+and target dependency links for those managed units.
 
 ## Configuration Change Process (Recommended)
 

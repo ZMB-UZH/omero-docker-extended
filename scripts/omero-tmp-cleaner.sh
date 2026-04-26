@@ -30,6 +30,16 @@ usage() {
     echo "Usage: $0 --tmp-dir <DIR> [--max-age-seconds <SECONDS>]" >&2
 }
 
+require_option_value() {
+    local option_name="$1"
+    local option_value="${2:-}"
+    if [[ -z "${option_value}" || "${option_value}" = -* ]]; then
+        echo "ERROR: ${option_name} requires a value." >&2
+        usage
+        exit 2
+    fi
+}
+
 is_non_negative_integer() {
     case "${1:-}" in
         ""|*[!0-9]*) return 1 ;;
@@ -40,10 +50,12 @@ is_non_negative_integer() {
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --tmp-dir)
+            require_option_value "$1" "${2:-}"
             TMP_DIR="${2:-}"
             shift 2
             ;;
         --max-age-seconds)
+            require_option_value "$1" "${2:-}"
             MAX_AGE_SECONDS="${2:-}"
             shift 2
             ;;
@@ -65,7 +77,7 @@ if [[ -z "${TMP_DIR}" ]]; then
     exit 2
 fi
 
-TMP_DIR="$(readlink -f "${TMP_DIR}")"
+TMP_DIR="$(readlink -f -- "${TMP_DIR}")"
 
 # Very defensive safety checks
 if [[ "${TMP_DIR}" = "/" ]]; then
@@ -100,7 +112,7 @@ read_retention_expiry() {
         return 1
     fi
     IFS= read -r expiry < "${marker}" || true
-    expiry="${expiry//[$' \t\r\n']/}"
+    expiry="${expiry//[[:space:]]/}"
     if ! is_non_negative_integer "${expiry}"; then
         return 1
     fi
@@ -138,7 +150,7 @@ load_active_retention_markers() {
             RETAINED_MARKERS+=("${marker}")
         fi
     done < <(
-        find -P "${TMP_DIR}" -xdev -type f \
+        find -P "${TMP_DIR}" -xdev -ignore_readdir_race -type f \
             \( -name "${RETENTION_DIR_MARKER_NAME}" -o -name ".*${RETENTION_FILE_MARKER_SUFFIX}" \) \
             -print0
     )
@@ -152,6 +164,7 @@ path_is_structural() {
     local path="$1"
     local relative="${path#"${TMP_DIR}"/}"
 
+    [[ -d "${path}" && ! -L "${path}" ]] || return 1
     [[ "${relative}" = "${path}" ]] && return 1
 
     case "${relative}" in
@@ -215,7 +228,8 @@ while IFS= read -r -d '' candidate; do
     fi
     rm -f -- "${candidate}"
 done < <(
-    find -P "${TMP_DIR}" -xdev -mindepth 1 \( -type f -o -type l \) -mmin "+${MAX_AGE_MINUTES}" -print0
+    find -P "${TMP_DIR}" -xdev -ignore_readdir_race -mindepth 1 \
+        \( -type f -o -type l \) -mmin "+${MAX_AGE_MINUTES}" -print0
 )
 
 # ---------------------------------------------------------------------------
@@ -228,7 +242,8 @@ for _ in 1 2; do
         fi
         rmdir --ignore-fail-on-non-empty -- "${candidate}"
     done < <(
-        find -P "${TMP_DIR}" -xdev -mindepth 1 -type d -empty -mmin "+${MAX_AGE_MINUTES}" -print0
+        find -P "${TMP_DIR}" -xdev -ignore_readdir_race -mindepth 1 \
+            -type d -empty -mmin "+${MAX_AGE_MINUTES}" -print0
     )
 done
 

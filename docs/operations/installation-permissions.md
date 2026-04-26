@@ -51,7 +51,16 @@ Host-side installer:
   - sets `${OMERO_TMP_PATH}/omero-server` and `${OMERO_TMP_PATH}/omero-server/tmp` to `0700`.
 - `scripts/install-tmp-cleaner.sh`
   - fully replaces the repo-managed `omero-tmp-cleaner` systemd service and
-    timer on every run before enabling the current units.
+    timer on every run before enabling the current units,
+  - removes stale unit files, unit drop-ins, and `.wants`/`.requires`
+    dependency links for those managed units before rendering replacements,
+  - renders systemd paths through `scripts/omero-host-service-lib.sh`; the
+    installed `/usr/local/sbin/omero-tmp-cleaner` runtime remains standalone,
+  - installs a timer that schedules from activation and from the previous
+    service run so reinstalling the timer cannot leave it active with no next
+    trigger,
+  - protects only real namespace directories at the temp root; stale
+    root-level files and symlinks remain eligible for cleanup.
 
 Server bootstrap:
 
@@ -109,8 +118,18 @@ Quota helper:
 - `scripts/install-quota-enforcer.sh`
   - fully replaces the repo-managed `omero-quota-enforcer` service, timer, and
     path units on every run before enabling the current units,
+  - removes stale unit files, unit drop-ins, and `.wants`/`.requires`
+    dependency links for those managed units before rendering replacements,
   - renders unit paths from the active installation and data paths instead of
     assuming `/opt/omero`,
+  - writes `/etc/default/omero-quota-enforcer` values with shell-safe quoting
+    so spaces, quotes, `$`, backticks, and backslashes in installation-specific
+    paths cannot be reinterpreted when the defaults file is sourced,
+  - uses `scripts/omero-host-service-lib.sh` only during installation; the
+    installed `omero-quota-enforcer.sh` runtime remains standalone,
+  - installs a timer that schedules from activation and from the previous
+    service run so reinstalling the timer cannot leave it active with no next
+    trigger,
   - creates `${OMERO_DATA_DIR}/.admin-tools/quota`,
   - sets `.admin-tools` and `.admin-tools/quota` to `0777`,
   - sets `group-quotas.json` to `0666` so host root and non-root `omeroweb` can both update quota state.
@@ -380,6 +399,7 @@ Purpose:
 Scripts:
 
 - `scripts/install-quota-enforcer.sh`
+- `scripts/omero-quota-enforcer.sh`
 - `startup/10-web-bootstrap.sh`
 
 Behavior:
@@ -387,6 +407,8 @@ Behavior:
 - quota state directories may be intentionally `0777`,
 - quota state files may fall back to `0664` or `0666`,
 - this is deliberate to support both host-side root automation and non-root web-side updates.
+- quota enforcement parses quota JSON once per run, rewrites mapping files by
+  exact group/path matches, and refuses non-regular root-managed mapping files.
 
 This is one of the few intentionally broad write-permission exceptions in the stack.
 
