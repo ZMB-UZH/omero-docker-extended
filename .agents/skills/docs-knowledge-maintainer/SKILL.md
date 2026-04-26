@@ -37,6 +37,8 @@ Use this skill whenever code changes alter behavior, operating assumptions, or u
 - stale plugin names
 - single-env `docker compose` examples missing `env/omero_secrets.env`
 - root docs contradicting deep docs
+- instruction surfaces that imply routine feature branches, PR branches, or
+  draft PRs instead of the current remote default branch
 - undocumented new runtime assumptions
 - compact rewrites that pass line budgets while dropping required meaning;
   update regression checks before changing a docs budget

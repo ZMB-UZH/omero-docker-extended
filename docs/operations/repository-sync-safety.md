@@ -127,7 +127,7 @@ Lessons:
 - Do not repair branch-history drift by merging the repositories together.
 - Do not delete backup refs immediately after a rewrite.
 - Do not leave PAT-backed temporary clones or remotes on disk after the operation completes.
-- Do not batch-rewrite hundreds of old branch refs to fix a problem caused by one bad commit on main.
+- Do not batch-rewrite hundreds of old branch refs to fix a problem caused by one bad commit on the default branch.
 - Do not push any commit to the destination whose root commit differs from the destination's existing root.
 
 ## Minimum Verification Checklist
@@ -136,7 +136,7 @@ Before presenting the result as complete, verify all of the following:
 
 - the target branch tip matches the intended repaired or synced commit,
 - any required exclusions are still excluded,
-- sample older branches now show sane ahead/behind counts against the repaired main line,
+- sample older branches now show sane ahead/behind counts against the repaired default-branch line,
 - backup refs exist during the validation window,
 - temporary PAT-based clones/remotes have been removed,
 - `python3 tools/lint_docs_structure.py` passes if documentation was changed.
