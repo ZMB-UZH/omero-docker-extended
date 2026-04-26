@@ -54,7 +54,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 and node.targets[0].id == name
             ):
                 return ast.literal_eval(node.value)
-        self.fail(f"{relative_path} is missing {name}")
+        raise AssertionError(f"{relative_path} is missing {name}")
 
     def test_root_security_policy_exists_and_points_to_canonical_docs(self) -> None:
         root_security = self.repo_root / "SECURITY.md"
