@@ -4,6 +4,7 @@ Requires=omero-quota-enforcer.service
 
 [Timer]
 OnBootSec=30s
+OnActiveSec=60s
 OnUnitActiveSec=60s
 AccuracySec=5s
 

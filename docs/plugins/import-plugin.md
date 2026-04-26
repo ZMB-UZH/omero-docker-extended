@@ -177,8 +177,16 @@ Cleanup is performed by two mechanisms:
 - **Sweep**: a host-side systemd timer (`omero-tmp-cleaner.timer`) runs periodically and deletes anything under `OMERO_TMP_PATH` older than 24 hours by default. The Import plugin writes deferred-cleanup markers for failed jobs so their payload directory and job JSON are retained for 48 hours unless `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` overrides that window.
 
 The installer replaces the repo-managed tmp-cleaner service and timer on every
-run before enabling the current units, so stale unit definitions do not remain
-active after updates.
+run before enabling the current units, including stale unit drop-ins and
+`.wants`/`.requires` dependency links, so old or corrupt unit definitions do
+not remain active after updates. Unit rendering is shared through
+`scripts/omero-host-service-lib.sh`, while the installed
+`/usr/local/sbin/omero-tmp-cleaner` runtime remains standalone. The cleaner
+protects namespace directories at the temp root and their `tmp/` subdirectories
+but still removes stale root-level files and symlinks when they exceed the
+configured age. The timer schedules from activation as well as from the last
+service run, so reinstalling or restarting the timer always leaves a future
+cleanup trigger.
 
 Useful commands (host):
 

@@ -23,55 +23,78 @@ LOCAL_SBIN_DIR="${LOCAL_SBIN_DIR:-/usr/local/sbin}"
 SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-systemctl}"
 TMP_CLEANER_BIN="${TMP_CLEANER_BIN:-${LOCAL_SBIN_DIR%/}/omero-tmp-cleaner}"
 
-systemd_quote() {
-    local value="$1"
-    value="${value//\\/\\\\}"
-    value="${value//\"/\\\"}"
-    printf '"%s"' "$value"
+# shellcheck source=scripts/omero-host-service-lib.sh
+source "${SCRIPT_DIR}/omero-host-service-lib.sh"
+
+usage() {
+    echo "Usage: $0 <OMERO_TMP_PATH>" >&2
+    echo "  OMERO_TMP_PATH: Path to the OMERO temporary directory on the host" >&2
 }
 
 render_unit() {
     local source_file="$1"
     local dest_file="$2"
-    local text tmp_file
 
-    text="$(< "$source_file")"
-    text="${text//__TMP_CLEANER_BIN__/$(systemd_quote "$TMP_CLEANER_BIN")}"
-    text="${text//__OMERO_TMP_PATH__/$(systemd_quote "$OMERO_TMP_DIR")}"
-
-    tmp_file="$(mktemp)"
-    printf '%s\n' "$text" > "$tmp_file"
-    install -D -m 0644 "$tmp_file" "$dest_file"
-    rm -f "$tmp_file"
+    omero_render_systemd_unit \
+        "${source_file}" \
+        "${dest_file}" \
+        TMP_CLEANER_BIN "${TMP_CLEANER_BIN}" \
+        OMERO_TMP_PATH "${OMERO_TMP_DIR}"
 }
 
 replace_managed_units() {
-    "${SYSTEMCTL_BIN}" disable --now \
+    omero_replace_systemd_units \
+        "${SYSTEMCTL_BIN}" \
+        "${SYSTEMD_SYSTEM_DIR}" \
         omero-tmp-cleaner.timer \
-        omero-tmp-cleaner.service >/dev/null 2>&1 || true
-    rm -f \
-        "${SYSTEMD_SYSTEM_DIR%/}/omero-tmp-cleaner.service" \
-        "${SYSTEMD_SYSTEM_DIR%/}/omero-tmp-cleaner.timer"
+        omero-tmp-cleaner.service
+}
+
+install_cleaner_script() {
+    local installed_sha
+
+    installed_sha="$(
+        omero_install_verified \
+            "${SCRIPT_DIR}/omero-tmp-cleaner.sh" \
+            "${TMP_CLEANER_BIN}" \
+            0755
+    )"
+    echo "  Installed: ${TMP_CLEANER_BIN} (sha256=${installed_sha})"
+}
+
+install_systemd_units() {
+    local service_dst timer_dst
+
+    service_dst="${SYSTEMD_SYSTEM_DIR%/}/omero-tmp-cleaner.service"
+    timer_dst="${SYSTEMD_SYSTEM_DIR%/}/omero-tmp-cleaner.timer"
+
+    replace_managed_units
+    render_unit "${SCRIPT_DIR}/omero-tmp-cleaner.service" "${service_dst}"
+    install -D -m 0644 "${SCRIPT_DIR}/omero-tmp-cleaner.timer" "${timer_dst}"
+    "${SYSTEMCTL_BIN}" daemon-reload
+
+    echo "  Installed: ${service_dst}"
+    echo "  Installed: ${timer_dst}"
+}
+
+enable_timer() {
+    "${SYSTEMCTL_BIN}" reset-failed \
+        omero-tmp-cleaner.service \
+        omero-tmp-cleaner.timer >/dev/null 2>&1 || true
+    "${SYSTEMCTL_BIN}" enable omero-tmp-cleaner.timer
+    "${SYSTEMCTL_BIN}" start omero-tmp-cleaner.timer
+    echo "  Enabled: omero-tmp-cleaner.timer"
 }
 
 main() {
-if [[ "$(id -u)" -ne 0 ]]; then
-    echo "ERROR: This script must run as root (use sudo)." >&2
+omero_require_root
+
+if [[ $# -ne 1 ]]; then
+    usage
     exit 1
 fi
 
-OMERO_TMP_DIR="${1:-}"
-if [[ -z "${OMERO_TMP_DIR}" ]]; then
-    echo "Usage: $0 <OMERO_TMP_PATH>" >&2
-    echo "  OMERO_TMP_PATH: Path to the OMERO temporary directory on the host" >&2
-    exit 1
-fi
-
-OMERO_TMP_DIR="$(readlink -f "${OMERO_TMP_DIR}")"
-if [[ ! -d "${OMERO_TMP_DIR}" ]]; then
-    echo "ERROR: Directory does not exist: ${OMERO_TMP_DIR}" >&2
-    exit 1
-fi
+OMERO_TMP_DIR="$(omero_canonical_existing_dir "$1" "OMERO_TMP_PATH")"
 
 echo "=== OMERO Tmp Cleaner Installer ==="
 echo ""
@@ -82,36 +105,19 @@ echo ""
 # Step 1: Install cleaner script
 # ---------------------------------------------------------------------------
 echo "[1/4] Installing cleaner script..."
-install -D -m 0755 "${SCRIPT_DIR}/omero-tmp-cleaner.sh" "$TMP_CLEANER_BIN"
-echo "  Installed: ${TMP_CLEANER_BIN}"
+install_cleaner_script
 
 # ---------------------------------------------------------------------------
 # Step 2: Install systemd units
 # ---------------------------------------------------------------------------
 echo "[2/4] Installing systemd units..."
-service_src="${SCRIPT_DIR}/omero-tmp-cleaner.service"
-timer_src="${SCRIPT_DIR}/omero-tmp-cleaner.timer"
-
-service_dst="${SYSTEMD_SYSTEM_DIR%/}/omero-tmp-cleaner.service"
-timer_dst="${SYSTEMD_SYSTEM_DIR%/}/omero-tmp-cleaner.timer"
-
-replace_managed_units
-render_unit "${service_src}" "${service_dst}"
-install -m 0644 "${timer_src}" "${timer_dst}"
-
-"${SYSTEMCTL_BIN}" daemon-reload
-
-echo "  Installed: ${service_dst}"
-echo "  Installed: ${timer_dst}"
+install_systemd_units
 
 # ---------------------------------------------------------------------------
 # Step 3: Enable + start timer
 # ---------------------------------------------------------------------------
 echo "[3/4] Enabling and starting timer..."
-"${SYSTEMCTL_BIN}" reset-failed omero-tmp-cleaner.service omero-tmp-cleaner.timer >/dev/null 2>&1 || true
-"${SYSTEMCTL_BIN}" enable omero-tmp-cleaner.timer
-"${SYSTEMCTL_BIN}" start omero-tmp-cleaner.timer
-echo "  Enabled: omero-tmp-cleaner.timer"
+enable_timer
 
 # ---------------------------------------------------------------------------
 # Step 4: Helpful commands
