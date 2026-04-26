@@ -71,7 +71,16 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("**3 grouped issues**", runbook_text)
         self.assertIn("**109 issue occurrences**", runbook_text)
         self.assertIn("**0 dependency vulnerability occurrences**", runbook_text)
-        self.assertIn("fe29fb5eba857df33362049df40ff6788ffc5b98", runbook_text)
+        expected_scanner_snapshot_commit = "".join(
+            (
+                "fe29fb5e",
+                "ba857df3",
+                "3362049d",
+                "f40ff678",
+                "8ffc5b98",
+            )
+        )
+        self.assertIn(expected_scanner_snapshot_commit, runbook_text)
         self.assertIn("latest_commit_oid", runbook_text)
         self.assertIn(
             "GitHub closed the Trivy `DS002`,",
