@@ -74,9 +74,14 @@ class MypyIntegrationContractTests(TestCase):
     def test_mypy_workflow_is_pinned_and_uses_repo_runner(self) -> None:
         workflow = yaml.safe_load(self.read_text(".github/workflows/mypy.yml"))
         triggers = workflow[True]
-        self.assertEqual(["main"], triggers["pull_request"]["branches"])
-        self.assertEqual(["main"], triggers["push"]["branches"])
+        self.assertNotIn("pull_request", triggers)
+        self.assertIn("push", triggers)
+        self.assertIsNone(triggers["push"])
         self.assertIn("workflow_dispatch", triggers)
+        self.assertEqual(
+            "github.ref_name == github.event.repository.default_branch",
+            workflow["jobs"]["mypy"]["if"],
+        )
         self.assertEqual("read", workflow["permissions"]["contents"])
         self.assertEqual("ubuntu-24.04", workflow["jobs"]["mypy"]["runs-on"])
 

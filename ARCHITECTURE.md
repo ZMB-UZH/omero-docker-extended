@@ -59,11 +59,12 @@ Bootstrap scripts run at container start to configure services that cannot be fu
 - `50-install-omero-downloader.sh`: downloads OMERO.downloader from GitHub releases (version-gated).
 - `51-install-imarisconvert.sh`: compiles ImarisConvertBioformats from source with CMake, downloads Bio-Formats JAR.
 
-The `omeroweb` container runs three processes via supervisord:
+The `omeroweb` container runs four processes via supervisord:
 
 1. OMERO.web (Django application server)
 2. Imaris Celery worker (async export tasks)
 3. Tools Celery worker (enhanced-search indexing tasks)
+4. Storage-quota reconciliation loop
 
 ### 3. Application layer
 
@@ -107,7 +108,10 @@ Each plugin follows a standard layout: `apps.py` (AppConfig), `config.py` (env-d
 
 Monitoring stack:
 
-- Prometheus scrapes node-exporter, cadvisor, postgres-exporter (x2), redis-exporter, loki, alloy, grafana, plus blackbox HTTP probes for 12 endpoints and TCP probes for 4 ports.
+- Prometheus scrapes 10 direct metric targets (including node-exporter,
+  cAdvisor, postgres-exporter x2, redis-exporter, Loki, Alloy, Grafana,
+  Prometheus, and blackbox-exporter), plus blackbox HTTP probes and TCP probes
+  for 5 internal endpoints.
 - Alloy collects Docker container stdout/stderr logs plus OMERO server and web internal log files (`.log`, `.out`, `.err`), pushes to Loki.
 - Grafana: 4 dashboards auto-provisioned (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
 
