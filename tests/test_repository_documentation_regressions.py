@@ -784,17 +784,16 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             )
         )
         scrape_configs = prometheus_data["scrape_configs"]
+        scrape_configs_by_name = {
+            config["job_name"]: config for config in scrape_configs
+        }
         direct_jobs = [
             config
             for config in scrape_configs
             if config["job_name"] not in {"blackbox_http", "blackbox_tcp"}
         ]
-        blackbox_http = next(
-            config for config in scrape_configs if config["job_name"] == "blackbox_http"
-        )
-        blackbox_tcp = next(
-            config for config in scrape_configs if config["job_name"] == "blackbox_tcp"
-        )
+        blackbox_http = scrape_configs_by_name["blackbox_http"]
+        blackbox_tcp = scrape_configs_by_name["blackbox_tcp"]
         http_targets = blackbox_http["static_configs"][0]["targets"]
         tcp_targets = blackbox_tcp["static_configs"][0]["targets"]
         self.assertEqual(10, len(direct_jobs))
