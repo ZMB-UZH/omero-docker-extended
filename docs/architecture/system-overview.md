@@ -29,7 +29,7 @@ Django-based web frontend with all registered plugin apps and co-located Celery 
 - Custom Dockerfile (`docker/omero-web.Dockerfile`) based on `openmicroscopy/omero-web-standalone`.
 - Installs all five plugin packages, `omero_plugin_common`, plus third-party OMERO.web plugins (gallery, figure, fpbioimage, iviewer, mapr, parade, web-zarr, autotag, tagsearch).
 - Installs matplotlib (SEM-EDX visualization), psycopg2-binary (plugin database), celery+redis (Imaris export and Tools enhanced-search indexing), and pinned `pytest` for in-container plugin regression tests.
-- Managed by supervisord (`supervisord.conf`): runs OMERO.web plus the Imaris and Tools Celery workers as three supervised processes.
+- Managed by supervisord (`supervisord.conf`): runs OMERO.web, the Imaris Celery worker, the Tools Celery worker, and the storage-quota reconciliation loop as four supervised processes.
 - Bootstrap script (`startup/10-web-bootstrap.sh`) validates/repairs the OMERO.web `var/` runtime layout, guarantees `var/django_secret_key` exists, validates log-directory access, and configures Docker socket GID.
 - Compose starts the service as `root` only for bind-mount reconciliation; the
   supervised OMERO.web and worker processes run as `omero-web`.
@@ -54,9 +54,18 @@ Cache backend and Celery message broker:
 - Requires `vm.overcommit_memory=1`, persisted on the host by the installation script (`/etc/sysctl.d/99-redis-overcommit.conf`). The profile-gated `redis-sysctl-init` one-shot sidecar is available as a fallback.
 - Used as: OMERO.web session cache (db 1), Imaris Celery broker/result backend (db 2), Tools enhanced-search broker/result backend (db 3).
 
+### Local AI inference (`ollama`)
+
+Internal-only Ollama service for OMP's `Local` AI provider:
+
+- Version 0.21.0, pinned as `ollama/ollama:0.21.0`.
+- Stores model data under `OLLAMA_DATA_PATH` when set, otherwise `/disks/omero_temp/ollama`.
+- Exposes port 11434 only on the Docker network.
+- Health check: `ollama list`.
+
 ### Monitoring stack
 
-- **Prometheus** (v3.11.2): scrapes 9 metric sources plus blackbox HTTP probes for 12 endpoints and TCP probes for 4 ports.
+- **Prometheus** (v3.11.2): scrapes 10 direct metric targets plus blackbox HTTP probes and TCP probes for 5 internal endpoints.
 - **Grafana** (13.0.1): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
 - **Loki** (3.7.1): log aggregation backend with TSDB storage and 5000 max entries per query.
 - **Alloy** (v1.15.1): collects Docker container logs and OMERO server/web internal log files, pushes to Loki.
@@ -103,7 +112,7 @@ All plugin packages are standard Django app modules registered via `CONFIG_omero
 Filename parsing and metadata annotation workflow:
 
 - Parses scientific filenames using configurable regex or AI-assisted suggestions.
-- AI providers: OpenAI, Anthropic, Google, Mistral (credentials stored per-user in plugin database).
+- AI providers: Local/Ollama, Groq, Gemini, Claude, Perplexity, xAI, and Cohere; external provider credentials are stored per-user in the plugin database.
 - Writes OMERO MapAnnotations with HMAC-based hash ownership tracking.
 - Background job execution with tmpfs job files and portalocker concurrency.
 - REMBI-aligned default variables, scientific nomenclature-aware hyphen protection.
@@ -182,7 +191,10 @@ Configuration is environment-driven and consumed at three levels:
 2. **Service parameters** (`env/*.env`): database credentials, Java heap, OMERO settings, plugin config, Celery settings, monitoring endpoints.
 3. **Docker Compose** (`docker-compose.yml`): maps env files to containers, defines dependencies with health conditions, networks, and volume mounts.
 
-Plugin code accesses configuration through `config.py` modules that use `omero_plugin_common.env_utils` for typed, validated reads. Error messages include the env file path and variable name for fast debugging.
+Plugin code accesses configuration through package `config.py` modules,
+package constants, or data-store helpers that use `omero_plugin_common.env_utils`
+for typed, validated reads. Error messages include the env file path and
+variable name for fast debugging.
 
 ## Security and operations notes
 

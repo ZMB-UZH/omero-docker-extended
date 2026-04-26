@@ -22,6 +22,7 @@ running containers or `docker compose config`; do not assume these host ports.
 | OMERO database | `database:5432` | PostgreSQL (OMERO core) |
 | Plugin database | `database-plugin:5433` | PostgreSQL (plugin data) |
 | Redis | `redis:6379` | Cache (db 1) + Imaris Celery broker (db 2) + Tools Celery broker (db 3) |
+| Ollama | `ollama:11434` | Local AI inference for OMP's `Local` provider |
 | Alloy | `alloy:12345` | Log pipeline metrics |
 | Node exporter | `node-exporter:9100` | Host metrics |
 | cAdvisor | `cadvisor:8080` | Container metrics |
@@ -147,19 +148,26 @@ Base: `/omeroweb_imaris_connector/`
 
 | Service | Health check method |
 | --- | --- |
-| `omeroserver` | OMERO CLI admin login |
-| `omeroweb` | container-local `curl` to `/webgateway/` on the configured OMERO.web port |
-| `database` | `pg_isready -U omero -d omero -p 5432` |
-| `database_plugin` | `pg_isready -U omero-plugin -d omero-plugin -p 5433` |
-| `redis` | `redis-cli ping` |
-| `pg-maintenance` | `pgrep -x cron` |
-| `prometheus` | `wget http://localhost:9090/-/ready` |
-| `grafana` | `wget http://localhost:3000/api/health` |
-| `loki` | `wget http://localhost:3100/ready` |
 | `portainer` | `wget http://localhost:9000/api/system/status` |
+| `loki` | `loki -version` |
+| `alloy` | `alloy --help` |
+| `prometheus` | `wget http://localhost:9090/-/ready` |
+| `blackbox-exporter` | `wget http://localhost:9115/-/healthy` |
 | `node-exporter` | `wget -O /dev/null http://localhost:9100/` |
 | `path-usage-exporter` | `test -f /textfile/omero_paths.prom` |
+| `cadvisor` | `wget http://localhost:8080/metrics` |
+| `postgres-exporter` | `wget http://localhost:9187/metrics` |
+| `postgres-exporter-plugin` | `wget http://localhost:9187/metrics` |
+| `redis-exporter` | `wget http://localhost:9121/metrics` |
+| `grafana` | `wget http://localhost:3000/api/health` |
+| `database` | `pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -p 5432` |
+| `omeroserver` | OMERO CLI admin login |
+| `omeroweb` | container-local `curl` to `/webgateway/` on the configured OMERO.web port |
+| `redis` | `redis-cli ping` |
+| `database_plugin` | `pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -p 5433` |
+| `pg-maintenance` | `pgrep -x cron` |
 | `crowdsec` | `wget http://localhost:8080/health` |
+| `ollama` | `ollama list` |
 
 ## External reverse proxy forwarding target
 

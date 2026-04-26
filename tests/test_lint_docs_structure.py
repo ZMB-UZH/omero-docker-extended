@@ -49,7 +49,7 @@ class DocsStructureLintTests(unittest.TestCase):
                 "docs/design-docs/index.md",
                 "docs/design-docs/core-beliefs.md",
                 "docs/exec-plans/tech-debt-tracker.md",
-                "docs/exec-plans/active/knowledge-base-bootstrap.md",
+                "docs/exec-plans/completed/knowledge-base-bootstrap.md",
                 "docs/exec-plans/completed/README.md",
                 "docs/generated/db-schema.md",
                 "docs/product-specs/index.md",

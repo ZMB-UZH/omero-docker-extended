@@ -121,12 +121,18 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertEqual(["python", "pyi"], hooks["ruff-check"]["types_or"])
         self.assertEqual(["python", "pyi"], hooks["ruff-format"]["types_or"])
 
-    def test_ruff_workflow_is_pinned_and_runs_on_main_only(self) -> None:
+    def test_ruff_workflow_is_pinned_and_runs_on_default_branch_only(self) -> None:
         workflow = yaml.safe_load(self.read_text(".github/workflows/ruff.yml"))
         # yaml.safe_load parses the YAML key `on:` as boolean True
         triggers = workflow[True]
-        self.assertEqual(["main"], triggers["pull_request"]["branches"])
-        self.assertEqual(["main"], triggers["push"]["branches"])
+        self.assertNotIn("pull_request", triggers)
+        self.assertIn("push", triggers)
+        self.assertIsNone(triggers["push"])
+        self.assertIn("workflow_dispatch", triggers)
+        self.assertEqual(
+            "github.ref_name == github.event.repository.default_branch",
+            workflow["jobs"]["ruff"]["if"],
+        )
         self.assertEqual("read", workflow["permissions"]["contents"])
         self.assertEqual("ubuntu-24.04", workflow["jobs"]["ruff"]["runs-on"])
 

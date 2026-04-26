@@ -4,8 +4,8 @@ How changes are planned, tracked, and completed in this repository.
 
 ## Change sizes
 
-- **Small changes** (single PR, clear scope): include plan bullets directly in the pull request description.
-- **Multi-step changes** (cross-cutting, multi-PR): create an execution plan in `docs/exec-plans/active/` before starting work.
+- **Small changes** (clear scope, one default-branch change): include plan bullets directly in the commit message, change summary, or verification notes.
+- **Multi-step changes** (cross-cutting or release-sized): create an execution plan in `docs/exec-plans/active/` before starting work.
 - **Exploratory/research**: document findings in `docs/design-docs/` and reference them in subsequent execution plans.
 
 ## Execution plans
@@ -21,7 +21,7 @@ When a plan is complete, move it to `docs/exec-plans/completed/` with:
 
 - Final outcomes and metrics.
 - Follow-up items (captured in `docs/exec-plans/tech-debt-tracker.md` if needed).
-- Links to related pull requests.
+- Links to related commits, workflow runs, releases, or explicitly requested pull requests.
 
 ## Technical debt
 
@@ -29,4 +29,4 @@ Known debt items are tracked in `docs/exec-plans/tech-debt-tracker.md` with prio
 
 ## Plan review
 
-Plans for infrastructure changes (Docker, startup scripts, monitoring) or changes affecting multiple plugins should be reviewed before implementation begins. Document the approach in the plan and reference it in the PR.
+Plans for infrastructure changes (Docker, startup scripts, monitoring) or changes affecting multiple plugins should be reviewed before implementation begins. Document the approach in the plan and reference it in the change summary before the default-branch push or release.

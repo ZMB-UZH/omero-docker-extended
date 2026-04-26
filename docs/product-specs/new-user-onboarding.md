@@ -19,6 +19,7 @@ cp env/omeroserver_example.env env/omeroserver.env
 cp env/omeroweb_example.env env/omeroweb.env
 cp env/omero-celery_example.env env/omero-celery.env
 cp env/grafana_example.env env/grafana.env
+cp env/omero_secrets_example.env env/omero_secrets.env
 ```
 
 Edit each file to set site-specific values. Rotate all default credentials.
@@ -92,7 +93,8 @@ Then confirm:
 ### 6. First operational checks
 
 - Confirm OMERO.server logs show successful startup and script registration.
-- Confirm the co-located Celery worker processes are active when enabled (Imaris export and Tools enhanced-search indexing).
+- Confirm the `omeroweb` supervisord programs are active: OMERO.web, Imaris Celery worker, Tools Celery worker, and storage-quota reconciliation loop.
+- If using OMP's Local AI provider, confirm the `ollama` service is healthy and the configured model is available.
 - Confirm pg-maintenance container is running with cron active.
 - Run a test metadata parse, upload, or Imaris export to validate end-to-end functionality.
 

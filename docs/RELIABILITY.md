@@ -61,13 +61,14 @@ See `docs/reference/service-endpoints.md` for the complete endpoint map.
 
 ## Process management
 
-The `omeroweb` container runs three processes via supervisord:
+The `omeroweb` container runs four processes via supervisord:
 
 1. **omero-web**: the Django application server (autorestart on failure).
 2. **imaris-celery-worker**: the Celery worker for Imaris export tasks (autorestart on unexpected exit).
 3. **tools-celery-worker**: the Celery worker for Tools enhanced-search indexing (autorestart on unexpected exit when enabled).
+4. **storage-quota-reconcile-loop**: the periodic storage-quota reconciliation loop (autorestart on failure).
 
-All three processes have dedicated log files with rotation (20MB max, 3 backups).
+All four processes have dedicated log files with rotation (20MB max, 3 backups).
 
 ## Database reliability
 

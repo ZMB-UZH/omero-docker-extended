@@ -4,9 +4,13 @@ This repository uses [Ruff](https://github.com/astral-sh/ruff) as the canonical 
 
 ## CI workflow
 
-- `.github/workflows/ruff.yml` listens for `pull_request` to `main`, `push` to `main`, and `workflow_dispatch`, but the job only executes when the ref resolves to the repository's current default branch.
-- `.github/workflows/mypy.yml` listens for `pull_request` to `main`, `push` to `main`, and `workflow_dispatch`, but the job only executes when the ref resolves to the repository's current default branch.
-- `.github/workflows/vulture.yml` listens for `pull_request` to `main`, `push` to `main`, and `workflow_dispatch`, but the job only executes when the ref resolves to the repository's current default branch.
+- `.github/workflows/ruff.yml`, `.github/workflows/mypy.yml`, and
+  `.github/workflows/vulture.yml` listen for repository pushes and
+  `workflow_dispatch`; each job executes only when the ref resolves to the
+  repository's current default branch.
+- These workflows intentionally avoid hard-coded branch names in `on:` filters.
+  The default-branch guard lives at the job level so a maintainer can rename
+  the default branch without editing workflow YAML.
 - The workflow uses pinned GitHub Actions and a pinned Ruff release (`0.15.11`).
 - The Mypy workflow restores and stores the `pip` download cache using the hash-pinned `.github/requirements/tests-ci.txt` and `.github/requirements/mypy-ci.txt` lockfiles as its cache key, installs both dependency sets, then runs `python3 tools/mypy_check.py`.
 - The Vulture workflow restores and stores the `pip` download cache using the hash-pinned `.github/requirements/vulture-ci.txt` lockfile as its cache key, then runs `python3 tools/vulture_check.py`.

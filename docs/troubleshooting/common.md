@@ -88,11 +88,6 @@ Cause:
 
 Fix:
 
-Security rationale:
-
-- Do **not** bind host `/dev/disk` into cAdvisor unless you explicitly require device symlink metadata.
-- Use the standard compose `tmpfs:` key to override `/dev/disk`, which blocks anonymous volume creation without exposing host block-device topology.
-
 ```bash
 docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env down
 ```
