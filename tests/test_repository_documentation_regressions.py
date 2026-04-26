@@ -67,9 +67,11 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             "GitHub reported **4 open alerts on the default branch",
             runbook_text,
         )
-        self.assertIn("**4 grouped issues**", runbook_text)
-        self.assertIn("**137 issue occurrences**", runbook_text)
+        self.assertIn("Last live API refresh: **2026-04-26**", runbook_text)
+        self.assertIn("**3 grouped issues**", runbook_text)
+        self.assertIn("**109 issue occurrences**", runbook_text)
         self.assertIn("**0 dependency vulnerability occurrences**", runbook_text)
+        self.assertIn("fe29fb5eba857df33362049df40ff6788ffc5b98", runbook_text)
         self.assertIn("latest_commit_oid", runbook_text)
         self.assertIn(
             "GitHub closed the Trivy `DS002`,",
@@ -78,8 +80,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("CodeQL file-level findings in", runbook_text)
         self.assertIn("transient Semgrep", runbook_text)
         self.assertIn(
-            "4 remaining alerts were repository-level", normalized_runbook_text
+            "4 remaining GitHub alerts were repository-level",
+            normalized_runbook_text,
         )
+        self.assertIn("`SH-3015` shell portability finding", normalized_runbook_text)
         self.assertNotIn("should clear on the next workflow refresh", runbook_text)
         self.assertIn(
             "~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**",
