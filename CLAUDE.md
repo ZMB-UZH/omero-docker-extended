@@ -20,6 +20,7 @@ Start with `AGENTS.md`, including its pinned Karpathy agent baseline.
 - Treat `AGENTS.md` as the universal baseline and this file as a Claude-specific adapter.
 - Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI agent <>`; never use profile-mapped AI emails such as `ai-agent@users.noreply.github.com`, `codex@openai.com`, or `codex@openai.invalid`; AI co-author trailers use `Co-authored-by: AI agent` with no email; audits include anonymous contributors (`contributors?anon=1`).
 - Non-AI commits use real human GitHub or actual human author identities, never host/local placeholders.
+- Develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch; resolve it dynamically and do not create feature branches, PR branches, temporary remote branches, or draft PRs for routine work.
 - Keep context small: load one task class, one code root, one nearest test module, and one matching skill, and follow the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
 - If the user asks for lower-token replies, use opt-in `caveman`; it is only for internal AI communication, never repo docs/comments/docstrings/function descriptions/user-facing copy, and changes reply style only, not routing, tool choice, verification scope, or uncertainty handling. Drop it when safety, sequencing, or ambiguity matters.

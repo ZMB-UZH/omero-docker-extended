@@ -7,7 +7,7 @@ upstream: third_party/ecc-v1.10.0/skills/verification-loop/SKILL.md
 
 # Verification Loop
 
-Use this skill after any non-trivial change and before proposing a PR.
+Use this skill after any non-trivial change and before committing, pushing, or opening a user-explicit PR.
 
 ## Upstream baseline
 
@@ -67,6 +67,7 @@ Do not treat stale or dirty live state as a reason to skip required live verific
 Check for:
 
 - unintended workflow or docs drift
+- accidental non-default-branch or draft-PR workflow guidance
 - stale service counts or plugin names
 - hard-coded paths, credentials, or ports
 - weakened validation or security boundaries

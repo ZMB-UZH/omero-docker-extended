@@ -10,4 +10,5 @@ globs:
 - Keep all other docs under `docs/`.
 - Use `.agents/skills/docs-knowledge-maintainer/` and `docs/reference/ai-agent-skills.md` when documentation or AI-instruction surfaces change.
 - Update `docs/index.md` for new docs and keep the AI adapter files aligned with `docs/reference/ai-agent-integrations.md`.
+- Preserve the current-remote-default-branch development rule across all AI instruction surfaces; do not introduce routine feature-branch, PR-branch, or draft-PR guidance.
 - Run `python3 tools/lint_docs_structure.py` after documentation or instruction changes.

@@ -10,4 +10,5 @@ globs:
 - Use `.agents/skills/security-review/`, `.agents/skills/security-finding-triager/`, and `.agents/skills/documentation-lookup/` when reviewing workflow or scanner changes.
 - Refresh action versions from official GitHub releases or tags before changing pins, and pin by full commit SHA.
 - Use the security docs and code-scanning runbooks before changing scanner or workflow logic.
+- Keep workflow runbooks and agent guidance default-branch-aware; do not tell agents to create branches or draft PRs for routine workflow checks.
 - Do not bind pure CI jobs to GitHub Actions environments unless you intentionally want deployment records for that workflow.

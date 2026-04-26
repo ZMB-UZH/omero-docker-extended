@@ -93,15 +93,15 @@ version's published signature.
 
 ## Trigger model
 
-- **Push** to `main`: full scan.
-- **Pull requests** targeting `main`: full scan.
+- **Push** to the current default branch: full scan.
+- **Pull requests** targeting the current default branch: full scan.
 - **Weekly schedule** (Monday 03:23 UTC): catches newly disclosed CVEs.
 - **Manual dispatch**: incident response or post-remediation verification.
 - Every job in `.github/workflows/security-code-scanning.yml` is additionally gated with the current default-branch context, so non-default refs can create workflow runs but do not consume runner minutes.
 
 ## Scanner Sources And Logs
 
-- Alert inventory: GitHub REST API, scoped to `state=open` and `branch=main`.
+- Alert inventory: GitHub REST API, scoped to `state=open` and the resolved current default branch.
 - GitHub REST API version: query `https://api.github.com/versions` and use the newest supported version for the current request; do not pin stale dates.
 - Workflow logs: GitHub Actions run logs for `security-code-scanning.yml`.
 - Local config: `.github/workflows/security-code-scanning.yml`, scanner config files it references, and committed test contracts.
@@ -112,7 +112,9 @@ Useful GitHub Actions log commands:
 
 ```bash
 command -v gh >/dev/null || { echo "gh is required" >&2; exit 1; }
-gh run list --workflow security-code-scanning.yml --branch main --limit 5
+default_branch=$(git remote show origin | sed -n 's/.*HEAD branch: //p')
+test -n "${default_branch}" || { echo "default branch not found" >&2; exit 1; }
+gh run list --workflow security-code-scanning.yml --branch "${default_branch}" --limit 5
 gh run view <run-id> --log-failed
 gh run view <run-id> --job <job-id> --log
 ```
@@ -120,9 +122,11 @@ gh run view <run-id> --job <job-id> --log
 Useful GitHub code-scanning API command:
 
 ```bash
+default_branch=$(git remote show origin | sed -n 's/.*HEAD branch: //p')
+test -n "${default_branch}" || { echo "default branch not found" >&2; exit 1; }
 python3 tools/scanner_inventory.py github-code-scanning \
   --repository ZMB-UZH/omero-docker-extended \
-  --branch main
+  --branch "${default_branch}"
 ```
 
 Useful DeepSource count command:
@@ -152,7 +156,9 @@ GitHub HTTPS Git operations require a PAT or credential manager, never an
 account password. For TTY pushes, use:
 
 ```bash
-python3 tools/git_push_with_pat.py origin main
+default_branch=$(git remote show origin | sed -n 's/.*HEAD branch: //p')
+test -n "${default_branch}" || { echo "default branch not found" >&2; exit 1; }
+python3 tools/git_push_with_pat.py origin "HEAD:${default_branch}"
 ```
 
 This helper disables stale GitHub credential helpers for the command and keeps
@@ -173,7 +179,7 @@ runbook or tool concisely with regression coverage.
 
 Last live API refresh: **2026-04-24**.
 
-GitHub reported **4 open alerts on `main`** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
+GitHub reported **4 open alerts on the default branch (`main` at refresh time)** at the time of the latest refresh used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
 DeepSource reported **4 grouped issues**, **137 issue occurrences**, and
 **0 dependency vulnerability occurrences** for the default branch during the
@@ -407,7 +413,7 @@ These categories may contain genuine issues that should be reviewed:
 5. **Periodic refresh**: When running a full security scan, compare the live alert count from the GitHub API against this file. Update all tables to match current state. Use:
 
    Use the GitHub code-scanning API command above with `state=open` and
-   `branch=main`.
+   the resolved current default branch.
 
 6. **Never include exploitation details**: Document what the vulnerability is and where it is located. Do not include proof-of-concept code, payload examples, or step-by-step exploitation instructions.
 
