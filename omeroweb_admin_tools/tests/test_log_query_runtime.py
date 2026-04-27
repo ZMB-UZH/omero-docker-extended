@@ -308,21 +308,14 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
         _as_completed,
     )
 
-    result = log_query_module.fetch_loki_logs(
-        config,
-        ["omeroserver", "omeroweb_internal"],
-        lookback_seconds=60,
-        max_entries=1,
-        internal_files={"omeroserver_internal": {"Blitz-0.log"}},
-    )
-    assert result == [
-        LogEntry(
-            timestamp="2026-03-30T07:01:00+00:00",
-            container="omeroweb_internal/a.log",
-            level="warn",
-            message="new",
+    with pytest.raises(RuntimeError, match="Loki log query failed for 2 source"):
+        log_query_module.fetch_loki_logs(
+            config,
+            ["omeroserver", "omeroweb_internal"],
+            lookback_seconds=60,
+            max_entries=1,
+            internal_files={"omeroserver_internal": {"Blitz-0.log"}},
         )
-    ]
 
     monkeypatch.setattr(
         log_query_module,

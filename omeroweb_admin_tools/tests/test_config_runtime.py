@@ -45,6 +45,8 @@ def test_build_log_config_validates_environment_values(monkeypatch):
         max_entries=250,
         timeout_seconds=4.5,
         cache_max_bytes=128 * 1024 * 1024,
+        internal_file_batch_size=128,
+        max_parallel_queries=128,
     )
 
     monkeypatch.setattr(

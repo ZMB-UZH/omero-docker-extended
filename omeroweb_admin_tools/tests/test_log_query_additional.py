@@ -232,3 +232,49 @@ def test_fetch_loki_logs_uncached_aggregates_jobs_and_filters_internal_batches(
         ("omeroserver", "docker"),
         ("omeroserver_internal/Blitz-0.log", "internal-kept"),
     ]
+
+
+def test_internal_batch_query_splits_after_failure(monkeypatch) -> None:
+    config = _config()
+    job = log_query_module._QueryJob(
+        query='{compose_service="omeroweb", log_type="internal"}',
+        source_type="internal_batch",
+        source_name="omeroweb_internal",
+        selected_files=("OMEROweb.log", "omero-web.stderr.log"),
+    )
+    calls = []
+
+    def fake_execute_query_job(config, job, lookback_seconds, max_entries, since_ns):
+        calls.append(job.selected_files)
+        if len(job.selected_files) > 1:
+            raise RuntimeError("batch too slow")
+        filename = job.selected_files[0]
+        return job, [
+            LogEntry(
+                timestamp="2026-03-09T00:00:03+00:00",
+                container=f"omeroweb_internal/{filename}",
+                level="info",
+                message=filename,
+            )
+        ]
+
+    monkeypatch.setattr(log_query_module, "_execute_query_job", fake_execute_query_job)
+
+    resolved_job, entries = log_query_module._execute_internal_batch_with_split(
+        config,
+        job,
+        lookback_seconds=60,
+        max_entries=10,
+        since_ns=None,
+    )
+
+    assert resolved_job == job
+    assert calls == [
+        ("OMEROweb.log", "omero-web.stderr.log"),
+        ("OMEROweb.log",),
+        ("omero-web.stderr.log",),
+    ]
+    assert [entry.message for entry in entries] == [
+        "OMEROweb.log",
+        "omero-web.stderr.log",
+    ]

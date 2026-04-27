@@ -423,7 +423,16 @@ services:
   redis:
     image: "redis:8.6.2-alpine"
     restart: unless-stopped
-    command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command:
+      - redis-server
+      - --save
+      - "${REDIS_SAVE_POLICY:-}"
+      - --appendonly
+      - "${REDIS_APPENDONLY:-no}"
+      - --maxmemory
+      - "${REDIS_MAXMEMORY:-512mb}"
+      - --maxmemory-policy
+      - "${REDIS_MAXMEMORY_POLICY:-allkeys-lru}"
     environment:
       TZ: Europe/Zurich
     networks:
@@ -431,7 +440,7 @@ services:
         aliases:
           - redis
     tmpfs:
-      - /data:size=512m
+      - /data:size=${REDIS_DATA_TMPFS_SIZE:-512m}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

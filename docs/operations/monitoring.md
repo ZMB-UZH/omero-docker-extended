@@ -173,13 +173,22 @@ Alloy collects logs from two sources:
 
 All logs are pushed to Loki at `http://loki:3100/loki/api/v1/push`.
 
-The internal OMERO file tails start from the current end-of-file (`tail_from_end = true`). This avoids replaying historical log backlogs into Loki during restarts, which previously caused startup-time ingestion-rate errors on single-node deployments. Docker container logs are still collected continuously after startup.
+The internal OMERO file tails start from the beginning when Alloy has no stored
+position (`tail_from_end = false`). That keeps first-run and recreated-collector
+installations from skipping log lines that were written before Alloy discovered
+the file. Existing installations still resume from `/data-alloy` positions, so
+normal restarts do not replay already-collected logs.
 
 Alloy stores Docker and file-tail positions under `/data-alloy`, backed by
 `ALLOY_DATA_PATH` from `installation_paths.env`. That path must persist across
 container restarts so `loki.source.docker` and `loki.source.file` resume at the
 recorded offsets instead of replaying historical container logs that Loki would
 reject as stale.
+
+Loki does not configure a repository-specific retention period in
+`monitoring/loki/loki-config.yml`; search visibility is controlled by the log
+query time range, Loki storage availability, and whether Alloy collected the
+line before source files rotated away.
 
 ## CrowdSec log expectations
 

@@ -13,7 +13,12 @@ from omero_plugin_common.env_utils import (
     require_env,
 )
 
-_DEFAULT_LOG_CACHE_MAX_MB = 512
+DEFAULT_LOG_CACHE_MAX_MB = 512
+DEFAULT_LOG_INTERNAL_FILE_BATCH_SIZE = 12
+DEFAULT_LOG_MAX_PARALLEL_QUERIES = 4
+_DEFAULT_LOG_CACHE_MAX_MB = DEFAULT_LOG_CACHE_MAX_MB
+_DEFAULT_LOG_INTERNAL_FILE_BATCH_SIZE = DEFAULT_LOG_INTERNAL_FILE_BATCH_SIZE
+_DEFAULT_LOG_MAX_PARALLEL_QUERIES = DEFAULT_LOG_MAX_PARALLEL_QUERIES
 
 
 def _get_optional_positive_int_env(name: str, default: int) -> int:
@@ -39,6 +44,8 @@ class LogConfig:
     max_entries: int
     timeout_seconds: float
     cache_max_bytes: int
+    internal_file_batch_size: int = _DEFAULT_LOG_INTERNAL_FILE_BATCH_SIZE
+    max_parallel_queries: int = _DEFAULT_LOG_MAX_PARALLEL_QUERIES
 
 
 def build_log_config() -> LogConfig:
@@ -65,6 +72,14 @@ def build_log_config() -> LogConfig:
         "ADMIN_TOOLS_LOG_CACHE_MAX_MB",
         _DEFAULT_LOG_CACHE_MAX_MB,
     )
+    internal_file_batch_size = _get_optional_positive_int_env(
+        "ADMIN_TOOLS_LOG_INTERNAL_FILE_BATCH_SIZE",
+        _DEFAULT_LOG_INTERNAL_FILE_BATCH_SIZE,
+    )
+    max_parallel_queries = _get_optional_positive_int_env(
+        "ADMIN_TOOLS_LOG_MAX_PARALLEL_QUERIES",
+        _DEFAULT_LOG_MAX_PARALLEL_QUERIES,
+    )
 
     if lookback_seconds <= 0:
         raise ValueError("ADMIN_TOOLS_LOG_LOOKBACK_SECONDS must be a positive integer.")
@@ -79,6 +94,8 @@ def build_log_config() -> LogConfig:
         max_entries=max_entries,
         timeout_seconds=timeout_seconds,
         cache_max_bytes=cache_max_mb * 1024 * 1024,
+        internal_file_batch_size=internal_file_batch_size,
+        max_parallel_queries=max_parallel_queries,
     )
 
 
