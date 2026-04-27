@@ -69,25 +69,25 @@ reported the server already configured, and `codex mcp list` showed exactly one
 
 ## Final Benchmark Result
 
-- Repo head: `9cd71a748e12eccd2cbbb0879b6cc769edddfc3b`
-- Mirror digest: `f8c06a1040beceb3c665af8e7d1652ae`
-- SQLite DB size: `35,749,888` bytes
-- Cold index time: `217.67` seconds
+- Repo head: `789ab5ba3c6a8a6a0ed2734661d1fd87e145bad1`
+- Mirror digest: `9579c4e0e25c394383154539f03c2f28`
+- SQLite DB size: `35,684,352` bytes
+- Cold index time: `218.64` seconds
 - Cases: `10`
 - Broad `rg` output: `282,693` characters across `279` unique file mentions
-- CocoIndex routing output: `43,683` characters across `34` unique file mentions
-- Focused `rg` on CocoIndex candidates: `47,959` characters
-- Hybrid total output: `91,642` characters
-- Hybrid reduction vs broad `rg`: `67.6%`
-- CocoIndex-only routing reduction vs broad `rg`: `84.5%`
+- CocoIndex routing output: `44,083` characters across `34` unique file mentions
+- Focused `rg` on CocoIndex candidates: `42,487` characters
+- Hybrid total output: `86,570` characters
+- Hybrid reduction vs broad `rg`: `69.4%`
+- CocoIndex-only routing reduction vs broad `rg`: `84.4%`
 - Candidate-file reduction: `87.8%`
-- Top-5 expected-file hits: CocoIndex `8/10`, broad `rg` `5/10`
-- Average command time after indexing: CocoIndex `366.2 ms`, broad `rg`
-  `8.1 ms`, focused candidate `rg` `5.2 ms`
+- Top-5 expected-file hits: CocoIndex `9/10`, broad `rg` `6/10`
+- Average command time after indexing: CocoIndex `374.8 ms`, broad `rg`
+  `9.4 ms`, focused candidate `rg` `5.0 ms`
 
 For the seven broad cases where broad `rg` produced at least `10,000`
-characters, hybrid output was `72,887` characters versus `269,569` characters
-for broad `rg`, a `73.0%` reduction. The hybrid workflow is therefore justified
+characters, hybrid output was `67,720` characters versus `269,569` characters
+for broad `rg`, a `74.9%` reduction. The hybrid workflow is therefore justified
 for broad routing. It is not justified for already-narrow exact searches; in
 those cases agents must use `rg` directly.
 
@@ -95,16 +95,16 @@ those cases agents must use `rg` directly.
 
 | Case | Coco rank | broad `rg` rank | Hybrid chars | broad `rg` chars |
 | --- | ---: | ---: | ---: | ---: |
-| `logging_loki_timeout` | 1 | 3 | 6,381 | 12,106 |
-| `redis_cache_defaults` | 1 | 1 | 5,279 | 1,818 |
-| `dropbox_bootstrap_readiness` | 3 | 2 | 7,091 | 5,628 |
-| `managed_repo_shared_prefix` | 1 | 14 | 8,578 | 30,837 |
-| `env_safety_guard` | miss | 2 | 11,559 | 28,581 |
+| `logging_loki_timeout` | 1 | 5 | 6,381 | 12,106 |
+| `redis_cache_defaults` | 1 | 2 | 5,279 | 1,818 |
+| `dropbox_bootstrap_readiness` | 3 | 1 | 7,091 | 5,628 |
+| `managed_repo_shared_prefix` | 1 | 6 | 8,578 | 30,837 |
+| `env_safety_guard` | 3 | 4 | 6,392 | 28,581 |
 | `upload_tmp_managedrepo` | 1 | 8 | 6,325 | 63,948 |
 | `enhanced_search_indexing` | miss | 10 | 9,304 | 40,108 |
 | `scanner_inventory_deepsource` | 1 | 5 | 7,293 | 19,287 |
-| `agent_context_caps` | 1 | 9 | 6,385 | 5,678 |
-| `crowdsec_bridge_bouncer` | 1 | 2 | 23,447 | 74,702 |
+| `agent_context_caps` | 1 | 4 | 6,480 | 5,678 |
+| `crowdsec_bridge_bouncer` | 1 | 9 | 23,447 | 74,702 |
 
 ## Decision
 
