@@ -14,6 +14,7 @@
 [![everything-claude-code](https://img.shields.io/static/v1?label=&message=everything-claude-code&color=555&logo=github&logoColor=white)](https://github.com/affaan-m/everything-claude-code)
 [![caveman](https://img.shields.io/static/v1?label=&message=caveman&color=555&logo=github&logoColor=white)](https://github.com/JuliusBrussee/caveman)
 [![andrej-karpathy-skills](https://img.shields.io/static/v1?label=&message=andrej-karpathy-skills&color=555&logo=github&logoColor=white)](https://github.com/forrestchang/andrej-karpathy-skills)
+[![cocoindex-code](https://img.shields.io/static/v1?label=&message=cocoindex-code&color=555&logo=github&logoColor=white)](https://github.com/cocoindex-io/cocoindex-code)
 <!-- END GENERATED BADGES -->
 
 Production-grade (see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom OMERO.web plugins for microscopy metadata workflows, file upload/import management, direct Imaris 11 integration, administrator tools, and a full server monitoring stack.
@@ -397,6 +398,13 @@ Optional AI-agent compression is available to all supported agents via the
 opt-in [`caveman`](https://github.com/JuliusBrussee/caveman) overlay for
 internal AI communication only. Repository documentation, comments, docstrings,
 function descriptions, and user-facing text stay in standard prose.
+
+Broad AI-agent repo navigation can use the all-agent
+`cocoindex-code-search` skill as semantic routing before exact `rg`
+validation. Agents check for an existing MCP server or tool named
+`cocoindex-code` first. Its wrapper keeps the pinned host install under XDG data
+paths or `AGENT_COCOINDEX_HOME`, with per-repository mirrors, databases, and
+runtime directories outside the live checkout.
 
 | Entry point | Purpose |
 | --- | --- |

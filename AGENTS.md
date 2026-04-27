@@ -79,14 +79,10 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Do not assume any non-root user, group, Dataset, Project, Screen, Image, file, annotation, script ID, plugin row, or other OMERO object already exists in a live installation unless the current task explicitly provisions it first.
 - When tests or live verification need OMERO images, files, annotations, acquisition metadata, users, groups, or plugin index rows, create deterministic disposable fixtures inside the test or verification flow and clean or isolate them by unique names. A user-named live object may be inspected only as a diagnostic target, never as a product assumption or required test precondition.
 - Keep changes deterministic, explicit, minimal, and reproducible; less is more when fewer lines prove full functional parity and satisfy every repo rule.
-- If the user explicitly asks for lower-token replies, use the opt-in
-  `caveman` skill at the lowest compression level that preserves clarity;
-  `caveman` is limited to internal AI communication and prompting, must never
-  rewrite repository docs, comments, docstrings, function descriptions, commit
-  messages, or user-facing copy, and changes reply style only without changing
-  routing, tool choice, verification scope, or the need to surface uncertainty
-  clearly. Drop compression for destructive actions, security guidance,
-  multi-step runbooks, or unresolved ambiguity.
+- If the user explicitly asks for lower-token replies, use opt-in `caveman` only
+  for internal AI communication. It never rewrites repo docs, comments, or
+  user-facing copy, and never changes routing, tools, verification, or
+  uncertainty handling; drop it for destructive/security/ambiguous work.
 - Update `docs/` whenever behavior or operating assumptions change; preserve every required meaning when compacting docs, add objective regression checks before line-budget changes, and fix a proven avoidable retry/error loop in repo instructions/tools only after the correct workflow is verified.
 - When creating or editing plugin help pages, follow
   `docs/reference/plugin-help-page-style-guide.md` for user-facing copy,
@@ -104,6 +100,8 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Treat plugin input as untrusted and validate at system boundaries.
 - Treat every tracked `*_example*` file as the canonical configuration contract.
 - Prefer repo-local skills before falling back to generic workflows.
+- For broad repo navigation, check for a `cocoindex-code` MCP server or tool first;
+  use `.agents/skills/cocoindex-code-search/` only for semantic routing when broad `rg` output would be large, then validate exactly with `rg`. It uses one XDG/`AGENT_COCOINDEX_HOME` install with per-repo external mirrors, DBs, and runtime dirs, never live-checkout `.cocoindex_code/`, and does not weaken the single-session rule.
 - Native adapter files exist for GitHub Copilot, Cursor, Claude, and Gemini. Treat `AGENTS.md` as the universal baseline; adapters are additive only.
 - Never create, edit, overwrite, delete, normalize, or print values from non-example deployment env files (`.env`, `installation_paths.env`, `env/*.env`) unless the user explicitly grants a one-off exception for that exact operation; examples remain the tracked contract.
 - Run `python3 tools/env_safety_guard.py check` and `python3 tools/env_safety_guard.py compose-guard` before any `docker compose` operation to verify deployment env files are intact and the checkout matches the live installation root. Use `python3 tools/env_safety_guard.py template-check` only to report env-template key drift without values.

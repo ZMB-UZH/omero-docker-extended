@@ -33,6 +33,7 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 | `compliance-and-rate-limit` | `.agents/skills/compliance-and-rate-limit/SKILL.md` | when repeated requests, crawling, or larger-scope extraction could create policy or load risk | collection stays cache-aware, paced, and non-evasive |
 | `verification-loop` | `.agents/skills/verification-loop/SKILL.md` | after non-trivial changes and before commit/push | verification states exactly what was checked and what was blocked |
 | `caveman` | `.agents/skills/caveman/SKILL.md` | when the user explicitly asks for lower-token replies or terse mode in AI communication | output tokens drop without losing technical substance or safety |
+| `cocoindex-code-search` | `.agents/skills/cocoindex-code-search/SKILL.md` | when broad repo navigation needs semantic routing before exact validation | context drops by routing to fewer candidate files without replacing `rg` |
 | `docs-knowledge-maintainer` | `.agents/skills/docs-knowledge-maintainer/SKILL.md` | when behavior, env contracts, topology, or troubleshooting guidance changes | docs stay aligned with the code and routing model |
 | `plugin-regression-triager` | `.agents/skills/plugin-regression-triager/SKILL.md` | when selecting the correct split pytest suites | the narrowest correct regression set is chosen |
 | `omero-runtime-verifier` | `.agents/skills/omero-runtime-verifier/SKILL.md` | for live runtime debugging, service checks, or OMERO CLI work | runtime triage follows the documented safe procedure |
@@ -63,6 +64,11 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 - Use the nearest skill before falling back to a generic workflow.
 - Keep every skill workflow in one session only; skills must not introduce background agents, subagents, spawned agents, delegated agents, or any separate agent session.
 - When a skill references live or version-sensitive behavior, verify with official upstream docs or releases.
+- Use `cocoindex-code-search` only as a shared host-side routing aid: check for
+  an existing MCP server or tool named `cocoindex-code` first, use one pinned
+  install under XDG data paths or `AGENT_COCOINDEX_HOME`, keep per-repository
+  external mirrors and databases outside the live checkout, then exact `rg`
+  confirmation before editing.
 - Never paste secrets, PATs, passwords, or internal-only URLs into external research tools.
 - `caveman` is opt-in and available through the shared `.agents/skills/` catalog like every other skill. Use it only when the user asks for terseness or lower token usage, and drop it immediately if clarity or safety would suffer.
 - `caveman` is limited to internal AI communication and prompting. Keep repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text in normal prose.
