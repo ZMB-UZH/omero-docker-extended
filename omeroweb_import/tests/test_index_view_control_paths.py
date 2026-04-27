@@ -7,12 +7,17 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http import HttpResponse
 from django.test import RequestFactory
 
 from omeroweb_import.strings import errors
-from omeroweb_import.views import core_functions as import_core_functions, index_view
+from omeroweb_import.views import (
+    core_functions as import_core_functions,
+    index_view,
+    utils as import_view_utils,
+)
 
 
 def _test_job_id(suffix: str) -> str:
@@ -22,6 +27,15 @@ def _test_job_id(suffix: str) -> str:
 
 def _payload(response):
     return json.loads(response.content.decode("utf-8"))
+
+
+@pytest.fixture(autouse=True)
+def _regular_wrapper_user(monkeypatch):
+    monkeypatch.setattr(
+        import_view_utils,
+        "current_username",
+        lambda request, conn: "alice",
+    )
 
 
 class _NamedObject:

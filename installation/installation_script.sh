@@ -1453,15 +1453,15 @@ wait_for_dropbox_ice_bootstrap_ready() {
 
     if ! is_positive_integer "${startup_wait_seconds}"; then
         echo "ERROR: OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS must be a positive integer, got: ${startup_wait_seconds}" >&2
-        return 1
+        return 2
     fi
     if ! is_positive_integer "${poll_interval_seconds}"; then
         echo "ERROR: OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS must be a positive integer, got: ${poll_interval_seconds}" >&2
-        return 1
+        return 2
     fi
 
-    max_wait_seconds=$((startup_wait_seconds + 60))
-    deadline_epoch=$((started_epoch + max_wait_seconds))
+    max_wait_seconds=$((startup_wait_seconds + poll_interval_seconds))
+    deadline_epoch=$(( $(date +%s) + max_wait_seconds ))
 
     echo "Waiting for DropBox Ice bootstrap to complete..."
 
@@ -1473,14 +1473,19 @@ wait_for_dropbox_ice_bootstrap_ready() {
                 echo "DropBox Ice bootstrap is ready."
                 return 0
             fi
+            if [ "${status}" = "error" ]; then
+                status_line="$(tr '\n' ' ' < "${status_file}" | sed 's/[[:space:]]\+/ /g')"
+                echo "ERROR: DropBox Ice bootstrap reported a non-retryable error at ${status_file}: ${status_line}" >&2
+                return 2
+            fi
         fi
 
         now_epoch="$(date +%s)"
         if [ "${now_epoch}" -ge "${deadline_epoch}" ]; then
-            echo "ERROR: Timed out waiting for DropBox Ice bootstrap status at ${status_file}" >&2
+            echo "WARNING: Timed out waiting for DropBox Ice bootstrap status at ${status_file}; the container bootstrap loop keeps retrying in the background." >&2
             if [ -r "${status_file}" ]; then
                 status_line="$(tr '\n' ' ' < "${status_file}" | sed 's/[[:space:]]\+/ /g')"
-                echo "ERROR: Last DropBox Ice bootstrap status: ${status_line}" >&2
+                echo "WARNING: Last DropBox Ice bootstrap status: ${status_line}" >&2
             fi
             return 1
         fi
@@ -1516,24 +1521,24 @@ wait_for_dropbox_user_dir_sync_ready() {
 
     if [ -z "${ROOTPASS:-}" ]; then
         echo "ERROR: ROOTPASS is required for DropBox user directory sync readiness." >&2
-        return 1
+        return 2
     fi
 
     if ! is_positive_integer "${retry_limit}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES must be a positive integer, got: ${retry_limit}" >&2
-        return 1
+        return 2
     fi
     if ! is_positive_integer "${retry_delay_seconds}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS must be a positive integer, got: ${retry_delay_seconds}" >&2
-        return 1
+        return 2
     fi
     if ! is_positive_integer "${startup_wait_seconds}"; then
         echo "ERROR: OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS must be a positive integer, got: ${startup_wait_seconds}" >&2
-        return 1
+        return 2
     fi
 
-    max_wait_seconds=$((startup_wait_seconds + retry_limit * retry_delay_seconds + 60))
-    deadline_epoch=$((started_epoch + max_wait_seconds))
+    max_wait_seconds=$((startup_wait_seconds + retry_limit * retry_delay_seconds + retry_delay_seconds))
+    deadline_epoch=$(( $(date +%s) + max_wait_seconds ))
 
     echo "Waiting for DropBox user directory synchronization to complete..."
 
@@ -1545,14 +1550,19 @@ wait_for_dropbox_user_dir_sync_ready() {
                 echo "DropBox user directory synchronization is ready."
                 return 0
             fi
+            if [ "${status}" = "error" ]; then
+                status_line="$(tr '\n' ' ' < "${status_file}" | sed 's/[[:space:]]\+/ /g')"
+                echo "ERROR: DropBox user directory synchronization reported a non-retryable error at ${status_file}: ${status_line}" >&2
+                return 2
+            fi
         fi
 
         now_epoch="$(date +%s)"
         if [ "${now_epoch}" -ge "${deadline_epoch}" ]; then
-            echo "ERROR: Timed out waiting for DropBox user directory synchronization status at ${status_file}" >&2
+            echo "WARNING: Timed out waiting for DropBox user directory synchronization status at ${status_file}; the container sync loop keeps retrying in the background." >&2
             if [ -r "${status_file}" ]; then
                 status_line="$(tr '\n' ' ' < "${status_file}" | sed 's/[[:space:]]\+/ /g')"
-                echo "ERROR: Last DropBox user directory sync status: ${status_line}" >&2
+                echo "WARNING: Last DropBox user directory sync status: ${status_line}" >&2
             fi
             return 1
         fi
@@ -4259,15 +4269,24 @@ if [ "${START_CONTAINERS}" -eq 1 ]; then
         exit 1
     fi
 
-    if ! wait_for_dropbox_ice_bootstrap_ready "${startup_sync_started_epoch}"; then
-        exit 1
-    fi
-
-    if ! wait_for_dropbox_user_dir_sync_ready "${startup_sync_started_epoch}"; then
-        exit 1
-    fi
-
     add_job_service_to_install_groups "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_LIST:-}"
+
+    set +e
+    wait_for_dropbox_ice_bootstrap_ready "${startup_sync_started_epoch}"
+    dropbox_ice_wait_rc=$?
+    set -e
+    if [ "${dropbox_ice_wait_rc}" -eq 2 ]; then
+        exit 1
+    fi
+
+    set +e
+    wait_for_dropbox_user_dir_sync_ready "${startup_sync_started_epoch}"
+    dropbox_user_dir_wait_rc=$?
+    set -e
+    if [ "${dropbox_user_dir_wait_rc}" -eq 2 ]; then
+        exit 1
+    fi
+
     echo ""
     print_binary_repository_cleanse_notice "started"
 else

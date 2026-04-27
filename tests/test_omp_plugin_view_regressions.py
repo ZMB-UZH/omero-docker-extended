@@ -694,6 +694,7 @@ class OmpPluginViewRegressionTests(TestCase):
             "separator": "_",
             "image_ids": [1],
             "started": 1.0,
+            "username": "stub-user",
         }
         conn = mock.Mock()
         conn.getUpdateService.return_value = object()

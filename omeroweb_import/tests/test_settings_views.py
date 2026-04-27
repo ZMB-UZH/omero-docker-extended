@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import django
+import pytest
 from django.conf import settings
 from django.test import RequestFactory
 
@@ -17,13 +18,26 @@ if not settings.configured:
     )
     django.setup()
 
-from omeroweb_import.views import special_method_settings_view, user_settings_view
+from omeroweb_import.views import (
+    special_method_settings_view,
+    user_settings_view,
+    utils as import_view_utils,
+)
 from omeroweb_import.strings import errors as import_errors
 from omeroweb_import.strings import messages as import_messages
 
 
 def _payload(response):
     return json.loads(response.content.decode("utf-8"))
+
+
+@pytest.fixture(autouse=True)
+def _regular_wrapper_user(monkeypatch):
+    monkeypatch.setattr(
+        import_view_utils,
+        "current_username",
+        lambda request, conn: "alice",
+    )
 
 
 def test_user_settings_view_saves_payload_and_returns_normalized_response(

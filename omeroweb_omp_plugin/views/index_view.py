@@ -472,6 +472,7 @@ def _safe_index_messages_json():
 
 
 @login_required()
+@require_non_root_user
 @ensure_csrf_cookie
 def index(request, conn=None, _url=None, **kwargs):
     """

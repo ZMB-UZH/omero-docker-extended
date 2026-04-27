@@ -48,8 +48,7 @@ def _job_owned_by_request(job, request, conn):
         return False
     job_username = str(job.get("username") or "").strip()
     if not job_username:
-        # Backward compatibility for pre-hardening jobs/tests that did not persist ownership.
-        return True
+        return False
     username = str(current_username(request, conn) or "").strip()
     return bool(username and job_username == username)
 
@@ -123,27 +122,44 @@ def _validate_user_password(conn, password):
     return True, None
 
 
-def _resolve_image_ids(conn, project_id, selected_image_ids):
-    if selected_image_ids:
-        return sorted(set(selected_image_ids))
-
-    images = collect_images_in_project(conn, project_id)
-    if not images:
-        images = list(conn.getObjects("Image"))
-
+def _image_ids_from_objects(images):
     seen = set()
     image_ids = []
     for img in images:
-        iid = get_id(img)
-        if not iid:
+        raw_iid = get_id(img)
+        if raw_iid is None:
             continue
-        iid = int(iid)
+        try:
+            iid = int(raw_iid)
+        except (TypeError, ValueError):
+            continue
         if iid not in seen:
             seen.add(iid)
             image_ids.append(iid)
 
     image_ids.sort()
     return image_ids
+
+
+def _resolve_image_ids(conn, project_id, selected_image_ids):
+    images = collect_images_in_project(conn, project_id)
+    project_image_ids = _image_ids_from_objects(images)
+    if selected_image_ids:
+        allowed_project_image_ids = set(project_image_ids)
+        selected = set()
+        for raw_iid in selected_image_ids:
+            try:
+                iid = int(raw_iid)
+            except (TypeError, ValueError):
+                continue
+            if iid in allowed_project_image_ids:
+                selected.add(iid)
+        return sorted(selected)
+
+    if not images:
+        images = list(conn.getObjects("Image"))
+
+    return _image_ids_from_objects(images)
 
 
 def _save_annotation_link(update, link):

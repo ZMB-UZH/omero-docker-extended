@@ -143,7 +143,12 @@ def require_non_root_user(view_func):
         if remaining_args and url is None:
             url = remaining_args[0]
             remaining_args = remaining_args[1:]
-        username = current_username(request, conn)
+        username = str(current_username(request, conn) or "").strip()
+        if not username:
+            return JsonResponse(
+                {"error": errors.unable_to_determine_username()},
+                status=403,
+            )
         if username == "root":
             return JsonResponse(
                 {"error": "PLEASE LOGIN AS REGULAR USER\nTO USE THIS PLUGIN"},

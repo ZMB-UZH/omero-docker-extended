@@ -242,7 +242,7 @@ Required rules:
 - Set timeouts explicitly.
 - Do not let browser input supply a raw upstream URL when a typed service key or route identifier can be used instead.
 
-### 6. Django responses, CSRF, and reflected data
+### 6. Django responses, CSRF, authorization, and reflected data
 
 Bad:
 
@@ -266,6 +266,9 @@ Required rules:
 - Escape reflected user content or keep the response type `text/plain`.
 - Prefer CSRF-compatible request flows with `X-CSRFToken`; do not add `@csrf_exempt` unless there is a documented, reviewed reason.
 - When a CSRF exemption remains necessary, document the alternative authentication/control that makes the route safe.
+- Boundary decorators such as `require_non_root_user` must fail closed when the current OMERO username is empty or unresolved.
+- Job and progress ownership checks must require a persisted owner identifier; ownerless job payloads are not valid compatibility fallbacks.
+- When browser input supplies object IDs scoped by a parent object, intersect those IDs with the server-derived accessible objects before fetching, mutating, or deleting anything.
 
 ### 7. Subprocesses and shell
 

@@ -178,14 +178,14 @@ runbook or tool concisely with regression coverage.
 
 ## Alert inventory
 
-Last live API refresh: **2026-04-26**.
+Last live API refresh: **2026-04-27**.
 
 GitHub reported **4 open alerts on the default branch (`main` at refresh time)** at the time of the live snapshot used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
 DeepSource reported **3 grouped issues**, **109 issue occurrences**, and
 **0 dependency vulnerability occurrences** for the default branch during the
 same refresh. The API `latest_commit_oid` was
-`92cee4a62e09971fec82fccc7f8d9b8e0b867653`, the pushed default-branch
+`ab3c98670e4149f8497059bd5f983857367b653c`, the pushed default-branch
 revision used for this snapshot.
 
 These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
@@ -228,16 +228,16 @@ defaults both images to their application users and keeps the required root
 bootstrap as an explicit Compose handoff for mounted runtime-path
 reconciliation.
 
-At the 2026-04-26 refresh after the successful default-branch security
+At the 2026-04-27 refresh after the successful default-branch security
 workflow, the 4 remaining GitHub alerts were repository-level Scorecard findings with
 no file location: `MaintainedID`, `CodeReviewID`, `CIIBestPracticesID`, and
 `BranchProtectionID`. The previous CodeQL file-level findings in
 `XTOmeroConnector.py` and the transient Semgrep transport findings from the
 first remediation push were no longer open.
 
-The same 2026-04-26 DeepSource refresh confirmed the `SH-3015` shell
+The same 2026-04-27 DeepSource refresh confirmed the `SH-3015` shell
 portability finding in `scripts/omero-host-service-lib.sh` remained closed on
-`92cee4a62e09971fec82fccc7f8d9b8e0b867653` after being remediated earlier
+`ab3c98670e4149f8497059bd5f983857367b653c` after being remediated earlier
 that day. The remaining grouped DeepSource issues were existing `SCT-1000`
 secrets findings, existing `SCT-A000` audit findings, and existing `PY-R1000`
 complexity findings.

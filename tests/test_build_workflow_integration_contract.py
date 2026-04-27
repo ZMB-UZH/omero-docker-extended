@@ -301,7 +301,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             script_text,
         )
         self.assertIn(
-            'write_dropbox_user_dir_sync_status "error" "omero-admin-not-ready" "0" "1"',
+            'write_dropbox_user_dir_sync_status "retrying" "omero-admin-not-ready" "0" "1"',
             script_text,
         )
         self.assertIn(
@@ -360,7 +360,23 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             script_text,
         )
         self.assertIn(
-            'write_dropbox_ice_bootstrap_status "error" "enable" "omero-api-not-ready" "0"',
+            'write_dropbox_ice_bootstrap_status "retrying" "enable" "omero-api-not-ready" "0"',
+            script_text,
+        )
+        self.assertIn(
+            'write_dropbox_ice_bootstrap_status "error" "enable" "omero-api-password-missing" "0"',
+            script_text,
+        )
+        self.assertIn(
+            "DropBox Ice bootstrap attempt ${attempt} did not complete; retrying in ${poll_interval}s",
+            script_text,
+        )
+        self.assertIn("OMERO_DROPBOX_ICE_BOOTSTRAP_MAX_RETRY_SECONDS", script_text)
+        self.assertIn("max_retry_seconds", script_text)
+        self.assertIn("retry-budget-exhausted", script_text)
+        self.assertIn("run_dropbox_ice_bootstrap_once || rc=$?", script_text)
+        self.assertIn(
+            "DropBox Ice bootstrap stopped on non-retryable configuration error",
             script_text,
         )
         self.assertIn(
@@ -387,6 +403,8 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS:-",
             script_text,
         )
+        self.assertNotIn("retrying in 60s", script_text)
+        self.assertNotIn("sleep 60", script_text)
 
     def test_installation_dropbox_readiness_waits_do_not_use_hidden_defaults(
         self,
@@ -427,6 +445,48 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS:-300",
             script_text,
         )
+        self.assertIn(
+            "deadline_epoch=$(( $(date +%s) + max_wait_seconds ))",
+            script_text,
+        )
+        self.assertIn(
+            "DropBox Ice bootstrap reported a non-retryable error",
+            script_text,
+        )
+        self.assertIn(
+            "DropBox user directory synchronization reported a non-retryable error",
+            script_text,
+        )
+        self.assertIn(
+            "WARNING: Timed out waiting for DropBox Ice bootstrap status",
+            script_text,
+        )
+        self.assertIn(
+            "WARNING: Timed out waiting for DropBox user directory synchronization status",
+            script_text,
+        )
+
+    def test_installation_runs_job_service_group_sync_before_dropbox_waits(
+        self,
+    ) -> None:
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
+
+        job_service_index = script_text.rindex(
+            'add_job_service_to_install_groups "${COMPOSE_FILE}"'
+        )
+        dropbox_ice_wait_index = script_text.rindex(
+            'wait_for_dropbox_ice_bootstrap_ready "${startup_sync_started_epoch}"'
+        )
+        dropbox_user_wait_index = script_text.rindex(
+            'wait_for_dropbox_user_dir_sync_ready "${startup_sync_started_epoch}"'
+        )
+
+        self.assertLess(job_service_index, dropbox_ice_wait_index)
+        self.assertLess(job_service_index, dropbox_user_wait_index)
+        self.assertIn("dropbox_ice_wait_rc=$?", script_text)
+        self.assertIn("dropbox_user_dir_wait_rc=$?", script_text)
 
     def test_server_bootstrap_uses_dedicated_runtime_tmp_slot(self) -> None:
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(

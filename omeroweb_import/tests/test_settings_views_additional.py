@@ -69,6 +69,11 @@ def test_import_view_utils_delegate_and_reject_root_users(monkeypatch):
         == "PLEASE LOGIN AS REGULAR USER\nTO USE THIS PLUGIN"
     )
 
+    monkeypatch.setattr(import_view_utils, "current_username", lambda request, conn: "")
+    unresolved = guarded(RequestFactory().get("/guarded"), conn=object())
+    assert unresolved.status_code == 403
+    assert _payload(unresolved)["error"] == import_errors.unable_to_determine_username()
+
 
 def test_special_method_settings_cover_non_dict_payload_and_unexpected_save_failure(
     monkeypatch,
@@ -83,6 +88,11 @@ def test_special_method_settings_cover_non_dict_payload_and_unexpected_save_fail
         special_method_settings_view._normalize_special_method_settings(["bad"]) == {}
     )
 
+    monkeypatch.setattr(
+        import_view_utils,
+        "current_username",
+        lambda request, conn: "alice",
+    )
     monkeypatch.setattr(
         special_method_settings_view,
         "current_username",
@@ -103,6 +113,12 @@ def test_special_method_settings_cover_non_dict_payload_and_unexpected_save_fail
 def test_special_method_load_settings_covers_method_username_and_unexpected_errors(
     monkeypatch,
 ):
+    monkeypatch.setattr(
+        import_view_utils,
+        "current_username",
+        lambda request, conn: "alice",
+    )
+
     get_request = RequestFactory().get("/omeroweb_import/settings/special/load/")
     response = special_method_settings_view.load_settings(get_request, conn=None)
     assert response.status_code == 405
@@ -144,6 +160,11 @@ def test_user_settings_view_returns_generic_error_on_unexpected_failure(monkeypa
         content_type="application/json",
     )
 
+    monkeypatch.setattr(
+        import_view_utils,
+        "current_username",
+        lambda request, conn: "alice",
+    )
     monkeypatch.setattr(
         user_settings_view, "current_username", lambda request, conn: "alice"
     )

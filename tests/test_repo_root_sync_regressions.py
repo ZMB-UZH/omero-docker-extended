@@ -345,6 +345,240 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
         self.assertIn("DropBox Ice bootstrap is ready", result.stdout)
 
+    def test_installation_dropbox_ice_timeout_is_retryable(self) -> None:
+        function_text = "\n".join(
+            [
+                self.installation_validators,
+                self._slice_function(
+                    self.installation_script,
+                    "repo_root_sync_stable_prefix_depth() {",
+                    "stop_old_installation_containers() {",
+                ),
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            server_var_dir = Path(tmpdir) / "server-var"
+            server_var_dir.mkdir(parents=True, exist_ok=True)
+            status_file = server_var_dir / "dropbox-ice-bootstrap.status"
+            status_file.write_text(
+                textwrap.dedent(
+                    """\
+                    status=retrying
+                    action=enable
+                    message=omero-admin-not-ready
+                    last_success_epoch=0
+                    updated_epoch=100
+                    """
+                ),
+                encoding="utf-8",
+            )
+            script = textwrap.dedent(
+                f"""\
+                set -euo pipefail
+                START_CONTAINERS=1
+                REPO_ROOT_DIR="{self.repo_root}"
+                OMERO_SERVER_VAR_PATH="{server_var_dir}"
+                OMERO_DROPBOX_ENABLED=1
+                OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS=1
+                OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS=1
+                {function_text}
+                set +e
+                wait_for_dropbox_ice_bootstrap_ready 100
+                rc=$?
+                set -e
+                printf 'rc=%s\\n' "${{rc}}"
+                """
+            )
+
+            result = self._run_bash(script)
+
+        self.assertIn("rc=1", result.stdout)
+        self.assertIn("WARNING: Timed out waiting for DropBox Ice", result.stderr)
+        self.assertNotIn("ERROR:", result.stderr)
+
+    def test_installation_dropbox_ice_error_is_non_retryable(self) -> None:
+        function_text = "\n".join(
+            [
+                self.installation_validators,
+                self._slice_function(
+                    self.installation_script,
+                    "repo_root_sync_stable_prefix_depth() {",
+                    "stop_old_installation_containers() {",
+                ),
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            server_var_dir = Path(tmpdir) / "server-var"
+            server_var_dir.mkdir(parents=True, exist_ok=True)
+            status_file = server_var_dir / "dropbox-ice-bootstrap.status"
+            status_file.write_text(
+                textwrap.dedent(
+                    """\
+                    status=error
+                    action=enable
+                    message=omero-api-password-missing
+                    last_success_epoch=0
+                    updated_epoch=100
+                    """
+                ),
+                encoding="utf-8",
+            )
+            script = textwrap.dedent(
+                f"""\
+                set -euo pipefail
+                START_CONTAINERS=1
+                REPO_ROOT_DIR="{self.repo_root}"
+                OMERO_SERVER_VAR_PATH="{server_var_dir}"
+                OMERO_DROPBOX_ENABLED=1
+                OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS=1
+                OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS=1
+                {function_text}
+                set +e
+                wait_for_dropbox_ice_bootstrap_ready 100
+                rc=$?
+                set -e
+                printf 'rc=%s\\n' "${{rc}}"
+                """
+            )
+
+            result = self._run_bash(script)
+
+        self.assertIn("rc=2", result.stdout)
+        self.assertIn("non-retryable error", result.stderr)
+
+    def test_installation_dropbox_user_dir_timeout_is_retryable(self) -> None:
+        function_text = "\n".join(
+            [
+                self.installation_validators,
+                self._slice_function(
+                    self.installation_script,
+                    "repo_root_sync_stable_prefix_depth() {",
+                    "stop_old_installation_containers() {",
+                ),
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            server_var_dir = Path(tmpdir) / "server-var"
+            server_var_dir.mkdir(parents=True, exist_ok=True)
+            status_file = server_var_dir / "dropbox-user-dir-sync.status"
+            status_file.write_text(
+                textwrap.dedent(
+                    """\
+                    status=retrying
+                    last_success_epoch=0
+                    dropbox_root=
+                    eligible_user_count=0
+                    created_count=0
+                    existing_count=0
+                    skipped_count=0
+                    failed_count=1
+                    message=omero-admin-not-ready
+                    updated_epoch=100
+                    """
+                ),
+                encoding="utf-8",
+            )
+            script = textwrap.dedent(
+                f"""\
+                set -euo pipefail
+                START_CONTAINERS=1
+                ROOTPASS=secret
+                REPO_ROOT_DIR="{self.repo_root}"
+                OMERO_SERVER_VAR_PATH="{server_var_dir}"
+                OMERO_DROPBOX_USER_DIR_SYNC_ENABLED=1
+                OMERO_DROPBOX_USER_DIR_SYNC_MAX_RETRIES=1
+                OMERO_DROPBOX_USER_DIR_SYNC_READINESS_POLL_SECONDS=1
+                OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS=1
+                {function_text}
+                set +e
+                wait_for_dropbox_user_dir_sync_ready 100
+                rc=$?
+                set -e
+                printf 'rc=%s\\n' "${{rc}}"
+                """
+            )
+
+            result = self._run_bash(script)
+
+        self.assertIn("rc=1", result.stdout)
+        self.assertIn(
+            "WARNING: Timed out waiting for DropBox user directory",
+            result.stderr,
+        )
+        self.assertNotIn("ERROR:", result.stderr)
+
+    def test_dropbox_ice_bootstrap_retry_budget_becomes_error(self) -> None:
+        function_text = self._slice_function(
+            self.server_bootstrap_script,
+            "write_dropbox_ice_bootstrap_status() {",
+            "write_dropbox_user_dir_sync_status() {",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            server_var_dir = Path(tmpdir) / "server-var"
+            server_log_dir = Path(tmpdir) / "server-log"
+            server_var_dir.mkdir(parents=True, exist_ok=True)
+            server_log_dir.mkdir(parents=True, exist_ok=True)
+            status_file = server_var_dir / "dropbox-ice-bootstrap.status"
+            log_file = server_log_dir / "dropbox-ice-bootstrap.log"
+            script = textwrap.dedent(
+                f"""\
+                set -euo pipefail
+                SERVER_VAR_DIR="{server_var_dir}"
+                SERVER_LOG_DIR="{server_log_dir}"
+                DROPBOX_ICE_BOOTSTRAP_STATUS_FILE="{status_file}"
+                OMERO_DROPBOX_ENABLED=1
+                OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS=1
+                OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS=1
+                OMERO_DROPBOX_ICE_BOOTSTRAP_MAX_RETRY_SECONDS=1
+
+                is_falsey_bool() {{
+                    return 1
+                }}
+
+                log() {{
+                    printf '%s\\n' "$*"
+                }}
+
+                acquire_lockdir() {{
+                    mkdir "$1"
+                }}
+
+                release_lockdir() {{
+                    rm -rf "$1"
+                }}
+
+                {function_text}
+
+                run_dropbox_ice_bootstrap_once() {{
+                    write_dropbox_ice_bootstrap_status retrying enable omero-admin-not-ready 0
+                    return 1
+                }}
+
+                schedule_dropbox_ice_bootstrap
+                set +e
+                wait
+                rc=$?
+                set -e
+                printf 'wait_rc=%s\\n' "${{rc}}"
+                cat "{status_file}"
+                printf '%s\\n' '--log--'
+                cat "{log_file}"
+                """
+            )
+
+            result = self._run_bash(script)
+
+        self.assertIn("wait_rc=", result.stdout)
+        self.assertIn("status=error", result.stdout)
+        self.assertIn(
+            "message=omero-admin-not-ready-retry-budget-exhausted", result.stdout
+        )
+        self.assertIn("retry budget exhausted", result.stdout)
+
     def test_repo_root_bootstrap_retries_lookup_before_marking_failure(self) -> None:
         function_text = self._slice_function(
             self.server_bootstrap_script,

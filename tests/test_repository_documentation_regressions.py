@@ -84,17 +84,17 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             "GitHub reported **4 open alerts on the default branch",
             runbook_text,
         )
-        self.assertIn("Last live API refresh: **2026-04-26**", runbook_text)
+        self.assertIn("Last live API refresh: **2026-04-27**", runbook_text)
         self.assertIn("**3 grouped issues**", runbook_text)
         self.assertIn("**109 issue occurrences**", runbook_text)
         self.assertIn("**0 dependency vulnerability occurrences**", runbook_text)
         expected_scanner_snapshot_commit = "".join(
             (
-                "92cee4a6",
-                "2e09971f",
-                "ec82fccc",
-                "7f8d9b8e",
-                "0b867653",
+                "ab3c9867",
+                "0e4149f8",
+                "497059bd",
+                "5f983857",
+                "367b653c",
             )
         )
         self.assertIn(expected_scanner_snapshot_commit, runbook_text)

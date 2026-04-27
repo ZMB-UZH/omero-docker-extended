@@ -121,6 +121,7 @@ EXPECTED_EXAMPLE_ENV_KEYS: dict[str, frozenset[str]] = {
             "OMERO_DROPBOX_VERSION",
             "OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS",
             "OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS",
+            "OMERO_DROPBOX_ICE_BOOTSTRAP_MAX_RETRY_SECONDS",
             "CONFIG_omero_fs_host",
             "CONFIG_omero_fs_port",
             "CONFIG_omero_fs_maxRetries",

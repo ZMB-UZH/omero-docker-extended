@@ -114,7 +114,7 @@ def test_job_view_helper_guards_cover_ownership_host_resolution_and_link_save(
     conn = _Conn()
 
     monkeypatch.setattr(job_view, "current_username", lambda *_args: "alice")
-    assert job_view._job_owned_by_request({}, request, conn) is True
+    assert job_view._job_owned_by_request({}, request, conn) is False
     assert job_view._job_owned_by_request({"username": "alice"}, request, conn) is True
     assert job_view._job_owned_by_request({"username": "bob"}, request, conn) is False
     assert job_view._job_owned_by_request([], request, conn) is False
@@ -280,7 +280,7 @@ def test_resolve_image_ids_prefers_selected_ids_and_deduplicates_project_images(
         ],
     )
 
-    assert job_view._resolve_image_ids(conn, 1, [8, 8, 7]) == [7, 8]
+    assert job_view._resolve_image_ids(conn, 1, [8, 8, 7, "2", "bad"]) == [2]
     assert job_view._resolve_image_ids(conn, 1, []) == [1, 2]
 
 
