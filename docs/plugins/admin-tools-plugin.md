@@ -64,7 +64,9 @@ omeroweb_admin_tools/
 
 ## Dependencies
 
-This plugin requires reachable monitoring service endpoints configured in `env/omeroweb.env`:
+This plugin requires reachable monitoring service endpoints and log-query
+controls configured in `env/omeroweb.env`; missing active assignments disable
+the log-query backend instead of using code-side defaults:
 
 | Variable                                       | Purpose                                                                                                                                                                                | Example                                                                                                                                        |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |

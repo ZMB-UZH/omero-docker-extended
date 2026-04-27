@@ -244,6 +244,8 @@ def test_logs_view_and_internal_log_labels_cover_configuration_paths(
             max_entries=100,
             timeout_seconds=5.0,
             cache_max_bytes=1024,
+            internal_file_batch_size=12,
+            max_parallel_queries=4,
         ),
     )
     monkeypatch.setattr(
@@ -282,6 +284,8 @@ def test_logs_view_and_internal_log_labels_cover_configuration_paths(
             max_entries=100,
             timeout_seconds=5.0,
             cache_max_bytes=1024,
+            internal_file_batch_size=12,
+            max_parallel_queries=4,
         ),
     )
     monkeypatch.setattr(

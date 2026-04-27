@@ -48,6 +48,9 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         cls.smart_disk_monitor = (
             REPO_ROOT / "monitoring" / "prometheus" / "smart_disk_monitor.sh"
         ).read_text(encoding="utf-8")
+        cls.installation_script = (
+            REPO_ROOT / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
 
     @staticmethod
     def _last_user(dockerfile_text: str) -> str:
@@ -190,6 +193,48 @@ class DockerHealthcheckContractTests(unittest.TestCase):
             'sysctl -w "${SYSCTL_KEY}=${SYSCTL_VALUE}"', self.redis_sysctl_script
         )
         self.assertNotIn("|| true", self.redis_sysctl_script)
+
+    def test_redis_runtime_tuning_is_required_env_file_contract(self) -> None:
+        service_text = self._compose_service_text(self.compose_text, "redis")
+        for variable in (
+            "REDIS_SAVE_POLICY",
+            "REDIS_APPENDONLY",
+            "REDIS_MAXMEMORY",
+            "REDIS_MAXMEMORY_POLICY",
+            "REDIS_DATA_TMPFS_SIZE",
+        ):
+            self.assertIn(f"Set {variable} in .env", service_text)
+        self.assertNotIn("${REDIS_SAVE_POLICY:-", service_text)
+        self.assertNotIn("${REDIS_APPENDONLY:-", service_text)
+        self.assertNotIn("${REDIS_MAXMEMORY:-", service_text)
+        self.assertNotIn("${REDIS_MAXMEMORY_POLICY:-", service_text)
+        self.assertNotIn("${REDIS_DATA_TMPFS_SIZE:-", service_text)
+
+    def test_installer_writes_redis_tuning_without_shell_fallback_expansion(
+        self,
+    ) -> None:
+        self.assertIn("REDIS_SAVE_POLICY=\n", self.installation_script)
+        self.assertIn("REDIS_APPENDONLY=no\n", self.installation_script)
+        self.assertIn("REDIS_MAXMEMORY=512mb\n", self.installation_script)
+        self.assertIn("REDIS_MAXMEMORY_POLICY=allkeys-lru\n", self.installation_script)
+        self.assertIn("REDIS_DATA_TMPFS_SIZE=512m\n", self.installation_script)
+        self.assertNotIn(
+            "REDIS_SAVE_POLICY=${REDIS_SAVE_POLICY:-", self.installation_script
+        )
+        self.assertNotIn(
+            "REDIS_APPENDONLY=${REDIS_APPENDONLY:-", self.installation_script
+        )
+        self.assertNotIn(
+            "REDIS_MAXMEMORY=${REDIS_MAXMEMORY:-", self.installation_script
+        )
+        self.assertNotIn(
+            "REDIS_MAXMEMORY_POLICY=${REDIS_MAXMEMORY_POLICY:-",
+            self.installation_script,
+        )
+        self.assertNotIn(
+            "REDIS_DATA_TMPFS_SIZE=${REDIS_DATA_TMPFS_SIZE:-",
+            self.installation_script,
+        )
 
     def test_cadvisor_entrypoint_uses_safe_rootfs_iteration(self) -> None:
         self.assertIn("for rootfs_entry in /rootfs/*; do", self.cadvisor_entrypoint)

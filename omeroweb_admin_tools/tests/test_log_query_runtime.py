@@ -204,6 +204,8 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
         max_entries=10,
         timeout_seconds=2.5,
         cache_max_bytes=1024,
+        internal_file_batch_size=12,
+        max_parallel_queries=4,
     )
     monkeypatch.setattr(
         log_query_module.requests,
@@ -229,6 +231,8 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
                 max_entries=10,
                 timeout_seconds=1.0,
                 cache_max_bytes=1024,
+                internal_file_batch_size=12,
+                max_parallel_queries=4,
             ),
             '{compose_service="omeroserver"}',
             60,

@@ -281,7 +281,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
             f"COMPOSE_PROJECT_NAME={compose_project_name}",
         ]
         dot_env_lines.extend(
-            f"{key}=value"
+            f"{key}={'value' if key != 'REDIS_SAVE_POLICY' else ''}"
             for key in env_safety_guard.DOT_ENV_REQUIRED_KEYS
             if key != "COMPOSE_PROJECT_NAME"
         )

@@ -75,6 +75,9 @@ def test_admin_config_and_root_user_decorator_cover_remaining_validation_edges(
     int_values = {
         "ADMIN_TOOLS_LOG_LOOKBACK_SECONDS": 30,
         "ADMIN_TOOLS_LOG_MAX_ENTRIES": 50,
+        "ADMIN_TOOLS_LOG_CACHE_MAX_MB": 0,
+        "ADMIN_TOOLS_LOG_INTERNAL_FILE_BATCH_SIZE": 12,
+        "ADMIN_TOOLS_LOG_MAX_PARALLEL_QUERIES": 4,
     }
     monkeypatch.setattr(
         admin_config,
@@ -86,19 +89,10 @@ def test_admin_config_and_root_user_decorator_cover_remaining_validation_edges(
         "get_float_env",
         lambda name, env_file=None: 2.5,
     )
-    monkeypatch.setattr(
-        admin_config,
-        "get_optional_env",
-        lambda name, env_file=None: "invalid",
-    )
     with pytest.raises(ValueError, match="positive integer"):
         admin_config.build_log_config()
 
-    monkeypatch.setattr(
-        admin_config,
-        "get_optional_env",
-        lambda name, env_file=None: None,
-    )
+    int_values["ADMIN_TOOLS_LOG_CACHE_MAX_MB"] = 128
     int_values["ADMIN_TOOLS_LOG_MAX_ENTRIES"] = 0
     with pytest.raises(ValueError, match="MAX_ENTRIES"):
         admin_config.build_log_config()

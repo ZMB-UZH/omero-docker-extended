@@ -80,9 +80,15 @@ DOT_ENV_REQUIRED_KEYS = (
     "OMERO_CLI_ZARR_VERSION",
     "OME_ZARR_PY_VERSION",
     "BIOFORMATS2RAW_VERSION",
+    "REDIS_SAVE_POLICY",
+    "REDIS_APPENDONLY",
+    "REDIS_MAXMEMORY",
+    "REDIS_MAXMEMORY_POLICY",
+    "REDIS_DATA_TMPFS_SIZE",
     "OMERO_DB_PASS",
     "OMP_PLUGIN_DB_PASS",
 )
+DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS = frozenset({"REDIS_SAVE_POLICY"})
 
 # ---------------------------------------------------------------------------
 # Manifest helpers
@@ -334,7 +340,12 @@ def cmd_dot_env_check(repo_root: Path) -> int:
                 f"{','.join(EXPECTED_COMPOSE_ENV_FILES)}"
             )
 
-    missing_keys = [key for key in DOT_ENV_REQUIRED_KEYS if not dot_env.get(key)]
+    missing_keys = [
+        key
+        for key in DOT_ENV_REQUIRED_KEYS
+        if key not in dot_env
+        or (key not in DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS and not dot_env[key])
+    ]
     if missing_keys:
         failures.append(
             ".env is missing compose interpolation keys: " + ", ".join(missing_keys)

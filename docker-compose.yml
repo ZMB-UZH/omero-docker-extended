@@ -426,13 +426,13 @@ services:
     command:
       - redis-server
       - --save
-      - "${REDIS_SAVE_POLICY:-}"
+      - "${REDIS_SAVE_POLICY?Set REDIS_SAVE_POLICY in .env}"
       - --appendonly
-      - "${REDIS_APPENDONLY:-no}"
+      - "${REDIS_APPENDONLY:?Set REDIS_APPENDONLY in .env}"
       - --maxmemory
-      - "${REDIS_MAXMEMORY:-512mb}"
+      - "${REDIS_MAXMEMORY:?Set REDIS_MAXMEMORY in .env}"
       - --maxmemory-policy
-      - "${REDIS_MAXMEMORY_POLICY:-allkeys-lru}"
+      - "${REDIS_MAXMEMORY_POLICY:?Set REDIS_MAXMEMORY_POLICY in .env}"
     environment:
       TZ: Europe/Zurich
     networks:
@@ -440,7 +440,7 @@ services:
         aliases:
           - redis
     tmpfs:
-      - /data:size=${REDIS_DATA_TMPFS_SIZE:-512m}
+      - /data:size=${REDIS_DATA_TMPFS_SIZE:?Set REDIS_DATA_TMPFS_SIZE in .env}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

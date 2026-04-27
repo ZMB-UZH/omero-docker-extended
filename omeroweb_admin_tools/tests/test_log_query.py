@@ -186,6 +186,7 @@ def test_prepare_query_jobs_batches_internal_files() -> None:
         internal_files={
             "omeroserver_internal": {f"Blitz-{idx}.log" for idx in range(13)}
         },
+        internal_file_batch_size=12,
     )
 
     assert len(jobs) == 2
@@ -199,6 +200,7 @@ def test_prepare_query_jobs_applies_text_filter_to_docker_and_internal_queries()
     jobs = _prepare_query_jobs(
         ["omeroserver", "omeroweb_internal"],
         text_query='imaris "warning"',
+        internal_file_batch_size=12,
     )
 
     assert len(jobs) == 2
@@ -213,6 +215,8 @@ def test_fetch_loki_logs_uses_process_local_cache(monkeypatch) -> None:
         max_entries=5000,
         timeout_seconds=30.0,
         cache_max_bytes=64 * 1024 * 1024,
+        internal_file_batch_size=12,
+        max_parallel_queries=4,
     )
     calls = {"count": 0}
     monkeypatch.setattr(
@@ -254,6 +258,8 @@ def test_fetch_loki_logs_cache_key_varies_by_text_query(monkeypatch) -> None:
         max_entries=5000,
         timeout_seconds=30.0,
         cache_max_bytes=64 * 1024 * 1024,
+        internal_file_batch_size=12,
+        max_parallel_queries=4,
     )
     calls = {"count": 0}
     monkeypatch.setattr(
@@ -297,6 +303,8 @@ def test_fetch_internal_log_labels_reads_filesystem_and_caches(monkeypatch) -> N
         max_entries=5000,
         timeout_seconds=30.0,
         cache_max_bytes=64 * 1024 * 1024,
+        internal_file_batch_size=12,
+        max_parallel_queries=4,
     )
     seen_patterns = []
     monkeypatch.setattr(
