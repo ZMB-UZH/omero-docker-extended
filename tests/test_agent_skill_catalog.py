@@ -15,6 +15,7 @@ ALL_SKILLS: tuple[str, ...] = (
     "ai-regression-testing",
     "browser-fallback",
     "caveman",
+    "cocoindex-code-search",
     "compliance-and-rate-limit",
     "context-budget",
     "deployment-patterns",
@@ -45,6 +46,7 @@ REPO_NATIVE_SKILLS: frozenset[str] = frozenset(
     {
         "browser-fallback",
         "caveman",
+        "cocoindex-code-search",
         "compliance-and-rate-limit",
         "docs-knowledge-maintainer",
         "env-contract-reviewer",
@@ -130,6 +132,22 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
             "stop escalating",
         ),
         adapter_phrases=("cache-aware", "paced"),
+    ),
+    "cocoindex-code-search": SkillScenario(
+        scenario=(
+            "An agent needs broad semantic routing across the repo without "
+            "dumping many files into context, while keeping exact validation in "
+            "ripgrep and avoiding index artifacts in the live checkout."
+        ),
+        skill_phrases=(
+            "pinned `cocoindex-code[full]==0.2.31`",
+            "MCP server or tool named `cocoindex-code`",
+            "external mirror of Git-visible non-ignored files",
+            "never run `ccc init` directly",
+            "semantic output as routing only",
+            "mcp server named `cocoindex-code`",
+        ),
+        adapter_phrases=("semantic routing", "rg"),
     ),
     "context-budget": SkillScenario(
         scenario=(
@@ -607,7 +625,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
         self,
     ) -> None:
         self.assertEqual(set(ALL_SKILLS), set(self.skill_dirs))
-        self.assertEqual(27, len(self.skill_dirs))
+        self.assertEqual(28, len(self.skill_dirs))
         self.assertEqual(set(ALL_SKILLS), set(SKILL_SCENARIOS))
 
     def test_every_skill_has_frontmatter_adapter_and_catalog_entry(self) -> None:

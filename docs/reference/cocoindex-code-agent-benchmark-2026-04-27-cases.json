@@ -1,0 +1,105 @@
+[
+  {
+    "name": "logging_loki_timeout",
+    "query": "Admin Tools Loki internal log query timeout batching cache max parallel queries",
+    "rg": "ADMIN_TOOLS_LOG|_fetch_loki_logs_uncached|Loki request timed out|internal_file_batch_size|max_parallel_queries",
+    "expected": [
+      "omeroweb_admin_tools/services/log_query.py",
+      "omeroweb_admin_tools/config.py",
+      "omeroweb_admin_tools/tests/test_log_query.py",
+      "docs/plugins/admin-tools-plugin.md"
+    ]
+  },
+  {
+    "name": "redis_cache_defaults",
+    "query": "Redis maxmemory default cache size eviction policy compose env variables performance",
+    "rg": "REDIS_MAXMEMORY|REDIS_MAXMEMORY_POLICY|--maxmemory|redis-cache|Redis memory sizing",
+    "expected": [
+      "docker-compose.yml",
+      "env/omeroserver_example.env",
+      "docs/deployment/configuration.md"
+    ]
+  },
+  {
+    "name": "dropbox_bootstrap_readiness",
+    "query": "DropBox Ice bootstrap omero admin not ready status timeout retry readiness",
+    "rg": "dropbox-ice-bootstrap|DropBox Ice bootstrap|omero-admin-not-ready|wait_for_dropbox_ice_bootstrap",
+    "expected": [
+      "startup/10-server-bootstrap.sh",
+      "installation/installation_script.sh",
+      "tests/test_build_workflow_integration_contract.py"
+    ]
+  },
+  {
+    "name": "managed_repo_shared_prefix",
+    "query": "ManagedRepository shared prefix normalization status ready stable prefix sync",
+    "rg": "shared-prefix|managed-repository|repo_root_sync|Managed-repository shared-prefix normalization",
+    "expected": [
+      "startup/10-server-bootstrap.sh",
+      "installation/installation_script.sh",
+      "startup/repo_root_sync_helper.py",
+      "docs/operations/installation-permissions.md"
+    ]
+  },
+  {
+    "name": "env_safety_guard",
+    "query": "do not edit env secrets compose guard live installation root safety check",
+    "rg": "env_safety_guard|compose-guard|omero_secrets.env|Never create, edit, overwrite, or delete",
+    "expected": [
+      "tools/env_safety_guard.py",
+      "tests/test_env_safety_guard.py",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "name": "upload_tmp_managedrepo",
+    "query": "Import plugin upload temp shared transfer ManagedRepository final handoff staged tree",
+    "rg": "shared-transfer|ManagedRepository|_staged|upload root|native import copy",
+    "expected": [
+      "omeroweb_import/views/core_functions.py",
+      "docs/plugins/import-plugin-workflow.md",
+      "docs/operations/installation-permissions.md"
+    ]
+  },
+  {
+    "name": "enhanced_search_indexing",
+    "query": "Enhanced search metadata indexing plugin database user scope indexed scope storage",
+    "rg": "enhanced_search|indexed_scope|metadata indexing|Enhanced search",
+    "expected": [
+      "omeroweb_tools/services/enhanced_search_service.py",
+      "omeroweb_tools/services/enhanced_search_store.py",
+      "omeroweb_tools/tests/test_enhanced_search_service.py"
+    ]
+  },
+  {
+    "name": "scanner_inventory_deepsource",
+    "query": "GitHub code scanning DeepSource grouped issues latest commit oid scanner inventory",
+    "rg": "scanner_inventory|deepsource|grouped_issues|issue_occurrences|latest commit",
+    "expected": [
+      "tools/scanner_inventory.py",
+      "docs/operations/code-scanning.md",
+      "tests/test_scanner_inventory.py"
+    ]
+  },
+  {
+    "name": "agent_context_caps",
+    "query": "AI agent context routing numeric caps smallest correct docs test lanes",
+    "rg": "context-routing|numeric caps|smallest correct|test lanes|agent_context",
+    "expected": [
+      "docs/reference/ai-agent-context-routing.md",
+      "tools/lint_docs_structure.py",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "name": "crowdsec_bridge_bouncer",
+    "query": "CrowdSec nftables firewall bouncer Docker bridge FORWARD chain protection",
+    "rg": "CrowdSec|nftables|firewall bouncer|FORWARD|Docker bridge",
+    "expected": [
+      "docker/crowdsec-entrypoint.sh",
+      "docker/crowdsec.Dockerfile",
+      "tests/test_crowdsec_installation_regressions.py",
+      "docs/deployment/configuration.md"
+    ]
+  }
+]

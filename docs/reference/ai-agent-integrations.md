@@ -115,6 +115,29 @@ The adapter set is designed to improve accuracy first, then reduce wasted contex
 - keep all workflows single-session; skills and adapters must not introduce delegated or spawned agent work
 - keep `AGENTS.md`, Claude, Gemini, Copilot, and Cursor core rules concise so they do not bloat always-on context
 
+## CocoIndex Code routing
+
+`.agents/skills/cocoindex-code-search/` defines the shared semantic routing
+workflow for every agent harness. Agents should first check whether an
+MCP server or tool named `cocoindex-code` is already available, and only read
+setup or installation instructions when it is absent. The wrapper installs the pinned
+`cocoindex-code[full]` package once per host account under
+`AGENT_COCOINDEX_HOME` or the XDG data default, then keeps each repository
+content digest in its own external mirror, database directory, and daemon
+runtime directory outside the live checkout.
+
+Agents must treat CocoIndex output as routing only. Use it to find a small
+candidate file set, then confirm exact strings, symbols, scanner findings, and
+edits with `rg`, file reads, and tests in the real checkout.
+
+MCP-capable clients can run
+`python3 tools/cocoindex_agent_search.py mcp-config` for a generic stdio
+configuration. The MCP client must launch the command from the target Git
+repository root or set `AGENT_COCOINDEX_REPO` for a workspace-scoped static
+configuration. Codex can use
+`python3 tools/cocoindex_agent_search.py mcp-install`, which registers the same
+server name without duplicating it.
+
 ## Claude Code hooks
 
 `.claude/settings.json` defines PostToolUse and PreToolUse hooks that automate rules from `AGENTS.md`:

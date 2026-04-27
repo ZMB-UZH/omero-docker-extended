@@ -13,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 CLI_TOOLS = (
     "env_safety_guard.py",
+    "cocoindex_agent_search.py",
     "extract_dockerfile_pip_deps.py",
     "frontend_preview_tooling.py",
     "git_push_with_pat.py",

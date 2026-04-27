@@ -110,6 +110,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
                 "ai-regression-testing",
                 "browser-fallback",
                 "caveman",
+                "cocoindex-code-search",
                 "compliance-and-rate-limit",
                 "context-budget",
                 "documentation-lookup",

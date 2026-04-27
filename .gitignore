@@ -47,6 +47,7 @@ dmypy.json
 .pyre/
 .pytype/
 .scannerwork/
+.cocoindex_code/
 
 # Local Django, Celery, notebook, and tool state
 *.log

@@ -31,6 +31,12 @@ KARPATHY_BADGE_IMAGE_URL = (
     "&color=555&logo=github&logoColor=white"
 )
 KARPATHY_BADGE_TARGET_URL = "https://github.com/forrestchang/andrej-karpathy-skills"
+COCOINDEX_BADGE_TITLE = "cocoindex-code"
+COCOINDEX_BADGE_IMAGE_URL = (
+    "https://img.shields.io/static/v1?label=&message=cocoindex-code"
+    "&color=555&logo=github&logoColor=white"
+)
+COCOINDEX_BADGE_TARGET_URL = "https://github.com/cocoindex-io/cocoindex-code"
 DEEPSOURCE_BADGE_TITLE = "DeepSource"
 DEEPSOURCE_BADGE_IMAGE_URL = (
     "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended.svg/"
@@ -224,6 +230,7 @@ def render_badge_block(
         f"[![{upstream_sources.badge_title}]({upstream_sources.badge_image_url})]({upstream_sources.repo_url})",
         f"[![{CAVEMAN_BADGE_TITLE}]({CAVEMAN_BADGE_IMAGE_URL})]({CAVEMAN_BADGE_TARGET_URL})",
         f"[![{KARPATHY_BADGE_TITLE}]({KARPATHY_BADGE_IMAGE_URL})]({KARPATHY_BADGE_TARGET_URL})",
+        f"[![{COCOINDEX_BADGE_TITLE}]({COCOINDEX_BADGE_IMAGE_URL})]({COCOINDEX_BADGE_TARGET_URL})",
         BADGE_BLOCK_END,
     ]
     return "\n".join(lines)
