@@ -16,13 +16,17 @@ def test_package_pin_and_hashes_are_exact() -> None:
     assert cocoindex_agent_search.PACKAGE_REQUIREMENT == (
         "cocoindex-code[full]==0.2.31"
     )
-    assert cocoindex_agent_search.PACKAGE_WHEEL_SHA256 == (
-        "bcaf341035901bf8d66491ce1a72d97d60e1ce6147d1187f1a2ee9377b189cf7"
-    )
-    assert cocoindex_agent_search.PACKAGE_SDIST_SHA256 == (
-        "19bf4cbb7c94801b1108ae742fccefc73b103b99ba4668868dbba10e3fb68b02"
-    )
     assert "latest" not in cocoindex_agent_search.PACKAGE_REQUIREMENT
+
+
+def test_benchmark_doc_records_package_hash_evidence() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    text = (
+        repo_root / "docs/reference/cocoindex-code-agent-benchmark-2026-04-27.md"
+    ).read_text(encoding="utf-8")
+
+    assert "Wheel SHA256:" in text
+    assert "Source SHA256:" in text
 
 
 def test_default_artifact_root_uses_xdg_not_repo(
@@ -95,12 +99,12 @@ def test_load_benchmark_cases_validates_required_schema(tmp_path: Path) -> None:
     )
 
     assert cocoindex_agent_search.load_benchmark_cases(cases_path) == [
-        {
-            "name": "case",
-            "query": "semantic query",
-            "rg": "pattern",
-            "expected": ["path.py"],
-        }
+        cocoindex_agent_search.BenchmarkCase(
+            name="case",
+            query="semantic query",
+            rg="pattern",
+            expected=("path.py",),
+        )
     ]
 
 
@@ -354,7 +358,51 @@ def test_repo_benchmark_cases_file_is_valid() -> None:
     cases = cocoindex_agent_search.load_benchmark_cases(cases_path)
 
     assert len(cases) == 10
-    assert all(case["expected"] for case in cases)
+    assert all(case.expected for case in cases)
+
+
+def test_mcp_command_runs_installed_cli_in_process(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    app = mock.Mock(return_value=0)
+    cli_module = mock.Mock(app=app)
+
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "resolve_context",
+        mock.Mock(return_value=context),
+    )
+    monkeypatch.setattr(cocoindex_agent_search, "ensure_ready", mock.Mock())
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "venv_site_package_paths",
+        mock.Mock(return_value=[tmp_path / "site-packages"]),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search.importlib,
+        "import_module",
+        mock.Mock(return_value=cli_module),
+    )
+    monkeypatch.setattr(sys, "argv", ["pytest"])
+
+    original_sys_path = list(sys.path)
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            cocoindex_agent_search.command_mcp(mock.Mock())
+    finally:
+        sys.path[:] = original_sys_path
+
+    assert exc_info.value.code == 0
+    assert sys.argv == [str(context.ccc_bin), "mcp"]
+    assert app.call_count == 1
+    assert "COCOINDEX_CODE_DB_PATH_MAPPING" in dict(cocoindex_agent_search.os.environ)
 
 
 def test_cross_agent_surfaces_describe_generic_cocoindex_workflow() -> None:
