@@ -90,11 +90,11 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("**0 dependency vulnerability occurrences**", runbook_text)
         expected_scanner_snapshot_commit = "".join(
             (
-                "ab3c9867",
-                "0e4149f8",
-                "497059bd",
-                "5f983857",
-                "367b653c",
+                "00c9e9c7",
+                "390f9181",
+                "30cde53e",
+                "e2923c56",
+                "79de6718",
             )
         )
         self.assertIn(expected_scanner_snapshot_commit, runbook_text)

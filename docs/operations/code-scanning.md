@@ -185,7 +185,7 @@ GitHub reported **4 open alerts on the default branch (`main` at refresh time)**
 DeepSource reported **3 grouped issues**, **109 issue occurrences**, and
 **0 dependency vulnerability occurrences** for the default branch during the
 same refresh. The API `latest_commit_oid` was
-`ab3c98670e4149f8497059bd5f983857367b653c`, the pushed default-branch
+`00c9e9c7390f918130cde53ee2923c5679de6718`, the pushed default-branch
 revision used for this snapshot.
 
 These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory when doing remediation work. Re-query the GitHub code-scanning API at the start of every remediation batch and again after the push that is expected to close alerts.
@@ -237,7 +237,7 @@ first remediation push were no longer open.
 
 The same 2026-04-27 DeepSource refresh confirmed the `SH-3015` shell
 portability finding in `scripts/omero-host-service-lib.sh` remained closed on
-`ab3c98670e4149f8497059bd5f983857367b653c` after being remediated earlier
+`00c9e9c7390f918130cde53ee2923c5679de6718` after being remediated earlier
 that day. The remaining grouped DeepSource issues were existing `SCT-1000`
 secrets findings, existing `SCT-A000` audit findings, and existing `PY-R1000`
 complexity findings.
