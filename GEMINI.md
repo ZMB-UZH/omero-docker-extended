@@ -20,7 +20,7 @@ skill catalog.
 - Honor the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` when a skill matches the task.
 - For broad repo navigation, check for a `cocoindex-code` MCP server or tool
-  first; use `.agents/skills/cocoindex-code-search/` only as semantic routing before exact `rg`. It is all-agent, XDG/`AGENT_COCOINDEX_HOME` based, and stores per-repo state outside the live checkout.
+  first; use `.agents/skills/cocoindex-code-search/` only as semantic routing before exact `rg`. It is all-agent, XDG/`AGENT_COCOINDEX_HOME` based, stores per-repo state outside the live checkout, and MCP install or launcher changes must pass `python3 tools/cocoindex_agent_search.py mcp-smoke`.
 - If the user asks for lower-token replies, use opt-in `caveman`; it is only for internal AI communication, never repo docs/comments/docstrings/function descriptions/user-facing copy, and changes reply style only, not routing, tool choice, verification scope, or uncertainty handling. Fall back to normal detail when safety or clarity is at risk.
 - Keep config environment-driven; never edit/normalize/print values from non-example deployment env files such as `env/omero_secrets.env` without an explicit one-off user exception; never use retired `.deepsource.toml`; use PAT/credential manager for GitHub HTTPS Git; ask immediately for missing credentials.
 - Live-test functional OMERO/installation changes when appropriate or requested: reconcile dirty/stale live roots non-destructively, rebuild/inject/restart from the exact checkout before commit/push, then verify green GitHub workflows and no DeepSource count increase after pushes.

@@ -38,6 +38,7 @@ DEFAULT_TIMEOUTS_SECONDS = {
     "search": 600,
     "status": 600,
     "rg": 600,
+    "mcp_smoke": 600,
 }
 
 SEARCH_FILE_RE = r"^File: (.*?):\d+(?:-\d+)? "
@@ -207,6 +208,27 @@ def checked_command(
     return completed
 
 
+def checked_git_command(
+    repo_root: Path,
+    args: list[str],
+    *,
+    cwd: Path | None = None,
+    timeout: int | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run Git with command-scoped trust for the targeted repository."""
+    trusted_root = repo_root.resolve()
+    return checked_command(
+        [
+            resolve_required_executable("git"),
+            "-c",
+            f"safe.directory={trusted_root}",
+            *args,
+        ],
+        cwd=cwd or trusted_root,
+        timeout=timeout,
+    )
+
+
 def default_artifact_root() -> Path:
     """Return the host-side artifact root without using repo-local paths."""
     override = os.environ.get(ARTIFACT_ROOT_ENV)
@@ -236,13 +258,26 @@ def timeout_seconds(name: str) -> int:
     return value
 
 
+def discover_git_root_candidate(start: Path) -> Path:
+    """Return the nearest ancestor containing a Git worktree marker."""
+    current = start.expanduser().resolve()
+    if current.is_file():
+        current = current.parent
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    raise RuntimeError(f"{start} is not inside a Git work tree.")
+
+
 def resolve_repo_root() -> Path:
     """Resolve the repository root from env or the current Git checkout."""
     override = os.environ.get(REPO_ROOT_ENV)
     if override:
         candidate = Path(override).expanduser().resolve()
-        completed = checked_command(
-            [resolve_required_executable("git"), "rev-parse", "--show-toplevel"],
+        repo_candidate = discover_git_root_candidate(candidate)
+        completed = checked_git_command(
+            repo_candidate,
+            ["rev-parse", "--show-toplevel"],
             cwd=candidate,
         )
         resolved = Path(completed.stdout.strip()).resolve()
@@ -251,8 +286,10 @@ def resolve_repo_root() -> Path:
                 f"{REPO_ROOT_ENV} must point at the Git repository root: {candidate}"
             )
         return resolved
-    completed = checked_command(
-        [resolve_required_executable("git"), "rev-parse", "--show-toplevel"],
+    candidate = discover_git_root_candidate(Path.cwd())
+    completed = checked_git_command(
+        candidate,
+        ["rev-parse", "--show-toplevel"],
         cwd=Path.cwd(),
     )
     return Path(completed.stdout.strip()).resolve()
@@ -297,16 +334,9 @@ def tracked_files(
     repo_root: Path, excluded_paths: frozenset[PurePosixPath] = frozenset()
 ) -> list[PurePosixPath]:
     """Return validated Git-visible, non-ignored files."""
-    completed = checked_command(
-        [
-            resolve_required_executable("git"),
-            "ls-files",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-            "-z",
-        ],
-        cwd=repo_root,
+    completed = checked_git_command(
+        repo_root,
+        ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
     )
     paths = [
         validate_repo_relative_path(path)
@@ -823,9 +853,9 @@ def run_benchmark(
     payload = {
         "benchmark_schema": 1,
         "package": PACKAGE_REQUIREMENT,
-        "repo_head": checked_command(
-            [resolve_required_executable("git"), "rev-parse", "HEAD"],
-            cwd=context.repo_root,
+        "repo_head": checked_git_command(
+            context.repo_root,
+            ["rev-parse", "HEAD"],
         ).stdout.strip(),
         "mirror_digest": context.mirror_digest,
         "benchmark_excluded_paths": [
@@ -892,6 +922,7 @@ def command_mcp(_args: argparse.Namespace) -> None:
     env = ccc_env(context)
     for site_package_path in venv_site_package_paths(context):
         sys.path.insert(0, str(site_package_path))
+    os.chdir(context.mirror_repo)
     os.environ.clear()
     os.environ.update(env)
     sys.argv = [str(context.ccc_bin), "mcp"]
@@ -963,6 +994,45 @@ def command_mcp_install(_args: argparse.Namespace) -> None:
         cwd=context.repo_root,
     )
     print(f"MCP server configured: {MCP_SERVER_NAME}")
+
+
+def run_mcp_stdio_smoke(context: CocoIndexContext) -> dict[str, object]:
+    """Run a real MCP initialize/list_tools probe against this wrapper."""
+    for site_package_path in venv_site_package_paths(context):
+        sys.path.insert(0, str(site_package_path))
+    anyio_module = importlib.import_module("anyio")
+    mcp_module = importlib.import_module("mcp")
+    stdio_module = importlib.import_module("mcp.client.stdio")
+    client_session = cast(Any, mcp_module).ClientSession
+    server_parameters = cast(Any, mcp_module).StdioServerParameters
+    stdio_client = cast(Any, stdio_module).stdio_client
+
+    async def probe() -> dict[str, object]:
+        params = server_parameters(
+            command=sys.executable,
+            args=[str(Path(__file__).resolve()), "mcp"],
+            env={ARTIFACT_ROOT_ENV: str(context.artifact_root)},
+            cwd=str(context.repo_root),
+        )
+        with cast(Any, anyio_module).fail_after(timeout_seconds("mcp_smoke")):
+            async with stdio_client(params) as (read_stream, write_stream):
+                async with client_session(read_stream, write_stream) as session:
+                    initialized = await session.initialize()
+                    tools = await session.list_tools()
+        server_info = initialized.serverInfo
+        return {
+            "server_name": server_info.name,
+            "server_version": server_info.version,
+            "tools": sorted(tool.name for tool in tools.tools),
+        }
+
+    return cast(dict[str, object], cast(Any, anyio_module).run(probe))
+
+
+def command_mcp_smoke(_args: argparse.Namespace) -> None:
+    context = resolve_context()
+    ensure_ready(context)
+    print(json.dumps(run_mcp_stdio_smoke(context), indent=2, sort_keys=True))
 
 
 def command_benchmark(args: argparse.Namespace) -> None:
@@ -1038,6 +1108,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Idempotently register the Codex MCP server as cocoindex-code.",
     )
     mcp_install.set_defaults(func=command_mcp_install)
+
+    mcp_smoke = subparsers.add_parser(
+        "mcp-smoke",
+        help="Launch this MCP server over stdio and verify initialize/list_tools.",
+    )
+    mcp_smoke.set_defaults(func=command_mcp_smoke)
 
     benchmark = subparsers.add_parser(
         "benchmark",

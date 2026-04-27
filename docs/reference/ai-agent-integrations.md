@@ -136,7 +136,10 @@ configuration. The MCP client must launch the command from the target Git
 repository root or set `AGENT_COCOINDEX_REPO` for a workspace-scoped static
 configuration. Codex can use
 `python3 tools/cocoindex_agent_search.py mcp-install`, which registers the same
-server name without duplicating it.
+server name without duplicating it. After any MCP install, config change, or
+launcher change, run `python3 tools/cocoindex_agent_search.py mcp-smoke` from
+the target repo root; the MCP path is not verified until stdio `initialize` and
+`list_tools` both succeed.
 
 ## Claude Code hooks
 

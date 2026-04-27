@@ -404,7 +404,9 @@ Broad AI-agent repo navigation can use the all-agent
 validation. Agents check for an existing MCP server or tool named
 `cocoindex-code` first. Its wrapper keeps the pinned host install under XDG data
 paths or `AGENT_COCOINDEX_HOME`, with per-repository mirrors, databases, and
-runtime directories outside the live checkout.
+runtime directories outside the live checkout. After MCP install or launcher
+changes, agents verify the stdio handshake with
+`python3 tools/cocoindex_agent_search.py mcp-smoke`.
 
 | Entry point | Purpose |
 | --- | --- |
