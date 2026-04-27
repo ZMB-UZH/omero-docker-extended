@@ -19,7 +19,7 @@ skill catalog.
 - Honor the routing doc's numeric caps before broadening context.
 - Use repo-local skills from `.agents/skills/` when they match the task.
 - For broad repo navigation, check for a `cocoindex-code` MCP server or tool
-  first; use `.agents/skills/cocoindex-code-search/` only as semantic routing before exact `rg`. It is all-agent, XDG/`AGENT_COCOINDEX_HOME` based, and stores per-repo state outside the live checkout.
+  first; use `.agents/skills/cocoindex-code-search/` only as semantic routing before exact `rg`. It is all-agent, XDG/`AGENT_COCOINDEX_HOME` based, stores per-repo state outside the live checkout, and MCP install or launcher changes must pass `python3 tools/cocoindex_agent_search.py mcp-smoke`.
 - If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill. It is for internal AI communication only, never for repo docs, comments, docstrings, function descriptions, or user-facing copy.
 - It changes reply style only, not routing, tool choice, verification scope, or uncertainty handling. Return to normal detail for destructive actions, security guidance, or unresolved ambiguity.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.

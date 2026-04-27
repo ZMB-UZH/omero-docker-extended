@@ -67,7 +67,8 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 - Use `cocoindex-code-search` only as a shared host-side routing aid: check for
   an existing MCP server or tool named `cocoindex-code` first, use one pinned
   install under XDG data paths or `AGENT_COCOINDEX_HOME`, keep per-repository
-  external mirrors and databases outside the live checkout, then exact `rg`
+  external mirrors and databases outside the live checkout, verify MCP changes
+  with `python3 tools/cocoindex_agent_search.py mcp-smoke`, then exact `rg`
   confirmation before editing.
 - Never paste secrets, PATs, passwords, or internal-only URLs into external research tools.
 - `caveman` is opt-in and available through the shared `.agents/skills/` catalog like every other skill. Use it only when the user asks for terseness or lower token usage, and drop it immediately if clarity or safety would suffer.

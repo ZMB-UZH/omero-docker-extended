@@ -18,15 +18,18 @@ reduce context before exact `rg`, file reads, and tests.
 3. Use `python3 tools/cocoindex_agent_search.py mcp-install` for Codex, or
    `python3 tools/cocoindex_agent_search.py mcp-config` for other MCP clients,
    only when the MCP server is absent.
-4. Use `python3 tools/cocoindex_agent_search.py install` directly only when MCP
+4. After installing, changing, or debugging the MCP path, run
+   `python3 tools/cocoindex_agent_search.py mcp-smoke`; registration alone is
+   not proof until stdio `initialize` and `list_tools` both succeed.
+5. Use `python3 tools/cocoindex_agent_search.py install` directly only when MCP
    is unavailable or a CLI-only workflow is intentionally being prepared.
-5. Use `python3 tools/cocoindex_agent_search.py search --limit 5 "<query>"` for
+6. Use `python3 tools/cocoindex_agent_search.py search --limit 5 "<query>"` for
    subsystem routing, then confirm the returned files with `rg` in the real repo.
-6. Use `--path '<glob>'` only after the first pass identifies a likely subtree.
-7. Run
+7. Use `--path '<glob>'` only after the first pass identifies a likely subtree.
+8. Run
    `python3 tools/cocoindex_agent_search.py benchmark --cases <cases.json>`
    when changing this workflow or after a major CocoIndex Code release.
-8. Skip CocoIndex when an exact string, symbol, or small `rg` result is already
+9. Skip CocoIndex when an exact string, symbol, or small `rg` result is already
    likely; the hybrid path is for broad routing where candidate output would be
    large.
 
@@ -60,7 +63,9 @@ reduce context before exact `rg`, file reads, and tests.
   for a workspace-scoped static config.
 - Codex: run `python3 tools/cocoindex_agent_search.py mcp-install`. It registers
   one workspace-agnostic MCP server named `cocoindex-code` and does not add a
-  duplicate if that name already exists.
+  duplicate if that name already exists. Then run
+  `python3 tools/cocoindex_agent_search.py mcp-smoke` from the target repo root
+  to prove the configured server completes the MCP handshake.
 
 ## Stop signs
 

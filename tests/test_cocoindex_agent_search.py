@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -56,6 +58,135 @@ def test_timeout_env_override_rejects_invalid_values(
 
     with pytest.raises(RuntimeError, match="positive integer"):
         cocoindex_agent_search.timeout_seconds("search")
+
+
+def test_discover_git_root_candidate_walks_from_nested_path(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    nested = repo / "src" / "package"
+    nested.mkdir(parents=True)
+    (repo / ".git").mkdir()
+
+    assert cocoindex_agent_search.discover_git_root_candidate(nested) == repo.resolve()
+
+
+def test_resolve_repo_root_uses_command_scoped_safe_directory_from_cwd(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repo = (tmp_path / "repo").resolve()
+    nested = repo / "docs"
+    nested.mkdir(parents=True)
+    (repo / ".git").mkdir()
+
+    def fake_checked_command(
+        args: list[str],
+        *,
+        cwd: Path,
+        env: dict[str, str] | None = None,
+        timeout: int | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        assert env is None
+        assert timeout is None
+        assert cwd == nested
+        assert args[:3] == [
+            "/usr/bin/git",
+            "-c",
+            f"safe.directory={repo}",
+        ]
+        assert args[3:] == ["rev-parse", "--show-toplevel"]
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=f"{repo}\n")
+
+    monkeypatch.chdir(nested)
+    monkeypatch.delenv(cocoindex_agent_search.REPO_ROOT_ENV, raising=False)
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "resolve_required_executable",
+        mock.Mock(return_value="/usr/bin/git"),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "checked_command",
+        fake_checked_command,
+    )
+
+    assert cocoindex_agent_search.resolve_repo_root() == repo
+
+
+def test_resolve_repo_root_rejects_env_override_that_is_not_repo_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repo = (tmp_path / "repo").resolve()
+    nested = repo / "docs"
+    nested.mkdir(parents=True)
+    (repo / ".git").mkdir()
+
+    monkeypatch.setenv(cocoindex_agent_search.REPO_ROOT_ENV, str(nested))
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "resolve_required_executable",
+        mock.Mock(return_value="/usr/bin/git"),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "checked_command",
+        mock.Mock(
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=f"{repo}\n"
+            )
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="must point at the Git repository root"):
+        cocoindex_agent_search.resolve_repo_root()
+
+
+def test_tracked_files_uses_command_scoped_safe_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repo = (tmp_path / "repo").resolve()
+    repo.mkdir()
+
+    def fake_checked_command(
+        args: list[str],
+        *,
+        cwd: Path,
+        env: dict[str, str] | None = None,
+        timeout: int | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        assert env is None
+        assert timeout is None
+        assert cwd == repo
+        assert args[:3] == [
+            "/usr/bin/git",
+            "-c",
+            f"safe.directory={repo}",
+        ]
+        assert args[3:] == [
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ]
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout="tools/cocoindex_agent_search.py\0",
+        )
+
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "resolve_required_executable",
+        mock.Mock(return_value="/usr/bin/git"),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "checked_command",
+        fake_checked_command,
+    )
+
+    assert cocoindex_agent_search.tracked_files(repo) == [
+        PurePosixPath("tools/cocoindex_agent_search.py")
+    ]
 
 
 @pytest.mark.parametrize(
@@ -372,6 +503,7 @@ def test_mcp_command_runs_installed_cli_in_process(
     )
     app = mock.Mock(return_value=0)
     cli_module = mock.Mock(app=app)
+    context.mirror_repo.mkdir(parents=True)
 
     monkeypatch.setenv("PATH", "/usr/bin")
     monkeypatch.setattr(
@@ -393,16 +525,124 @@ def test_mcp_command_runs_installed_cli_in_process(
     monkeypatch.setattr(sys, "argv", ["pytest"])
 
     original_sys_path = list(sys.path)
+    original_cwd = Path.cwd()
     try:
         with pytest.raises(SystemExit) as exc_info:
             cocoindex_agent_search.command_mcp(mock.Mock())
+        assert Path.cwd() == context.mirror_repo
     finally:
+        os.chdir(original_cwd)
         sys.path[:] = original_sys_path
 
     assert exc_info.value.code == 0
     assert sys.argv == [str(context.ccc_bin), "mcp"]
     assert app.call_count == 1
     assert "COCOINDEX_CODE_DB_PATH_MAPPING" in dict(cocoindex_agent_search.os.environ)
+
+
+def test_mcp_smoke_uses_workspace_root_and_minimal_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path / "repo",
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    captured_params: dict[str, object] = {}
+
+    class FakeFailAfter:
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(self, *args: object) -> bool:
+            return False
+
+    class FakeServerParameters:
+        def __init__(
+            self,
+            *,
+            command: str,
+            args: list[str],
+            env: dict[str, str],
+            cwd: str,
+        ) -> None:
+            captured_params.update(
+                {"command": command, "args": args, "env": env, "cwd": cwd}
+            )
+
+    class FakeStdioClient:
+        def __init__(self, _params: FakeServerParameters) -> None:
+            pass
+
+        async def __aenter__(self) -> tuple[object, object]:
+            return object(), object()
+
+        async def __aexit__(self, *args: object) -> bool:
+            return False
+
+    class FakeSession:
+        def __init__(self, _read_stream: object, _write_stream: object) -> None:
+            pass
+
+        async def __aenter__(self) -> "FakeSession":
+            return self
+
+        async def __aexit__(self, *args: object) -> bool:
+            return False
+
+        async def initialize(self) -> object:
+            return SimpleNamespace(
+                serverInfo=SimpleNamespace(name="fake", version="1.0")
+            )
+
+        async def list_tools(self) -> object:
+            return SimpleNamespace(
+                tools=[SimpleNamespace(name="search"), SimpleNamespace(name="index")]
+            )
+
+    fake_anyio = mock.Mock()
+    fake_anyio.fail_after = mock.Mock(return_value=FakeFailAfter())
+    fake_anyio.run.side_effect = lambda function: __import__("asyncio").run(function())
+    fake_mcp = mock.Mock(
+        ClientSession=FakeSession,
+        StdioServerParameters=FakeServerParameters,
+    )
+    fake_stdio = mock.Mock(stdio_client=FakeStdioClient)
+
+    def fake_import_module(name: str) -> object:
+        return {
+            "anyio": fake_anyio,
+            "mcp": fake_mcp,
+            "mcp.client.stdio": fake_stdio,
+        }[name]
+
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "venv_site_package_paths",
+        mock.Mock(return_value=[tmp_path / "site-packages"]),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search.importlib,
+        "import_module",
+        fake_import_module,
+    )
+
+    original_sys_path = list(sys.path)
+    try:
+        assert cocoindex_agent_search.run_mcp_stdio_smoke(context) == {
+            "server_name": "fake",
+            "server_version": "1.0",
+            "tools": ["index", "search"],
+        }
+    finally:
+        sys.path[:] = original_sys_path
+    assert captured_params["command"] == sys.executable
+    assert captured_params["args"][-1] == "mcp"
+    assert captured_params["env"] == {
+        cocoindex_agent_search.ARTIFACT_ROOT_ENV: str(context.artifact_root)
+    }
+    assert captured_params["cwd"] == str(context.repo_root)
 
 
 def test_cross_agent_surfaces_describe_generic_cocoindex_workflow() -> None:
@@ -423,6 +663,7 @@ def test_cross_agent_surfaces_describe_generic_cocoindex_workflow() -> None:
         assert "cocoindex-code-search" in text, relative_path
         assert "MCP" in text and "cocoindex-code" in text, relative_path
         assert "semantic routing" in text, relative_path
+        assert "mcp-smoke" in text, relative_path
         assert "rg" in text, relative_path
         assert "AGENT_COCOINDEX_HOME" in text, relative_path
         assert ".cocoindex_code/" in text or "outside the live checkout" in text, (
