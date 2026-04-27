@@ -13,6 +13,7 @@ import stat
 import subprocess
 import tempfile
 import time
+from contextlib import suppress
 
 DEFAULT_OUTPUT = "/textfile/omero_paths.prom"
 DEFAULT_INTERVAL_SECONDS = 30
@@ -193,10 +194,8 @@ def write_metrics(content: str) -> None:
         os.replace(tmp_name, OUT)
     except Exception:
         if tmp_name is not None:
-            try:
+            with suppress(FileNotFoundError):
                 os.unlink(tmp_name)
-            except FileNotFoundError:
-                pass
         raise
 
 
