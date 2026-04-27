@@ -16,7 +16,7 @@ import time
 import venv
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import TextIO
+from typing import Any, TextIO, cast
 
 
 PACKAGE_NAME = "cocoindex-code"
@@ -895,7 +895,8 @@ def command_mcp(_args: argparse.Namespace) -> None:
     os.environ.clear()
     os.environ.update(env)
     sys.argv = [str(context.ccc_bin), "mcp"]
-    app = getattr(importlib.import_module("cocoindex_code.cli"), "app")
+    cli_module = importlib.import_module("cocoindex_code.cli")
+    app = cast(Any, cli_module).app
     raise SystemExit(app())
 
 
