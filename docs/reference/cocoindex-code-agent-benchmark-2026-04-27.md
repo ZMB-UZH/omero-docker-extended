@@ -69,7 +69,8 @@ reported the server already configured, and `codex mcp list` showed exactly one
 
 ## Final Benchmark Result
 
-- Repo head: `789ab5ba3c6a8a6a0ed2734661d1fd87e145bad1`
+- Benchmarked implementation head:
+  `789ab5ba3c6a8a6a0ed2734661d1fd87e145bad1`
 - Mirror digest: `9579c4e0e25c394383154539f03c2f28`
 - SQLite DB size: `35,684,352` bytes
 - Cold index time: `218.64` seconds
