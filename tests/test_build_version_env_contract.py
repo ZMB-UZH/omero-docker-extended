@@ -72,10 +72,29 @@ class BuildVersionEnvContractTests(unittest.TestCase):
 
     def test_alloy_persists_runtime_positions(self) -> None:
         compose_text = self.read_text("docker-compose.yml")
+        alloy_service = compose_text.split("\n  alloy:\n", 1)[1].split(
+            "\n  prometheus:\n", 1
+        )[0]
         self.assertIn("--storage.path=/data-alloy", compose_text)
         self.assertIn(
             "${ALLOY_DATA_PATH:?Set ALLOY_DATA_PATH (run installation/installation_script.sh)}:/data-alloy:rw",
-            compose_text,
+            alloy_service,
+        )
+        self.assertIn(
+            "${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/logs/omeroserver:ro",
+            alloy_service,
+        )
+        self.assertIn(
+            "${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (run installation/installation_script.sh)}:/logs/omeroweb:ro",
+            alloy_service,
+        )
+        self.assertIn(
+            "${OMERO_WEB_SUPERVISOR_LOGS_PATH:?Set OMERO_WEB_SUPERVISOR_LOGS_PATH (run installation/installation_script.sh)}:/logs/omeroweb-supervisor:ro",
+            alloy_service,
+        )
+        self.assertNotIn(
+            "${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:ro",
+            alloy_service,
         )
 
     def test_installation_script_manages_alloy_data_path_contract(self) -> None:

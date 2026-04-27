@@ -8,13 +8,14 @@ set -eu
 deny='^(dev|proc|sys|run|etc|usr|var|bin|sbin|lib|lib64|root|tmp|rootfs|boot)$'
 
 if [ -d /rootfs ]; then
-  for d in $(ls -1 /rootfs 2>/dev/null || true); do
+  for rootfs_entry in /rootfs/*; do
+    [ -e "$rootfs_entry" ] || continue
+    d=${rootfs_entry#/rootfs/}
     echo "$d" | grep -Eq "$deny" && continue
     [ -e "/$d" ] && continue
-    [ -e "/rootfs/$d" ] || continue
 
-    mkdir -p "/$d"
-    mount --rbind "/rootfs/$d" "/$d" 2>/dev/null || true
+    mkdir -p "/$d" || continue
+    mount --rbind "$rootfs_entry" "/$d" 2>/dev/null || true
     mount -o remount,ro,bind "/$d" 2>/dev/null || true
   done
 fi

@@ -20,4 +20,4 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Monthly: REINDEX CONCURRENTLY on both databases (first Sunday of the month at 04:00)
 # The [ $(date +\%d) -le 7 ] trick ensures it only runs on the first Sunday.
-0 4 * * 0   [ "$(date +\%d)" -le 7 ] && /usr/local/bin/pg-maintenance-cron-runner reindex >> /var/log/pg-maintenance.log 2>&1
+0 4 * * 0   if [ "$(date +\%d)" -le 7 ]; then /usr/local/bin/pg-maintenance-cron-runner reindex; fi >> /var/log/pg-maintenance.log 2>&1

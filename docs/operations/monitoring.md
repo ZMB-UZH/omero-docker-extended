@@ -44,6 +44,7 @@ remain optional explicit overrides when required by host policy.
 | `monitoring/postgres-exporter/postgres_exporter.yml`                | Explicit Postgres exporter config file (keeps startup deterministic, no implicit defaults) |
 | `monitoring/crowdsec/acquis.yaml`                                   | CrowdSec log acquisition sources (host syslog, Docker containers)                          |
 | `monitoring/path-usage-exporter/path_usage_exporter.py`             | Path usage exporter script for OMERO volume metrics                                        |
+| `monitoring/prometheus/smart_disk_monitor.sh`                       | Standalone disk textfile helper; not part of the default Compose stack                     |
 
 ## Prometheus scrape targets
 
@@ -132,19 +133,43 @@ Four dashboards auto-provisioned in the `OMERO` folder:
    dashboard. Top summary stats include host CPU/memory, root and swap usage,
    and dynamic filesystem utilization for OMERO data and database paths from
    `installation_paths.env`, collected by the path-usage exporter via host
-   `df -P -B1`. The database-path stat renders one percentage when both
+   `df -kP`. The database-path stat renders one percentage when both
    database paths are on the same filesystem mountpoint, or two percentages
    when they are on different mountpoints.
 2. **Database Metrics** (`database-metrics.json`) -- OMERO core database: connections, transactions, index usage, table sizes.
 3. **Plugin Database Metrics** (`plugin-database-metrics.json`) -- OMERO plugin database: same metrics for the omero-plugin database.
 4. **Redis Metrics** (`redis-metrics.json`) -- memory usage, connected clients, commands/sec, keyspace stats.
 
+### Path usage exporter controls
+
+The default Compose stack mounts `installation_paths.env` at
+`/config/installation_paths.env`, the host root at `/host`, and the
+node-exporter textfile directory at `/textfile`. The path usage exporter keeps
+those defaults for existing deployments and also accepts these optional runtime
+overrides when a derived deployment needs different mount points or timing:
+
+- `PATH_USAGE_EXPORTER_OUTPUT` (default `/textfile/omero_paths.prom`)
+- `PATH_USAGE_EXPORTER_INTERVAL_SECONDS` (default `30`)
+- `PATH_USAGE_EXPORTER_ENV_FILE` (default `/config/installation_paths.env`)
+- `PATH_USAGE_EXPORTER_HOST_ROOT` (default `/host`)
+- `PATH_USAGE_EXPORTER_DF_TIMEOUT_SECONDS` (default `10`)
+
+The exporter reads only absolute paths from `installation_paths.env`, resolves
+them under the configured host-root mount, and escapes Prometheus label values
+before writing textfile metrics atomically.
+
 ## Alloy log collection
 
 Alloy collects logs from two sources:
 
 1. **Docker container logs**: discovered via Docker socket (`/var/run/docker.sock`), relabeled with `compose_service` and `container` labels.
-2. **OMERO internal log files**: discovered by file path patterns in mounted OMERO server and web log directories (`*.log`, `*.out`, `*.err`). Labeled with `compose_service`, `log_type=internal`, and `filepath`.
+2. **OMERO internal log files**: discovered by file path patterns in mounted
+   OMERO server and web log directories (`*.log`, `*.out`, `*.err`). Compose
+   mounts the installation-specific host paths into Alloy under neutral
+   collector paths (`/logs/omeroserver`, `/logs/omeroweb`, and
+   `/logs/omeroweb-supervisor`), so the Alloy config does not encode the host
+   installation root. Labeled with `compose_service`, `log_type=internal`, and
+   `filepath`.
 
 All logs are pushed to Loki at `http://loki:3100/loki/api/v1/push`.
 
