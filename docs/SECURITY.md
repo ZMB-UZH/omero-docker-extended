@@ -20,7 +20,10 @@ Security practices and controls for this deployment.
   for startup bind-mount reconciliation, and the entrypoints drop to the
   application users before launching the long-running processes.
 - The `omero-celery-worker` container runs as a dedicated `celery` user (uid/gid 10001).
-- Redis runs with `maxmemory 512mb` and `allkeys-lru` eviction on tmpfs (no persistent state).
+- Redis runs without persistent state. Compose defaults to
+  `REDIS_MAXMEMORY=512mb`, `REDIS_MAXMEMORY_POLICY=allkeys-lru`, and tmpfs
+  sizing from `REDIS_DATA_TMPFS_SIZE`, all interpolated from the generated
+  `.env` file when present.
 - `cadvisor` runs privileged because it inspects host/container runtime state for metrics.
 - The `crowdsec`, `pg-maintenance`, and `redis-sysctl-init` helper images
   default to non-root users. Compose explicitly runs these helper services as

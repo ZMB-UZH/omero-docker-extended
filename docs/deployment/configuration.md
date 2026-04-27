@@ -36,6 +36,13 @@ This repository expresses those OMERO properties in env files with the existing 
 - `env/omero-celery_example.env` -> `env/omero-celery.env`: Celery and Imaris connector processing controls.
 - `env/grafana_example.env` -> `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
 - `env/omero_secrets_example.env` -> `env/omero_secrets.env`: credentials and secrets (deployment-local only; never commit runtime secrets). This now includes the local `supervisord` socket credentials used by the `omeroweb` container's `supervisorctl` interface.
+- Redis memory sizing is interpolated from the generated `.env` file. The
+  installer writes `REDIS_MAXMEMORY=512mb`,
+  `REDIS_MAXMEMORY_POLICY=allkeys-lru`, `REDIS_DATA_TMPFS_SIZE=512m`,
+  `REDIS_APPENDONLY=no`, and an empty `REDIS_SAVE_POLICY` unless the operator
+  provides different values before generation. Existing installs that do not
+  have these keys keep the same Compose defaults through fallback
+  interpolation.
 - `CONFIG_omero_pixeldata_threads` (in `env/omeroserver*.env`) sets OMERO's `omero.pixeldata.threads` property. The official OMERO docs list a default of `2`; this repository tracks `4` to increase concurrent pixel-pyramid work via the same env-driven server configuration path.
 - CrowdSec pre-installs the `cs-firewall-bouncer` binary plus both `nftables`
   and `iptables`/`ipset` backends at image build time

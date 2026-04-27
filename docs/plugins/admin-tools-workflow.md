@@ -71,7 +71,8 @@ flowchart TD
   source keys and basename rules before LogQL construction.
 - Severity normalization maps mixed Loki/source labels (including missing/`unknown`) to canonical severities (`debug`, `info`, `warn`, `error`, `fatal`) using stream labels plus message-pattern inference.
 - Traceback-continuation lines and RedisBloom `bf-error-rate` entries are classified as non-error noise.
-- Internal log file selections are batched to avoid one-Loki-query-per-file fan-out.
+- Internal log file selections are batched to avoid one-Loki-query-per-file fan-out. If a multi-file internal batch times out or fails, the query is split into smaller batches before the request is considered failed.
+- Log requests fail loudly when any selected source cannot be queried after bounded retries; they do not return silently incomplete source sets.
 - Repeated identical requests are served from a process-local RAM cache (budget controlled by `ADMIN_TOOLS_LOG_CACHE_MAX_MB`).
 
 ### 2. Resource monitoring
@@ -122,7 +123,7 @@ flowchart TD
 
 ## Failure boundaries
 
-- **Loki unreachable**: log page shows connection error; cached results remain available.
+- **Loki unreachable or selected source query failure**: log page shows a backend error instead of returning silently incomplete results.
 - **Grafana proxy timeout**: returns `504 Gateway Timeout` instead of Django `500`.
 - **Quota state file permission error**: reconciliation fails with explicit permission diagnostics (including UID/GID and mode details).
 - **Missing group directory**: quota stays pending with logged explanation; no external directory creation.

@@ -18,7 +18,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, cast
 import urllib.parse
 import requests
 
-from ..config import LogConfig
+from ..config import LogConfig, DEFAULT_LOG_INTERNAL_FILE_BATCH_SIZE
 from omero_plugin_common.logging_utils import (
     sanitize_log_value,
     sanitize_url_for_logging,
@@ -31,8 +31,6 @@ _LABEL_CACHE_TTL_SECONDS = 60.0
 _DEFAULT_LOG_CACHE_MAX_BYTES = 512 * 1024 * 1024
 _DEFAULT_LABEL_CACHE_MAX_BYTES = 8 * 1024 * 1024
 _CACHE_MAX_ITEMS = 128
-_MAX_PARALLEL_LOKI_QUERIES = 4
-_INTERNAL_FILE_QUERY_BATCH_SIZE = 12
 _COMPOSE_SERVICE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _INTERNAL_LOG_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$")
 
@@ -70,6 +68,15 @@ class _QueryJob:
     source_type: str
     source_name: str
     selected_files: Tuple[str, ...] = ()
+    text_query: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class _QueryFailure:
+    """Sanitized summary of a Loki source query failure."""
+
+    job: _QueryJob
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -680,8 +687,11 @@ def _prepare_query_jobs(
     containers: List[str],
     internal_files: Optional[Dict[str, set[str]]] = None,
     text_query: Optional[str] = None,
+    internal_file_batch_size: int = DEFAULT_LOG_INTERNAL_FILE_BATCH_SIZE,
 ) -> List[_QueryJob]:
     """Build the minimal set of Loki queries required for the request."""
+    if internal_file_batch_size <= 0:
+        raise ValueError("internal_file_batch_size must be positive")
     docker_containers = [c for c in containers if not c.endswith("_internal")]
     internal_services = [c for c in containers if c.endswith("_internal")]
     jobs: List[_QueryJob] = []
@@ -692,13 +702,14 @@ def _prepare_query_jobs(
                 query=_append_text_filter(_build_docker_query(container), text_query),
                 source_type="docker",
                 source_name=container,
+                text_query=text_query,
             )
         )
 
     for service in internal_services:
         selected_files = sorted((internal_files or {}).get(service, set()))
         if selected_files:
-            for batch in _chunks(selected_files, _INTERNAL_FILE_QUERY_BATCH_SIZE):
+            for batch in _chunks(selected_files, internal_file_batch_size):
                 jobs.append(
                     _QueryJob(
                         query=_append_text_filter(
@@ -711,6 +722,7 @@ def _prepare_query_jobs(
                         source_type="internal_batch",
                         source_name=service,
                         selected_files=batch,
+                        text_query=text_query,
                     )
                 )
             continue
@@ -724,10 +736,111 @@ def _prepare_query_jobs(
                 ),
                 source_type="internal_all",
                 source_name=service,
+                text_query=text_query,
             )
         )
 
     return jobs
+
+
+def _split_internal_query_job(job: _QueryJob) -> List[_QueryJob]:
+    """Split an internal batch job into two smaller jobs preserving filters."""
+    if job.source_type != "internal_batch" or len(job.selected_files) <= 1:
+        return []
+    midpoint = max(1, len(job.selected_files) // 2)
+    split_jobs: List[_QueryJob] = []
+    for batch in (job.selected_files[:midpoint], job.selected_files[midpoint:]):
+        if not batch:
+            continue
+        split_jobs.append(
+            _QueryJob(
+                query=_append_text_filter(
+                    _build_internal_files_query(job.source_name, batch),
+                    job.text_query,
+                ),
+                source_type=job.source_type,
+                source_name=job.source_name,
+                selected_files=batch,
+                text_query=job.text_query,
+            )
+        )
+    return split_jobs
+
+
+def _execute_internal_batch_with_split(
+    config: LogConfig,
+    job: _QueryJob,
+    lookback_seconds: int,
+    max_entries: int,
+    since_ns: Optional[int],
+    *,
+    try_current_batch: bool = True,
+) -> Tuple[_QueryJob, List[LogEntry]]:
+    """Run an internal file query and recursively split timed-out batches."""
+    if try_current_batch:
+        try:
+            resolved_job, entries = _execute_query_job(
+                config,
+                job,
+                lookback_seconds,
+                max_entries,
+                since_ns,
+            )
+        except Exception:
+            split_jobs = _split_internal_query_job(job)
+            if not split_jobs:
+                raise
+        else:
+            return resolved_job, _filter_internal_batch_entries(
+                resolved_job.source_name,
+                resolved_job.selected_files,
+                entries,
+            )
+    else:
+        split_jobs = _split_internal_query_job(job)
+        if not split_jobs:
+            raise RuntimeError("internal log query failed and cannot be split further")
+
+    if split_jobs:
+        logger.warning(
+            "Internal log query failed for %s/%s; retrying as %d smaller batches.",
+            sanitize_log_value(job.source_name),
+            sanitize_log_value(",".join(job.selected_files)),
+            len(split_jobs),
+        )
+        split_entries: List[LogEntry] = []
+        for split_job in split_jobs:
+            _resolved_split_job, entries = _execute_internal_batch_with_split(
+                config,
+                split_job,
+                lookback_seconds,
+                max_entries,
+                since_ns,
+            )
+            split_entries.extend(entries)
+        return job, split_entries
+    raise RuntimeError("internal log query failed before split could complete")
+
+
+def _describe_query_job(job: _QueryJob) -> str:
+    """Return a sanitized human-readable source description for errors."""
+    if job.source_type == "internal_batch" and job.selected_files:
+        return (
+            f"{job.source_name}/"
+            f"{','.join(_validated_internal_log_filename(name) for name in job.selected_files)}"
+        )
+    return job.source_name
+
+
+def _format_query_failures(failures: Sequence[_QueryFailure]) -> str:
+    """Build a bounded error message for failed Loki source queries."""
+    shown = [
+        f"{failure.job.source_type}:{_describe_query_job(failure.job)}: {failure.reason}"
+        for failure in failures[:3]
+    ]
+    if len(failures) > len(shown):
+        shown.append(f"{len(failures) - len(shown)} more")
+    return "; ".join(shown)
 
 
 def _execute_query_job(
@@ -780,6 +893,7 @@ def _fetch_loki_logs_uncached(
         containers,
         internal_files=internal_files,
         text_query=text_query,
+        internal_file_batch_size=config.internal_file_batch_size,
     )
     logger.debug(
         "fetch_loki_logs called: jobs=%d, lookback=%d, max=%d, since_ns=%s, text_query=%r",
@@ -794,7 +908,8 @@ def _fetch_loki_logs_uncached(
 
     all_entries: List[LogEntry] = []
     internal_entries_by_service: Dict[str, List[LogEntry]] = {}
-    worker_count = max(1, min(len(jobs), _MAX_PARALLEL_LOKI_QUERIES))
+    failures: List[_QueryFailure] = []
+    worker_count = max(1, min(len(jobs), config.max_parallel_queries))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
         future_to_job = {
@@ -815,12 +930,29 @@ def _fetch_loki_logs_uncached(
                 _resolved_job, entries = future.result()
             except Exception as exc:
                 if job.source_type == "internal_batch" and job.selected_files:
-                    logger.warning(
-                        "Internal log query failed for %s/%s: %s",
-                        sanitize_log_value(job.source_name),
-                        sanitize_log_value(",".join(job.selected_files)),
-                        sanitize_log_value(exc),
-                    )
+                    try:
+                        _resolved_job, entries = _execute_internal_batch_with_split(
+                            config,
+                            job,
+                            lookback_seconds,
+                            max_entries,
+                            since_ns,
+                            try_current_batch=False,
+                        )
+                    except Exception as split_exc:
+                        logger.warning(
+                            "Internal log query failed for %s/%s: %s",
+                            sanitize_log_value(job.source_name),
+                            sanitize_log_value(",".join(job.selected_files)),
+                            sanitize_log_value(split_exc),
+                        )
+                        failures.append(
+                            _QueryFailure(
+                                job=job,
+                                reason=sanitize_log_value(split_exc),
+                            )
+                        )
+                        continue
                 else:
                     logger.warning(
                         "%s log query failed for %s: %s",
@@ -830,7 +962,10 @@ def _fetch_loki_logs_uncached(
                         sanitize_log_value(job.source_name),
                         sanitize_log_value(exc),
                     )
-                continue
+                    failures.append(
+                        _QueryFailure(job=job, reason=sanitize_log_value(exc))
+                    )
+                    continue
 
             if job.source_type == "docker":
                 logger.debug(
@@ -855,6 +990,12 @@ def _fetch_loki_logs_uncached(
                 len(entries),
             )
             internal_entries_by_service.setdefault(job.source_name, []).extend(entries)
+
+    if failures:
+        raise RuntimeError(
+            "Loki log query failed for "
+            f"{len(failures)} source(s): {_format_query_failures(failures)}"
+        )
 
     for service, service_entries in internal_entries_by_service.items():
         if len(service_entries) > max_entries:
@@ -980,6 +1121,8 @@ def _build_logs_cache_key(
             "internal_files": normalized_internal,
             "since_ns": since_ns,
             "text_query": text_query or "",
+            "internal_file_batch_size": config.internal_file_batch_size,
+            "max_parallel_queries": config.max_parallel_queries,
         },
         sort_keys=True,
         separators=(",", ":"),
