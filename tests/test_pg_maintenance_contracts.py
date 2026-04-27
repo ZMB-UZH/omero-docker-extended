@@ -75,6 +75,7 @@ def test_entrypoint_writes_private_shell_quoted_cron_env(tmp_path: Path) -> None
     assert result.returncode == 0, result.stderr
     assert not marker.exists()
     assert stat.S_IMODE(env_file.stat().st_mode) == 0o600
+    assert list(tmp_path.glob("pg-maintenance-env.*")) == []
     env_text = env_file.read_text(encoding="utf-8")
     assert "export OMERO_DB_PASS=" in env_text
     assert "export PLUGIN_DB_PASS=" in env_text
@@ -108,7 +109,7 @@ def test_cron_schedule_uses_runner_without_self_rewriting_or_guard_leak() -> Non
 
     assert "/usr/local/bin/pg-maintenance-cron-runner vacuum_analyze" in cron_text
     assert (
-        '[ "$(date +\\%d)" -le 7 ] && /usr/local/bin/pg-maintenance-cron-runner reindex'
+        'if [ "$(date +\\%d)" -le 7 ]; then /usr/local/bin/pg-maintenance-cron-runner reindex; fi'
     ) in cron_text
     assert ". /etc/pg-maintenance-env" not in cron_text
     assert "/usr/local/bin/pg-maintenance.sh" not in cron_text

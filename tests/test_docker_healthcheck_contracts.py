@@ -42,6 +42,12 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         cls.redis_sysctl_script = (
             REPO_ROOT / "docker" / "redis-sysctl-init.sh"
         ).read_text(encoding="utf-8")
+        cls.cadvisor_entrypoint = (
+            REPO_ROOT / "monitoring" / "cadvisor" / "entrypoint.sh"
+        ).read_text(encoding="utf-8")
+        cls.smart_disk_monitor = (
+            REPO_ROOT / "monitoring" / "prometheus" / "smart_disk_monitor.sh"
+        ).read_text(encoding="utf-8")
 
     @staticmethod
     def _last_user(dockerfile_text: str) -> str:
@@ -184,6 +190,24 @@ class DockerHealthcheckContractTests(unittest.TestCase):
             'sysctl -w "${SYSCTL_KEY}=${SYSCTL_VALUE}"', self.redis_sysctl_script
         )
         self.assertNotIn("|| true", self.redis_sysctl_script)
+
+    def test_cadvisor_entrypoint_uses_safe_rootfs_iteration(self) -> None:
+        self.assertIn("for rootfs_entry in /rootfs/*; do", self.cadvisor_entrypoint)
+        self.assertIn("d=${rootfs_entry#/rootfs/}", self.cadvisor_entrypoint)
+        self.assertIn('mount --rbind "$rootfs_entry" "/$d"', self.cadvisor_entrypoint)
+        self.assertNotIn("ls -1 /rootfs", self.cadvisor_entrypoint)
+
+    def test_smart_disk_monitor_is_env_driven_and_validates_df_output(self) -> None:
+        self.assertIn("set -eu", self.smart_disk_monitor)
+        self.assertIn("SMART_DISK_MONITOR_OUT_FILE", self.smart_disk_monitor)
+        self.assertIn("SMART_DISK_MONITOR_INTERVAL_SECONDS", self.smart_disk_monitor)
+        self.assertIn("SMART_DISK_MONITOR_OMERO_DATA_PATH", self.smart_disk_monitor)
+        self.assertIn('OUT_DIR=$(dirname "$OUT_FILE")', self.smart_disk_monitor)
+        self.assertNotIn("OUT_DIR=${OUT_FILE%/*}", self.smart_disk_monitor)
+        self.assertIn('df -kP "$target_path"', self.smart_disk_monitor)
+        self.assertIn('is_uint "$total_kb"', self.smart_disk_monitor)
+        self.assertNotIn("tail -n1", self.smart_disk_monitor)
+        self.assertNotIn("awk '{print $2}'", self.smart_disk_monitor)
 
 
 if __name__ == "__main__":

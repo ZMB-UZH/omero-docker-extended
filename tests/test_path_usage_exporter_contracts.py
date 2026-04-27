@@ -1,15 +1,30 @@
 from __future__ import annotations
 
+import importlib.util
+import stat
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+EXPORTER_PATH = (
+    REPO_ROOT / "monitoring" / "path-usage-exporter" / "path_usage_exporter.py"
+)
 
 
 class PathUsageExporterContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "path_usage_exporter", EXPORTER_PATH
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Could not load {EXPORTER_PATH}")
+        cls.exporter = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.exporter)
         cls.dockerfile_text = (
             REPO_ROOT / "docker" / "path-usage-exporter.Dockerfile"
         ).read_text(encoding="utf-8")
@@ -42,6 +57,68 @@ class PathUsageExporterContractTests(unittest.TestCase):
             'chown_tree_or_die "${NODE_EXPORTER_TEXTFILE_PATH}" "Node exporter textfile directory" "${PATH_USAGE_EXPORTER_UID}" "${PATH_USAGE_EXPORTER_GID}"',
             self.installation_script_text,
         )
+
+    def test_path_translation_requires_absolute_host_paths(self) -> None:
+        self.assertEqual(
+            self.exporter.host_path_for_df("/srv/omero/../data", "/host"),
+            "/host/srv/data",
+        )
+        self.assertEqual(
+            self.exporter.host_path_for_df("/../../etc", "/host"),
+            "/host/etc",
+        )
+        with self.assertRaises(ValueError):
+            self.exporter.host_path_for_df("relative/path", "/host")
+
+    def test_prometheus_labels_are_escaped_in_rendered_metrics(self) -> None:
+        path_value = '/data/"quoted\\line\nnext'
+        mountpoint = '/host/data/"quoted\\mount\nnext'
+
+        with (
+            mock.patch.object(self.exporter.os.path, "exists", return_value=True),
+            mock.patch.object(
+                self.exporter, "df_usage", return_value=(mountpoint, 2048, 1024, 0.5)
+            ),
+        ):
+            metrics = self.exporter.render_metrics({"OMERO_DATA_PATH": path_value})
+
+        self.assertIn('path="/data/\\"quoted\\\\line\\nnext"', metrics)
+        self.assertIn('mountpoint="/host/data/\\"quoted\\\\mount\\nnext"', metrics)
+        self.assertIn('omero_path_used_ratio{kind="omero_data"', metrics)
+
+    def test_df_usage_times_out_and_rejects_malformed_numbers(self) -> None:
+        with mock.patch.object(
+            self.exporter.subprocess,
+            "run",
+            side_effect=subprocess.TimeoutExpired(["df"], 1),
+        ):
+            self.assertIsNone(self.exporter.df_usage("/host/data", timeout_seconds=1))
+
+        bad_completed = subprocess.CompletedProcess(
+            ["df"],
+            0,
+            stdout=(
+                "Filesystem 1B-blocks Used Available Use% Mounted on\n"
+                "/dev/test not-a-number 10 5 50% /host/data\n"
+            ),
+            stderr="",
+        )
+        with mock.patch.object(
+            self.exporter.subprocess, "run", return_value=bad_completed
+        ):
+            self.assertIsNone(self.exporter.df_usage("/host/data"))
+
+    def test_write_metrics_uses_atomic_temp_file_in_output_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "omero_paths.prom"
+
+            with mock.patch.object(self.exporter, "OUT", str(output_path)):
+                self.exporter.write_metrics("metric 1\n")
+
+            self.assertEqual(output_path.read_text(encoding="utf-8"), "metric 1\n")
+            self.assertEqual(stat.S_IMODE(output_path.stat().st_mode), 0o644)
+            self.assertEqual(list(Path(tmp_dir).glob("*.tmp")), [])
+            self.assertEqual(list(Path(tmp_dir).glob(".*.tmp")), [])
 
 
 if __name__ == "__main__":

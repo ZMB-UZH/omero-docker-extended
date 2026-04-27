@@ -113,7 +113,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(pg_stat_database_blks_hit{datname=\"omero-plugin\"}) / (sum(pg_stat_database_blks_hit{datname=\"omero-plugin\"}) + sum(pg_stat_database_blks_read{datname=\"omero-plugin\"}))"
+          "expr": "sum(pg_stat_database_blks_hit{datname=\"omero-plugin\"}) / clamp_min(sum(pg_stat_database_blks_hit{datname=\"omero-plugin\"}) + sum(pg_stat_database_blks_read{datname=\"omero-plugin\"}), 1)"
         }
       ]
     },
@@ -336,7 +336,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_stat_database_blks_hit{datname=\"omero-plugin\"} / (pg_stat_database_blks_hit{datname=\"omero-plugin\"} + pg_stat_database_blks_read{datname=\"omero-plugin\"})",
+          "expr": "pg_stat_database_blks_hit{datname=\"omero-plugin\"} / clamp_min(pg_stat_database_blks_hit{datname=\"omero-plugin\"} + pg_stat_database_blks_read{datname=\"omero-plugin\"}, 1)",
           "legendFormat": "{{datname}} ({{server}})"
         }
       ]

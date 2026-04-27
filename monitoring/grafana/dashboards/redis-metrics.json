@@ -113,7 +113,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "redis_memory_used_bytes / redis_memory_max_bytes"
+          "expr": "(redis_memory_used_bytes / redis_memory_max_bytes) and on(instance) (redis_memory_max_bytes > 0)"
         }
       ]
     },
@@ -443,7 +443,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))",
+          "expr": "rate(redis_keyspace_hits_total[5m]) / clamp_min(rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]), 1)",
           "legendFormat": "Hit ratio"
         }
       ]

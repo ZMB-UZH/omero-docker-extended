@@ -74,7 +74,7 @@ Internal-only Ollama service for OMP's `Local` AI provider:
 - **cAdvisor** (v0.56.2): container resource metrics.
 - **Postgres exporters** (v0.19.1, x2): one per PostgreSQL instance.
 - **Redis exporter** (v1.82.0): Redis metrics.
-- **Path usage exporter** (custom Python 3.12 image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs host `df -P -B1` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
+- **Path usage exporter** (custom Python 3.12 image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs portable host `df -kP` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
 - **CrowdSec** (v1.7.6): host-wide cybersecurity engine analyzing host syslog,
   SSH auth logs, and Docker container logs. The firewall bouncer auto-detects
   the host's firewall backend at startup: on Ubuntu 24.04+ and Debian 13+

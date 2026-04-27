@@ -113,7 +113,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(pg_stat_database_blks_hit{datname=\"omero\"}) / (sum(pg_stat_database_blks_hit{datname=\"omero\"}) + sum(pg_stat_database_blks_read{datname=\"omero\"}))"
+          "expr": "sum(pg_stat_database_blks_hit{datname=\"omero\"}) / clamp_min(sum(pg_stat_database_blks_hit{datname=\"omero\"}) + sum(pg_stat_database_blks_read{datname=\"omero\"}), 1)"
         }
       ]
     },
@@ -336,7 +336,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_stat_database_blks_hit{datname=\"omero\"} / (pg_stat_database_blks_hit{datname=\"omero\"} + pg_stat_database_blks_read{datname=\"omero\"})",
+          "expr": "pg_stat_database_blks_hit{datname=\"omero\"} / clamp_min(pg_stat_database_blks_hit{datname=\"omero\"} + pg_stat_database_blks_read{datname=\"omero\"}, 1)",
           "legendFormat": "{{datname}} ({{server}})"
         }
       ]
