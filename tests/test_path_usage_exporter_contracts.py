@@ -4,9 +4,8 @@ import importlib.util
 import stat
 import subprocess
 import tempfile
-import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, main, mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +14,7 @@ EXPORTER_PATH = (
 )
 
 
-class PathUsageExporterContractTests(unittest.TestCase):
+class PathUsageExporterContractTests(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         spec = importlib.util.spec_from_file_location(
@@ -122,4 +121,4 @@ class PathUsageExporterContractTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()
