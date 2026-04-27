@@ -36,7 +36,7 @@ Answer four architecture questions before any implementation work:
 ### Python footprint
 
 - Production Python files: `148`
-- Production Python lines: `54,992`
+- Production Python lines: `54,993`
 - Test Python files: `174`
 - Test Python lines: `85,609`
 
