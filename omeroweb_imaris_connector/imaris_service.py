@@ -698,20 +698,25 @@ def _is_security_violation(exc: Exception) -> bool:
     return False
 
 
+def _collect_exception_types(candidate: object) -> tuple[type[BaseException], ...]:
+    if isinstance(candidate, type):
+        if issubclass(candidate, BaseException):
+            return (candidate,)
+        return ()
+    if not isinstance(candidate, tuple):
+        return ()
+
+    exception_types: list[type[BaseException]] = []
+    for item in candidate:
+        if isinstance(item, type) and issubclass(item, BaseException):
+            exception_types.append(item)
+    return tuple(exception_types)
+
+
 def _is_no_processor_available(exc: Exception) -> bool:
-    no_processor_type = getattr(omero, "NoProcessorAvailable", None)
-    no_processor_types: tuple[type[BaseException], ...] = ()
-    if isinstance(no_processor_type, type) and issubclass(
-        no_processor_type, BaseException
-    ):
-        no_processor_types = (no_processor_type,)
-    elif isinstance(no_processor_type, tuple):
-        no_processor_candidates: tuple[object, ...] = no_processor_type
-        no_processor_types = tuple(
-            candidate
-            for candidate in no_processor_candidates
-            if isinstance(candidate, type) and issubclass(candidate, BaseException)
-        )
+    no_processor_types = _collect_exception_types(
+        getattr(omero, "NoProcessorAvailable", None)
+    )
     for err in _iter_exception_chain(exc):
         if no_processor_types and isinstance(err, no_processor_types):
             return True
