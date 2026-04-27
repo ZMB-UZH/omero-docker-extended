@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import hashlib
+import importlib
 import json
 import os
 import shutil
@@ -15,17 +16,12 @@ import time
 import venv
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import TextIO
 
 
 PACKAGE_NAME = "cocoindex-code"
 PACKAGE_VERSION = "0.2.31"
 PACKAGE_REQUIREMENT = f"{PACKAGE_NAME}[full]=={PACKAGE_VERSION}"
-PACKAGE_WHEEL_SHA256 = (
-    "bcaf341035901bf8d66491ce1a72d97d60e1ce6147d1187f1a2ee9377b189cf7"
-)
-PACKAGE_SDIST_SHA256 = (
-    "19bf4cbb7c94801b1108ae742fccefc73b103b99ba4668868dbba10e3fb68b02"
-)
 MCP_SERVER_NAME = "cocoindex-code"
 ARTIFACT_ROOT_ENV = "AGENT_COCOINDEX_HOME"
 REPO_ROOT_ENV = "AGENT_COCOINDEX_REPO"
@@ -92,6 +88,67 @@ class CocoIndexContext:
     @property
     def pip_cache(self) -> Path:
         return self.artifact_root / "pip-cache"
+
+
+@dataclass(frozen=True)
+class BenchmarkCase:
+    """Validated benchmark input case."""
+
+    name: str
+    query: str
+    rg: str
+    expected: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BenchmarkResult:
+    """Measured result for one benchmark case."""
+
+    case: str
+    rg_ms: float
+    rg_returncode: int
+    rg_chars: int
+    rg_line_count: int
+    rg_unique_files: int
+    rg_first_files: list[str]
+    rg_expected_rank: int | None
+    coco_ms: float
+    coco_chars: int
+    coco_line_count: int
+    coco_unique_files: int
+    coco_first_files: list[str]
+    coco_expected_rank: int | None
+    focused_rg_ms: float
+    focused_rg_returncode: int
+    focused_rg_chars: int
+    focused_rg_line_count: int
+    focused_rg_unique_files: int
+    hybrid_chars: int
+
+    def as_payload(self) -> dict[str, object]:
+        """Return a JSON-serializable benchmark record."""
+        return {
+            "case": self.case,
+            "rg_ms": self.rg_ms,
+            "rg_returncode": self.rg_returncode,
+            "rg_chars": self.rg_chars,
+            "rg_line_count": self.rg_line_count,
+            "rg_unique_files": self.rg_unique_files,
+            "rg_first_files": self.rg_first_files,
+            "rg_expected_rank": self.rg_expected_rank,
+            "coco_ms": self.coco_ms,
+            "coco_chars": self.coco_chars,
+            "coco_line_count": self.coco_line_count,
+            "coco_unique_files": self.coco_unique_files,
+            "coco_first_files": self.coco_first_files,
+            "coco_expected_rank": self.coco_expected_rank,
+            "focused_rg_ms": self.focused_rg_ms,
+            "focused_rg_returncode": self.focused_rg_returncode,
+            "focused_rg_chars": self.focused_rg_chars,
+            "focused_rg_line_count": self.focused_rg_line_count,
+            "focused_rg_unique_files": self.focused_rg_unique_files,
+            "hybrid_chars": self.hybrid_chars,
+        }
 
 
 def resolve_required_executable(name: str) -> str:
@@ -304,11 +361,12 @@ class FileLock:
 
     def __init__(self, path: Path) -> None:
         self.path = path
-        self.handle = None
+        self.handle: TextIO | None = None
 
-    def __enter__(self) -> None:
+    def __enter__(self) -> "FileLock":
         self.handle = self.path.open("a+", encoding="utf-8")
         fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX)
+        return self
 
     def __exit__(self, *_exc: object) -> None:
         if self.handle is not None:
@@ -538,12 +596,12 @@ def parse_file_hits(pattern: str, text: str) -> list[str]:
     return unique(re.findall(pattern, text, flags=re.MULTILINE))
 
 
-def load_benchmark_cases(path: Path) -> list[dict[str, object]]:
+def load_benchmark_cases(path: Path) -> list[BenchmarkCase]:
     """Load and validate benchmark cases from JSON."""
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, list) or not payload:
         raise RuntimeError("Benchmark cases file must contain a non-empty JSON list.")
-    cases: list[dict[str, object]] = []
+    cases: list[BenchmarkCase] = []
     for index, item in enumerate(payload, 1):
         if not isinstance(item, dict):
             raise RuntimeError(f"Benchmark case {index} must be a JSON object.")
@@ -568,13 +626,183 @@ def load_benchmark_cases(path: Path) -> list[dict[str, object]]:
             raise RuntimeError(
                 f"Benchmark case {index} expected must be a non-empty string list."
             )
-        cases.append(item)
+        cases.append(
+            BenchmarkCase(
+                name=item["name"],
+                query=item["query"],
+                rg=item["rg"],
+                expected=tuple(expected),
+            )
+        )
     return cases
+
+
+def rg_exclude_args(excluded_paths: frozenset[PurePosixPath]) -> list[str]:
+    """Return rg glob flags for benchmark exclusions."""
+    return [
+        flag
+        for path in sorted(excluded_paths, key=str)
+        for flag in ("-g", f"!{path.as_posix()}")
+    ]
+
+
+def run_rg_baseline(
+    context: CocoIndexContext,
+    rg_bin: str,
+    case: BenchmarkCase,
+    exclude_args: list[str],
+) -> tuple[subprocess.CompletedProcess[str], float, list[str]]:
+    """Run broad rg for one benchmark case."""
+    start = time.perf_counter()
+    result = run_command(
+        [
+            rg_bin,
+            "-n",
+            "-i",
+            "--no-heading",
+            *exclude_args,
+            case.rg,
+            ".",
+        ],
+        cwd=context.repo_root,
+        timeout=timeout_seconds("rg"),
+    )
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    return result, elapsed_ms, parse_file_hits(RG_FILE_RE, result.stdout)
+
+
+def run_coco_search(
+    context: CocoIndexContext,
+    case: BenchmarkCase,
+) -> tuple[subprocess.CompletedProcess[str], float, list[str]]:
+    """Run CocoIndex semantic routing for one benchmark case."""
+    start = time.perf_counter()
+    result = run_command(
+        [str(context.ccc_bin), "search", "--limit", "5", case.query],
+        cwd=context.mirror_repo,
+        env=ccc_env(context),
+        timeout=timeout_seconds("search"),
+    )
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    if result.returncode != 0:
+        raise RuntimeError(
+            "\n".join(
+                [
+                    f"CocoIndex search failed for case {case.name}",
+                    result.stdout,
+                    result.stderr,
+                ]
+            )
+        )
+    return result, elapsed_ms, parse_file_hits(SEARCH_FILE_RE, result.stdout)
+
+
+def empty_focused_rg_result() -> subprocess.CompletedProcess[str]:
+    """Return the benchmark record for a focused rg miss."""
+    return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="")
+
+
+def run_focused_rg(
+    context: CocoIndexContext,
+    rg_bin: str,
+    case: BenchmarkCase,
+    coco_files: list[str],
+) -> tuple[subprocess.CompletedProcess[str], float, list[str]]:
+    """Run rg only on CocoIndex candidate files."""
+    start = time.perf_counter()
+    existing_coco_files = [
+        path for path in coco_files if (context.repo_root / path).is_file()
+    ]
+    if existing_coco_files:
+        result = run_command(
+            [
+                rg_bin,
+                "-n",
+                "-i",
+                "--no-heading",
+                case.rg,
+                *existing_coco_files,
+            ],
+            cwd=context.repo_root,
+            timeout=timeout_seconds("rg"),
+        )
+    else:
+        result = empty_focused_rg_result()
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    return result, elapsed_ms, parse_file_hits(RG_FILE_RE, result.stdout)
+
+
+def benchmark_case(
+    context: CocoIndexContext,
+    rg_bin: str,
+    case: BenchmarkCase,
+    exclude_args: list[str],
+) -> BenchmarkResult:
+    """Run all benchmark commands for one case."""
+    rg_result, rg_ms, rg_files = run_rg_baseline(context, rg_bin, case, exclude_args)
+    coco_result, coco_ms, coco_files = run_coco_search(context, case)
+    focused_rg_result, focused_rg_ms, focused_rg_files = run_focused_rg(
+        context, rg_bin, case, coco_files
+    )
+    return BenchmarkResult(
+        case=case.name,
+        rg_ms=round(rg_ms, 1),
+        rg_returncode=rg_result.returncode,
+        rg_chars=len(rg_result.stdout),
+        rg_line_count=rg_result.stdout.count("\n"),
+        rg_unique_files=len(rg_files),
+        rg_first_files=rg_files[:5],
+        rg_expected_rank=hit_rank(rg_files, list(case.expected)),
+        coco_ms=round(coco_ms, 1),
+        coco_chars=len(coco_result.stdout),
+        coco_line_count=coco_result.stdout.count("\n"),
+        coco_unique_files=len(coco_files),
+        coco_first_files=coco_files[:5],
+        coco_expected_rank=hit_rank(coco_files, list(case.expected)),
+        focused_rg_ms=round(focused_rg_ms, 1),
+        focused_rg_returncode=focused_rg_result.returncode,
+        focused_rg_chars=len(focused_rg_result.stdout),
+        focused_rg_line_count=focused_rg_result.stdout.count("\n"),
+        focused_rg_unique_files=len(focused_rg_files),
+        hybrid_chars=len(coco_result.stdout) + len(focused_rg_result.stdout),
+    )
+
+
+def benchmark_summary(results: list[BenchmarkResult]) -> dict[str, object]:
+    """Summarize benchmark results without re-parsing JSON payload objects."""
+    return {
+        "cases": len(results),
+        "rg_top5_hits": sum(
+            result.rg_expected_rank is not None and result.rg_expected_rank <= 5
+            for result in results
+        ),
+        "coco_top5_hits": sum(
+            result.coco_expected_rank is not None and result.coco_expected_rank <= 5
+            for result in results
+        ),
+        "rg_total_chars": sum(result.rg_chars for result in results),
+        "coco_total_chars": sum(result.coco_chars for result in results),
+        "focused_rg_total_chars": sum(result.focused_rg_chars for result in results),
+        "hybrid_total_chars": sum(result.hybrid_chars for result in results),
+        "rg_avg_ms": round(sum(result.rg_ms for result in results) / len(results), 1),
+        "coco_avg_ms": round(
+            sum(result.coco_ms for result in results) / len(results), 1
+        ),
+        "focused_rg_avg_ms": round(
+            sum(result.focused_rg_ms for result in results) / len(results), 1
+        ),
+        "rg_total_unique_file_mentions": sum(
+            result.rg_unique_files for result in results
+        ),
+        "coco_total_unique_file_mentions": sum(
+            result.coco_unique_files for result in results
+        ),
+    }
 
 
 def run_benchmark(
     context: CocoIndexContext,
-    cases: list[dict[str, object]],
+    cases: list[BenchmarkCase],
     output_path: Path | None,
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
 ) -> dict[str, object]:
@@ -587,108 +815,14 @@ def run_benchmark(
     index_elapsed = time.perf_counter() - index_start
 
     rg_bin = resolve_required_executable("rg")
-    results: list[dict[str, object]] = []
-    rg_exclude_args = [
-        flag
-        for path in sorted(excluded_paths, key=str)
-        for flag in ("-g", f"!{path.as_posix()}")
+    results = [
+        benchmark_case(context, rg_bin, case, rg_exclude_args(excluded_paths))
+        for case in cases
     ]
-    for case in cases:
-        expected = [str(value) for value in case["expected"]]  # type: ignore[index]
-        rg_start = time.perf_counter()
-        rg_result = run_command(
-            [
-                rg_bin,
-                "-n",
-                "-i",
-                "--no-heading",
-                *rg_exclude_args,
-                str(case["rg"]),
-                ".",
-            ],
-            cwd=context.repo_root,
-            timeout=timeout_seconds("rg"),
-        )
-        rg_ms = (time.perf_counter() - rg_start) * 1000
-        rg_files = parse_file_hits(RG_FILE_RE, rg_result.stdout)
-
-        coco_start = time.perf_counter()
-        coco_result = run_command(
-            [str(context.ccc_bin), "search", "--limit", "5", str(case["query"])],
-            cwd=context.mirror_repo,
-            env=ccc_env(context),
-            timeout=timeout_seconds("search"),
-        )
-        coco_ms = (time.perf_counter() - coco_start) * 1000
-        if coco_result.returncode != 0:
-            raise RuntimeError(
-                "\n".join(
-                    [
-                        f"CocoIndex search failed for case {case['name']}",
-                        coco_result.stdout,
-                        coco_result.stderr,
-                    ]
-                )
-            )
-        coco_files = parse_file_hits(SEARCH_FILE_RE, coco_result.stdout)
-        focused_rg_start = time.perf_counter()
-        existing_coco_files = [
-            path for path in coco_files if (context.repo_root / path).is_file()
-        ]
-        if existing_coco_files:
-            focused_rg_result = run_command(
-                [
-                    rg_bin,
-                    "-n",
-                    "-i",
-                    "--no-heading",
-                    str(case["rg"]),
-                    *existing_coco_files,
-                ],
-                cwd=context.repo_root,
-                timeout=timeout_seconds("rg"),
-            )
-        else:
-            focused_rg_result = subprocess.CompletedProcess(
-                args=[],
-                returncode=1,
-                stdout="",
-                stderr="",
-            )
-        focused_rg_ms = (time.perf_counter() - focused_rg_start) * 1000
-        focused_rg_files = parse_file_hits(RG_FILE_RE, focused_rg_result.stdout)
-        hybrid_chars = len(coco_result.stdout) + len(focused_rg_result.stdout)
-
-        results.append(
-            {
-                "case": case["name"],
-                "rg_ms": round(rg_ms, 1),
-                "rg_returncode": rg_result.returncode,
-                "rg_chars": len(rg_result.stdout),
-                "rg_line_count": rg_result.stdout.count("\n"),
-                "rg_unique_files": len(rg_files),
-                "rg_first_files": rg_files[:5],
-                "rg_expected_rank": hit_rank(rg_files, expected),
-                "coco_ms": round(coco_ms, 1),
-                "coco_chars": len(coco_result.stdout),
-                "coco_line_count": coco_result.stdout.count("\n"),
-                "coco_unique_files": len(coco_files),
-                "coco_first_files": coco_files[:5],
-                "coco_expected_rank": hit_rank(coco_files, expected),
-                "focused_rg_ms": round(focused_rg_ms, 1),
-                "focused_rg_returncode": focused_rg_result.returncode,
-                "focused_rg_chars": len(focused_rg_result.stdout),
-                "focused_rg_line_count": focused_rg_result.stdout.count("\n"),
-                "focused_rg_unique_files": len(focused_rg_files),
-                "hybrid_chars": hybrid_chars,
-            }
-        )
 
     payload = {
         "benchmark_schema": 1,
         "package": PACKAGE_REQUIREMENT,
-        "package_wheel_sha256": PACKAGE_WHEEL_SHA256,
-        "package_sdist_sha256": PACKAGE_SDIST_SHA256,
         "repo_head": checked_command(
             [resolve_required_executable("git"), "rev-parse", "HEAD"],
             cwd=context.repo_root,
@@ -699,45 +833,8 @@ def run_benchmark(
         ],
         "index_elapsed_seconds": round(index_elapsed, 2),
         "index_db_bytes": target_sqlite_db(context).stat().st_size,
-        "results": results,
-        "summary": {
-            "cases": len(results),
-            "rg_top5_hits": sum(
-                1
-                for result in results
-                if result["rg_expected_rank"] and result["rg_expected_rank"] <= 5
-            ),
-            "coco_top5_hits": sum(
-                1
-                for result in results
-                if result["coco_expected_rank"] and result["coco_expected_rank"] <= 5
-            ),
-            "rg_total_chars": sum(int(result["rg_chars"]) for result in results),
-            "coco_total_chars": sum(int(result["coco_chars"]) for result in results),
-            "focused_rg_total_chars": sum(
-                int(result["focused_rg_chars"]) for result in results
-            ),
-            "hybrid_total_chars": sum(
-                int(result["hybrid_chars"]) for result in results
-            ),
-            "rg_avg_ms": round(
-                sum(float(result["rg_ms"]) for result in results) / len(results), 1
-            ),
-            "coco_avg_ms": round(
-                sum(float(result["coco_ms"]) for result in results) / len(results), 1
-            ),
-            "focused_rg_avg_ms": round(
-                sum(float(result["focused_rg_ms"]) for result in results)
-                / len(results),
-                1,
-            ),
-            "rg_total_unique_file_mentions": sum(
-                int(result["rg_unique_files"]) for result in results
-            ),
-            "coco_total_unique_file_mentions": sum(
-                int(result["coco_unique_files"]) for result in results
-            ),
-        },
+        "results": [result.as_payload() for result in results],
+        "summary": benchmark_summary(results),
     }
     if output_path is not None:
         output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
@@ -792,7 +889,22 @@ def command_status(_args: argparse.Namespace) -> None:
 def command_mcp(_args: argparse.Namespace) -> None:
     context = resolve_context()
     ensure_ready(context)
-    os.execve(str(context.ccc_bin), [str(context.ccc_bin), "mcp"], ccc_env(context))
+    env = ccc_env(context)
+    for site_package_path in venv_site_package_paths(context):
+        sys.path.insert(0, str(site_package_path))
+    os.environ.clear()
+    os.environ.update(env)
+    sys.argv = [str(context.ccc_bin), "mcp"]
+    app = getattr(importlib.import_module("cocoindex_code.cli"), "app")
+    raise SystemExit(app())
+
+
+def venv_site_package_paths(context: CocoIndexContext) -> list[Path]:
+    """Return import paths for the pinned venv packages."""
+    site_packages = sorted((context.venv_dir / "lib").glob("python*/site-packages"))
+    if not site_packages:
+        raise RuntimeError(f"Could not find site-packages under {context.venv_dir}")
+    return site_packages
 
 
 def mcp_config_payload(
