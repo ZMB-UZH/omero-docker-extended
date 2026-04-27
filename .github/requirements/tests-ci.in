@@ -9,7 +9,7 @@ coverage==7.13.5
 django==6.0.4
 pyyaml==6.0.3
 portalocker==3.2.0
-psycopg2-binary==2.9.11
+psycopg2-binary==2.9.12
 numpy==2.4.4
 numcodecs==0.16.5
 matplotlib==3.10.8

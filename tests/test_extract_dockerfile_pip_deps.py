@@ -39,6 +39,27 @@ def test_extractor_includes_known_direct_dependencies():
         assert expected in packages, f"Expected {expected} in extracted packages"
 
 
+def test_omeroweb_runtime_pins_psycopg2_binary_to_monitored_requirement():
+    requirement_prefix = "psycopg2-binary>="
+    monitored_version = None
+    requirements_path = REPO_ROOT / "omeroweb_omp_plugin" / "requirements.txt"
+    for line in requirements_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith(requirement_prefix):
+            monitored_version = line.removeprefix(requirement_prefix).strip()
+            break
+
+    assert monitored_version, "OMP plugin requirements must monitor psycopg2-binary"
+
+    result = subprocess.run(
+        [sys.executable, str(EXTRACTOR), str(DOCKERFILE)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert f"psycopg2-binary=={monitored_version}" in result.stdout.splitlines()
+
+
 def test_extractor_excludes_build_tooling():
     result = subprocess.run(
         [sys.executable, str(EXTRACTOR), str(DOCKERFILE)],
