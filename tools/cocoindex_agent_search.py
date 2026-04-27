@@ -1015,10 +1015,12 @@ def run_mcp_stdio_smoke(context: CocoIndexContext) -> dict[str, object]:
             cwd=str(context.repo_root),
         )
         with cast(Any, anyio_module).fail_after(timeout_seconds("mcp_smoke")):
-            async with stdio_client(params) as (read_stream, write_stream):
-                async with client_session(read_stream, write_stream) as session:
-                    initialized = await session.initialize()
-                    tools = await session.list_tools()
+            async with (
+                stdio_client(params) as (read_stream, write_stream),
+                client_session(read_stream, write_stream) as session,
+            ):
+                initialized = await session.initialize()
+                tools = await session.list_tools()
         server_info = initialized.serverInfo
         return {
             "server_name": server_info.name,

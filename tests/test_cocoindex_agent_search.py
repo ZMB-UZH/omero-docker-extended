@@ -572,8 +572,8 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
             )
 
     class FakeStdioClient:
-        def __init__(self, _params: FakeServerParameters) -> None:
-            pass
+        def __init__(self, params: FakeServerParameters) -> None:
+            self.params = params
 
         async def __aenter__(self) -> tuple[object, object]:
             return object(), object()
@@ -582,8 +582,8 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
             return False
 
     class FakeSession:
-        def __init__(self, _read_stream: object, _write_stream: object) -> None:
-            pass
+        def __init__(self, read_stream: object, write_stream: object) -> None:
+            self.streams = (read_stream, write_stream)
 
         async def __aenter__(self) -> "FakeSession":
             return self
@@ -592,11 +592,13 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
             return False
 
         async def initialize(self) -> object:
+            self.initialized = True
             return SimpleNamespace(
                 serverInfo=SimpleNamespace(name="fake", version="1.0")
             )
 
         async def list_tools(self) -> object:
+            self.listed_tools = True
             return SimpleNamespace(
                 tools=[SimpleNamespace(name="search"), SimpleNamespace(name="index")]
             )
