@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from django.test import RequestFactory
 
-from omeroweb_omp_plugin.views import job_view, variable_set_view
+from omeroweb_omp_plugin.views import job_view, utils as view_utils, variable_set_view
 
 
 class _LockStub:
@@ -41,9 +41,12 @@ def test_job_progress_logs_escape_job_id_and_exception(
         "started": time.time(),
         "separator_mode": "chars",
         "chunk_size": 1,
+        "username": "alice",
     }
     request = RequestFactory().get("/omp/job-progress/")
 
+    monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(job_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(job_view, "load_job", lambda job_id: job)
     monkeypatch.setattr(job_view, "save_job", lambda job_dict: True)
     monkeypatch.setattr(
@@ -74,6 +77,7 @@ def test_job_progress_logs_escape_job_id_and_exception(
 def test_variable_set_view_logs_escape_exception_text(monkeypatch, caplog):
     request = RequestFactory().get("/omp/sets/")
 
+    monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         variable_set_view, "current_username", lambda request, conn: "alice"
     )

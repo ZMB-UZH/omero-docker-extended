@@ -132,15 +132,14 @@ This repository expresses those OMERO properties in env files with the existing 
   (`OMERO_JOB_SERVICE_HOST`, default `localhost`; `OMERO_JOB_SERVICE_PORT`,
   default `4064`) to match installation-time behavior in non-default
   deployments. The sync uses jitter (`OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS`,
-  default 20) and exponential backoff to avoid thundering-herd effects and
-  does not affect active user sessions. To reduce false startup errors during
-  initial database/schema migrations, only the first sync attempt in the first
-  cycle uses the long readiness window
-  (`OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS`); retries in the same cycle and all
-  later cycles use a short readiness probe window
-  (`12 * OMERO_JOB_SERVICE_READINESS_POLL_SECONDS`) so the loop actually
-  executes all configured retries (`OMERO_JOB_SERVICE_SYNC_MAX_RETRIES`,
-  default 3). User creation also retries with
+  default 20) to avoid synchronized retries and does not affect active user
+  sessions. Each sync attempt uses the configured readiness window
+  (`OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS`, default 900 seconds) so slow first
+  starts, schema checks, or database recovery do not turn expected OMERO
+  startup time into failed short probes. Retry pauses use
+  `OMERO_JOB_SERVICE_READINESS_POLL_SECONDS`; no fixed sleep interval is
+  embedded in the loop. The number of sync attempts per cycle is controlled by
+  `OMERO_JOB_SERVICE_SYNC_MAX_RETRIES` (default 3). User creation also retries with
   `OMERO_JOB_SERVICE_USER_ENSURE_RETRIES`. All sync-loop variables
   (`OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS`,
   `OMERO_JOB_SERVICE_SYNC_MAX_RETRIES`,
@@ -389,15 +388,24 @@ mapping is the standard repo mapping: `.` becomes `_`, and a literal `_` in an
 OMERO property becomes `__`. The upstream DropBox admin reference is
 `https://omero.readthedocs.io/en/stable/sysadmins/dropbox.html`.
 The server image installs the pinned `OMERO_DROPBOX_VERSION` package, and
-`OMERO_DROPBOX_ENABLED=1` schedules a one-shot in-container bootstrap that waits
+`OMERO_DROPBOX_ENABLED=1` schedules an in-container bootstrap loop that waits
 for the running OMERO admin interface and a real OMERO API login before
 enabling and starting the required `MonitorServer` and `DropBox` Ice servers.
 The image sets the DropBox IceGrid template activation to `manual` so DropBox
 does not auto-start before Blitz accepts sessions; the bootstrap remains the
-single place that starts DropBox. The wait and poll cadence are controlled by
-`OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS` and
-`OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS`; the latest result is
-written to `${SERVER_VAR_DIR}/dropbox-ice-bootstrap.status`.
+single place that starts DropBox. Recoverable readiness misses are recorded as
+`status=retrying` and the loop keeps trying with
+`OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS`; non-retryable
+configuration errors are recorded as `status=error`. The readiness window per
+attempt is controlled by `OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS`
+(default 900 seconds), and the total retry budget is controlled by
+`OMERO_DROPBOX_ICE_BOOTSTRAP_MAX_RETRY_SECONDS` (default 3600 seconds in new
+installs). If repeated recoverable failures exhaust that budget, the loop
+records `status=error` with a retry-budget message instead of waiting forever.
+The latest result is written to `${SERVER_VAR_DIR}/dropbox-ice-bootstrap.status`.
+During installation, a current `status=ok` confirms DropBox readiness,
+`status=error` stops the install, and a transient wait timeout is reported
+while the in-container loop continues within its configured retry budget.
 
 The supported DropBox layout is the OMERO default convention:
 
@@ -423,7 +431,12 @@ The loop interval is controlled by
 `OMERO_DROPBOX_USER_DIR_SYNC_INTERVAL_SECONDS` and the loop uses the same
 lockdir/status-file pattern as the managed-repository prefix sync. It reads the
 current OMERO experimenter list, creates missing first-level username
-directories only, and does not walk or modify payload trees.
+directories only, and does not walk or modify payload trees. The first cycle
+uses `OMERO_DROPBOX_USER_DIR_SYNC_STARTUP_WAIT_SECONDS` (default 900 seconds)
+before marking OMERO API readiness as retryable; later cycles continue on the
+configured interval. Its status file uses `status=retrying` for recoverable
+readiness misses and `status=error` for non-retryable configuration or helper
+failures.
 
 Directory ownership and mode are controlled by
 `OMERO_DROPBOX_USER_DIR_OWNER`, `OMERO_DROPBOX_USER_DIR_GROUP`, and

@@ -35,6 +35,14 @@ def test_load_json_body_and_require_non_root_user(monkeypatch):
     forbidden = root_view(RequestFactory().get("/"), conn=object())
     assert forbidden.status_code == 403
 
+    monkeypatch.setattr(utils, "current_username", lambda request, conn: "")
+    unresolved = root_view(RequestFactory().get("/"), conn=object())
+    assert unresolved.status_code == 403
+    assert (
+        json.loads(unresolved.content)["error"]
+        == utils.errors.unable_to_determine_username()
+    )
+
     monkeypatch.setattr(utils, "current_username", lambda request, conn: "alice")
     allowed = root_view(RequestFactory().get("/"), conn="conn", url="/api", flag=True)
     assert allowed.status_code == 200

@@ -6,7 +6,11 @@ from django.test import RequestFactory
 
 from omeroweb_omp_plugin.strings import errors as omp_errors
 from omeroweb_omp_plugin.strings import messages as omp_messages
-from omeroweb_omp_plugin.views import user_data_view, variable_set_view
+from omeroweb_omp_plugin.views import (
+    user_data_view,
+    utils as view_utils,
+    variable_set_view,
+)
 
 
 def _payload(response):
@@ -14,6 +18,7 @@ def _payload(response):
 
 
 def test_variable_set_views_cover_success_and_validation_paths(monkeypatch) -> None:
+    monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         variable_set_view, "current_username", lambda request, conn: "alice"
     )
@@ -156,6 +161,7 @@ def test_variable_set_views_cover_success_and_validation_paths(monkeypatch) -> N
 
 
 def test_user_data_views_cover_success_and_request_guards(monkeypatch) -> None:
+    monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         user_data_view, "current_username", lambda request, conn: "alice"
     )
@@ -199,6 +205,7 @@ def test_user_data_views_cover_success_and_request_guards(monkeypatch) -> None:
 def test_variable_and_user_data_views_cover_store_failures_and_guard_edges(
     monkeypatch,
 ) -> None:
+    monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         variable_set_view, "current_username", lambda request, conn: "alice"
     )
@@ -476,6 +483,7 @@ def test_variable_and_user_data_views_cover_store_failures_and_guard_edges(
 def test_variable_and_user_data_views_cover_remaining_method_and_username_guards(
     monkeypatch,
 ) -> None:
+    monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(variable_set_view, "current_username", lambda request, conn: "")
     save_missing_user_request = RequestFactory().post("/omp/varsets/save/")
     save_missing_user_request._decoded_payload = {

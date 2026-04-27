@@ -916,6 +916,10 @@ validate_dropbox_user_dir_sync_configuration() {
             echo "ERROR: OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS must be a positive integer, got: '${ice_poll_interval}'" >&2
             exit 1
         fi
+
+        if [[ -n "${OMERO_DROPBOX_ICE_BOOTSTRAP_MAX_RETRY_SECONDS-}" ]]; then
+            require_positive_integer_env_var "OMERO_DROPBOX_ICE_BOOTSTRAP_MAX_RETRY_SECONDS"
+        fi
     fi
 
     if [[ "${enabled}" != "1" && "${enabled}" != "0" ]]; then
@@ -1193,7 +1197,7 @@ schedule_job_service_bootstrap() {
     local interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS:-3600}"
     local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES:-3}"
     local jitter_max="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS:-20}"
-    local startup_wait="${OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS:-300}"
+    local startup_wait="${OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS:-900}"
     local poll_interval="${OMERO_JOB_SERVICE_READINESS_POLL_SECONDS:-10}"
     local host="${OMERO_JOB_SERVICE_HOST:-localhost}"
     local port="${OMERO_JOB_SERVICE_PORT:-4064}"
@@ -1337,34 +1341,22 @@ schedule_job_service_bootstrap() {
             return "${failed}"
         }
 
-        first_cycle=1
         while true; do
             start="$(date +%s)"
             ok=0
 
-            # First cycle: use full startup_wait so the server has time to initialize.
-            # Subsequent cycles: use a shorter window since the server should already be running.
-            if [[ "${first_cycle}" -eq 1 ]]; then
-                ready_wait="${startup_wait}"
-            else
-                ready_wait=$((poll_interval * 12))
-            fi
-
             for attempt in $(seq 1 "${max_retries}"); do
-                if sync_once "${ready_wait}"; then
+                if sync_once "${startup_wait}"; then
                     ok=1
                     break
                 fi
-                echo "[$(date -u)] WARN: sync attempt ${attempt}/${max_retries} failed; retrying in 60s"
                 if [[ "${attempt}" -lt "${max_retries}" ]]; then
-                    sleep 60
+                    echo "[$(date -u)] WARN: sync attempt ${attempt}/${max_retries} did not complete; retrying in ${poll_interval}s with readiness window ${startup_wait}s"
+                    sleep "${poll_interval}"
                 fi
-                # After first attempt in first cycle, use shorter waits
-                ready_wait=$((poll_interval * 6))
             done
 
             [[ "${ok}" -eq 1 ]] || echo "[$(date -u)] ERROR: Job-service group sync failed after ${max_retries} attempts; will wait until next interval"
-            first_cycle=0
 
             epoch_end="$(date +%s)"
             elapsed=$((epoch_end - start))
@@ -1900,8 +1892,8 @@ run_dropbox_ice_bootstrap_once() {
     write_dropbox_ice_bootstrap_status "running" "enable-start" "waiting-for-omero-admin" "0"
 
     if ! wait_for_dropbox_ice_admin "${startup_wait}" "${poll_interval}"; then
-        write_dropbox_ice_bootstrap_status "error" "enable" "omero-admin-not-ready" "0"
-        echo "[$(date -u)] ERROR: OMERO IceGrid did not become ready after ${startup_wait}s"
+        write_dropbox_ice_bootstrap_status "retrying" "enable" "omero-admin-not-ready" "0"
+        echo "[$(date -u)] WARN: OMERO IceGrid did not become ready after ${startup_wait}s"
         return 1
     fi
 
@@ -1910,7 +1902,7 @@ run_dropbox_ice_bootstrap_once() {
         if env_var_value_is_empty "${api_password_env}"; then
             write_dropbox_ice_bootstrap_status "error" "enable" "omero-api-password-missing" "0"
             echo "[$(date -u)] ERROR: OMERO API readiness check cannot run because DropBox password env is missing"
-            return 1
+            return 2
         fi
         if ! wait_for_dropbox_user_dir_sync_api \
             "${startup_wait}" \
@@ -1919,26 +1911,26 @@ run_dropbox_ice_bootstrap_once() {
             "${api_port}" \
             "${api_username}" \
             "${api_password_env}"; then
-            write_dropbox_ice_bootstrap_status "error" "enable" "omero-api-not-ready" "0"
-            echo "[$(date -u)] ERROR: OMERO API did not become ready before DropBox Ice server start after ${startup_wait}s"
+            write_dropbox_ice_bootstrap_status "retrying" "enable" "omero-api-not-ready" "0"
+            echo "[$(date -u)] WARN: OMERO API did not become ready before DropBox Ice server start after ${startup_wait}s"
             return 1
         fi
     fi
 
     if ! run_dropbox_ice_command server enable MonitorServer; then
-        write_dropbox_ice_bootstrap_status "error" "enable" "monitor-enable-failed" "0"
+        write_dropbox_ice_bootstrap_status "retrying" "enable" "monitor-enable-failed" "0"
         return 1
     fi
     if ! run_dropbox_ice_command server enable DropBox; then
-        write_dropbox_ice_bootstrap_status "error" "enable" "dropbox-enable-failed" "0"
+        write_dropbox_ice_bootstrap_status "retrying" "enable" "dropbox-enable-failed" "0"
         return 1
     fi
     if ! start_dropbox_ice_server MonitorServer; then
-        write_dropbox_ice_bootstrap_status "error" "start" "monitor-start-failed" "0"
+        write_dropbox_ice_bootstrap_status "retrying" "start" "monitor-start-failed" "0"
         return 1
     fi
     if ! start_dropbox_ice_server DropBox; then
-        write_dropbox_ice_bootstrap_status "error" "start" "dropbox-start-failed" "0"
+        write_dropbox_ice_bootstrap_status "retrying" "start" "dropbox-start-failed" "0"
         return 1
     fi
 
@@ -1951,6 +1943,7 @@ schedule_dropbox_ice_bootstrap() {
     local enabled="${OMERO_DROPBOX_ENABLED}"
     local startup_wait="${OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS}"
     local poll_interval="${OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS}"
+    local max_retry_seconds="${OMERO_DROPBOX_ICE_BOOTSTRAP_MAX_RETRY_SECONDS:-3600}"
 
     if is_falsey_bool "${enabled}"; then
         log "Skipping DropBox Ice bootstrap (OMERO_DROPBOX_ENABLED=${enabled})."
@@ -1967,11 +1960,38 @@ schedule_dropbox_ice_bootstrap() {
         fi
         trap 'release_lockdir "${lockdir}" ""' EXIT
 
-        echo "[$(date -u)] DropBox Ice bootstrap waiting for OMERO admin readiness (startup_wait=${startup_wait}s, poll=${poll_interval}s)"
-        if ! run_dropbox_ice_bootstrap_once; then
-            echo "[$(date -u)] WARN: DropBox Ice bootstrap finished with errors"
-            exit 1
-        fi
+        echo "[$(date -u)] DropBox Ice bootstrap waiting for OMERO admin readiness (startup_wait=${startup_wait}s, poll=${poll_interval}s, max_retry=${max_retry_seconds}s)"
+        local attempt=1
+        local loop_started_epoch=""
+        loop_started_epoch="$(date +%s)"
+        while true; do
+            local rc=0
+            run_dropbox_ice_bootstrap_once || rc=$?
+            if [[ "${rc}" -eq 0 ]]; then
+                exit 0
+            fi
+            if [[ "${rc}" -eq 2 ]]; then
+                echo "[$(date -u)] ERROR: DropBox Ice bootstrap stopped on non-retryable configuration error"
+                exit 1
+            fi
+            local elapsed=0
+            local last_message="retry-budget-exhausted"
+            elapsed=$(( $(date +%s) - loop_started_epoch ))
+            if [[ "${elapsed}" -ge "${max_retry_seconds}" ]]; then
+                if [[ -r "${DROPBOX_ICE_BOOTSTRAP_STATUS_FILE}" ]]; then
+                    last_message="$(sed -n 's/^message=//p' "${DROPBOX_ICE_BOOTSTRAP_STATUS_FILE}" | tail -n 1)"
+                fi
+                if [[ -z "${last_message}" ]]; then
+                    last_message="retry-budget-exhausted"
+                fi
+                write_dropbox_ice_bootstrap_status "error" "enable-start" "${last_message}-retry-budget-exhausted" "0"
+                echo "[$(date -u)] ERROR: DropBox Ice bootstrap retry budget exhausted after ${elapsed}s"
+                exit 1
+            fi
+            echo "[$(date -u)] WARN: DropBox Ice bootstrap attempt ${attempt} did not complete; retrying in ${poll_interval}s"
+            attempt=$((attempt + 1))
+            sleep "${poll_interval}"
+        done
     ) >>"${SERVER_LOG_DIR}/dropbox-ice-bootstrap.log" 2>&1 &
 
     log "Scheduled background DropBox Ice bootstrap"
@@ -2038,8 +2058,8 @@ run_dropbox_user_dir_sync_once() {
             "${port}" \
             "${username}" \
             "${password_env}"; then
-            write_dropbox_user_dir_sync_status "error" "omero-admin-not-ready" "0" "1"
-            echo "[$(date -u)] ERROR: OMERO API did not become ready before DropBox user directory sync after ${wait_seconds}s"
+            write_dropbox_user_dir_sync_status "retrying" "omero-admin-not-ready" "0" "1"
+            echo "[$(date -u)] WARN: OMERO API did not become ready before DropBox user directory sync after ${wait_seconds}s"
             return 1
         fi
     fi
@@ -2118,7 +2138,7 @@ schedule_binary_repository_cleanse() {
     local enabled="${OMERO_BINARY_REPO_CLEANSE_ON_START:-1}"
     local root_pass="${ROOTPASS:-}"
     local data_dir="${OMERO_BINARY_REPO_CLEANSE_DATA_DIR:-${OMERO_DIR}}"
-    local startup_wait="${OMERO_BINARY_REPO_CLEANSE_STARTUP_WAIT_SECONDS:-300}"
+    local startup_wait="${OMERO_BINARY_REPO_CLEANSE_STARTUP_WAIT_SECONDS:-900}"
     local poll_interval="${OMERO_BINARY_REPO_CLEANSE_READINESS_POLL_SECONDS:-10}"
     local keepalive_seconds="${OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS:-30}"
     local log_file="${SERVER_LOG_DIR}/binary-repository-cleanse.log"
