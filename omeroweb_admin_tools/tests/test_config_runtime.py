@@ -24,6 +24,9 @@ def test_build_log_config_validates_environment_values(monkeypatch):
         lambda name, env_file=None: {
             "ADMIN_TOOLS_LOG_LOOKBACK_SECONDS": 900,
             "ADMIN_TOOLS_LOG_MAX_ENTRIES": 250,
+            "ADMIN_TOOLS_LOG_CACHE_MAX_MB": 128,
+            "ADMIN_TOOLS_LOG_INTERNAL_FILE_BATCH_SIZE": 12,
+            "ADMIN_TOOLS_LOG_MAX_PARALLEL_QUERIES": 4,
         }[name],
     )
     monkeypatch.setattr(
@@ -31,12 +34,6 @@ def test_build_log_config_validates_environment_values(monkeypatch):
         "get_float_env",
         lambda name, env_file=None: 4.5,
     )
-    monkeypatch.setattr(
-        admin_config,
-        "get_optional_env",
-        lambda name, env_file=None: "128",
-    )
-
     config = admin_config.build_log_config()
 
     assert config == admin_config.LogConfig(
@@ -45,19 +42,31 @@ def test_build_log_config_validates_environment_values(monkeypatch):
         max_entries=250,
         timeout_seconds=4.5,
         cache_max_bytes=128 * 1024 * 1024,
-        internal_file_batch_size=128,
-        max_parallel_queries=128,
+        internal_file_batch_size=12,
+        max_parallel_queries=4,
     )
 
     monkeypatch.setattr(
-        admin_config, "get_optional_env", lambda name, env_file=None: "0"
+        admin_config,
+        "get_int_env",
+        lambda name, env_file=None: (
+            0
+            if name == "ADMIN_TOOLS_LOG_INTERNAL_FILE_BATCH_SIZE"
+            else {
+                "ADMIN_TOOLS_LOG_LOOKBACK_SECONDS": 900,
+                "ADMIN_TOOLS_LOG_MAX_ENTRIES": 250,
+                "ADMIN_TOOLS_LOG_CACHE_MAX_MB": 128,
+                "ADMIN_TOOLS_LOG_MAX_PARALLEL_QUERIES": 4,
+            }[name]
+        ),
     )
     assert admin_config.optional_log_config() is None
 
     monkeypatch.setattr(
-        admin_config, "get_optional_env", lambda name, env_file=None: None
+        admin_config,
+        "get_int_env",
+        lambda name, env_file=None: (_ for _ in ()).throw(RuntimeError("missing env")),
     )
-    monkeypatch.setattr(admin_config, "get_int_env", lambda name, env_file=None: 0)
     assert admin_config.optional_log_config() is None
 
 

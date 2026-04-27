@@ -37,6 +37,8 @@ def _config():
         max_entries=5000,
         timeout_seconds=5.0,
         cache_max_bytes=64 * 1024 * 1024,
+        internal_file_batch_size=12,
+        max_parallel_queries=4,
     )
 
 

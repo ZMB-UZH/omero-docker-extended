@@ -18,7 +18,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, cast
 import urllib.parse
 import requests
 
-from ..config import LogConfig, DEFAULT_LOG_INTERNAL_FILE_BATCH_SIZE
+from ..config import LogConfig
 from omero_plugin_common.logging_utils import (
     sanitize_log_value,
     sanitize_url_for_logging,
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 _LOG_RESULT_CACHE_TTL_SECONDS = 5.0
 _LABEL_CACHE_TTL_SECONDS = 60.0
-_DEFAULT_LOG_CACHE_MAX_BYTES = 512 * 1024 * 1024
+_UNCONFIGURED_LOG_CACHE_MAX_BYTES = 0
 _DEFAULT_LABEL_CACHE_MAX_BYTES = 8 * 1024 * 1024
 _CACHE_MAX_ITEMS = 128
 _COMPOSE_SERVICE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
@@ -234,7 +234,7 @@ def _estimate_label_cache_size(value: object) -> int:
 _LOG_RESULT_CACHE = _InMemoryTTLCache(
     ttl_seconds=_LOG_RESULT_CACHE_TTL_SECONDS,
     max_items=_CACHE_MAX_ITEMS,
-    max_bytes=_DEFAULT_LOG_CACHE_MAX_BYTES,
+    max_bytes=_UNCONFIGURED_LOG_CACHE_MAX_BYTES,
     size_estimator=_estimate_log_entries_size,
 )
 _INTERNAL_LABELS_CACHE = _InMemoryTTLCache(
@@ -687,7 +687,8 @@ def _prepare_query_jobs(
     containers: List[str],
     internal_files: Optional[Dict[str, set[str]]] = None,
     text_query: Optional[str] = None,
-    internal_file_batch_size: int = DEFAULT_LOG_INTERNAL_FILE_BATCH_SIZE,
+    *,
+    internal_file_batch_size: int,
 ) -> List[_QueryJob]:
     """Build the minimal set of Loki queries required for the request."""
     if internal_file_batch_size <= 0:

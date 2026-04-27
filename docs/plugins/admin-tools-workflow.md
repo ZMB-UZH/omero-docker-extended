@@ -73,7 +73,7 @@ flowchart TD
 - Traceback-continuation lines and RedisBloom `bf-error-rate` entries are classified as non-error noise.
 - Internal log file selections are batched to avoid one-Loki-query-per-file fan-out. If a multi-file internal batch times out or fails, the query is split into smaller batches before the request is considered failed.
 - Log requests fail loudly when any selected source cannot be queried after bounded retries; they do not return silently incomplete source sets.
-- Repeated identical requests are served from a process-local RAM cache (budget controlled by `ADMIN_TOOLS_LOG_CACHE_MAX_MB`).
+- Repeated identical requests are served from a process-local RAM cache (budget controlled by required `env/omeroweb.env` assignment `ADMIN_TOOLS_LOG_CACHE_MAX_MB`).
 
 ### 2. Resource monitoring
 

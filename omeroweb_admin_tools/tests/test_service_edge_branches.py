@@ -48,6 +48,8 @@ def _log_config(url: str = "https://loki:3100") -> LogConfig:
         max_entries=5000,
         timeout_seconds=5.0,
         cache_max_bytes=64 * 1024 * 1024,
+        internal_file_batch_size=12,
+        max_parallel_queries=4,
     )
 
 
@@ -285,6 +287,7 @@ def test_log_query_helpers_cover_validation_inference_and_job_execution(monkeypa
         ["omeroserver", "omeroweb_internal"],
         internal_files={"omeroweb_internal": {"server.log", "worker.log"}},
         text_query="boom",
+        internal_file_batch_size=12,
     )
     assert {job.source_type for job in jobs} == {"docker", "internal_batch"}
     assert any(job.source_name == "omeroserver" for job in jobs)
