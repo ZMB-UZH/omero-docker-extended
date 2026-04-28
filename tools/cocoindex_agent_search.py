@@ -54,9 +54,15 @@ DEFAULT_TIMEOUTS_SECONDS = {
 CODEX_MCP_STARTUP_TIMEOUT_SECONDS = DEFAULT_TIMEOUTS_SECONDS["install"]
 CODEX_MCP_TOOL_TIMEOUT_SECONDS = DEFAULT_TIMEOUTS_SECONDS["index"]
 MCP_PROTOCOL_VERSIONS = ("2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25")
+MCP_PROTOCOL_PROBE_ATTEMPTS = 3
+MCP_PROTOCOL_PROBE_RETRY_DELAY_SECONDS = 0.25
 
 SEARCH_FILE_RE = r"^File: (.*?):\d+(?:-\d+)? "
 RG_FILE_RE = r"^(?:\./)?([^:\n]+):\d+:"
+
+
+class McpSearchToolUnavailable(RuntimeError):
+    """Raised when an initialized MCP server briefly returns no search tool."""
 
 
 @dataclass(frozen=True)
@@ -1443,10 +1449,10 @@ def parse_mcp_response_lines(stdout: str) -> dict[int, dict[str, Any]]:
     return responses
 
 
-def run_mcp_jsonrpc_protocol_probe(
+def run_mcp_jsonrpc_protocol_probe_once(
     context: CocoIndexContext, protocol_version: str
 ) -> dict[str, object]:
-    """Probe newline-delimited MCP JSON-RPC without a client library."""
+    """Probe newline-delimited MCP JSON-RPC without retries."""
     messages = [
         {
             "jsonrpc": "2.0",
@@ -1503,12 +1509,32 @@ def run_mcp_jsonrpc_protocol_probe(
         if isinstance(tool, dict) and isinstance(tool.get("name"), str)
     )
     if "search" not in tool_names:
-        raise RuntimeError(f"MCP tools/list did not include search: {tool_names}")
+        raise McpSearchToolUnavailable(
+            f"MCP tools/list did not include search: {tool_names}"
+        )
     return {
         "protocol_version": protocol_version,
         "negotiated_protocol_version": negotiated_protocol,
         "tools": tool_names,
     }
+
+
+def run_mcp_jsonrpc_protocol_probe(
+    context: CocoIndexContext, protocol_version: str
+) -> dict[str, object]:
+    """Probe raw MCP JSON-RPC, retrying only transient empty tool lists."""
+    last_error: McpSearchToolUnavailable | None = None
+    for attempt in range(MCP_PROTOCOL_PROBE_ATTEMPTS):
+        try:
+            return run_mcp_jsonrpc_protocol_probe_once(context, protocol_version)
+        except McpSearchToolUnavailable as exc:
+            last_error = exc
+            if attempt + 1 < MCP_PROTOCOL_PROBE_ATTEMPTS:
+                time.sleep(MCP_PROTOCOL_PROBE_RETRY_DELAY_SECONDS)
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("MCP raw protocol probe did not run.")
 
 
 def run_mcp_jsonrpc_smoke(context: CocoIndexContext) -> list[dict[str, object]]:
