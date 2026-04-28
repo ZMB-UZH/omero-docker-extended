@@ -78,7 +78,7 @@ The current workflows already cover docs validation, split tests, Ruff, Vulture,
 ## Related Repo Settings
 
 - Require `docs-knowledge-base`, `tests`, `ruff`, `vulture`, `super-linter`, and security scanning to pass before default-branch acceptance.
-- Add or maintain a branch ruleset for the current remote default branch. Add rules for other branches only when maintainers explicitly designate them as production-change targets.
+- Add or maintain a branch ruleset for the current remote default branch. Add rules for other branches only when those branches are explicitly designated as production-change targets.
 - Add `CODEOWNERS` coverage for `.github/workflows/`, `startup/`, `installation/`, `docker/`, `env/*_example.env`, and `docs/operations/`.
 - Require review for changes to workflows, startup scripts, Dockerfiles, and environment templates.
 - Limit GitHub token permissions in workflows to the minimum needed for each job.

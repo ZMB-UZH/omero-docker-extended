@@ -2,7 +2,7 @@
 
 Operating principles that guide all decisions in this repository.
 
-1. **Repository-local knowledge is the system of record.** Decisions made in Slack, email, or meetings do not exist for future developers or AI agents unless they are captured in versioned files. If it matters, it belongs in `docs/`.
+1. **Repository-local knowledge is the system of record.** Decisions made in Slack, email, or meetings do not exist for future maintenance or AI agents unless they are captured in versioned files. If it matters, it belongs in `docs/`.
 
 2. **Short navigation docs over monolithic instructions.** `AGENTS.md` is a table of contents, not an encyclopedia. `docs/index.md` is a navigation hub with cross-links. Deep content lives in domain-specific documents. When everything is "important," nothing is.
 

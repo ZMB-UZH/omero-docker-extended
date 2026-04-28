@@ -1,0 +1,55 @@
+name: Bug report
+description: Report reproducible broken behavior in the OMERO Docker deployment or plugins.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, tokens, passwords, private host paths, live `.env` values, or exploit details.
+  - type: input
+    id: subsystem
+    attributes:
+      label: Affected subsystem
+      description: "Example: installation, Docker Compose, import plugin, OMP plugin, admin tools, monitoring."
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Describe what failed and include safe logs or command output.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Describe the behavior that should have occurred.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest reproducible command or workflow.
+      placeholder: |
+        1. Run ...
+        2. Open ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Safe environment details
+      description: Include OS, Docker/Compose versions, branch or commit, and relevant non-secret configuration names.
+    validations:
+      required: true
+  - type: textarea
+    id: checks
+    attributes:
+      label: Checks already run
+      description: List tests, diagnostics, or live checks already performed.
+    validations:
+      required: false

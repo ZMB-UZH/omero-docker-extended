@@ -194,7 +194,7 @@ These numbers are dynamic. Do **not** trust stale prose, screenshots, or memory 
 
 To prevent documentation drift:
 
-- **Anti-regression gate (canonical)**: `tools/regression_guard.py` (`scan`, `catalog`, `selfcheck`). This is the machine-checked rule list and the only authoritative source for "what shapes of code we never accept again". Documents below are reference-only background.
+- **Anti-regression gate (canonical)**: `tools/regression_guard.py` (`scan`, `catalog`, `selfcheck`). This is the machine-checked rule list and the only authoritative source for code shapes that must never be accepted again. Documents below are reference-only background.
 - Use this runbook for **live** open-alert totals, refresh dates, SLAs, and remediation workflow.
 - Use `docs/reference/ai-agent-security-prevention-playbook.md` for canonical coding patterns, concrete bad/good examples, external best-practice links, and anti-drift rules.
 - Use `docs/reference/code-scanning-resolved-findings.md` and `docs/reference/closed-alert-archive.md` for **closed-history** counts, hotspot files, and per-rule lessons.
@@ -394,7 +394,7 @@ contain genuine issues if a future scan reintroduces them:
 
 ## Hardening roadmap
 
-1. Add or keep a current-default-branch ruleset requiring security scanning checks to pass before accepting default-branch changes. Maintainers may add explicitly requested pull-request protections, but agents must not make separate branches or PRs unless the user asks for them.
+1. Add or keep a current-default-branch ruleset requiring security scanning checks to pass before accepting default-branch changes. Pull-request protections may be added when explicitly requested, but agents must not make separate branches or PRs unless the user asks for them.
 2. ~~Add CI policy to fail builds when new `CRITICAL` or `HIGH` alerts are introduced.~~ **Done**: the `security-delta` job in `.github/workflows/security-code-scanning.yml` now enforces a zero-added-alert policy after default-branch security scans.
 3. ~~Pin all GitHub Actions to full commit SHAs.~~ **Done in-tree**: workflow action references are SHA-pinned. Keep adding workflow-policy linting so future edits cannot drift back to tag-based action references.
 4. ~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**: the repository root now includes `SECURITY.md`, which points GitHub-native security surfaces at the canonical `docs/SECURITY.md` guidance. The Scorecard `SecurityPolicyID` finding is no longer open in the 2026-04-22 live refresh.

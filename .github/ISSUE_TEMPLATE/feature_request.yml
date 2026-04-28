@@ -1,0 +1,47 @@
+name: Feature request
+description: Propose a scoped improvement for deployment, plugins, docs, or operations.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow gap
+      description: Describe the operational, research-data, plugin, or documentation need.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful behavior change.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Mention existing workarounds, upstream OMERO behavior, or rejected approaches.
+    validations:
+      required: false
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact area
+      options:
+        - Documentation
+        - Installation or update workflow
+        - Docker or Compose runtime
+        - OMERO.web plugin behavior
+        - Monitoring or operations
+        - Security or permissions
+        - Developer tooling
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Suggested validation
+      description: List tests, live checks, or docs that should prove the change.
+    validations:
+      required: false

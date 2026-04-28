@@ -75,6 +75,98 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
         self.assertTrue((self.repo_root / "docs" / "SECURITY.md").exists())
 
+    def test_github_community_standard_files_exist(self) -> None:
+        expected_paths = (
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.md",
+            "SECURITY.md",
+            ".github/SECURITY.md",
+            ".github/ISSUE_TEMPLATE/bug_report.yml",
+            ".github/ISSUE_TEMPLATE/feature_request.yml",
+            ".github/ISSUE_TEMPLATE/config.yml",
+            ".github/pull_request_template.md",
+        )
+        for relative_path in expected_paths:
+            with self.subTest(relative_path=relative_path):
+                path = self.repo_root / relative_path
+                self.assertTrue(path.is_file(), f"Missing {relative_path}")
+                self.assertGreater(
+                    len(path.read_text(encoding="utf-8").strip()),
+                    0,
+                    f"{relative_path} is empty",
+                )
+
+        code_of_conduct = self.read_text("CODE_OF_CONDUCT.md")
+        contributing = self.read_text("CONTRIBUTING.md")
+        issue_config = self.read_text(".github/ISSUE_TEMPLATE/config.yml")
+        pr_template = self.read_text(".github/pull_request_template.md")
+
+        self.assertIn("Reporting", code_of_conduct)
+        self.assertIn("security/advisories/new", code_of_conduct)
+        self.assertIn("tools/run_local_workflow_gates.py", contributing)
+        self.assertIn("blank_issues_enabled: false", issue_config)
+        self.assertIn("Security vulnerability", issue_config)
+        self.assertIn("## Verification", pr_template)
+
+    def test_docs_do_not_imply_multiple_project_maintainers(self) -> None:
+        plural_voice_patterns = {
+            "plural pronoun": re.compile(
+                r"\b(we|we're|we’ve|we've|we’ll|we'll|we’d|we'd|our|ours|"
+                r"ourselves|us|let's|lets)\b",
+                re.IGNORECASE,
+            ),
+            "plural maintainer role": re.compile(
+                r"\b(maintainers|multi-maintainer|development team|team|"
+                r"future developers)\b",
+                re.IGNORECASE,
+            ),
+        }
+        upstream_developer_url = re.compile(
+            r"https://omero\.readthedocs\.io/.*/developers/"
+        )
+        mermaid_edge = re.compile(r"^\s*[A-Z][A-Z0-9]*\s*--?>")
+        informal_singular = re.compile(
+            r"\b(I'm|I’ve|I've|I’ll|I'll|I’d|I'd|me|my|mine|myself)\b|"
+            r"(?<![-/])\bI\b(?![/\[])"
+        )
+        personal_voice_patterns = {
+            **plural_voice_patterns,
+            "informal singular": informal_singular,
+        }
+        checked_suffixes = {
+            ".json",
+            ".md",
+            ".mdc",
+            ".rst",
+            ".txt",
+            ".yaml",
+            ".yml",
+        }
+        checked_names = {"AGENTS.md", "CLAUDE.md", "GEMINI.md", "README.md"}
+        offenders: list[str] = []
+        for relative_path in self.git_files():
+            path = Path(relative_path)
+            if path.parts and path.parts[0] == "third_party":
+                continue
+            if (
+                path.suffix.lower() not in checked_suffixes
+                and path.name not in checked_names
+            ):
+                continue
+            text = self.read_text(relative_path)
+            for line_number, line in enumerate(text.splitlines(), start=1):
+                if upstream_developer_url.search(line):
+                    continue
+                if mermaid_edge.search(line):
+                    continue
+                for pattern_name, pattern in personal_voice_patterns.items():
+                    if pattern.search(line):
+                        offenders.append(
+                            f"{relative_path}:{line_number}: {pattern_name}: {line}"
+                        )
+
+        self.assertEqual([], offenders)
+
     def test_code_scanning_runbook_records_current_root_security_state(
         self,
     ) -> None:

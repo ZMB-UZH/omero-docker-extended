@@ -39,7 +39,7 @@ GitHub reported the following branch-level totals when this ledger was refreshed
 
 ### Highest-recurrence rule families from the 2 040-alert closed history
 
-| Rule family | Closed alerts | What the repeated fixes taught us |
+| Rule family | Closed alerts | Lessons from repeated fixes |
 | --- | ---: | --- |
 | `B101` | 492 | Production code must not rely on `assert`; test code may. |
 | `python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query` | 165 | Raw SQL keeps regressing unless composition and parameterization are separated deliberately. |
@@ -56,7 +56,7 @@ GitHub reported the following branch-level totals when this ledger was refreshed
 
 ### Closed-alert themes derived from the full-history review
 
-| Theme | Representative rules | Closed alerts | What the fixes taught us |
+| Theme | Representative rules | Closed alerts | Lessons from fixes |
 | --- | --- | ---: | --- |
 | Assertions and swallowed exceptions | `B101`, `py/empty-except`, `B110`, `B112` | 659 | Production code must not rely on `assert`, and silent `except` blocks are treated as defects, not style issues. |
 | SQL and query construction | `sqlalchemy-execute-raw-query`, `B608` | 178 | Query text and user data must be separated consistently, even in tests and helper layers. |
@@ -87,7 +87,7 @@ This ledger intentionally stays focused on:
 - hotspot files and recurring rule families
 - per-rule prevention lessons
 
-Use the playbook when you need the current normative coding pattern. Use this ledger when you need to understand how often a rule has already regressed here and what the prior fixes taught us.
+Use the playbook when the current normative coding pattern is needed. Use this ledger to understand how often a rule has already regressed here and what prior fixes showed.
 
 ## Resolved finding categories — full catalog
 

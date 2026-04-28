@@ -144,9 +144,9 @@ package and registering `ccc mcp` with the agent. This repo keeps that MCP
 server contract but launches it through `tools/cocoindex_agent_search.py mcp`
 so every MCP-capable agent can share one host install while keeping
 `.cocoindex_code/`, model caches, runtime files, and SQLite databases out of
-the live checkout. The upstream `ccc` skill is also installed for supported
-project agent directories, but its OMERO override routes this repository back
-through `.agents/skills/cocoindex-code-search/`.
+the live checkout. Do not copy the upstream `ccc` skill into per-agent
+directories in this repository; adapter files should point to the single
+`.agents/skills/cocoindex-code-search/` workflow instead.
 
 MCP-capable clients can run
 `python3 tools/cocoindex_agent_search.py mcp-config` for a generic stdio
