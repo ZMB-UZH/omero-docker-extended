@@ -692,14 +692,12 @@ def test_active_index_metadata_resolves_without_hashing_worktree(
 ) -> None:
     repo_root = (tmp_path / "repo").resolve()
     artifact_root = (tmp_path / "artifacts").resolve()
+    mirror_digest = "abc12345" * 4
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=repo_root,
         artifact_root=artifact_root,
-        mirror_repo=artifact_root
-        / "mirrors"
-        / "abc123abc123abc123abc123abc123ab"
-        / "repo",
-        mirror_digest="abc123abc123abc123abc123abc123ab",
+        mirror_repo=artifact_root / "mirrors" / mirror_digest / "repo",
+        mirror_digest=mirror_digest,
     )
     cocoindex_agent_search.write_active_index_metadata(context)
     monkeypatch.setattr(cocoindex_agent_search, "resolve_repo_root", lambda: repo_root)

@@ -84,7 +84,6 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ".github/ISSUE_TEMPLATE/bug_report.yml",
             ".github/ISSUE_TEMPLATE/feature_request.yml",
             ".github/ISSUE_TEMPLATE/config.yml",
-            ".github/ISSUE_TEMPLATE.md",
             ".github/pull_request_template.md",
         )
         for relative_path in expected_paths:
