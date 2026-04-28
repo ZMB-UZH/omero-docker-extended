@@ -25,7 +25,7 @@ envs:                               # extra environment variables for the daemon
 ### Fields
 
 | Field | Description |
-|-------|-------------|
+| ----- | ----------- |
 | `embedding.provider` | `sentence-transformers` for local models, `litellm` (or omit) for cloud/remote models |
 | `embedding.model` | Model identifier — format depends on provider (see examples below) |
 | `embedding.device` | Optional. `cpu`, `cuda`, or `mps`. Auto-detected if omitted. Only relevant for `sentence-transformers`. |
@@ -119,7 +119,7 @@ language_overrides:
 ### Fields
 
 | Field | Description |
-|-------|-------------|
+| ----- | ----------- |
 | `include_patterns` | Glob patterns for files to index. Defaults cover common languages (Python, JS/TS, Rust, Go, Java, C/C++, C#, SQL, Shell, Markdown, PHP, Lua, etc.). |
 | `exclude_patterns` | Glob patterns for files/directories to skip. Defaults exclude hidden dirs, `node_modules`, `dist`, `__pycache__`, `vendor`, etc. |
 | `language_overrides` | List of `{ext, lang}` pairs to override language detection for specific file extensions. |
