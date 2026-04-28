@@ -100,10 +100,9 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Treat plugin input as untrusted and validate at system boundaries.
 - Treat every tracked `*_example*` file as the canonical configuration contract.
 - Prefer repo-local skills before falling back to generic workflows.
-- For broad repo navigation, check for a `cocoindex-code` MCP server or tool first;
-  use `.agents/skills/cocoindex-code-search/` only for semantic routing when broad `rg` output would be large, then validate exactly with `rg`. It uses one XDG/`AGENT_COCOINDEX_HOME` install with per-repo external mirrors, DBs, and runtime dirs, never live-checkout `.cocoindex_code/`, and does not weaken the single-session rule.
-  After MCP install or launcher changes, prove stdio `initialize` and
-  `list_tools` with `python3 tools/cocoindex_agent_search.py mcp-smoke`.
+- For broad repo navigation, check for a `cocoindex-code` MCP server or tool first; use `.agents/skills/cocoindex-code-search/` only for semantic routing before exact `rg`. It uses one XDG/`AGENT_COCOINDEX_HOME` install with per-repo external mirrors/DB/runtime dirs, never live-checkout `.cocoindex_code/`, and does not weaken the single-session rule.
+  If CocoIndex starts a cold semantic index, tell the user once that the first search can take several minutes and later searches reuse the external cache. It indexes text-decodable mirrored files through CocoIndex Code 0.2.31; do not claim binary semantic search, add repo-specific language rewrites/file-type exclusions, or use `--lang` on mixed-language files unless proven safe.
+  After MCP install or launcher changes, prove stdio `initialize`, `list_tools`, raw protocol probes, and a real search with `python3 tools/cocoindex_agent_search.py mcp-smoke`.
 - Native adapter files exist for GitHub Copilot, Cursor, Claude, and Gemini. Treat `AGENTS.md` as the universal baseline; adapters are additive only.
 - Never create, edit, overwrite, delete, normalize, or print values from non-example deployment env files (`.env`, `installation_paths.env`, `env/*.env`) unless the user explicitly grants a one-off exception for that exact operation; examples remain the tracked contract.
 - Run `python3 tools/env_safety_guard.py check` and `python3 tools/env_safety_guard.py compose-guard` before any `docker compose` operation to verify deployment env files are intact and the checkout matches the live installation root. Use `python3 tools/env_safety_guard.py template-check` only to report env-template key drift without values.

@@ -33,6 +33,7 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 | `compliance-and-rate-limit` | `.agents/skills/compliance-and-rate-limit/SKILL.md` | when repeated requests, crawling, or larger-scope extraction could create policy or load risk | collection stays cache-aware, paced, and non-evasive |
 | `verification-loop` | `.agents/skills/verification-loop/SKILL.md` | after non-trivial changes and before commit/push | verification states exactly what was checked and what was blocked |
 | `caveman` | `.agents/skills/caveman/SKILL.md` | when the user explicitly asks for lower-token replies or terse mode in AI communication | output tokens drop without losing technical substance or safety |
+| `ccc` | `.agents/skills/ccc/SKILL.md` | when an agent understands the upstream CocoIndex Code skill surface | upstream `ccc` guidance is available with an OMERO override that routes this repo through `cocoindex-code-search` |
 | `cocoindex-code-search` | `.agents/skills/cocoindex-code-search/SKILL.md` | when broad repo navigation needs semantic routing before exact validation | context drops by routing to fewer candidate files without replacing `rg` |
 | `docs-knowledge-maintainer` | `.agents/skills/docs-knowledge-maintainer/SKILL.md` | when behavior, env contracts, topology, or troubleshooting guidance changes | docs stay aligned with the code and routing model |
 | `plugin-regression-triager` | `.agents/skills/plugin-regression-triager/SKILL.md` | when selecting the correct split pytest suites | the narrowest correct regression set is chosen |
@@ -67,9 +68,20 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 - Use `cocoindex-code-search` only as a shared host-side routing aid: check for
   an existing MCP server or tool named `cocoindex-code` first, use one pinned
   install under XDG data paths or `AGENT_COCOINDEX_HOME`, keep per-repository
-  external mirrors and databases outside the live checkout, verify MCP changes
+  external mirrors and databases outside the live checkout, repair stale
+  same-name Codex MCP entries instead of adding duplicates, verify MCP changes
   with `python3 tools/cocoindex_agent_search.py mcp-smoke`, then exact `rg`
-  confirmation before editing.
+  confirmation before editing. If it cold-indexes, tell the user once that the
+  first search can take several minutes and then uses the external cache. Its
+  mirror asks CocoIndex Code 0.2.31 to include every Git-visible mirrored file
+  pattern; CocoIndex indexes text-decodable content and skips undecodable
+  binary files, so do not add repo-specific language rewrites or file-type
+  exclusions without a tested opt-in path.
+- The upstream `ccc` skill is installed across supported project agent
+  directories with a repo override. Its generic `ccc init` guidance is for
+  other projects; inside this repository it must defer to
+  `cocoindex-code-search` so `.cocoindex_code/` and per-repo databases stay
+  outside the live checkout.
 - Never paste secrets, PATs, passwords, or internal-only URLs into external research tools.
 - `caveman` is opt-in and available through the shared `.agents/skills/` catalog like every other skill. Use it only when the user asks for terseness or lower token usage, and drop it immediately if clarity or safety would suffer.
 - `caveman` is limited to internal AI communication and prompting. Keep repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text in normal prose.
