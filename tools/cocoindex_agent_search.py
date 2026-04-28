@@ -1055,16 +1055,31 @@ def daemon_handshake_succeeds(context: CocoIndexContext) -> bool:
     """Return whether the current runtime daemon accepts a version handshake."""
     prepend_venv_site_package_paths(context)
     with patched_process_env(ccc_env(context)):
+        cocoindex_module = importlib.import_module("cocoindex_code")
         client_module = importlib.import_module("cocoindex_code.client")
         try:
-            conn = cast(Any, client_module)._raw_connect_and_handshake()
-        except (ConnectionRefusedError, OSError, RuntimeError):
+            socket_path = cast(Any, client_module).daemon_socket_path()
+            if sys.platform != "win32" and not os.path.exists(socket_path):
+                return False
+            conn = cast(Any, client_module).Client(
+                socket_path,
+                family=cast(Any, client_module).connection_family(),
+            )
+            try:
+                request = cast(Any, client_module).HandshakeRequest(
+                    version=cast(Any, cocoindex_module).__version__
+                )
+                conn.send_bytes(cast(Any, client_module).encode_request(request))
+                response = cast(Any, client_module).decode_response(conn.recv_bytes())
+            finally:
+                conn.close()
+        except (EOFError, OSError, RuntimeError):
             return False
-        try:
-            conn.close()
-        except OSError:
-            pass
-    return True
+    return (
+        isinstance(response, cast(Any, client_module).HandshakeResponse)
+        and response.ok
+        and response.daemon_version == cast(Any, cocoindex_module).__version__
+    )
 
 
 def start_daemon_process(context: CocoIndexContext) -> subprocess.Popen[bytes]:
@@ -1218,6 +1233,11 @@ def format_toml_scalar(value: int | float | bool | str) -> str:
     return json.dumps(value)
 
 
+def format_toml_assignment(key: str, value: int | float | bool | str) -> str:
+    """Format one TOML assignment line."""
+    return f"{key} = {format_toml_scalar(value)}\n"
+
+
 def atomic_write_text(path: Path, text: str) -> None:
     """Atomically replace a text file in its own directory."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1239,23 +1259,15 @@ def atomic_write_text(path: Path, text: str) -> None:
             Path(temp_name).unlink(missing_ok=True)
 
 
-def upsert_toml_table_scalars(
-    text: str, table_name: str, values: Mapping[str, int | float | bool | str]
-) -> str:
-    """Set scalar keys in one TOML table while preserving other content."""
+def find_toml_table_bounds(lines: list[str], table_name: str) -> tuple[int, int] | None:
+    """Return start/end indexes for a TOML table."""
     header = f"[{table_name}]"
-    lines = text.splitlines(keepends=True)
-    newline = "\n" if text.endswith("\n") or not text else ""
     start = next(
         (index for index, line in enumerate(lines) if line.strip() == header),
         None,
     )
     if start is None:
-        prefix = "" if not lines or lines[-1].endswith("\n") else "\n"
-        body = "".join(
-            f"{key} = {format_toml_scalar(value)}\n" for key, value in values.items()
-        )
-        return text + prefix + header + "\n" + body
+        return None
 
     end = len(lines)
     for index in range(start + 1, len(lines)):
@@ -1263,28 +1275,61 @@ def upsert_toml_table_scalars(
         if stripped.startswith("[") and stripped.endswith("]"):
             end = index
             break
+    return start, end
 
-    replacement_lines: list[str] = []
+
+def matching_toml_key(line: str, keys: tuple[str, ...]) -> str | None:
+    """Return the configured scalar key assigned by a TOML line."""
+    stripped = line.lstrip()
+    return next((key for key in keys if stripped.startswith(f"{key} =")), None)
+
+
+def update_toml_table_lines(
+    lines: list[str], values: Mapping[str, int | float | bool | str]
+) -> list[str]:
+    """Return TOML table body lines with scalar values upserted."""
+    keys = tuple(values)
+    rendered = {
+        key: format_toml_assignment(key, value) for key, value in values.items()
+    }
     seen: set[str] = set()
-    for line in lines[start + 1 : end]:
-        stripped = line.lstrip()
-        matching_key = next(
-            (key for key in values if stripped.startswith(f"{key} =")),
-            None,
-        )
-        if matching_key is None:
-            replacement_lines.append(line)
+    updated: list[str] = []
+    for line in lines:
+        key = matching_toml_key(line, keys)
+        if key is None:
+            updated.append(line)
             continue
-        replacement_lines.append(
-            f"{matching_key} = {format_toml_scalar(values[matching_key])}\n"
-        )
-        seen.add(matching_key)
+        updated.append(rendered[key])
+        seen.add(key)
+    updated.extend(rendered[key] for key in keys if key not in seen)
+    return updated
 
-    for key, value in values.items():
-        if key not in seen:
-            replacement_lines.append(f"{key} = {format_toml_scalar(value)}\n")
 
-    updated = lines[: start + 1] + replacement_lines + lines[end:]
+def append_toml_table(
+    text: str, table_name: str, values: Mapping[str, int | float | bool | str]
+) -> str:
+    """Append a TOML table containing scalar assignments."""
+    prefix = "" if not text or text.endswith("\n") else "\n"
+    body = "".join(format_toml_assignment(key, value) for key, value in values.items())
+    return f"{text}{prefix}[{table_name}]\n{body}"
+
+
+def upsert_toml_table_scalars(
+    text: str, table_name: str, values: Mapping[str, int | float | bool | str]
+) -> str:
+    """Set scalar keys in one TOML table while preserving other content."""
+    lines = text.splitlines(keepends=True)
+    newline = "\n" if text.endswith("\n") or not text else ""
+    bounds = find_toml_table_bounds(lines, table_name)
+    if bounds is None:
+        return append_toml_table(text, table_name, values)
+
+    start, end = bounds
+    updated = (
+        lines[: start + 1]
+        + update_toml_table_lines(lines[start + 1 : end], values)
+        + lines[end:]
+    )
     output = "".join(updated)
     return output if output.endswith("\n") else output + newline
 
