@@ -1007,6 +1007,57 @@ def test_mcp_jsonrpc_protocol_probe_uses_raw_stdio(
     assert '"method": "tools/call"' not in kwargs["input_text"]
 
 
+def test_mcp_jsonrpc_protocol_probe_retries_empty_tool_list(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path / "repo",
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    empty_tools = subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout=(
+            '{"jsonrpc":"2.0","id":1,"result":'
+            '{"protocolVersion":"2025-06-18"}}\n'
+            '{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}\n'
+        ),
+        stderr="",
+    )
+    search_tool = subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout=(
+            '{"jsonrpc":"2.0","id":1,"result":'
+            '{"protocolVersion":"2025-06-18"}}\n'
+            '{"jsonrpc":"2.0","id":2,"result":'
+            '{"tools":[{"name":"search"}]}}\n'
+        ),
+        stderr="",
+    )
+    mocked_run = mock.Mock(side_effect=[empty_tools, search_tool])
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "run_command_with_input",
+        mocked_run,
+    )
+    monkeypatch.setattr(cocoindex_agent_search.time, "sleep", mock.Mock())
+
+    assert cocoindex_agent_search.run_mcp_jsonrpc_protocol_probe(
+        context, "2025-06-18"
+    ) == {
+        "protocol_version": "2025-06-18",
+        "negotiated_protocol_version": "2025-06-18",
+        "tools": ["search"],
+    }
+    assert mocked_run.call_count == 2
+    cocoindex_agent_search.time.sleep.assert_called_once_with(
+        cocoindex_agent_search.MCP_PROTOCOL_PROBE_RETRY_DELAY_SECONDS
+    )
+
+
 def test_mcp_jsonrpc_protocol_probe_rejects_protocol_mismatch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
