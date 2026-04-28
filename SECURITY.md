@@ -12,9 +12,9 @@ Canonical full URL:
 
 - Prefer GitHub private vulnerability reporting for this repository:
   <https://github.com/ZMB-UZH/omero-docker-extended/security/advisories/new>
-- If private reporting is not available in the current hosting location, contact the repository maintainers through a non-public channel before disclosure.
+- If private reporting is not available in the current hosting location, contact the repository maintainer through a non-public channel before disclosure.
 - Do not post exploit details, proof-of-concept payloads, or live secrets in public issues, pull requests, or discussions.
-- We aim to acknowledge new vulnerability reports promptly and coordinate disclosure within 90 days when the impact and remediation window allow it.
+- New vulnerability reports are acknowledged promptly, and disclosure is coordinated within 90 days when the impact and remediation window allow it.
 
 ## Related documentation
 

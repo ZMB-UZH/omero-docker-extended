@@ -74,10 +74,10 @@ reduce context before exact `rg`, file reads, and tests.
   `tools/cocoindex_agent_search.py mcp` instead so agents get the same
   CocoIndex server while keeping `.cocoindex_code/`, runtime files, model
   caches, and per-repo databases outside the live checkout.
-- The upstream `ccc` skill may also be installed with
-  `npx skills add cocoindex-io/cocoindex-code --all --copy`; in this repo its
-  project-local copies must keep the OMERO override that points back to this
-  skill before any direct `ccc init` or native `ccc mcp` workflow.
+- Do not copy the upstream `ccc` skill into this repository. Keep this file as
+  the single repository-local CocoIndex skill surface and generate MCP
+  configuration from `tools/cocoindex_agent_search.py mcp-config` when another
+  MCP-capable agent needs explicit stdio settings.
 - Generic MCP: first check whether a server or tool named `cocoindex-code` is
   already configured. If it is absent, run
   `python3 tools/cocoindex_agent_search.py mcp-config` and use the printed

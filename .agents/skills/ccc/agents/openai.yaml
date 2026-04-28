@@ -1,7 +1,0 @@
-interface:
-  display_name: "CocoIndex Code"
-  short_description: "Upstream ccc skill routed through the OMERO wrapper"
-  brand_color: "#2563EB"
-  default_prompt: "Use the OMERO CocoIndex wrapper before direct ccc commands"
-policy:
-  allow_implicit_invocation: true

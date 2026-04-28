@@ -22,7 +22,7 @@ Administrators who deploy, monitor, and maintain the OMERO installation. They ne
 - Automated maintenance that runs safely without intervention (pg-maintenance).
 - Troubleshooting procedures that lead to resolution without guesswork.
 
-### Integration developers
+### Integration and extension work
 
 Engineers who extend or modify the platform. They need:
 

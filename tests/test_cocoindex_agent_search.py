@@ -1115,35 +1115,27 @@ def test_cross_agent_surfaces_describe_generic_cocoindex_workflow() -> None:
         )
 
 
-def test_installed_ccc_skills_preserve_repo_override() -> None:
+def test_no_copied_ccc_skill_trees_are_tracked() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    skill_paths = sorted(repo_root.glob("**/skills/ccc/SKILL.md"))
+    completed = subprocess.run(
+        [
+            cocoindex_agent_search.resolve_required_executable("git"),
+            "ls-files",
+            "-z",
+            ":(glob)**/skills/ccc/**",
+            "skills-lock.json",
+        ],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+    )
 
-    assert skill_paths
-    for skill_path in skill_paths:
-        text = skill_path.read_text(encoding="utf-8")
-        assert "OMERO Docker Extended override" in text, skill_path
-        assert "cocoindex-code-search" in text, skill_path
-        assert "tools/cocoindex_agent_search.py mcp-config" in text, skill_path
-        assert "Do not run `ccc init`" in text, skill_path
-        assert "Inside this repository:" in text, skill_path
-        assert "For upstream native use outside this repository:" in text, skill_path
-        assert "The agent owns the `ccc` lifecycle" not in text, skill_path
-
-        management_text = (
-            skill_path.parent / "references" / "management.md"
-        ).read_text(encoding="utf-8")
-        assert "## OMERO wrapper installation" in management_text, skill_path
-        assert "## Native upstream installation" in management_text, skill_path
-        assert (
-            "Use native commands below only outside this repository" in management_text
-        )
-
-        settings_text = (skill_path.parent / "references" / "settings.md").read_text(
-            encoding="utf-8"
-        )
-        assert "do not create or edit live-checkout `.cocoindex_code/`" in settings_text
-        assert "For upstream native use outside this repository" in settings_text
+    assert completed.stdout == b""
+    skill_text = (
+        repo_root / ".agents" / "skills" / "cocoindex-code-search" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "npx skills add cocoindex-io/cocoindex-code --all --copy" not in skill_text
+    assert "project-local copies" not in skill_text
 
 
 def test_repo_has_no_stale_omero_specific_cocoindex_install_name() -> None:

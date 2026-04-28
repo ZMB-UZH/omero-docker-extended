@@ -13,7 +13,7 @@ apply the parsed metadata.
 5. Continue to preview before writing anything to OMERO.
 
 Use stable variable names such as `sample`, `condition`, `channel`, or `time`
-when your team will search or reuse the metadata later.
+when the metadata will be searched or reused later.
 
 ## Preview and Apply
 

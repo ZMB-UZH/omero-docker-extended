@@ -35,19 +35,15 @@ The vendor snapshot includes only the ECC skills that map cleanly onto this repo
 ## CocoIndex Code skill
 
 - Repository: `cocoindex-io/cocoindex-code`
-- Installed command: `npx --yes skills add cocoindex-io/cocoindex-code --all --copy`
+- Upstream native installation command:
+  `pipx install 'cocoindex-code[full]'`
 - Observed upstream `main` commit during install verification:
   `51ea6efea1878ca1b412b155adedbadc1dd611ad`
-- Skill lock entry: `skills-lock.json` records the installed upstream source,
-  skill path `skills/ccc/SKILL.md`, and installer hash
-  `485211ec7ef033f784261d1dba56770fea20163aebdd482950e8d4878b74c6b2`.
-- Local paths: `.agents/skills/ccc/` plus project copies for supported agent
-  directories created by the skills installer.
-- Integration rule: keep the upstream `ccc` skill available for broad
-  agent compatibility, but preserve the OMERO override in every copied
-  `ccc` skill so this repository uses `.agents/skills/cocoindex-code-search/`
-  and `tools/cocoindex_agent_search.py` before any direct native `ccc init`,
-  `ccc index`, `ccc search`, or `ccc mcp` workflow.
+- Local path: `.agents/skills/cocoindex-code-search/`
+- Integration rule: keep one repository-local CocoIndex workflow and generate
+  MCP configuration with `tools/cocoindex_agent_search.py mcp-config` when a
+  client needs explicit stdio settings. Do not copy the upstream `ccc` skill
+  into root dot-directories or per-agent skill directories.
 
 ## Karpathy baseline
 

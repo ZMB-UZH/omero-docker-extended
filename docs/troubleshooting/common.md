@@ -364,7 +364,7 @@ Symptom:
 
 Cause:
 
-- The Import plugin always lets OMERO CLI/Bio-Formats build the logical import plan before import starts, even when browser-side compatibility checking is disabled.
+- The Import plugin always allows OMERO CLI/Bio-Formats to build the logical import plan before import starts, even when browser-side compatibility checking is disabled.
 - Compatibility-disabled jobs use that background step for planning only: it persists `planned_import_units`, but it does not run the first-batch compatibility scan.
 - Older broken builds tried to recover by switching background dataset preparation onto a `job-service` impersonation path. On stacks where `job-service` could not impersonate the importing user, that path collapsed into the generic destination-preparation error.
 - Fixed builds use an independent admin-created user session for background dataset preparation, so they do not need the browser session and do not reintroduce the historical logout/disconnect problem.
