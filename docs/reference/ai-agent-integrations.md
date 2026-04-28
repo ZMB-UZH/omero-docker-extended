@@ -150,16 +150,27 @@ directories in this repository; adapter files should point to the single
 
 MCP-capable clients can run
 `python3 tools/cocoindex_agent_search.py mcp-config` for a generic stdio
-configuration. The MCP client must launch the command from the target Git
-repository root or set `AGENT_COCOINDEX_REPO` for a workspace-scoped static
-configuration. Codex can use
+configuration, then map the printed `command`, `args`, `env`,
+`startup_timeout_sec`, and `tool_timeout_sec` into the client's native config.
+The MCP client must launch the command from the target Git repository root or
+set `AGENT_COCOINDEX_REPO` for a workspace-scoped static configuration. Do not
+claim compatibility with clients that cannot run local stdio MCP servers, set
+environment variables, and allow long tool timeouts. Codex can use
 `python3 tools/cocoindex_agent_search.py mcp-install`, which registers or
-repairs the same server name without duplicating it and writes explicit
-startup/tool timeouts for slow first-install and first-index runs. After any
-MCP install, config change, or launcher change, run
+repairs the same server name without duplicating it, uses a repository-relative
+wrapper command, and writes explicit per-server startup/tool timeouts. The MCP
+server itself stays lightweight through initialize and tool-list requests. MCP
+search may only query an existing active index; cold install, mirror, daemon,
+and index work requires an explicit CLI command outside the MCP request path.
+Mirror, index, refresh, and benchmark commands reject dirty or untracked
+worktrees by default and require an explicit dirty flag for intentional
+disk-heavy runs.
+After any MCP install, config change, or launcher change, run
 `python3 tools/cocoindex_agent_search.py mcp-smoke` from the target repo root;
 the MCP path is not verified until stdio `initialize`, raw JSON-RPC protocol
-probes, `list_tools`, and a real MCP search call all succeed.
+probes, and `list_tools` succeed. Use `mcp-smoke --include-search` only for an
+explicit end-to-end search smoke against an existing active index; it must
+refuse to build or refresh one.
 
 ## Claude Code hooks
 

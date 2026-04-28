@@ -9,6 +9,7 @@ import fcntl
 import hashlib
 import importlib
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -27,20 +28,33 @@ PACKAGE_NAME = "cocoindex-code"
 PACKAGE_VERSION = "0.2.31"
 PACKAGE_REQUIREMENT = f"{PACKAGE_NAME}[full]=={PACKAGE_VERSION}"
 MCP_SERVER_NAME = "cocoindex-code"
+MCP_PYTHON_COMMAND = "python3"
+MCP_JSONRPC_VERSION = "2.0"
+MCP_SEARCH_TOOL_NAME = "search"
 ARTIFACT_ROOT_ENV = "AGENT_COCOINDEX_HOME"
 REPO_ROOT_ENV = "AGENT_COCOINDEX_REPO"
 TIMEOUT_ENV_PREFIX = "AGENT_COCOINDEX_TIMEOUT_"
 MIRROR_SCHEMA_VERSION = "1"
+FILE_COPY_CHUNK_BYTES = 1024 * 1024
 DENIED_MIRROR_BASENAMES = frozenset({".env"})
 DENIED_MIRROR_SUFFIXES = (".env",)
 DENIED_MIRROR_PARTS = frozenset({".codex", ".cocoindex_code"})
 MIRROR_INCLUDE_PATTERNS = ("*",)
 MIRROR_EXCLUDE_PATTERNS = (".cocoindex_code/**", "**/.cocoindex_code/**")
+DISK_BYTES_ENV_PREFIX = "AGENT_COCOINDEX_DISK_"
+MIN_DEFAULT_FREE_BYTES = 2 * 1024 * 1024 * 1024
+MAX_DEFAULT_FREE_BYTES = 20 * 1024 * 1024 * 1024
 COLD_INDEX_NOTICE = (
     "NOTICE: CocoIndex is building a cold semantic index for this repository; "
     "the first search can take several minutes and later searches reuse the "
     "external cache."
 )
+INDEX_REQUIRED_MESSAGE = (
+    "No active CocoIndex semantic index is recorded for this repository. Run "
+    "`python3 tools/cocoindex_agent_search.py index` explicitly when disk "
+    "headroom and system load are safe."
+)
+ACTIVE_INDEX_SCHEMA_VERSION = 1
 DEFAULT_TIMEOUTS_SECONDS = {
     "install": 7200,
     "verify_install": 300,
@@ -51,18 +65,32 @@ DEFAULT_TIMEOUTS_SECONDS = {
     "rg": 600,
     "mcp_smoke": 600,
 }
-CODEX_MCP_STARTUP_TIMEOUT_SECONDS = DEFAULT_TIMEOUTS_SECONDS["install"]
-CODEX_MCP_TOOL_TIMEOUT_SECONDS = DEFAULT_TIMEOUTS_SECONDS["index"]
+MCP_STARTUP_TIMEOUT_SECONDS = 600
+MCP_TOOL_TIMEOUT_SECONDS = DEFAULT_TIMEOUTS_SECONDS["index"]
 MCP_PROTOCOL_VERSIONS = ("2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25")
 MCP_PROTOCOL_PROBE_ATTEMPTS = 3
 MCP_PROTOCOL_PROBE_RETRY_DELAY_SECONDS = 0.25
 
 SEARCH_FILE_RE = r"^File: (.*?):\d+(?:-\d+)? "
 RG_FILE_RE = r"^(?:\./)?([^:\n]+):\d+:"
+LOGGER = logging.getLogger(__name__)
 
 
 class McpSearchToolUnavailable(RuntimeError):
     """Raised when an initialized MCP server briefly returns no search tool."""
+
+
+class JsonRpcError(RuntimeError):
+    """Raised for JSON-RPC request errors that should be reported to the client."""
+
+    def __init__(self, code: int, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+class IndexRequiredError(RuntimeError):
+    """Raised when a safe search refuses to build an index implicitly."""
 
 
 @dataclass(frozen=True)
@@ -304,6 +332,76 @@ def timeout_seconds(name: str) -> int:
     return value
 
 
+def env_bytes(name: str, default: int) -> int:
+    """Return a positive byte limit from the environment."""
+    raw_value = os.environ.get(f"{DISK_BYTES_ENV_PREFIX}{name}")
+    if raw_value is None:
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"{DISK_BYTES_ENV_PREFIX}{name} must be a positive integer byte count."
+        ) from exc
+    if value <= 0:
+        raise RuntimeError(
+            f"{DISK_BYTES_ENV_PREFIX}{name} must be a positive integer byte count."
+        )
+    return value
+
+
+def artifact_usage_bytes(artifact_root: Path) -> int:
+    """Return current artifact bytes without following symlinks."""
+    if not artifact_root.exists():
+        return 0
+    total = 0
+    for root, dirs, files in os.walk(artifact_root):
+        root_path = Path(root)
+        dirs[:] = [entry for entry in dirs if not (root_path / entry).is_symlink()]
+        for name in files:
+            path = root_path / name
+            try:
+                stat = path.stat(follow_symlinks=False)
+            except OSError:
+                LOGGER.debug("Could not stat CocoIndex artifact file.", exc_info=True)
+                continue
+            total += stat.st_size
+    return total
+
+
+def default_min_free_bytes(total_bytes: int) -> int:
+    """Return a host-scaled minimum free-space floor."""
+    return min(
+        MAX_DEFAULT_FREE_BYTES,
+        max(MIN_DEFAULT_FREE_BYTES, total_bytes // 20),
+    )
+
+
+def require_disk_budget(context: CocoIndexContext, operation: str) -> None:
+    """Fail closed before expensive disk-heavy CocoIndex operations."""
+    disk_root = context.artifact_root
+    while not disk_root.exists() and disk_root != disk_root.parent:
+        disk_root = disk_root.parent
+    usage = shutil.disk_usage(disk_root)
+    min_free_bytes = env_bytes("MIN_FREE_BYTES", default_min_free_bytes(usage.total))
+    if usage.free < min_free_bytes:
+        raise RuntimeError(
+            f"Refusing CocoIndex {operation}: filesystem containing "
+            f"{context.artifact_root} has only {usage.free} free bytes, below the "
+            f"configured {min_free_bytes} byte minimum."
+        )
+    max_artifact_bytes = os.environ.get(f"{DISK_BYTES_ENV_PREFIX}MAX_ARTIFACT_BYTES")
+    if max_artifact_bytes is not None:
+        artifact_limit = env_bytes("MAX_ARTIFACT_BYTES", 1)
+        artifact_bytes = artifact_usage_bytes(context.artifact_root)
+        if artifact_bytes > artifact_limit:
+            raise RuntimeError(
+                f"Refusing CocoIndex {operation}: artifact root {context.artifact_root} "
+                f"already uses {artifact_bytes} bytes, above the configured "
+                f"{artifact_limit} byte limit."
+            )
+
+
 def discover_git_root_candidate(start: Path) -> Path:
     """Return the nearest ancestor containing a Git worktree marker."""
     current = start.expanduser().resolve()
@@ -398,31 +496,140 @@ def tracked_files(
     return sorted((path for path in paths if path not in excluded_paths), key=str)
 
 
-def file_digest_and_mirror_source(
-    repo_root: Path, paths: list[PurePosixPath]
-) -> tuple[str, dict[str, bytes]]:
-    """Hash tracked file contents and keep bytes for a matching mirror copy."""
+def repo_status_porcelain(repo_root: Path) -> str:
+    """Return porcelain status, including untracked files, without printing paths."""
+    return checked_git_command(
+        repo_root,
+        ["status", "--porcelain=v1"],
+        timeout=timeout_seconds("rg"),
+    ).stdout
+
+
+def require_clean_index_target(repo_root: Path, *, allow_dirty: bool) -> None:
+    """Prevent accidental per-edit index churn unless the caller opts in."""
+    if allow_dirty:
+        return
+    if repo_status_porcelain(repo_root).strip():
+        raise RuntimeError(
+            "Refusing to build or refresh a CocoIndex index from a dirty worktree. "
+            "Commit or stash first, or pass the explicit dirty-index flag when "
+            "that disk-heavy operation is intentional."
+        )
+
+
+def verified_repo_source_path(repo_root: Path, relative_path: PurePosixPath) -> Path:
+    """Return a repository file path that is safe to read or copy."""
+    path_text = relative_path.as_posix()
+    source_path = repo_root / Path(relative_path)
+    if source_path.is_symlink():
+        raise RuntimeError(f"Refusing to mirror tracked symlink: {path_text}")
+    resolved = source_path.resolve()
+    if not resolved.is_relative_to(repo_root):
+        raise RuntimeError(f"Tracked path escapes repository root: {path_text}")
+    return source_path
+
+
+def repo_file_sha256(source_path: Path) -> bytes:
+    """Return a file content digest without loading the whole file into memory."""
+    digest = hashlib.sha256()
+    with source_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(FILE_COPY_CHUNK_BYTES), b""):
+            digest.update(chunk)
+    return digest.digest()
+
+
+def file_digest(repo_root: Path, paths: list[PurePosixPath]) -> str:
+    """Hash repository file contents without retaining file payloads."""
     digest = hashlib.sha256()
     digest.update(f"schema:{MIRROR_SCHEMA_VERSION}\0".encode())
-    files: dict[str, bytes] = {}
     for relative_path in paths:
         path_text = relative_path.as_posix()
-        source_path = repo_root / Path(relative_path)
         digest.update(path_text.encode())
         digest.update(b"\0")
+        source_path = verified_repo_source_path(repo_root, relative_path)
         if not source_path.exists():
             digest.update(b"missing\0")
             continue
-        if source_path.is_symlink():
-            raise RuntimeError(f"Refusing to mirror tracked symlink: {path_text}")
-        resolved = source_path.resolve()
-        if not resolved.is_relative_to(repo_root):
-            raise RuntimeError(f"Tracked path escapes repository root: {path_text}")
-        payload = source_path.read_bytes()
-        digest.update(hashlib.sha256(payload).digest())
+        digest.update(repo_file_sha256(source_path))
         digest.update(b"\0")
+    return digest.hexdigest()[:32]
+
+
+def file_digest_and_mirror_source(
+    repo_root: Path, paths: list[PurePosixPath]
+) -> tuple[str, dict[str, bytes]]:
+    """Hash small test fixtures and keep bytes for legacy unit assertions."""
+    files: dict[str, bytes] = {}
+    for relative_path in paths:
+        source_path = verified_repo_source_path(repo_root, relative_path)
+        if not source_path.exists():
+            continue
+        payload = source_path.read_bytes()
+        path_text = relative_path.as_posix()
         files[path_text] = payload
-    return digest.hexdigest()[:32], files
+    return file_digest(repo_root, paths), files
+
+
+def repo_visible_file_total_bytes(
+    repo_root: Path,
+    paths: list[PurePosixPath],
+) -> int:
+    """Return total source bytes that a mirror copy would write."""
+    total = 0
+    for relative_path in paths:
+        source_path = verified_repo_source_path(repo_root, relative_path)
+        if source_path.exists():
+            total += source_path.stat().st_size
+    return total
+
+
+def require_mirror_write_budget(
+    context: CocoIndexContext,
+    source_bytes: int,
+) -> None:
+    """Fail before copying when the mirror cannot fit with free-space headroom."""
+    disk_root = context.artifact_root
+    while not disk_root.exists() and disk_root != disk_root.parent:
+        disk_root = disk_root.parent
+    usage = shutil.disk_usage(disk_root)
+    min_free_bytes = env_bytes("MIN_FREE_BYTES", default_min_free_bytes(usage.total))
+    required_free = source_bytes + min_free_bytes
+    if usage.free < required_free:
+        raise RuntimeError(
+            f"Refusing CocoIndex mirror: source files require {source_bytes} bytes "
+            f"and the filesystem containing {context.artifact_root} has only "
+            f"{usage.free} free bytes before the {min_free_bytes} byte reserve."
+        )
+
+
+def copy_repo_files(
+    repo_root: Path,
+    paths: list[PurePosixPath],
+    target_root: Path,
+) -> tuple[str, int]:
+    """Copy repository files to a mirror while recomputing the content digest."""
+    digest = hashlib.sha256()
+    digest.update(f"schema:{MIRROR_SCHEMA_VERSION}\0".encode())
+    copied_files = 0
+    for relative_path in paths:
+        path_text = relative_path.as_posix()
+        digest.update(path_text.encode())
+        digest.update(b"\0")
+        source_path = verified_repo_source_path(repo_root, relative_path)
+        if not source_path.exists():
+            digest.update(b"missing\0")
+            continue
+        file_digest_value = hashlib.sha256()
+        target = target_root / path_text
+        target.parent.mkdir(parents=True, exist_ok=True)
+        copied_files += 1
+        with source_path.open("rb") as source, target.open("wb") as destination:
+            for chunk in iter(lambda: source.read(FILE_COPY_CHUNK_BYTES), b""):
+                file_digest_value.update(chunk)
+                destination.write(chunk)
+        digest.update(file_digest_value.digest())
+        digest.update(b"\0")
+    return digest.hexdigest()[:32], copied_files
 
 
 def lock_path(artifact_root: Path, name: str) -> Path:
@@ -477,6 +684,15 @@ def ccc_supervised_env(context: CocoIndexContext) -> dict[str, str]:
     return env
 
 
+def wrapper_script_arg(*, pin_repo: bool) -> str:
+    """Return the script path for MCP configs without pinning checkout paths by default."""
+    script_path = Path(__file__).resolve()
+    if pin_repo:
+        return str(script_path)
+    script_repo = discover_git_root_candidate(script_path)
+    return script_path.relative_to(script_repo).as_posix()
+
+
 @contextmanager
 def patched_process_env(env: dict[str, str]) -> Any:
     """Temporarily replace process env for imported CocoIndex helpers."""
@@ -492,12 +708,13 @@ def patched_process_env(env: dict[str, str]) -> Any:
 
 def resolve_context(
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
+    repo_root: Path | None = None,
 ) -> CocoIndexContext:
     """Resolve repo and artifact paths, including the current mirror digest."""
-    repo_root = resolve_repo_root()
+    repo_root = repo_root or resolve_repo_root()
     artifact_root = default_artifact_root()
     paths = tracked_files(repo_root, excluded_paths)
-    digest, _files = file_digest_and_mirror_source(repo_root, paths)
+    digest = file_digest(repo_root, paths)
     return CocoIndexContext(
         repo_root=repo_root,
         artifact_root=artifact_root,
@@ -506,8 +723,97 @@ def resolve_context(
     )
 
 
+def resolve_mcp_handshake_context() -> CocoIndexContext:
+    """Resolve only the paths needed for lightweight MCP handshake probes."""
+    repo_root = resolve_repo_root()
+    artifact_root = default_artifact_root()
+    digest = "mcp-handshake"
+    return CocoIndexContext(
+        repo_root=repo_root,
+        artifact_root=artifact_root,
+        mirror_repo=artifact_root / "mirrors" / digest / "repo",
+        mirror_digest=digest,
+    )
+
+
+def repo_active_key(repo_root: Path) -> str:
+    """Return a host-local key for active-index metadata."""
+    return hashlib.sha256(str(repo_root.resolve()).encode()).hexdigest()[:32]
+
+
+def active_index_path(artifact_root: Path, repo_root: Path) -> Path:
+    """Return the active-index metadata path for one local repository root."""
+    return artifact_root / "active" / f"{repo_active_key(repo_root)}.json"
+
+
+def validate_mirror_digest(value: object) -> str:
+    """Validate a stored mirror digest before using it as a path component."""
+    if (
+        not isinstance(value, str)
+        or len(value) != 32
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise RuntimeError("Active CocoIndex metadata contains an invalid digest.")
+    return value
+
+
+def resolve_active_index_context() -> CocoIndexContext:
+    """Resolve the last explicit index for the current repo without hashing files."""
+    repo_root = resolve_repo_root()
+    artifact_root = default_artifact_root()
+    metadata_path = active_index_path(artifact_root, repo_root)
+    if not metadata_path.exists():
+        raise IndexRequiredError(INDEX_REQUIRED_MESSAGE)
+    try:
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Active CocoIndex metadata is invalid JSON: {metadata_path}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(
+            f"Active CocoIndex metadata must be an object: {metadata_path}"
+        )
+    if payload.get("schema") != ACTIVE_INDEX_SCHEMA_VERSION:
+        raise RuntimeError(
+            f"Active CocoIndex metadata schema is unsupported: {metadata_path}"
+        )
+    if payload.get("package") != PACKAGE_REQUIREMENT:
+        raise RuntimeError(
+            f"Active CocoIndex metadata package is stale: {metadata_path}"
+        )
+    if payload.get("source_repo") != str(repo_root):
+        raise RuntimeError(
+            f"Active CocoIndex metadata does not match this repo: {metadata_path}"
+        )
+    digest = validate_mirror_digest(payload.get("mirror_digest"))
+    return CocoIndexContext(
+        repo_root=repo_root,
+        artifact_root=artifact_root,
+        mirror_repo=artifact_root / "mirrors" / digest / "repo",
+        mirror_digest=digest,
+    )
+
+
+def write_active_index_metadata(context: CocoIndexContext) -> None:
+    """Record the latest explicit index for read-only MCP/search operations."""
+    metadata_path = active_index_path(context.artifact_root, context.repo_root)
+    payload = {
+        "schema": ACTIVE_INDEX_SCHEMA_VERSION,
+        "package": PACKAGE_REQUIREMENT,
+        "source_repo": str(context.repo_root),
+        "mirror_digest": context.mirror_digest,
+    }
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(
+        metadata_path,
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+    )
+
+
 def ensure_installed(context: CocoIndexContext) -> None:
     """Install the pinned full host package into the versioned venv."""
+    require_disk_budget(context, "install")
     with FileLock(lock_path(context.artifact_root, "install")):
         if context.ccc_bin.exists():
             try:
@@ -563,12 +869,15 @@ def ensure_mirror(
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
 ) -> None:
     """Create the immutable external mirror for current Git-visible files."""
+    require_disk_budget(context, "mirror")
     manifest_path = context.mirror_repo.parent / "manifest.json"
     if manifest_path.exists() and context.mirror_repo.exists():
         return
 
     paths = tracked_files(context.repo_root, excluded_paths)
-    digest, files = file_digest_and_mirror_source(context.repo_root, paths)
+    source_bytes = repo_visible_file_total_bytes(context.repo_root, paths)
+    require_mirror_write_budget(context, source_bytes)
+    digest = file_digest(context.repo_root, paths)
     if digest != context.mirror_digest:
         raise RuntimeError(
             "Repository contents changed while resolving the mirror digest."
@@ -582,10 +891,13 @@ def ensure_mirror(
             shutil.rmtree(build_root)
         repo_build = build_root / "repo"
         repo_build.mkdir(parents=True, exist_ok=True)
-        for path_text, payload in files.items():
-            target = repo_build / path_text
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(payload)
+        copied_digest, copied_files = copy_repo_files(
+            context.repo_root, paths, repo_build
+        )
+        if copied_digest != context.mirror_digest:
+            raise RuntimeError(
+                "Repository contents changed while building the mirror copy."
+            )
 
         if context.mirror_repo.parent.exists():
             context.mirror_repo.parent.mkdir(parents=True, exist_ok=True)
@@ -596,7 +908,7 @@ def ensure_mirror(
             "digest": context.mirror_digest,
             "source_repo": str(context.repo_root),
             "git_visible_non_ignored_files": len(paths),
-            "mirrored_files": len(files),
+            "mirrored_files": copied_files,
             "package": PACKAGE_REQUIREMENT,
         }
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
@@ -650,10 +962,13 @@ def ensure_project_settings_match_mirror(context: CocoIndexContext) -> bool:
     return changed
 
 
-def ensure_ready(context: CocoIndexContext) -> None:
+def ensure_ready(
+    context: CocoIndexContext,
+    excluded_paths: frozenset[PurePosixPath] = frozenset(),
+) -> None:
     """Install and prepare the external mirror."""
     ensure_installed(context)
-    ensure_mirror(context)
+    ensure_mirror(context, excluded_paths)
     ensure_project_initialized(context)
     ensure_project_settings_match_mirror(context)
 
@@ -675,10 +990,42 @@ def repo_relative_path_if_inside(repo_root: Path, path: Path) -> PurePosixPath |
 
 
 def run_ccc(
-    context: CocoIndexContext, args: list[str], timeout: int | None = None
+    context: CocoIndexContext,
+    args: list[str],
+    timeout: int | None = None,
+    excluded_paths: frozenset[PurePosixPath] = frozenset(),
 ) -> subprocess.CompletedProcess[str]:
     """Run the pinned ccc executable inside the external mirror."""
-    ensure_ready(context)
+    ensure_ready(context, excluded_paths)
+    ensure_daemon_ready(context)
+    return checked_command(
+        [str(context.ccc_bin), *args],
+        cwd=context.mirror_repo,
+        env=ccc_supervised_env(context),
+        timeout=timeout,
+    )
+
+
+def require_existing_search_artifacts(context: CocoIndexContext) -> None:
+    """Require every artifact needed for search without creating any of them."""
+    missing: list[str] = []
+    if not context.ccc_bin.exists():
+        missing.append(str(context.ccc_bin))
+    if not context.mirror_repo.exists():
+        missing.append(str(context.mirror_repo))
+    if not target_sqlite_db(context).exists():
+        raise IndexRequiredError(INDEX_REQUIRED_MESSAGE)
+    if missing:
+        raise IndexRequiredError(
+            "CocoIndex search artifacts are incomplete; missing " + ", ".join(missing)
+        )
+
+
+def run_ccc_existing(
+    context: CocoIndexContext, args: list[str], timeout: int | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run ccc only against already-created artifacts."""
+    require_existing_search_artifacts(context)
     ensure_daemon_ready(context)
     return checked_command(
         [str(context.ccc_bin), *args],
@@ -691,6 +1038,26 @@ def run_ccc(
 def target_sqlite_db(context: CocoIndexContext) -> Path:
     """Return the expected external vector database path."""
     return context.db_dir / "target_sqlite.db"
+
+
+def run_index(
+    context: CocoIndexContext,
+    *,
+    allow_dirty: bool,
+    excluded_paths: frozenset[PurePosixPath] = frozenset(),
+) -> str:
+    """Run an explicit disk-heavy CocoIndex index operation."""
+    require_clean_index_target(context.repo_root, allow_dirty=allow_dirty)
+    require_disk_budget(context, "index")
+    emit_cold_index_notice_if_needed(context)
+    output = run_ccc(
+        context,
+        ["index"],
+        timeout=timeout_seconds("index"),
+        excluded_paths=excluded_paths,
+    )
+    write_active_index_metadata(context)
+    return output.stdout
 
 
 def unique(seq: list[str]) -> list[str]:
@@ -930,13 +1297,17 @@ def run_benchmark(
     cases: list[BenchmarkCase],
     output_path: Path | None,
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
+    *,
+    allow_dirty: bool = False,
 ) -> dict[str, object]:
     """Run the reproducible hybrid search benchmark."""
+    require_clean_index_target(context.repo_root, allow_dirty=allow_dirty)
+    require_disk_budget(context, "benchmark")
     ensure_installed(context)
     ensure_mirror(context, excluded_paths)
     ensure_project_initialized(context)
     index_start = time.perf_counter()
-    run_ccc(context, ["index"], timeout=timeout_seconds("index"))
+    run_index(context, allow_dirty=allow_dirty, excluded_paths=excluded_paths)
     index_elapsed = time.perf_counter() - index_start
 
     rg_bin = resolve_required_executable("rg")
@@ -967,13 +1338,16 @@ def run_benchmark(
 
 
 def command_install(_args: argparse.Namespace) -> None:
-    context = resolve_context()
+    context = resolve_mcp_handshake_context()
     ensure_installed(context)
     print(f"installed {PACKAGE_REQUIREMENT} at {context.venv_dir}")
 
 
-def command_prepare(_args: argparse.Namespace) -> None:
-    context = resolve_context()
+def command_prepare(args: argparse.Namespace) -> None:
+    allow_dirty = getattr(args, "allow_dirty_mirror", False)
+    repo_root = resolve_repo_root()
+    require_clean_index_target(repo_root, allow_dirty=allow_dirty)
+    context = resolve_context(repo_root=repo_root)
     ensure_ready(context)
     print(
         json.dumps(
@@ -983,49 +1357,325 @@ def command_prepare(_args: argparse.Namespace) -> None:
     )
 
 
-def command_index(_args: argparse.Namespace) -> None:
-    context = resolve_context()
-    emit_cold_index_notice_if_needed(context)
-    output = run_ccc(context, ["index"], timeout=timeout_seconds("index"))
-    print(output.stdout, end="")
+def command_index(args: argparse.Namespace) -> None:
+    allow_dirty = getattr(args, "allow_dirty_index", False)
+    repo_root = resolve_repo_root()
+    require_clean_index_target(repo_root, allow_dirty=allow_dirty)
+    context = resolve_context(repo_root=repo_root)
+    output = run_index(context, allow_dirty=allow_dirty)
+    print(output, end="")
 
 
 def command_search(args: argparse.Namespace) -> None:
-    context = resolve_context()
-    if args.refresh or not target_sqlite_db(context).exists():
-        emit_cold_index_notice_if_needed(context)
-        run_ccc(context, ["index"], timeout=timeout_seconds("index"))
-    ccc_args = ["search", "--limit", str(args.limit)]
-    if args.path:
-        ccc_args.extend(["--path", args.path])
-    for lang in args.lang:
+    allow_dirty = getattr(args, "allow_dirty_index", False)
+    if getattr(args, "refresh", False) or getattr(args, "index_if_missing", False):
+        repo_root = resolve_repo_root()
+        require_clean_index_target(repo_root, allow_dirty=allow_dirty)
+        context = resolve_context(repo_root=repo_root)
+    else:
+        context = resolve_active_index_context()
+    output = run_search(
+        context,
+        query=args.query,
+        limit=args.limit,
+        path=args.path,
+        langs=args.lang,
+        refresh=args.refresh,
+        allow_index=getattr(args, "index_if_missing", False),
+        allow_dirty=allow_dirty,
+    )
+    print(output, end="")
+
+
+def run_search(
+    context: CocoIndexContext,
+    *,
+    query: list[str],
+    limit: int,
+    path: str | None,
+    langs: list[str],
+    refresh: bool,
+    allow_index: bool,
+    allow_dirty: bool = False,
+) -> str:
+    """Run a CocoIndex Code search and return the rendered search output."""
+    if refresh:
+        run_index(context, allow_dirty=allow_dirty)
+    elif not target_sqlite_db(context).exists():
+        if not allow_index:
+            raise IndexRequiredError(INDEX_REQUIRED_MESSAGE)
+        run_index(context, allow_dirty=allow_dirty)
+    ccc_args = ["search", "--limit", str(limit)]
+    if path:
+        ccc_args.extend(["--path", path])
+    for lang in langs:
         ccc_args.extend(["--lang", lang])
-    ccc_args.extend(args.query)
-    output = run_ccc(context, ccc_args, timeout=timeout_seconds("search"))
-    print(output.stdout, end="")
+    ccc_args.extend(query)
+    output = run_ccc_existing(context, ccc_args, timeout=timeout_seconds("search"))
+    return output.stdout
 
 
 def command_status(_args: argparse.Namespace) -> None:
-    context = resolve_context()
-    ensure_ready(context)
-    output = run_ccc(context, ["status"], timeout=timeout_seconds("status"))
+    context = resolve_active_index_context()
+    output = run_ccc_existing(context, ["status"], timeout=timeout_seconds("status"))
     print(output.stdout, end="")
 
 
+def mcp_search_tool_definition() -> dict[str, object]:
+    """Return the lightweight MCP search tool definition."""
+    return {
+        "name": MCP_SEARCH_TOOL_NAME,
+        "description": (
+            "Search the target Git repository with the pinned CocoIndex Code "
+            "semantic index. The MCP tool never installs, mirrors, refreshes, "
+            "or builds an index; run the CLI index command explicitly first."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Natural-language search query.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 5,
+                    "description": "Maximum number of search results.",
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Optional repository-relative glob filter.",
+                },
+                "lang": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional CocoIndex language filters.",
+                },
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    }
+
+
+def mcp_initialize_result(params: object) -> dict[str, object]:
+    """Return an MCP initialize result without touching CocoIndex runtime state."""
+    requested = params.get("protocolVersion") if isinstance(params, dict) else None
+    protocol_version = (
+        requested if requested in MCP_PROTOCOL_VERSIONS else MCP_PROTOCOL_VERSIONS[-1]
+    )
+    return {
+        "protocolVersion": protocol_version,
+        "capabilities": {"tools": {}},
+        "serverInfo": {"name": MCP_SERVER_NAME, "version": PACKAGE_VERSION},
+    }
+
+
+def mcp_positive_int(value: object, field: str, default: int) -> int:
+    """Validate a positive JSON integer parameter."""
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise JsonRpcError(-32602, f"{field} must be a positive integer.")
+    return value
+
+
+def mcp_optional_string(value: object, field: str) -> str | None:
+    """Validate an optional JSON string parameter."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise JsonRpcError(-32602, f"{field} must be a non-empty string.")
+    return value
+
+
+def mcp_string_list(value: object, field: str) -> list[str]:
+    """Validate an optional JSON string-list parameter."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(
+        isinstance(item, str) and item for item in value
+    ):
+        raise JsonRpcError(-32602, f"{field} must be a list of non-empty strings.")
+    return value
+
+
+def mcp_search_arguments(arguments: object) -> dict[str, object]:
+    """Validate MCP search tool arguments."""
+    if not isinstance(arguments, dict):
+        raise JsonRpcError(-32602, "search arguments must be an object.")
+    query = arguments.get("query")
+    if not isinstance(query, str) or not query:
+        raise JsonRpcError(-32602, "query must be a non-empty string.")
+    if "refresh_index" in arguments:
+        raise JsonRpcError(
+            -32602,
+            "refresh_index is not supported by MCP; run the CLI index command explicitly.",
+        )
+    return {
+        "query": query,
+        "limit": mcp_positive_int(arguments.get("limit"), "limit", 5),
+        "path": mcp_optional_string(arguments.get("path"), "path"),
+        "langs": mcp_string_list(arguments.get("lang"), "lang"),
+    }
+
+
+def run_mcp_search_tool(arguments: object) -> str:
+    """Run the MCP search tool without building or refreshing an index."""
+    parsed = mcp_search_arguments(arguments)
+    context: CocoIndexContext | None = None
+    try:
+        context = resolve_active_index_context()
+        return run_search(
+            context,
+            query=[cast(str, parsed["query"])],
+            limit=cast(int, parsed["limit"]),
+            path=cast(str | None, parsed["path"]),
+            langs=cast(list[str], parsed["langs"]),
+            refresh=False,
+            allow_index=False,
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(sanitize_mcp_error_text(str(exc), context)) from exc
+
+
+def sanitize_mcp_error_text(
+    message: str,
+    context: CocoIndexContext | None = None,
+) -> str:
+    """Redact local host paths from MCP-visible error text."""
+    replacements: dict[str, str] = {}
+
+    def add_path(path: Path, label: str) -> None:
+        try:
+            paths = {str(path.expanduser()), str(path.expanduser().resolve())}
+        except OSError:
+            paths = {str(path)}
+        for candidate in paths:
+            if candidate and candidate != "/":
+                replacements[candidate] = label
+
+    if context is not None:
+        add_path(context.artifact_root, f"${ARTIFACT_ROOT_ENV}")
+        add_path(context.repo_root, f"${REPO_ROOT_ENV}")
+    add_path(Path.home(), "$HOME")
+    try:
+        add_path(default_artifact_root(), f"${ARTIFACT_ROOT_ENV}")
+    except RuntimeError:
+        LOGGER.debug("Could not resolve CocoIndex artifact root for redaction.")
+    try:
+        add_path(resolve_repo_root(), f"${REPO_ROOT_ENV}")
+    except RuntimeError:
+        LOGGER.debug("Could not resolve repository root for redaction.")
+
+    redacted = message
+    for path, label in sorted(
+        replacements.items(),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    ):
+        redacted = redacted.replace(path, label)
+    return redacted
+
+
+def write_jsonrpc_message(output_stream: TextIO, payload: dict[str, object]) -> None:
+    """Write one newline-delimited JSON-RPC payload to stdout."""
+    output_stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
+    output_stream.flush()
+
+
+def write_jsonrpc_result(
+    output_stream: TextIO, request_id: object, result: dict[str, object]
+) -> None:
+    """Write one successful JSON-RPC response."""
+    write_jsonrpc_message(
+        output_stream,
+        {"jsonrpc": MCP_JSONRPC_VERSION, "id": request_id, "result": result},
+    )
+
+
+def write_jsonrpc_error(
+    output_stream: TextIO, request_id: object, code: int, message: str
+) -> None:
+    """Write one JSON-RPC error response."""
+    write_jsonrpc_message(
+        output_stream,
+        {
+            "jsonrpc": MCP_JSONRPC_VERSION,
+            "id": request_id,
+            "error": {"code": code, "message": message},
+        },
+    )
+
+
+def mcp_tool_call_result(params: object) -> dict[str, object]:
+    """Handle one MCP tools/call request."""
+    if not isinstance(params, dict):
+        raise JsonRpcError(-32602, "tools/call params must be an object.")
+    name = params.get("name")
+    if name != MCP_SEARCH_TOOL_NAME:
+        raise JsonRpcError(-32602, "Unknown MCP tool.")
+    try:
+        text = run_mcp_search_tool(params.get("arguments", {}))
+    except JsonRpcError:
+        raise
+    except RuntimeError as exc:
+        return {
+            "content": [{"type": "text", "text": f"CocoIndex search failed: {exc}"}],
+            "isError": True,
+        }
+    return {"content": [{"type": "text", "text": text}], "isError": False}
+
+
+def handle_mcp_request(message: dict[str, object]) -> dict[str, object] | None:
+    """Return an MCP result for a JSON-RPC request or None for notifications."""
+    request_id = message.get("id")
+    if request_id is None:
+        return None
+    method = message.get("method")
+    if method == "initialize":
+        return mcp_initialize_result(message.get("params", {}))
+    if method == "tools/list":
+        return {"tools": [mcp_search_tool_definition()]}
+    if method == "tools/call":
+        return mcp_tool_call_result(message.get("params", {}))
+    if method == "ping":
+        return {}
+    raise JsonRpcError(-32601, f"Method not found: {method!r}.")
+
+
+def run_lightweight_mcp_server(
+    input_stream: TextIO = sys.stdin,
+    output_stream: TextIO = sys.stdout,
+) -> None:
+    """Run a fast-start stdio MCP server without pre-indexing the repository."""
+    for raw_line in input_stream:
+        if not raw_line.strip():
+            continue
+        request_id: object = None
+        has_request_id = False
+        try:
+            message = json.loads(raw_line)
+            if not isinstance(message, dict):
+                raise JsonRpcError(-32600, "JSON-RPC message must be an object.")
+            has_request_id = "id" in message
+            request_id = message.get("id")
+            result = handle_mcp_request(message)
+            if has_request_id and result is not None:
+                write_jsonrpc_result(output_stream, request_id, result)
+        except json.JSONDecodeError:
+            write_jsonrpc_error(output_stream, request_id, -32700, "Parse error.")
+        except JsonRpcError as exc:
+            if has_request_id:
+                write_jsonrpc_error(output_stream, request_id, exc.code, exc.message)
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            if has_request_id:
+                write_jsonrpc_error(output_stream, request_id, -32000, str(exc))
+
+
 def command_mcp(_args: argparse.Namespace) -> None:
-    context = resolve_context()
-    emit_cold_index_notice_if_needed(context)
-    ensure_ready(context)
-    ensure_daemon_ready(context)
-    env = ccc_supervised_env(context)
-    prepend_venv_site_package_paths(context)
-    os.chdir(context.mirror_repo)
-    os.environ.clear()
-    os.environ.update(env)
-    sys.argv = [str(context.ccc_bin), "mcp"]
-    cli_module = importlib.import_module("cocoindex_code.cli")
-    app = cast(Any, cli_module).app
-    raise SystemExit(app())
+    run_lightweight_mcp_server()
 
 
 def venv_site_package_paths(context: CocoIndexContext) -> list[Path]:
@@ -1140,7 +1790,10 @@ def cleanup_stale_daemon_files(context: CocoIndexContext) -> None:
         try:
             path.unlink(missing_ok=True)
         except OSError:
-            pass
+            LOGGER.debug(
+                "Could not remove stale CocoIndex daemon runtime file.",
+                exc_info=True,
+            )
 
 
 def ensure_daemon_ready(context: CocoIndexContext) -> None:
@@ -1160,14 +1813,14 @@ def mcp_config_payload(
     env = {ARTIFACT_ROOT_ENV: str(context.artifact_root)}
     if pin_repo:
         env[REPO_ROOT_ENV] = str(context.repo_root)
-    return {
+    payload: dict[str, object] = {
         "name": MCP_SERVER_NAME,
         "transport": "stdio",
-        "command": sys.executable,
-        "args": [str(Path(__file__).resolve()), "mcp"],
+        "command": MCP_PYTHON_COMMAND,
+        "args": [wrapper_script_arg(pin_repo=pin_repo), "mcp"],
         "env": env,
-        "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SECONDS,
-        "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_SECONDS,
+        "startup_timeout_sec": MCP_STARTUP_TIMEOUT_SECONDS,
+        "tool_timeout_sec": MCP_TOOL_TIMEOUT_SECONDS,
         "working_directory_contract": (
             f"Launch from the target Git repository root or set {REPO_ROOT_ENV} "
             "to that root. The shared install stays under "
@@ -1175,10 +1828,11 @@ def mcp_config_payload(
             "its own content-digest mirror, database, and runtime directory."
         ),
     }
+    return payload
 
 
 def command_mcp_config(args: argparse.Namespace) -> None:
-    context = resolve_context()
+    context = resolve_mcp_handshake_context()
     print(json.dumps(mcp_config_payload(context, pin_repo=args.pin_repo), indent=2))
 
 
@@ -1192,11 +1846,11 @@ def codex_config_path() -> Path:
 def expected_codex_mcp_server(context: CocoIndexContext) -> dict[str, object]:
     """Return the expected Codex MCP server table for this wrapper."""
     return {
-        "command": sys.executable,
-        "args": [str(Path(__file__).resolve()), "mcp"],
+        "command": MCP_PYTHON_COMMAND,
+        "args": [wrapper_script_arg(pin_repo=False), "mcp"],
         "env": {ARTIFACT_ROOT_ENV: str(context.artifact_root)},
-        "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SECONDS,
-        "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_SECONDS,
+        "startup_timeout_sec": MCP_STARTUP_TIMEOUT_SECONDS,
+        "tool_timeout_sec": MCP_TOOL_TIMEOUT_SECONDS,
     }
 
 
@@ -1224,6 +1878,7 @@ def codex_mcp_server_matches_expected(
     return (
         server.get("command") == expected["command"]
         and server.get("args") == expected["args"]
+        and "cwd" not in server
         and env.get(ARTIFACT_ROOT_ENV) == expected_env[ARTIFACT_ROOT_ENV]
         and server.get("startup_timeout_sec") == expected["startup_timeout_sec"]
         and server.get("tool_timeout_sec") == expected["tool_timeout_sec"]
@@ -1343,8 +1998,8 @@ def upsert_toml_table_scalars(
 def ensure_codex_mcp_timeouts(config_path: Path) -> None:
     """Ensure Codex has generous timeouts for the CocoIndex MCP server."""
     values = {
-        "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SECONDS,
-        "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_SECONDS,
+        "startup_timeout_sec": MCP_STARTUP_TIMEOUT_SECONDS,
+        "tool_timeout_sec": MCP_TOOL_TIMEOUT_SECONDS,
     }
     original = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
     updated = upsert_toml_table_scalars(
@@ -1355,7 +2010,7 @@ def ensure_codex_mcp_timeouts(config_path: Path) -> None:
 
 
 def command_mcp_install(_args: argparse.Namespace) -> None:
-    context = resolve_context()
+    context = resolve_mcp_handshake_context()
     codex = resolve_required_executable("codex")
     config_path = codex_config_path()
     expected = expected_codex_mcp_server(context)
@@ -1384,8 +2039,8 @@ def command_mcp_install(_args: argparse.Namespace) -> None:
             f"{ARTIFACT_ROOT_ENV}={context.artifact_root}",
             MCP_SERVER_NAME,
             "--",
-            sys.executable,
-            str(Path(__file__).resolve()),
+            MCP_PYTHON_COMMAND,
+            wrapper_script_arg(pin_repo=False),
             "mcp",
         ],
         cwd=context.repo_root,
@@ -1394,7 +2049,11 @@ def command_mcp_install(_args: argparse.Namespace) -> None:
     print(f"MCP server configured: {MCP_SERVER_NAME}")
 
 
-def run_mcp_stdio_smoke(context: CocoIndexContext) -> dict[str, object]:
+def run_mcp_stdio_smoke(
+    context: CocoIndexContext,
+    *,
+    include_search: bool,
+) -> dict[str, object]:
     """Run a real MCP initialize/list_tools probe against this wrapper."""
     prepend_venv_site_package_paths(context)
     anyio_module = importlib.import_module("anyio")
@@ -1418,17 +2077,22 @@ def run_mcp_stdio_smoke(context: CocoIndexContext) -> dict[str, object]:
             ):
                 initialized = await session.initialize()
                 tools = await session.list_tools()
-                search = await session.call_tool(
-                    "search",
-                    {"query": "MCP smoke search", "limit": 1, "refresh_index": True},
-                )
+                search_result_type = None
+                if include_search:
+                    search = await session.call_tool(
+                        "search",
+                        {"query": "MCP smoke search", "limit": 1},
+                    )
+                    search_result_type = type(search).__name__
         server_info = initialized.serverInfo
-        return {
+        result = {
             "server_name": server_info.name,
             "server_version": server_info.version,
             "tools": sorted(tool.name for tool in tools.tools),
-            "search_tool_result_type": type(search).__name__,
         }
+        if include_search:
+            result["search_tool_result_type"] = search_result_type
+        return result
 
     return cast(dict[str, object], cast(Any, anyio_module).run(probe))
 
@@ -1545,27 +2209,39 @@ def run_mcp_jsonrpc_smoke(context: CocoIndexContext) -> list[dict[str, object]]:
     ]
 
 
-def command_mcp_smoke(_args: argparse.Namespace) -> None:
-    context = resolve_context()
-    ensure_ready(context)
-    payload = run_mcp_stdio_smoke(context)
-    payload["jsonrpc_protocol_probes"] = run_mcp_jsonrpc_smoke(context)
+def command_mcp_smoke(args: argparse.Namespace) -> None:
+    payload: dict[str, object] = {}
+    handshake_context = resolve_mcp_handshake_context()
+    payload["stdio_probe"] = run_mcp_stdio_smoke(
+        handshake_context,
+        include_search=False,
+    )
+    payload["jsonrpc_protocol_probes"] = run_mcp_jsonrpc_smoke(handshake_context)
+    if args.include_search:
+        search_context = resolve_active_index_context()
+        payload["stdio_search_probe"] = run_mcp_stdio_smoke(
+            search_context,
+            include_search=True,
+        )
     print(json.dumps(payload, indent=2, sort_keys=True))
 
 
 def command_benchmark(args: argparse.Namespace) -> None:
     repo_root = resolve_repo_root()
+    allow_dirty = args.allow_dirty_index
+    require_clean_index_target(repo_root, allow_dirty=allow_dirty)
     excluded_paths = frozenset(
         path
         for path in [repo_relative_path_if_inside(repo_root, args.cases)]
         if path is not None
     )
-    context = resolve_context(excluded_paths)
+    context = resolve_context(excluded_paths, repo_root=repo_root)
     payload = run_benchmark(
         context,
         load_benchmark_cases(args.cases),
         args.output,
         excluded_paths,
+        allow_dirty=allow_dirty,
     )
     print(json.dumps(payload, indent=2, sort_keys=True))
 
@@ -1588,16 +2264,40 @@ def build_parser() -> argparse.ArgumentParser:
     prepare = subparsers.add_parser(
         "prepare", help="Create the external Git-visible non-ignored file mirror."
     )
+    prepare.add_argument(
+        "--allow-dirty-mirror",
+        action="store_true",
+        help="Allow mirroring the current dirty worktree digest.",
+    )
     prepare.set_defaults(func=command_prepare)
 
     index = subparsers.add_parser("index", help="Build or refresh the semantic index.")
+    index.add_argument(
+        "--allow-dirty-index",
+        action="store_true",
+        help="Allow indexing the current dirty worktree digest.",
+    )
     index.set_defaults(func=command_index)
 
     search = subparsers.add_parser("search", help="Search the semantic index.")
     search.add_argument("--limit", type=int, default=5)
     search.add_argument("--path", help="Optional CocoIndex file path glob.")
     search.add_argument("--lang", action="append", default=[])
-    search.add_argument("--refresh", action="store_true")
+    search.add_argument(
+        "--index-if-missing",
+        action="store_true",
+        help="Build the semantic index if it is missing for this repository digest.",
+    )
+    search.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Explicitly refresh the semantic index before searching.",
+    )
+    search.add_argument(
+        "--allow-dirty-index",
+        action="store_true",
+        help="Allow indexing the current dirty worktree digest.",
+    )
     search.add_argument("query", nargs="+")
     search.set_defaults(func=command_search)
 
@@ -1629,7 +2329,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     mcp_smoke = subparsers.add_parser(
         "mcp-smoke",
-        help="Launch this MCP server and verify initialize/list_tools/search.",
+        help="Launch this MCP server and verify initialize/list_tools.",
+    )
+    mcp_smoke.add_argument(
+        "--include-search",
+        action="store_true",
+        help=(
+            "Also call the MCP search tool against the existing semantic index. "
+            "This refuses to build or refresh the index."
+        ),
     )
     mcp_smoke.set_defaults(func=command_mcp_smoke)
 
@@ -1639,6 +2347,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     benchmark.add_argument("--cases", type=Path, required=True)
     benchmark.add_argument("--output", type=Path)
+    benchmark.add_argument(
+        "--allow-dirty-index",
+        action="store_true",
+        help="Allow benchmarking the current dirty worktree digest.",
+    )
     benchmark.set_defaults(func=command_benchmark)
 
     return parser
