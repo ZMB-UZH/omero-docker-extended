@@ -130,16 +130,36 @@ Agents must treat CocoIndex output as routing only. Use it to find a small
 candidate file set, then confirm exact strings, symbols, scanner findings, and
 edits with `rg`, file reads, and tests in the real checkout.
 
+When CocoIndex reports a cold semantic index, agents should tell the user once
+in one short sentence that the first search can take several minutes and later
+searches reuse the external cache. The wrapper configures CocoIndex Code 0.2.31
+to include every Git-visible mirrored file pattern instead of upstream's
+extension list. CocoIndex indexes text-decodable content and skips undecodable
+binary files, so agents must not claim semantic search inside arbitrary binary
+formats or add repo-specific language rewrites or file-type exclusions without a
+tested opt-in path.
+
+Upstream CocoIndex Code documents native MCP setup as installing the full
+package and registering `ccc mcp` with the agent. This repo keeps that MCP
+server contract but launches it through `tools/cocoindex_agent_search.py mcp`
+so every MCP-capable agent can share one host install while keeping
+`.cocoindex_code/`, model caches, runtime files, and SQLite databases out of
+the live checkout. The upstream `ccc` skill is also installed for supported
+project agent directories, but its OMERO override routes this repository back
+through `.agents/skills/cocoindex-code-search/`.
+
 MCP-capable clients can run
 `python3 tools/cocoindex_agent_search.py mcp-config` for a generic stdio
 configuration. The MCP client must launch the command from the target Git
 repository root or set `AGENT_COCOINDEX_REPO` for a workspace-scoped static
 configuration. Codex can use
-`python3 tools/cocoindex_agent_search.py mcp-install`, which registers the same
-server name without duplicating it. After any MCP install, config change, or
-launcher change, run `python3 tools/cocoindex_agent_search.py mcp-smoke` from
-the target repo root; the MCP path is not verified until stdio `initialize` and
-`list_tools` both succeed.
+`python3 tools/cocoindex_agent_search.py mcp-install`, which registers or
+repairs the same server name without duplicating it and writes explicit
+startup/tool timeouts for slow first-install and first-index runs. After any
+MCP install, config change, or launcher change, run
+`python3 tools/cocoindex_agent_search.py mcp-smoke` from the target repo root;
+the MCP path is not verified until stdio `initialize`, raw JSON-RPC protocol
+probes, `list_tools`, and a real MCP search call all succeed.
 
 ## Claude Code hooks
 

@@ -18,8 +18,7 @@ skill catalog.
 - Develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch; resolve it dynamically and do not create feature branches, PR branches, temporary remote branches, or draft PRs for routine work.
 - Honor the routing doc's numeric caps before broadening context.
 - Use repo-local skills from `.agents/skills/` when they match the task.
-- For broad repo navigation, check for a `cocoindex-code` MCP server or tool
-  first; use `.agents/skills/cocoindex-code-search/` only as semantic routing before exact `rg`. It is all-agent, XDG/`AGENT_COCOINDEX_HOME` based, stores per-repo state outside the live checkout, and MCP install or launcher changes must pass `python3 tools/cocoindex_agent_search.py mcp-smoke`.
+- CocoIndex: for broad navigation, check `cocoindex-code` MCP first; use `.agents/skills/cocoindex-code-search/` for semantic routing before exact `rg`. State cold-index waits once; later searches use the external cache. It uses `AGENT_COCOINDEX_HOME`, keeps `.cocoindex_code/` outside checkout, indexes text-decodable files, and `mcp-smoke` verifies MCP changes.
 - If the user explicitly asks for lower-token replies, use the opt-in `caveman` skill. It is for internal AI communication only, never for repo docs, comments, docstrings, function descriptions, or user-facing copy.
 - It changes reply style only, not routing, tool choice, verification scope, or uncertainty handling. Return to normal detail for destructive actions, security guidance, or unresolved ambiguity.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, or ports.

@@ -20,16 +20,20 @@ reduce context before exact `rg`, file reads, and tests.
    only when the MCP server is absent.
 4. After installing, changing, or debugging the MCP path, run
    `python3 tools/cocoindex_agent_search.py mcp-smoke`; registration alone is
-   not proof until stdio `initialize` and `list_tools` both succeed.
+   not proof until stdio `initialize`, raw JSON-RPC protocol probes,
+   `list_tools`, and a real MCP search call all succeed.
 5. Use `python3 tools/cocoindex_agent_search.py install` directly only when MCP
    is unavailable or a CLI-only workflow is intentionally being prepared.
 6. Use `python3 tools/cocoindex_agent_search.py search --limit 5 "<query>"` for
    subsystem routing, then confirm the returned files with `rg` in the real repo.
-7. Use `--path '<glob>'` only after the first pass identifies a likely subtree.
-8. Run
+7. If the wrapper reports a cold semantic index, tell the user once in one
+   short sentence that the first search can take several minutes and later
+   searches reuse the external cache.
+8. Use `--path '<glob>'` only after the first pass identifies a likely subtree.
+9. Run
    `python3 tools/cocoindex_agent_search.py benchmark --cases <cases.json>`
    when changing this workflow or after a major CocoIndex Code release.
-9. Skip CocoIndex when an exact string, symbol, or small `rg` result is already
+10. Skip CocoIndex when an exact string, symbol, or small `rg` result is already
    likely; the hybrid path is for broad routing where candidate output would be
    large.
 
@@ -50,11 +54,30 @@ reduce context before exact `rg`, file reads, and tests.
   working directory. Do not put installation-specific paths in committed files.
 - Do not add, commit, or normalize `.cocoindex_code/` in the repository.
 - Do not index real `.env` files; only example env contracts are allowed.
+- The mirror asks CocoIndex Code 0.2.31 to include every Git-visible mirrored
+  file pattern. CocoIndex indexes text-decodable content and safely skips
+  undecodable binary files; do not claim semantic search inside arbitrary binary
+  formats.
+- Do not add repo-specific language rewrites or file-type exclusions without a
+  tested, opt-in configuration path.
+- Avoid `--lang` for mixed-language or container formats such as templates,
+  notebooks, Markdown with code blocks, or generated manifests unless the exact
+  language filter is known to be safe for that file type.
 - Treat semantic output as routing only; read and edit real repo files after
   exact confirmation.
 
 ## MCP
 
+- Upstream CocoIndex Code documents the native contract as
+  `pipx install 'cocoindex-code[full]'` plus
+  `codex mcp add cocoindex-code -- ccc mcp`. This repo intentionally registers
+  `tools/cocoindex_agent_search.py mcp` instead so agents get the same
+  CocoIndex server while keeping `.cocoindex_code/`, runtime files, model
+  caches, and per-repo databases outside the live checkout.
+- The upstream `ccc` skill may also be installed with
+  `npx skills add cocoindex-io/cocoindex-code --all --copy`; in this repo its
+  project-local copies must keep the OMERO override that points back to this
+  skill before any direct `ccc init` or native `ccc mcp` workflow.
 - Generic MCP: first check whether a server or tool named `cocoindex-code` is
   already configured. If it is absent, run
   `python3 tools/cocoindex_agent_search.py mcp-config` and use the printed
@@ -62,8 +85,9 @@ reduce context before exact `rg`, file reads, and tests.
   it from the target Git repository root, or use `mcp-config --pin-repo` only
   for a workspace-scoped static config.
 - Codex: run `python3 tools/cocoindex_agent_search.py mcp-install`. It registers
-  one workspace-agnostic MCP server named `cocoindex-code` and does not add a
-  duplicate if that name already exists. Then run
+  one workspace-agnostic MCP server named `cocoindex-code`, repairs a stale
+  same-name Codex entry instead of adding duplicates, and writes generous Codex
+  startup/tool timeouts for first-install and first-index runs. Then run
   `python3 tools/cocoindex_agent_search.py mcp-smoke` from the target repo root
   to prove the configured server completes the MCP handshake.
 

@@ -69,6 +69,10 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![Vulture]("),
+            badge_block.index("[![cocoindex-code]("),
+        )
+        self.assertLess(
+            badge_block.index("[![cocoindex-code]("),
             badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
         )
         self.assertLess(
@@ -81,10 +85,6 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![andrej-karpathy-skills]("),
-            badge_block.index("[![cocoindex-code]("),
-        )
-        self.assertLess(
-            badge_block.index("[![cocoindex-code]("),
             badge_block.index(update_readme_badges.BADGE_BLOCK_END),
         )
         self.assertLess(

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 import fcntl
 import hashlib
 import importlib
@@ -13,7 +14,10 @@ import shutil
 import subprocess
 import sys
 import time
+import tempfile
+import tomllib
 import venv
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, TextIO, cast
@@ -30,6 +34,13 @@ MIRROR_SCHEMA_VERSION = "1"
 DENIED_MIRROR_BASENAMES = frozenset({".env"})
 DENIED_MIRROR_SUFFIXES = (".env",)
 DENIED_MIRROR_PARTS = frozenset({".codex", ".cocoindex_code"})
+MIRROR_INCLUDE_PATTERNS = ("*",)
+MIRROR_EXCLUDE_PATTERNS = (".cocoindex_code/**", "**/.cocoindex_code/**")
+COLD_INDEX_NOTICE = (
+    "NOTICE: CocoIndex is building a cold semantic index for this repository; "
+    "the first search can take several minutes and later searches reuse the "
+    "external cache."
+)
 DEFAULT_TIMEOUTS_SECONDS = {
     "install": 7200,
     "verify_install": 300,
@@ -40,6 +51,9 @@ DEFAULT_TIMEOUTS_SECONDS = {
     "rg": 600,
     "mcp_smoke": 600,
 }
+CODEX_MCP_STARTUP_TIMEOUT_SECONDS = DEFAULT_TIMEOUTS_SECONDS["install"]
+CODEX_MCP_TOOL_TIMEOUT_SECONDS = DEFAULT_TIMEOUTS_SECONDS["index"]
+MCP_PROTOCOL_VERSIONS = ("2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25")
 
 SEARCH_FILE_RE = r"^File: (.*?):\d+(?:-\d+)? "
 RG_FILE_RE = r"^(?:\./)?([^:\n]+):\d+:"
@@ -206,6 +220,32 @@ def checked_command(
             )
         )
     return completed
+
+
+def run_command_with_input(
+    args: list[str],
+    *,
+    cwd: Path,
+    input_text: str,
+    env: dict[str, str] | None = None,
+    timeout: int | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a subprocess with stdin and capture deterministic output."""
+    try:
+        return subprocess.run(
+            args,
+            cwd=cwd,
+            env=env,
+            input=input_text,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except OSError as exc:
+        raise RuntimeError(
+            f"Could not execute command {' '.join(args)}: {exc}"
+        ) from exc
 
 
 def checked_git_command(
@@ -424,6 +464,26 @@ def ccc_env(context: CocoIndexContext) -> dict[str, str]:
     return env
 
 
+def ccc_supervised_env(context: CocoIndexContext) -> dict[str, str]:
+    """Return a CocoIndex env where the wrapper owns daemon startup."""
+    env = ccc_env(context)
+    env["COCOINDEX_CODE_DAEMON_SUPERVISED"] = "1"
+    return env
+
+
+@contextmanager
+def patched_process_env(env: dict[str, str]) -> Any:
+    """Temporarily replace process env for imported CocoIndex helpers."""
+    original = os.environ.copy()
+    os.environ.clear()
+    os.environ.update(env)
+    try:
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(original)
+
+
 def resolve_context(
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
 ) -> CocoIndexContext:
@@ -563,11 +623,39 @@ def ensure_project_initialized(context: CocoIndexContext) -> None:
         )
 
 
+def ensure_project_settings_match_mirror(context: CocoIndexContext) -> bool:
+    """Configure the mirror project to index every mirrored text file type."""
+    prepend_venv_site_package_paths(context)
+    settings_module = importlib.import_module("cocoindex_code.settings")
+    project_settings = settings_module.load_project_settings(context.mirror_repo)
+    changed = False
+
+    include_patterns = list(MIRROR_INCLUDE_PATTERNS)
+    exclude_patterns = list(MIRROR_EXCLUDE_PATTERNS)
+    if project_settings.include_patterns != include_patterns:
+        project_settings.include_patterns = include_patterns
+        changed = True
+    if project_settings.exclude_patterns != exclude_patterns:
+        project_settings.exclude_patterns = exclude_patterns
+        changed = True
+
+    if changed:
+        settings_module.save_project_settings(context.mirror_repo, project_settings)
+    return changed
+
+
 def ensure_ready(context: CocoIndexContext) -> None:
     """Install and prepare the external mirror."""
     ensure_installed(context)
     ensure_mirror(context)
     ensure_project_initialized(context)
+    ensure_project_settings_match_mirror(context)
+
+
+def emit_cold_index_notice_if_needed(context: CocoIndexContext) -> None:
+    """Tell the calling agent when the next index/search is expected to be cold."""
+    if not target_sqlite_db(context).exists():
+        print(COLD_INDEX_NOTICE, file=sys.stderr)
 
 
 def repo_relative_path_if_inside(repo_root: Path, path: Path) -> PurePosixPath | None:
@@ -585,10 +673,11 @@ def run_ccc(
 ) -> subprocess.CompletedProcess[str]:
     """Run the pinned ccc executable inside the external mirror."""
     ensure_ready(context)
+    ensure_daemon_ready(context)
     return checked_command(
         [str(context.ccc_bin), *args],
         cwd=context.mirror_repo,
-        env=ccc_env(context),
+        env=ccc_supervised_env(context),
         timeout=timeout,
     )
 
@@ -890,14 +979,15 @@ def command_prepare(_args: argparse.Namespace) -> None:
 
 def command_index(_args: argparse.Namespace) -> None:
     context = resolve_context()
+    emit_cold_index_notice_if_needed(context)
     output = run_ccc(context, ["index"], timeout=timeout_seconds("index"))
     print(output.stdout, end="")
 
 
 def command_search(args: argparse.Namespace) -> None:
     context = resolve_context()
-    ensure_ready(context)
     if args.refresh or not target_sqlite_db(context).exists():
+        emit_cold_index_notice_if_needed(context)
         run_ccc(context, ["index"], timeout=timeout_seconds("index"))
     ccc_args = ["search", "--limit", str(args.limit)]
     if args.path:
@@ -918,10 +1008,11 @@ def command_status(_args: argparse.Namespace) -> None:
 
 def command_mcp(_args: argparse.Namespace) -> None:
     context = resolve_context()
+    emit_cold_index_notice_if_needed(context)
     ensure_ready(context)
-    env = ccc_env(context)
-    for site_package_path in venv_site_package_paths(context):
-        sys.path.insert(0, str(site_package_path))
+    ensure_daemon_ready(context)
+    env = ccc_supervised_env(context)
+    prepend_venv_site_package_paths(context)
     os.chdir(context.mirror_repo)
     os.environ.clear()
     os.environ.update(env)
@@ -939,6 +1030,108 @@ def venv_site_package_paths(context: CocoIndexContext) -> list[Path]:
     return site_packages
 
 
+def prepend_venv_site_package_paths(context: CocoIndexContext) -> None:
+    """Make pinned venv packages importable without duplicating sys.path."""
+    for site_package_path in reversed(venv_site_package_paths(context)):
+        site_path = str(site_package_path)
+        if site_path not in sys.path:
+            sys.path.insert(0, site_path)
+
+
+def daemon_log_path(context: CocoIndexContext) -> Path:
+    """Return this wrapper's CocoIndex daemon log path."""
+    return context.runtime_dir / "daemon.log"
+
+
+def read_daemon_log(context: CocoIndexContext) -> str:
+    """Return the daemon log for diagnostics, if present."""
+    try:
+        return daemon_log_path(context).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def daemon_handshake_succeeds(context: CocoIndexContext) -> bool:
+    """Return whether the current runtime daemon accepts a version handshake."""
+    prepend_venv_site_package_paths(context)
+    with patched_process_env(ccc_env(context)):
+        client_module = importlib.import_module("cocoindex_code.client")
+        try:
+            conn = cast(Any, client_module)._raw_connect_and_handshake()
+        except (ConnectionRefusedError, OSError, RuntimeError):
+            return False
+        try:
+            conn.close()
+        except OSError:
+            pass
+    return True
+
+
+def start_daemon_process(context: CocoIndexContext) -> subprocess.Popen[bytes]:
+    """Start the pinned CocoIndex daemon for this mirror."""
+    context.runtime_dir.mkdir(parents=True, exist_ok=True)
+    log_handle = daemon_log_path(context).open("w", encoding="utf-8")
+    try:
+        return subprocess.Popen(
+            [str(context.ccc_bin), "run-daemon"],
+            cwd=context.mirror_repo,
+            env=ccc_env(context),
+            stdin=subprocess.DEVNULL,
+            stdout=log_handle,
+            stderr=log_handle,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        raise RuntimeError(f"Could not start CocoIndex daemon: {exc}") from exc
+    finally:
+        log_handle.close()
+
+
+def wait_for_daemon_handshake(
+    context: CocoIndexContext, proc: subprocess.Popen[bytes]
+) -> None:
+    """Wait until the daemon completes a real client handshake."""
+    deadline = time.monotonic() + timeout_seconds("mcp_smoke")
+    while time.monotonic() < deadline:
+        if daemon_handshake_succeeds(context):
+            return
+        if proc.poll() is not None:
+            log = read_daemon_log(context)
+            message = "CocoIndex daemon exited before it accepted a handshake."
+            if log:
+                message += f"\n\nDaemon log:\n{log}"
+            raise RuntimeError(message)
+        time.sleep(0.2)
+
+    log = read_daemon_log(context)
+    message = "CocoIndex daemon did not accept a handshake in time."
+    if log:
+        message += f"\n\nDaemon log:\n{log}"
+    raise RuntimeError(message)
+
+
+def cleanup_stale_daemon_files(context: CocoIndexContext) -> None:
+    """Remove stale same-runtime socket files after handshake failure."""
+    for path in (
+        context.runtime_dir / "daemon.sock",
+        context.runtime_dir / "daemon.pid",
+    ):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def ensure_daemon_ready(context: CocoIndexContext) -> None:
+    """Start exactly one ready daemon for this repository mirror."""
+    with FileLock(lock_path(context.artifact_root, f"daemon-{context.mirror_digest}")):
+        if daemon_handshake_succeeds(context):
+            return
+        cleanup_stale_daemon_files(context)
+        proc = start_daemon_process(context)
+        wait_for_daemon_handshake(context, proc)
+
+
 def mcp_config_payload(
     context: CocoIndexContext, *, pin_repo: bool
 ) -> dict[str, object]:
@@ -952,6 +1145,8 @@ def mcp_config_payload(
         "command": sys.executable,
         "args": [str(Path(__file__).resolve()), "mcp"],
         "env": env,
+        "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SECONDS,
+        "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_SECONDS,
         "working_directory_contract": (
             f"Launch from the target Git repository root or set {REPO_ROOT_ENV} "
             "to that root. The shared install stays under "
@@ -966,18 +1161,169 @@ def command_mcp_config(args: argparse.Namespace) -> None:
     print(json.dumps(mcp_config_payload(context, pin_repo=args.pin_repo), indent=2))
 
 
+def codex_config_path() -> Path:
+    """Return the Codex config path for the active host account."""
+    codex_home = os.environ.get("CODEX_HOME")
+    root = Path(codex_home).expanduser() if codex_home else Path.home() / ".codex"
+    return root / "config.toml"
+
+
+def expected_codex_mcp_server(context: CocoIndexContext) -> dict[str, object]:
+    """Return the expected Codex MCP server table for this wrapper."""
+    return {
+        "command": sys.executable,
+        "args": [str(Path(__file__).resolve()), "mcp"],
+        "env": {ARTIFACT_ROOT_ENV: str(context.artifact_root)},
+        "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SECONDS,
+        "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_SECONDS,
+    }
+
+
+def load_codex_config(path: Path) -> dict[str, Any]:
+    """Load a Codex TOML config file without printing its contents."""
+    if not path.exists():
+        return {}
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        raise RuntimeError(f"Could not parse Codex config at {path}: {exc}") from exc
+
+
+def codex_mcp_server_matches_expected(
+    config: dict[str, Any], expected: dict[str, object]
+) -> bool:
+    """Return whether the configured Codex server matches this wrapper."""
+    server = config.get("mcp_servers", {}).get(MCP_SERVER_NAME)
+    if not isinstance(server, dict):
+        return False
+    env = server.get("env")
+    expected_env = expected["env"]
+    if not isinstance(env, dict) or not isinstance(expected_env, dict):
+        return False
+    return (
+        server.get("command") == expected["command"]
+        and server.get("args") == expected["args"]
+        and env.get(ARTIFACT_ROOT_ENV) == expected_env[ARTIFACT_ROOT_ENV]
+        and server.get("startup_timeout_sec") == expected["startup_timeout_sec"]
+        and server.get("tool_timeout_sec") == expected["tool_timeout_sec"]
+    )
+
+
+def format_toml_scalar(value: int | float | bool | str) -> str:
+    """Format the scalar values this tool writes to Codex config."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int | float):
+        return str(value)
+    return json.dumps(value)
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """Atomically replace a text file in its own directory."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            delete=False,
+        ) as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+            temp_name = handle.name
+        os.replace(temp_name, path)
+    finally:
+        if temp_name is not None:
+            Path(temp_name).unlink(missing_ok=True)
+
+
+def upsert_toml_table_scalars(
+    text: str, table_name: str, values: Mapping[str, int | float | bool | str]
+) -> str:
+    """Set scalar keys in one TOML table while preserving other content."""
+    header = f"[{table_name}]"
+    lines = text.splitlines(keepends=True)
+    newline = "\n" if text.endswith("\n") or not text else ""
+    start = next(
+        (index for index, line in enumerate(lines) if line.strip() == header),
+        None,
+    )
+    if start is None:
+        prefix = "" if not lines or lines[-1].endswith("\n") else "\n"
+        body = "".join(
+            f"{key} = {format_toml_scalar(value)}\n" for key, value in values.items()
+        )
+        return text + prefix + header + "\n" + body
+
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        stripped = lines[index].strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            end = index
+            break
+
+    replacement_lines: list[str] = []
+    seen: set[str] = set()
+    for line in lines[start + 1 : end]:
+        stripped = line.lstrip()
+        matching_key = next(
+            (key for key in values if stripped.startswith(f"{key} =")),
+            None,
+        )
+        if matching_key is None:
+            replacement_lines.append(line)
+            continue
+        replacement_lines.append(
+            f"{matching_key} = {format_toml_scalar(values[matching_key])}\n"
+        )
+        seen.add(matching_key)
+
+    for key, value in values.items():
+        if key not in seen:
+            replacement_lines.append(f"{key} = {format_toml_scalar(value)}\n")
+
+    updated = lines[: start + 1] + replacement_lines + lines[end:]
+    output = "".join(updated)
+    return output if output.endswith("\n") else output + newline
+
+
+def ensure_codex_mcp_timeouts(config_path: Path) -> None:
+    """Ensure Codex has generous timeouts for the CocoIndex MCP server."""
+    values = {
+        "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SECONDS,
+        "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_SECONDS,
+    }
+    original = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    updated = upsert_toml_table_scalars(
+        original, f"mcp_servers.{MCP_SERVER_NAME}", values
+    )
+    if updated != original:
+        atomic_write_text(config_path, updated)
+
+
 def command_mcp_install(_args: argparse.Namespace) -> None:
     context = resolve_context()
     codex = resolve_required_executable("codex")
+    config_path = codex_config_path()
+    expected = expected_codex_mcp_server(context)
     existing = run_command(
         [codex, "mcp", "get", MCP_SERVER_NAME], cwd=context.repo_root
     )
     if existing.returncode == 0:
-        print(f"MCP server already configured: {MCP_SERVER_NAME}")
-        return
-    combined_output = f"{existing.stdout}\n{existing.stderr}"
-    if f"No MCP server named '{MCP_SERVER_NAME}' found" not in combined_output:
-        raise RuntimeError(combined_output.strip())
+        config = load_codex_config(config_path)
+        if codex_mcp_server_matches_expected(config, expected):
+            print(f"MCP server already configured: {MCP_SERVER_NAME}")
+            return
+        checked_command(
+            [codex, "mcp", "remove", MCP_SERVER_NAME],
+            cwd=context.repo_root,
+        )
+    else:
+        combined_output = f"{existing.stdout}\n{existing.stderr}"
+        if f"No MCP server named '{MCP_SERVER_NAME}' found" not in combined_output:
+            raise RuntimeError(combined_output.strip())
     checked_command(
         [
             codex,
@@ -993,13 +1339,13 @@ def command_mcp_install(_args: argparse.Namespace) -> None:
         ],
         cwd=context.repo_root,
     )
+    ensure_codex_mcp_timeouts(config_path)
     print(f"MCP server configured: {MCP_SERVER_NAME}")
 
 
 def run_mcp_stdio_smoke(context: CocoIndexContext) -> dict[str, object]:
     """Run a real MCP initialize/list_tools probe against this wrapper."""
-    for site_package_path in venv_site_package_paths(context):
-        sys.path.insert(0, str(site_package_path))
+    prepend_venv_site_package_paths(context)
     anyio_module = importlib.import_module("anyio")
     mcp_module = importlib.import_module("mcp")
     stdio_module = importlib.import_module("mcp.client.stdio")
@@ -1021,20 +1367,119 @@ def run_mcp_stdio_smoke(context: CocoIndexContext) -> dict[str, object]:
             ):
                 initialized = await session.initialize()
                 tools = await session.list_tools()
+                search = await session.call_tool(
+                    "search",
+                    {"query": "MCP smoke search", "limit": 1, "refresh_index": True},
+                )
         server_info = initialized.serverInfo
         return {
             "server_name": server_info.name,
             "server_version": server_info.version,
             "tools": sorted(tool.name for tool in tools.tools),
+            "search_tool_result_type": type(search).__name__,
         }
 
     return cast(dict[str, object], cast(Any, anyio_module).run(probe))
 
 
+def parse_mcp_response_lines(stdout: str) -> dict[int, dict[str, Any]]:
+    """Parse JSON-RPC responses by integer id from stdio output."""
+    responses: dict[int, dict[str, Any]] = {}
+    for line in stdout.splitlines():
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"MCP server emitted non-JSON stdout: {line!r}") from exc
+        response_id = payload.get("id")
+        if isinstance(response_id, int):
+            responses[response_id] = payload
+    return responses
+
+
+def run_mcp_jsonrpc_protocol_probe(
+    context: CocoIndexContext, protocol_version: str
+) -> dict[str, object]:
+    """Probe newline-delimited MCP JSON-RPC without a client library."""
+    messages = [
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": protocol_version,
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "cocoindex-agent-search-smoke",
+                    "version": "1",
+                },
+            },
+        },
+        {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+    ]
+    completed = run_command_with_input(
+        [sys.executable, str(Path(__file__).resolve()), "mcp"],
+        cwd=context.repo_root,
+        env={ARTIFACT_ROOT_ENV: str(context.artifact_root)},
+        input_text="".join(json.dumps(message) + "\n" for message in messages),
+        timeout=timeout_seconds("mcp_smoke"),
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "\n".join(
+                [
+                    f"MCP protocol probe failed with exit {completed.returncode}",
+                    "STDOUT:",
+                    completed.stdout,
+                    "STDERR:",
+                    completed.stderr,
+                ]
+            )
+        )
+    responses = parse_mcp_response_lines(completed.stdout)
+    initialize = responses.get(1, {})
+    tools_list = responses.get(2, {})
+    initialize_result = initialize.get("result", {})
+    if not isinstance(initialize_result, dict):
+        raise RuntimeError(f"MCP initialize did not return a result: {initialize}")
+    negotiated_protocol = initialize_result.get("protocolVersion")
+    if negotiated_protocol not in MCP_PROTOCOL_VERSIONS:
+        raise RuntimeError(
+            f"MCP initialize returned unsupported protocolVersion {negotiated_protocol!r}."
+        )
+    tools_result = tools_list.get("result", {})
+    if not isinstance(tools_result, dict):
+        raise RuntimeError(f"MCP tools/list did not return a result: {tools_list}")
+    tool_names = sorted(
+        tool["name"]
+        for tool in tools_result.get("tools", [])
+        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    )
+    if "search" not in tool_names:
+        raise RuntimeError(f"MCP tools/list did not include search: {tool_names}")
+    return {
+        "protocol_version": protocol_version,
+        "negotiated_protocol_version": negotiated_protocol,
+        "tools": tool_names,
+    }
+
+
+def run_mcp_jsonrpc_smoke(context: CocoIndexContext) -> list[dict[str, object]]:
+    """Probe supported MCP protocol versions using raw stdio JSON-RPC."""
+    return [
+        run_mcp_jsonrpc_protocol_probe(context, protocol_version)
+        for protocol_version in MCP_PROTOCOL_VERSIONS
+    ]
+
+
 def command_mcp_smoke(_args: argparse.Namespace) -> None:
     context = resolve_context()
     ensure_ready(context)
-    print(json.dumps(run_mcp_stdio_smoke(context), indent=2, sort_keys=True))
+    payload = run_mcp_stdio_smoke(context)
+    payload["jsonrpc_protocol_probes"] = run_mcp_jsonrpc_smoke(context)
+    print(json.dumps(payload, indent=2, sort_keys=True))
 
 
 def command_benchmark(args: argparse.Namespace) -> None:
@@ -1113,7 +1558,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     mcp_smoke = subparsers.add_parser(
         "mcp-smoke",
-        help="Launch this MCP server over stdio and verify initialize/list_tools.",
+        help="Launch this MCP server and verify initialize/list_tools/search.",
     )
     mcp_smoke.set_defaults(func=command_mcp_smoke)
 

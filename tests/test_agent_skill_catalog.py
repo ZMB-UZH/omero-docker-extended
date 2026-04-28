@@ -15,6 +15,7 @@ ALL_SKILLS: tuple[str, ...] = (
     "ai-regression-testing",
     "browser-fallback",
     "caveman",
+    "ccc",
     "cocoindex-code-search",
     "compliance-and-rate-limit",
     "context-budget",
@@ -46,6 +47,7 @@ REPO_NATIVE_SKILLS: frozenset[str] = frozenset(
     {
         "browser-fallback",
         "caveman",
+        "ccc",
         "cocoindex-code-search",
         "compliance-and-rate-limit",
         "docs-knowledge-maintainer",
@@ -117,6 +119,21 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
             "destructive actions",
         ),
         adapter_phrases=("tokens", "terse"),
+    ),
+    "ccc": SkillScenario(
+        scenario=(
+            "An agent has the upstream CocoIndex Code skill installed, but this "
+            "repository must keep ccc project artifacts outside the live checkout "
+            "and route MCP setup through the OMERO wrapper."
+        ),
+        skill_phrases=(
+            "OMERO Docker Extended override",
+            "cocoindex-code-search",
+            "Do not run `ccc init`",
+            "tools/cocoindex_agent_search.py mcp-config",
+            "upstream `ccc mcp` server behavior",
+        ),
+        adapter_phrases=("CocoIndex", "OMERO wrapper"),
     ),
     "compliance-and-rate-limit": SkillScenario(
         scenario=(
@@ -625,7 +642,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
         self,
     ) -> None:
         self.assertEqual(set(ALL_SKILLS), set(self.skill_dirs))
-        self.assertEqual(28, len(self.skill_dirs))
+        self.assertEqual(len(ALL_SKILLS), len(self.skill_dirs))
         self.assertEqual(set(ALL_SKILLS), set(SKILL_SCENARIOS))
 
     def test_every_skill_has_frontmatter_adapter_and_catalog_entry(self) -> None:

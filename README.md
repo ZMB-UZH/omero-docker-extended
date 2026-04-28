@@ -11,10 +11,10 @@
 [![super-linter](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/super-linter.yml?branch=main&label=super-linter&logo=github)](https://github.com/super-linter/super-linter)
 [![Ruff](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/ruff.yml?branch=main&logo=ruff&label=Ruff)](https://github.com/astral-sh/ruff)
 [![Vulture](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/vulture.yml?branch=main&logo=python&label=Vulture)](https://github.com/jendrikseipp/vulture)
+[![cocoindex-code](https://img.shields.io/static/v1?label=&message=cocoindex-code&color=555&logo=github&logoColor=white)](https://github.com/cocoindex-io/cocoindex-code)
 [![everything-claude-code](https://img.shields.io/static/v1?label=&message=everything-claude-code&color=555&logo=github&logoColor=white)](https://github.com/affaan-m/everything-claude-code)
 [![caveman](https://img.shields.io/static/v1?label=&message=caveman&color=555&logo=github&logoColor=white)](https://github.com/JuliusBrussee/caveman)
 [![andrej-karpathy-skills](https://img.shields.io/static/v1?label=&message=andrej-karpathy-skills&color=555&logo=github&logoColor=white)](https://github.com/forrestchang/andrej-karpathy-skills)
-[![cocoindex-code](https://img.shields.io/static/v1?label=&message=cocoindex-code&color=555&logo=github&logoColor=white)](https://github.com/cocoindex-io/cocoindex-code)
 <!-- END GENERATED BADGES -->
 
 Production-grade (see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom OMERO.web plugins for microscopy metadata workflows, file upload/import management, direct Imaris 11 integration, administrator tools, and a full server monitoring stack.
@@ -404,9 +404,15 @@ Broad AI-agent repo navigation can use the all-agent
 validation. Agents check for an existing MCP server or tool named
 `cocoindex-code` first. Its wrapper keeps the pinned host install under XDG data
 paths or `AGENT_COCOINDEX_HOME`, with per-repository mirrors, databases, and
-runtime directories outside the live checkout. After MCP install or launcher
-changes, agents verify the stdio handshake with
-`python3 tools/cocoindex_agent_search.py mcp-smoke`.
+runtime directories outside the live checkout. The Codex installer repairs
+stale same-name entries instead of adding duplicates. After MCP install or
+launcher changes, agents verify the stdio handshake, raw protocol probes, tool
+listing, and a real search tool call with
+`python3 tools/cocoindex_agent_search.py mcp-smoke`. If it cold-indexes, agents
+tell the user once that the first search can take several minutes and then uses
+the external cache. The mirror asks CocoIndex Code 0.2.31 to include every
+Git-visible mirrored file pattern; CocoIndex indexes text-decodable content and
+skips undecodable binary files.
 
 | Entry point | Purpose |
 | --- | --- |
