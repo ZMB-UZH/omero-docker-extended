@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+const { beforeEach, describe, expect, it } = globalThis;
 
 const scriptUrl = '/__preview_static__/omeroweb_tools/enhanced_search_indexed_scope.js';
 const stylesUrl = '/__preview_static__/omeroweb_tools/styles.css';
