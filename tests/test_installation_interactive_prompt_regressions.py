@@ -272,6 +272,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
                         OMERO_CLI_ZARR_VERSION=0.8.0
                         OME_ZARR_PY_VERSION=0.15.0
                         BIOFORMATS2RAW_VERSION=0.11.0
+                        BIOFORMATS_VERSION=8.5.0
                         OMERO_INSTALLATION_PATH="{temp_path}"
                         COMPOSE_FILE="{temp_path / "docker-compose.yml"}"
                         BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="installation/docker_buildx_compressed_push.sh"
@@ -368,6 +369,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
                         OMERO_CLI_ZARR_VERSION=0.8.0
                         OME_ZARR_PY_VERSION=0.15.0
                         BIOFORMATS2RAW_VERSION=0.11.0
+                        BIOFORMATS_VERSION=8.5.0
                         OMERO_INSTALLATION_PATH="{temp_path}"
                         OMERO_DATA_PATH="{temp_path / "data"}"
                         COMPOSE_FILE="{temp_path / "docker-compose.yml"}"

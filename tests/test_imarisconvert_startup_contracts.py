@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -8,6 +9,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "startup" / "51-install-imarisconvert.sh"
+BASH_BIN = shutil.which("bash") or "/bin/bash"
+SHA256SUM_BIN = shutil.which("sha256sum") or "/usr/bin/sha256sum"
 
 
 def _write_executable(path: Path, content: str = "#!/bin/sh\nexit 0\n") -> None:
@@ -23,7 +26,7 @@ def _write_large_jar(path: Path) -> None:
 
 def _write_sha256_manifest(jar_path: Path) -> None:
     digest = subprocess.check_output(
-        ["sha256sum", str(jar_path)],
+        [SHA256SUM_BIN, str(jar_path)],
         text=True,
     ).split()[0]
     jar_path.with_suffix(jar_path.suffix + ".sha256").write_text(
@@ -63,7 +66,7 @@ def test_imarisconvert_startup_default_verifies_existing_install(tmp_path):
     install_dir, wrapper_path = _prepare_valid_install(tmp_path)
 
     result = subprocess.run(
-        ["bash", str(SCRIPT_PATH)],
+        [BASH_BIN, str(SCRIPT_PATH)],
         check=False,
         env=_script_env(install_dir, wrapper_path),
         text=True,
@@ -78,7 +81,7 @@ def test_imarisconvert_startup_ignores_entrypoint_arguments_in_verify_mode(tmp_p
     install_dir, wrapper_path = _prepare_valid_install(tmp_path)
 
     result = subprocess.run(
-        ["bash", str(SCRIPT_PATH), "/startup/99-run.sh"],
+        [BASH_BIN, str(SCRIPT_PATH), "/startup/99-run.sh"],
         check=False,
         env=_script_env(install_dir, wrapper_path),
         text=True,
@@ -94,7 +97,7 @@ def test_imarisconvert_startup_fails_fast_when_runtime_artifacts_are_missing(tmp
     (install_dir / "artifacts" / "bioformats" / "bioformats_package.jar").unlink()
 
     result = subprocess.run(
-        ["bash", str(SCRIPT_PATH)],
+        [BASH_BIN, str(SCRIPT_PATH)],
         check=False,
         env=_script_env(install_dir, wrapper_path),
         text=True,
@@ -115,7 +118,7 @@ def test_imarisconvert_build_time_mode_repairs_wrapper_and_cache_without_network
         path.unlink()
 
     result = subprocess.run(
-        ["bash", str(SCRIPT_PATH), "--install-build-time"],
+        [BASH_BIN, str(SCRIPT_PATH), "--install-build-time"],
         check=False,
         env=_script_env(install_dir, wrapper_path),
         text=True,

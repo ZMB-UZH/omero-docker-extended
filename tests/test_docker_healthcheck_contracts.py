@@ -111,6 +111,12 @@ class DockerHealthcheckContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("/startup/healthcheck-omeroserver.sh", self.compose_text)
+        self.assertIn("OMERO_SERVER_HEALTHCHECK_INTERVAL_SECONDS", self.compose_text)
+        self.assertIn("OMERO_SERVER_HEALTHCHECK_TIMEOUT_SECONDS", self.compose_text)
+        self.assertIn("OMERO_SERVER_HEALTHCHECK_RETRIES", self.compose_text)
+        self.assertIn(
+            "OMERO_SERVER_HEALTHCHECK_START_PERIOD_SECONDS", self.compose_text
+        )
         self.assertIn("OMERO_CLI_USER is required", helper_text)
         self.assertIn("OMERO_CLI_HOST is required", helper_text)
         self.assertIn("OMERO_CLI_PORT is required", helper_text)

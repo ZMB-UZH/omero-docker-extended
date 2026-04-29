@@ -41,7 +41,7 @@ def _group_name(group) -> str:
 
 
 def _group_id(group) -> int:
-    return int(_value(group.id))
+    return int(str(_value(group.id)))
 
 
 def _eligible_groups(groups: Iterable) -> list:
@@ -106,7 +106,7 @@ def sync_memberships(args: argparse.Namespace) -> int:
         admin = conn.getAdminService()
         job_exp = ensure_job_user(admin, args.job_user, job_pass, args.user_retries)
         current_group_ids = {
-            int(group_id) for group_id in admin.getMemberOfGroupIds(job_exp)
+            int(str(group_id)) for group_id in admin.getMemberOfGroupIds(job_exp)
         }
         groups = _eligible_groups(admin.lookupGroups())
         missing_groups = [
@@ -115,7 +115,7 @@ def sync_memberships(args: argparse.Namespace) -> int:
 
         if missing_groups:
             admin.addGroups(
-                ExperimenterI(int(_value(job_exp.id)), False), missing_groups
+                ExperimenterI(int(str(_value(job_exp.id))), False), missing_groups
             )
 
         print(

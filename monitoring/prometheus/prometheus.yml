@@ -83,7 +83,7 @@ scrape_configs:
           - database-plugin:5433
           - redis:6379
           - omeroserver:4063
-          - omeroserver:4064
+          - omeroserver:__OMERO_CLI_PORT__
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
