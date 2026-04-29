@@ -1,14 +1,14 @@
 const { describe, expect, it } = globalThis;
 
 /** Fetches preview-hosted text and asserts that the asset was served. */
-const fetchText = async (url) => {
+async function fetchText(url) {
   const response = await fetch(url);
   expect(response.ok).toBe(true);
   return response.text();
-};
+}
 
 /** Renders the generated help page HTML inside the browser test document. */
-const installHelpPage = async () => {
+async function installHelpPage() {
   const html = await fetchText('/help.html');
   const parsed = new DOMParser().parseFromString(html, 'text/html');
 
@@ -33,7 +33,7 @@ const installHelpPage = async () => {
   }
 
   await new Promise((resolve) => requestAnimationFrame(() => resolve()));
-};
+}
 
 describe('Enhanced Search HTML help page', () => {
   it('renders compact help with exact interface screenshots', async () => {

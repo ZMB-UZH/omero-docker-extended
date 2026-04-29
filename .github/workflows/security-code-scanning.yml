@@ -47,9 +47,7 @@ jobs:
 
           git ls-files '*.py' ':!:third_party/**' > "$python_sources"
           git ls-files '*.pyi' > "$python_stubs"
-          git ls-files \
-            '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' \
-            ':!:third_party/**' > "$js_candidates"
+          git ls-files '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' ':!:third_party/**' > "$js_candidates"
 
           echo "::group::CodeQL language candidate files"
           if [ "${{ matrix.language }}" = "python" ]; then
