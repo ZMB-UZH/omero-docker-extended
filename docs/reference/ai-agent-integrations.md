@@ -29,9 +29,9 @@ text in each adapter.
 
 ## AI commit identity
 
-Every AI-facing adapter inherits the commit-identity rule from `AGENTS.md`. Any AI tool that creates or rewrites a commit object must set both author and committer to `AI agent <>`, using an empty email field. Any AI co-author trailer must be `Co-authored-by: AI agent` with no email.
+Every AI-facing adapter inherits the commit-identity rule from `AGENTS.md`. Any AI tool that creates or rewrites a commit object must set both author and committer to `AI Agent <>`, using an empty email field. Any AI co-author trailer must be `Co-authored-by: AI Agent` with no email.
 
-AI tools must not infer identity from global Git config, prior commits, GitHub accounts, host users, or human operators. If the active tool cannot create that exact empty-email identity or trailer, or would use a profile-mapped AI address such as `ai-agent@users.noreply.github.com`, `codex@openai.com`, or `codex@openai.invalid`, it must stop before committing.
+AI tools must not infer identity from global Git config, prior commits, GitHub accounts, host users, or human operators. If the active tool cannot create that exact empty-email identity or trailer, or would use a profile-mapped AI/tool address, it must stop before committing.
 
 Identity cleanup must check fresh branch-head authors, committers, `Co-authored-by` trailers, and GitHub anonymous contributors (`contributors?anon=1`); a normal contributors check without anonymous entries is incomplete. GitHub PR-head refs are managed snapshots and must be reported separately from current branch heads.
 
@@ -39,7 +39,7 @@ Non-AI commit identities must be real human GitHub identities or actual human au
 
 ## Default-branch development
 
-Every AI-facing adapter inherits the default-branch rule from `AGENTS.md`. AI agents must develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch, must resolve that branch from the remote instead of hard-coding `main`, and must not create feature branches, PR branches, temporary remote branches, or draft PRs for routine work.
+Every AI-facing adapter inherits the default-branch rule from `AGENTS.md`. AI Agents must develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch, must resolve that branch from the remote instead of hard-coding `main`, and must not create feature branches, PR branches, temporary remote branches, or draft PRs for routine work.
 
 ## Supported instruction surfaces
 

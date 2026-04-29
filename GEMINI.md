@@ -9,12 +9,12 @@ skill catalog.
 
 ## Single-session rule
 
-- AI agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
+- AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
 
 ## Core rules
 
 - Start with `AGENTS.md`, then the routing doc.
-- Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI agent <>`; never use profile-mapped AI emails such as `ai-agent@users.noreply.github.com`, `codex@openai.com`, or `codex@openai.invalid`; AI co-author trailers use `Co-authored-by: AI agent` with no email; audits include anonymous contributors (`contributors?anon=1`).
+- Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI Agent <>`; never use profile-mapped AI/tool emails; AI co-author trailers use `Co-authored-by: AI Agent` with no email; audits include anonymous contributors (`contributors?anon=1`).
 - Non-AI commits use real human GitHub or actual human author identities, never host/local placeholders.
 - Develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch; resolve it dynamically and do not create feature branches, PR branches, temporary remote branches, or draft PRs for routine work.
 - Honor the routing doc's numeric caps before broadening scope.

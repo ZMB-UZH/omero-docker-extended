@@ -109,6 +109,43 @@ def test_pat_push_accepts_env_token_without_prompt(monkeypatch) -> None:
     assert prompted is False
 
 
+def test_pat_push_accepts_explicit_force_with_lease(monkeypatch) -> None:
+    monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
+    captured: dict[str, object] = {}
+    expected = "0123456789abcdef0123456789abcdef01234567"
+
+    def fake_run(command, *, env, check):
+        captured["command"] = command
+        return subprocess.CompletedProcess(command, 0)
+
+    args = git_push_with_pat.parse_args(
+        [
+            "--force-with-lease",
+            f"refs/heads/main:{expected}",
+            "origin",
+            "HEAD:main",
+        ]
+    )
+    result = git_push_with_pat.run_push(
+        args,
+        env={"PATH": "/usr/bin", "GITHUB_TOKEN": TEST_GITHUB_CREDENTIAL},
+        runner=fake_run,
+    )
+
+    assert result == 0
+    assert captured["command"] == [
+        "/usr/bin/git",
+        "-c",
+        "credential.helper=",
+        "-c",
+        "credential.https://github.com.helper=",
+        "push",
+        f"--force-with-lease=refs/heads/main:{expected}",
+        "origin",
+        "HEAD:main",
+    ]
+
+
 def test_pat_push_does_not_write_credential_to_temp_tree(monkeypatch) -> None:
     monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
     observed_files: dict[str, str] = {}
@@ -151,8 +188,34 @@ def test_pat_push_rejects_option_like_git_arguments(remote, refspec) -> None:
         username="x-access-token",
         token_env="GITHUB_TOKEN",
         dry_run=False,
+        force_with_lease=None,
     )
     with pytest.raises(SystemExit, match="must be a non-option Git argument"):
+        git_push_with_pat.run_push(
+            args,
+            env={"GITHUB_TOKEN": TEST_GITHUB_CREDENTIAL},
+        )
+
+
+@pytest.mark.parametrize(
+    "force_with_lease",
+    [
+        "main:0123456789abcdef0123456789abcdef01234567",
+        "refs/heads/main",
+        "refs/heads/main:-1234",
+        "refs/heads/main:not-a-sha",
+    ],
+)
+def test_pat_push_rejects_invalid_force_with_lease(force_with_lease) -> None:
+    args = git_push_with_pat.argparse.Namespace(
+        remote="origin",
+        refspec="HEAD:main",
+        username="x-access-token",
+        token_env="GITHUB_TOKEN",
+        dry_run=False,
+        force_with_lease=force_with_lease,
+    )
+    with pytest.raises(SystemExit, match="force-with-lease"):
         git_push_with_pat.run_push(
             args,
             env={"GITHUB_TOKEN": TEST_GITHUB_CREDENTIAL},

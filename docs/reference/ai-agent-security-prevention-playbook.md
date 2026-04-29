@@ -49,7 +49,7 @@ These sources were used to shape the rules below:
 
 ## What the closed-alert history says
 
-The latest full closed-history API refresh, summarized in `docs/reference/code-scanning-resolved-findings.md`, shows that the highest-recurrence families are not random noise; they identify the exact places where AI agents tend to drift:
+The latest full closed-history API refresh, summarized in `docs/reference/code-scanning-resolved-findings.md`, shows that the highest-recurrence families are not random noise; they identify the exact places where AI Agents tend to drift:
 
 | Rule family                                                        | Closed alerts | What future agents must assume                                                                                            |
 | ------------------------------------------------------------------ | ------------: | ------------------------------------------------------------------------------------------------------------------------- |
@@ -318,7 +318,7 @@ Required rules:
 - Treat workflow expressions, artifact names, branch names, and pull-request metadata as untrusted input.
 - Do not put secrets into workflow YAML, checked-in example files, or generated docs.
 
-### 9. Secrets, PATs, and AI-agent operational hygiene
+### 9. Secrets, PATs, and AI Agent operational hygiene
 
 Bad:
 

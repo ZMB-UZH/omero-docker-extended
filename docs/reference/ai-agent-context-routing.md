@@ -1,6 +1,6 @@
 # AI Agent Context Routing
 
-Minimal routing map for AI agents. Use this to load only the smallest correct part of the repository.
+Minimal routing map for AI Agents. Use this to load only the smallest correct part of the repository.
 
 ## Core rule
 

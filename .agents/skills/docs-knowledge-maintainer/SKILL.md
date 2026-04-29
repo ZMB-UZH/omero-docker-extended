@@ -57,4 +57,4 @@ python3 -m pytest tests/test_repository_documentation_regressions.py -v -p no:ca
 
 ## Good outcome
 
-Operators, contributors, and AI agents can all find the changed contract from `docs/index.md` and the nearest deep doc without conflicting instructions.
+Operators, contributors, and AI Agents can all find the changed contract from `docs/index.md` and the nearest deep doc without conflicting instructions.

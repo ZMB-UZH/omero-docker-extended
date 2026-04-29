@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host-side CocoIndex Code workflow for AI-agent semantic routing."""
+"""Host-side CocoIndex Code workflow for AI Agent semantic routing."""
 
 from __future__ import annotations
 

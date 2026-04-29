@@ -68,7 +68,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── .cursor/rules/                     # Cursor-specific rule adapters pointing back to AGENTS/skills
 ├── .github/copilot-instructions.md    # GitHub Copilot repo-wide instructions
 ├── .github/instructions/              # GitHub Copilot path-specific instructions
-├── AGENTS.md                          # Agent navigation map (start here for AI agents)
+├── AGENTS.md                          # Agent navigation map (start here for AI Agents)
 ├── ARCHITECTURE.md                    # Architectural overview and dependency boundaries
 ├── CLAUDE.md                          # Claude Code working instructions
 ├── GEMINI.md                          # Gemini CLI project context
@@ -335,7 +335,7 @@ Create deployment-local runtime files by copying these templates and removing `_
 ### Example templates and runtime files
 
 - All `*_example*` files in this repository are the templates for configuration and operational helper scripts.
-- For AI-assisted analysis and maintenance, AI agents are instructed to always assume the corresponding non-example runtime files are present on the target system and structurally aligned with their `*_example*` versions.
+- For AI-assisted analysis and maintenance, AI Agents are instructed to always assume the corresponding non-example runtime files are present on the target system and structurally aligned with their `*_example*` versions.
 - This split exists so update flows (including `github_pull_project_bash_example`) can pull repository changes without replacing site-local runtime files that admins manage outside git, including pull-launcher runtime files that operators manage locally.
 - The pull/update workflow preserves only existing site-local `logo/logo.png` in place (no backup/restore copy), while still refreshing sibling template assets such as `logo/logo_example.png` from upstream.
 
@@ -394,12 +394,12 @@ Both operations are designed for online use. They may briefly acquire locks; the
 <details open>
 <summary><h2>Documentation</h2></summary>
 
-Optional AI-agent compression is available to all supported agents via the
+Optional AI Agent compression is available to all supported agents via the
 opt-in [`caveman`](https://github.com/JuliusBrussee/caveman) overlay for
 internal AI communication only. Repository documentation, comments, docstrings,
 function descriptions, and user-facing text stay in standard prose.
 
-Broad AI-agent repo navigation can use the all-agent
+Broad AI Agent repo navigation can use the all-agent
 `cocoindex-code-search` skill as semantic routing before exact `rg`
 validation. Agents check for an existing MCP server or tool named
 `cocoindex-code` first. Its wrapper keeps the pinned host install under XDG data
@@ -420,7 +420,7 @@ skips undecodable binary files.
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Architectural overview, layer model, dependency rules |
 | [`CLAUDE.md`](CLAUDE.md) | Claude Code specific working instructions |
 | [`GEMINI.md`](GEMINI.md) | Gemini CLI project context |
-| [`docs/reference/ai-agent-skills.md`](docs/reference/ai-agent-skills.md) | Harness-neutral skill catalog for recurring AI-agent workflows |
+| [`docs/reference/ai-agent-skills.md`](docs/reference/ai-agent-skills.md) | Harness-neutral skill catalog for recurring AI Agent workflows |
 | [`docs/reference/ai-agent-integrations.md`](docs/reference/ai-agent-integrations.md) | Native adapter map for Copilot, Cursor, Claude, Gemini, and shared skills |
 | [`docs/reference/ai-agent-upstream-sources.md`](docs/reference/ai-agent-upstream-sources.md) | Pinned upstream provenance for ECC-derived local skills, Karpathy baseline, and vendored caveman prompt references |
 | [`docs/index.md`](docs/index.md) | Full documentation index with cross-links |

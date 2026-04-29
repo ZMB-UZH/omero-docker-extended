@@ -46,6 +46,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Validate authentication flow without updating the remote.",
     )
+    parser.add_argument(
+        "--force-with-lease",
+        metavar="REF:SHA",
+        help=(
+            "Pass a single explicit --force-with-lease=<ref>:<sha> guard to "
+            "git push. The value must contain a fully qualified ref and the "
+            "expected remote object ID."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -53,7 +62,22 @@ def _validate_git_argument(name: str, value: str) -> None:
     if not value or value.startswith("-") or "\x00" in value:
         raise SystemExit(f"{name} must be a non-option Git argument")
     if any(ord(character) < 32 for character in value):
-        raise SystemExit(f"{name} must not contain control characters")
+            raise SystemExit(f"{name} must not contain control characters")
+
+
+def _validate_force_with_lease(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if "\x00" in value or any(ord(character) < 32 for character in value):
+        raise SystemExit("force-with-lease must not contain control characters")
+    ref, separator, expected = value.partition(":")
+    if separator != ":" or not ref.startswith("refs/") or not expected:
+        raise SystemExit("force-with-lease must be REF:SHA")
+    if ref.startswith("-") or expected.startswith("-"):
+        raise SystemExit("force-with-lease must not contain option-like values")
+    if not all(character in "0123456789abcdefABCDEF" for character in expected):
+        raise SystemExit("force-with-lease expected object ID must be hex")
+    return f"--force-with-lease={ref}:{expected}"
 
 
 def _read_token(env: Mapping[str, str], env_name: str, reader: TokenReader) -> str:
@@ -156,6 +180,7 @@ def run_push(
     _validate_git_argument("remote", args.remote)
     _validate_git_argument("refspec", args.refspec)
     _validate_git_argument("username", args.username)
+    force_with_lease = _validate_force_with_lease(args.force_with_lease)
 
     base_env = dict(os.environ if env is None else env)
     token = _read_token(base_env, args.token_env, token_reader)
@@ -191,6 +216,8 @@ def run_push(
         ]
         if args.dry_run:
             command.append("--dry-run")
+        if force_with_lease is not None:
+            command.append(force_with_lease)
         command.extend([args.remote, args.refspec])
         result = runner(command, env=push_env, check=False)
         return result.returncode

@@ -408,12 +408,12 @@ contain genuine issues if a future scan reintroduces them:
    `docs/SECURITY.md`.
 6. Evaluate adding fuzz testing for parser code (`filename_parser.py`, `sem_edx_parser.py`).
 
-## AI agent maintenance instructions
+## AI Agent maintenance instructions
 
 This file is the operational runbook for code-scanning workflow, live snapshot
 format, and triage rules. `tools/regression_guard.py` is the canonical
 machine-checked anti-regression gate, and the reference docs listed above own
-closed-history lessons. AI agents working on this repository must follow these
+closed-history lessons. AI Agents working on this repository must follow these
 rules:
 
 1. **After fixing a vulnerability**: Refresh the GitHub API and, when authenticated, DeepSource. Update only the live snapshot and any directly affected historical/closed-history notes with the exact refresh date and verification evidence.
@@ -451,7 +451,7 @@ rules:
 
 9. **Stale-count rule**: Never quote an open-alert total from memory or from this document alone. Always refresh it from the GitHub API first and include the refresh date in your notes or verification summary.
 
-## AI agent coding guidelines — preventing new findings
+## AI Agent coding guidelines — preventing new findings
 
 The canonical coding patterns, concrete bad/good examples, stop signs, and external best-practice links now live in `docs/reference/ai-agent-security-prevention-playbook.md`.
 

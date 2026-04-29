@@ -1,6 +1,6 @@
 ---
 name: caveman
-description: Lower output token usage on demand for all AI agents without sacrificing technical accuracy, safety, or repo-specific clarity.
+description: Lower output token usage on demand for all AI Agents without sacrificing technical accuracy, safety, or repo-specific clarity.
 origin: repo-local caveman overlay adapted from caveman v1.6.0 for OMERO Docker Extended
 ---
 

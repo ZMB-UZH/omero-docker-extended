@@ -117,6 +117,57 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("Security vulnerability", issue_config)
         self.assertIn("## Verification", pr_template)
 
+    def test_current_branch_history_uses_exact_ai_agent_identity(self) -> None:
+        """Reject AI/tool commit identities that map to third-party accounts."""
+        git_path = shutil.which("git")
+        self.assertIsNotNone(git_path)
+        output = subprocess.check_output(
+            [
+                git_path,
+                "log",
+                "--format=%H%x00%an%x00%ae%x00%cn%x00%ce%x00%B%x00END",
+            ],
+            cwd=self.repo_root,
+            text=True,
+        )
+        forbidden_emails = {
+            "ai-" + "agent@users.noreply.github.com",
+            "co" + "dex@local",
+            "co" + "dex@openai.com",
+            "co" + "dex@openai.invalid",
+        }
+        bad_identities: list[str] = []
+        for record in output.split("\0END\n"):
+            if not record.strip():
+                continue
+            commit, author_name, author_email, committer_name, committer_email, body = (
+                record.lstrip("\n").split("\0", maxsplit=5)
+            )
+            identities = (
+                ("author", author_name, author_email),
+                ("committer", committer_name, committer_email),
+            )
+            for role, name, email in identities:
+                lower_name = name.casefold()
+                bad_name = (
+                    lower_name in {"ai-agent", "codex"}
+                    or (lower_name == "ai agent" and name != "AI Agent")
+                )
+                bad_ai_email = name == "AI Agent" and email != ""
+                if bad_name or bad_ai_email or email in forbidden_emails:
+                    bad_identities.append(f"{commit} {role}: {name} <{email}>")
+            for line in body.splitlines():
+                if line.casefold().startswith("co-authored-by:"):
+                    trailer = line.removeprefix("Co-authored-by:").strip()
+                    if trailer.casefold().startswith(("ai agent", "ai-agent", "codex")):
+                        self.assertEqual(
+                            "AI Agent",
+                            trailer,
+                            f"{commit} has invalid AI co-author trailer: {line}",
+                        )
+
+        self.assertEqual([], bad_identities)
+
     def test_docs_do_not_imply_multiple_project_maintainers(self) -> None:
         """Verify Docs do not imply multiple project maintainers."""
         plural_voice_patterns = {

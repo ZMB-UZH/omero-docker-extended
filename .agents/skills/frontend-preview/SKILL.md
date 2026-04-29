@@ -1,7 +1,7 @@
 ---
 name: frontend-preview
 description: Preview HTML/CSS/JS changes in Django plugin templates with the pinned host-side Vite/Vitest toolchain, then validate live in OMERO.web.
-origin: repo-local skill for AI agent frontend preview and DOM/browser validation
+origin: repo-local skill for AI Agent frontend preview and DOM/browser validation
 ---
 
 # Frontend Preview
