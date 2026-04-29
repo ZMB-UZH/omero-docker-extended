@@ -1,3 +1,1 @@
-"""
-Utility modules for the OMP plugin.
-"""
+"""Utility modules for the OMP plugin."""

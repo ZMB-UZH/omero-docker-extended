@@ -78,6 +78,7 @@ _INLINE_TEMPLATE_BACKEND = DjangoTemplates(
 def _proxy_method_not_allowed_response(
     allowed: tuple = _PROXY_SAFE_METHODS,
 ) -> JsonResponse:
+    """Handle proxy method not allowed response."""
     response = JsonResponse(
         {"error": "Method not allowed", "allowed_methods": list(allowed)},
         status=405,
@@ -129,6 +130,7 @@ def _internal_service_base_url(
     default_port: int,
     scheme_env_name: str = "ADMIN_TOOLS_INTERNAL_SERVICE_SCHEME",
 ) -> str:
+    """Handle internal service base URL."""
     configured_url = os.environ.get(url_env_name, "").strip()
     if configured_url:
         return configured_url
@@ -169,11 +171,13 @@ def _probe_http_url(url: str, timeout_seconds: float = 2.5) -> Dict[str, object]
 
 
 def _normalize_proxy_prefix(proxy_prefix: str) -> str:
+    """Handle normalize proxy prefix."""
     stripped = str(proxy_prefix or "").strip().strip("/")
     return f"/{stripped}" if stripped else ""
 
 
 def _safe_redirect_segment(value: str, default: str) -> str:
+    """Handle safe redirect segment."""
     raw_value = str(value or "").strip()
     if not raw_value:
         return default
@@ -186,6 +190,7 @@ def _safe_redirect_segment(value: str, default: str) -> str:
 
 
 def _safe_dashboard_uid(value: str, default: str) -> str:
+    """Handle safe dashboard uid."""
     raw_value = str(value or "").strip()
     if not raw_value:
         return default
@@ -197,6 +202,7 @@ def _safe_dashboard_uid(value: str, default: str) -> str:
 
 
 def _normalize_proxy_request_target(subpath: str) -> Tuple[str, str]:
+    """Handle normalize proxy request target."""
     raw_target = str(subpath or "").strip()
     parsed_target = urllib.parse.urlsplit(raw_target)
     if parsed_target.scheme or parsed_target.netloc:
@@ -222,6 +228,7 @@ def _normalize_proxy_request_target(subpath: str) -> Tuple[str, str]:
 
 
 def _normalize_proxy_query_string(query: str) -> str:
+    """Handle normalize proxy query string."""
     normalized_query = str(query or "").lstrip("?")
     if any(ord(char) < 32 or ord(char) == 127 for char in normalized_query):
         raise ValueError("Invalid proxy query")
@@ -229,6 +236,7 @@ def _normalize_proxy_query_string(query: str) -> str:
 
 
 def _build_proxy_target_url(base_url: str, path: str, query: str) -> tuple[str, str]:
+    """Handle build proxy target URL."""
     normalized_path, _ignored_query = _normalize_proxy_request_target(path)
     base_parsed = urllib.parse.urlparse(_validated_http_url(base_url))
     if not base_parsed.hostname:
@@ -263,6 +271,7 @@ def _build_proxy_target_url(base_url: str, path: str, query: str) -> tuple[str, 
 
 
 def _build_proxy_request_target(target_url: str) -> str:
+    """Handle build proxy request target."""
     target_parsed = urllib.parse.urlparse(target_url)
     request_target = urllib.parse.urlunparse(
         (
@@ -285,6 +294,7 @@ def _collect_proxy_headers(
     django_request,
     extra_forwarded_headers: tuple,
 ) -> dict[str, str]:
+    """Handle collect proxy headers."""
     forwarded_headers: dict[str, str] = {}
     for header_name in (
         "Accept",
@@ -303,6 +313,7 @@ def _collect_proxy_headers(
 
 
 def _rewrite_origin_headers(headers: dict[str, str], base_url: str) -> None:
+    """Handle rewrite origin headers."""
     backend_origin = _origin_from_url(base_url)
     if not backend_origin:
         return
@@ -313,12 +324,15 @@ def _rewrite_origin_headers(headers: dict[str, str], base_url: str) -> None:
 
 
 def _proxy_request_body(django_request) -> bytes | None:
+    """Handle proxy request body."""
     if django_request.method not in {"POST", "PUT", "PATCH"}:
         return None
     return django_request.body
 
 
 class _ProxyBackendResponse:
+    """Represent proxy backend response."""
+
     def __init__(self, raw_response, connection) -> None:
         self.status_code = int(raw_response.status)
         self.headers = getattr(raw_response, "headers", None) or raw_response.msg
@@ -333,6 +347,7 @@ class _ProxyBackendResponse:
         return self._content
 
     def close(self) -> None:
+        """Handle close."""
         self._connection.close()
 
 
@@ -345,6 +360,7 @@ def _send_proxy_backend_request(
     headers: dict[str, str],
     timeout_seconds: float,
 ) -> _ProxyBackendResponse:
+    """Handle send proxy backend request."""
     base_parsed = urllib.parse.urlparse(_validated_http_url(base_url))
     hostname = base_parsed.hostname
     if not hostname:
@@ -375,6 +391,7 @@ def _unsupported_event_stream_response(
     content_type: str,
     target_url: str,
 ) -> HttpResponse | None:
+    """Handle unsupported event stream response."""
     if normalized_path != "api/v1/notifications/live":
         return None
     if not content_type.startswith("text/event-stream"):
@@ -461,6 +478,7 @@ def _proxy_http_request(
 
 
 def _header_first(headers, name: str, default: str = "") -> str:
+    """Handle header first."""
     value = None
     getter = getattr(headers, "get", None)
     if callable(getter):
@@ -471,6 +489,7 @@ def _header_first(headers, name: str, default: str = "") -> str:
 
 
 def _header_values(headers, name: str) -> List[str]:
+    """Handle header values."""
     for attr in ("get_all", "getlist"):
         getter = getattr(headers, attr, None)
         if callable(getter):
@@ -557,6 +576,7 @@ def _origin_from_url(url: str) -> str:
 
 
 def _rewrite_proxied_location(location: str, base_url: str, proxy_prefix: str) -> str:
+    """Handle rewrite proxied location."""
     normalized_prefix = _normalize_proxy_prefix(proxy_prefix)
     parsed_location = urlparse(str(location or ""))
     parsed_base = urlparse(base_url.rstrip("/"))
@@ -921,6 +941,7 @@ def _list_omero_group_names(conn) -> List[str]:
 
 
 def _first_admin_listing(admin_service, method_names: tuple[str, ...]) -> list:
+    """Handle first admin listing."""
     for method_name in method_names:
         objects = _call_admin_listing(admin_service, method_name)
         if objects:
@@ -931,6 +952,7 @@ def _first_admin_listing(admin_service, method_names: tuple[str, ...]) -> list:
 def _register_admin_users(
     experimenters: list,
 ) -> tuple[dict[str, str], dict[str, set[str]]]:
+    """Handle register admin users."""
     users: dict[str, str] = {}
     groups_by_user: dict[str, set[str]] = {}
     for user in experimenters:
@@ -944,6 +966,7 @@ def _register_admin_users(
 def _register_admin_groups(
     experimenter_groups: list,
 ) -> tuple[set[str], dict[str, str], dict[str, set[str]]]:
+    """Handle register admin groups."""
     groups: set[str] = set()
     group_permissions: dict[str, str] = {}
     users_by_group: dict[str, set[str]] = {}
@@ -957,6 +980,7 @@ def _register_admin_groups(
 
 
 def _admin_id_arg_options(object_id: int) -> tuple[tuple[object, ...], ...]:
+    """Handle admin identifier arg options."""
     return ((object_id,), (int(object_id),), (object_id, False), (object_id, None))
 
 
@@ -968,6 +992,7 @@ def _link_user_group_memberships(
     groups_by_user: dict[str, set[str]],
     users_by_group: dict[str, set[str]],
 ) -> None:
+    """Handle link user group memberships."""
     for user in experimenters:
         user_id = _safe_object_id(user)
         username = _safe_username(user)
@@ -996,6 +1021,7 @@ def _link_group_user_memberships(
     groups_by_user: dict[str, set[str]],
     users_by_group: dict[str, set[str]],
 ) -> None:
+    """Handle link group user memberships."""
     for group in experimenter_groups:
         group_id = _safe_object_id(group)
         group_name = _safe_group_name(group)
@@ -1071,6 +1097,7 @@ def _permission_flag(permission_obj, method_name: str) -> bool:
 
 
 def _safe_group_permission_object(group_obj):
+    """Handle safe group permission object."""
     try:
         details = group_obj.getDetails()
         return details.getPermissions() if details is not None else None
@@ -1079,6 +1106,7 @@ def _safe_group_permission_object(group_obj):
 
 
 def _permission_label_from_flags(permission_obj) -> str:
+    """Handle permission label from flags."""
     group_read = _permission_flag(permission_obj, "isGroupRead")
     group_write = _permission_flag(permission_obj, "isGroupWrite")
     group_annotate = _permission_flag(permission_obj, "isGroupAnnotate")
@@ -1092,6 +1120,7 @@ def _permission_label_from_flags(permission_obj) -> str:
 
 
 def _permission_label_from_text(permission_obj) -> str:
+    """Handle permission label from text."""
     permission_text = str(permission_obj or "").strip().lower()
     labels = (
         ("Read-write", ("read-write", "rwrw")),
@@ -1114,6 +1143,7 @@ def _safe_group_permission_label(group_obj) -> str:
 
 
 def _require_root_user(request, conn):
+    """Handle require root user."""
     username = current_username(request, conn)
     if username != "root":
         return JsonResponse(
@@ -1195,6 +1225,7 @@ def logs_view(request, _conn=None, _url=None, **kwargs):
 
 
 def _parse_log_limits(request, log_config) -> tuple[int, int]:
+    """Handle parse log limits."""
     lookback_seconds = int(request.GET.get("lookback", log_config.lookback_seconds))
     max_entries = int(request.GET.get("limit", log_config.max_entries))
     if lookback_seconds <= 0 or max_entries <= 0:
@@ -1204,6 +1235,7 @@ def _parse_log_limits(request, log_config) -> tuple[int, int]:
 
 
 def _parse_optional_since_ns(request) -> int | None:
+    """Handle parse optional since ns."""
     since_raw = request.GET.get("since", "").strip()
     if not since_raw:
         return None
@@ -1211,12 +1243,14 @@ def _parse_optional_since_ns(request) -> int | None:
 
 
 def _valid_log_container_keys() -> set[str]:
+    """Handle valid log container keys."""
     return {source["container"] for source in _build_log_sources()} | set(
         _INTERNAL_LOG_SERVICES
     )
 
 
 def _log_containers_from_request(request) -> list[str]:
+    """Handle log containers from request."""
     containers = [
         str(value or "").strip() for value in request.GET.getlist("container")
     ]
@@ -1231,6 +1265,7 @@ def _log_containers_from_request(request) -> list[str]:
 
 
 def _internal_log_files_from_query(values: list[str]) -> dict[str, set[str]]:
+    """Handle internal log files from query."""
     internal_files: dict[str, set[str]] = {}
     for value in values:
         if not value or "/" not in value:
@@ -1245,6 +1280,7 @@ def _internal_log_files_from_query(values: list[str]) -> dict[str, set[str]]:
 
 
 def _filter_log_entries(entries, *, level: str, query: str):
+    """Handle filter log entries."""
     filtered_entries = entries
     if level:
         filtered_entries = [entry for entry in filtered_entries if entry.level == level]
@@ -1488,6 +1524,7 @@ class _UnixSocketHTTPConnection(HTTPConnection):
         self.unix_socket_path = unix_socket_path
 
     def connect(self) -> None:
+        """Handle connect."""
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.settimeout(self.timeout)
         self.sock.connect(self.unix_socket_path)
@@ -1534,6 +1571,7 @@ def _docker_api_json(path: str, timeout_seconds: float = 3.0) -> Optional[object
 
 
 def _docker_identity_diagnostics(diag: dict[str, object]) -> list[int]:
+    """Handle docker identity diagnostics."""
     try:
         diag["current_uid"] = os.getuid()
         current_gids = list(os.getgroups())
@@ -1559,6 +1597,7 @@ def _docker_socket_diagnostics(
     docker_socket: str,
     current_gids: list[int],
 ) -> None:
+    """Handle docker socket diagnostics."""
     if not diag["socket_exists"]:
         return
     try:
@@ -1581,6 +1620,7 @@ def _docker_socket_diagnostics(
 
 
 def _docker_status_sample(container: dict) -> dict[str, str]:
+    """Handle docker status sample."""
     labels = container.get("Labels", {}) or {}
     service = str(labels.get("com.docker.compose.service", "")).strip()
     status = str(container.get("Status", "")).strip()
@@ -1597,6 +1637,7 @@ def _docker_status_sample(container: dict) -> dict[str, str]:
 def _docker_container_health_summary(
     containers: list,
 ) -> tuple[int, list[dict[str, str]]]:
+    """Handle docker container health summary."""
     health_count = 0
     samples: list[dict[str, str]] = []
     for container in containers[:15]:
@@ -1610,6 +1651,7 @@ def _docker_container_health_summary(
 
 
 def _docker_api_diagnostics(diag: dict[str, object]) -> None:
+    """Handle docker API diagnostics."""
     try:
         containers = _docker_api_json("/containers/json?all=1")
         if containers is None:
@@ -1672,6 +1714,7 @@ def _parse_docker_status_health(status: str) -> str:
 
 
 def _compose_service_from_container(container: dict) -> str:
+    """Handle compose service from container."""
     labels = container.get("Labels", {}) or {}
     if not isinstance(labels, dict):
         return ""
@@ -1679,6 +1722,7 @@ def _compose_service_from_container(container: dict) -> str:
 
 
 def _container_runtime_health(container: dict) -> tuple[str, str, str]:
+    """Handle container runtime health."""
     service_name = _compose_service_from_container(container)
     if not service_name:
         return "", "", ""
@@ -1688,10 +1732,12 @@ def _container_runtime_health(container: dict) -> tuple[str, str, str]:
 
 
 def _container_id(container: dict) -> str:
+    """Handle container identifier."""
     return str(container.get("Id", "")).strip()
 
 
 def _has_inspected_healthcheck(inspect_payload: dict) -> bool:
+    """Handle has inspected healthcheck."""
     config_payload = inspect_payload.get("Config", {}) or {}
     healthcheck_payload = config_payload.get("Healthcheck")
     return (
@@ -1702,6 +1748,7 @@ def _has_inspected_healthcheck(inspect_payload: dict) -> bool:
 
 
 def _inspected_health_status(inspect_payload: dict) -> str:
+    """Handle inspected health status."""
     state_payload = inspect_payload.get("State", {}) or {}
     state_health = state_payload.get("Health", {}) or {}
     if not isinstance(state_health, dict):
@@ -1718,6 +1765,7 @@ def _apply_container_inspect_health(
     healthcheck_config: dict[str, bool],
     runtime_health: dict[str, dict[str, str]],
 ) -> None:
+    """Handle apply container inspect health."""
     inspect_payload = _docker_api_json(f"/containers/{container_id}/json")
     if not isinstance(inspect_payload, dict):
         return
@@ -1832,6 +1880,7 @@ def _load_compose_runtime_health() -> Dict[str, Dict[str, str]]:
 
 
 def _service_name_variants(raw_candidate: str) -> set[str]:
+    """Handle service name variants."""
     candidate = str(raw_candidate or "").strip().lstrip("/")
     if not candidate:
         return set()
@@ -1859,6 +1908,7 @@ def _resolve_expected_service_name(
     raw_candidate: str,
     expected_lookup: dict[str, str],
 ) -> str:
+    """Handle resolve expected service name."""
     for variant in _service_name_variants(raw_candidate):
         direct_match = expected_lookup.get(variant)
         if direct_match:
@@ -1867,6 +1917,7 @@ def _resolve_expected_service_name(
 
 
 def _target_service_candidates(target: dict[str, object]) -> tuple[str, ...]:
+    """Handle target service candidates."""
     raw_labels = target.get("labels", {}) or {}
     raw_discovered_labels = target.get("discoveredLabels", {}) or {}
     labels = raw_labels if isinstance(raw_labels, dict) else {}
@@ -1891,6 +1942,7 @@ def _status_by_prometheus_target(
     active_targets: List[Dict[str, object]],
     expected_services: List[str],
 ) -> dict[str, str]:
+    """Handle status by prometheus target."""
     expected_lookup = {service.lower(): service for service in expected_services}
     status_by_service = {service: "unknown" for service in expected_services}
     for target in active_targets:
@@ -1907,6 +1959,7 @@ def _apply_prometheus_target_health(
     service_name: str,
     health: str,
 ) -> None:
+    """Handle apply prometheus target health."""
     current = status_by_service[service_name]
     if health == "up":
         status_by_service[service_name] = "up"
@@ -1918,6 +1971,7 @@ def _mark_recently_seen_services(
     status_by_service: dict[str, str],
     recently_seen_services: Optional[List[str]],
 ) -> None:
+    """Handle mark recently seen services."""
     recently_seen = {
         str(service).strip().lower() for service in (recently_seen_services or [])
     }
@@ -1927,6 +1981,7 @@ def _mark_recently_seen_services(
 
 
 def _lower_bool_lookup(values: Optional[Dict[str, bool]]) -> dict[str, bool]:
+    """Handle lower bool lookup."""
     return {
         str(name).lower(): bool(enabled) for name, enabled in (values or {}).items()
     }
@@ -1935,6 +1990,7 @@ def _lower_bool_lookup(values: Optional[Dict[str, bool]]) -> dict[str, bool]:
 def _lower_runtime_lookup(
     values: Optional[Dict[str, Dict[str, str]]],
 ) -> dict[str, Dict[str, str]]:
+    """Handle lower runtime lookup."""
     return {str(name).lower(): payload for name, payload in (values or {}).items()}
 
 
@@ -1944,6 +2000,7 @@ def _target_service_health(
     healthcheck_state: str,
     has_healthcheck: bool,
 ) -> str:
+    """Handle target service health."""
     if not has_healthcheck:
         return (
             "up"
@@ -1965,6 +2022,7 @@ def _target_service_entry(
     healthcheck_lookup: dict[str, bool],
     runtime_lookup: dict[str, Dict[str, str]],
 ) -> dict[str, str]:
+    """Handle target service entry."""
     runtime = runtime_lookup.get(service.lower(), {})
     state = str(runtime.get("state", "")).lower()
     healthcheck_state = str(runtime.get("health", "")).lower()
@@ -2016,6 +2074,7 @@ def _public_monitoring_base_url(
     host_port: int,
     proxied: bool,
 ) -> str:
+    """Handle public monitoring base URL."""
     if configured_public_url:
         return configured_public_url
     if not _is_internal_hostname(urlparse(internal_url).hostname or ""):
@@ -2031,6 +2090,7 @@ def _public_monitoring_base_url(
 
 
 def _monitoring_dashboard_query() -> str:
+    """Handle monitoring dashboard query."""
     return urlencode(
         {
             "orgId": "1",
@@ -2046,6 +2106,7 @@ def _grafana_dashboard_urls(
     grafana_public_base_url: str,
     dashboard_query: str,
 ) -> dict[str, str]:
+    """Handle grafana dashboard URLs."""
     dashboard_uid = _safe_dashboard_uid(
         os.environ.get("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", ""),
         "omero-infrastructure",
@@ -2089,10 +2150,12 @@ def _grafana_dashboard_urls(
 
 
 def _empty_targets_overview() -> dict[str, Any]:
+    """Handle empty targets overview."""
     return {"active": 0, "up": 0, "down": 0, "unknown": 0, "services": []}
 
 
 def _prometheus_active_targets(prometheus_base_url: str) -> list[dict[str, object]]:
+    """Handle prometheus active targets."""
     response = requests.get(
         f"{_validated_http_url(prometheus_base_url).rstrip('/')}/api/v1/targets",
         timeout=5.0,
@@ -2106,6 +2169,7 @@ def _prometheus_active_targets(prometheus_base_url: str) -> list[dict[str, objec
 
 
 def _target_counts(active_targets: list[dict[str, object]]) -> dict[str, int]:
+    """Handle target counts."""
     up_count = sum(
         1 for target in active_targets if str(target.get("health", "")).lower() == "up"
     )
@@ -2123,6 +2187,7 @@ def _target_counts(active_targets: list[dict[str, object]]) -> dict[str, int]:
 
 
 def _recently_seen_services(prometheus_base_url: str) -> list[str]:
+    """Handle recently seen services."""
     try:
         return _collect_recently_seen_services(prometheus_base_url)
     except Exception:
@@ -2134,6 +2199,7 @@ def _monitoring_targets_overview(
     prometheus_base_url: str,
     expected_services: list[str],
 ) -> dict[str, Any]:
+    """Handle monitoring targets overview."""
     targets_overview = _empty_targets_overview()
     try:
         active_targets = _prometheus_active_targets(prometheus_base_url)
@@ -2383,6 +2449,7 @@ _STORAGE_DISTRIBUTION_QUERY = """
 
 
 def _storage_distribution_from_rows(rows) -> dict[str, object]:
+    """Handle storage distribution from rows."""
     per_user_group: list[dict[str, object]] = []
     totals_by_user: dict[str, int] = {}
     full_name_by_user: dict[str, str] = {}
@@ -2416,6 +2483,7 @@ def _storage_distribution_from_rows(rows) -> dict[str, object]:
 
 
 def _query_storage_distribution(conn) -> dict[str, object]:
+    """Handle query storage distribution."""
     service_opts = conn.SERVICE_OPTS
     if hasattr(service_opts, "setOmeroGroup"):
         service_opts.setOmeroGroup(-1)
@@ -2430,6 +2498,7 @@ def _query_storage_distribution(conn) -> dict[str, object]:
 
 
 def _merge_known_storage_principals(conn, distribution: dict[str, object]) -> None:
+    """Handle merge known storage principals."""
     totals_by_user = cast(dict[str, int], distribution["totals_by_user"])
     full_name_by_user = cast(dict[str, str], distribution["full_name_by_user"])
     groups_by_user = cast(dict[str, set[str]], distribution["groups_by_user"])
@@ -2462,6 +2531,7 @@ def _merge_known_storage_principals(conn, distribution: dict[str, object]) -> No
 
 
 def _storage_disk_usage(data_root: str) -> tuple[int | None, int | None, int | None]:
+    """Handle storage disk usage."""
     try:
         return shutil.disk_usage(data_root)
     except Exception:
@@ -2473,6 +2543,7 @@ def _storage_disk_usage(data_root: str) -> tuple[int | None, int | None, int | N
 
 
 def _storage_quota_status(known_groups: list[str]) -> dict[str, object]:
+    """Handle storage quota status."""
     try:
         return reconcile_quotas(known_groups)
     except Exception:
@@ -2492,6 +2563,7 @@ def _storage_quota_status(known_groups: list[str]) -> dict[str, object]:
 
 
 def _storage_bytes_sort_key(item: dict[str, object]) -> int:
+    """Handle storage bytes sort key."""
     value = item.get("bytes", 0)
     return int(value) if isinstance(value, (int, float, str)) else 0
 
@@ -2504,6 +2576,7 @@ def _storage_response_payload(
     data_free: int | None,
     quota_status: dict[str, object],
 ) -> dict[str, object]:
+    """Handle storage response payload."""
     totals_by_user = cast(dict[str, int], distribution["totals_by_user"])
     full_name_by_user = cast(dict[str, str], distribution["full_name_by_user"])
     groups_by_user = cast(dict[str, set[str]], distribution["groups_by_user"])
@@ -2628,6 +2701,7 @@ def storage_quota_data(request, conn=None, _url=None, **kwargs):
 
 
 def _json_payload_from_request(request) -> dict[str, object]:
+    """Handle JSON payload from request."""
     raw_body = request.body.decode("utf-8").strip()
     if not raw_body:
         return {}
@@ -2639,6 +2713,7 @@ def _json_payload_from_request(request) -> dict[str, object]:
 
 
 def _quota_updates_from_form(request):
+    """Handle quota updates from form."""
     if not request.POST:
         return None
     raw_updates = request.POST.get("updates")
@@ -2648,6 +2723,7 @@ def _quota_updates_from_form(request):
 
 
 def _normalize_quota_updates(updates) -> list[tuple[str, object]]:
+    """Handle normalize quota updates."""
     if updates is None:
         return []
     if not isinstance(updates, list):
@@ -2661,6 +2737,7 @@ def _normalize_quota_updates(updates) -> list[tuple[str, object]]:
 
 
 def _quota_updates_from_request(request) -> list[tuple[str, object]]:
+    """Handle quota updates from request."""
     payload = _json_payload_from_request(request)
     updates = payload.get("updates")
     if updates is None:
@@ -2776,6 +2853,7 @@ def server_database_testing_view(request, _conn=None, _url=None, **kwargs):
 def _diagnostic_script_ids_from_request(
     request,
 ) -> tuple[list[str], JsonResponse | None]:
+    """Handle diagnostic script identifiers from request."""
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
     except (UnicodeDecodeError, json.JSONDecodeError):
@@ -2798,6 +2876,7 @@ def _diagnostic_script_ids_from_request(
 
 
 def _request_username_or_unknown(request, conn) -> str:
+    """Handle request username or unknown."""
     try:
         return current_username(request, conn)
     except Exception:
@@ -2805,6 +2884,7 @@ def _request_username_or_unknown(request, conn) -> str:
 
 
 def _sanitized_script_id_list(script_ids: list[str]) -> str:
+    """Handle sanitized script identifier list."""
     return ", ".join(sanitize_log_value(script_id) for script_id in script_ids)
 
 

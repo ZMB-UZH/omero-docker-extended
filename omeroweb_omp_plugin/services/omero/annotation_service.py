@@ -1,6 +1,4 @@
-"""
-OMERO annotation services for managing MapAnnotations.
-"""
+"""OMERO annotation services for managing MapAnnotations."""
 
 import json
 import logging
@@ -54,9 +52,7 @@ def canonicalize_mapping(mapping):
 
 
 def compute_plugin_hash(mapping):
-    """
-    Compute the value stored under HASH_KEY.
-    """
+    """Compute the value stored under HASH_KEY."""
     payload = canonicalize_mapping(mapping)
     secret = get_hash_secret()
 
@@ -84,6 +80,7 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
     """
 
     def _unwrap(val):
+        """Handle unwrap."""
         if callable(getattr(val, "getValue", None)):
             try:
                 return val.getValue()
@@ -98,7 +95,6 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
 
     def _extract_pair(nv):
         """Return (name, value) tuple from a NamedValue or (name, value) pair."""
-
         # NamedValue-like object
         name = getattr(nv, "name", None)
         if name is None and callable(getattr(nv, "getName", None)):
@@ -128,6 +124,7 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
         return str(name), "" if value is None else str(value)
 
     def _load_pairs_from_qs(aid):
+        """Handle load pairs from qs."""
         if qs is None or aid is None:
             return []
 
@@ -187,7 +184,6 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
 
 def find_plugin_annotation_ids(conn, image_id, allow_legacy=False):
     """Return plugin-owned MapAnnotation IDs; legacy matching is opt-in."""
-
     try:
         iid = int(image_id)
     except Exception:
@@ -340,6 +336,7 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
     service_opts = getattr(conn, "SERVICE_OPTS", None)
 
     def _annotation_exists(aid):
+        """Handle annotation exists."""
         try:
             params = ParametersI()
             params.add("aid", rlong(int(aid)))
@@ -353,6 +350,7 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
             return True
 
     def _delete_by_id(aid):
+        """Handle delete by identifier."""
         try:
             conn.deleteObjects("Annotation", [int(aid)], wait=True)
         except Exception as e:

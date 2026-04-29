@@ -11,12 +11,16 @@ from tools import agent_skill_provenance
 
 
 class AgentSkillProvenanceTests(TestCase):
+    """Test cases for agent skill provenance tests."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.sources = agent_skill_provenance.load_upstream_sources(cls.repo_root)
 
     def test_badge_image_url_uses_stable_static_components(self) -> None:
+        """Verify test badge image URL uses stable static compo behavior."""
         parsed = urlsplit(self.sources.badge_image_url)
         self.assertEqual("https", parsed.scheme)
         self.assertEqual("img.shields.io", parsed.netloc)
@@ -35,6 +39,7 @@ class AgentSkillProvenanceTests(TestCase):
         self.assertEqual("everything-claude-code", self.sources.badge_title)
 
     def test_repo_url_and_skills_tree_url_remain_stable(self) -> None:
+        """Verify test repo URL and skills tree URL remain stable."""
         self.assertEqual(
             "https://github.com/affaan-m/everything-claude-code",
             self.sources.repo_url,
@@ -45,12 +50,14 @@ class AgentSkillProvenanceTests(TestCase):
         )
 
     def test_fetch_text_rejects_unapproved_hosts_and_schemes(self) -> None:
+        """Verify test fetch text rejects unapproved hosts and behavior."""
         with self.assertRaisesRegex(ValueError, "Unsupported fetch scheme"):
             agent_skill_provenance.fetch_text("ssh://raw.githubusercontent.com/x/y")
         with self.assertRaisesRegex(ValueError, "Unsupported fetch host"):
             agent_skill_provenance.fetch_text("https://github.com/x/y")
 
     def test_fetch_text_uses_curl_for_allowed_upstream_raw_urls(self) -> None:
+        """Verify test fetch text uses curl for allowed upstrea behavior."""
         allowed_url = self.sources.raw_skill_url("search-first")
         with (
             mock.patch(
@@ -85,6 +92,7 @@ class AgentSkillProvenanceTests(TestCase):
         )
 
     def test_fetch_text_surfaces_curl_failures(self) -> None:
+        """Verify test fetch text surfaces curl failures."""
         allowed_url = self.sources.raw_skill_url("search-first")
         with (
             mock.patch(
@@ -102,6 +110,7 @@ class AgentSkillProvenanceTests(TestCase):
             agent_skill_provenance.fetch_text(allowed_url)
 
     def test_fetch_text_surfaces_transport_exceptions(self) -> None:
+        """Verify test fetch text surfaces transport exceptions."""
         allowed_url = self.sources.raw_skill_url("search-first")
         with (
             mock.patch(
@@ -119,6 +128,7 @@ class AgentSkillProvenanceTests(TestCase):
             agent_skill_provenance.fetch_text(allowed_url)
 
     def test_resolve_required_executable_rejects_missing_command(self) -> None:
+        """Verify test resolve required executable rejects miss behavior."""
         with (
             mock.patch(
                 "tools.agent_skill_provenance.shutil.which",

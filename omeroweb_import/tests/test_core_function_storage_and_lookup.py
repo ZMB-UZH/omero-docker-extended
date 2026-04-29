@@ -7,22 +7,30 @@ from omeroweb_import.views import core_functions
 
 
 class _ImageId:
+    """Represent image identifier."""
+
     def __init__(self, value):
         self._value = value
 
     def getValue(self):
+        """Return get value."""
         return self._value
 
 
 class _ImageRow:
+    """Represent image row."""
+
     def __init__(self, image_id):
         self._image_id = image_id
 
     def getId(self):
+        """Return get identifier."""
         return _ImageId(self._image_id)
 
 
 class _UnlockedLock:
+    """Represent unlocked lock."""
+
     def __enter__(self):
         return self
 
@@ -31,6 +39,8 @@ class _UnlockedLock:
 
 
 class _FailingLock:
+    """Represent failing lock."""
+
     def __enter__(self):
         raise core_functions.portalocker.exceptions.LockException("busy")
 
@@ -39,6 +49,7 @@ class _FailingLock:
 
 
 def test_timeout_expired_handles_invalid_negative_and_elapsed_values(monkeypatch):
+    """Verify test timeout expired handles invalid negative behavior."""
     monkeypatch.setattr(core_functions.time, "time", lambda: 15.0)
     assert core_functions._timeout_expired(10.0, "bad") is False
     assert core_functions._timeout_expired(10.0, -1) is False
@@ -49,6 +60,7 @@ def test_timeout_expired_handles_invalid_negative_and_elapsed_values(monkeypatch
 def test_job_storage_helpers_cover_missing_corrupt_and_lock_failure_paths(
     tmp_path, monkeypatch
 ):
+    """Verify test job storage helpers cover missing corrup behavior."""
     jobs_root = tmp_path / "jobs"
     jobs_root.mkdir()
     job_id = "c" * 32
@@ -82,6 +94,7 @@ def test_job_storage_helpers_cover_missing_corrupt_and_lock_failure_paths(
     lock_calls = []
 
     def failing_lock(*args, **kwargs):
+        """Handle failing lock."""
         lock_calls.append((args, kwargs))
         return _FailingLock()
 
@@ -121,15 +134,21 @@ def test_job_storage_helpers_cover_missing_corrupt_and_lock_failure_paths(
 
 
 def test_batch_find_images_by_name_covers_dataset_global_and_failure_paths(monkeypatch):
+    """Verify test batch find images by name covers dataset behavior."""
+
     class _Params:
+        """Represent params."""
+
         def __init__(self):
             self.values = {}
 
         def addLong(self, key, value):
+            """Handle add long."""
             self.values[key] = value
             return self
 
         def addList(self, key, value):
+            """Handle add list."""
             self.values[key] = list(value)
             return self
 
@@ -147,6 +166,7 @@ def test_batch_find_images_by_name_covers_dataset_global_and_failure_paths(monke
     }
 
     def find_all_by_query(query, params, opts):
+        """Handle find all by query."""
         queries.append((query, dict(params.values)))
         return [_ImageRow(11), _ImageRow(12)]
 

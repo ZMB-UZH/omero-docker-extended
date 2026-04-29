@@ -12,27 +12,34 @@ from omeroweb_import.views import core_functions
 
 
 class _DummyLock:
+    """Test double for dummy lock."""
+
     def __init__(self, acquired=True):
         self._acquired = acquired
         self.timeout = None
         self.released = False
 
     def acquire(self, timeout=None):
+        """Handle acquire."""
         self.timeout = timeout
         return self._acquired
 
     def release(self):
+        """Handle release."""
         self.released = True
 
 
 def _job_state(monkeypatch, job):
+    """Handle job state."""
     state = {"job": job}
 
     def load_job(job_id):
+        """Return load job."""
         assert job_id == job["job_id"]
         return state["job"]
 
     def save_job(job_dict):
+        """Store save job."""
         state["job"] = job_dict
         return True
 
@@ -42,9 +49,11 @@ def _job_state(monkeypatch, job):
 
 
 def _job_state_with_updates(monkeypatch, job):
+    """Handle job state with updates."""
     state = _job_state(monkeypatch, job)
 
     def update_job(job_id, mutator):
+        """Handle update job."""
         assert job_id == job["job_id"]
         state["job"] = mutator(state["job"])
         return state["job"]
@@ -56,6 +65,7 @@ def _job_state_with_updates(monkeypatch, job):
 def test_import_zarr_via_cli_handles_stage_exception_without_unbound_local(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test import Zarr via cli handles stage except behavior."""
     source_path = tmp_path / "image.zarr"
     source_path.mkdir()
     shared_source = tmp_path / "shared.zarr"
@@ -71,9 +81,11 @@ def test_import_zarr_via_cli_handles_stage_exception_without_unbound_local(
     )
 
     def failing_stage(*args, **kwargs):
+        """Handle failing stage."""
         raise RuntimeError("stage boom")
 
     def failing_cleanup(path):
+        """Handle failing cleanup."""
         cleanup_attempts.append(path)
         raise RuntimeError("cleanup boom")
 
@@ -110,6 +122,7 @@ def test_import_zarr_via_cli_rejects_missing_context_invalid_plans_and_prepare_f
     tmp_path: Path,
     monkeypatch,
 ):
+    """Verify test import Zarr via cli rejects missing cont behavior."""
     source_path = tmp_path / "image.zarr"
     source_path.mkdir()
     common_kwargs = dict(
@@ -174,6 +187,7 @@ def test_import_zarr_via_cli_rejects_missing_context_invalid_plans_and_prepare_f
 def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
     tmp_path: Path, monkeypatch, caplog
 ):
+    """Verify test import Zarr via cli handles no objects m behavior."""
     source_path = tmp_path / "image.zarr"
     source_path.mkdir()
     shared_source = tmp_path / "shared.zarr"
@@ -237,6 +251,7 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
         render_result,
         run_error=None,
     ):
+        """Run run case."""
         cleanup_calls.clear()
         imported_image_cleanup_calls.clear()
         verify_calls.clear()
@@ -265,6 +280,7 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
         )
 
         def verify_api(*args, **kwargs):
+            """Handle verify API."""
             verify_calls.append(kwargs)
             return list(api_ids)
 
@@ -386,6 +402,7 @@ def test_import_zarr_via_cli_uses_api_verified_image_ids_for_name_normalization(
     tmp_path: Path,
     monkeypatch,
 ):
+    """Verify test import Zarr via cli uses API verified im behavior."""
     source_path = tmp_path / "image.zarr"
     source_path.mkdir()
     shared_source = tmp_path / "shared.zarr"
@@ -487,6 +504,7 @@ def test_import_zarr_via_cli_handles_unexpected_cli_runner_exceptions(
     tmp_path: Path,
     monkeypatch,
 ):
+    """Verify test import Zarr via cli handles unexpected c behavior."""
     source_path = tmp_path / "image.zarr"
     source_path.mkdir()
     shared_source = tmp_path / "shared.zarr"
@@ -557,9 +575,12 @@ def test_import_zarr_via_cli_handles_unexpected_cli_runner_exceptions(
 def test_finalize_imported_zarr_image_metadata_records_reload_failures(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test finalize imported Zarr image metadata re behavior."""
     managed_zarr = tmp_path / "managed"
 
     class _PixelsWrapper:
+        """Represent pixels wrapper."""
+
         def __init__(self, storage):
             self._storage = storage
             self._obj = types.SimpleNamespace(
@@ -568,19 +589,25 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
 
         @staticmethod
         def getPhysicalSizeX():
+            """Return get physical size x."""
             return None
 
     class _Image:
+        """Represent image."""
+
         def __init__(self, storage):
             self._storage = storage
 
         def getPrimaryPixels(self):
+            """Return get primary pixels."""
             return _PixelsWrapper(self._storage)
 
     storages = {1: {}, 2: {}}
     update_saves = []
 
     class _Conn:
+        """Represent conn."""
+
         def __init__(self):
             self.SERVICE_OPTS = types.SimpleNamespace(
                 setOmeroGroup=lambda value: setattr(self, "group", value)
@@ -590,11 +617,13 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
 
         @staticmethod
         def getUpdateService():
+            """Return get update service."""
             return types.SimpleNamespace(
                 saveAndReturnObject=lambda obj: update_saves.append(obj) or obj
             )
 
         def getObject(self, object_type, image_id):
+            """Return get object."""
             assert object_type == "Image"
             self._calls[image_id] = self._calls.get(image_id, 0) + 1
             call_number = self._calls[image_id]
@@ -613,20 +642,25 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
             raise AssertionError(f"Unexpected image id {image_id}")
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     conn = _Conn()
 
     class _AdminConn:
+        """Represent admin conn."""
+
         def __init__(self):
             self.closed = False
 
         @staticmethod
         def suConn(username):
+            """Handle su conn."""
             assert username == "alice"
             return conn
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     admin_conn = _AdminConn()
@@ -676,6 +710,7 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
 def test_import_job_entry_covers_staged_background_and_native_routing_failures(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test import job entry covers staged backgroun behavior."""
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
     staged_root = upload_root / "_staged"
@@ -851,6 +886,7 @@ def test_mark_failed_job_for_deferred_cleanup_reports_partial_failures(
     tmp_path: Path,
     monkeypatch,
 ):
+    """Verify test mark failed job for deferred cleanup rep behavior."""
     monkeypatch.setattr(
         core_functions, "_get_failed_import_retention_seconds", lambda: 3600
     )
@@ -871,7 +907,11 @@ def test_mark_failed_job_for_deferred_cleanup_reports_partial_failures(
 def test_open_service_connection_handles_group_override_and_connect_failures(
     monkeypatch,
 ):
+    """Verify test open service connection handles group ov behavior."""
+
     class _Conn:
+        """Represent conn."""
+
         def __init__(self, *, connect_result=True, connect_error=None):
             self.connect_result = connect_result
             self.connect_error = connect_error
@@ -882,15 +922,18 @@ def test_open_service_connection_handles_group_override_and_connect_failures(
             )
 
         def connect(self):
+            """Handle connect."""
             if self.connect_error is not None:
                 raise self.connect_error
             return self.connect_result
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
         @staticmethod
         def getLastError():
+            """Return get last error."""
             return "boom"
 
     success_conn = _Conn()
@@ -944,6 +987,7 @@ def test_open_service_connection_handles_group_override_and_connect_failures(
 def test_process_import_job_handles_missing_connection_details_upload_root_and_crashes(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test process import job handles missing conne behavior."""
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
     jobs_root.mkdir()
@@ -1057,6 +1101,7 @@ def test_process_import_job_handles_missing_connection_details_upload_root_and_c
 def test_process_import_job_handles_group_resolution_preskips_and_cleanup_warnings(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test process import job handles group resolut behavior."""
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
     jobs_root.mkdir()
@@ -1119,10 +1164,13 @@ def test_process_import_job_handles_group_resolution_preskips_and_cleanup_warnin
     )
 
     class _AdminConn:
+        """Represent admin conn."""
+
         def __init__(self):
             self.closed = False
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     admin_conn = _AdminConn()
@@ -1210,6 +1258,7 @@ def test_process_import_job_handles_group_resolution_preskips_and_cleanup_warnin
 def test_process_import_job_ignores_sparse_result_payloads_and_worker_exceptions(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test process import job ignores sparse result behavior."""
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
     jobs_root.mkdir()
@@ -1269,6 +1318,7 @@ def test_process_import_job_ignores_sparse_result_payloads_and_worker_exceptions
     )
 
     def _fake_import_job_entry(entry, *args, **kwargs):
+        """Handle fake import job entry."""
         rel_path = entry["relative_path"]
         if rel_path == "raises.ome.tif":
             raise RuntimeError("worker exploded")
@@ -1299,6 +1349,7 @@ def test_process_import_job_ignores_sparse_result_payloads_and_worker_exceptions
 
 
 def test_has_import_candidates_in_output_matches_directory_groups(tmp_path: Path):
+    """Verify test has import candidates in output matches behavior."""
     package_root = tmp_path / "plate.zarr"
     package_root.mkdir()
     member = package_root / ".zattrs"
@@ -1334,20 +1385,27 @@ def test_has_import_candidates_in_output_matches_directory_groups(tmp_path: Path
 def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions(
     monkeypatch,
 ):
+    """Verify test reconnect session closes stale connectio behavior."""
     events = []
 
     class _OldConn:
+        """Represent old conn."""
+
         @staticmethod
         def close():
+            """Handle close."""
             events.append("old-close")
 
     class _NewConn:
+        """Represent new conn."""
+
         def __init__(self):
             self.closed = False
             self.groups = []
             self.SERVICE_OPTS = types.SimpleNamespace(setOmeroGroup=self.groups.append)
 
         def close(self):
+            """Handle close."""
             self.closed = True
             events.append("new-close")
 
@@ -1404,12 +1462,18 @@ def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions
     assert core_functions._reconnect_session("session", "omeroserver", 4064) is None
 
     class _ExplodingOldConn:
+        """Represent exploding old conn."""
+
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("stale close exploded")
 
     class _ExplodingInvalidConn(_NewConn):
+        """Represent exploding invalid conn."""
+
         def close(self):
+            """Handle close."""
             self.closed = True
             raise RuntimeError("invalid close exploded")
 
@@ -1440,10 +1504,14 @@ def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions
 
 
 def test_session_helpers_cover_validation_open_and_detached_join_paths(monkeypatch):
+    """Verify test session helpers cover validation open an behavior."""
+
     def _event_context():
+        """Handle event context."""
         return object()
 
     def _expired_event_context():
+        """Handle expired event context."""
         raise RuntimeError("expired")
 
     assert (
@@ -1500,6 +1568,7 @@ def test_session_helpers_cover_validation_open_and_detached_join_paths(monkeypat
 def test_prepare_job_import_datasets_handles_missing_upload_roots_and_save_failures(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test prepare job import datasets handles miss behavior."""
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
     monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
@@ -1567,6 +1636,7 @@ def test_prepare_job_import_datasets_handles_missing_upload_roots_and_save_failu
 def test_run_compatibility_check_inner_handles_staged_path_errors_and_future_failures(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test run compatibility check inner handles st behavior."""
     upload_root = tmp_path / "uploads"
     job_id = "a" * 32
     job_root = upload_root / job_id
@@ -1620,6 +1690,7 @@ def test_run_compatibility_check_inner_handles_staged_path_errors_and_future_fai
     )
 
     def resolve_path(current_root, staged_path):
+        """Return resolve path."""
         if "broken" in staged_path:
             return None, "staged path rejected"
         return valid_file, None
@@ -1666,15 +1737,19 @@ def test_run_compatibility_check_inner_handles_staged_path_errors_and_future_fai
 
 
 def test_start_import_thread_requires_ready_state_and_persistence(monkeypatch):
+    """Verify test start import thread requires ready state behavior."""
     events = []
     thread_targets = []
 
     class _Thread:
+        """Represent thread."""
+
         def __init__(self, *, target, args, daemon):
             thread_targets.append((target, args, daemon))
 
         @staticmethod
         def start():
+            """Run start."""
             events.append("thread-started")
 
     job = {"job_id": "a" * 32, "status": "checking"}

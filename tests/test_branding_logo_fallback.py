@@ -13,12 +13,16 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 class BrandingLogoFallbackTests(unittest.TestCase):
+    """Test cases for branding logo fallback tests."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.writer_script = cls.repo_root / "tools" / "write_branding_logo_fallback.py"
 
     def test_fallback_writer_creates_deterministic_png(self) -> None:
+        """Verify test fallback writer creates deterministic png."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             first_path = Path(tmp_dir) / "first.png"
             second_path = Path(tmp_dir) / "second.png"
@@ -39,6 +43,7 @@ class BrandingLogoFallbackTests(unittest.TestCase):
             self.assertTrue(first_bytes.startswith(PNG_SIGNATURE))
 
     def test_fallback_writer_png_dimensions_and_content(self) -> None:
+        """Verify test fallback writer png dimensions and content."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_path = Path(tmp_dir) / "fallback.png"
 
@@ -75,6 +80,7 @@ class BrandingLogoFallbackTests(unittest.TestCase):
             self.assertEqual(len(raw_rows), 96 * (1 + (96 * 4)))
 
             def pixel_rgba(x: int, y: int) -> tuple[int, int, int, int]:
+                """Handle pixel rgba."""
                 row_start = y * (1 + (96 * 4))
                 row_bytes = raw_rows[row_start + 1 : row_start + 1 + (96 * 4)]
                 pixel_start = x * 4

@@ -12,6 +12,7 @@ from omeroweb_tools.views import help_view
 
 
 def test_tools_app_ready_invokes_logging_setup(monkeypatch):
+    """Verify test tools app ready invokes logging setup."""
     configured = []
     monkeypatch.setattr(
         apps, "configure_omero_gateway_logging", lambda: configured.append(True)
@@ -24,6 +25,7 @@ def test_tools_app_ready_invokes_logging_setup(monkeypatch):
 
 
 def test_tools_urls_expose_expected_routes():
+    """Verify test tools URLs expose expected routes."""
     route_map = {pattern.name: str(pattern.pattern) for pattern in urls.urlpatterns}
 
     assert route_map["omeroweb_tools_index"] == ""
@@ -41,6 +43,7 @@ def test_tools_urls_expose_expected_routes():
 
 
 def test_tools_help_page_renders_html_template(monkeypatch):
+    """Verify test tools help page renders HTML template."""
     captured = {}
     monkeypatch.setattr(
         help_view,
@@ -57,6 +60,7 @@ def test_tools_help_page_renders_html_template(monkeypatch):
 
 
 def test_tools_help_template_is_registered_html_user_help():
+    """Verify test tools help template is registered HTML u behavior."""
     template_path = (
         Path(__file__).resolve().parents[1]
         / "templates"
@@ -97,6 +101,7 @@ def test_tools_help_template_is_registered_html_user_help():
 
 
 def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
+    """Verify test enhanced search template removes filter behavior."""
     template_path = (
         Path(__file__).resolve().parents[1]
         / "templates"
@@ -373,6 +378,7 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
 
 
 def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
+    """Verify test enhanced search styles use compact saved behavior."""
     styles_path = (
         Path(__file__).resolve().parents[1] / "static" / "omeroweb_tools" / "styles.css"
     )
@@ -584,6 +590,7 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
 
 
 def test_indexed_scope_browser_persistence_script_is_data_agnostic():
+    """Verify test indexed scope browser persistence script behavior."""
     script_path = (
         Path(__file__).resolve().parents[1]
         / "static"
@@ -604,6 +611,7 @@ def test_indexed_scope_browser_persistence_script_is_data_agnostic():
 
 
 def test_tools_landing_template_has_single_enhanced_search_entry_without_descriptive_copy():
+    """Verify test tools landing template has single enhanc behavior."""
     template_path = (
         Path(__file__).resolve().parents[1]
         / "templates"
@@ -617,6 +625,7 @@ def test_tools_landing_template_has_single_enhanced_search_entry_without_descrip
 
 
 def test_tools_task_wiring_avoids_service_task_import_cycle():
+    """Verify test tools task wiring avoids service task im behavior."""
     task_path = Path(__file__).resolve().parents[1] / "tasks.py"
     task_names_path = Path(__file__).resolve().parents[1] / "task_names.py"
     service_path = (

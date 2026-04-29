@@ -12,19 +12,23 @@ from ..strings import errors
 
 
 def current_username(request, conn):
+    """Handle current username."""
     return _current_username(request, conn)
 
 
 def load_json_body(request):
+    """Return load JSON body."""
     payload, _error = parse_json_body(request)
     return payload if payload is not None else {}
 
 
 def load_request_data(request):
+    """Return load request data."""
     return _load_request_data(request)
 
 
 def json_error(message, status=200, extra=None):
+    """Handle JSON error."""
     payload = {"ok": False, "error": message}
     if extra:
         payload.update(extra)
@@ -32,6 +36,8 @@ def json_error(message, status=200, extra=None):
 
 
 def require_non_root_user(view_func):
+    """Handle require non root user."""
+
     @wraps(view_func)
     def _wrapped(request, *args, conn=None, url=None, **kwargs):
         remaining_args = args

@@ -14,11 +14,13 @@ class DocsStructureLintTests(unittest.TestCase):
     """Coverage for docs lint helper."""
 
     def test_validation_passes_for_project_repository(self) -> None:
+        """Verify test validation passes for project repository."""
         repo_root: Path = Path(__file__).resolve().parents[1]
         errors = run_validations(repo_root)
         self.assertEqual(errors, [])
 
     def test_validation_fails_when_index_is_missing(self) -> None:
+        """Verify test validation fails when index is missing."""
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = Path(temp_dir)
             (repo_root / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
@@ -26,6 +28,7 @@ class DocsStructureLintTests(unittest.TestCase):
             self.assertTrue(any("docs/index.md" in err.message for err in errors))
 
     def test_validation_flags_bloated_or_unrouted_agent_surfaces(self) -> None:
+        """Verify test validation flags bloated or unrouted age behavior."""
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = Path(temp_dir)
 

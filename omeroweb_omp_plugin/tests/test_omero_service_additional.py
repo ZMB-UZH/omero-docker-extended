@@ -6,32 +6,42 @@ from omeroweb_omp_plugin.services.omero import image_service, metadata_service
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self._raw_value = value
 
     def getValue(self):
+        """Return get value."""
         return self._raw_value
 
 
 class _Image:
+    """Represent image."""
+
     def __init__(self, image_id, name, *, fileset=None):
         self.id = image_id
         self._name = name
         self._fileset = fileset
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self.id)
 
     def getName(self):
+        """Return get name."""
         return self._name
 
     def getFileset(self):
+        """Return get fileset."""
         if callable(self._fileset):
             return self._fileset()
         return self._fileset
 
 
 class _Dataset:
+    """Represent dataset."""
+
     def __init__(self, dataset_id, name, images, *, owned=True):
         self.id = dataset_id
         self._name = name
@@ -39,27 +49,38 @@ class _Dataset:
         self.owned = owned
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self.id)
 
     def getName(self):
+        """Return get name."""
         return self._name
 
     def listChildren(self):
+        """Return list children."""
         return list(self._images)
 
 
 class _Project:
+    """Represent project."""
+
     def __init__(self, datasets):
         self._datasets = list(datasets)
 
     def listChildren(self):
+        """Return list children."""
         return list(self._datasets)
 
 
 def test_image_service_fetch_and_collectors_cover_bulk_and_fallback_paths(monkeypatch):
+    """Verify test image service fetch and collectors cover behavior."""
+
     class _BulkConn:
+        """Represent bulk conn."""
+
         @staticmethod
         def getObjects(object_type, ids=None, obj_ids=None):
+            """Return get objects."""
             assert object_type == "Image"
             if ids is not None:
                 raise TypeError("legacy signature")
@@ -70,12 +91,16 @@ def test_image_service_fetch_and_collectors_cover_bulk_and_fallback_paths(monkey
     assert sorted(image_map) == [1, 2]
 
     class _FallbackConn:
+        """Represent fallback conn."""
+
         @staticmethod
         def getObjects(object_type, ids=None, obj_ids=None):
+            """Return get objects."""
             raise RuntimeError("bulk load unavailable")
 
         @staticmethod
         def getObject(object_type, image_id):
+            """Return get object."""
             assert object_type == "Image"
             return _Image(image_id, f"image-{image_id}.tif") if image_id == 3 else None
 
@@ -135,8 +160,11 @@ def test_image_service_fetch_and_collectors_cover_bulk_and_fallback_paths(monkey
     assert [dataset.getId().getValue() for dataset, _images in non_owned_rows] == [13]
 
     class _BrokenSelectedProject:
+        """Represent broken selected project."""
+
         @staticmethod
         def listChildren():
+            """Return list children."""
             raise RuntimeError("selected datasets unavailable")
 
     assert (
@@ -153,29 +181,41 @@ def test_image_service_fetch_and_collectors_cover_bulk_and_fallback_paths(monkey
 def test_collect_dataset_summaries_detects_formats_across_metadata_fallbacks(
     monkeypatch,
 ):
+    """Verify test collect dataset summaries detects format behavior."""
+
     class _OriginalFile:
+        """Represent original file."""
+
         def __init__(self, *, format_value=None, name=None):
             self._format_value = format_value
             self._name = name
 
         def getFormat(self):
+            """Return get format."""
             return None if self._format_value is None else _Value(self._format_value)
 
         def getName(self):
+            """Return get name."""
             return self._name
 
     class _UsedFile:
+        """Represent used file."""
+
         def __init__(self, original_file):
             self._original_file = original_file
 
         def getOriginalFile(self):
+            """Return get original file."""
             return self._original_file
 
     class _Fileset:
+        """Represent fileset."""
+
         def __init__(self, used_files):
             self._used_files = list(used_files)
 
         def copyUsedFiles(self):
+            """Handle copy used files."""
             return list(self._used_files)
 
     image_from_format = _Image(
@@ -202,7 +242,10 @@ def test_collect_dataset_summaries_detects_formats_across_metadata_fallbacks(
     )
 
     class _BrokenDataset(_Dataset):
+        """Represent broken dataset."""
+
         def listChildren(self):
+            """Return list children."""
             raise RuntimeError("images unavailable")
 
     dataset_unknown = _BrokenDataset(22, "Unknown", [])
@@ -229,17 +272,24 @@ def test_collect_dataset_summaries_detects_formats_across_metadata_fallbacks(
 
 
 def test_extract_acquisition_metadata_handles_partial_failures_without_long_values():
+    """Verify test extract acquisition metadata handles par behavior."""
+
     class _Image:
+        """Represent image."""
+
         @staticmethod
         def getId():
+            """Return get identifier."""
             return 7
 
         @staticmethod
         def getAcquisitionDate():
+            """Return get acquisition date."""
             raise RuntimeError("missing acquisition date")
 
         @staticmethod
         def getObjectiveSettings():
+            """Return get objective settings."""
             return SimpleNamespace(
                 getID=lambda: "objective-1",
                 getCorrectionCollar=lambda: 0.15,
@@ -247,6 +297,7 @@ def test_extract_acquisition_metadata_handles_partial_failures_without_long_valu
 
         @staticmethod
         def getChannels():
+            """Return get channels."""
             return [
                 SimpleNamespace(
                     getIndex=lambda: (_ for _ in ()).throw(RuntimeError("no index")),
@@ -258,6 +309,7 @@ def test_extract_acquisition_metadata_handles_partial_failures_without_long_valu
 
         @staticmethod
         def getDetectorSettings():
+            """Return get detector settings."""
             return [
                 SimpleNamespace(
                     getID=lambda: (_ for _ in ()).throw(RuntimeError("no id")),
@@ -268,6 +320,7 @@ def test_extract_acquisition_metadata_handles_partial_failures_without_long_valu
 
         @staticmethod
         def loadOriginalMetadata():
+            """Return load original metadata."""
             return (
                 1,
                 [("Exposure", "100ms"), ("broken",), ("Title", "short note")],
@@ -289,7 +342,11 @@ def test_extract_acquisition_metadata_handles_partial_failures_without_long_valu
 
 
 def test_image_and_metadata_services_cover_remaining_runtime_failure_paths(monkeypatch):
+    """Verify test image and metadata services cover remain behavior."""
+
     class _BrokenMetadataTuple:
+        """Represent broken metadata tuple."""
+
         def __len__(self):
             return 3
 
@@ -300,11 +357,15 @@ def test_image_and_metadata_services_cover_remaining_runtime_failure_paths(monke
             return True
 
     class _BrokenDetectorList:
+        """Represent broken detector list."""
+
         def __bool__(self):
             return True
 
         def __iter__(self):
             class _BrokenDetectorIterator:
+                """Represent broken detector iterator."""
+
                 def __init__(self):
                     self._message = "detectors unavailable"
 
@@ -317,34 +378,45 @@ def test_image_and_metadata_services_cover_remaining_runtime_failure_paths(monke
             return _BrokenDetectorIterator()
 
     class _BrokenMetadataImage:
+        """Represent broken metadata image."""
+
         @staticmethod
         def getId():
+            """Return get identifier."""
             return 1
 
         @staticmethod
         def getAcquisitionDate():
+            """Return get acquisition date."""
             return None
 
         @staticmethod
         def getObjectiveSettings():
+            """Return get objective settings."""
             return None
 
         @staticmethod
         def getChannels():
+            """Return get channels."""
             return []
 
         @staticmethod
         def getDetectorSettings():
+            """Return get detector settings."""
             return _BrokenDetectorList()
 
         @staticmethod
         def loadOriginalMetadata():
+            """Return load original metadata."""
             return _BrokenMetadataTuple()
 
     assert metadata_service.extract_acquisition_metadata(_BrokenMetadataImage()) == {}
 
     class _BrokenMetadataImageWithoutId(_BrokenMetadataImage):
+        """Represent broken metadata image without identifier."""
+
         def getId(self):
+            """Return get identifier."""
             raise RuntimeError("missing id")
 
     assert (

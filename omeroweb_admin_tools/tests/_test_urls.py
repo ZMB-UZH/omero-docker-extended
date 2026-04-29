@@ -5,6 +5,7 @@ from django.urls import path
 
 
 def _noop_view(_request, *args, **kwargs):
+    """Handle noop view."""
     return HttpResponse("")
 
 

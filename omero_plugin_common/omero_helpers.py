@@ -12,10 +12,12 @@ logger = logging.getLogger(__name__)
 
 
 def _value_or_raw(value):
+    """Handle value or raw."""
     return value.getValue() if hasattr(value, "getValue") else value
 
 
 def _call_or_none(obj, method_name: str):
+    """Handle call or none."""
     method = getattr(obj, method_name, None)
     if not callable(method):
         return None
@@ -26,6 +28,7 @@ def _call_or_none(obj, method_name: str):
 
 
 def _owner_candidates(obj):
+    """Handle owner candidates."""
     details = _call_or_none(obj, "getDetails")
     details_owner = _call_or_none(details, "getOwner") if details is not None else None
     method_owner = _call_or_none(obj, "getOwner")
@@ -39,10 +42,12 @@ def _owner_candidates(obj):
 
 
 def _owner_from_details_or_method(obj):
+    """Handle owner from details or method."""
     return next(iter(_owner_candidates(obj)), None)
 
 
 def _safe_debug(message: str, *values) -> None:
+    """Handle safe debug."""
     logger.debug(message, *(sanitize_log_value(value) for value in values))
 
 
@@ -98,6 +103,7 @@ def is_owned_by_user(obj, owner_id):
 
 
 def _current_user_id(conn):
+    """Handle current user identifier."""
     try:
         user = conn.getUser()
         if user is not None:
@@ -108,6 +114,7 @@ def _current_user_id(conn):
 
 
 def _get_owner_username(obj):
+    """Handle get owner username."""
     if obj is None:
         return ""
     for owner in _owner_candidates(obj):
@@ -127,6 +134,7 @@ def _get_owner_username(obj):
 
 
 def _has_read_write_permissions(obj):
+    """Handle has read write permissions."""
     if obj is None:
         return False
     for attr in ("canEdit", "canWrite"):

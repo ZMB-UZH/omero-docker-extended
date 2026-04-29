@@ -10,6 +10,7 @@ from omeroweb_import.views import core_functions
 def test_directory_initialization_uses_parent_checks_and_caches_paths(
     tmp_path, monkeypatch
 ):
+    """Verify test directory initialization uses parent che behavior."""
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
     ensure_parent_calls = []
@@ -49,6 +50,7 @@ def test_directory_initialization_uses_parent_checks_and_caches_paths(
 def test_directory_helpers_cover_failure_and_permission_fix_paths(
     tmp_path, monkeypatch
 ):
+    """Verify test directory helpers cover failure and perm behavior."""
     target = tmp_path / "nested" / "child"
     target.parent.mkdir(parents=True)
     assert core_functions._ensure_parent_dir(target) is True
@@ -90,6 +92,7 @@ def test_directory_helpers_cover_failure_and_permission_fix_paths(
     original_chmod = Path.chmod
 
     def chmod(self, path_mode):
+        """Handle chmod."""
         if self == existing:
             chmod_calls.append(path_mode)
             return None
@@ -104,6 +107,7 @@ def test_directory_helpers_cover_failure_and_permission_fix_paths(
     original_access = core_functions.os.access
 
     def access(path, mode):
+        """Handle access."""
         if Path(path) == inaccessible:
             return False
         return original_access(path, mode)
@@ -114,6 +118,7 @@ def test_directory_helpers_cover_failure_and_permission_fix_paths(
 
 
 def test_runtime_env_helpers_normalize_boolean_and_integer_values(monkeypatch):
+    """Verify test runtime env helpers normalize boolean an behavior."""
     monkeypatch.setenv("IMPORT_BATCH", " 7 ")
     monkeypatch.setenv("FEATURE_FLAG", " yes ")
     monkeypatch.setenv("BROKEN_BATCH", "bad-value")

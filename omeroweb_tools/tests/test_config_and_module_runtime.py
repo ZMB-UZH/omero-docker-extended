@@ -9,6 +9,7 @@ from omeroweb_tools.task_names import ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME
 
 
 def test_config_helpers_cover_invalid_values_and_scope_serialization():
+    """Verify test config helpers cover invalid values and behavior."""
     scope = tools_config.EnhancedSearchScope("user", 7, "Your universal metadata index")
 
     assert scope.to_dict() == {
@@ -25,6 +26,7 @@ def test_config_helpers_cover_invalid_values_and_scope_serialization():
 
 
 def test_build_enhanced_search_celery_config_normalizes_invalid_inputs(monkeypatch):
+    """Verify test build enhanced search celery config norm behavior."""
     monkeypatch.setattr(
         tools_config,
         "get_optional_env",
@@ -58,9 +60,12 @@ def test_build_enhanced_search_celery_config_normalizes_invalid_inputs(monkeypat
 
 
 def test_celery_app_builds_configured_celery_instance(monkeypatch):
+    """Verify test celery app builds configured celery inst behavior."""
     created = {}
 
     class _FakeCelery:
+        """Test double for fake celery."""
+
         def __init__(self, name, broker, backend):
             created["init"] = {
                 "name": name,
@@ -71,6 +76,7 @@ def test_celery_app_builds_configured_celery_instance(monkeypatch):
 
         @staticmethod
         def autodiscover_tasks(packages, force=False):
+            """Handle autodiscover tasks."""
             created["autodiscover"] = {"packages": packages, "force": force}
 
     monkeypatch.setattr(
@@ -112,12 +118,18 @@ def test_celery_app_builds_configured_celery_instance(monkeypatch):
 
 
 def test_tasks_module_registers_and_runs_scope_sync_task(monkeypatch):
+    """Verify test tasks module registers and runs scope sy behavior."""
     decorated = {}
 
     class _FakeApp:
+        """Test double for fake app."""
+
         @staticmethod
         def task(**kwargs):
+            """Handle task."""
+
             def _decorator(func):
+                """Handle decorator."""
                 decorated["kwargs"] = kwargs
                 return func
 

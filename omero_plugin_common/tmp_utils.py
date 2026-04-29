@@ -14,12 +14,14 @@ TMP_PATH_ENV = "OMERO_TMP_PATH"
 
 
 def _validate_path_component(value: str, *, label: str) -> str:
+    """Handle validate path component."""
     if value in {"", ".", ".."} or "/" in value or "\\" in value or "\x00" in value:
         raise ValueError(f"{label} must be a single safe path component.")
     return value
 
 
 def _append_components(base: Path, components: Iterable[str]) -> Path:
+    """Handle append components."""
     path = base
     for component in components:
         path /= _validate_path_component(str(component), label="temporary subdirectory")

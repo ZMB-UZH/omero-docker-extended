@@ -13,16 +13,20 @@ from omeroweb_import.views import core_functions
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self.val = value
 
     def getValue(self):
+        """Return get value."""
         return self.val
 
 
 def test_core_function_misc_final_edges_cover_remaining_helper_branches(
     monkeypatch, tmp_path: Path
 ):
+    """Verify test core function misc final edges cover rem behavior."""
     monkeypatch.setattr(
         core_functions,
         "_entry_requires_name_normalization",
@@ -159,6 +163,7 @@ def test_core_function_misc_final_edges_cover_remaining_helper_branches(
 def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
     monkeypatch, tmp_path: Path
 ):
+    """Verify test managed path and import candidate helper behavior."""
     real_os_open = os.open
     real_os_stat = os.stat
 
@@ -295,6 +300,8 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
     original_parse_import_groups = core_functions._parse_import_groups
 
     class _CandidatePath:
+        """Represent candidate path."""
+
         __hash__ = None
 
         def __init__(self, should_match=False):
@@ -302,6 +309,7 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
 
         @staticmethod
         def resolve():
+            """Return resolve."""
             raise OSError("resolve failed")
 
         def __eq__(self, other):
@@ -309,6 +317,7 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
 
         @staticmethod
         def relative_to(other):
+            """Handle relative to."""
             raise ValueError("outside")
 
     monkeypatch.setattr(
@@ -394,20 +403,25 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
 def test_core_function_routing_and_native_zarr_helpers_cover_remaining_lines(
     monkeypatch, tmp_path: Path
 ):
+    """Verify test core function routing and native Zarr he behavior."""
     state = {"job": {"compatibility_status": "pending"}}
 
     def _update_job(job_id, mutator):
+        """Handle update job."""
         state["job"] = mutator(state["job"])
         return state["job"]
 
     thread_starts = []
 
     class _Thread:
+        """Represent thread."""
+
         def __init__(self, *, target, args, daemon):
             self.args = args
 
         @staticmethod
         def start():
+            """Run start."""
             thread_starts.append("started")
 
     monkeypatch.setattr(core_functions, "_update_job", _update_job)
@@ -488,6 +502,7 @@ def test_core_function_routing_and_native_zarr_helpers_cover_remaining_lines(
 def test_import_job_entry_covers_remaining_zarr_routing_paths(
     monkeypatch, tmp_path: Path
 ):
+    """Verify test import job entry covers remaining Zarr r behavior."""
     zarr_path = tmp_path / "plate.ome.zarr"
     zarr_path.mkdir()
     upload_root = tmp_path / "uploads"
@@ -597,6 +612,7 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ):
+    """Verify test core function import name and compatibil behavior."""
     managed_dir = tmp_path / "managed"
     original_directory_is_usable = core_functions._directory_is_usable
     monkeypatch.setattr(
@@ -611,8 +627,11 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
     assert original_directory_is_usable(not_a_directory) is False
 
     class _BrokenPath:
+        """Represent broken path."""
+
         @staticmethod
         def is_dir():
+            """Return whether is dir."""
             raise OSError("stat failed")
 
         def __str__(self):
@@ -675,10 +694,13 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
     core_functions._logical_import_entry_source_display_name = lambda entry: ""
 
     class _NamelessDir:
+        """Represent nameless dir."""
+
         name = ""
 
         @staticmethod
         def is_dir():
+            """Return whether is dir."""
             return True
 
     monkeypatch.setattr(
@@ -708,18 +730,23 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
     ) == [10, 11]
 
     class _Image:
+        """Represent image."""
+
         def __init__(self, image_id: int, name: str):
             self.id = image_id
             self._name = name
             self.saved = 0
 
         def getName(self):
+            """Return get name."""
             return self._name
 
         def setName(self, name):
+            """Store set name."""
             self._name = name
 
         def save(self):
+            """Store save."""
             self.saved += 1
 
     mismatch_images = {

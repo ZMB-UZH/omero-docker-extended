@@ -28,6 +28,7 @@ _psycopg2_sql: Any | None = None
 
 
 def _load_psycopg2():
+    """Handle load psycopg2."""
     if _psycopg2_mod is not None and _psycopg2_extras is not None:
         return _psycopg2_mod, _psycopg2_extras
 
@@ -41,6 +42,7 @@ def _load_psycopg2():
 
 
 def _load_psycopg2_sql():
+    """Handle load psycopg2 SQL."""
     if _psycopg2_sql is not None:
         return _psycopg2_sql
 
@@ -59,6 +61,7 @@ def _safe_query(template, *identifiers):
 
 
 def _db_params():
+    """Handle database params."""
     user = os.environ.get(ENV_USER)
     password = os.environ.get(ENV_AUTH)
     host = os.environ.get(ENV_HOST)
@@ -104,6 +107,7 @@ def _db_params():
 
 @contextmanager
 def _connect():
+    """Handle connect."""
     psycopg2, _ = _load_psycopg2()
     param_options = _db_params()
     conn = None
@@ -148,6 +152,7 @@ def _connect():
 
 
 def _ensure_user_settings_schema(conn):
+    """Handle ensure user settings schema."""
     _load_psycopg2_sql()
     with conn.cursor() as cur:
         stmt = _safe_query(
@@ -175,6 +180,7 @@ def _ensure_user_settings_schema(conn):
 
 
 def _ensure_special_method_settings_schema(conn):
+    """Handle ensure special method settings schema."""
     _load_psycopg2_sql()
     with conn.cursor() as cur:
         stmt = _safe_query(
@@ -212,6 +218,7 @@ def _ensure_special_method_settings_schema(conn):
 
 
 def save_user_settings(username, settings_payload):
+    """Store save user settings."""
     try:
         _, extras = _load_psycopg2()
         _load_psycopg2_sql()
@@ -257,6 +264,7 @@ def save_user_settings(username, settings_payload):
 
 
 def save_special_method_settings(username, method_key, settings_payload):
+    """Store save special method settings."""
     try:
         _, extras = _load_psycopg2()
         _load_psycopg2_sql()
@@ -304,6 +312,7 @@ def save_special_method_settings(username, method_key, settings_payload):
 
 
 def load_special_method_settings(username, method_key):
+    """Return load special method settings."""
     try:
         _load_psycopg2_sql()
         with _connect() as conn:

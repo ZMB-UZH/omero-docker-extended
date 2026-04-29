@@ -2,6 +2,7 @@ from omeroweb_imaris_connector import apps, urls
 
 
 def test_imaris_module_contracts_cover_ready_hook_and_route(monkeypatch):
+    """Verify test imaris module contracts cover ready hook behavior."""
     configured = []
     monkeypatch.setattr(
         apps, "configure_omero_gateway_logging", lambda: configured.append(True)

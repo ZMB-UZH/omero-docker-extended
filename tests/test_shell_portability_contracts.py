@@ -17,11 +17,15 @@ BASH_BIN = "/bin/bash"
 
 
 class ShellPortabilityContractTests(unittest.TestCase):
+    """Test cases for shell portability contract tests."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def test_tracked_shell_scripts_avoid_bash_regex_operator(self) -> None:
+        """Verify test tracked shell scripts avoid bash regex o behavior."""
         git_path = shutil.which("git")
         self.assertIsNotNone(git_path)
         result = subprocess.run(
@@ -60,6 +64,7 @@ class ShellPortabilityContractTests(unittest.TestCase):
         self.assertFalse(offenders, msg=f"Bash regex operator remains: {offenders}")
 
     def test_ext4_quota_enforcer_matches_group_names_literally(self) -> None:
+        """Verify test ext4 quota enforcer matches group names behavior."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin = temp_path / "bin"
@@ -119,6 +124,7 @@ class ShellPortabilityContractTests(unittest.TestCase):
 
     @staticmethod
     def _write_fake_command(path: Path) -> None:
+        """Handle write fake command."""
         path.write_text(
             textwrap.dedent(
                 """\

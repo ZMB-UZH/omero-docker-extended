@@ -12,6 +12,8 @@ from omeroweb_admin_tools.services.system_diagnostics import (
 
 
 class _FakeResponse:
+    """Test double for fake response."""
+
     def __init__(self, status, payload):
         self.status = status
         self.status_code = status
@@ -20,35 +22,45 @@ class _FakeResponse:
         self.text = payload.decode("utf-8", errors="replace")
 
     def read(self):
+        """Return read."""
         return self._payload
 
 
 class _FakeConnection:
+    """Test double for fake connection."""
+
     def __init__(self, response=None, *, request_error=None):
         self.response = response
         self.request_error = request_error
         self.closed = False
 
     def request(self, method, path):
+        """Handle request."""
         if self.request_error is not None:
             raise self.request_error
 
     def getresponse(self):
+        """Return getresponse."""
         return self.response
 
     def close(self):
+        """Handle close."""
         self.closed = True
 
 
 class _Cursor:
+    """Represent cursor."""
+
     def __init__(self, row):
         self.row = row
         self.executed = []
 
     def execute(self, query):
+        """Run execute."""
         self.executed.append(query)
 
     def fetchone(self):
+        """Handle fetchone."""
         return self.row
 
     def __enter__(self):
@@ -59,18 +71,23 @@ class _Cursor:
 
 
 class _PgConnection:
+    """Represent pg connection."""
+
     def __init__(self, row):
         self.row = row
         self.closed = False
 
     def cursor(self):
+        """Handle cursor."""
         return _Cursor(self.row)
 
     def close(self):
+        """Handle close."""
         self.closed = True
 
 
 def _result(check_id: str, label: str) -> DiagnosticCheckResult:
+    """Handle result."""
     return DiagnosticCheckResult(
         check_id=check_id,
         label=label,
@@ -82,6 +99,7 @@ def _result(check_id: str, label: str) -> DiagnosticCheckResult:
 
 
 def test_environment_and_database_profile_helpers(monkeypatch):
+    """Verify test environment and database profile helpers."""
     monkeypatch.setenv("ADMIN_TOOLS_PLUGIN_DB_HOST", "plugin-db")
     monkeypatch.setenv("ADMIN_TOOLS_PLUGIN_DB_PORT", "5544")
     monkeypatch.setenv("ADMIN_TOOLS_PLUGIN_DB_USER", "plugin-user")
@@ -130,6 +148,7 @@ def test_environment_and_database_profile_helpers(monkeypatch):
 def test_docker_api_json_and_runtime_inspection_handle_socket_and_payload_cases(
     monkeypatch,
 ):
+    """Verify test docker API JSON and runtime inspection h behavior."""
     monkeypatch.setattr(system_diagnostics.os.path, "exists", lambda path: False)
     ok, payload, error = system_diagnostics._docker_api_json("/containers/json")
     assert ok is False
@@ -205,7 +224,10 @@ def test_docker_api_json_and_runtime_inspection_handle_socket_and_payload_cases(
 
 
 def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
+    """Verify test SQL and network primitives report succes behavior."""
+
     def _psycopg2_single_value():
+        """Handle psycopg2 single value."""
         return type(
             "Psycopg2",
             (),
@@ -231,6 +253,8 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
     assert resolved.status == "pass"
 
     class _SocketContext:
+        """Represent socket context."""
+
         def __enter__(self):
             return self
 
@@ -302,6 +326,7 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
     assert invalid_http.status == "fail"
 
     def _psycopg2_bad_value():
+        """Handle psycopg2 bad value."""
         return type(
             "Psycopg2",
             (),
@@ -321,6 +346,7 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
 
 
 def test_diagnostic_aggregators_return_expected_checks(monkeypatch):
+    """Verify test diagnostic aggregators return expected c behavior."""
     monkeypatch.setenv("ADMIN_TOOLS_OMERO_SERVER_HOST", "omeroserver")
     monkeypatch.setenv("ADMIN_TOOLS_OMERO_BLITZ_PORT", "4064")
     monkeypatch.setenv("ADMIN_TOOLS_OMERO_SECURE_PORT", "4063")
@@ -373,6 +399,7 @@ def test_diagnostic_aggregators_return_expected_checks(monkeypatch):
 
 
 def test_omero_server_core_reports_missing_runtime_config(monkeypatch):
+    """Verify test OMERO server core reports missing runtim behavior."""
     for name in (
         "ADMIN_TOOLS_OMERO_SERVER_HOST",
         "OMEROHOST",

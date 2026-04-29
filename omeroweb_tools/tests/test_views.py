@@ -13,6 +13,7 @@ from omeroweb_tools.views import index_view, utils as view_utils
 
 
 def test_enhanced_search_view_blocks_root_without_running_search(monkeypatch):
+    """Verify test enhanced search view blocks root without behavior."""
     captured = {}
     monkeypatch.setattr(
         index_view,
@@ -72,6 +73,7 @@ def test_enhanced_search_view_blocks_root_without_running_search(monkeypatch):
 
 
 def test_enhanced_search_view_blocks_unresolved_user_without_store_access(monkeypatch):
+    """Verify test enhanced search view blocks unresolved u behavior."""
     monkeypatch.setattr(
         index_view,
         "render",
@@ -120,6 +122,7 @@ def test_enhanced_search_view_blocks_unresolved_user_without_store_access(monkey
 
 
 def test_enhanced_search_view_builds_pagination_querystrings(monkeypatch):
+    """Verify test enhanced search view builds pagination q behavior."""
     captured = {}
     monkeypatch.setattr(
         index_view,
@@ -197,6 +200,7 @@ def test_enhanced_search_view_builds_pagination_querystrings(monkeypatch):
 
 
 def test_enhanced_search_view_handles_settings_store_failure(monkeypatch):
+    """Verify test enhanced search view handles settings st behavior."""
     captured = {}
     monkeypatch.setattr(
         index_view,
@@ -246,6 +250,7 @@ def test_enhanced_search_view_handles_settings_store_failure(monkeypatch):
 
 
 def test_start_scope_sync_view_rejects_root_user(monkeypatch):
+    """Verify test start scope sync view rejects root user."""
     monkeypatch.setattr(
         "omeroweb_tools.views.utils.current_username",
         lambda request, conn: "root",
@@ -263,6 +268,7 @@ def test_start_scope_sync_view_rejects_root_user(monkeypatch):
 
 
 def test_start_scope_sync_view_requires_acquisition_indexing(monkeypatch):
+    """Verify test start scope sync view requires acquisiti behavior."""
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         index_view,
@@ -289,6 +295,7 @@ def test_start_scope_sync_view_requires_acquisition_indexing(monkeypatch):
 def test_start_scope_sync_view_returns_database_error_when_settings_unavailable(
     monkeypatch,
 ):
+    """Verify test start scope sync view returns database e behavior."""
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         index_view,
@@ -312,6 +319,7 @@ def test_start_scope_sync_view_returns_database_error_when_settings_unavailable(
 
 
 def test_save_user_settings_view_persists_payload(monkeypatch):
+    """Verify test save user settings view persists payload."""
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         index_view,
@@ -350,6 +358,7 @@ def test_save_user_settings_view_persists_payload(monkeypatch):
 
 
 def test_save_user_settings_view_returns_database_error_message(monkeypatch):
+    """Verify test save user settings view returns database behavior."""
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         index_view,
@@ -375,6 +384,7 @@ def test_save_user_settings_view_returns_database_error_message(monkeypatch):
 
 
 def test_start_scope_sync_view_targets_current_user_scope(monkeypatch):
+    """Verify test start scope sync view targets current us behavior."""
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         index_view,
@@ -423,6 +433,7 @@ def test_start_scope_sync_view_targets_current_user_scope(monkeypatch):
 
 
 def test_start_scope_sync_view_ignores_requested_scope_key(monkeypatch):
+    """Verify test start scope sync view ignores requested behavior."""
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         index_view,
@@ -474,6 +485,7 @@ def test_start_scope_sync_view_ignores_requested_scope_key(monkeypatch):
 
 
 def test_save_query_view_validates_required_payload(monkeypatch):
+    """Verify test save query view validates required payload."""
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     request = RequestFactory().post(
         "/omeroweb_tools/enhanced-search/saved-queries/save/",
@@ -489,6 +501,7 @@ def test_save_query_view_validates_required_payload(monkeypatch):
 
 
 def test_save_query_view_rejects_overlong_query_names(monkeypatch):
+    """Verify test save query view rejects overlong query n behavior."""
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     request = RequestFactory().post(
         "/omeroweb_tools/enhanced-search/saved-queries/save/",
@@ -510,6 +523,7 @@ def test_save_query_view_rejects_overlong_query_names(monkeypatch):
 
 
 def test_apply_saved_query_view_redirects_with_safe_query_string(monkeypatch):
+    """Verify test apply saved query view redirects with sa behavior."""
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         index_view,
@@ -541,17 +555,22 @@ def test_apply_saved_query_view_redirects_with_safe_query_string(monkeypatch):
 
 
 def test_validate_user_password_closes_session_after_success(monkeypatch):
+    """Verify test validate user password closes session af behavior."""
     closed = []
     credential_value = "opaque-value"
 
     class _Client:
+        """Represent client."""
+
         @staticmethod
         def createSession(username, provided_value):
+            """Build create session."""
             assert username == "alice"
             assert provided_value == credential_value
 
         @staticmethod
         def closeSession():
+            """Handle close session."""
             closed.append(True)
 
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
@@ -570,17 +589,22 @@ def test_validate_user_password_closes_session_after_success(monkeypatch):
 
 
 def test_validate_user_password_does_not_close_session_when_login_fails(monkeypatch):
+    """Verify test validate user password does not close se behavior."""
     closed = []
     credential_value = "opaque-value"
 
     class _Client:
+        """Represent client."""
+
         @staticmethod
         def createSession(username, provided_value):
+            """Build create session."""
             assert provided_value == credential_value
             raise RuntimeError("nope")
 
         @staticmethod
         def closeSession():
+            """Handle close session."""
             closed.append(True)
 
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
@@ -599,16 +623,21 @@ def test_validate_user_password_does_not_close_session_when_login_fails(monkeypa
 
 
 def test_validate_user_password_suppresses_close_failure_after_success(monkeypatch):
+    """Verify test validate user password suppresses close behavior."""
     credential_value = "opaque-value"
 
     class _Client:
+        """Represent client."""
+
         @staticmethod
         def createSession(username, provided_value):
+            """Build create session."""
             assert username == "alice"
             assert provided_value == credential_value
 
         @staticmethod
         def closeSession():
+            """Handle close session."""
             raise RuntimeError("close failed")
 
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")

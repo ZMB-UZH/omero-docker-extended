@@ -11,26 +11,35 @@ from omeroweb_import.views import core_functions
 
 
 class _FakeValue:
+    """Test double for fake value."""
+
     def __init__(self, value):
         self.val = value
 
     def getValue(self):
+        """Return get value."""
         return self.val
 
 
 class _FakeLength:
+    """Test double for fake length."""
+
     def __init__(self, value, unit):
         self._value = value
         self._unit = unit
 
     def getValue(self):
+        """Return get value."""
         return self._value
 
     def getUnit(self):
+        """Return get unit."""
         return self._unit
 
 
 class _FakeUnit:
+    """Test double for fake unit."""
+
     def __init__(self, name):
         self.name = name
 
@@ -39,6 +48,7 @@ class _FakeUnit:
 
 
 def test_job_gate_helpers_cover_pending_compatibility_and_plan_build(monkeypatch):
+    """Verify test job gate helpers cover pending compatibi behavior."""
     monkeypatch.setenv(core_functions.UPLOAD_BATCH_FILES_ENV, "25")
 
     assert core_functions._normalize_job_batch_size("0", 5) == 1
@@ -106,6 +116,7 @@ def test_job_gate_helpers_cover_pending_compatibility_and_plan_build(monkeypatch
 
 
 def test_path_and_sem_edx_helpers_normalize_and_validate_entries(monkeypatch, tmp_path):
+    """Verify test path and sem edx helpers normalize and v behavior."""
     monkeypatch.setattr(
         core_functions, "MAX_UPLOAD_RELATIVE_PATH_BYTES", 12, raising=False
     )
@@ -175,6 +186,7 @@ def test_path_and_sem_edx_helpers_normalize_and_validate_entries(monkeypatch, tm
 def test_resolve_root_relative_path_returns_safe_validation_errors(
     monkeypatch, tmp_path
 ):
+    """Verify test resolve root relative path returns safe behavior."""
     monkeypatch.setattr(
         core_functions,
         "_managed_runtime_validation_error",
@@ -193,6 +205,7 @@ def test_resolve_root_relative_path_returns_safe_validation_errors(
 def test_external_info_units_and_dataset_helpers_cover_aliases_and_fallbacks(
     monkeypatch,
 ):
+    """Verify test external info units and dataset helpers behavior."""
     assert core_functions._optional_int("17") == 17
     assert core_functions._optional_int("not-an-int") is None
     assert core_functions._optional_int(object()) is None
@@ -213,7 +226,10 @@ def test_external_info_units_and_dataset_helpers_cover_aliases_and_fallbacks(
     )
 
     class _ParametersI:
+        """Represent parameters i."""
+
         def addId(self, value):
+            """Handle add identifier."""
             self.value = value
             return self
 
@@ -236,6 +252,8 @@ def test_external_info_units_and_dataset_helpers_cover_aliases_and_fallbacks(
     }
 
     class _FakeUnitsLength:
+        """Test double for fake units length."""
+
         _enumerators = dict(enumerate(units.values()))
 
     for name, unit in units.items():
@@ -318,6 +336,7 @@ def test_external_info_units_and_dataset_helpers_cover_aliases_and_fallbacks(
 
 
 def test_cli_and_shared_zarr_helpers_cover_env_and_safe_cleanup(monkeypatch, tmp_path):
+    """Verify test cli and shared Zarr helpers cover env an behavior."""
     monkeypatch.setenv(core_functions.CLI_KEEPALIVE_SECONDS_ENV, "9999")
     monkeypatch.setenv(core_functions.LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_ENV, "1")
     monkeypatch.setenv(core_functions.SCRIPT_START_TIMEOUT_SECONDS_ENV, "0")

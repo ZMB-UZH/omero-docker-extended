@@ -8,6 +8,7 @@ from .utils import require_root_user
 @login_required()
 @require_root_user
 def help_page(request, **kwargs):
+    """Handle help page."""
     help_path = (
         Path(__file__).resolve().parents[2]
         / "docs"

@@ -7,54 +7,73 @@ from omeroweb_tools.services import acquisition_metadata as metadata
 
 
 class _GetterlessValue:
+    """Represent getterless value."""
+
     def __str__(self):
         return "2 mm"
 
 
 class _BrokenEntry:
+    """Represent broken entry."""
+
     def __len__(self):
         raise RuntimeError("broken entry")
 
 
 class _BrokenChannel:
+    """Represent broken channel."""
+
     @staticmethod
     def getIndex():
+        """Return get index."""
         raise RuntimeError("bad index")
 
     @staticmethod
     def getLabel():
+        """Return get label."""
         raise RuntimeError("bad label")
 
     @staticmethod
     def getExcitationWave():
+        """Return get excitation wave."""
         return "488 nm"
 
     @staticmethod
     def getEmissionWave():
+        """Return get emission wave."""
         return "525 nm"
 
 
 class _BadChannelIndex:
+    """Represent bad channel index."""
+
     @staticmethod
     def getIndex():
+        """Return get index."""
         return object()
 
     @staticmethod
     def getLabel():
+        """Return get label."""
         return "GFP"
 
     @staticmethod
     def getExcitationWave():
+        """Return get excitation wave."""
         return "488 nm"
 
     @staticmethod
     def getEmissionWave():
+        """Return get emission wave."""
         return "525 nm"
 
 
 class _LegacyPixelImage:
+    """Represent legacy pixel image."""
+
     @staticmethod
     def loadOriginalMetadata():
+        """Return load original metadata."""
         long_value = "Zeiss " + ("alpha " * 2500)
         return (
             None,
@@ -68,36 +87,44 @@ class _LegacyPixelImage:
 
     @staticmethod
     def getChannels():
+        """Return get channels."""
         return [_BrokenChannel()]
 
     @staticmethod
     def getAcquisitionDate():
+        """Return get acquisition date."""
         raise RuntimeError("missing date")
 
     @staticmethod
     def getObjectiveSettings():
+        """Return get objective settings."""
         raise RuntimeError("missing objective")
 
     @staticmethod
     def getDetectorSettings():
+        """Return get detector settings."""
         raise RuntimeError("missing detector")
 
     @staticmethod
     def getPixelSizeX(units=None):
+        """Return get pixel size x."""
         if units is True:
             raise TypeError("legacy signature")
         return "250 nm"
 
     @staticmethod
     def getPixelSizeY(units=True):
+        """Return get pixel size y."""
         raise RuntimeError("missing y")
 
     @staticmethod
     def listParents():
+        """Return list parents."""
         raise RuntimeError("missing parents")
 
 
 def test_metadata_helpers_cover_units_caps_and_empty_values():
+    """Verify test metadata helpers cover units caps and em behavior."""
     assert metadata._normalized_key(" BF_Objective NA ") == "objective na"
     assert metadata._normalized_text(None) == ""
     assert metadata._parse_datetime(None) is None
@@ -172,8 +199,11 @@ def test_metadata_helpers_cover_units_caps_and_empty_values():
     assert len(capped) <= metadata._SEARCH_TEXT_CAP
 
     class _RaisingGetter:
+        """Represent raising getter."""
+
         @staticmethod
         def getLabel():
+            """Return get label."""
             raise RuntimeError("boom")
 
     assert metadata._safe_channel_value(object(), "missing") is None
@@ -183,58 +213,86 @@ def test_metadata_helpers_cover_units_caps_and_empty_values():
 
 
 def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_edges():
+    """Verify test metadata helpers cover malformed OMERO s behavior."""
+
     class _ValueWrapper:
+        """Represent value wrapper."""
+
         value = "wrapped scalar"
 
     class _NonScalarWrapper:
+        """Represent non scalar wrapper."""
+
         value = ["not", "indexable"]
 
     class _BrokenValue:
+        """Represent broken value."""
+
         @staticmethod
         def getValue():
+            """Return get value."""
             raise RuntimeError("broken value")
 
         def __str__(self):
             return "2.5"
 
     class _LegacyPlaneQuantity:
+        """Represent legacy plane quantity."""
+
         @staticmethod
         def getDeltaT(units=None):
+            """Return get delta t."""
             if units is not None:
                 raise TypeError("legacy getter does not accept units")
             return SimpleNamespace(getValue=lambda: "1.25")
 
     class _BrokenLegacyPlaneQuantity:
+        """Represent broken legacy plane quantity."""
+
         @staticmethod
         def getDeltaT(units=None):
+            """Return get delta t."""
             if units is not None:
                 raise TypeError("legacy getter does not accept units")
             raise RuntimeError("broken legacy getter")
 
     class _BrokenPlaneQuantity:
+        """Represent broken plane quantity."""
+
         @staticmethod
         def getDeltaT(units=None):
+            """Return get delta t."""
             raise RuntimeError("broken getter")
 
     class _AxisGetter:
+        """Represent axis getter."""
+
         @staticmethod
         def getTheC():
+            """Return get the c."""
             return "2"
 
     class _BrokenAxisGetter:
+        """Represent broken axis getter."""
+
         @staticmethod
         def getTheC():
+            """Return get the c."""
             raise RuntimeError("broken axis getter")
 
     class _FallbackMapAnnotation:
+        """Represent fallback map annotation."""
+
         OMERO_CLASS = "MapAnnotation"
 
         @staticmethod
         def getValue():
+            """Return get value."""
             raise RuntimeError("primary map getter failed")
 
         @staticmethod
         def getMapValue():
+            """Return get map value."""
             return [
                 SimpleNamespace(getName=lambda: "Treatment", getValue=lambda: "DMSO"),
                 SimpleNamespace(
@@ -244,22 +302,31 @@ def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_e
             ]
 
     class _FallbackTextAnnotation:
+        """Represent fallback text annotation."""
+
         OMERO_CLASS = "TextAnnotation"
 
         @staticmethod
         def getTextValue():
+            """Return get text value."""
             raise RuntimeError("text missing")
 
         @staticmethod
         def getDescription():
+            """Return get description."""
             return "QC passed"
 
     class _NonIterableValue:
+        """Represent non iterable value."""
+
         @staticmethod
         def listValues():
+            """Return list values."""
             return object()
 
     class _BrokenIterable:
+        """Represent broken iterable."""
+
         def __iter__(self):
             raise RuntimeError("broken iteration")
 
@@ -323,8 +390,11 @@ def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_e
     )
 
     class _ImageWithBrokenRawChannels:
+        """Represent image with broken raw channels."""
+
         @staticmethod
         def getChannels():
+            """Return get channels."""
             raise RuntimeError("channel load failed")
 
     assert (
@@ -341,34 +411,47 @@ def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_e
 
 
 def test_plane_info_collection_keeps_legacy_targeted_copy_plane_info_path():
+    """Verify test plane info collection keeps legacy targe behavior."""
+
     class _Value:
+        """Represent value."""
+
         def __init__(self, value):
             self._raw_value = value
 
         def getValue(self):
+            """Return get value."""
             return self._raw_value
 
     class _PlaneInfo:
+        """Represent plane info."""
+
         theT = 0
 
         @staticmethod
         def getDeltaT(units="SECOND"):
+            """Return get delta t."""
             assert units == "SECOND"
             return _Value(3.5)
 
     class _Pixels:
+        """Represent pixels."""
+
         def __init__(self):
             self.copy_plane_info_calls = []
 
         @staticmethod
         def getSizeZ():
+            """Return get size z."""
             return 1
 
         @staticmethod
         def getSizeC():
+            """Return get size c."""
             return 1
 
         def copyPlaneInfo(self, theC, theZ):
+            """Handle copy plane info."""
             self.copy_plane_info_calls.append((theC, theZ))
             return [_PlaneInfo()]
 
@@ -390,69 +473,97 @@ def test_plane_info_collection_keeps_legacy_targeted_copy_plane_info_path():
 
 
 def test_plane_info_collection_covers_unavailable_bulk_and_targeted_failures():
+    """Verify test plane info collection covers unavailable behavior."""
+
     class _Value:
+        """Represent value."""
+
         def __init__(self, value):
             self._raw_value = value
 
         def getValue(self):
+            """Return get value."""
             return self._raw_value
 
     class _PlaneInfo:
+        """Represent plane info."""
+
         theC = 0
         theZ = 1
         theT = 0
 
         @staticmethod
         def getDeltaT(units="SECOND"):
+            """Return get delta t."""
             return _Value(2.5)
 
     class _NoPlaneInfoPixels:
+        """Represent no plane info pixels."""
+
         @staticmethod
         def getSizeZ():
+            """Return get size z."""
             return 1
 
         @staticmethod
         def getSizeC():
+            """Return get size c."""
             return 1
 
     class _BulkTypeErrorPixels:
+        """Represent bulk type error pixels."""
+
         @staticmethod
         def getSizeZ():
+            """Return get size z."""
             return 1
 
         @staticmethod
         def getSizeC():
+            """Return get size c."""
             return 1
 
         @staticmethod
         def copyPlaneInfo(*args, **kwargs):
+            """Handle copy plane info."""
             if not args and not kwargs:
                 raise TypeError("bulk unsupported")
             return [_PlaneInfo()]
 
     class _BulkFailurePixels(_BulkTypeErrorPixels):
+        """Represent bulk failure pixels."""
+
         def copyPlaneInfo(self, *args, **kwargs):
+            """Handle copy plane info."""
             if not args and not kwargs:
                 raise RuntimeError("bulk failed")
             return [_PlaneInfo()]
 
     class _BulkMissingAxisPixels(_BulkTypeErrorPixels):
+        """Represent bulk missing axis pixels."""
+
         def copyPlaneInfo(self, *args, **kwargs):
+            """Handle copy plane info."""
             return [SimpleNamespace(theC=None, theZ=0, theT=0)]
 
     class _TargetedFailurePixels:
+        """Represent targeted failure pixels."""
+
         def __init__(self):
             self.calls = []
 
         @staticmethod
         def getSizeZ():
+            """Return get size z."""
             return 2
 
         @staticmethod
         def getSizeC():
+            """Return get size c."""
             return 1
 
         def copyPlaneInfo(self, theC, theZ):
+            """Handle copy plane info."""
             self.calls.append((theC, theZ))
             if theZ == 0:
                 raise RuntimeError("plane failed")
@@ -508,24 +619,34 @@ def test_plane_info_collection_covers_unavailable_bulk_and_targeted_failures():
 
 
 def test_metadata_collection_helpers_tolerate_broken_omero_objects():
+    """Verify test metadata collection helpers tolerate bro behavior."""
+
     class _BrokenMetadataImage:
+        """Represent broken metadata image."""
+
         @staticmethod
         def loadOriginalMetadata():
+            """Return load original metadata."""
             raise RuntimeError("no metadata")
 
     class _WeirdMetadataImage:
+        """Represent weird metadata image."""
+
         def __init__(self, payload=None):
             self._payload = payload
 
         def loadOriginalMetadata(self):
+            """Return load original metadata."""
             return self._payload
 
         @staticmethod
         def getChannels():
+            """Return get channels."""
             raise RuntimeError("no channels")
 
         @staticmethod
         def listParents():
+            """Return list parents."""
             return []
 
     assert metadata._collect_original_metadata(_BrokenMetadataImage()) == {}
@@ -538,6 +659,8 @@ def test_metadata_collection_helpers_tolerate_broken_omero_objects():
     assert weird_metadata == {"BF_Instrument Model": "LSM 980"}
 
     class _BrokenSection:
+        """Represent broken section."""
+
         def __bool__(self):
             return True
 
@@ -587,6 +710,7 @@ def test_metadata_collection_helpers_tolerate_broken_omero_objects():
 def test_metadata_attributes_and_extract_search_document_cover_legacy_omero_shapes(
     monkeypatch,
 ):
+    """Verify test metadata attributes and extract search d behavior."""
     monkeypatch.setattr(
         metadata,
         "get_text",
@@ -657,7 +781,10 @@ def test_metadata_attributes_and_extract_search_document_cover_legacy_omero_shap
     }
 
     class _FailingPixelImage(_LegacyPixelImage):
+        """Represent failing pixel image."""
+
         def getPixelSizeX(self, units=None):
+            """Return get pixel size x."""
             if units is True:
                 raise TypeError("legacy signature")
             raise RuntimeError("still broken")

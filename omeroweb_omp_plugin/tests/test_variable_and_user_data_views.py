@@ -14,10 +14,12 @@ from omeroweb_omp_plugin.views import (
 
 
 def _payload(response):
+    """Handle payload."""
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_variable_set_views_cover_success_and_validation_paths(monkeypatch) -> None:
+    """Verify test variable set views cover success and val behavior."""
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         variable_set_view, "current_username", lambda request, conn: "alice"
@@ -161,6 +163,7 @@ def test_variable_set_views_cover_success_and_validation_paths(monkeypatch) -> N
 
 
 def test_user_data_views_cover_success_and_request_guards(monkeypatch) -> None:
+    """Verify test user data views cover success and reques behavior."""
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         user_data_view, "current_username", lambda request, conn: "alice"
@@ -205,6 +208,7 @@ def test_user_data_views_cover_success_and_request_guards(monkeypatch) -> None:
 def test_variable_and_user_data_views_cover_store_failures_and_guard_edges(
     monkeypatch,
 ) -> None:
+    """Verify test variable and user data views cover store behavior."""
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         variable_set_view, "current_username", lambda request, conn: "alice"
@@ -483,6 +487,7 @@ def test_variable_and_user_data_views_cover_store_failures_and_guard_edges(
 def test_variable_and_user_data_views_cover_remaining_method_and_username_guards(
     monkeypatch,
 ) -> None:
+    """Verify test variable and user data views cover remai behavior."""
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(variable_set_view, "current_username", lambda request, conn: "")
     save_missing_user_request = RequestFactory().post("/omp/varsets/save/")

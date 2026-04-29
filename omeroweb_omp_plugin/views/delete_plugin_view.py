@@ -34,6 +34,7 @@ _DELETE_TARGET_KINDS = frozenset({"Annotation", "ImageAnnotationLink"})
 
 
 def _validated_delete_object_id(value, label: str) -> int:
+    """Handle validated delete object identifier."""
     object_id = int(value)
     if object_id <= 0:
         raise ValueError(f"Invalid {label}.")
@@ -41,6 +42,7 @@ def _validated_delete_object_id(value, label: str) -> int:
 
 
 def _run_omero_delete(cli_base_cmd, object_kind: str, object_id: int):
+    """Handle run OMERO delete."""
     if object_kind not in _DELETE_TARGET_KINDS:
         raise ValueError("Unsupported OMERO delete target.")
     validated_id = _validated_delete_object_id(object_id, f"{object_kind} id")

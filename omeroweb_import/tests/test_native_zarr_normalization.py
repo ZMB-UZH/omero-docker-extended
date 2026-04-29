@@ -39,11 +39,13 @@ from omeroweb_import.views.core_functions import (  # noqa: E402
 
 
 def _write_text(path: Path, payload: dict) -> None:
+    """Handle write text."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _write_chunk(path: Path, payload: bytes = b"\x00") -> None:
+    """Handle write chunk."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(payload)
 
@@ -51,12 +53,14 @@ def _write_chunk(path: Path, payload: bytes = b"\x00") -> None:
 def _write_blosc_chunk(
     path: Path, shape: tuple[int, ...], dtype: str = "uint16"
 ) -> None:
+    """Handle write blosc chunk."""
     raw = np.zeros(shape, dtype=np.dtype(dtype)).tobytes(order="C")
     codec = Blosc(cname="lz4", clevel=5, shuffle=1)
     _write_chunk(path, codec.encode(raw))
 
 
 def _make_multiscale_ome_zarr(zarr_dir: Path, dataset_paths: list[str]) -> Path:
+    """Handle make multiscale ome Zarr."""
     _write_text(
         zarr_dir / ".zattrs",
         {
@@ -100,6 +104,7 @@ def _make_multiscale_ome_zarr(zarr_dir: Path, dataset_paths: list[str]) -> Path:
 
 
 def _make_bioformats2raw_layout(zarr_dir: Path, series_names: list[str]) -> Path:
+    """Handle make bioformats2raw layout."""
     _write_text(zarr_dir / ".zattrs", {"bioformats2raw.layout": 3})
     _write_text(zarr_dir / ".zgroup", {"zarr_format": 2})
     for series_name in series_names:
@@ -108,6 +113,7 @@ def _make_bioformats2raw_layout(zarr_dir: Path, series_names: list[str]) -> Path
 
 
 def _make_large_blosc_image_store(zarr_dir: Path) -> Path:
+    """Handle make large blosc image store."""
     _write_text(
         zarr_dir / ".zattrs",
         {
@@ -181,10 +187,13 @@ def _make_large_blosc_image_store(zarr_dir: Path) -> Path:
 
 
 class TestNativeZarrNormalization:
+    """Represent test native Zarr normalization."""
+
     @staticmethod
     def test_prepare_native_zarr_copy_accepts_multiscale_ome_zarr_without_rewriting(
         tmp_path,
     ):
+        """Verify test prepare native Zarr copy accepts multisc behavior."""
         zarr_dir = _make_multiscale_ome_zarr(
             tmp_path / "image.ome.zarr", ["s0", "s1", "s2"]
         )
@@ -206,6 +215,7 @@ class TestNativeZarrNormalization:
     def test_prepare_native_zarr_copy_rewrites_large_blosc_image_arrays_to_gzip(
         tmp_path,
     ):
+        """Verify test prepare native Zarr copy rewrites large behavior."""
         zarr_dir = _make_large_blosc_image_store(tmp_path / "image.ome.zarr")
 
         error = _prepare_native_zarr_copy(zarr_dir)
@@ -218,6 +228,7 @@ class TestNativeZarrNormalization:
 
     @staticmethod
     def test_prepare_native_zarr_copy_rewrites_only_referenced_image_arrays(tmp_path):
+        """Verify test prepare native Zarr copy rewrites only r behavior."""
         zarr_dir = _make_large_blosc_image_store(tmp_path / "image.ome.zarr")
         _write_text(
             zarr_dir / "tables" / "measurements" / ".zarray",
@@ -258,6 +269,7 @@ class TestNativeZarrNormalization:
     def test_prepare_native_zarr_copy_rewrites_supported_bioformats2raw_series_arrays(
         tmp_path,
     ):
+        """Verify test prepare native Zarr copy rewrites suppor behavior."""
         zarr_dir = _make_bioformats2raw_layout(tmp_path / "bf2raw.ome.zarr", ["0", "1"])
         for series_name in ("0", "1"):
             _write_text(
@@ -293,6 +305,7 @@ class TestNativeZarrNormalization:
 
     @staticmethod
     def test_prepare_native_zarr_copy_rejects_sparse_bioformats2raw_layout(tmp_path):
+        """Verify test prepare native Zarr copy rejects sparse behavior."""
         zarr_dir = _make_bioformats2raw_layout(
             tmp_path / "bf2raw-gap.ome.zarr", ["0", "2"]
         )
@@ -304,6 +317,7 @@ class TestNativeZarrNormalization:
 
     @staticmethod
     def test_validate_native_ome_ngff_zarr_rejects_plate_layout(tmp_path):
+        """Verify test validate native ome NGFF Zarr rejects pl behavior."""
         zarr_dir = tmp_path / "plate.ome.zarr"
         _write_text(
             zarr_dir / ".zattrs",

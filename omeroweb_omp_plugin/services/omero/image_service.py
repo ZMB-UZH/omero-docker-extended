@@ -1,6 +1,4 @@
-"""
-OMERO image collection and retrieval services.
-"""
+"""OMERO image collection and retrieval services."""
 
 import logging
 from typing import Any

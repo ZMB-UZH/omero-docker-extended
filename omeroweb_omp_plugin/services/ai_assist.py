@@ -50,6 +50,7 @@ _COHERE_DEFAULT_MODEL = "command-r"
 
 
 def _extract_cohere_response_text(payload):
+    """Handle extract cohere response text."""
     if not payload:
         return None
     if payload.get("text"):
@@ -75,10 +76,12 @@ def _extract_cohere_response_text(payload):
 
 
 def _suggest_separator_regex(filenames):
+    """Handle suggest separator regex."""
     return suggest_separator_regex(filenames, allowed_separators=COMMON_SEPARATORS)
 
 
 def _summarize_separators(filenames):
+    """Handle summarize separators."""
     counts: Counter[str] = Counter()
     for name in filenames:
         base = extract_base_name(name)
@@ -92,6 +95,7 @@ def _summarize_separators(filenames):
 
 
 def _separator_candidates(filenames):
+    """Handle separator candidates."""
     counts: Counter[str] = Counter()
     for name in filenames:
         base = extract_base_name(name)
@@ -106,6 +110,7 @@ def _separator_candidates(filenames):
 
 
 def _build_hyphen_hint(filenames):
+    """Handle build hyphen hint."""
     has_pairs, detected_labels = detect_label_value_pairs(filenames)
     if not has_pairs:
         detected_labels = None
@@ -113,6 +118,7 @@ def _build_hyphen_hint(filenames):
 
 
 def _build_prompt(filenames, strict=False):
+    """Handle build prompt."""
     sample = filenames[:60]
     list_block = "\n".join(f"- {name}" for name in sample)
     separators = _summarize_separators(filenames)
@@ -147,6 +153,7 @@ def _build_prompt(filenames, strict=False):
 
 
 def _clean_regex(text):
+    """Handle clean regex."""
     if not text:
         return ""
     cleaned = text.strip()
@@ -169,12 +176,14 @@ def _clean_regex(text):
 
 
 def _split_filename_with_regex(regex, filename):
+    """Handle split filename with regex."""
     base = extract_base_name(filename)
     parts = [part.strip() for part in re.split(regex, base) if part and part.strip()]
     return base, parts
 
 
 def _is_regex_reasonable(regex, filenames):
+    """Handle is regex reasonable."""
     if not regex or not filenames:
         return False
     try:
@@ -211,6 +220,7 @@ def _is_regex_reasonable(regex, filenames):
 
 
 def _is_regex_too_generic(regex, filenames):
+    """Handle is regex too generic."""
     if not regex:
         return True
     try:
@@ -240,6 +250,7 @@ def _is_regex_too_generic(regex, filenames):
 
 
 def _post_json(url, headers, payload, timeout=15):
+    """Handle post JSON."""
     parsed = urllib.parse.urlparse(str(url or ""))
     if parsed.scheme != "https" or not parsed.netloc:
         raise AiAssistError(errors.provider_unreachable())
@@ -296,6 +307,7 @@ def _post_json(url, headers, payload, timeout=15):
 
 
 def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
+    """Handle call ai provider raw."""
     provider = (provider or "").strip().lower()
 
     if provider in _OPENAI_COMPATIBLE:
@@ -431,6 +443,7 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
 
 
 def generate_ai_regex(provider, api_key, filenames, model=None):
+    """Handle generate ai regex."""
     provider = (provider or "").strip().lower()
     if not provider:
         raise AiAssistError(errors.provider_required())
@@ -479,6 +492,7 @@ def generate_ai_regex(provider, api_key, filenames, model=None):
 
 
 def _build_parse_prompt(filenames, custom_instructions=""):
+    """Handle build parse prompt."""
     sample = filenames[:60]
     list_block = "\n".join(f"- {name}" for name in sample)
 
@@ -520,6 +534,7 @@ def _build_parse_prompt(filenames, custom_instructions=""):
 
 
 def _parse_ai_value_rows(text, expected_count, filenames=None):
+    """Handle parse ai value rows."""
     if not text:
         raise AiAssistError(errors.provider_response_empty())
 
@@ -556,6 +571,7 @@ def _parse_ai_value_rows(text, expected_count, filenames=None):
 def generate_ai_parsed_values(
     provider, api_key, filenames, model=None, custom_instructions=""
 ):
+    """Handle generate ai parsed values."""
     provider = (provider or "").strip().lower()
 
     if not provider:

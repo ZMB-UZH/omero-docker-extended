@@ -10,13 +10,17 @@ INSTALLATION_SCRIPT = REPO_ROOT / "installation" / "installation_script.sh"
 
 
 class SecurityHardeningContractTests(unittest.TestCase):
+    """Test cases for security hardening contract tests."""
+
     @classmethod
     def setUpClass(cls):
+        """Store set up class."""
         cls.server_dockerfile = SERVER_DOCKERFILE.read_text(encoding="utf-8")
         cls.web_dockerfile = WEB_DOCKERFILE.read_text(encoding="utf-8")
         cls.installation_script = INSTALLATION_SCRIPT.read_text(encoding="utf-8")
 
     def test_locale_data_is_preserved_while_other_hardening_stays_enabled(self):
+        """Verify test locale data is preserved while other har behavior."""
         self.assertNotIn("langpacks-en", self.server_dockerfile)
         self.assertNotIn("glibc-langpack-en", self.server_dockerfile)
         self.assertNotIn("localedef --list-archive", self.server_dockerfile)
@@ -41,6 +45,7 @@ class SecurityHardeningContractTests(unittest.TestCase):
         )
 
     def test_security_hardening_prompt_defaults_yes_while_scout_stays_opt_in(self):
+        """Verify test security hardening prompt defaults yes w behavior."""
         self.assertIn(
             'APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-}"',
             self.installation_script,

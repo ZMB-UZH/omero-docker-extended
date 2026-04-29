@@ -108,6 +108,7 @@ class _InMemoryTTLCache:
         self._lock = threading.Lock()
 
     def get_or_load(self, key: object, loader: Callable[[], object]) -> object:
+        """Return get or load."""
         now = time.monotonic()
         owner = False
 
@@ -158,6 +159,7 @@ class _InMemoryTTLCache:
         return future.result()
 
     def _prune_locked(self, now: float) -> None:
+        """Handle prune locked."""
         expired = [
             key for key, record in self._values.items() if record.expires_at <= now
         ]

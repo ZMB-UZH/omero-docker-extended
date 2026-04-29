@@ -1,6 +1,4 @@
-"""
-File and path utility functions for import plugin.
-"""
+"""File and path utility functions for import plugin."""
 
 import logging
 from dataclasses import dataclass
@@ -14,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class _DirectoryCache:
+    """Represent directory cache."""
+
     upload_root: Path | None = None
     jobs_root: Path | None = None
 

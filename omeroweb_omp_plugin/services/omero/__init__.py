@@ -1,3 +1,1 @@
-"""
-OMERO-specific services for images, annotations, and metadata.
-"""
+"""OMERO-specific services for images, annotations, and metadata."""

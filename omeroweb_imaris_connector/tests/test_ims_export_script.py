@@ -12,6 +12,7 @@ import pytest
 
 
 def _install_omero_stub() -> None:
+    """Handle install OMERO stub."""
     omero_module = types.ModuleType("omero")
 
     gateway_module = types.ModuleType("omero.gateway")
@@ -32,6 +33,7 @@ def _install_omero_stub() -> None:
 
 
 def _load_script_module():
+    """Handle load script module."""
     _install_omero_stub()
     module_name = "ims_export_script_under_test"
     sys.modules.pop(module_name, None)
@@ -47,16 +49,19 @@ def _load_script_module():
 
 
 def _write_file(path: pathlib.Path, payload: bytes) -> None:
+    """Handle write file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(payload)
 
 
 def _write_sha256(path: pathlib.Path, payload: bytes) -> None:
+    """Handle write sha256."""
     digest = hashlib.sha256(payload).hexdigest()
     path.write_text(f"{digest}  bioformats_package.jar\n", encoding="ascii")
 
 
 def test_ensure_bioformats_jar_seeds_cache_from_runtime(monkeypatch, tmp_path) -> None:
+    """Verify test ensure bioformats jar seeds cache from r behavior."""
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
 
@@ -79,6 +84,7 @@ def test_ensure_bioformats_jar_seeds_cache_from_runtime(monkeypatch, tmp_path) -
 def test_ensure_bioformats_jar_restores_runtime_from_cache(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test ensure bioformats jar restores runtime f behavior."""
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
 
@@ -101,6 +107,7 @@ def test_ensure_bioformats_jar_restores_runtime_from_cache(
 def test_ensure_bioformats_jar_replaces_invalid_runtime_from_cache(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test ensure bioformats jar replaces invalid r behavior."""
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
 
@@ -124,6 +131,7 @@ def test_ensure_bioformats_jar_replaces_invalid_runtime_from_cache(
 def test_ensure_bioformats_jar_returns_none_without_runtime_or_cache(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test ensure bioformats jar returns none witho behavior."""
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
     monkeypatch.setenv("BIOFORMATS_VERSION", "8.5.0")
@@ -136,6 +144,7 @@ def test_ensure_bioformats_jar_returns_none_without_runtime_or_cache(
 def test_safe_filename_and_checksum_helpers_cover_edge_cases(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test safe filename and checksum helpers cover behavior."""
     module = _load_script_module()
     checksum_path = tmp_path / "bioformats.sha256"
 
@@ -154,11 +163,15 @@ def test_safe_filename_and_checksum_helpers_cover_edge_cases(
     assert module._read_expected_sha256(str(tmp_path)) is None
 
     class _StatFailingPath:
+        """Represent stat failing path."""
+
         @staticmethod
         def is_file():
+            """Return whether is file."""
             raise OSError("stat failed")
 
     def _stat_failing_path(_path_text):
+        """Handle stat failing path."""
         return _StatFailingPath()
 
     with monkeypatch.context() as context:
@@ -178,6 +191,7 @@ def test_safe_filename_and_checksum_helpers_cover_edge_cases(
 def test_export_root_and_checksum_helpers_cover_fallback_cleanup_and_altsep(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test export root and checksum helpers cover f behavior."""
     module = _load_script_module()
     printed = []
 
@@ -237,11 +251,15 @@ def test_export_root_and_checksum_helpers_cover_fallback_cleanup_and_altsep(
 
 
 def test_run_conversion_returns_missing_original_file_error(tmp_path) -> None:
+    """Verify test run conversion returns missing original behavior."""
     module = _load_script_module()
 
     class _Conn:
+        """Represent conn."""
+
         @staticmethod
         def getObject(object_type, image_id):
+            """Return get object."""
             return types.SimpleNamespace(getName=lambda: "demo.ome.tif")
 
     module.get_original_file_path = lambda conn, image: None
@@ -256,6 +274,7 @@ def test_run_conversion_returns_missing_original_file_error(tmp_path) -> None:
 def test_copy_and_validate_bioformats_jar_cover_integrity_paths(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test copy and validate bioformats jar cover i behavior."""
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
 
@@ -300,6 +319,7 @@ def test_copy_and_validate_bioformats_jar_cover_integrity_paths(
 def test_copy_and_path_helpers_cover_error_and_exception_fallbacks(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test copy and path helpers cover error and ex behavior."""
     module = _load_script_module()
     source = tmp_path / "source.jar"
     source.write_text("payload", encoding="utf-8")
@@ -335,21 +355,29 @@ def test_copy_and_path_helpers_cover_error_and_exception_fallbacks(
     )
 
     class _BadPhysicalSize:
+        """Represent bad physical size."""
+
         @staticmethod
         def getValue():
+            """Return get value."""
             raise RuntimeError("bad value")
 
     class _BadPrimaryPixels:
+        """Represent bad primary pixels."""
+
         @staticmethod
         def getPhysicalSizeX():
+            """Return get physical size x."""
             return _BadPhysicalSize()
 
         @staticmethod
         def getPhysicalSizeY():
+            """Return get physical size y."""
             return _BadPhysicalSize()
 
         @staticmethod
         def getPhysicalSizeZ():
+            """Return get physical size z."""
             return _BadPhysicalSize()
 
     image = types.SimpleNamespace(getPrimaryPixels=_BadPrimaryPixels)
@@ -377,28 +405,37 @@ def test_copy_and_path_helpers_cover_error_and_exception_fallbacks(
 
 
 def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks() -> None:
+    """Verify test voxel size and original file path helper behavior."""
     module = _load_script_module()
 
     class _PhysicalSize:
+        """Represent physical size."""
+
         def __init__(self, value):
             self._value = value
 
         def getValue(self):
+            """Return get value."""
             return self._value
 
     class _PrimaryPixels:
+        """Represent primary pixels."""
+
         def __init__(self, x, y, z):
             self._x = x
             self._y = y
             self._z = z
 
         def getPhysicalSizeX(self):
+            """Return get physical size x."""
             return self._x
 
         def getPhysicalSizeY(self):
+            """Return get physical size y."""
             return self._y
 
         def getPhysicalSizeZ(self):
+            """Return get physical size z."""
             return self._z
 
     image = types.SimpleNamespace(
@@ -460,10 +497,13 @@ def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks() -> Non
     assert module.get_original_file_path(bad_conn, image) is None
 
     class ConfigServiceHolder:
+        """Represent config service holder."""
+
         def __init__(self, config_service):
             self.config_service = config_service
 
         def getConfigService(self):
+            """Return get config service."""
             return self.config_service
 
     for config_service in (
@@ -489,6 +529,7 @@ def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks() -> Non
 def test_convert_to_ims_uses_resolved_binary_runtime_env_and_output(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test convert to IMS uses resolved binary runt behavior."""
     module = _load_script_module()
     install_dir = tmp_path / "install"
     real_bin = install_dir / "bin" / "ImarisConvertBioformats"
@@ -516,6 +557,7 @@ def test_convert_to_ims_uses_resolved_binary_runtime_env_and_output(
     captured = {}
 
     def fake_run(cmd, *, timeout, env, cwd, **_kwargs):
+        """Handle fake run."""
         captured["cmd"] = cmd
         captured["timeout"] = timeout
         captured["env"] = env
@@ -544,6 +586,7 @@ def test_convert_to_ims_uses_resolved_binary_runtime_env_and_output(
 def test_convert_and_run_conversion_cover_missing_runtime_and_success_paths(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test convert and run conversion cover missing behavior."""
     module = _load_script_module()
     monkeypatch.setattr(module, "IMARISCONVERT_INSTALL_DIR", str(tmp_path / "missing"))
     monkeypatch.setattr(module.shutil, "which", lambda name: None)
@@ -566,11 +609,18 @@ def test_convert_and_run_conversion_cover_missing_runtime_and_success_paths(
     monkeypatch.setattr(module, "convert_to_ims", lambda image, src, dst: True)
 
     class _FixedDatetime:
+        """Represent fixed datetime."""
+
         @staticmethod
         def utcnow():
+            """Handle utcnow."""
+
             class _Now:
+                """Represent now."""
+
                 @staticmethod
                 def strftime(fmt):
+                    """Handle strftime."""
                     return "20260330T120000Z"
 
             return _Now()
@@ -591,6 +641,7 @@ def test_convert_and_run_conversion_cover_missing_runtime_and_success_paths(
 def test_convert_to_ims_and_run_conversion_cover_failure_paths(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test convert to IMS and run conversion cover behavior."""
     module = _load_script_module()
     install_dir = tmp_path / "install"
     real_bin = install_dir / "ImarisConvertBioformats"
@@ -601,11 +652,18 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
     output_file = tmp_path / "output.ims"
 
     class _FixedDatetime:
+        """Represent fixed datetime."""
+
         @staticmethod
         def utcnow():
+            """Handle utcnow."""
+
             class _Now:
+                """Represent now."""
+
                 @staticmethod
                 def strftime(fmt):
+                    """Handle strftime."""
                     return "20260331T120000Z"
 
             return _Now()
@@ -638,6 +696,7 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
     calls = []
 
     def _failed_run(cmd, *, timeout, env, cwd, **_kwargs):
+        """Handle failed run."""
         calls.append({"env": env, "cwd": cwd})
         return subprocess.CompletedProcess(
             args=cmd, returncode=1, stdout="bad", stderr="boom"
@@ -701,6 +760,7 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
 def test_run_script_sets_outputs_and_attaches_exported_file(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test run script sets outputs and attaches exp behavior."""
     module = _load_script_module()
     export_root = tmp_path / "exports"
     export_path = export_root / "image_7" / "demo.ims"
@@ -725,17 +785,22 @@ def test_run_script_sets_outputs_and_attaches_exported_file(
     )
 
     class _Client:
+        """Represent client."""
+
         @staticmethod
         def getInputs(unwrap=True):
+            """Return get inputs."""
             assert unwrap is True
             return {"Image_ID": 7}
 
         @staticmethod
         def setOutput(key, value):
+            """Store set output."""
             outputs[key] = value
 
         @staticmethod
         def closeSession():
+            """Handle close session."""
             outputs["closed"] = True
 
     client = _Client()
@@ -782,6 +847,7 @@ def test_run_script_sets_outputs_and_attaches_exported_file(
 def test_run_script_survives_attachment_failure_and_reports_export_path(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test run script survives attachment failure a behavior."""
     module = _load_script_module()
     export_root = tmp_path / "exports"
     export_path = export_root / "image_8" / "failed-demo.ims"
@@ -804,16 +870,21 @@ def test_run_script_survives_attachment_failure_and_reports_export_path(
     )
 
     class _Client:
+        """Represent client."""
+
         @staticmethod
         def getInputs(unwrap=True):
+            """Return get inputs."""
             return {"Image_ID": 8}
 
         @staticmethod
         def setOutput(key, value):
+            """Store set output."""
             outputs[key] = value
 
         @staticmethod
         def closeSession():
+            """Handle close session."""
             outputs["closed"] = True
 
     monkeypatch.setattr(module, "_get_export_root", lambda: str(export_root))
@@ -850,6 +921,7 @@ def test_run_script_survives_attachment_failure_and_reports_export_path(
 def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test run script covers missing image output f behavior."""
     module = _load_script_module()
     export_root = tmp_path / "exports"
     export_path = export_root / "image_9" / "demo.ims"
@@ -859,18 +931,23 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
     output_calls = []
 
     class _Client:
+        """Represent client."""
+
         @staticmethod
         def getInputs(unwrap=True):
+            """Return get inputs."""
             return {"Image_ID": 9}
 
         @staticmethod
         def setOutput(key, value):
+            """Store set output."""
             output_calls.append((key, value))
             if key == "File_Annotation":
                 raise RuntimeError("output failed")
 
         @staticmethod
         def closeSession():
+            """Handle close session."""
             output_calls.append(("closed", True))
 
     client = _Client()
@@ -926,16 +1003,21 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
     missing_image_calls = []
 
     class _MissingImageClient:
+        """Represent missing image client."""
+
         @staticmethod
         def getInputs(unwrap=True):
+            """Return get inputs."""
             return {"Image_ID": 10}
 
         @staticmethod
         def setOutput(key, value):
+            """Store set output."""
             missing_image_calls.append((key, value))
 
         @staticmethod
         def closeSession():
+            """Handle close session."""
             missing_image_calls.append(("closed", True))
 
     monkeypatch.setattr(
@@ -962,12 +1044,16 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
     error_calls = []
 
     class _ExplodingClient:
+        """Represent exploding client."""
+
         @staticmethod
         def setOutput(key, value):
+            """Store set output."""
             error_calls.append((key, value))
 
         @staticmethod
         def closeSession():
+            """Handle close session."""
             error_calls.append(("closed", True))
 
     monkeypatch.setattr(
@@ -990,21 +1076,27 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
 
 
 def test_ims_export_script_main_entrypoint_executes_run_script() -> None:
+    """Verify test IMS export script main entrypoint execut behavior."""
     _install_omero_stub()
 
     output_calls = []
 
     class _Client:
+        """Represent client."""
+
         @staticmethod
         def getInputs(unwrap=True):
+            """Return get inputs."""
             raise RuntimeError("boom")
 
         @staticmethod
         def setOutput(key, value):
+            """Store set output."""
             output_calls.append((key, value))
 
         @staticmethod
         def closeSession():
+            """Handle close session."""
             output_calls.append(("closed", True))
 
     sys.modules["omero"].scripts.client = lambda *args, **kwargs: _Client()

@@ -22,6 +22,7 @@ DEFAULT_REQUEST_TIMEOUT_SECONDS = 120
 
 
 def curl_config_quote(value: str) -> str:
+    """Handle curl config quote."""
     escaped = (
         value.replace("\\", "\\\\")
         .replace('"', '\\"')
@@ -32,6 +33,7 @@ def curl_config_quote(value: str) -> str:
 
 
 def parse_args() -> argparse.Namespace:
+    """Validate parse args."""
     parser = argparse.ArgumentParser(
         description="Summarize GitHub code-scanning or DeepSource findings."
     )
@@ -110,6 +112,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def positive_int(value: str) -> int:
+    """Handle positive int."""
     try:
         parsed = int(value)
     except ValueError:
@@ -120,6 +123,7 @@ def positive_int(value: str) -> int:
 
 
 def add_request_timeout_argument(parser: argparse.ArgumentParser) -> None:
+    """Handle add request timeout argument."""
     parser.add_argument(
         "--request-timeout",
         type=positive_int,
@@ -132,6 +136,7 @@ def add_request_timeout_argument(parser: argparse.ArgumentParser) -> None:
 
 
 def read_token(env_name: str, label: str) -> str:
+    """Return read token."""
     token = os.environ.get(env_name, "").strip()
     if token:
         return token
@@ -175,6 +180,7 @@ def fetch_json(
     service: str,
     timeout_seconds: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
 ) -> Any:
+    """Handle fetch JSON."""
     parsed_url = urllib.parse.urlsplit(url)
     if parsed_url.scheme != "https" or not parsed_url.hostname:
         raise SystemExit(f"{service} request requires an HTTPS URL")
@@ -219,6 +225,7 @@ def fetch_json(
 def latest_github_api_version(
     timeout_seconds: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
 ) -> str:
+    """Handle latest github API version."""
     versions = fetch_json(
         "https://api.github.com/versions",
         headers={
@@ -236,6 +243,7 @@ def latest_github_api_version(
 
 
 def summarize_github_code_scanning(args: argparse.Namespace) -> dict[str, Any]:
+    """Handle summarize github code scanning."""
     owner, repo = parse_github_repository(args.repository)
     repository = f"{owner}/{repo}"
     token = read_token(args.token_env, "GitHub")
@@ -287,6 +295,7 @@ def summarize_github_code_scanning(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def parse_deepsource_repository(repository: str) -> tuple[str, str, str]:
+    """Validate parse deepsource repository."""
     parts = repository.split("/")
     if (
         len(parts) != 3
@@ -301,6 +310,7 @@ def parse_deepsource_repository(repository: str) -> tuple[str, str, str]:
 
 
 def summarize_deepsource(args: argparse.Namespace) -> dict[str, Any]:
+    """Handle summarize deepsource."""
     vcs_provider, login, name = parse_deepsource_repository(args.repository)
     token = read_token(args.token_env, "DeepSource")
     timeout_seconds = getattr(args, "request_timeout", DEFAULT_REQUEST_TIMEOUT_SECONDS)
@@ -355,6 +365,7 @@ def summarize_deepsource(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def summarize_deepsource_issues(args: argparse.Namespace) -> dict[str, Any]:
+    """Handle summarize deepsource issues."""
     vcs_provider, login, name = parse_deepsource_repository(args.repository)
     token = read_token(args.token_env, "DeepSource")
     timeout_seconds = getattr(args, "request_timeout", DEFAULT_REQUEST_TIMEOUT_SECONDS)
@@ -484,6 +495,7 @@ def summarize_deepsource_issues(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Run the command-line entry point."""
     args = parse_args()
     if args.command == "github-code-scanning":
         summary = summarize_github_code_scanning(args)

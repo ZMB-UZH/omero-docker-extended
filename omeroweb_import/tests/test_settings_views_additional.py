@@ -27,10 +27,12 @@ from omeroweb_import.views import (
 
 
 def _payload(response):
+    """Handle payload."""
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_import_view_utils_delegate_and_reject_root_users(monkeypatch):
+    """Verify test import view utils delegate and reject ro behavior."""
     request = RequestFactory().post(
         "/omeroweb_import/settings/save/",
         data=json.dumps({"settings": {"enabled": True}}),
@@ -78,6 +80,7 @@ def test_import_view_utils_delegate_and_reject_root_users(monkeypatch):
 def test_special_method_settings_cover_non_dict_payload_and_unexpected_save_failure(
     monkeypatch,
 ):
+    """Verify test special method settings cover non dict p behavior."""
     request = RequestFactory().post(
         "/omeroweb_import/settings/special/save/",
         data=json.dumps({"method": "sem_edx_spectra", "settings": {"enabled": True}}),
@@ -113,6 +116,7 @@ def test_special_method_settings_cover_non_dict_payload_and_unexpected_save_fail
 def test_special_method_load_settings_covers_method_username_and_unexpected_errors(
     monkeypatch,
 ):
+    """Verify test special method load settings covers meth behavior."""
     monkeypatch.setattr(
         import_view_utils,
         "current_username",
@@ -154,6 +158,7 @@ def test_special_method_load_settings_covers_method_username_and_unexpected_erro
 
 
 def test_user_settings_view_returns_generic_error_on_unexpected_failure(monkeypatch):
+    """Verify test user settings view returns generic error behavior."""
     request = RequestFactory().post(
         "/omeroweb_import/settings/save/",
         data=json.dumps({"settings": {"chunk_size": 3}}),

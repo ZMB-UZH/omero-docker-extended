@@ -29,76 +29,99 @@ from omero_web_zarr import views
 
 
 def _response_text(response) -> str:
+    """Handle response text."""
     return b"".join(response.streaming_content).decode("utf-8")
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self.val = value
 
 
 class _ExternalInfo:
+    """Represent external info."""
+
     def __init__(self, lsid):
         self.lsid = _Value(lsid)
 
 
 class _Details:
+    """Represent details."""
+
     def __init__(self, lsid):
         self.externalInfo = _ExternalInfo(lsid)
 
 
 class _FakeImage:
+    """Test double for fake image."""
+
     def __init__(self, lsid, image_id=1, name="store-backed"):
         self._details = _Details(lsid)
         self.id = image_id
         self._name = name
 
     def getDetails(self):
+        """Return get details."""
         return self._details
 
     def getName(self):
+        """Return get name."""
         return self._name
 
     @staticmethod
     def getPixelSizeX(units=True):
+        """Return get pixel size x."""
         return None
 
     @staticmethod
     def getPixelSizeY(units=True):
+        """Return get pixel size y."""
         return None
 
     @staticmethod
     def getPixelSizeZ(units=True):
+        """Return get pixel size z."""
         return None
 
 
 class _FakeChunkImage:
+    """Test double for fake chunk image."""
+
     @staticmethod
     def requiresPixelsPyramid():
+        """Handle requires pixels pyramid."""
         return False
 
     @staticmethod
     def getSizeT():
+        """Return get size t."""
         return 1
 
     @staticmethod
     def getSizeC():
+        """Return get size c."""
         return 1
 
     @staticmethod
     def getSizeZ():
+        """Return get size z."""
         return 1
 
     @staticmethod
     def getSizeY():
+        """Return get size y."""
         return 512
 
     @staticmethod
     def getSizeX():
+        """Return get size x."""
         return 1024
 
 
 def _write_store(root):
+    """Handle write store."""
     root.mkdir(parents=True, exist_ok=True)
     (root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
     (root / ".zattrs").write_text(
@@ -116,6 +139,7 @@ def _write_store(root):
 
 
 def test_store_backed_json_response_returns_canonical_metadata(tmp_path):
+    """Verify test store backed JSON response returns canon behavior."""
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()))
 
@@ -128,6 +152,7 @@ def test_store_backed_json_response_returns_canonical_metadata(tmp_path):
 
 
 def test_store_backed_json_response_skips_non_v04_requests(tmp_path):
+    """Verify test store backed JSON response skips non v04 behavior."""
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()))
 
@@ -135,6 +160,7 @@ def test_store_backed_json_response_skips_non_v04_requests(tmp_path):
 
 
 def test_store_backed_chunk_response_returns_exact_chunk_bytes(tmp_path):
+    """Verify test store backed chunk response returns exac behavior."""
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()))
 
@@ -146,6 +172,7 @@ def test_store_backed_chunk_response_returns_exact_chunk_bytes(tmp_path):
 
 
 def test_store_backed_response_supports_non_numeric_dataset_paths(tmp_path):
+    """Verify test store backed response supports non numer behavior."""
     _write_store(tmp_path)
     (tmp_path / "s0").mkdir()
     (tmp_path / "s0" / ".zarray").write_text(
@@ -163,10 +190,12 @@ def test_store_backed_response_supports_non_numeric_dataset_paths(tmp_path):
 def test_build_store_backed_preview_context_points_to_omero_zarr_endpoints(
     tmp_path, monkeypatch
 ):
+    """Verify test build store backed preview context point behavior."""
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=502, name="10150")
 
     def fake_reverse(name, args=None, kwargs=None):
+        """Handle fake reverse."""
         if name == "omero_web_zarr_index":
             return "/zarr/"
         if name == "render_thumbnail":
@@ -192,6 +221,7 @@ def test_build_store_backed_preview_context_points_to_omero_zarr_endpoints(
 def test_preview_image_zattrs_preserves_store_backed_raw_multiscales(
     tmp_path, monkeypatch
 ):
+    """Verify test preview image zattrs preserves store bac behavior."""
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=12, name="pyramid.zarr")
     request = RequestFactory().get("/zarr/v0.4/preview/image/12.zarr/.zattrs")
@@ -235,21 +265,26 @@ def test_preview_image_zattrs_preserves_store_backed_raw_multiscales(
 
 
 def test_get_chunk_shape_preserves_yx_order_for_non_pyramid_images():
+    """Verify test get chunk shape preserves yx order for n behavior."""
     assert views.get_chunk_shape(_FakeChunkImage()) == [512, 1024]
 
 
 class _FakeConn:
+    """Test double for fake conn."""
+
     def __init__(self, image):
         self._image = image
         self.c = None
 
     def getObject(self, object_type, iid):
+        """Return get object."""
         assert object_type == "Image"
         assert iid == self._image.id
         return self._image
 
 
 def test_preview_image_zarray_delegates_to_raw_endpoint(monkeypatch):
+    """Verify test preview image zarray delegates to raw en behavior."""
     image = _FakeImage("/managed/demo.ome.zarr", image_id=43, name="managed.ome.zarr")
     request = RequestFactory().get("/zarr/v0.4/preview/image/43.zarr/0/.zarray")
     sentinel = HttpResponse('{"zarr_format": 2}', content_type="application/json")
@@ -257,6 +292,7 @@ def test_preview_image_zarray_delegates_to_raw_endpoint(monkeypatch):
     conn = _FakeConn(image)
 
     def fake_image_zarray(request, iid, level, conn=None, **kwargs):
+        """Handle fake image zarray."""
         captured["call"] = (request, iid, level, conn, kwargs)
         return sentinel
 
@@ -269,6 +305,7 @@ def test_preview_image_zarray_delegates_to_raw_endpoint(monkeypatch):
 
 
 def test_preview_image_chunk_delegates_to_raw_endpoint(monkeypatch):
+    """Verify test preview image chunk delegates to raw end behavior."""
     image = _FakeImage("/managed/demo.ome.zarr", image_id=44, name="managed.ome.zarr")
     request = RequestFactory().get("/zarr/v0.4/preview/image/44.zarr/0/0/0/0/0")
     sentinel = HttpResponse(b"store-chunk", content_type="application/octet-stream")
@@ -276,6 +313,7 @@ def test_preview_image_chunk_delegates_to_raw_endpoint(monkeypatch):
     conn = _FakeConn(image)
 
     def fake_image_chunk(request, iid, level, chunk, conn=None, **kwargs):
+        """Handle fake image chunk."""
         captured["call"] = (request, iid, level, chunk, conn, kwargs)
         return sentinel
 
@@ -290,6 +328,7 @@ def test_preview_image_chunk_delegates_to_raw_endpoint(monkeypatch):
 
 
 def test_preview_image_store_path_delegates_to_raw_endpoint(monkeypatch):
+    """Verify test preview image store path delegates to ra behavior."""
     image = _FakeImage("/managed/demo.ome.zarr", image_id=45, name="managed.ome.zarr")
     request = RequestFactory().get("/zarr/v0.4/preview/image/45.zarr/s1/.zarray")
     sentinel = HttpResponse('{"zarr_format": 2}', content_type="application/json")
@@ -297,6 +336,7 @@ def test_preview_image_store_path_delegates_to_raw_endpoint(monkeypatch):
     conn = _FakeConn(image)
 
     def fake_image_store_path(request, iid, version, store_path, conn=None, **kwargs):
+        """Handle fake image store path."""
         captured["call"] = (request, iid, version, store_path, conn, kwargs)
         return sentinel
 
@@ -314,6 +354,7 @@ def test_preview_image_store_path_delegates_to_raw_endpoint(monkeypatch):
 
 
 def test_download_store_metadata_returns_json_manifest(tmp_path):
+    """Verify test download store metadata returns JSON man behavior."""
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=7, name="demo.zarr")
     request = RequestFactory().get("/zarr/download/image/7/metadata/")
@@ -332,6 +373,7 @@ def test_download_store_metadata_returns_json_manifest(tmp_path):
 
 
 def test_download_store_original_returns_zip_file(tmp_path):
+    """Verify test download store original returns zip file."""
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=8, name="demo.zarr")
     request = RequestFactory().get("/zarr/download/image/8/original/")
@@ -353,6 +395,7 @@ def test_download_store_original_returns_zip_file(tmp_path):
 
 
 def test_download_store_ome_tiff_returns_ome_tiff_file(tmp_path, monkeypatch):
+    """Verify test download store ome tiff returns ome tiff behavior."""
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=9, name="demo.zarr")
     request = RequestFactory().get("/zarr/download/image/9/ome-tiff/")
@@ -395,6 +438,7 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
     tmp_path,
     monkeypatch,
 ):
+    """Verify test download store ome tiff cleans up temp f behavior."""
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=10, name="broken.zarr")
     request = RequestFactory().get("/zarr/download/image/10/ome-tiff/")
@@ -416,15 +460,20 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
     target_path = tmp_path / "broken-output.ome.tif"
 
     class _NamedTempFile:
+        """Represent named temp file."""
+
         def __init__(self, path):
             self.name = str(path)
             path.write_bytes(b"temp")
 
         @staticmethod
         def close():
+            """Handle close."""
             return None
 
     class _FailingWriter:
+        """Represent failing writer."""
+
         def __init__(self, *_args, **_kwargs):
             return None
 
@@ -436,6 +485,7 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
 
         @staticmethod
         def write(*_args, **_kwargs):
+            """Store write."""
             raise RuntimeError("writer failed")
 
     monkeypatch.setattr(
@@ -454,11 +504,16 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
 
 
 def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
+    """Verify test apps serves base injected shell and redi behavior."""
+
     class _FakeResponse:
+        """Test double for fake response."""
+
         text = "<html><head></head><body>vizarr</body></html>"
 
         @staticmethod
         def raise_for_status():
+            """Handle raise for status."""
             return None
 
     views._fetch_remote_app_shell.cache_clear()
@@ -487,6 +542,7 @@ def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
 
 
 def test_inject_launcher_head_replaces_existing_base_tag():
+    """Verify test inject launcher head replaces existing b behavior."""
     html = '<html><head><base href="https://stale.example/"></head><body>validator</body></html>'
 
     updated = views._inject_launcher_head(
@@ -500,6 +556,7 @@ def test_inject_launcher_head_replaces_existing_base_tag():
 
 
 def test_build_app_launch_url_quotes_root_relative_source(monkeypatch):
+    """Verify test build app launch URL quotes root relativ behavior."""
     monkeypatch.setattr(
         views,
         "reverse",
@@ -514,6 +571,7 @@ def test_build_app_launch_url_quotes_root_relative_source(monkeypatch):
 def test_store_backed_views_cover_missing_paths_and_preview_routes(
     tmp_path, monkeypatch
 ):
+    """Verify test store backed views cover missing paths a behavior."""
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=13, name="demo.zarr")
 
@@ -562,6 +620,7 @@ def test_store_backed_views_cover_missing_paths_and_preview_routes(
 def test_image_preview_and_download_views_cover_missing_store_backed_images(
     tmp_path, monkeypatch
 ):
+    """Verify test image preview and download views cover m behavior."""
     request = RequestFactory().get("/zarr/preview/image/14/")
     missing_conn = SimpleNamespace(getObject=lambda object_type, iid: None)
     with pytest.raises(Http404):
@@ -629,6 +688,7 @@ def test_image_preview_and_download_views_cover_missing_store_backed_images(
 
 
 def test_app_shell_helpers_cover_empty_paths_cache_fetch_and_invalid_apps(monkeypatch):
+    """Verify test app shell helpers cover empty paths cach behavior."""
     assert views._sanitize_app_asset_path("") == ""
     injected = views._inject_launcher_head(
         "validator",
@@ -641,10 +701,13 @@ def test_app_shell_helpers_cover_empty_paths_cache_fetch_and_invalid_apps(monkey
     events = []
 
     class _FakeShellResponse:
+        """Test double for fake shell response."""
+
         text = "<html>validator</html>"
 
         @staticmethod
         def raise_for_status():
+            """Handle raise for status."""
             events.append("raise_for_status")
 
     views._fetch_remote_app_shell.cache_clear()

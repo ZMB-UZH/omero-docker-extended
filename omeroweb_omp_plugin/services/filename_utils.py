@@ -1,6 +1,4 @@
-"""
-Filename parsing utilities with intelligent label-value pair detection.
-"""
+"""Filename parsing utilities with intelligent label-value pair detection."""
 
 import re
 from collections import Counter
@@ -139,6 +137,7 @@ def regex_for_separators(separators, filenames=None):
 
 
 def suggest_separator_regex(filenames, allowed_separators=None):
+    """Handle suggest separator regex."""
     counts: Counter[str] = Counter()
     for name in filenames:
         base = extract_base_name(name)

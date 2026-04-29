@@ -21,11 +21,13 @@ TEST_GITHUB_CREDENTIAL = "-".join(("placeholder", "credential"))
 
 
 def test_pat_push_uses_one_shot_askpass_without_leaking_token(monkeypatch) -> None:
+    """Verify test pat push uses one shot askpass without l behavior."""
     monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
     monkeypatch.setattr(git_push_with_pat.sys.stdin, "isatty", lambda: True)
     captured: dict[str, object] = {}
 
     def fake_run(command, *, env, check):
+        """Handle fake run."""
         captured["command"] = command
         captured["env"] = env
         captured["check"] = check
@@ -80,15 +82,18 @@ def test_pat_push_uses_one_shot_askpass_without_leaking_token(monkeypatch) -> No
 
 
 def test_pat_push_accepts_env_token_without_prompt(monkeypatch) -> None:
+    """Verify test pat push accepts env token without prompt."""
     monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
     prompted = False
 
     def fail_prompt(_prompt):
+        """Handle fail prompt."""
         nonlocal prompted
         prompted = True
         return "wrong"
 
     def fake_run(command, *, env, check):
+        """Handle fake run."""
         password = subprocess.check_output(
             [env["GIT_ASKPASS"], "Password for https://github.com:"],
             env=env,
@@ -110,11 +115,13 @@ def test_pat_push_accepts_env_token_without_prompt(monkeypatch) -> None:
 
 
 def test_pat_push_accepts_explicit_force_with_lease(monkeypatch) -> None:
+    """Verify test pat push accepts explicit force with lease."""
     monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
     captured: dict[str, object] = {}
     expected = "".join(format(value % 16, "x") for value in range(40))
 
     def fake_run(command, *, env, check):
+        """Handle fake run."""
         captured["command"] = command
         return subprocess.CompletedProcess(command, 0)
 
@@ -147,10 +154,12 @@ def test_pat_push_accepts_explicit_force_with_lease(monkeypatch) -> None:
 
 
 def test_pat_push_does_not_write_credential_to_temp_tree(monkeypatch) -> None:
+    """Verify test pat push does not write credential to te behavior."""
     monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
     observed_files: dict[str, str] = {}
 
     def fake_run(command, *, env, check):
+        """Handle fake run."""
         temp_root = Path(env["GIT_ASKPASS"]).parent
         for path in temp_root.iterdir():
             if path.is_file() or path.is_socket():
@@ -182,6 +191,7 @@ def test_pat_push_does_not_write_credential_to_temp_tree(monkeypatch) -> None:
     [("-origin", "main"), ("origin", "-main")],
 )
 def test_pat_push_rejects_option_like_git_arguments(remote, refspec) -> None:
+    """Verify test pat push rejects option like git arguments."""
     args = git_push_with_pat.argparse.Namespace(
         remote=remote,
         refspec=refspec,
@@ -207,6 +217,7 @@ def test_pat_push_rejects_option_like_git_arguments(remote, refspec) -> None:
     ],
 )
 def test_pat_push_rejects_invalid_force_with_lease(force_with_lease) -> None:
+    """Verify test pat push rejects invalid force with lease."""
     args = git_push_with_pat.argparse.Namespace(
         remote="origin",
         refspec="HEAD:main",

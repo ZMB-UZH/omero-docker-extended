@@ -15,6 +15,7 @@ from omeroweb_admin_tools.services.storage_quotas import (
 
 @pytest.fixture(autouse=True)
 def _set_required_quota_env(monkeypatch) -> None:
+    """Handle set required quota env."""
     monkeypatch.setenv(MIN_GROUP_QUOTA_ENV, "0.10")
     monkeypatch.setenv(DEFAULT_GROUP_QUOTA_ENV, "0.10")
     monkeypatch.setenv(AUTO_GROUP_QUOTA_ENV, "false")
@@ -23,6 +24,7 @@ def _set_required_quota_env(monkeypatch) -> None:
 def test_resolve_managed_group_root_uses_fixed_path_when_present(
     tmp_path, monkeypatch
 ) -> None:
+    """Verify test resolve managed group root uses fixed pa behavior."""
     managed_root = tmp_path / "OMERO" / "ManagedRepository"
     managed_root.mkdir(parents=True)
 
@@ -37,6 +39,7 @@ def test_resolve_managed_group_root_uses_fixed_path_when_present(
 def test_resolve_managed_group_root_reports_missing_fixed_path(
     tmp_path, monkeypatch
 ) -> None:
+    """Verify test resolve managed group root reports missi behavior."""
     missing_root = tmp_path / "OMERO" / "ManagedRepository"
 
     monkeypatch.setenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", str(missing_root))
@@ -50,6 +53,7 @@ def test_resolve_managed_group_root_reports_missing_fixed_path(
 def test_resolve_managed_group_root_uses_absolute_server_setting(
     tmp_path, monkeypatch
 ) -> None:
+    """Verify test resolve managed group root uses absolute behavior."""
     managed_root = tmp_path / "OMERO" / "ManagedRepository"
     managed_root.mkdir(parents=True)
 
@@ -64,6 +68,7 @@ def test_resolve_managed_group_root_uses_absolute_server_setting(
 
 
 def test_reconcile_blocks_enforcement_for_unsafe_root(tmp_path, monkeypatch) -> None:
+    """Verify test reconcile blocks enforcement for unsafe behavior."""
     state_path = tmp_path / "quotas.json"
     unsafe_root = tmp_path / "not-omero"
     unsafe_root.mkdir(parents=True)
@@ -87,6 +92,7 @@ def test_reconcile_blocks_enforcement_for_unsafe_root(tmp_path, monkeypatch) -> 
 
 
 def test_reconcile_includes_detection_reason_in_response(tmp_path, monkeypatch) -> None:
+    """Verify test reconcile includes detection reason in r behavior."""
     state_path = tmp_path / "quotas.json"
     safe_root = tmp_path / "safe" / "group-root"
     safe_root.mkdir(parents=True)

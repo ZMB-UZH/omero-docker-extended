@@ -22,6 +22,7 @@ from omero_web_zarr.templatetags import zarr_webclient
 
 
 def test_zarr_module_contracts_cover_ready_routes_and_template_filter(monkeypatch):
+    """Verify test Zarr module contracts cover ready routes behavior."""
     installed = []
     monkeypatch.setattr(
         integration, "install_webgateway_overrides", lambda: installed.append(True)

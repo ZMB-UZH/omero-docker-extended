@@ -11,30 +11,42 @@ TEST_DB_AUTH = "plugin-db-fixture"
 
 
 class _FakeSqlTemplate:
+    """Test double for fake SQL template."""
+
     def __init__(self, query):
         self.query = str(query)
 
     def format(self, *args, **kwargs):
+        """Build format."""
         return self.query
 
 
 class _FakeSqlModule:
+    """Test double for fake SQL module."""
+
     @staticmethod
     def SQL(query):
+        """Handle SQL."""
         return _FakeSqlTemplate(query)
 
     @staticmethod
     def Identifier(name):
+        """Handle identifier."""
         return name
 
 
 class _FakeExtras:
+    """Test double for fake extras."""
+
     @staticmethod
     def Json(payload):
+        """Handle JSON."""
         return {"json": payload}
 
 
 class _FakeCursor:
+    """Test double for fake cursor."""
+
     def __init__(self, *, fetchone=None, fetchall=None, rowcount=0, rowcounts=None):
         self.fetchone_value = fetchone
         self.fetchall_value = fetchall or []
@@ -43,14 +55,17 @@ class _FakeCursor:
         self.executed = []
 
     def execute(self, query, params=None):
+        """Run execute."""
         self.executed.append((str(query), params))
         if self.rowcounts:
             self.rowcount = self.rowcounts.pop(0)
 
     def fetchone(self):
+        """Handle fetchone."""
         return self.fetchone_value
 
     def fetchall(self):
+        """Handle fetchall."""
         return list(self.fetchall_value)
 
     def __enter__(self):
@@ -61,34 +76,42 @@ class _FakeCursor:
 
 
 class _FakeConnection:
+    """Test double for fake connection."""
+
     def __init__(self, cursors):
         self._cursors = list(cursors)
         self.commits = 0
         self.closed = False
 
     def cursor(self):
+        """Handle cursor."""
         if not self._cursors:
             self._cursors.append(_FakeCursor())
         return self._cursors.pop(0)
 
     def commit(self):
+        """Handle commit."""
         self.commits += 1
 
     def close(self):
+        """Handle close."""
         self.closed = True
 
 
 def _patch_connection_queue(monkeypatch, module, connections):
+    """Handle patch connection queue."""
     queue = list(connections)
 
     @contextmanager
     def fake_connect():
+        """Handle fake connect."""
         yield queue.pop(0)
 
     monkeypatch.setattr(module, "_connect", fake_connect)
 
 
 def test_omp_data_store_connection_and_schema_helpers(monkeypatch):
+    """Verify test omp data store connection and schema hel behavior."""
     env_values = {
         omp_data_store.ENV_USER: "plugin-user",
         omp_data_store.ENV_AUTH: TEST_DB_AUTH,
@@ -141,6 +164,7 @@ def test_omp_data_store_connection_and_schema_helpers(monkeypatch):
 
 
 def test_omp_data_store_variable_sets_credentials_and_user_cleanup(monkeypatch):
+    """Verify test omp data store variable sets credentials behavior."""
     monkeypatch.setattr(omp_data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
         omp_data_store,
@@ -192,6 +216,7 @@ def test_omp_data_store_variable_sets_credentials_and_user_cleanup(monkeypatch):
 
 
 def test_omp_data_store_delete_validation_and_table_listing(monkeypatch):
+    """Verify test omp data store delete validation and tab behavior."""
     monkeypatch.setattr(omp_data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(omp_data_store, "_ensure_schema", lambda conn: None)
 

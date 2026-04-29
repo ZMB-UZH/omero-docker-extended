@@ -14,22 +14,29 @@ from omeroweb_omp_plugin.services.omero import (
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self._raw_value = value
 
     def getValue(self):
+        """Return get value."""
         return self._raw_value
 
 
 class _ErrorBody:
+    """Represent error body."""
+
     def __init__(self, payload):
         self._payload = payload
 
     def read(self):
+        """Return read."""
         return self._payload
 
 
 def test_extract_error_details_prefers_nested_messages_and_plaintext():
+    """Verify test extract error details prefers nested mes behavior."""
     nested = _ErrorBody(
         json.dumps({"error": {"message": "staging failed"}}).encode("utf-8")
     )
@@ -43,6 +50,7 @@ def test_extract_error_details_prefers_nested_messages_and_plaintext():
 
 
 def test_core_reexports_follow_live_annotation_service_bindings(monkeypatch):
+    """Verify test core reexports follow live annotation se behavior."""
     monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "secret")
     monkeypatch.setattr(
         annotation_service,
@@ -55,6 +63,7 @@ def test_core_reexports_follow_live_annotation_service_bindings(monkeypatch):
 
 
 def test_filename_helpers_detect_label_value_pairs_and_protect_scientific_hyphens():
+    """Verify test filename helpers detect label value pair behavior."""
     filenames = [
         "experiment-ch-01-pos-02.tif",
         "experiment-ch-02-pos-03.tif",
@@ -80,6 +89,7 @@ def test_filename_helpers_detect_label_value_pairs_and_protect_scientific_hyphen
 
 
 def test_in_memory_cache_expires_entries_and_supports_delete_clear(monkeypatch):
+    """Verify test in memory cache expires entries and supp behavior."""
     current_time = [100.0]
     cache = rate_limit.InMemoryCache()
     monkeypatch.setattr(rate_limit.time, "time", lambda: current_time[0])
@@ -101,18 +111,22 @@ def test_in_memory_cache_expires_entries_and_supports_delete_clear(monkeypatch):
 
 
 def test_rate_limit_uses_shared_counter_and_reports_block_status(monkeypatch):
+    """Verify test rate limit uses shared counter and repor behavior."""
     current_time = [1000.0]
     state = {}
 
     def fake_get(key):
+        """Handle fake get."""
         return state.get(key)
 
     def fake_set(key, value, timeout):
+        """Handle fake set."""
         state[key] = value
         state["timeout"] = timeout
         return True
 
     def fake_delete(key):
+        """Handle fake delete."""
         state.pop(key, None)
         return True
 
@@ -157,6 +171,7 @@ def test_rate_limit_uses_shared_counter_and_reports_block_status(monkeypatch):
 
 
 def test_rate_limit_handles_django_ip_fallbacks_and_cache_failures(monkeypatch):
+    """Verify test rate limit handles django ip fallbacks a behavior."""
     request = SimpleNamespace(
         META={
             "HTTP_X_FORWARDED_FOR": "10.0.0.5, 10.0.0.6",
@@ -190,6 +205,7 @@ def test_rate_limit_handles_django_ip_fallbacks_and_cache_failures(monkeypatch):
     assert status["is_blocked"] is False
 
     def failing_cache(*_args, **_kwargs):
+        """Handle failing cache."""
         raise RuntimeError("cache boom")
 
     monkeypatch.setattr(rate_limit, "_cache_get", failing_cache)
@@ -209,20 +225,27 @@ def test_rate_limit_handles_django_ip_fallbacks_and_cache_failures(monkeypatch):
 
 
 class _FakeParameters:
+    """Test double for fake parameters."""
+
     def __init__(self):
         self.values = {}
 
     def add(self, key, value):
+        """Handle add."""
         self.values[key] = value
 
 
 class _NamedValue:
+    """Represent named value."""
+
     def __init__(self, name, value):
         self.name = _Value(name)
         self.value = _Value(value)
 
 
 class _MapAnnotation:
+    """Represent map annotation."""
+
     def __init__(self, ann_id, mapping, *, ns=MAP_NS):
         self.id = ann_id
         self._mapping = dict(mapping)
@@ -230,16 +253,20 @@ class _MapAnnotation:
         self._obj = self
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self.id)
 
     def getMapValue(self):
+        """Return get map value."""
         return [_NamedValue(key, value) for key, value in self._mapping.items()]
 
     def getNs(self):
+        """Return get ns."""
         return _Value(self._ns)
 
 
 def _plugin_mapping(secret=None, **extra):
+    """Handle plugin mapping."""
     original = annotation_service.get_hash_secret
     try:
         annotation_service.get_hash_secret = lambda: secret
@@ -251,6 +278,7 @@ def _plugin_mapping(secret=None, **extra):
 
 
 def test_annotation_hash_helpers_detect_preloaded_and_database_fallback(monkeypatch):
+    """Verify test annotation hash helpers detect preloaded behavior."""
     monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
     monkeypatch.setattr(annotation_service, "rlong", _Value)
     monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "shared-secret")
@@ -282,6 +310,7 @@ def test_annotation_hash_helpers_detect_preloaded_and_database_fallback(monkeypa
 
 
 def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
+    """Verify test annotation queries and plugin delete mode."""
     monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
     monkeypatch.setattr(annotation_service, "rlong", _Value)
     monkeypatch.setattr(annotation_service, "rstring", _Value)
@@ -297,8 +326,11 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
     deleted_link_ids = set()
 
     class _FakeQueryService:
+        """Test double for fake query service."""
+
         @staticmethod
         def projection(hql, params, service_opts=None):
+            """Handle projection."""
             if "where l.parent.id = :iid and a.ns = :ns" in hql:
                 return [[_Value(1)], [_Value(2)], [_Value(3)]]
             if "join a.mapValue mv" in hql and "where a.id = :aid" in hql:
@@ -323,10 +355,13 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
             raise AssertionError(f"Unexpected HQL: {hql}")
 
     class _FakeUpdateService:
+        """Test double for fake update service."""
+
         def __init__(self):
             self.deleted = []
 
         def deleteObject(self, obj):
+            """Handle delete object."""
             self.deleted.append(obj)
 
     ann1 = _MapAnnotation(1, plugin_mapping)
@@ -375,6 +410,7 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
 
 
 def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch):
+    """Verify test annotation helpers cover tuple pairs and behavior."""
     monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
     monkeypatch.setattr(annotation_service, "rlong", _Value)
     monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "shared-secret")
@@ -402,8 +438,11 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
     deleted_annotation_ids = set()
 
     class _QueryService:
+        """Represent query service."""
+
         @staticmethod
         def projection(hql, params, service_opts=None):
+            """Handle projection."""
             if "where l.child.id = :aid" in hql:
                 aid = params.values["aid"].getValue()
                 return [] if aid in deleted_annotation_ids else [[_Value(401)]]
@@ -415,10 +454,13 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
             raise AssertionError(f"Unexpected HQL: {hql}")
 
     class _UpdateService:
+        """Represent update service."""
+
         def __init__(self):
             self.deleted = []
 
         def deleteObject(self, obj):
+            """Handle delete object."""
             self.deleted.append(obj)
 
     ann = _MapAnnotation(7, {"alpha": "1"})
@@ -460,6 +502,7 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
 
 
 def test_annotation_query_helpers_cover_invalid_inputs_and_legacy_controls(monkeypatch):
+    """Verify test annotation query helpers cover invalid i behavior."""
     monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
     monkeypatch.setattr(annotation_service, "rlong", _Value)
     monkeypatch.setattr(annotation_service, "rstring", _Value)
@@ -480,8 +523,11 @@ def test_annotation_query_helpers_cover_invalid_inputs_and_legacy_controls(monke
     invalid_marker_ann = _MapAnnotation(10, {"alpha": "1", HASH_KEY: "not-plugin"})
 
     class _QueryService:
+        """Represent query service."""
+
         @staticmethod
         def projection(hql, params, service_opts=None):
+            """Handle projection."""
             if "where l.parent.id = :iid and a.ns = :ns" in hql:
                 return [[_Value(4)], [_Value(5)]]
             if "join a.mapValue mv" in hql and "where a.id = :aid" in hql:
@@ -511,6 +557,7 @@ def test_annotation_query_helpers_cover_invalid_inputs_and_legacy_controls(monke
 def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annotations(
     monkeypatch,
 ):
+    """Verify test annotation delete paths cover keep mode behavior."""
     monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
     monkeypatch.setattr(annotation_service, "rlong", _Value)
     monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "shared-secret")
@@ -533,8 +580,11 @@ def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annota
     deleted = []
 
     class _QueryService:
+        """Represent query service."""
+
         @staticmethod
         def projection(hql, params, service_opts=None):
+            """Handle projection."""
             if "where l.child.id = :aid" in hql:
                 aid = params.values["aid"].getValue()
                 return [[_Value(link_id)] for link_id in lingering_links.get(aid, [])]
@@ -543,8 +593,11 @@ def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annota
             raise AssertionError(f"Unexpected HQL: {hql}")
 
     class _UpdateService:
+        """Represent update service."""
+
         @staticmethod
         def deleteObject(obj):
+            """Handle delete object."""
             deleted.append(obj)
 
     conn = SimpleNamespace(
@@ -576,6 +629,8 @@ def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annota
 
 
 class _FakeOriginalFile:
+    """Test double for fake original file."""
+
     def __init__(self):
         self._id = _Value(501)
         self.name = None
@@ -584,52 +639,69 @@ class _FakeOriginalFile:
         self.mimetype = None
 
     def setName(self, value):
+        """Store set name."""
         self.name = value
 
     def setPath(self, value):
+        """Store set path."""
         self.path = value
 
     def setSize(self, value):
+        """Store set size."""
         self.size = value
 
     def setMimetype(self, value):
+        """Store set mimetype."""
         self.mimetype = value
 
     def getId(self):
+        """Return get identifier."""
         return self._id
 
 
 class _FakeFileAnnotation:
+    """Test double for fake file annotation."""
+
     def __init__(self):
         self.ns = None
         self.file = None
 
     def setNs(self, value):
+        """Store set ns."""
         self.ns = value
 
     def setFile(self, value):
+        """Store set file."""
         self.file = value
 
 
 class _FakeImageAnnotationLink:
+    """Test double for fake image annotation link."""
+
     def __init__(self):
         self.parent = None
         self.child = None
 
     def setParent(self, value):
+        """Store set parent."""
         self.parent = value
 
     def setChild(self, value):
+        """Store set child."""
         self.child = value
 
 
 class _FakeImageRef:
+    """Test double for fake image ref."""
+
     def __init__(self, image_id, loaded):
         self.image_id = image_id
         self.loaded = loaded
 
 
 class _FakeRawFileStore:
+    """Test double for fake raw file store."""
+
     def __init__(self):
         self.file_id = None
         self.buffer = b""
@@ -637,28 +709,37 @@ class _FakeRawFileStore:
         self.closed = False
 
     def setFileId(self, value):
+        """Store set file identifier."""
         self.file_id = value
 
     def write(self, data, offset, length):
+        """Store write."""
         self.buffer = data[offset : offset + length]
 
     def save(self):
+        """Store save."""
         self.saved = True
 
     def close(self):
+        """Handle close."""
         self.closed = True
 
 
 class _FakeUpdateServiceForMetadata:
+    """Test double for fake update service for metadata."""
+
     def __init__(self):
         self.saved = []
 
     def saveAndReturnObject(self, obj):
+        """Store save and return object."""
         self.saved.append(obj)
         return obj
 
 
 class _FakeImageForMetadata:
+    """Test double for fake image for metadata."""
+
     def __init__(self, raw_store):
         self._raw_store = raw_store
         self._update = _FakeUpdateServiceForMetadata()
@@ -670,14 +751,17 @@ class _FakeImageForMetadata:
 
     @staticmethod
     def getId():
+        """Return get identifier."""
         return 99
 
     @staticmethod
     def getAcquisitionDate():
+        """Return get acquisition date."""
         return _Value("2026-03-20T09:10:11")
 
     @staticmethod
     def getObjectiveSettings():
+        """Return get objective settings."""
         return SimpleNamespace(
             getID=lambda: _Value(7),
             getCorrectionCollar=lambda: _Value(0.17),
@@ -685,6 +769,7 @@ class _FakeImageForMetadata:
 
     @staticmethod
     def getChannels():
+        """Return get channels."""
         return [
             SimpleNamespace(
                 getIndex=lambda: 0,
@@ -696,6 +781,7 @@ class _FakeImageForMetadata:
 
     @staticmethod
     def getDetectorSettings():
+        """Return get detector settings."""
         return [
             SimpleNamespace(
                 getID=lambda: _Value(3),
@@ -706,6 +792,7 @@ class _FakeImageForMetadata:
 
     @staticmethod
     def loadOriginalMetadata():
+        """Return load original metadata."""
         return (
             1,
             [("Exposure", "100ms"), ("LongNote", "X" * 260)],
@@ -716,6 +803,7 @@ class _FakeImageForMetadata:
 def test_extract_acquisition_metadata_collects_searchable_fields_and_attaches_long_values(
     monkeypatch,
 ):
+    """Verify test extract acquisition metadata collects se behavior."""
     raw_store = _FakeRawFileStore()
     image = _FakeImageForMetadata(raw_store)
 
@@ -748,22 +836,31 @@ def test_extract_acquisition_metadata_collects_searchable_fields_and_attaches_lo
 def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
     monkeypatch,
 ):
+    """Verify test image collection helpers cover fetch fal behavior."""
+
     class _Image:
+        """Represent image."""
+
         def __init__(self, image_id, name, fileset=None):
             self.id = image_id
             self._name = name
             self._fileset = fileset
 
         def getId(self):
+            """Return get identifier."""
             return _Value(self.id)
 
         def getName(self):
+            """Return get name."""
             return _Value(self._name)
 
         def getFileset(self):
+            """Return get fileset."""
             return self._fileset
 
     class _Dataset:
+        """Represent dataset."""
+
         def __init__(self, dataset_id, name, images, owner_id=7):
             self.id = dataset_id
             self.owner_id = owner_id
@@ -771,44 +868,60 @@ def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
             self._images = list(images)
 
         def getId(self):
+            """Return get identifier."""
             return _Value(self.id)
 
         def getName(self):
+            """Return get name."""
             return _Value(self._name)
 
         def listChildren(self):
+            """Return list children."""
             return list(self._images)
 
     class _Project:
+        """Represent project."""
+
         def __init__(self, datasets):
             self._datasets = list(datasets)
 
         def listChildren(self):
+            """Return list children."""
             return list(self._datasets)
 
     class _OriginalFile:
+        """Represent original file."""
+
         def __init__(self, *, fmt=None, name=None):
             self._fmt = fmt
             self._name = name
 
         def getFormat(self):
+            """Return get format."""
             return _Value(self._fmt) if self._fmt is not None else None
 
         def getName(self):
+            """Return get name."""
             return _Value(self._name)
 
     class _UsedFile:
+        """Represent used file."""
+
         def __init__(self, original_file):
             self._original_file = original_file
 
         def getOriginalFile(self):
+            """Return get original file."""
             return self._original_file
 
     class _Fileset:
+        """Represent fileset."""
+
         def __init__(self, used_files):
             self._used_files = list(used_files)
 
         def copyUsedFiles(self):
+            """Handle copy used files."""
             return list(self._used_files)
 
     monkeypatch.setattr(
@@ -838,8 +951,11 @@ def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
     fetched = {1: image_one, 2: image_two}
 
     class _FetchConn:
+        """Represent fetch conn."""
+
         @staticmethod
         def getObjects(object_type, ids=None, obj_ids=None):
+            """Return get objects."""
             assert object_type == "Image"
             if ids is not None:
                 raise TypeError("legacy backend")
@@ -847,6 +963,7 @@ def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
 
         @staticmethod
         def getObject(object_type, image_id):
+            """Return get object."""
             assert object_type == "Image"
             return fetched.get(image_id)
 
@@ -907,7 +1024,11 @@ def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
 
 
 def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures():
+    """Verify test extract acquisition metadata handles dir behavior."""
+
     class _ImageWithFallbacks:
+        """Represent image with fallbacks."""
+
         def __init__(self):
             self._raw_store = _FakeRawFileStore()
             self._update = _FakeUpdateServiceForMetadata()
@@ -921,14 +1042,17 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
         @staticmethod
         def getId():
+            """Return get identifier."""
             return 101
 
         @staticmethod
         def getAcquisitionDate():
+            """Return get acquisition date."""
             return "2026-03-21T10:11:12"
 
         @staticmethod
         def getObjectiveSettings():
+            """Return get objective settings."""
             return SimpleNamespace(
                 getID=lambda: "OBJ-7",
                 getCorrectionCollar=lambda: 0.20,
@@ -936,6 +1060,7 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
         @staticmethod
         def getChannels():
+            """Return get channels."""
             return [
                 SimpleNamespace(
                     getIndex=lambda: (_ for _ in ()).throw(RuntimeError("no index")),
@@ -955,6 +1080,7 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
         @staticmethod
         def getDetectorSettings():
+            """Return get detector settings."""
             return [
                 SimpleNamespace(
                     getID=lambda: (_ for _ in ()).throw(
@@ -967,6 +1093,7 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
         @staticmethod
         def loadOriginalMetadata():
+            """Return load original metadata."""
             return (
                 1,
                 [("Exposure", 100), ("OnlyKey",), None],
@@ -990,76 +1117,102 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
 
 def test_extract_acquisition_metadata_returns_empty_when_sections_raise():
+    """Verify test extract acquisition metadata returns emp behavior."""
+
     class _BrokenImage:
+        """Represent broken image."""
+
         @staticmethod
         def getId():
+            """Return get identifier."""
             return 202
 
         @staticmethod
         def getAcquisitionDate():
+            """Return get acquisition date."""
             raise RuntimeError("date failed")
 
         @staticmethod
         def getObjectiveSettings():
+            """Return get objective settings."""
             raise RuntimeError("objective failed")
 
         @staticmethod
         def getChannels():
+            """Return get channels."""
             raise RuntimeError("channels failed")
 
         @staticmethod
         def getDetectorSettings():
+            """Return get detector settings."""
             raise RuntimeError("detectors failed")
 
         @staticmethod
         def loadOriginalMetadata():
+            """Return load original metadata."""
             raise RuntimeError("metadata failed")
 
     assert metadata_service.extract_acquisition_metadata(_BrokenImage()) == {}
 
 
 class _FakeOriginalFileRef:
+    """Test double for fake original file ref."""
+
     def __init__(self, name, fmt):
         self._name = name
         self._fmt = fmt
 
     def getFormat(self):
+        """Return get format."""
         return _Value(self._fmt) if self._fmt is not None else None
 
     def getName(self):
+        """Return get name."""
         return _Value(self._name)
 
 
 class _FakeUsedFile:
+    """Test double for fake used file."""
+
     def __init__(self, original_file):
         self._original_file = original_file
 
     def getOriginalFile(self):
+        """Return get original file."""
         return self._original_file
 
 
 class _FakeFileset:
+    """Test double for fake fileset."""
+
     def __init__(self, used_files):
         self._used_files = used_files
 
     def copyUsedFiles(self):
+        """Handle copy used files."""
         return list(self._used_files)
 
 
 class _FakeImage:
+    """Test double for fake image."""
+
     def __init__(self, image_id, name, fileset=None):
         self.id = image_id
         self._name = name
         self._fileset = fileset
 
     def getFileset(self):
+        """Return get fileset."""
         return self._fileset
 
     def getName(self):
+        """Return get name."""
         return _Value(self._name)
 
 
 class _FakeDataset:
+    """Test double for fake dataset."""
+
     def __init__(self, dataset_id, name, owner_id, images):
         self.id = dataset_id
         self.owner_id = owner_id
@@ -1067,21 +1220,27 @@ class _FakeDataset:
         self._images = list(images)
 
     def listChildren(self):
+        """Return list children."""
         return list(self._images)
 
     def getName(self):
+        """Return get name."""
         return _Value(self._name)
 
 
 class _FakeProject:
+    """Test double for fake project."""
+
     def __init__(self, datasets):
         self._datasets = list(datasets)
 
     def listChildren(self):
+        """Return list children."""
         return list(self._datasets)
 
 
 def test_image_service_collectors_and_format_detection(monkeypatch):
+    """Verify test image service collectors and format dete behavior."""
     monkeypatch.setattr(image_service, "get_id", lambda obj: getattr(obj, "id", None))
     monkeypatch.setattr(
         image_service,
@@ -1113,8 +1272,11 @@ def test_image_service_collectors_and_format_detection(monkeypatch):
     project = _FakeProject([ds1, ds2, ds_other_owner])
 
     class _FakeConn:
+        """Test double for fake conn."""
+
         @staticmethod
         def getObjects(kind, ids=None, obj_ids=None):
+            """Return get objects."""
             if ids is not None:
                 raise TypeError("legacy gateway")
             if obj_ids is not None:
@@ -1123,6 +1285,7 @@ def test_image_service_collectors_and_format_detection(monkeypatch):
 
         @staticmethod
         def getObject(kind, object_id):
+            """Return get object."""
             if kind == "Project":
                 return project if object_id == 77 else None
             return images.get(object_id)

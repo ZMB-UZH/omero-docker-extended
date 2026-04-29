@@ -5,11 +5,15 @@ from pathlib import Path
 
 
 class OmeroWebLogoFallbackContractTests(unittest.TestCase):
+    """Test cases for OMERO web logo fallback contract tests."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def test_omeroweb_dockerfile_copies_logo_fallback_writer(self) -> None:
+        """Verify test omeroweb dockerfile copies logo fallback behavior."""
         dockerfile_text = (
             self.repo_root / "docker" / "omero-web.Dockerfile"
         ).read_text(encoding="utf-8")
@@ -19,6 +23,7 @@ class OmeroWebLogoFallbackContractTests(unittest.TestCase):
         )
 
     def test_web_bootstrap_uses_logo_fallback_writer_path(self) -> None:
+        """Verify test web bootstrap uses logo fallback writer behavior."""
         bootstrap_text = (self.repo_root / "startup" / "10-web-bootstrap.sh").read_text(
             encoding="utf-8"
         )

@@ -15,10 +15,12 @@ from omeroweb_omp_plugin.views import help_view, user_settings_view
 
 
 def _json_payload(response):
+    """Handle JSON payload."""
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_http_utils_cover_response_and_stream_fallback_paths():
+    """Verify test HTTP utils cover response and stream fal behavior."""
     nested_response = SimpleNamespace(
         json=lambda: {"message": {"message": "nested detail"}},
         text="ignored",
@@ -37,8 +39,11 @@ def test_http_utils_cover_response_and_stream_fallback_paths():
     )
 
     class _UnreadableBody:
+        """Represent unreadable body."""
+
         @staticmethod
         def read():
+            """Return read."""
             raise RuntimeError("unreadable")
 
     assert http_utils.extract_error_details(
@@ -53,6 +58,7 @@ def test_http_utils_cover_response_and_stream_fallback_paths():
 def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
     monkeypatch,
 ):
+    """Verify test core wrapper and filename parser paths f behavior."""
     monkeypatch.setattr(
         annotation_service,
         "canonicalize_mapping",
@@ -139,9 +145,11 @@ def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
 def test_core_delete_existing_annotations_supports_runtime_positional_signature(
     monkeypatch,
 ):
+    """Verify test core delete existing annotations support behavior."""
     captured = {}
 
     def fake_delete(conn, update, img, var_names, mode):
+        """Handle fake delete."""
         captured["args"] = (conn, update, img, var_names, mode)
         return (1, 2, 3)
 
@@ -162,31 +170,44 @@ def test_core_delete_existing_annotations_supports_runtime_positional_signature(
 def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
     monkeypatch,
 ):
+    """Verify test core delete existing annotations falls b behavior."""
     deleted = []
 
     class _Stub:
+        """Test double for stub."""
+
         def setId(self, value):
+            """Store set identifier."""
             self.id = value
 
     class _Update:
+        """Represent update."""
+
         @staticmethod
         def deleteObject(obj):
+            """Handle delete object."""
             deleted.append(obj.id)
 
     class _Conn:
+        """Represent conn."""
+
         @staticmethod
         def getObject(*_args):
+            """Return get object."""
             return None
 
         @staticmethod
         def getUpdateService():
+            """Return get update service."""
             return _Update()
 
         @staticmethod
         def deleteObjects(kind, object_ids, wait=True):
+            """Handle delete objects."""
             deleted.extend((kind, object_id, wait) for object_id in object_ids)
 
     def fake_delete(conn, update, img, var_names, mode):
+        """Handle fake delete."""
         raise AssertionError("legacy id-based fallback should handle this path")
 
     monkeypatch.setattr(annotation_service, "delete_existing_annotations", fake_delete)
@@ -218,6 +239,7 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
 def test_help_page_and_user_settings_views_cover_success_and_error_paths(
     monkeypatch,
 ):
+    """Verify test help page and user settings views cover behavior."""
     factory = RequestFactory()
 
     response = inspect.unwrap(help_view.help_page)(factory.get("/help"))
@@ -311,6 +333,7 @@ def test_help_page_and_user_settings_views_cover_success_and_error_paths(
 def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
     monkeypatch,
 ):
+    """Verify test core delete helpers cover signature and behavior."""
     monkeypatch.setattr(
         core.inspect,
         "signature",
@@ -327,27 +350,38 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
     deleted = []
 
     class _Stub:
+        """Test double for stub."""
+
         def setId(self, value):
+            """Store set identifier."""
             self.id = value
 
     class _Update:
+        """Represent update."""
+
         @staticmethod
         def deleteObject(obj):
+            """Handle delete object."""
             deleted.append(obj)
 
     class _Conn:
+        """Represent conn."""
+
         @staticmethod
         def getObject(object_type, object_id):
+            """Return get object."""
             if object_type == "ImageAnnotationLink":
                 raise RuntimeError("lookup failed")
             return SimpleNamespace(_obj=("annotation", object_id))
 
         @staticmethod
         def getUpdateService():
+            """Return get update service."""
             return _Update()
 
         @staticmethod
         def deleteObjects(kind, object_ids, wait=True):
+            """Handle delete objects."""
             deleted.extend((kind, object_id, wait) for object_id in object_ids)
 
     monkeypatch.setattr(core, "MapAnnotationI", _Stub)
@@ -367,8 +401,11 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
     assert deleted[1] == ("Annotation", 7, True)
 
     class _ConnWithLoadedLink:
+        """Represent conn with loaded link."""
+
         @staticmethod
         def getObject(object_type, object_id):
+            """Return get object."""
             assert object_type == "ImageAnnotationLink"
             return SimpleNamespace(_obj=("loaded-link", object_id))
 

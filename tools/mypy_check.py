@@ -16,7 +16,6 @@ EXCLUDED_TOP_LEVEL_DIRS: frozenset[str] = frozenset({"docs", "tests", "third_par
 
 def resolve_required_executable(name: str) -> str:
     """Resolve an executable name to an absolute path."""
-
     resolved = shutil.which(name)
     if not resolved:
         raise RuntimeError(f"Required executable `{name}` is not available in PATH.")
@@ -25,7 +24,6 @@ def resolve_required_executable(name: str) -> str:
 
 def is_mypy_target(relative_path: PurePosixPath) -> bool:
     """Return True when a tracked Python file belongs to the production scope."""
-
     if relative_path.suffix != ".py":
         return False
 
@@ -48,6 +46,7 @@ def is_mypy_target(relative_path: PurePosixPath) -> bool:
 
 
 def _run_git(repo_root: Path, *args: str) -> str:
+    """Handle run git."""
     safe_repo_root = str(repo_root.resolve())
     completed = subprocess.run(
         [
@@ -66,7 +65,6 @@ def _run_git(repo_root: Path, *args: str) -> str:
 
 def list_mypy_targets(repo_root: Path) -> list[str]:
     """List tracked Python files that belong to the Mypy production scope."""
-
     tracked_files = _run_git(repo_root, "ls-files", "--", TRACKED_PYTHON_PATHSPEC)
     targets = [
         relative_path
@@ -80,7 +78,6 @@ def list_mypy_targets(repo_root: Path) -> list[str]:
 
 def build_mypy_command(paths: list[str], *, config_file: str) -> list[str]:
     """Build the Mypy command for the given tracked paths."""
-
     return [
         sys.executable,
         "-m",
@@ -93,13 +90,13 @@ def build_mypy_command(paths: list[str], *, config_file: str) -> list[str]:
 
 def run_mypy(repo_root: Path, paths: list[str], *, config_file: str) -> int:
     """Run Mypy from the repository root."""
-
     command = build_mypy_command(paths, config_file=config_file)
     completed = subprocess.run(command, cwd=repo_root, check=False)
     return completed.returncode
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build build parser."""
     parser = argparse.ArgumentParser(
         description="Run Mypy against tracked production Python files only."
     )
@@ -122,6 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the command-line entry point."""
     args = build_parser().parse_args(argv)
     repo_root = Path(args.repo_root).resolve()
     targets = list_mypy_targets(repo_root)

@@ -32,104 +32,137 @@ from omero_web_zarr import views
 
 
 def _response_text(response) -> str:
+    """Handle response text."""
     return b"".join(response.streaming_content).decode("utf-8")
 
 
 class _FakeLength:
+    """Test double for fake length."""
+
     def __init__(self, value, symbol):
         self._value = value
         self._symbol = symbol
 
     def getValue(self):
+        """Return get value."""
         return self._value
 
     def getSymbol(self):
+        """Return get symbol."""
         return self._symbol
 
     def getUnit(self):
+        """Return get unit."""
         return self._symbol
 
 
 class _FakePixelsType:
+    """Test double for fake pixels type."""
+
     def __init__(self, value):
         self._value = value
 
     def getValue(self):
+        """Return get value."""
         return self._value
 
 
 class _FakePrimaryPixels:
+    """Test double for fake primary pixels."""
+
     def __init__(self, pixel_type, tile_value=7):
         self._pixel_type = pixel_type
         self._tile_value = tile_value
 
     def getPixelsType(self):
+        """Return get pixels type."""
         return _FakePixelsType(self._pixel_type)
 
     def getTile(self, _z, _c, _t, tile):
+        """Return get tile."""
         _x, _y, width, height = tile
         dtype = views.PIXEL_TYPES[self._pixel_type]
         return np.full((height, width), self._tile_value, dtype=dtype)
 
 
 class _FakeChannel:
+    """Test double for fake channel."""
+
     def __init__(self, label="Channel-1"):
         self.label = label
 
 
 class _FakeResolutionDescription:
+    """Test double for fake resolution description."""
+
     def __init__(self, size_x, size_y):
         self.sizeX = size_x
         self.sizeY = size_y
 
 
 class _FakeResolutionEngine:
+    """Test double for fake resolution engine."""
+
     def __init__(self, descriptions, default_z=0, default_t=0):
         self._descriptions = descriptions
         self._default_z = default_z
         self._default_t = default_t
 
     def getResolutionDescriptions(self):
+        """Return get resolution descriptions."""
         return self._descriptions
 
     def getDefaultZ(self):
+        """Return get default z."""
         return self._default_z
 
     def getDefaultT(self):
+        """Return get default t."""
         return self._default_t
 
 
 class _FakeRawPixelsStore:
+    """Test double for fake raw pixels store."""
+
     def __init__(self, payload):
         self.payload = payload
         self.calls = []
         self.closed = False
 
     def setPixelsId(self, pixels_id, _bypass):
+        """Store set pixels identifier."""
         self.calls.append(("setPixelsId", pixels_id))
 
     def setResolutionLevel(self, level):
+        """Store set resolution level."""
         self.calls.append(("setResolutionLevel", level))
 
     def getTile(self, z, c, t, x, y, width, height):
+        """Return get tile."""
         self.calls.append(("getTile", z, c, t, x, y, width, height))
         return self.payload[: width * height]
 
     def close(self):
+        """Handle close."""
         self.closed = True
 
 
 class _FakeConn:
+    """Test double for fake conn."""
+
     def __init__(self, image):
         self._image = image
 
     def getObject(self, object_type, iid):
+        """Return get object."""
         assert object_type == "Image"
         assert iid == self._image.id
         return self._image
 
 
 class _FakeImage:
+    """Test double for fake image."""
+
     def __init__(
         self,
         *,
@@ -174,56 +207,74 @@ class _FakeImage:
         )
 
     def getDetails(self):
+        """Return get details."""
         return self._details
 
     def getName(self):
+        """Return get name."""
         return self._name
 
     def getSizeT(self):
+        """Return get size t."""
         return self._sizes["T"]
 
     def getSizeC(self):
+        """Return get size c."""
         return self._sizes["C"]
 
     def getSizeZ(self):
+        """Return get size z."""
         return self._sizes["Z"]
 
     def getSizeY(self):
+        """Return get size y."""
         return self._sizes["Y"]
 
     def getSizeX(self):
+        """Return get size x."""
         return self._sizes["X"]
 
     def requiresPixelsPyramid(self):
+        """Handle requires pixels pyramid."""
         return self._pyramid
 
     def getZoomLevelScaling(self):
+        """Return get zoom level scaling."""
         return [1.0] * len(self._re.getResolutionDescriptions())
 
     def getChannels(self):
+        """Return get channels."""
         return self._channels
 
     def isGreyscaleRenderingModel(self):
+        """Handle is greyscale rendering model."""
         return not self._color
 
     def getPrimaryPixels(self):
+        """Return get primary pixels."""
         return self._primary_pixels
 
     @staticmethod
     def getPixelsId():
+        """Return get pixels identifier."""
         return 17
 
     def getPixelSizeX(self, units=True):
+        """Return get pixel size x."""
         return self._pixel_sizes.get("x")
 
     def getPixelSizeY(self, units=True):
+        """Return get pixel size y."""
         return self._pixel_sizes.get("y")
 
     def getPixelSizeZ(self, units=True):
+        """Return get pixel size z."""
         return self._pixel_sizes.get("z")
 
 
 class _FakeChunkWriter:
+    """Test double for fake chunk writer."""
+
     def __init__(self, root):
         self.root = Path(root)
 
@@ -232,7 +283,10 @@ class _FakeChunkWriter:
 
 
 def test_index_and_image_zgroup_return_non_store_defaults(monkeypatch):
+    """Verify test index and image zgroup return non store behavior."""
+
     def fake_reverse(name, kwargs=None):
+        """Handle fake reverse."""
         if name == "omero_web_zarr_index":
             return "/zarr/"
         if name == "zarr_app":
@@ -250,6 +304,7 @@ def test_index_and_image_zgroup_return_non_store_defaults(monkeypatch):
 
 
 def test_image_zattrs_builds_non_store_multiscales_for_pyramids(monkeypatch):
+    """Verify test image zattrs builds non store multiscale behavior."""
     image = _FakeImage(
         image_id=21,
         name="pyramid-image",
@@ -299,6 +354,7 @@ def test_image_zattrs_builds_non_store_multiscales_for_pyramids(monkeypatch):
 def test_image_zattrs_v03_omits_transformations_and_rejects_unknown_version(
     monkeypatch,
 ):
+    """Verify test image zattrs v03 omits transformations a behavior."""
     image = _FakeImage(image_id=22, size_z=2, size_y=6, size_x=8)
     monkeypatch.setattr(views, "_store_backed_json_response", lambda *_args: None)
     monkeypatch.setattr(
@@ -326,6 +382,7 @@ def test_image_zattrs_v03_omits_transformations_and_rejects_unknown_version(
 
 
 def test_get_image_shape_and_chunk_shape_cover_pyramid_levels(monkeypatch):
+    """Verify test get image shape and chunk shape cover py behavior."""
     image = _FakeImage(
         pyramid=True,
         size_y=9,
@@ -346,6 +403,7 @@ def test_get_image_shape_and_chunk_shape_cover_pyramid_levels(monkeypatch):
 def test_image_zarray_returns_dimension_separator_for_runtime_generated_metadata(
     monkeypatch,
 ):
+    """Verify test image zarray returns dimension separator behavior."""
     image = _FakeImage(image_id=31, size_y=5, size_x=7)
     monkeypatch.setattr(views, "_store_backed_json_response", lambda *_args: None)
 
@@ -363,6 +421,7 @@ def test_image_zarray_returns_dimension_separator_for_runtime_generated_metadata
 
 
 def test_image_chunk_pads_edge_tiles_for_non_store_pyramids(monkeypatch):
+    """Verify test image chunk pads edge tiles for non stor behavior."""
     image = _FakeImage(
         image_id=41,
         size_y=3,
@@ -396,6 +455,7 @@ def test_image_chunk_pads_edge_tiles_for_non_store_pyramids(monkeypatch):
 
 
 def test_image_chunk_uses_raw_pixels_store_for_lower_pyramid_levels(monkeypatch):
+    """Verify test image chunk uses raw pixels store for lo behavior."""
     raw_tile = np.array([[1, 2], [3, 4]], dtype=np.uint8).tobytes()
     raw_store = _FakeRawPixelsStore(raw_tile)
     runtime_conn = SimpleNamespace(
@@ -435,7 +495,11 @@ def test_image_chunk_uses_raw_pixels_store_for_lower_pyramid_levels(monkeypatch)
 
 
 def test_image_chunk_builds_runtime_chunk_indices_for_tcz_axes(monkeypatch):
+    """Verify test image chunk builds runtime chunk indices behavior."""
+
     class _RichFakeChunkWriter:
+        """Test double for rich fake chunk writer."""
+
         def __init__(self, root):
             self.root = Path(root)
 
@@ -481,6 +545,7 @@ def test_image_chunk_builds_runtime_chunk_indices_for_tcz_axes(monkeypatch):
 
 
 def test_image_chunk_rejects_wrong_dimension_count(monkeypatch):
+    """Verify test image chunk rejects wrong dimension count."""
     image = _FakeImage(image_id=43, size_y=4, size_x=4)
     monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
 
@@ -497,10 +562,12 @@ def test_image_chunk_rejects_wrong_dimension_count(monkeypatch):
 def test_image_store_path_and_preview_cover_store_and_non_store_paths(
     monkeypatch, tmp_path
 ):
+    """Verify test image store path and preview cover store behavior."""
     image = _FakeImage(image_id=51, name="preview.zarr", lsid=str(tmp_path))
     conn = _FakeConn(image)
 
     def fake_reverse(name, args=None, kwargs=None):
+        """Handle fake reverse."""
         if name == "load_metadata_preview":
             return f"/preview/{kwargs['c_type']}/{kwargs['c_id']}/"
         if name == "omero_web_zarr_index":
@@ -560,6 +627,7 @@ def test_image_store_path_and_preview_cover_store_and_non_store_paths(
 def test_store_backed_ome_tiff_helpers_cover_reordering_planes_and_metadata(
     monkeypatch,
 ):
+    """Verify test store backed ome tiff helpers cover reor behavior."""
     node = SimpleNamespace(
         data=[np.arange(6, dtype=np.uint16).reshape(2, 3, 1)],
         metadata={"channel_names": ["DNA"]},
@@ -604,6 +672,7 @@ def test_store_backed_ome_tiff_helpers_cover_reordering_planes_and_metadata(
 def test_app_helpers_reject_invalid_asset_paths_and_surface_fetch_failures(
     monkeypatch,
 ):
+    """Verify test app helpers reject invalid asset paths a behavior."""
     with pytest.raises(Http404):
         views._sanitize_app_asset_path("https://example.com/app.js")
     with pytest.raises(Http404):
@@ -632,6 +701,7 @@ def test_app_helpers_reject_invalid_asset_paths_and_surface_fetch_failures(
 def test_runtime_view_helpers_cover_store_shortcuts_and_single_plane_iterators(
     monkeypatch,
 ):
+    """Verify test runtime view helpers cover store shortcu behavior."""
     multi_dim_image = _FakeImage(image_id=71, size_t=2, size_z=3, size_y=4, size_x=5)
     assert views.get_chunk_shape(multi_dim_image) == [1, 1, 4, 5]
 

@@ -92,6 +92,7 @@ class AgentSkillUpstreamSources:
         return f"https://img.shields.io/static/v1?{query}"
 
     def raw_skill_url(self, skill_name: str) -> str:
+        """Handle raw skill URL."""
         relative_path = self.upstream_relative_paths[skill_name]
         return (
             "https://raw.githubusercontent.com/"
@@ -100,6 +101,7 @@ class AgentSkillUpstreamSources:
 
 
 def _extract_required_match(pattern: re.Pattern[str], text: str, label: str) -> str:
+    """Handle extract required match."""
     match = pattern.search(text)
     if match is None:
         raise RuntimeError(
@@ -115,7 +117,6 @@ def _extract_required_match(pattern: re.Pattern[str], text: str, label: str) -> 
 
 def load_upstream_sources(repo_root: Path) -> AgentSkillUpstreamSources:
     """Parse the pinned upstream skill provenance document."""
-
     doc_text = (repo_root / UPSTREAM_SOURCES_DOC_PATH).read_text(encoding="utf-8")
     repo_slug = _extract_required_match(
         UPSTREAM_REPOSITORY_RE, doc_text, "Upstream repository"
@@ -143,7 +144,6 @@ def load_upstream_sources(repo_root: Path) -> AgentSkillUpstreamSources:
 
 def resolve_required_executable(name: str) -> str:
     """Resolve an executable to an absolute path."""
-
     resolved = shutil.which(name)
     if not resolved:
         raise RuntimeError(f"Required executable `{name}` is not available in PATH.")
@@ -152,7 +152,6 @@ def resolve_required_executable(name: str) -> str:
 
 def resolve_remote_tag_commit(repo_slug: str, tag: str, *, cwd: Path) -> str:
     """Resolve the exact commit currently referenced by a remote Git tag."""
-
     completed = subprocess.run(
         [
             resolve_required_executable("git"),
@@ -179,7 +178,6 @@ def resolve_remote_tag_commit(repo_slug: str, tag: str, *, cwd: Path) -> str:
 
 def fetch_text(url: str, *, timeout: int = 20) -> str:
     """Fetch UTF-8 text from a URL."""
-
     parsed = urlsplit(url)
     if parsed.scheme not in ALLOWED_FETCH_SCHEMES:
         raise ValueError(f"Unsupported fetch scheme: {parsed.scheme!r}")

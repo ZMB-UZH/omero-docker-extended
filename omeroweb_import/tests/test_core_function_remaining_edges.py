@@ -12,24 +12,31 @@ from omeroweb_import.views import core_functions
 
 
 class _Upload:
+    """Represent upload."""
+
     def __init__(self, *chunks: bytes):
         self._chunks = chunks
 
     def chunks(self):
+        """Handle chunks."""
         return list(self._chunks)
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self._raw_value = value
 
     def getValue(self):
+        """Return get value."""
         return self._raw_value
 
 
 def test_directory_helpers_cover_parent_creation_and_permission_failures(
     tmp_path, monkeypatch
 ):
+    """Verify test directory helpers cover parent creation behavior."""
     target = tmp_path / "nested" / "file.txt"
     assert core_functions._ensure_parent_dir(target) is True
     assert target.parent.exists()
@@ -38,6 +45,7 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
     original_mkdir = Path.mkdir
 
     def failing_mkdir(self, *args, **kwargs):
+        """Handle failing mkdir."""
         if self == failing_target.parent:
             raise OSError("mkdir failed")
         return original_mkdir(self, *args, **kwargs)
@@ -53,6 +61,7 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
     original_chmod = Path.chmod
 
     def failing_chmod(self, mode):
+        """Handle failing chmod."""
         if self == secure_dir:
             raise OSError("chmod failed")
         return original_chmod(self, mode)
@@ -64,6 +73,7 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
     failing_create = tmp_path / "failing-create"
 
     def mkdir_target_failure(self, *args, **kwargs):
+        """Handle mkdir target failure."""
         if self == failing_create:
             raise OSError("create failed")
         return original_mkdir(self, *args, **kwargs)
@@ -76,6 +86,7 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
     failing_exists = tmp_path / "failing-exists"
 
     def exists_failure(self):
+        """Handle exists failure."""
         if self == failing_exists:
             raise OSError("exists failed")
         return original_exists(self)
@@ -87,6 +98,7 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
 def test_staged_upload_helpers_cover_runtime_and_oserror_fallbacks(
     tmp_path, monkeypatch
 ):
+    """Verify test staged upload helpers cover runtime and behavior."""
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
 
@@ -159,6 +171,7 @@ def test_staged_upload_helpers_cover_runtime_and_oserror_fallbacks(
 def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(
     tmp_path, monkeypatch
 ):
+    """Verify test managed runtime and job file helpers cov behavior."""
     original_os_open = core_functions.os.open
     original_os_close = core_functions.os.close
     upload_root = tmp_path / "uploads"
@@ -285,6 +298,7 @@ def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(
     original_unlink = Path.unlink
 
     def failing_unlink(self, *args, **kwargs):
+        """Handle failing unlink."""
         if self.parent == jobs_root and self.suffix == ".tmp":
             raise OSError("unlink failed")
         return original_unlink(self, *args, **kwargs)
@@ -300,6 +314,7 @@ def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(
 def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
     tmp_path, monkeypatch
 ):
+    """Verify test job update and parameter helpers cover g behavior."""
     jobs_root = tmp_path / "jobs"
     jobs_root.mkdir()
     monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: jobs_root)
@@ -363,6 +378,7 @@ def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
 def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
     monkeypatch,
 ):
+    """Verify test connection and dataset helpers cover adm behavior."""
     monkeypatch.setattr(
         core_functions,
         "_open_admin_connection",
@@ -379,14 +395,18 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
     )
 
     class _AdminConn:
+        """Represent admin conn."""
+
         def __init__(self, conn):
             self._conn = conn
 
         def suConn(self, username):
+            """Handle su conn."""
             return self._conn
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("admin close exploded")
 
     monkeypatch.setattr(
@@ -407,15 +427,21 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
     group_calls = []
 
     class _UpdateService:
+        """Represent update service."""
+
         @staticmethod
         def saveAndReturnObject(dataset, opts):
+            """Store save and return object."""
             raise RuntimeError("save failed")
 
         @staticmethod
         def saveObject(link, opts):
+            """Store save object."""
             group_calls.append(("linked", link, opts))
 
     class _DatasetConn:
+        """Represent dataset conn."""
+
         def __init__(self):
             self.SERVICE_OPTS = SimpleNamespace(
                 setOmeroGroup=lambda value: group_calls.append(("group", value))
@@ -423,10 +449,12 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
 
         @staticmethod
         def getUpdateService():
+            """Return get update service."""
             return _UpdateService()
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("dataset close exploded")
 
     monkeypatch.setattr(
@@ -455,26 +483,32 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
     assert core_functions._open_service_connection("omeroserver", 4064) is None
 
     class _BlitzConn:
+        """Represent blitz conn."""
+
         def __init__(self, connect_result, *, fail_group=False):
             self._connect_result = connect_result
             self._fail_group = fail_group
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=self._set_group)
 
         def _set_group(self, value):
+            """Handle set group."""
             if self._fail_group:
                 raise RuntimeError("group exploded")
 
         def connect(self):
+            """Handle connect."""
             if isinstance(self._connect_result, Exception):
                 raise self._connect_result
             return self._connect_result
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close exploded")
 
         @staticmethod
         def getLastError():
+            """Return get last error."""
             return "last-error"
 
     connect_attempts = iter(
@@ -547,6 +581,7 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
 def test_import_candidate_and_probe_helpers_cover_remaining_path_edges(
     monkeypatch, tmp_path
 ):
+    """Verify test import candidate and probe helpers cover behavior."""
     expected_path = SimpleNamespace(
         resolve=lambda: (_ for _ in ()).throw(OSError("resolve failed")),
         is_dir=lambda: False,

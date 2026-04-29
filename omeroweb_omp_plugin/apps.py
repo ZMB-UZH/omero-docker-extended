@@ -4,6 +4,8 @@ from omero_plugin_common.logging_utils import configure_omero_gateway_logging
 
 
 class OMPPluginConfig(AppConfig):
+    """Represent ompplugin config."""
+
     name = "omeroweb_omp_plugin"
     label = "omeroweb_omp_plugin"
 

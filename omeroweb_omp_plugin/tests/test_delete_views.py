@@ -15,25 +15,31 @@ AUTH_VALUE = "".join(["fixture", "-", "credential"])
 
 
 def _payload(response):
+    """Handle payload."""
     return json.loads(response.content.decode("utf-8"))
 
 
 def _delete_request_payload(project_id, password_value):
+    """Handle delete request payload."""
     return {"project_id": project_id, "password": password_value}
 
 
 class _Conn:
+    """Represent conn."""
+
     def __init__(self):
         self.getObject = lambda kind, object_id: None
 
     @staticmethod
     def getUser():
+        """Return get user."""
         return SimpleNamespace(getName=lambda: "alice")
 
 
 def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
     monkeypatch,
 ):
+    """Verify test delete all view covers validation chunk behavior."""
     conn = _Conn()
     factory = RequestFactory()
 
@@ -166,6 +172,7 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
     }
 
     def _run(cmd, **kwargs):
+        """Handle run."""
         return cli_results[cmd[4]]
 
     monkeypatch.setattr(delete_all_view.subprocess, "run", _run)
@@ -227,6 +234,7 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
 
 
 def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatch):
+    """Verify test delete plugin view covers validation and behavior."""
     with pytest.raises(ValueError, match="Invalid annotation id"):
         delete_plugin_view._validated_delete_object_id(0, "annotation id")
     with pytest.raises(ValueError, match="Unsupported OMERO delete target"):
@@ -365,6 +373,7 @@ def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatc
 
 
 def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeypatch):
+    """Verify test delete plugin view covers cli failures l behavior."""
     conn = _Conn()
     factory = RequestFactory()
 
@@ -398,6 +407,7 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
     )
 
     def _plugin_annotation_ids(_conn, image_id):
+        """Handle plugin annotation identifiers."""
         if image_id == 1:
             raise RuntimeError("lookup failed")
         return {
@@ -418,6 +428,7 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
     }
 
     def _find_link_ids(_conn, annotation_id):
+        """Handle find link identifiers."""
         state = link_lookup[annotation_id]
         if state == "boom":
             raise RuntimeError("link lookup failed")
@@ -452,6 +463,7 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
     }
 
     def _run(cmd, **kwargs):
+        """Handle run."""
         return delete_results[cmd[4]]
 
     annotation_lookup = {

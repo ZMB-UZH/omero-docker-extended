@@ -15,6 +15,7 @@ from omero_web_zarr import utils
 
 
 def _write_minimal_store(root: Path) -> None:
+    """Handle write minimal store."""
     root.mkdir(parents=True, exist_ok=True)
     (root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
 
@@ -22,6 +23,7 @@ def _write_minimal_store(root: Path) -> None:
 def test_path_and_external_lsid_helpers_cover_additional_invalid_inputs(
     tmp_path, monkeypatch
 ):
+    """Verify test path and external lsid helpers cover add behavior."""
     assert utils.resolve_local_zarr_store(None) is None
     assert utils.resolve_local_zarr_store("https://example.invalid/demo.zarr") is None
     assert utils.resolve_local_zarr_store("file://") is None
@@ -42,7 +44,10 @@ def test_path_and_external_lsid_helpers_cover_additional_invalid_inputs(
         utils.resolve_local_zarr_file(store_root.resolve(), "nested")
 
     class _Params:
+        """Represent params."""
+
         def addId(self, image_id):
+            """Handle add identifier."""
             self.image_id = image_id
             return self
 
@@ -84,6 +89,7 @@ def test_path_and_external_lsid_helpers_cover_additional_invalid_inputs(
 def test_node_and_channel_helpers_cover_cache_mismatch_and_error_paths(
     monkeypatch, tmp_path
 ):
+    """Verify test node and channel helpers cover cache mis behavior."""
     image = SimpleNamespace(id=7)
     monkeypatch.setattr(
         utils,
@@ -163,6 +169,7 @@ def test_node_and_channel_helpers_cover_cache_mismatch_and_error_paths(
 
 
 def test_plane_render_and_encoding_helpers_cover_remaining_utils_paths(monkeypatch):
+    """Verify test plane render and encoding helpers cover behavior."""
     original_render_store_backed_plane = utils.render_store_backed_plane
 
     with pytest.raises(ValueError, match="no image data"):
@@ -257,6 +264,7 @@ def test_plane_render_and_encoding_helpers_cover_remaining_utils_paths(monkeypat
 def test_store_backed_metadata_helpers_cover_symlink_resolution_and_reader_fallbacks(
     tmp_path, monkeypatch
 ):
+    """Verify test store backed metadata helpers cover syml behavior."""
     store_root = tmp_path / "store.zarr"
     _write_minimal_store(store_root)
 
@@ -335,6 +343,8 @@ def test_store_backed_metadata_helpers_cover_symlink_resolution_and_reader_fallb
     assert utils._load_store_backed_image_node_with_reader(store_root) is None
 
     class _Reader:
+        """Represent reader."""
+
         def __call__(self):
             return [SimpleNamespace(data=None), SimpleNamespace(data=[])]
 
@@ -344,6 +354,7 @@ def test_store_backed_metadata_helpers_cover_symlink_resolution_and_reader_fallb
 
 
 def test_store_metadata_file_resolution_rejects_paths_outside_store(tmp_path) -> None:
+    """Verify test store metadata file resolution rejects p behavior."""
     store_root = tmp_path / "secure.zarr"
     _write_minimal_store(store_root)
     (store_root / ".zattrs").write_text(
@@ -385,6 +396,7 @@ def test_store_metadata_file_resolution_rejects_paths_outside_store(tmp_path) ->
 
 
 def test_store_backed_axis_and_size_helpers_cover_fallback_shapes() -> None:
+    """Verify test store backed axis and size helpers cover behavior."""
     fallback_node = SimpleNamespace(
         data=[np.zeros((2, 3, 4), dtype=np.uint8)],
         metadata={"axes": [{"name": "y"}]},
@@ -401,6 +413,7 @@ def test_store_backed_utils_cover_root_attrs_rgb_rendering_and_tile_size_fallbac
     monkeypatch,
     tmp_path,
 ):
+    """Verify test store backed utils cover root attrs rgb behavior."""
     store_root = tmp_path / "root.zarr"
     store_root.mkdir()
     (store_root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
@@ -431,9 +444,12 @@ def test_store_backed_utils_cover_root_attrs_rgb_rendering_and_tile_size_fallbac
     monkeypatch.setattr(utils, "_fallback_tile_size", lambda image, conn=None: (64, 32))
 
     class _FallbackImage:
+        """Represent fallback image."""
+
         _re = None
 
         def _prepareRenderingEngine(self):
+            """Handle prepare rendering engine."""
             self._re = None
 
     assert utils.get_safe_image_tile_size(_FallbackImage()) == (64, 32)

@@ -22,6 +22,7 @@ TokenReader = Callable[[str], str]
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Validate parse args."""
     parser = argparse.ArgumentParser(
         description=(
             "Run git push with a socket-backed askpass helper so GitHub PATs "
@@ -59,6 +60,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def _validate_git_argument(name: str, value: str) -> None:
+    """Handle validate git argument."""
     if not value or value.startswith("-") or "\x00" in value:
         raise SystemExit(f"{name} must be a non-option Git argument")
     if any(ord(character) < 32 for character in value):
@@ -66,6 +68,7 @@ def _validate_git_argument(name: str, value: str) -> None:
 
 
 def _validate_force_with_lease(value: str | None) -> str | None:
+    """Handle validate force with lease."""
     if value is None:
         return None
     if "\x00" in value or any(ord(character) < 32 for character in value):
@@ -81,6 +84,7 @@ def _validate_force_with_lease(value: str | None) -> str | None:
 
 
 def _read_token(env: Mapping[str, str], env_name: str, reader: TokenReader) -> str:
+    """Handle read token."""
     token = env.get(env_name, "").strip()
     if token:
         return token
@@ -93,6 +97,7 @@ def _read_token(env: Mapping[str, str], env_name: str, reader: TokenReader) -> s
 
 
 def _write_askpass(path: Path) -> None:
+    """Handle write askpass."""
     executable = sys.executable or "/usr/bin/env python3"
     path.write_text(
         "\n".join(
@@ -139,6 +144,7 @@ def _serve_credential_once(
     socket_path: Path,
     credential: str,
 ) -> tuple[threading.Event, threading.Thread]:
+    """Handle serve credential once."""
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(str(socket_path))
     socket_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
@@ -149,6 +155,7 @@ def _serve_credential_once(
     payload = f"{credential}\n".encode("utf-8")
 
     def serve() -> None:
+        """Handle serve."""
         try:
             while not stop.is_set():
                 try:
@@ -177,6 +184,7 @@ def run_push(
     token_reader: TokenReader = getpass.getpass,
     runner: RunCommand = subprocess.run,
 ) -> int:
+    """Run run push."""
     _validate_git_argument("remote", args.remote)
     _validate_git_argument("refspec", args.refspec)
     _validate_git_argument("username", args.username)
@@ -230,6 +238,7 @@ def run_push(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command-line entry point."""
     return run_push(parse_args(argv))
 
 

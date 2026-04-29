@@ -5,11 +5,14 @@ from django.apps import AppConfig
 
 
 class OmeroWebZarrAppConfig(AppConfig):
+    """Represent OMERO web Zarr app config."""
+
     name = "omero_web_zarr"
     label = "zarr"
 
     @staticmethod
     def ready():
+        """Return ready."""
         from .integration import install_webgateway_overrides
 
         install_webgateway_overrides()

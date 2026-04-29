@@ -10,6 +10,7 @@ from omeroweb_admin_tools.services import storage_quotas
 
 @pytest.fixture(autouse=True)
 def _quota_env(monkeypatch):
+    """Handle quota env."""
     monkeypatch.setenv(storage_quotas.MIN_GROUP_QUOTA_ENV, "0.10")
     monkeypatch.setenv(storage_quotas.DEFAULT_GROUP_QUOTA_ENV, "0.25")
     monkeypatch.setenv(storage_quotas.AUTO_GROUP_QUOTA_ENV, "false")
@@ -19,6 +20,7 @@ def test_storage_quota_env_and_root_helpers_cover_validation_edges(
     monkeypatch,
     tmp_path,
 ):
+    """Verify test storage quota env and root helpers cover behavior."""
     monkeypatch.setenv(storage_quotas.AUTO_GROUP_QUOTA_ENV, "maybe")
     with pytest.raises(storage_quotas.QuotaError, match="expected one of"):
         storage_quotas.auto_set_default_group_quota_enabled()
@@ -53,6 +55,7 @@ def test_storage_quota_env_and_root_helpers_cover_validation_edges(
     real_resolve = Path.resolve
 
     def _resolve(self, *args, **kwargs):
+        """Handle resolve."""
         if self == managed_root:
             raise FileNotFoundError("deferred mount metadata")
         return real_resolve(self, *args, **kwargs)
@@ -65,6 +68,7 @@ def test_storage_quota_state_and_log_helpers_cover_normalization_paths(
     monkeypatch,
     tmp_path,
 ):
+    """Verify test storage quota state and log helpers cove behavior."""
     state_path = tmp_path / "quotas.json"
     state_path.write_text(
         json.dumps({"quotas_gb": {}, "logs": []}),
@@ -103,6 +107,7 @@ def test_storage_quota_csv_filesystem_and_state_helpers_cover_edge_cases(
     monkeypatch,
     tmp_path,
 ):
+    """Verify test storage quota CSV filesystem and state h behavior."""
     with pytest.raises(storage_quotas.QuotaError, match="CSV file is empty"):
         storage_quotas.import_quotas_csv("")
 
@@ -159,6 +164,7 @@ def test_reconcile_quotas_covers_invalid_state_entries_and_persist_warnings(
     monkeypatch,
     tmp_path,
 ):
+    """Verify test reconcile quotas covers invalid state en behavior."""
     invalid_state_path = tmp_path / "invalid-state.json"
     invalid_state_path.write_text(
         json.dumps(

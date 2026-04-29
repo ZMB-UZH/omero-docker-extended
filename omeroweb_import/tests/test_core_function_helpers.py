@@ -9,6 +9,7 @@ from omeroweb_import.views import core_functions
 
 
 def test_append_job_messages_errors_and_txt_labels_trim_to_limit(monkeypatch) -> None:
+    """Verify test append job messages errors and txt label behavior."""
     monkeypatch.setattr(core_functions, "MAX_IMPORT_LOG_LINES", 2)
     job = {}
 
@@ -32,6 +33,7 @@ def test_append_job_messages_errors_and_txt_labels_trim_to_limit(monkeypatch) ->
 def test_job_id_and_managed_path_helpers_enforce_managed_roots(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test job identifier and managed path helpers behavior."""
     upload_root = tmp_path / "uploads"
     jobs_root = tmp_path / "jobs"
     upload_root.mkdir()
@@ -68,6 +70,7 @@ def test_job_id_and_managed_path_helpers_enforce_managed_roots(
 def test_resolve_managed_child_path_rejects_symlinked_segments(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test resolve managed child path rejects symli behavior."""
     upload_root = tmp_path / "uploads"
     jobs_root = tmp_path / "jobs"
     outside_root = tmp_path / "outside"
@@ -88,6 +91,7 @@ def test_resolve_managed_child_path_rejects_symlinked_segments(
 
 
 def test_managed_path_helpers_reject_embedded_null_bytes(monkeypatch, tmp_path) -> None:
+    """Verify test managed path helpers reject embedded nul behavior."""
     upload_root = tmp_path / "uploads"
     jobs_root = tmp_path / "jobs"
     upload_root.mkdir()
@@ -100,11 +104,16 @@ def test_managed_path_helpers_reject_embedded_null_bytes(monkeypatch, tmp_path) 
 
 
 def test_staged_upload_file_helpers_reject_symlink_leaf_targets(tmp_path) -> None:
+    """Verify test staged upload file helpers reject symlin behavior."""
+
     class _Upload:
+        """Represent upload."""
+
         def __init__(self, *chunks):
             self._chunks = chunks
 
         def chunks(self):
+            """Handle chunks."""
             return list(self._chunks)
 
     upload_root = tmp_path / "uploads"
@@ -153,11 +162,16 @@ def test_staged_upload_file_helpers_reject_symlink_leaf_targets(tmp_path) -> Non
 
 
 def test_replace_staged_upload_file_creates_private_modes(tmp_path) -> None:
+    """Verify test replace staged upload file creates priva behavior."""
+
     class _Upload:
+        """Represent upload."""
+
         def __init__(self, *chunks):
             self._chunks = chunks
 
         def chunks(self):
+            """Handle chunks."""
             return list(self._chunks)
 
     upload_root = tmp_path / "uploads"
@@ -179,6 +193,7 @@ def test_replace_staged_upload_file_creates_private_modes(tmp_path) -> None:
 
 
 def test_write_read_job_file_and_apply_upload_updates(monkeypatch, tmp_path) -> None:
+    """Verify test write read job file and apply upload upd behavior."""
     jobs_root = tmp_path / "jobs"
     jobs_root.mkdir()
     monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: jobs_root)
@@ -223,6 +238,7 @@ def test_write_read_job_file_and_apply_upload_updates(monkeypatch, tmp_path) -> 
 def test_compatibility_output_parsers_cover_candidates_groups_and_failures(
     tmp_path,
 ) -> None:
+    """Verify test compatibility output parsers cover candi behavior."""
     image_path = tmp_path / "plate.zarr" / "0" / "0"
     image_path.parent.mkdir(parents=True, exist_ok=True)
     image_path.write_text("chunk", encoding="utf-8")
@@ -285,6 +301,7 @@ def test_compatibility_output_parsers_cover_candidates_groups_and_failures(
 
 
 def test_relative_root_helpers_detect_directory_package_shapes() -> None:
+    """Verify test relative root helpers detect directory p behavior."""
     active_paths = [
         "plate.zarr/.zattrs",
         "plate.zarr/OME/METADATA.ome.xml",
@@ -322,6 +339,7 @@ def test_relative_root_helpers_detect_directory_package_shapes() -> None:
 
 
 def test_collect_import_entries_and_single_entry_units() -> None:
+    """Verify test collect import entries and single entry behavior."""
     job = {
         "files": [
             {"relative_path": "a.tif", "status": "uploaded"},
@@ -360,6 +378,7 @@ def test_collect_import_entries_and_single_entry_units() -> None:
 def test_probe_import_path_caches_group_coverage_and_scan_failures(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test probe import path caches group coverage behavior."""
     staged_root = tmp_path / "staged"
     path = staged_root / "plate.zarr"
     active_paths = [

@@ -10,4 +10,5 @@ AI_PROVIDER_OPTIONS = [
 
 
 def list_ai_provider_options():
+    """Return list ai provider options."""
     return list(AI_PROVIDER_OPTIONS)

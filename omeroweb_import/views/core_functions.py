@@ -276,6 +276,8 @@ JOB_SERVICE_SECURE_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_SECURE"
 
 
 class JobServiceCredentials(NamedTuple):
+    """Represent job service credentials."""
+
     user: str
     password: str
     group_override: str
@@ -366,6 +368,8 @@ NGFF_CONVERTER_SETTINGS_DEFAULTS = {
 
 @dataclass
 class _DirectoryCache:
+    """Represent directory cache."""
+
     upload_root: Optional[Path] = None
     jobs_root: Optional[Path] = None
     initialized: bool = False
@@ -380,14 +384,17 @@ _DIRECTORY_CACHE = _DirectoryCache()
 
 
 def _resolve_upload_root() -> Path:
+    """Handle resolve upload root."""
     return resolve_upload_root()
 
 
 def _resolve_jobs_root() -> Path:
+    """Handle resolve jobs root."""
     return resolve_jobs_root()
 
 
 def _ensure_parent_dir(path: Path) -> bool:
+    """Handle ensure parent dir."""
     parent = path.parent
     if parent.exists():
         return True
@@ -574,6 +581,7 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
 
 
 def _job_path(job_id: str) -> Path:
+    """Handle job path."""
     return _resolve_managed_child_parts(
         _get_jobs_root(),
         (f"{_validated_job_id(job_id)}.json",),
@@ -581,6 +589,7 @@ def _job_path(job_id: str) -> Path:
 
 
 def _get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> int:
+    """Handle get env int."""
     raw = os.environ.get(env_key, "")
     if raw:
         raw = INT_SANITIZER.sub("", str(raw))
@@ -592,6 +601,7 @@ def _get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> 
 
 
 def _get_env_bool(env_key: str, default: bool = False) -> bool:
+    """Handle get env bool."""
     raw = os.environ.get(env_key)
     if raw is None:
         return default
@@ -599,6 +609,7 @@ def _get_env_bool(env_key: str, default: bool = False) -> bool:
 
 
 def _get_import_timeout_seconds() -> int:
+    """Handle get import timeout seconds."""
     return _get_env_int(
         IMPORT_TIMEOUT_SECONDS_ENV,
         IMPORT_TIMEOUT_SECONDS_DEFAULT,
@@ -608,14 +619,17 @@ def _get_import_timeout_seconds() -> int:
 
 
 def _special_methods_enabled() -> bool:
+    """Handle special methods enabled."""
     return not _get_env_bool(SPECIAL_METHODS_DISABLED_ENV)
 
 
 def _native_zarr_import_enabled() -> bool:
+    """Handle native Zarr import enabled."""
     return get_bool_env(NATIVE_ZARR_IMPORT_ENABLED_ENV, env_file=ENV_FILE_OMEROWEB)
 
 
 def _normalize_job_batch_size(value, default: int) -> int:
+    """Handle normalize job batch size."""
     try:
         normalized = int(value)
     except (TypeError, ValueError):
@@ -624,6 +638,7 @@ def _normalize_job_batch_size(value, default: int) -> int:
 
 
 def _normalize_sem_edx_settings(raw_settings):
+    """Handle normalize sem edx settings."""
     if not isinstance(raw_settings, dict):
         return dict(SEM_EDX_SETTINGS_DEFAULTS)
 
@@ -768,6 +783,7 @@ def _build_bioformats2raw_command(
 
 
 def _resolve_job_batch_size(job_dict) -> int:
+    """Handle resolve job batch size."""
     default_batch_size = _get_env_int(
         UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10
     )
@@ -775,10 +791,12 @@ def _resolve_job_batch_size(job_dict) -> int:
 
 
 def _has_pending_uploads(job_dict) -> bool:
+    """Handle has pending uploads."""
     return any(entry.get("status") == "pending" for entry in job_dict.get("files", []))
 
 
 def _compatibility_pending_entries(job_dict):
+    """Handle compatibility pending entries."""
     if not job_dict.get("compatibility_enabled", True):
         return []
     return [
@@ -793,6 +811,7 @@ def _compatibility_pending_entries(job_dict):
 
 
 def _should_start_compatibility_check(job_dict) -> bool:
+    """Handle should start compatibility check."""
     if not job_dict or job_dict.get("compatibility_thread_active"):
         return False
     if job_dict.get("compatibility_confirmed"):
@@ -806,6 +825,7 @@ def _should_start_compatibility_check(job_dict) -> bool:
 
 
 def _should_start_import_plan_build(job_dict) -> bool:
+    """Handle should start import plan build."""
     if not job_dict or job_dict.get("compatibility_enabled", True):
         return False
     if job_dict.get("compatibility_thread_active"):
@@ -825,6 +845,7 @@ def _should_start_import_plan_build(job_dict) -> bool:
 
 
 def _refresh_job_status(job_dict):
+    """Handle refresh job status."""
     if _has_pending_uploads(job_dict):
         job_dict["status"] = "uploading"
         return job_dict
@@ -864,6 +885,7 @@ def _refresh_job_status(job_dict):
 
 
 def _load_job(job_id: str):
+    """Handle load job."""
     if not _safe_job_id(job_id):
         logger.warning(
             "Upload job id rejected as invalid: %s",
@@ -927,6 +949,7 @@ def _load_job(job_id: str):
 def _save_job(
     job_dict, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS
 ):
+    """Handle save job."""
     job_id = job_dict.get("job_id")
     if not _safe_job_id(job_id):
         logger.warning(
@@ -971,6 +994,7 @@ def _robust_update_job(
     retries: int = JOB_LOCK_RETRIES,
     timeout: float = JOB_LOCK_TIMEOUT_SECONDS,
 ):
+    """Handle robust update job."""
     if not _safe_job_id(job_id):
         logger.warning(
             "Refusing to update upload job with invalid id: %s",
@@ -1022,6 +1046,7 @@ def _robust_update_job(
 
 
 def _resolve_job_storage_paths(job_id: str) -> tuple[Optional[Path], Optional[Path]]:
+    """Handle resolve job storage paths."""
     try:
         return _job_path(job_id), _job_lock_path(job_id)
     except (OSError, ValueError) as exc:
@@ -1034,6 +1059,7 @@ def _resolve_job_storage_paths(job_id: str) -> tuple[Optional[Path], Optional[Pa
 
 
 def _safe_relative_path(raw_name: str):
+    """Handle safe relative path."""
     if not raw_name or not isinstance(raw_name, str):
         return None
     raw = raw_name.replace("\\", "/")
@@ -1051,6 +1077,7 @@ def _safe_relative_path(raw_name: str):
 
 
 def _validate_relative_path_lengths(rel_path: str):
+    """Handle validate relative path lengths."""
     if len(os.fsencode(rel_path)) > MAX_UPLOAD_RELATIVE_PATH_BYTES:
         return errors.file_path_too_long(rel_path, MAX_UPLOAD_RELATIVE_PATH_BYTES)
     for part in PurePosixPath(rel_path).parts:
@@ -1060,6 +1087,7 @@ def _validate_relative_path_lengths(rel_path: str):
 
 
 def _normalize_upload_relative_path(raw_name: str):
+    """Handle normalize upload relative path."""
     rel_path = _safe_relative_path(raw_name)
     if rel_path is None:
         return None, errors.invalid_filename(raw_name)
@@ -1070,6 +1098,7 @@ def _normalize_upload_relative_path(raw_name: str):
 
 
 def _normalize_dataset_name_override(raw_name):
+    """Handle normalize dataset name override."""
     if raw_name is None:
         return None, None
     if not isinstance(raw_name, str):
@@ -1094,18 +1123,23 @@ def _normalize_dataset_name_override(raw_name):
 
 @dataclass(frozen=True)
 class _ManagedUploadInternalError:
+    """Represent managed upload internal error."""
+
     public_message: str
 
 
 def _managed_upload_internal_error(public_message: str) -> _ManagedUploadInternalError:
+    """Handle managed upload internal error."""
     return _ManagedUploadInternalError(public_message)
 
 
 def _is_managed_upload_internal_error(error) -> bool:
+    """Handle is managed upload internal error."""
     return isinstance(error, _ManagedUploadInternalError)
 
 
 def _managed_upload_error_message(error) -> str:
+    """Handle managed upload error message."""
     if _is_managed_upload_internal_error(error):
         return error.public_message
     return str(error)
@@ -1114,6 +1148,7 @@ def _managed_upload_error_message(error) -> str:
 def _resolve_root_relative_path(
     root: Path, relative_path: str, *, max_bytes: int | None = None
 ):
+    """Handle resolve root relative path."""
     normalized_path, normalize_error = _normalize_upload_relative_path(relative_path)
     if normalize_error:
         return None, normalize_error
@@ -1131,6 +1166,7 @@ def _resolve_root_relative_path(
 
 
 def _resolve_staged_target_path(upload_root: Path, staged_path: str):
+    """Handle resolve staged target path."""
     return _resolve_root_relative_path(
         upload_root,
         staged_path,
@@ -1139,11 +1175,13 @@ def _resolve_staged_target_path(upload_root: Path, staged_path: str):
 
 
 def _validate_staged_target_path(upload_root: Path, staged_path: str):
+    """Handle validate staged target path."""
     _, error = _resolve_staged_target_path(upload_root, staged_path)
     return error
 
 
 def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, upload):
+    """Handle append upload chunks to staged path."""
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return None, None, normalize_error
@@ -1204,6 +1242,7 @@ def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, up
 
 
 def _reset_staged_upload_file(upload_root: Path, staged_path: str):
+    """Handle reset staged upload file."""
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return normalize_error
@@ -1252,6 +1291,7 @@ def _reset_staged_upload_file(upload_root: Path, staged_path: str):
 
 
 def _staged_upload_size(upload_root: Path, staged_path: str):
+    """Handle staged upload size."""
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return None, normalize_error
@@ -1297,6 +1337,7 @@ def _staged_upload_size(upload_root: Path, staged_path: str):
 
 
 def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
+    """Handle replace staged upload file."""
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return None, normalize_error
@@ -1354,6 +1395,7 @@ def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
 
 
 def _build_staged_relative_path(relative_path: str) -> str:
+    """Handle build staged relative path."""
     return PurePosixPath("_staged", relative_path).as_posix()
 
 
@@ -1392,6 +1434,7 @@ def _should_auto_skip_import(relative_path: str) -> bool:
 
 
 def _normalize_sem_edx_associations(raw_associations, normalized_entries):
+    """Handle normalize sem edx associations."""
     if not isinstance(raw_associations, dict):
         return {}
 
@@ -1452,7 +1495,6 @@ def _build_sem_edx_associations_from_entries(entries):
 
     This keeps behaviour predictable and ensures TXT attachment is at least attempted.
     """
-
     if not isinstance(entries, list) or not entries:
         return {}
 
@@ -1488,6 +1530,7 @@ def _build_sem_edx_associations_from_entries(entries):
 
 
 def _get_text(value_obj):
+    """Handle get text."""
     if value_obj is None:
         return ""
     try:
@@ -1510,6 +1553,7 @@ def _get_text(value_obj):
 
 
 def _external_info_text(external_info, attribute_name: str, getter_name: str) -> str:
+    """Handle external info text."""
     if external_info is None:
         return ""
 
@@ -1527,6 +1571,7 @@ def _external_info_text(external_info, attribute_name: str, getter_name: str) ->
 
 
 def _query_image_external_info(conn, image_id: int) -> tuple[str, str]:
+    """Handle query image external info."""
     if conn is None:
         return "", ""
 
@@ -1554,6 +1599,7 @@ def _query_image_external_info(conn, image_id: int) -> tuple[str, str]:
 
 @lru_cache(maxsize=None)
 def _units_length_for_name(unit_name: str):
+    """Handle units length for name."""
     from omero.model.enums import UnitsLength
 
     raw_name = str(unit_name or "").strip()
@@ -1569,6 +1615,7 @@ def _units_length_for_name(unit_name: str):
 
 
 def _normalize_units_length_name(unit_name: str) -> str:
+    """Handle normalize units length name."""
     normalized_name = str(unit_name or "").strip().replace("μ", "µ").lower()
     normalized_name = normalized_name.replace("-", "").replace("_", "").replace(" ", "")
     normalized_name = normalized_name.replace("metres", "meters").replace(
@@ -1581,6 +1628,7 @@ def _normalize_units_length_name(unit_name: str) -> str:
 
 @lru_cache(maxsize=1)
 def _units_length_by_normalized_name():
+    """Handle units length by normalized name."""
     from omero.model.enums import UnitsLength
 
     return {
@@ -1590,10 +1638,12 @@ def _units_length_by_normalized_name():
 
 
 def _unit_sort_key(enum_value):
+    """Handle unit sort key."""
     return getattr(enum_value, "name", str(enum_value))
 
 
 def _iter_units_length_values(units_length_class):
+    """Handle iter units length values."""
     values_by_name = {}
     for attribute_name in dir(units_length_class):
         if attribute_name.startswith("_"):
@@ -1614,6 +1664,7 @@ def _iter_units_length_values(units_length_class):
 
 @lru_cache(maxsize=1)
 def _units_length_symbol_aliases():
+    """Handle units length symbol aliases."""
     units = _units_length_by_normalized_name()
     alias_map = {}
 
@@ -1671,6 +1722,7 @@ def _units_length_symbol_aliases():
 
 
 def _native_zarr_length_from_value_unit(value_unit):
+    """Handle native Zarr length from value unit."""
     if not isinstance(value_unit, (list, tuple)) or not value_unit:
         return None
 
@@ -1688,6 +1740,7 @@ def _native_zarr_length_from_value_unit(value_unit):
 
 
 def _native_zarr_length_signature(length) -> Optional[tuple[float, str]]:
+    """Handle native Zarr length signature."""
     if length is None:
         return None
 
@@ -1715,6 +1768,7 @@ def _native_zarr_length_signature(length) -> Optional[tuple[float, str]]:
 def _native_zarr_image_relative_path_from_lsid(
     managed_zarr: Path, lsid: str
 ) -> Optional[str]:
+    """Handle native Zarr image relative path from lsid."""
     root_path = Path(managed_zarr).resolve(strict=False)
     lsid_text = str(lsid or "").strip()
     if not lsid_text:
@@ -1733,6 +1787,7 @@ def _runtime_native_zarr_physical_sizes(
     managed_zarr: Path,
     image_relative_path: Optional[str],
 ) -> tuple[dict[str, object], Optional[str]]:
+    """Handle runtime native Zarr physical sizes."""
     target_path = managed_zarr
     if image_relative_path:
         target_path = managed_zarr / image_relative_path
@@ -1952,6 +2007,7 @@ def _finalize_imported_zarr_image_metadata(
 
 
 def _get_id(obj):
+    """Handle get identifier."""
     try:
         model_obj = getattr(obj, "_obj", None)
         if model_obj is not None:
@@ -1966,6 +2022,7 @@ def _get_id(obj):
 
 
 def _get_owner_id(obj):
+    """Handle get owner identifier."""
     if obj is None:
         return None
     try:
@@ -1989,6 +2046,7 @@ def _get_owner_id(obj):
 
 
 def _current_user_id(conn):
+    """Handle current user identifier."""
     try:
         user = conn.getUser()
         if user is not None:
@@ -2000,6 +2058,7 @@ def _current_user_id(conn):
 
 
 def _is_owned_by_user(obj, user_id):
+    """Handle is owned by user."""
     if obj is None or user_id is None:
         return False
     owner_id = _get_owner_id(obj)
@@ -2012,6 +2071,7 @@ def _is_owned_by_user(obj, user_id):
 
 
 def _get_owner_username(obj):
+    """Handle get owner username."""
     if obj is None:
         return ""
     owner = None
@@ -2041,6 +2101,7 @@ def _get_owner_username(obj):
 
 
 def _has_read_write_permissions(obj):
+    """Handle has read write permissions."""
     if obj is None:
         return False
     for attr in ("canEdit", "canWrite"):
@@ -2063,6 +2124,7 @@ def _has_read_write_permissions(obj):
 
 
 def _iter_accessible_projects(conn):
+    """Handle iter accessible projects."""
     if conn is None:
         return
 
@@ -2125,6 +2187,7 @@ def _iter_accessible_projects(conn):
 
 
 def _collect_project_payload(conn, user_id):
+    """Handle collect project payload."""
     owned_projects = []
     collab_projects = []
     try:
@@ -2145,6 +2208,7 @@ def _collect_project_payload(conn, user_id):
 
 
 def _dataset_name_for_path(relative_path: str, orphan_dataset_name: str | None = None):
+    """Handle dataset name for path."""
     parts = PurePosixPath(relative_path).parts
     if len(parts) <= 1:
         return orphan_dataset_name
@@ -2155,6 +2219,7 @@ DIRECTORY_PACKAGE_EXTENSIONS = (".zarr",)
 
 
 def _directory_package_root_for_relative_path(relative_path: str) -> Optional[str]:
+    """Handle directory package root for relative path."""
     parts = PurePosixPath(relative_path).parts
     if not parts:
         return None
@@ -2171,6 +2236,7 @@ def _directory_package_root_for_relative_path(relative_path: str) -> Optional[st
 def _dataset_name_for_upload_relative_path(
     relative_path: str, orphan_dataset_name: str | None = None
 ):
+    """Handle dataset name for upload relative path."""
     package_root = _directory_package_root_for_relative_path(relative_path)
     if package_root:
         return "\\".join(PurePosixPath(package_root).parts)
@@ -2178,6 +2244,7 @@ def _dataset_name_for_upload_relative_path(
 
 
 def _logical_unit_is_directory_package_root(entry: dict) -> bool:
+    """Handle logical unit is directory package root."""
     dataset_relative_path = (
         entry.get("dataset_relative_path") or entry.get("relative_path") or ""
     )
@@ -2202,6 +2269,7 @@ def _logical_unit_is_directory_package_root(entry: dict) -> bool:
 
 
 def _dataset_name_for_import_entry(entry: dict, orphan_dataset_name: str | None = None):
+    """Handle dataset name for import entry."""
     dataset_relative_path = (
         entry.get("dataset_relative_path") or entry.get("relative_path") or ""
     )
@@ -2213,6 +2281,7 @@ def _dataset_name_for_import_entry(entry: dict, orphan_dataset_name: str | None 
 
 
 def _job_dataset_name_override(job_dict: dict):
+    """Handle job dataset name override."""
     dataset_name = job_dict.get("dataset_name_override")
     if dataset_name is None:
         return None
@@ -2225,6 +2294,7 @@ def _dataset_name_for_job_entry(
     entry: dict,
     orphan_dataset_name: str | None = None,
 ):
+    """Handle dataset name for job entry."""
     dataset_name_override = _job_dataset_name_override(job_dict)
     if dataset_name_override:
         return dataset_name_override
@@ -2236,6 +2306,7 @@ def _dataset_name_for_job_relative_path(
     relative_path: str,
     orphan_dataset_name: str | None = None,
 ):
+    """Handle dataset name for job relative path."""
     dataset_name_override = _job_dataset_name_override(job_dict)
     if dataset_name_override:
         return dataset_name_override
@@ -2243,6 +2314,7 @@ def _dataset_name_for_job_relative_path(
 
 
 def _generate_orphan_dataset_name():
+    """Handle generate orphan dataset name."""
     suffix = "".join(
         secrets.choice(ORPHAN_SUFFIX_ALPHANUM) for _ in range(ORPHAN_SUFFIX_LENGTH)
     )
@@ -2250,6 +2322,7 @@ def _generate_orphan_dataset_name():
 
 
 def _find_project_dataset(conn, project_id: int, name: str):
+    """Handle find project dataset."""
     if not project_id or not name:
         return None
     try:
@@ -2268,6 +2341,7 @@ def _find_project_dataset(conn, project_id: int, name: str):
 
 
 def _link_dataset_to_project(conn, dataset_id: int, project_id: int):
+    """Handle link dataset to project."""
     if not dataset_id or not project_id:
         return False
     try:
@@ -2289,6 +2363,7 @@ def _link_dataset_to_project(conn, dataset_id: int, project_id: int):
 
 
 def _resolve_omero_host_port(conn):
+    """Handle resolve OMERO host port."""
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
     port = getattr(conn, "port", None) or getattr(conn, "_port", None)
 
@@ -2307,6 +2382,7 @@ def _resolve_omero_host_port(conn):
 
 
 def _get_session_key(conn):
+    """Handle get session key."""
     if callable(getattr(conn, "getSessionId", None)):
         try:
             return conn.getSessionId()
@@ -2320,6 +2396,7 @@ def _get_session_key(conn):
 
 
 def _optional_int(value) -> int | None:
+    """Handle optional int."""
     if value is None or value == "":
         return None
     try:
@@ -2331,6 +2408,7 @@ def _optional_int(value) -> int | None:
 def _get_or_create_dataset(
     conn, name: str, dataset_map: dict, project_id: int | None = None
 ):
+    """Handle get or create dataset."""
     if not name:
         return None
     if name in dataset_map:
@@ -2373,6 +2451,7 @@ def _get_or_create_dataset(
 
 
 def _plan_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
+    """Handle plan job dataset targets."""
     dataset_name_override = _job_dataset_name_override(job_dict)
     if dataset_name_override:
         return (
@@ -2402,6 +2481,7 @@ def _plan_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
 
 
 def _serialize_import_unit_plan(unit: dict):
+    """Handle serialize import unit plan."""
     covered_relative_paths = [
         relative_path
         for relative_path in (unit.get("covered_relative_paths") or [])
@@ -2424,6 +2504,7 @@ def _serialize_import_unit_plan(unit: dict):
 
 
 def _planned_import_units_for_request(job_dict: dict):
+    """Handle planned import units for request."""
     raw_units = job_dict.get("planned_import_units") or []
     if not isinstance(raw_units, list):
         return []
@@ -2467,6 +2548,7 @@ def _planned_import_units_for_request(job_dict: dict):
 
 
 def _plan_request_job_dataset_targets(job_dict: dict):
+    """Handle plan request job dataset targets."""
     dataset_name_override = _job_dataset_name_override(job_dict)
     if dataset_name_override:
         has_active_entries = any(
@@ -2544,6 +2626,7 @@ def _plan_request_job_dataset_targets(job_dict: dict):
 def _prepare_request_job_import_datasets(
     job_id: str, job_dict: dict, conn: Optional[BlitzGateway] = None
 ):
+    """Handle prepare request job import datasets."""
     generic_error = errors.unable_prepare_import_destination()
     if conn is None:
         return None, generic_error
@@ -2601,6 +2684,7 @@ def _prepare_uploaded_job_for_request_path_import(
     job_dict: dict,
     conn: Optional[BlitzGateway] = None,
 ):
+    """Handle prepare uploaded job for request path import."""
     if conn is None or _has_pending_uploads(job_dict):
         return job_dict, None
 
@@ -2642,6 +2726,7 @@ def _prepare_uploaded_job_for_request_path_import(
 def _ensure_job_dataset_targets(
     job_dict: dict, entries_to_import: list[dict], conn: Optional[BlitzGateway] = None
 ):
+    """Handle ensure job dataset targets."""
     orphan_dataset_name, dataset_names = _plan_job_dataset_targets(
         job_dict, entries_to_import
     )
@@ -2736,11 +2821,13 @@ def _ensure_job_dataset_targets(
 def _prepare_job_import_datasets(
     job_id: str, job_dict: dict, conn: Optional[BlitzGateway] = None
 ):
+    """Handle prepare job import datasets."""
     upload_root = _get_upload_root() / job_id
     if not upload_root.exists():
         error_message = errors.upload_folder_missing_on_server()
 
         def mark_upload_root_missing(current_job):
+            """Handle mark upload root missing."""
             current_job["status"] = "error"
             _append_job_error(current_job, error_message)
             current_job["updated"] = time.time()
@@ -2757,6 +2844,7 @@ def _prepare_job_import_datasets(
         error_message = dataset_error or errors.unable_prepare_import_destination()
 
         def mark_dataset_target_error(current_job):
+            """Handle mark dataset target error."""
             current_job["status"] = "error"
             _append_job_error(current_job, error_message)
             current_job["updated"] = time.time()
@@ -2788,6 +2876,7 @@ _IMPORT_OBJECT_PATTERN = _IMPORT_OBJECT_PATTERNS[0]
 
 
 def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
+    """Handle build OMERO cli command."""
     cmd = [OMERO_CLI]
     if session_key:
         cmd.extend(["-k", session_key])
@@ -2816,6 +2905,7 @@ SCRIPT_START_RETRY_SECONDS_ENV = "OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS"
 
 
 def _get_cli_keepalive_seconds() -> int:
+    """Handle get cli keepalive seconds."""
     return _get_env_int(
         CLI_KEEPALIVE_SECONDS_ENV,
         CLI_KEEPALIVE_SECONDS_DEFAULT,
@@ -2825,6 +2915,7 @@ def _get_cli_keepalive_seconds() -> int:
 
 
 def _get_local_import_scan_timeout_seconds() -> int:
+    """Handle get local import scan timeout seconds."""
     return _get_env_int(
         LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_ENV,
         LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_DEFAULT,
@@ -2834,6 +2925,7 @@ def _get_local_import_scan_timeout_seconds() -> int:
 
 
 def _get_script_start_timeout_seconds() -> int:
+    """Handle get script start timeout seconds."""
     return _get_env_int(
         SCRIPT_START_TIMEOUT_SECONDS_ENV,
         SCRIPT_START_TIMEOUT_SECONDS_DEFAULT,
@@ -2843,6 +2935,7 @@ def _get_script_start_timeout_seconds() -> int:
 
 
 def _get_script_start_retry_seconds() -> int:
+    """Handle get script start retry seconds."""
     return _get_env_int(
         SCRIPT_START_RETRY_SECONDS_ENV,
         SCRIPT_START_RETRY_SECONDS_DEFAULT,
@@ -2852,6 +2945,7 @@ def _get_script_start_retry_seconds() -> int:
 
 
 def _get_failed_import_retention_seconds() -> int:
+    """Handle get failed import retention seconds."""
     return _get_env_int(
         FAILED_IMPORT_RETENTION_SECONDS_ENV,
         FAILED_IMPORT_RETENTION_SECONDS_DEFAULT,
@@ -2861,6 +2955,7 @@ def _get_failed_import_retention_seconds() -> int:
 
 
 def _sanitize_cli_output_for_logging(text: str) -> str:
+    """Handle sanitize cli output for logging."""
     sanitized = sanitize_log_value(text)
     return re.sub(
         r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
@@ -2877,6 +2972,7 @@ def _summarize_cli_error_text(
     max_lines: int = 10,
     max_chars: int = 500,
 ) -> str:
+    """Handle summarize cli error text."""
     raw_text = stderr or stdout or ""
     if not raw_text:
         return "bioformats2raw reported no details"
@@ -2888,6 +2984,7 @@ def _summarize_cli_error_text(
 
 
 def _extract_imported_object_ids(output: str) -> list[str]:
+    """Handle extract imported object identifiers."""
     if not output:
         return []
     created_ids = []
@@ -2906,6 +3003,7 @@ def _extract_imported_image_ids_for_normalization(
     output: str,
     fallback_image_ids=None,
 ) -> list[int]:
+    """Handle extract imported image identifiers for normal behavior."""
     image_ids = _extract_imported_image_ids(output)
     if image_ids:
         return image_ids
@@ -2925,6 +3023,7 @@ def _extract_imported_image_ids_for_normalization(
 
 
 def _reports_no_processor_available(stdout: str, stderr: str) -> bool:
+    """Handle reports no processor available."""
     combined = "\n".join(part for part in (stdout, stderr) if part)
     lowered = combined.lower()
     return "noprocessoravailable" in lowered or "no processor available" in lowered
@@ -2938,6 +3037,7 @@ BACKGROUND_IMPORT_SESSION_MAX_SECONDS = 7 * 24 * 60 * 60
 def _get_background_import_session_timeout_seconds(
     timeout_hint_seconds: Optional[int] = None,
 ) -> int:
+    """Handle get background import session timeout seconds."""
     base_seconds = (
         timeout_hint_seconds
         if timeout_hint_seconds is not None
@@ -2951,16 +3051,19 @@ def _get_background_import_session_timeout_seconds(
 
 
 def _get_root_password() -> str:
+    """Handle get root password."""
     return (os.environ.get("ROOTPASS") or "").strip()
 
 
 def _normalize_job_service_credentials(credentials) -> JobServiceCredentials:
+    """Handle normalize job service credentials."""
     if isinstance(credentials, JobServiceCredentials):
         return credentials
     return JobServiceCredentials(*credentials)
 
 
 def _open_admin_connection(host: str, port: int) -> Optional[BlitzGateway]:
+    """Handle open admin connection."""
     root_pass = _get_root_password()
     if not root_pass:
         logger.error(
@@ -3012,6 +3115,7 @@ def _resolve_group_name(
     group_id: Optional[int],
     group_name: Optional[str] = None,
 ) -> Optional[str]:
+    """Handle resolve group name."""
     cached_name = (group_name or "").strip()
     if cached_name:
         return cached_name
@@ -3044,6 +3148,7 @@ def _background_import_session(
     group_name: Optional[str] = None,
     timeout_hint_seconds: Optional[int] = None,
 ):
+    """Handle background import session."""
     admin_conn = _open_admin_connection(host, port)
     if admin_conn is None:
         yield None
@@ -3119,6 +3224,7 @@ def _background_user_connection(
         return
 
     def _open_from_session(active_session_key: str):
+        """Handle open from session."""
         if not active_session_key:
             return None
         try:
@@ -3180,6 +3286,7 @@ def _background_user_connection(
 def _write_cli_ice_config(
     cli_home: Path, keepalive_seconds: int, base_config_path: str = ""
 ) -> Optional[Path]:
+    """Handle write cli ice config."""
     if keepalive_seconds <= 0:
         return None
 
@@ -3218,6 +3325,7 @@ def _write_cli_ice_config(
 
 
 def _classify_import_failure(stdout: str, stderr: str) -> str:
+    """Handle classify import failure."""
     combined = "\n".join(part for part in (stdout, stderr) if part).lower()
     if (
         "proxy keep alive failed" in combined
@@ -3248,6 +3356,7 @@ def _classify_import_failure(stdout: str, stderr: str) -> str:
 
 
 def _run_omero_cli(cmd, timeout=None):
+    """Handle run OMERO cli."""
     return process_utils.run(
         cmd,
         check=False,
@@ -3257,6 +3366,7 @@ def _run_omero_cli(cmd, timeout=None):
 
 
 def _run_local_import_scan(path: Path, timeout: Optional[int] = None):
+    """Handle run local import scan."""
     if timeout is None:
         timeout = _get_local_import_scan_timeout_seconds()
     cmd = [
@@ -3295,6 +3405,7 @@ def _run_local_import_scan(path: Path, timeout: Optional[int] = None):
 
 
 def _run_omero_cli_streaming(cmd, *, env, timeout, on_tick=None):
+    """Handle run OMERO cli streaming."""
     return process_utils.run_streaming(
         cmd,
         timeout=timeout,
@@ -3305,6 +3416,7 @@ def _run_omero_cli_streaming(cmd, *, env, timeout, on_tick=None):
 
 
 def _parse_cli_id(output: str, expected_type: str):
+    """Handle parse cli identifier."""
     for line in (output or "").splitlines():
         match = _CLI_ID_PATTERN.search(line.strip())
         if match and match.group("type") == expected_type:
@@ -3463,6 +3575,7 @@ def _import_file(
     last_save = 0.0
 
     def _update_progress(pid: int, _elapsed: float) -> None:
+        """Handle update progress."""
         nonlocal baseline_rchar, last_save
         if file_size <= 0:
             return
@@ -3699,6 +3812,7 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
 
 
 def _params_add_string(params, key, value):
+    """Handle params add string."""
     add_string = getattr(params, "addString", None)
     if callable(add_string):
         add_string(key, value)
@@ -3719,6 +3833,7 @@ def _params_add_string(params, key, value):
 
 
 def _params_add_long(params, key, value):
+    """Handle params add long."""
     add_long = getattr(params, "addLong", None)
     if callable(add_long):
         add_long(key, value)
@@ -3738,6 +3853,7 @@ def _params_add_long(params, key, value):
 
 
 def _params_add_string_list(params, key, values):
+    """Handle params add string list."""
     normalized_values = [str(value) for value in values]
 
     add_list = getattr(params, "addList", None)
@@ -3761,12 +3877,14 @@ def _params_add_string_list(params, key, values):
 
 
 def _params_page(params, offset, size):
+    """Handle params page."""
     page = getattr(params, "page", None)
     if callable(page):
         page(offset, size)
 
 
 def _timeout_expired(start_time: float, timeout_seconds) -> bool:
+    """Handle timeout expired."""
     try:
         timeout = float(timeout_seconds)
     except (TypeError, ValueError):
@@ -3845,6 +3963,7 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
 
 
 def _first_non_empty_env(*names: str) -> str:
+    """Handle first non empty env."""
     for name in names:
         value = (os.environ.get(name) or "").strip()
         if value:
@@ -3853,6 +3972,7 @@ def _first_non_empty_env(*names: str) -> str:
 
 
 def _job_service_secure_from_env(raw_value: str) -> bool:
+    """Handle job service secure from env."""
     return not (raw_value and raw_value.lower() in ("0", "false", "no", "off"))
 
 
@@ -4044,6 +4164,7 @@ def _open_service_connection(
 
 
 def _connection_has_last_error(conn) -> bool:
+    """Handle connection has last error."""
     try:
         return bool(conn.getLastError())
     except Exception:
@@ -4086,7 +4207,6 @@ def _open_user_owned_background_connection(
     purpose: str = "background OMERO work",
 ):
     """Open a user-owned OMERO connection from an independent session key only."""
-
     if not session_key or not host or port is None:
         logger.warning(
             "Background OMERO connection for %s requires an independent session key.",
@@ -4103,6 +4223,7 @@ def _open_user_owned_background_connection(
 
 
 def _logical_import_entry_display_name(entry: dict) -> str:
+    """Handle logical import entry display name."""
     rel_path = (entry.get("relative_path") or "").strip()
     if not rel_path:
         return ""
@@ -4110,6 +4231,7 @@ def _logical_import_entry_display_name(entry: dict) -> str:
 
 
 def _logical_import_entry_source_display_name(entry: dict) -> str:
+    """Handle logical import entry source display name."""
     source_rel_path = (entry.get("source_relative_path") or "").strip()
     if source_rel_path:
         return PurePosixPath(source_rel_path).name
@@ -4117,6 +4239,7 @@ def _logical_import_entry_source_display_name(entry: dict) -> str:
 
 
 def _logical_import_entry_group_header_name(entry: dict) -> str:
+    """Handle logical import entry group header name."""
     explicit_group_header_name = (entry.get("group_header_name") or "").strip()
     if explicit_group_header_name:
         return explicit_group_header_name
@@ -4127,6 +4250,7 @@ def _logical_import_entry_group_header_name(entry: dict) -> str:
 
 
 def _entry_requires_name_normalization(entry: dict, dataset_id: Optional[int]) -> bool:
+    """Handle entry requires name normalization."""
     if not dataset_id:
         return False
 
@@ -4143,6 +4267,8 @@ def _entry_requires_name_normalization(entry: dict, dataset_id: Optional[int]) -
 
 @dataclass(frozen=True)
 class _ImportNameNormalizationContext:
+    """Represent import name normalization context."""
+
     cli_import_name: Optional[str] = None
     group_header_name: str = ""
     expected_image_names: tuple[str, ...] = ()
@@ -4152,6 +4278,7 @@ def _build_source_aware_image_name(
     source_display_name: str,
     image_display_name: str,
 ) -> str:
+    """Handle build source aware image name."""
     source_text = (source_display_name or "").strip()
     image_text = (image_display_name or "").strip()
     if not source_text:
@@ -4166,6 +4293,7 @@ def _build_source_aware_image_name(
 def _coerce_import_name_normalization_context(
     context,
 ) -> Optional[_ImportNameNormalizationContext]:
+    """Handle coerce import name normalization context."""
     if context is None or isinstance(context, _ImportNameNormalizationContext):
         return context
     if not isinstance(context, dict):
@@ -4189,6 +4317,7 @@ def _build_ome_zarr_import_name_normalization_context(
     entry: dict,
     file_path: Path,
 ) -> Optional[_ImportNameNormalizationContext]:
+    """Handle build ome Zarr import name normalization context."""
     if not file_path.is_dir() or not any(
         file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS
     ):
@@ -4232,6 +4361,7 @@ def _build_import_name_normalization_context(
     dataset_id: Optional[int],
     file_path: Optional[Path] = None,
 ):
+    """Handle build import name normalization context."""
     if file_path is not None:
         zarr_context = _build_ome_zarr_import_name_normalization_context(
             entry,
@@ -4255,6 +4385,7 @@ def _build_import_name_normalization_context(
 
 
 def _extract_imported_image_ids(import_stdout: str) -> list[int]:
+    """Handle extract imported image identifiers."""
     if not import_stdout:
         return []
 
@@ -4279,6 +4410,7 @@ def _extract_imported_image_ids(import_stdout: str) -> list[int]:
 def _image_name_requires_normalization(
     current_name: str, group_header_name: str
 ) -> bool:
+    """Handle image name requires normalization."""
     normalized_current = (current_name or "").strip()
     if not normalized_current:
         return True
@@ -4294,6 +4426,7 @@ def _apply_import_name_normalization_context(
     port: int,
     group_id: Optional[int],
 ) -> list[int]:
+    """Handle apply import name normalization context."""
     context = _coerce_import_name_normalization_context(context)
     if not context or not session_key:
         return []
@@ -4437,6 +4570,7 @@ def _attach_txt_to_image_service(
         file_path: Path,
         mimetype: str,
     ):
+        """Handle attach file."""
         try:
             binary_data = file_path.read_bytes()
         except Exception as exc:
@@ -4529,6 +4663,7 @@ def _attach_txt_to_image_service(
 
 
 def _append_job_message(job: dict, message: str):
+    """Handle append job message."""
     if not message:
         return
     job.setdefault("messages", [])
@@ -4538,6 +4673,7 @@ def _append_job_message(job: dict, message: str):
 
 
 def _append_job_error(job: dict, message: str):
+    """Handle append job error."""
     if not message:
         return
     job.setdefault("errors", [])
@@ -4549,11 +4685,13 @@ def _append_job_error(job: dict, message: str):
 def _append_txt_attachment_message(
     job: dict, txt_name: str, image_name: str, success: bool
 ):
+    """Handle append txt attachment message."""
     label = "Txt attachment success" if success else "Txt attachment failure"
     _append_job_message(job, f"{label}: {txt_name} into {image_name}")
 
 
 def _verify_import(conn, file_name: str, dataset_id=None):
+    """Handle verify import."""
     if dataset_id:
         try:
             dataset = conn.getObject("Dataset", dataset_id)
@@ -4576,6 +4714,7 @@ def _verify_import(conn, file_name: str, dataset_id=None):
 
 
 def _get_import_lock(username: str):
+    """Handle get import lock."""
     key = username or "__default__"
     with _IMPORT_LOCKS_GUARD:
         lock = _IMPORT_LOCKS.get(key)
@@ -4586,16 +4725,19 @@ def _get_import_lock(username: str):
 
 
 def _safe_job_id(value: str) -> bool:
+    """Handle safe job identifier."""
     return bool(value and isinstance(value, str) and JOB_ID_SANITIZER.match(value))
 
 
 def _validated_job_id(value: str) -> str:
+    """Handle validated job identifier."""
     if not _safe_job_id(value):
         raise ValueError("Invalid job id.")
     return uuid.UUID(hex=str(value).lower()).hex
 
 
 def _job_lock_path(job_id: str) -> Path:
+    """Handle job lock path."""
     return _resolve_managed_child_parts(
         _get_jobs_root(),
         (f".{_validated_job_id(job_id)}.lock",),
@@ -4610,16 +4752,20 @@ _MANAGED_COMPONENT_RE = re.compile(r"(?!\.{1,2}$)[^/\\\x00]+")
 
 
 class _ManagedPathValidationError(ValueError):
+    """Represent managed path validation error."""
+
     pass
 
 
 def _invalid_managed_path(display_path: str) -> _ManagedPathValidationError:
+    """Handle invalid managed path."""
     return _ManagedPathValidationError(errors.invalid_filename(display_path))
 
 
 def _managed_relative_path_validation_error(
     root: Path, relative_parts: tuple[str, ...], *, max_bytes: int | None = None
 ) -> str | None:
+    """Handle managed relative path validation error."""
     if not relative_parts:
         return errors.invalid_filename("")
 
@@ -4644,6 +4790,7 @@ def _managed_relative_path_validation_error(
 def _validate_managed_relative_parts(
     root: Path, relative_parts: tuple[str, ...], *, max_bytes: int | None = None
 ) -> tuple[Path, tuple[str, ...]]:
+    """Handle validate managed relative parts."""
     validation_error = _managed_relative_path_validation_error(
         root,
         relative_parts,
@@ -4655,6 +4802,7 @@ def _validate_managed_relative_parts(
 
 
 def _managed_root_relative_parts(path: Path) -> tuple[Path, tuple[str, ...]]:
+    """Handle managed root relative parts."""
     candidate = Path(path)
     for root in (_get_upload_root(), _get_jobs_root()):
         root_path = Path(root)
@@ -4672,6 +4820,7 @@ def _managed_root_relative_parts(path: Path) -> tuple[Path, tuple[str, ...]]:
 
 
 def _validated_managed_component(component: str, display_path: str) -> str:
+    """Handle validated managed component."""
     component_text = str(component or "")
     if not _MANAGED_COMPONENT_RE.fullmatch(component_text):
         raise _invalid_managed_path(display_path)
@@ -4679,10 +4828,12 @@ def _validated_managed_component(component: str, display_path: str) -> str:
 
 
 def _managed_safe_component_name(component: str, display_path: str) -> str:
+    """Handle managed safe component name."""
     return _validated_managed_component(component, display_path)
 
 
 def _open_trusted_managed_root_fd(root_path: Path) -> int:
+    """Handle open trusted managed root fd."""
     try:
         return os.open(
             root_path,
@@ -4699,6 +4850,7 @@ def _open_trusted_managed_root_fd(root_path: Path) -> int:
 def _open_managed_subdirectory_fd(
     parent_fd: int, directory_name: str, display_path: str
 ) -> int:
+    """Handle open managed subdirectory fd."""
     safe_name = _managed_safe_component_name(directory_name, display_path)
     return os.open(
         safe_name,
@@ -4708,6 +4860,7 @@ def _open_managed_subdirectory_fd(
 
 
 def _managed_child_lstat(parent_fd: int, child_name: str, display_path: str):
+    """Handle managed child lstat."""
     safe_name = _managed_safe_component_name(child_name, display_path)
     try:
         stat_result = os.stat(safe_name, dir_fd=parent_fd, follow_symlinks=False)
@@ -4723,6 +4876,7 @@ def _managed_child_lstat(parent_fd: int, child_name: str, display_path: str):
 def _create_managed_subdirectory(
     parent_fd: int, directory_name: str, display_path: str
 ) -> int:
+    """Handle create managed subdirectory."""
     safe_name = _managed_safe_component_name(directory_name, display_path)
     os.mkdir(safe_name, _MANAGED_DIRECTORY_CREATE_MODE, dir_fd=parent_fd)
     return _open_managed_subdirectory_fd(parent_fd, safe_name, display_path)
@@ -4731,6 +4885,7 @@ def _create_managed_subdirectory(
 def _open_managed_upload_file_fd(
     parent_fd: int, child_name: str, flags: int, display_path: str
 ) -> int:
+    """Handle open managed upload file fd."""
     safe_name = _managed_safe_component_name(child_name, display_path)
     _managed_child_lstat(parent_fd, safe_name, display_path)
     try:
@@ -4747,12 +4902,14 @@ def _open_managed_upload_file_fd(
 
 
 def _open_managed_directory_fd(path: Path) -> int:
+    """Handle open managed directory fd."""
     return _open_trusted_managed_root_fd(Path(path))
 
 
 def _validate_existing_managed_path_segments(
     root_path: Path, normalized_parts: tuple[str, ...]
 ) -> None:
+    """Handle validate existing managed path segments."""
     try:
         dir_fd = _open_managed_directory_fd(root_path)
     except FileNotFoundError:
@@ -4785,6 +4942,7 @@ def _managed_parent_directory_fd(
     max_bytes: int | None = None,
     create_parents: bool = False,
 ) -> tuple[int, str]:
+    """Handle managed parent directory fd."""
     root_path, normalized_parts = _validate_managed_relative_parts(
         root,
         relative_parts,
@@ -4821,12 +4979,14 @@ def _managed_parent_directory_fd(
 
 
 def _managed_child_path(root_path: Path, normalized_parts: tuple[str, ...]) -> Path:
+    """Handle managed child path."""
     return Path(root_path).joinpath(*normalized_parts)
 
 
 def _managed_runtime_validation_error(
     root: Path, relative_parts: tuple[str, ...], *, max_bytes: int | None = None
 ) -> str | None:
+    """Handle managed runtime validation error."""
     validation_error = _managed_relative_path_validation_error(
         root,
         relative_parts,
@@ -4850,6 +5010,7 @@ def _managed_parent_runtime_error(
     max_bytes: int | None = None,
     create_parents: bool = False,
 ) -> str | None:
+    """Handle managed parent runtime error."""
     validation_error = _managed_relative_path_validation_error(
         root,
         relative_parts,
@@ -4876,6 +5037,7 @@ def _managed_parent_runtime_error(
 def _resolve_managed_child_parts(
     root: Path, relative_parts: tuple[str, ...], *, max_bytes: int | None = None
 ) -> Path:
+    """Handle resolve managed child parts."""
     root_path, normalized_parts = _validate_managed_relative_parts(
         root,
         relative_parts,
@@ -4888,6 +5050,7 @@ def _resolve_managed_child_parts(
 def _resolve_managed_child_path(
     root: Path, relative_path: str, *, max_bytes: int | None = None
 ) -> Path:
+    """Handle resolve managed child path."""
     normalized_path, normalize_error = _normalize_upload_relative_path(relative_path)
     if normalize_error:
         raise _ManagedPathValidationError(normalize_error)
@@ -4899,6 +5062,7 @@ def _resolve_managed_child_path(
 
 
 def _resolve_managed_directory_path(path: Path) -> Path:
+    """Handle resolve managed directory path."""
     root_path, relative = _managed_root_relative_parts(Path(path))
     if not relative:
         return root_path
@@ -4908,6 +5072,7 @@ def _resolve_managed_directory_path(path: Path) -> Path:
 
 
 def _fsync_directory(path: Path):
+    """Handle fsync directory."""
     try:
         dir_fd = os.open(path, os.O_DIRECTORY)
     except (AttributeError, OSError):
@@ -4919,16 +5084,19 @@ def _fsync_directory(path: Path):
 
 
 def _fsync_jobs_directory():
+    """Handle fsync jobs directory."""
     _fsync_directory(_get_jobs_root())
 
 
 def _read_job_file(job_id: str):
+    """Handle read job file."""
     path = _job_path(job_id)
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
 def _write_job_file(job_id: str, job_dict):
+    """Handle write job file."""
     path = _job_path(job_id)
     tmp_path = None
     try:
@@ -4962,6 +5130,7 @@ def _apply_upload_updates(
     upload_errors: list | None = None,
     **legacy_options,
 ):
+    """Handle apply upload updates."""
     if upload_errors is None and "errors" in legacy_options:
         upload_errors = legacy_options.pop("errors")
     if legacy_options:
@@ -4969,6 +5138,7 @@ def _apply_upload_updates(
         raise TypeError(f"Unexpected upload update keyword(s): {unexpected}")
 
     def apply_updates(job_dict):
+        """Handle apply updates."""
         entries_by_id = {
             entry.get("upload_id"): entry for entry in job_dict.get("files", [])
         }
@@ -5001,6 +5171,7 @@ def _apply_upload_updates(
 
 
 def _update_job(job_id: str, update_fn):
+    """Handle update job."""
     return _robust_update_job(job_id, update_fn)
 
 
@@ -5207,6 +5378,7 @@ def _parse_candidate_path_line(line: str) -> Optional[Path]:
 
 
 def _parse_import_groups(output: str):
+    """Handle parse import groups."""
     groups: list[dict[str, Any]] = []
     current_group: dict[str, Any] | None = None
 
@@ -5236,6 +5408,7 @@ def _parse_import_groups(output: str):
 
 
 def _relative_path_within_root(relative_path: str, root_relative_path: str) -> bool:
+    """Handle relative path within root."""
     if not root_relative_path:
         return False
     return relative_path == root_relative_path or relative_path.startswith(
@@ -5244,6 +5417,7 @@ def _relative_path_within_root(relative_path: str, root_relative_path: str) -> b
 
 
 def _common_relative_prefix(relative_paths: list[str]) -> str:
+    """Handle common relative prefix."""
     if not relative_paths:
         return ""
 
@@ -5266,6 +5440,7 @@ def _group_covers_all_active_paths_under_root(
     root_relative_path: str,
     covered_relative_paths: list[str],
 ) -> bool:
+    """Handle group covers all active paths under root."""
     if not root_relative_path or not covered_relative_paths:
         return False
 
@@ -5288,6 +5463,7 @@ def _looks_like_directory_package_root(
     group_path_relative: str,
     covered_relative_paths: list[str],
 ) -> bool:
+    """Handle looks like directory package root."""
     if not root_relative_path or not covered_relative_paths:
         return False
     if group_path_relative and not _relative_path_within_root(
@@ -5336,6 +5512,7 @@ def _looks_like_directory_package_root(
 
 
 def _collect_import_entries(job_dict, *, for_compatibility: bool = False):
+    """Handle collect import entries."""
     entries = []
     for index, entry in enumerate(job_dict.get("files", [])):
         rel_path = entry.get("relative_path")
@@ -5366,6 +5543,7 @@ def _collect_import_entries(job_dict, *, for_compatibility: bool = False):
 
 
 def _single_entry_import_unit(entry: dict):
+    """Handle single entry import unit."""
     rel_path = entry["relative_path"]
     return {
         "cleanup_staged_paths": [entry["staged_path"]],
@@ -5384,6 +5562,7 @@ def _probe_import_path(
     active_relative_paths: list[str],
     cache: dict[str, dict],
 ):
+    """Handle probe import path."""
     cache_key = str(path)
     cached = cache.get(cache_key)
     if cached is not None:
@@ -5479,6 +5658,7 @@ def _probe_import_path(
 def _build_import_units(
     job_dict, upload_root: Path, *, for_compatibility: bool = False
 ):
+    """Handle build import units."""
     active_entries = _collect_import_entries(
         job_dict, for_compatibility=for_compatibility
     )
@@ -5806,6 +5986,7 @@ def _check_import_compatibility(
 
 
 def _run_compatibility_check(job_id: str):
+    """Handle run compatibility check."""
     try:
         _run_compatibility_check_inner(job_id)
     except Exception as exc:
@@ -5817,6 +5998,7 @@ def _run_compatibility_check(job_id: str):
         )
 
         def reset_thread(job_dict):
+            """Handle reset thread."""
             job_dict["compatibility_thread_active"] = False
             job_dict["compatibility_status"] = "error"
             _refresh_job_status(job_dict)
@@ -5827,6 +6009,7 @@ def _run_compatibility_check(job_id: str):
 
 
 def _run_compatibility_check_inner(job_id: str):
+    """Handle run compatibility check inner."""
     job = _load_job(job_id)
     if not job:
         return
@@ -5839,6 +6022,7 @@ def _run_compatibility_check_inner(job_id: str):
     if not planned_units:
 
         def mark_idle(job_dict):
+            """Handle mark idle."""
             job_dict["planned_import_units"] = []
             job_dict["compatibility_thread_active"] = False
             has_uploaded = any(
@@ -5876,6 +6060,7 @@ def _run_compatibility_check_inner(job_id: str):
     ]
 
     def persist_plans(job_dict):
+        """Store persist plans."""
         job_dict["planned_import_units"] = serialized_plans
         job_dict["updated"] = time.time()
         return job_dict
@@ -5885,6 +6070,7 @@ def _run_compatibility_check_inner(job_id: str):
     if not job.get("compatibility_enabled", True):
 
         def mark_planning_ready(job_dict):
+            """Handle mark planning ready."""
             job_dict["compatibility_thread_active"] = False
             if job_dict.get("compatibility_status") not in ("incompatible", "error"):
                 job_dict["compatibility_status"] = "compatible"
@@ -5988,6 +6174,7 @@ def _run_compatibility_check_inner(job_id: str):
     ]
 
     def apply_results(job_dict):
+        """Handle apply results."""
         entries = job_dict.get("files", [])
         for result in results:
             covered_indexes = result.get("covered_indexes", [])
@@ -6048,9 +6235,11 @@ def _run_compatibility_check_inner(job_id: str):
 
 
 def _start_compatibility_check_thread(job_id: str):
+    """Handle start compatibility check thread."""
     started = {"value": False}
 
     def mark_started(job_dict):
+        """Handle mark started."""
         if job_dict.get("compatibility_thread_active"):
             return job_dict
         job_dict["compatibility_thread_active"] = True
@@ -6072,6 +6261,8 @@ def _start_compatibility_check_thread(job_id: str):
 
 @dataclass(frozen=True)
 class _NativeZarrImportPlan:
+    """Represent native Zarr import plan."""
+
     kind: Optional[str] = None
     recognized_zarr: bool = False
     validation_error: Optional[str] = None
@@ -6091,6 +6282,7 @@ _IMPORT_ROUTING_ENTRY_FIELDS = (
 
 
 def _native_zarr_import_plan(zarr_path: Path) -> _NativeZarrImportPlan:
+    """Handle native Zarr import plan."""
     inspection = inspect_ome_zarr_image(zarr_path)
     recognized_zarr = bool(getattr(inspection, "recognized", False))
     if not recognized_zarr:
@@ -6111,6 +6303,7 @@ def _native_zarr_import_plan(zarr_path: Path) -> _NativeZarrImportPlan:
 def _serialize_native_zarr_plan(
     plan: Optional[_NativeZarrImportPlan],
 ) -> Optional[dict]:
+    """Handle serialize native Zarr plan."""
     if not isinstance(plan, _NativeZarrImportPlan):
         return None
     if not (
@@ -6131,6 +6324,7 @@ def _serialize_native_zarr_plan(
 
 
 def _deserialize_native_zarr_plan(payload) -> _NativeZarrImportPlan:
+    """Handle deserialize native Zarr plan."""
     if isinstance(payload, _NativeZarrImportPlan):
         return payload
     if not isinstance(payload, dict):
@@ -6145,6 +6339,7 @@ def _deserialize_native_zarr_plan(payload) -> _NativeZarrImportPlan:
 
 
 def _attach_import_routing_fields(unit: dict, covered_entries: list[dict]) -> None:
+    """Handle attach import routing fields."""
     if not covered_entries:
         return
 
@@ -6171,6 +6366,7 @@ _SCRIPT_OUTPUT_PATTERN = re.compile(r"^\s*\*?\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$")
 
 
 def _extract_script_outputs(text: str) -> dict[str, str]:
+    """Handle extract script outputs."""
     outputs = {}
     for line in (text or "").splitlines():
         match = _SCRIPT_OUTPUT_PATTERN.match(line)
@@ -6184,12 +6380,14 @@ def _extract_script_outputs(text: str) -> dict[str, str]:
 
 
 def _shared_zarr_transfer_root() -> Path:
+    """Handle shared Zarr transfer root."""
     root = get_plugin_tmp_dir(ZARR_SHARED_TRANSFER_SUBDIR, create=True)
     root.chmod(ZARR_SHARED_TRANSFER_ROOT_MODE)
     return root.resolve(strict=False)
 
 
 def _normalize_shared_zarr_permissions(path: Path) -> None:
+    """Handle normalize shared Zarr permissions."""
     path = Path(path)
     if not path.exists():
         return
@@ -6213,6 +6411,7 @@ def _normalize_shared_zarr_permissions(path: Path) -> None:
 def _prepare_server_readable_zarr_source(
     file_path: Path,
 ) -> tuple[Optional[Path], Optional[Path], Optional[str]]:
+    """Handle prepare server readable Zarr source."""
     try:
         source = Path(file_path).resolve(strict=True)
     except OSError as exc:
@@ -6243,6 +6442,7 @@ def _prepare_server_readable_zarr_source(
 
 
 def _cleanup_shared_zarr_transfer(path: Optional[Path]) -> None:
+    """Handle cleanup shared Zarr transfer."""
     if path is None:
         return
     transfer_root = _shared_zarr_transfer_root()
@@ -6274,14 +6474,17 @@ def _cleanup_shared_zarr_transfer(path: Optional[Path]) -> None:
 
 
 def _iter_script_services(conn):
+    """Handle iter script services."""
     if conn is None:
         return
     seen = set()
 
     def _connection_script_service():
+        """Handle connection script service."""
         return conn.getScriptService()
 
     def _session_factory_script_service():
+        """Handle session factory script service."""
         return conn.c.sf.getScriptService()
 
     for svc_getter in (_connection_script_service, _session_factory_script_service):
@@ -6299,6 +6502,7 @@ def _iter_script_services(conn):
 def _find_script_id_by_name(
     conn, script_name: str, *, preferred_path_fragment: Optional[str] = None
 ) -> Optional[int]:
+    """Handle find script identifier by name."""
     if conn is None or not script_name:
         return None
 
@@ -6367,6 +6571,7 @@ def _run_zarr_managed_repo_script(
     source_path: Optional[Path] = None,
     managed_path: Optional[Path] = None,
 ) -> tuple[bool, dict[str, str], str]:
+    """Handle run Zarr managed repo script."""
     admin_conn = _open_admin_connection(host, port)
     if admin_conn is None:
         return (
@@ -6466,6 +6671,7 @@ def _cleanup_managed_zarr_path(
     group_name: str,
     managed_path: Optional[Path],
 ) -> None:
+    """Handle cleanup managed Zarr path."""
     if managed_path is None:
         return
     success, _outputs, message = _run_zarr_managed_repo_script(
@@ -7203,6 +7409,7 @@ def _import_job_entry(
     username=None,
     group_name=None,
 ):
+    """Handle import job entry."""
     _ = session_key
     rel_path = entry.get("relative_path")
     if not rel_path:
@@ -7616,6 +7823,7 @@ def _import_job_entry(
 
 
 def _mark_failed_job_for_deferred_cleanup(job_id: str) -> bool:
+    """Handle mark failed job for deferred cleanup."""
     retention_seconds = _get_failed_import_retention_seconds()
     upload_root = _get_upload_root()
     jobs_root = _get_jobs_root()
@@ -7646,6 +7854,7 @@ def _mark_failed_job_for_deferred_cleanup(job_id: str) -> bool:
 
 
 def _process_import_job(job_id: str):
+    """Handle process import job."""
     safe_job_id_for_log = sanitize_log_value(job_id)
     logger.info("Import thread started for job %s", safe_job_id_for_log)
     job = _load_job(job_id)
@@ -8674,6 +8883,7 @@ def _process_import_job(job_id: str):
 
 
 def _start_import_thread(job_id: str):
+    """Handle start import thread."""
     job = _load_job(job_id)
     if not job:
         return

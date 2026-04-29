@@ -7,16 +7,22 @@ from omero_plugin_common import omero_helpers, request_utils, string_utils
 
 
 class _ValueBox:
+    """Represent value box."""
+
     def __init__(self, value):
         self._value = value
 
     def getValue(self):
+        """Return get value."""
         return self._value
 
 
 class _BrokenValueBox:
+    """Represent broken value box."""
+
     @staticmethod
     def getValue():
+        """Return get value."""
         raise RuntimeError("boom")
 
     def __str__(self) -> str:
@@ -24,6 +30,8 @@ class _BrokenValueBox:
 
 
 class _OwnerStub:
+    """Represent owner stub."""
+
     def __init__(self, owner_id, *, ome_name=None, name=None, first_name=None):
         self._owner_id = owner_id
         self._ome_name = ome_name
@@ -31,55 +39,71 @@ class _OwnerStub:
         self._first_name = first_name
 
     def getId(self):
+        """Return get identifier."""
         return _ValueBox(self._owner_id)
 
     def getOmeName(self):
+        """Return get ome name."""
         if self._ome_name is None:
             raise AttributeError("missing ome name")
         return _ValueBox(self._ome_name)
 
     def getName(self):
+        """Return get name."""
         if self._name is None:
             raise AttributeError("missing display name")
         return _ValueBox(self._name)
 
     def getFirstName(self):
+        """Return get first name."""
         if self._first_name is None:
             raise AttributeError("missing first name")
         return _ValueBox(self._first_name)
 
 
 class _OwnerWithBrokenId:
+    """Represent owner with broken identifier."""
+
     @staticmethod
     def getId():
+        """Return get identifier."""
         raise RuntimeError("broken owner id")
 
 
 class _DetailsStub:
+    """Represent details stub."""
+
     def __init__(self, *, owner=None, permissions=None):
         self._owner = owner
         self._permissions = permissions
 
     def getOwner(self):
+        """Return get owner."""
         return self._owner
 
     def getPermissions(self):
+        """Return get permissions."""
         return self._permissions
 
 
 class _PermissionsStub:
+    """Represent permissions stub."""
+
     def __init__(self, *, can_read, can_write):
         self._can_read = can_read
         self._can_write = can_write
 
     def isRead(self):
+        """Handle is read."""
         return self._can_read
 
     def isWrite(self):
+        """Handle is write."""
         return self._can_write
 
 
 def test_omero_helper_accessors_cover_value_resolution_owner_fallbacks_and_permissions():
+    """Verify test OMERO helper accessors cover value resol behavior."""
     internal = SimpleNamespace(_obj=SimpleNamespace(id=SimpleNamespace(val=17)))
     via_method = SimpleNamespace(getId=lambda: _ValueBox(42))
     missing = SimpleNamespace(
@@ -175,6 +199,7 @@ def test_omero_helper_accessors_cover_value_resolution_owner_fallbacks_and_permi
 
 
 def test_request_and_string_helpers_cover_user_resolution_json_fallbacks_and_payload_keys():
+    """Verify test request and string helpers cover user re behavior."""
     conn = SimpleNamespace(
         getUser=lambda: SimpleNamespace(getName=lambda: "omero-user")
     )
@@ -185,8 +210,11 @@ def test_request_and_string_helpers_cover_user_resolution_json_fallbacks_and_pay
     invalid_utf8_request = SimpleNamespace(body=b"\xff")
 
     class FailingConn:
+        """Represent failing conn."""
+
         @staticmethod
         def getUser():
+            """Return get user."""
             raise RuntimeError("connection unavailable")
 
     assert request_utils.current_username(request, conn) == "omero-user"
@@ -224,13 +252,18 @@ def test_request_and_string_helpers_cover_user_resolution_json_fallbacks_and_pay
 
 
 def test_omero_helper_debug_logs_sanitize_exception_text(caplog):
+    """Verify test OMERO helper debug logs sanitize excepti behavior."""
+
     class ObjectWithUnsafeInternalId:
+        """Represent object with unsafe internal identifier."""
+
         @property
         def _obj(self):
             raise RuntimeError("bad\nid")
 
         @staticmethod
         def getId():
+            """Return get identifier."""
             return _ValueBox(31)
 
     caplog.set_level(logging.DEBUG, logger=omero_helpers.__name__)

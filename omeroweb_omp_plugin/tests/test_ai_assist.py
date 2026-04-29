@@ -7,6 +7,7 @@ from omeroweb_omp_plugin.services import ai_assist
 
 
 def test_generate_ai_regex_accepts_reasonable_separator_pattern(monkeypatch):
+    """Verify test generate ai regex accepts reasonable sep behavior."""
     filenames = [
         "sample_cond_ctrl_rep_3_ch_DAPI.tif",
         "sample_cond_treated_rep_4_ch_GFP.tif",
@@ -25,6 +26,7 @@ def test_generate_ai_regex_accepts_reasonable_separator_pattern(monkeypatch):
 
 
 def test_generate_ai_regex_falls_back_when_pattern_is_too_generic(monkeypatch):
+    """Verify test generate ai regex falls back when patter behavior."""
     filenames = [
         "sample_cond_ctrl_rep_3_ch_DAPI.tif",
         "sample_cond_treated_rep_4_ch_GFP.tif",
@@ -41,6 +43,7 @@ def test_generate_ai_regex_falls_back_when_pattern_is_too_generic(monkeypatch):
 
 
 def test_prompt_and_regex_helpers_cover_strict_hints_cleanup_and_validation():
+    """Verify test prompt and regex helpers cover strict hi behavior."""
     filenames = [
         "10444-ec-01-sa-01-sc-01-20x.tif",
         "10445-ec-02-sa-03-sc-04-40x.tif",
@@ -64,9 +67,12 @@ def test_prompt_and_regex_helpers_cover_strict_hints_cleanup_and_validation():
 
 
 def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeypatch):
+    """Verify test post JSON and provider dispatch cover su behavior."""
     captured = []
 
     class _Response:
+        """Represent response."""
+
         def __init__(self, payload, status_code=200, headers=None):
             self.payload = payload
             self.status_code = status_code
@@ -74,15 +80,18 @@ def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeyp
             self.text = payload.decode("utf-8")
 
         def json(self):
+            """Handle JSON."""
             return json.loads(self.payload.decode("utf-8"))
 
         def raise_for_status(self):
+            """Handle raise for status."""
             if self.status_code >= 400:
                 exc = ai_assist.requests.HTTPError("request failed")
                 exc.response = self
                 raise exc
 
     def fake_post(url, headers=None, data=None, timeout=15):
+        """Handle fake post."""
         captured.append((url, dict(headers or {}), data, timeout))
         return _Response(b'{"ok": true}')
 
@@ -103,6 +112,7 @@ def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeyp
         ai_assist._post_json(insecure_url, {}, {})
 
     def raise_http_error(url, headers=None, data=None, timeout=15):
+        """Handle raise HTTP error."""
         response = _Response(
             b'{"error": {"message": "slow down"}}',
             status_code=429,
@@ -131,6 +141,7 @@ def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeyp
     provider_calls = []
 
     def fake_post_json(url, headers, payload, timeout=15):
+        """Handle fake post JSON."""
         provider_calls.append((url, headers, payload))
         if "anthropic" in url:
             return {"content": [{"text": "claude-output"}]}
@@ -175,9 +186,11 @@ def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeyp
 def test_generate_ai_regex_retries_with_strict_prompt_before_accepting_result(
     monkeypatch,
 ):
+    """Verify test generate ai regex retries with strict pr behavior."""
     prompts = []
 
     def fake_call(provider, api_key, prompt, max_tokens, model=None):
+        """Handle fake call."""
         prompts.append(prompt)
         if len(prompts) == 1:
             return "."
@@ -198,6 +211,7 @@ def test_generate_ai_regex_retries_with_strict_prompt_before_accepting_result(
 
 
 def test_parse_prompt_rows_and_generate_ai_parsed_values_cover_validation(monkeypatch):
+    """Verify test parse prompt rows and generate ai parsed behavior."""
     filenames = ["10444-ec-01-sa-01.tif", "10445-ec-02-sa-03.tif"]
     prompt = ai_assist._build_parse_prompt(
         filenames, custom_instructions="Keep microscope magnification suffixes."
@@ -244,6 +258,7 @@ def test_parse_prompt_rows_and_generate_ai_parsed_values_cover_validation(monkey
 def test_ai_assist_helper_edges_cover_empty_inputs_and_provider_shape_failures(
     monkeypatch,
 ):
+    """Verify test ai assist helper edges cover empty input behavior."""
     filenames = [
         "sample_A-01.tif",
         "sample_B-02.tif",

@@ -9,38 +9,52 @@ from omeroweb_import.services import data_store as import_data_store
 
 
 class _FakeSqlTemplate:
+    """Test double for fake SQL template."""
+
     def __init__(self, query):
         self.query = str(query)
 
     def format(self, *args, **kwargs):
+        """Build format."""
         return self.query
 
 
 class _FakeSqlModule:
+    """Test double for fake SQL module."""
+
     @staticmethod
     def SQL(query):
+        """Handle SQL."""
         return _FakeSqlTemplate(query)
 
     @staticmethod
     def Identifier(name):
+        """Handle identifier."""
         return name
 
 
 class _FakeExtras:
+    """Test double for fake extras."""
+
     @staticmethod
     def Json(payload):
+        """Handle JSON."""
         return {"json": payload}
 
 
 class _FakeCursor:
+    """Test double for fake cursor."""
+
     def __init__(self, *, fetchone=None):
         self.fetchone_value = fetchone
         self.executed = []
 
     def execute(self, query, params=None):
+        """Run execute."""
         self.executed.append((str(query), params))
 
     def fetchone(self):
+        """Handle fetchone."""
         return self.fetchone_value
 
     def __enter__(self):
@@ -51,22 +65,29 @@ class _FakeCursor:
 
 
 class _FakeConnection:
+    """Test double for fake connection."""
+
     def __init__(self, cursors):
         self._cursors = list(cursors)
         self.commits = 0
         self.closed = False
 
     def cursor(self):
+        """Handle cursor."""
         return self._cursors.pop(0)
 
     def commit(self):
+        """Handle commit."""
         self.commits += 1
 
     def close(self):
+        """Handle close."""
         self.closed = True
 
 
 class _RaisingContext:
+    """Represent raising context."""
+
     def __init__(self, error):
         self.error = error
 
@@ -78,6 +99,7 @@ class _RaisingContext:
 
 
 def test_import_data_store_connection_schema_and_crud(monkeypatch):
+    """Verify test import data store connection schema and behavior."""
     monkeypatch.setenv(import_data_store.ENV_USER, "import-user")
     monkeypatch.setenv(import_data_store.ENV_AUTH, "import-pass")
     monkeypatch.setenv(import_data_store.ENV_HOST, "database-plugin")
@@ -91,6 +113,7 @@ def test_import_data_store_connection_schema_and_crud(monkeypatch):
     connection = _FakeConnection([_FakeCursor()])
 
     def fake_connect(**kwargs):
+        """Handle fake connect."""
         if kwargs["port"] == 5434:
             raise OSError("port closed")
         return connection
@@ -134,6 +157,7 @@ def test_import_data_store_connection_schema_and_crud(monkeypatch):
 
     @contextmanager
     def fake_queue_connect():
+        """Handle fake queue connect."""
         yield queue.pop(0)
 
     monkeypatch.setattr(import_data_store, "_connect", fake_queue_connect)
@@ -150,6 +174,7 @@ def test_import_data_store_connection_schema_and_crud(monkeypatch):
 def test_import_data_store_validates_credentials_ports_and_connection_failures(
     monkeypatch,
 ):
+    """Verify test import data store validates credentials behavior."""
     monkeypatch.delenv(import_data_store.ENV_USER, raising=False)
     monkeypatch.delenv(import_data_store.ENV_AUTH, raising=False)
     monkeypatch.delenv(import_data_store.ENV_HOST, raising=False)
@@ -196,6 +221,7 @@ def test_import_data_store_validates_credentials_ports_and_connection_failures(
 
 
 def test_import_data_store_persistence_and_load_failures_are_sanitized(monkeypatch):
+    """Verify test import data store persistence and load f behavior."""
     monkeypatch.setattr(import_data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
         import_data_store,
@@ -211,6 +237,7 @@ def test_import_data_store_persistence_and_load_failures_are_sanitized(monkeypat
 
     @contextmanager
     def _missing_user_row():
+        """Handle missing user row."""
         yield _FakeConnection([_FakeCursor(), _FakeCursor(fetchone=None)])
 
     monkeypatch.setattr(import_data_store, "_connect", _missing_user_row)
@@ -223,6 +250,7 @@ def test_import_data_store_persistence_and_load_failures_are_sanitized(monkeypat
 
     @contextmanager
     def _missing_special_row():
+        """Handle missing special row."""
         yield _FakeConnection([_FakeCursor(), _FakeCursor(fetchone=None)])
 
     monkeypatch.setattr(import_data_store, "_connect", _missing_special_row)
@@ -255,6 +283,7 @@ def test_import_data_store_persistence_and_load_failures_are_sanitized(monkeypat
 def test_import_data_store_loaders_and_connect_cover_cache_and_empty_option_edges(
     monkeypatch,
 ):
+    """Verify test import data store loaders and connect co behavior."""
     sentinel_mod = object()
     sentinel_extras = object()
     sentinel_sql = object()
@@ -322,6 +351,7 @@ def test_import_data_store_loaders_and_connect_cover_cache_and_empty_option_edge
 
     @contextmanager
     def _missing_special_row():
+        """Handle missing special row."""
         yield _FakeConnection([_FakeCursor(fetchone=None)])
 
     monkeypatch.setattr(import_data_store, "_connect", _missing_special_row)
@@ -337,6 +367,7 @@ def test_import_data_store_loaders_and_connect_cover_cache_and_empty_option_edge
 
 
 def test_import_data_store_real_loader_success_paths_cache_imports(monkeypatch):
+    """Verify test import data store real loader success pa behavior."""
     monkeypatch.setattr(import_data_store, "_psycopg2_mod", None)
     monkeypatch.setattr(import_data_store, "_psycopg2_extras", None)
     monkeypatch.setattr(import_data_store, "_psycopg2_sql", None)

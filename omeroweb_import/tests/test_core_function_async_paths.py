@@ -11,55 +11,72 @@ from omeroweb_import.views import core_functions
 
 
 class _DummyLock:
+    """Test double for dummy lock."""
+
     def __init__(self, acquired=True):
         self._acquired = acquired
         self.timeout = None
         self.released = False
 
     def acquire(self, timeout=None):
+        """Handle acquire."""
         self.timeout = timeout
         return self._acquired
 
     def release(self):
+        """Handle release."""
         self.released = True
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self.val = value
 
     def getValue(self):
+        """Return get value."""
         return self.val
 
 
 class _ImageId:
+    """Represent image identifier."""
+
     def __init__(self, value):
         self._value = value
 
     def getValue(self):
+        """Return get value."""
         return self._value
 
 
 class _ImageRow:
+    """Represent image row."""
+
     def __init__(self, image_id):
         self._image_id = image_id
 
     def getId(self):
+        """Return get identifier."""
         return _ImageId(self._image_id)
 
 
 def _job_state(monkeypatch, job):
+    """Handle job state."""
     state = {"job": job}
 
     def load_job(job_id):
+        """Return load job."""
         assert job_id == job["job_id"]
         return state["job"]
 
     def save_job(job_dict):
+        """Store save job."""
         state["job"] = job_dict
         return True
 
     def update_job(job_id, mutator):
+        """Handle update job."""
         assert job_id == job["job_id"]
         state["job"] = mutator(state["job"])
         return state["job"]
@@ -71,19 +88,25 @@ def _job_state(monkeypatch, job):
 
 
 def test_find_image_by_name_prefers_dataset_search_and_global_fallback(monkeypatch):
+    """Verify test find image by name prefers dataset searc behavior."""
     params_seen = []
 
     class _Params:
+        """Represent params."""
+
         @staticmethod
         def addLong(key, value):
+            """Handle add long."""
             params_seen.append(("long", key, value))
 
         @staticmethod
         def addString(key, value):
+            """Handle add string."""
             params_seen.append(("string", key, value))
 
         @staticmethod
         def page(offset, size):
+            """Handle page."""
             params_seen.append(("page", offset, size))
 
     monkeypatch.setattr(
@@ -94,10 +117,13 @@ def test_find_image_by_name_prefers_dataset_search_and_global_fallback(monkeypat
     )
 
     class _QueryService:
+        """Represent query service."""
+
         def __init__(self):
             self.calls = []
 
         def findAllByQuery(self, query, params, service_opts):
+            """Handle find all by query."""
             self.calls.append(query)
             if "JOIN FETCH i.datasetLinks" in query:
                 return [_ImageRow(5)]
@@ -120,6 +146,7 @@ def test_find_image_by_name_prefers_dataset_search_and_global_fallback(monkeypat
     assert any(call[0] == "long" and call[2] == 7 for call in params_seen)
 
     def failing_dataset_search(query, params, service_opts):
+        """Handle failing dataset search."""
         if "JOIN FETCH i.datasetLinks" in query:
             raise RuntimeError("dataset query failed")
         return [_ImageRow(11), _ImageRow(12)]
@@ -155,6 +182,7 @@ def test_run_compatibility_check_inner_covers_remaining_idle_state_transitions(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test run compatibility check inner covers rem behavior."""
     monkeypatch.setattr(core_functions, "_load_job", lambda job_id: None)
     core_functions._run_compatibility_check_inner("0" * 32)
 
@@ -226,17 +254,24 @@ def test_run_compatibility_check_inner_covers_remaining_idle_state_transitions(
 
 
 def test_verify_import_helpers_and_dataset_creation(monkeypatch):
+    """Verify test verify import helpers and dataset creation."""
+
     class _Params:
+        """Represent params."""
+
         def __init__(self):
             self.values = {}
 
         def addId(self, value):
+            """Handle add identifier."""
             self.values["id"] = value
 
         def add(self, key, value):
+            """Handle add."""
             self.values[key] = value
 
         def addList(self, key, value):
+            """Handle add list."""
             self.values[key] = list(value)
 
     monkeypatch.setattr(
@@ -253,10 +288,13 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
     )
 
     class _QueryService:
+        """Represent query service."""
+
         def __init__(self):
             self.calls = []
 
         def projection(self, query, params, service_opts):
+            """Handle projection."""
             self.calls.append((query, dict(params.values)))
             if "externalInfo.lsid = :lsid" in query:
                 return [[_Value("31")]]
@@ -267,6 +305,8 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
             return []
 
     class _Conn:
+        """Represent conn."""
+
         def __init__(self):
             self.SERVICE_OPTS = types.SimpleNamespace(
                 setOmeroGroup=lambda value: setattr(self, "group", value)
@@ -277,12 +317,15 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
             self.project_links = []
 
         def getQueryService(self):
+            """Return get query service."""
             return self.query_service
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
         def getUpdateService(self):
+            """Return get update service."""
             return types.SimpleNamespace(
                 saveAndReturnObject=lambda obj, opts=None: types.SimpleNamespace(
                     getId=lambda: _ImageId(77)
@@ -291,15 +334,19 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
             )
 
     class _AdminConn:
+        """Represent admin conn."""
+
         def __init__(self, user_conn):
             self.user_conn = user_conn
             self.closed = False
 
         def suConn(self, username):
+            """Handle su conn."""
             self.username = username
             return self.user_conn
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     conn = _Conn()
@@ -376,13 +423,17 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
     ) == ["fallback-id"]
 
     class _CreatedDataset:
+        """Represent created dataset."""
+
         def __init__(self, dataset_id=None, _loaded=True):
             self.dataset_id = dataset_id
 
         def setName(self, value):
+            """Store set name."""
             self.name = value
 
         def getId(self):
+            """Return get identifier."""
             return _ImageId(self.dataset_id)
 
     omero_model = types.ModuleType("omero.model")
@@ -413,7 +464,11 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
 def test_verify_imported_zarr_images_renderable_reports_dimension_lsid_and_thumbnail_errors(
     monkeypatch,
 ):
+    """Verify test verify imported Zarr images renderable r behavior."""
+
     class _Image:
+        """Represent image."""
+
         def __init__(
             self,
             image_id,
@@ -434,21 +489,27 @@ def test_verify_imported_zarr_images_renderable_reports_dimension_lsid_and_thumb
             self._lsid = lsid
 
         def getSizeX(self):
+            """Return get size x."""
             return self._sizes[0]
 
         def getSizeY(self):
+            """Return get size y."""
             return self._sizes[1]
 
         def getSizeZ(self):
+            """Return get size z."""
             return self._sizes[2]
 
         def getSizeC(self):
+            """Return get size c."""
             return self._sizes[3]
 
         def getSizeT(self):
+            """Return get size t."""
             return self._sizes[4]
 
         def getThumbnail(self, size, direct=True):
+            """Return get thumbnail."""
             if not self._thumbs:
                 raise RuntimeError("thumbnail failure")
             value = self._thumbs.pop(0)
@@ -457,6 +518,8 @@ def test_verify_imported_zarr_images_renderable_reports_dimension_lsid_and_thumb
             return value
 
     class _Conn:
+        """Represent conn."""
+
         def __init__(self, image):
             self.image = image
             self.SERVICE_OPTS = types.SimpleNamespace(
@@ -465,21 +528,27 @@ def test_verify_imported_zarr_images_renderable_reports_dimension_lsid_and_thumb
             self.closed = False
 
         def getObject(self, obj_type, image_id):
+            """Return get object."""
             return self.image
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     class _AdminConn:
+        """Represent admin conn."""
+
         def __init__(self, conn):
             self.conn = conn
             self.closed = False
 
         def suConn(self, username):
+            """Handle su conn."""
             self.username = username
             return self.conn
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     image = _Image(51)
@@ -556,6 +625,7 @@ def test_verify_imported_zarr_images_renderable_reports_dimension_lsid_and_thumb
 def test_run_compatibility_check_inner_updates_idle_disabled_and_result_paths(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test run compatibility check inner updates id behavior."""
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
     jobs_root.mkdir()
@@ -720,6 +790,7 @@ def test_run_compatibility_check_inner_updates_idle_disabled_and_result_paths(
 def test_process_import_job_covers_lock_timeout_success_and_failure_cleanup(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test process import job covers lock timeout s behavior."""
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
     jobs_root.mkdir()
@@ -887,6 +958,7 @@ def test_process_import_job_covers_lock_timeout_success_and_failure_cleanup(
 def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test attach txt to image service saves raw fi behavior."""
     txt_path = tmp_path / "spectrum.txt"
     txt_path.write_text("energy,count\n1,2\n", encoding="utf-8")
     plot_path = tmp_path / "spectrum.png"
@@ -894,6 +966,8 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
     table_calls = []
 
     class _OriginalFileI:
+        """Represent original file i."""
+
         def __init__(self):
             self._id = 0
             self.name = None
@@ -902,35 +976,47 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
             self.mimetype = None
 
         def setName(self, value):
+            """Store set name."""
             self.name = value
 
         def setPath(self, value):
+            """Store set path."""
             self.path = value
 
         def setSize(self, value):
+            """Store set size."""
             self.size = value
 
         def setMimetype(self, value):
+            """Store set mimetype."""
             self.mimetype = value
 
         def getId(self):
+            """Return get identifier."""
             return _Value(self._id)
 
         def proxy(self):
+            """Handle proxy."""
             return self
 
     class _FileAnnotationI:
+        """Represent file annotation i."""
+
         def __init__(self):
             self.ns = None
             self.file = None
 
         def setNs(self, value):
+            """Store set ns."""
             self.ns = value
 
         def setFile(self, value):
+            """Store set file."""
             self.file = value
 
     class _FileAnnotationWrapper:
+        """Represent file annotation wrapper."""
+
         def __init__(self, conn, annotation):
             self.conn = conn
             self.annotation = annotation
@@ -953,6 +1039,8 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
     linked_annotations = []
 
     class _RawFileStore:
+        """Represent raw file store."""
+
         def __init__(self):
             self.file_id = None
             self.payload = b""
@@ -960,23 +1048,30 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
             self.closed = False
 
         def setFileId(self, value):
+            """Store set file identifier."""
             self.file_id = value
 
         def write(self, data, offset, length):
+            """Store write."""
             self.payload = data[offset : offset + length]
 
         def save(self):
+            """Store save."""
             self.saved = True
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     class _UpdateService:
+        """Represent update service."""
+
         def __init__(self):
             self.saved = []
             self._next_id = 101
 
         def saveAndReturnObject(self, obj):
+            """Store save and return object."""
             if hasattr(obj, "_id"):
                 obj._id = self._next_id
                 self._next_id += 1
@@ -986,13 +1081,18 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
     update_service = _UpdateService()
 
     class _Image:
+        """Represent image."""
+
         @staticmethod
         def linkAnnotation(wrapper):
+            """Handle link annotation."""
             linked_annotations.append(wrapper.annotation)
 
     image = _Image()
 
     class _UserConn:
+        """Represent user conn."""
+
         def __init__(self):
             self.closed = False
             self.c = types.SimpleNamespace(
@@ -1001,26 +1101,31 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
 
         @staticmethod
         def _create_raw_file_store():
+            """Handle create raw file store."""
             store = _RawFileStore()
             stores.append(store)
             return store
 
         @staticmethod
         def getUpdateService():
+            """Return get update service."""
             return update_service
 
         @staticmethod
         def getObject(object_type, object_id):
+            """Return get object."""
             assert (object_type, object_id) == ("Image", 99)
             return image
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     user_conn = _UserConn()
 
     @contextmanager
     def _background_user_connection(*args, **kwargs):
+        """Handle background user connection."""
         try:
             yield user_conn
         finally:
@@ -1069,6 +1174,7 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
 def test_verify_import_and_cleanup_imported_images_cover_dataset_and_admin_paths(
     monkeypatch,
 ):
+    """Verify test verify import and cleanup imported image behavior."""
     dataset = types.SimpleNamespace(
         listChildren=lambda: [
             types.SimpleNamespace(getName=lambda: "match.ome.tif"),
@@ -1089,6 +1195,8 @@ def test_verify_import_and_cleanup_imported_images_cover_dataset_and_admin_paths
     assert core_functions._verify_import(conn, "global.ome.tif") is True
 
     class _AdminConn:
+        """Represent admin conn."""
+
         def __init__(self):
             self.groups = []
             self.deleted = []
@@ -1096,9 +1204,11 @@ def test_verify_import_and_cleanup_imported_images_cover_dataset_and_admin_paths
             self.SERVICE_OPTS = types.SimpleNamespace(setOmeroGroup=self.groups.append)
 
         def deleteObjects(self, object_type, object_ids, wait=True):
+            """Handle delete objects."""
             self.deleted.append((object_type, object_ids, wait))
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     admin_conn = _AdminConn()
@@ -1116,6 +1226,7 @@ def test_verify_import_and_cleanup_imported_images_cover_dataset_and_admin_paths
 def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test process import job handles sem edx assoc behavior."""
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
     jobs_root.mkdir()
@@ -1197,20 +1308,26 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     )
 
     class _ImportedImage:
+        """Represent imported image."""
+
         def __init__(self):
             self._obj = types.SimpleNamespace(id=types.SimpleNamespace(val=301))
 
         @staticmethod
         def listParents():
+            """Return list parents."""
             return [types.SimpleNamespace(getId=lambda: 88)]
 
     imported_image = _ImportedImage()
 
     class _ServiceConn:
+        """Represent service conn."""
+
         def __init__(self):
             self.closed = False
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     service_conn = _ServiceConn()
@@ -1262,6 +1379,7 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     plot_imports = []
 
     def fake_import_job_entry(entry, *args, **kwargs):
+        """Handle fake import job entry."""
         if entry.get("relative_path") == "images/sample.ome.tif":
             return {
                 "status": "imported",
@@ -1327,6 +1445,7 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
 def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test process import job handles sem edx recon behavior."""
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
     jobs_root.mkdir()
@@ -1443,21 +1562,27 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     )
 
     class _ImportedImage:
+        """Represent imported image."""
+
         def __init__(self):
             self._obj = types.SimpleNamespace(id=types.SimpleNamespace(val=301))
 
         @staticmethod
         def listParents():
+            """Return list parents."""
             raise RuntimeError("parents unavailable")
 
     imported_image = _ImportedImage()
 
     class _ServiceConn:
+        """Represent service conn."""
+
         def __init__(self, name):
             self.name = name
             self.closed = False
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     connections = [_ServiceConn("initial"), _ServiceConn("reopened")]
@@ -1478,6 +1603,7 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     batch_calls = []
 
     def _batch_find(conn, names, dataset_id):
+        """Handle batch find."""
         batch_calls.append((conn.name, tuple(sorted(names)), dataset_id))
         if "sample.ome.tif" in names:
             return {"sample.ome.tif": imported_image}
@@ -1486,6 +1612,7 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     monkeypatch.setattr(core_functions, "_batch_find_images_by_name", _batch_find)
 
     def _resolve_staged(root, staged_path):
+        """Handle resolve staged."""
         target = root / staged_path
         name = target.name
         if name == "staged-error.txt":
@@ -1501,6 +1628,7 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     sem_edx_parser = types.ModuleType("omeroweb_import.services.omero.sem_edx_parser")
 
     def _create_plot(txt_path):
+        """Handle create plot."""
         plot_path = tmp_path / f"{txt_path.stem}.png"
         plot_path.write_bytes(b"\x89PNG\r\n\x1a\n")
         return plot_path
@@ -1515,6 +1643,7 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     copied_plots = []
 
     def _copy2(src, dst):
+        """Handle copy2."""
         copied_plots.append(dst.name)
         if dst.name == "plot-copy-error.png":
             raise RuntimeError("copy failed")
@@ -1539,6 +1668,7 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
         plot_path=None,
         **kwargs,
     ):
+        """Handle attach txt."""
         attached.append((txt_path.name, plot_path and plot_path.name))
         if txt_path.name == "attach-error.txt":
             raise RuntimeError("attach exploded")
@@ -1548,6 +1678,7 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     plot_imports = []
 
     def _import_job_entry(entry, *args, **kwargs):
+        """Handle import job entry."""
         relative_path = entry.get("relative_path")
         if relative_path == first_image:
             return {

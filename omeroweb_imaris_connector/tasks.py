@@ -285,6 +285,7 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
     def _update_task_state(
         status: str, extra_meta: dict[str, Any] | None = None
     ) -> None:
+        """Handle update task state."""
         meta = {
             "image_id": image_id,
             "status": status,

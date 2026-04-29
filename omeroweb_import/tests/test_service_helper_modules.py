@@ -30,52 +30,70 @@ TEST_OMERO_CLI = "omero-cli"
 
 
 class _FakeValue:
+    """Test double for fake value."""
+
     def __init__(self, value):
         self._value = value
 
     def getValue(self):
+        """Return get value."""
         return self._value
 
 
 class _FakeDatasetI:
+    """Test double for fake dataset i."""
+
     def __init__(self, dataset_id=None, _loaded=True):
         self._id = dataset_id
         self.name = None
 
     def setName(self, value):
+        """Store set name."""
         self.name = value
 
     def getId(self):
+        """Return get identifier."""
         return _FakeValue(self._id)
 
 
 class _FakeProjectI:
+    """Test double for fake project i."""
+
     def __init__(self, project_id, _loaded):
         self.project_id = project_id
 
 
 class _FakeProjectDatasetLinkI:
+    """Test double for fake project dataset link i."""
+
     def __init__(self):
         self.parent = None
         self.child = None
 
     def setParent(self, parent):
+        """Store set parent."""
         self.parent = parent
 
     def setChild(self, child):
+        """Store set child."""
         self.child = child
 
 
 class _FakeDatasetChild:
+    """Test double for fake dataset child."""
+
     def __init__(self, dataset_id, name):
         self.id = dataset_id
         self._name = name
 
     def getName(self):
+        """Return get name."""
         return self._name
 
 
 class _FakeProject:
+    """Test double for fake project."""
+
     def __init__(
         self,
         project_id,
@@ -94,27 +112,35 @@ class _FakeProject:
         self._children = list(children or [])
 
     def getName(self):
+        """Return get name."""
         return self._name
 
     def listChildren(self):
+        """Return list children."""
         return list(self._children)
 
 
 class _FakeExistingDataset:
+    """Test double for fake existing dataset."""
+
     def __init__(self, dataset_id, *, expose_id=True):
         self.id = dataset_id if expose_id else None
         self._dataset_id = dataset_id
 
     def getId(self):
+        """Return get identifier."""
         return _FakeValue(self._dataset_id)
 
 
 class _FakeUpdateService:
+    """Test double for fake update service."""
+
     def __init__(self):
         self.saved_links = []
         self.saved_datasets = []
 
     def saveAndReturnObject(self, obj):
+        """Store save and return object."""
         if isinstance(obj, _FakeDatasetI):
             if obj._id is None:
                 obj._id = 77
@@ -125,30 +151,38 @@ class _FakeUpdateService:
 
 
 class _FakeSecrets:
+    """Test double for fake secrets."""
+
     def __init__(self, values):
         self._values = iter(values)
 
     def choice(self, _alphabet):
+        """Handle choice."""
         return next_or_fail(self._values)
 
 
 class _FakeServiceOpts:
+    """Test double for fake service opts."""
+
     def __init__(self, *, group="5", fail_get=False):
         self.group = group
         self.fail_get = fail_get
         self.set_calls = []
 
     def getOmeroGroup(self):
+        """Return get OMERO group."""
         if self.fail_get:
             raise RuntimeError("cannot read group")
         return self.group
 
     def setOmeroGroup(self, value):
+        """Store set OMERO group."""
         self.set_calls.append(value)
 
 
 @pytest.fixture()
 def dataset_module(monkeypatch):
+    """Handle dataset module."""
     monkeypatch.setattr(core_functions, "PurePosixPath", PurePosixPath, raising=False)
     monkeypatch.setattr(core_functions, "secrets", _FakeSecrets("ABCD"), raising=False)
     monkeypatch.setattr(
@@ -200,11 +234,13 @@ def dataset_module(monkeypatch):
 
 
 def _write_json(path, payload) -> None:
+    """Handle write JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(__import__("json").dumps(payload), encoding="utf-8")
 
 
 def test_import_module_contracts_and_reexports(monkeypatch):
+    """Verify test import module contracts and reexports."""
     calls = []
     monkeypatch.setattr(
         apps, "configure_omero_gateway_logging", lambda: calls.append("configured")
@@ -278,6 +314,7 @@ def test_import_module_contracts_and_reexports(monkeypatch):
 
 
 def test_import_compatibility_facades_use_public_core_aliases():
+    """Verify test import compatibility facades use public behavior."""
     alias_pairs = (
         (import_service, "_append_job_error", "append_job_error"),
         (import_service, "_get_import_timeout_seconds", "get_import_timeout_seconds"),
@@ -301,6 +338,7 @@ def test_import_compatibility_facades_use_public_core_aliases():
 def test_dataset_service_wrapper_uses_canonical_core_functions(
     dataset_module, monkeypatch
 ):
+    """Verify test dataset service wrapper uses canonical c behavior."""
     monkeypatch.setattr(
         core_functions,
         "_iter_accessible_projects",
@@ -338,6 +376,7 @@ def test_dataset_service_wrapper_uses_canonical_core_functions(
     update_service = _FakeUpdateService()
 
     def _get_objects(model, *args, **kwargs):
+        """Handle get objects."""
         if model == "Project":
             return iter([project])
         if model == "Dataset":
@@ -393,6 +432,7 @@ def test_dataset_service_wrapper_uses_canonical_core_functions(
 
 
 def test_dataset_service_iter_accessible_projects_uses_fallback_paths(dataset_module):
+    """Verify test dataset service iter accessible projects behavior."""
     service_opts = _FakeServiceOpts()
     conn = SimpleNamespace(
         SERVICE_OPTS=service_opts,
@@ -411,6 +451,7 @@ def test_core_function_helpers_cover_native_zarr_plan_and_shared_transfer_cleanu
     monkeypatch,
     caplog,
 ):
+    """Verify test core function helpers cover native Zarr behavior."""
     plan = core_functions._NativeZarrImportPlan(
         kind=support.OME_ZARR_IMPORT_KIND_BIOFORMATS2RAW,
         recognized_zarr=True,
@@ -464,6 +505,7 @@ def test_ome_zarr_support_helpers_cover_metadata_fallback_axes_sizes_and_chunk_w
     tmp_path,
     monkeypatch,
 ):
+    """Verify test ome Zarr support helpers cover metadata behavior."""
     store = tmp_path / "image.ome.zarr"
     expected = {"multiscales": [{"datasets": [{"path": "0"}]}]}
     _write_json(store / "zarr.json", expected)
@@ -578,6 +620,7 @@ def test_ome_zarr_support_helpers_cover_metadata_fallback_axes_sizes_and_chunk_w
 
 
 def test_import_help_page_serves_markdown_and_404s_when_missing(monkeypatch, tmp_path):
+    """Verify test import help page serves markdown and 404 behavior."""
     request = RequestFactory().get("/omeroweb_import/help/")
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
 
@@ -600,6 +643,7 @@ def test_import_help_page_serves_markdown_and_404s_when_missing(monkeypatch, tmp
 
 
 def test_import_urls_module_can_be_loaded_in_isolation_with_stubbed_views(monkeypatch):
+    """Verify test import URLs module can be loaded in isol behavior."""
     package_module = types.ModuleType("omeroweb_import")
     package_module.__path__ = [str(REPO_ROOT / "omeroweb_import")]
     views_module = types.ModuleType("omeroweb_import.views")

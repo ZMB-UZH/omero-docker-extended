@@ -1,3 +1,1 @@
-"""
-Filename parsing services.
-"""
+"""Filename parsing services."""

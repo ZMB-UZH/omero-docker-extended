@@ -11,24 +11,32 @@ from omeroweb_omp_plugin.views import job_view, utils as view_utils, variable_se
 
 
 class _LockStub:
+    """Represent lock stub."""
+
     @staticmethod
     def acquire():
+        """Handle acquire."""
         return None
 
     @staticmethod
     def release():
+        """Handle release."""
         return None
 
 
 class _ImageStub:
+    """Represent image stub."""
+
     @staticmethod
     def getName():
+        """Return get name."""
         return "image.ome.tif"
 
 
 def test_job_progress_logs_escape_job_id_and_exception(
     monkeypatch, tmp_path: Path, caplog
 ):
+    """Verify test job progress logs escape job identifier behavior."""
     job = {
         "job_id": "bad\njob",
         "project_id": 1,
@@ -75,6 +83,7 @@ def test_job_progress_logs_escape_job_id_and_exception(
 
 
 def test_variable_set_view_logs_escape_exception_text(monkeypatch, caplog):
+    """Verify test variable set view logs escape exception behavior."""
     request = RequestFactory().get("/omp/sets/")
 
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")

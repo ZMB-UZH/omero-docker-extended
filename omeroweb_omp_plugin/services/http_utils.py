@@ -2,6 +2,7 @@ import json
 
 
 def _extract_message_from_payload(payload):
+    """Handle extract message from payload."""
     if isinstance(payload, dict):
         info = payload.get("error") or payload.get("message")
         if isinstance(info, dict):
@@ -14,6 +15,7 @@ def _extract_message_from_payload(payload):
 
 
 def _extract_message_from_response(response):
+    """Handle extract message from response."""
     if response is None:
         return None
     try:
@@ -30,6 +32,7 @@ def _extract_message_from_response(response):
 
 
 def extract_error_details(error):
+    """Return extract error details."""
     if not error:
         return None
     response = getattr(error, "response", None)

@@ -10,18 +10,23 @@ from omeroweb_import.views import core_functions
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self._raw_value = value
 
     def getValue(self):
+        """Return get value."""
         return self._raw_value
 
 
 def _raise(exc):
+    """Handle raise."""
     raise exc
 
 
 def test_identity_owner_and_permission_helpers_cover_edge_failures(monkeypatch) -> None:
+    """Verify test identity owner and permission helpers co behavior."""
     assert (
         core_functions._get_id(
             SimpleNamespace(
@@ -80,21 +85,27 @@ def test_identity_owner_and_permission_helpers_cover_edge_failures(monkeypatch) 
     )
 
     class _FallbackOwner:
+        """Represent fallback owner."""
+
         @staticmethod
         def getOmeName():
+            """Return get ome name."""
             raise RuntimeError("ome name exploded")
 
         @staticmethod
         def getName():
+            """Return get name."""
             return SimpleNamespace(val="")
 
         @staticmethod
         def getFirstName():
+            """Return get first name."""
             return SimpleNamespace(val="")
 
     monkeypatch.setattr(core_functions, "_get_id", lambda owner: 42)
 
     def _fallback_details():
+        """Handle fallback details."""
         return SimpleNamespace(getOwner=_FallbackOwner)
 
     assert (
@@ -129,9 +140,12 @@ def test_identity_owner_and_permission_helpers_cover_edge_failures(monkeypatch) 
 def test_project_listing_and_payload_helpers_cover_restore_and_failure_paths(
     monkeypatch,
 ) -> None:
+    """Verify test project listing and payload helpers cove behavior."""
     assert list(core_functions._iter_accessible_projects(None)) == []
 
     class _ServiceOpts:
+        """Represent service opts."""
+
         def __init__(self, *, group="5", fail_get=False, fail_restore=False):
             self.group = group
             self.fail_get = fail_get
@@ -139,11 +153,13 @@ def test_project_listing_and_payload_helpers_cover_restore_and_failure_paths(
             self.set_calls = []
 
         def getOmeroGroup(self):
+            """Return get OMERO group."""
             if self.fail_get:
                 raise RuntimeError("group read exploded")
             return self.group
 
         def setOmeroGroup(self, value):
+            """Store set OMERO group."""
             self.set_calls.append(value)
             self.group = value
             if self.fail_restore and value == "5":
@@ -152,6 +168,7 @@ def test_project_listing_and_payload_helpers_cover_restore_and_failure_paths(
     restore_opts = _ServiceOpts(fail_restore=True)
 
     def _restore_get_objects(model, opts=None):
+        """Handle restore get objects."""
         assert model == "Project"
         if restore_opts.group == "-1":
             raise RuntimeError("cross-group exploded")
@@ -191,22 +208,31 @@ def test_project_listing_and_payload_helpers_cover_restore_and_failure_paths(
 def test_dataset_and_native_zarr_helpers_cover_unhappy_paths(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test dataset and native Zarr helpers cover un behavior."""
+
     class _LengthWithRawFallback:
+        """Represent length with raw fallback."""
+
         val = "2.5"
 
         @staticmethod
         def getValue():
+            """Return get value."""
             raise RuntimeError("value exploded")
 
         @staticmethod
         def getUnit():
+            """Return get unit."""
             raise RuntimeError("unit exploded")
 
     class _BadLength:
+        """Represent bad length."""
+
         val = "not-a-number"
 
         @staticmethod
         def getValue():
+            """Return get value."""
             raise RuntimeError("value exploded")
 
     assert core_functions._native_zarr_length_signature(_LengthWithRawFallback()) == (
@@ -310,6 +336,7 @@ def test_dataset_and_native_zarr_helpers_cover_unhappy_paths(
 def test_background_import_session_covers_missing_error_and_cleanup_paths(
     monkeypatch,
 ) -> None:
+    """Verify test background import session covers missing behavior."""
     monkeypatch.setattr(core_functions, "_open_admin_connection", lambda *args: None)
     with core_functions._background_import_session("alice", "omeroserver", 4064) as key:
         assert key is None
@@ -329,13 +356,17 @@ def test_background_import_session_covers_missing_error_and_cleanup_paths(
     closed = []
 
     class _SessionService:
+        """Represent session service."""
+
         @staticmethod
         def createSessionWithTimeouts(principal, user_timeout_ms, group_timeout_ms):
+            """Build create session with timeouts."""
             created.append((principal, user_timeout_ms, group_timeout_ms))
             return SimpleNamespace(getUuid=lambda: _Value("background-session"))
 
         @staticmethod
         def closeSession(session):
+            """Handle close session."""
             closed.append(session)
             raise RuntimeError("close exploded")
 
@@ -385,6 +416,7 @@ def test_background_import_session_covers_missing_error_and_cleanup_paths(
 def test_shared_transfer_helpers_cover_symlink_and_cleanup_error_paths(
     monkeypatch, tmp_path: Path
 ) -> None:
+    """Verify test shared transfer helpers cover symlink an behavior."""
     core_functions._normalize_shared_zarr_permissions(tmp_path / "missing")
 
     tree_root = tmp_path / "tree"
@@ -464,6 +496,7 @@ def test_shared_transfer_helpers_cover_symlink_and_cleanup_error_paths(
 
 
 def test_script_service_helpers_cover_deduping_and_selection() -> None:
+    """Verify test script service helpers cover deduping an behavior."""
     assert list(core_functions._iter_script_services(None)) == []
     assert core_functions._find_script_id_by_name(None, "demo.py") is None
     assert core_functions._find_script_id_by_name(object(), "") is None
@@ -511,8 +544,11 @@ def test_script_service_helpers_cover_deduping_and_selection() -> None:
     ]
 
     class _WorkingService:
+        """Represent working service."""
+
         @staticmethod
         def getScripts():
+            """Return get scripts."""
             return preferred_scripts
 
     conn = SimpleNamespace(
@@ -554,6 +590,7 @@ def test_script_service_helpers_cover_deduping_and_selection() -> None:
 def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_paths(
     monkeypatch, tmp_path
 ) -> None:
+    """Verify test script output and managed repo launch he behavior."""
     assert core_functions._extract_script_outputs(
         "\n".join(
             [
@@ -604,6 +641,7 @@ def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_p
     )
 
     def _run(cmd, **kwargs):
+        """Handle run."""
         attempted_cmds.append(cmd)
         attempted_envs.append(kwargs["env"])
         return next_or_fail(results)
@@ -679,8 +717,11 @@ def test_background_user_connection_with_session_key(monkeypatch) -> None:
     closed = {"count": 0}
 
     class FakeConn:
+        """Test double for fake conn."""
+
         @staticmethod
         def close():
+            """Handle close."""
             closed["count"] += 1
 
     monkeypatch.setattr(
@@ -717,8 +758,11 @@ def test_background_user_connection_with_session_key_close_fails(
     """_background_user_connection logs warning when connection close raises."""
 
     class FakeConn:
+        """Test double for fake conn."""
+
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close failed")
 
     monkeypatch.setattr(
@@ -741,12 +785,16 @@ def test_background_user_connection_without_session_key(monkeypatch) -> None:
     closed = {"count": 0}
 
     class FakeConn:
+        """Test double for fake conn."""
+
         @staticmethod
         def close():
+            """Handle close."""
             closed["count"] += 1
 
     @contextmanager
     def fake_background_session(*args, **kwargs):
+        """Handle fake background session."""
         yield "generated-session-key"
 
     monkeypatch.setattr(
@@ -773,12 +821,16 @@ def test_background_user_connection_without_session_key_close_fails(
     from contextlib import contextmanager
 
     class FakeConn:
+        """Test double for fake conn."""
+
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close failed")
 
     @contextmanager
     def fake_background_session(*args, **kwargs):
+        """Handle fake background session."""
         yield "generated-session-key"
 
     monkeypatch.setattr(
@@ -805,6 +857,7 @@ def test_background_user_connection_background_session_yields_empty_key(
 
     @contextmanager
     def fake_background_session(*args, **kwargs):
+        """Handle fake background session."""
         yield ""
 
     monkeypatch.setattr(

@@ -1,6 +1,4 @@
-"""
-Filename parsing logic.
-"""
+"""Filename parsing logic."""
 
 import re
 import logging
@@ -10,6 +8,7 @@ _UNSAFE_SEPARATOR_REGEX_RE = re.compile(r"(\(\?(?!:)|\\[1-9]|\{\d|\*\+|\+\+)")
 
 
 def _parse_separator_fragment(separator_fragment):
+    """Handle parse separator fragment."""
     if separator_fragment == r"\s":
         return "", True
     if separator_fragment.startswith("\\"):
@@ -22,6 +21,7 @@ def _parse_separator_fragment(separator_fragment):
 
 
 def _extract_separator_fragments(pattern):
+    """Handle extract separator fragments."""
     if (
         not isinstance(pattern, str)
         or not pattern
@@ -104,6 +104,7 @@ def _extract_separator_fragments(pattern):
 
 
 def _split_on_separator_fragments(value, fragments, match_whitespace):
+    """Handle split on separator fragments."""
     parts: list[str] = []
     current: list[str] = []
     index = 0
@@ -147,6 +148,7 @@ def _split_on_separator_fragments(value, fragments, match_whitespace):
 
 
 def is_supported_separator_pattern(sep_pattern):
+    """Return whether is supported separator pattern."""
     try:
         _extract_separator_fragments(sep_pattern)
     except ValueError:

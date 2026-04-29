@@ -9,32 +9,42 @@ from omeroweb_omp_plugin.services.parsing import filename_parser
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self._raw_value = value
 
     def getValue(self):
+        """Return get value."""
         return self._raw_value
 
 
 class _Image:
+    """Represent image."""
+
     def __init__(self, image_id, name, *, fileset=None):
         self.id = image_id
         self._name = name
         self._fileset = fileset
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self.id)
 
     def getName(self):
+        """Return get name."""
         return self._name
 
     def getFileset(self):
+        """Return get fileset."""
         if callable(self._fileset):
             return self._fileset()
         return self._fileset
 
 
 class _Dataset:
+    """Represent dataset."""
+
     def __init__(self, dataset_id, name, images, *, owner_id=7):
         self.id = dataset_id
         self.owner_id = owner_id
@@ -42,24 +52,31 @@ class _Dataset:
         self._images = list(images)
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self.id)
 
     def getName(self):
+        """Return get name."""
         return _Value(self._name)
 
     def listChildren(self):
+        """Return list children."""
         return list(self._images)
 
 
 class _Project:
+    """Represent project."""
+
     def __init__(self, datasets):
         self._datasets = list(datasets)
 
     def listChildren(self):
+        """Return list children."""
         return list(self._datasets)
 
 
 def test_filename_parser_covers_group_class_whitespace_and_validation_edges():
+    """Verify test filename parser covers group class white behavior."""
     assert filename_parser._parse_separator_fragment(r"\s") == ("", True)
     assert filename_parser._parse_separator_fragment(r"\.") == (".", False)
     assert filename_parser._extract_separator_fragments(r"[\.-]+") == (
@@ -117,6 +134,7 @@ def test_filename_parser_covers_group_class_whitespace_and_validation_edges():
 def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
     monkeypatch,
 ):
+    """Verify test image service covers runtime fallbacks a behavior."""
     monkeypatch.setattr(
         image_service,
         "get_id",
@@ -143,8 +161,11 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
     skipped_image = _Image(None, "missing-id.tif")
 
     class _BulkConn:
+        """Represent bulk conn."""
+
         @staticmethod
         def getObjects(object_type, ids=None, obj_ids=None):
+            """Return get objects."""
             assert object_type == "Image"
             if ids is not None:
                 raise TypeError("legacy signature")
@@ -155,12 +176,16 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
     assert bulk_fetched == {"external-id": external_image}
 
     class _FallbackConn:
+        """Represent fallback conn."""
+
         @staticmethod
         def getObjects(object_type, ids=None, obj_ids=None):
+            """Return get objects."""
             raise RuntimeError("bulk fetch unavailable")
 
         @staticmethod
         def getObject(object_type, image_id):
+            """Return get object."""
             assert object_type == "Image"
             if image_id == 1:
                 raise RuntimeError("transient lookup failure")
@@ -180,8 +205,11 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
     )
 
     class _BrokenProject:
+        """Represent broken project."""
+
         @staticmethod
         def listChildren():
+            """Return list children."""
             raise RuntimeError("broken project")
 
     assert (
@@ -236,38 +264,51 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
     ] == [(9, [1])]
 
     class _OriginalFile:
+        """Represent original file."""
+
         def __init__(self, *, format_value=None, name=None):
             self._format_value = format_value
             self._name = name
 
         def getFormat(self):
+            """Return get format."""
             return None if self._format_value is None else _Value(self._format_value)
 
         def getName(self):
+            """Return get name."""
             return self._name
 
     class _UsedFile:
+        """Represent used file."""
+
         def __init__(self, original_file):
             self._original_file = original_file
 
         def getOriginalFile(self):
+            """Return get original file."""
             if isinstance(self._original_file, Exception):
                 raise self._original_file
             return self._original_file
 
     class _Fileset:
+        """Represent fileset."""
+
         def __init__(self, used_files=None, *, explode=False):
             self._used_files = list(used_files or [])
             self._explode = explode
 
         def copyUsedFiles(self):
+            """Handle copy used files."""
             if self._explode:
                 raise RuntimeError("copy failed")
             return list(self._used_files)
 
     class _RaisingName:
+        """Represent raising name."""
+
         @staticmethod
         def getValue():
+            """Return get value."""
             raise RuntimeError("bad image name")
 
     image_from_fileset_extension = _Image(
@@ -363,72 +404,99 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
 
 
 def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_logging():
+    """Verify test extract acquisition metadata covers inne behavior."""
+
     class _ObjectiveSettings:
+        """Represent objective settings."""
+
         @staticmethod
         def getID():
+            """Return get identifier."""
             raise RuntimeError("missing objective id")
 
         @staticmethod
         def getCorrectionCollar():
+            """Return get correction collar."""
             raise RuntimeError("missing collar")
 
     class _Channel:
+        """Represent channel."""
+
         @staticmethod
         def getIndex():
+            """Return get index."""
             raise RuntimeError("missing index")
 
         @staticmethod
         def getLabel():
+            """Return get label."""
             raise RuntimeError("missing label")
 
         @staticmethod
         def getEmissionWave():
+            """Return get emission wave."""
             raise RuntimeError("missing emission")
 
         @staticmethod
         def getExcitationWave():
+            """Return get excitation wave."""
             return "405"
 
     class _Detector:
+        """Represent detector."""
+
         @staticmethod
         def getID():
+            """Return get identifier."""
             raise RuntimeError("missing detector id")
 
         @staticmethod
         def getBinning():
+            """Return get binning."""
             raise RuntimeError("missing binning")
 
         @staticmethod
         def getGain():
+            """Return get gain."""
             return "1.5"
 
     class _BrokenMetadata:
+        """Represent broken metadata."""
+
         def __len__(self):
             raise RuntimeError("len failed")
 
     class _ImageWithInnerFailures:
+        """Represent image with inner failures."""
+
         @staticmethod
         def getId():
+            """Return get identifier."""
             return 7
 
         @staticmethod
         def getAcquisitionDate():
+            """Return get acquisition date."""
             return "2026-03-31T12:00:00"
 
         @staticmethod
         def getObjectiveSettings():
+            """Return get objective settings."""
             return _ObjectiveSettings()
 
         @staticmethod
         def getChannels():
+            """Return get channels."""
             return [_Channel()]
 
         @staticmethod
         def getDetectorSettings():
+            """Return get detector settings."""
             return [_Detector()]
 
         @staticmethod
         def loadOriginalMetadata():
+            """Return load original metadata."""
             return _BrokenMetadata()
 
     cleaned = metadata_service.extract_acquisition_metadata(_ImageWithInnerFailures())
@@ -439,28 +507,36 @@ def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_log
     }
 
     class _ImageWithOuterFailures:
+        """Represent image with outer failures."""
+
         @staticmethod
         def getId():
+            """Return get identifier."""
             raise RuntimeError("missing id")
 
         @staticmethod
         def getAcquisitionDate():
+            """Return get acquisition date."""
             raise RuntimeError("no acquisition date")
 
         @staticmethod
         def getObjectiveSettings():
+            """Return get objective settings."""
             raise RuntimeError("no objective")
 
         @staticmethod
         def getChannels():
+            """Return get channels."""
             raise RuntimeError("no channels")
 
         @staticmethod
         def getDetectorSettings():
+            """Return get detector settings."""
             raise RuntimeError("no detectors")
 
         @staticmethod
         def loadOriginalMetadata():
+            """Return load original metadata."""
             raise RuntimeError("no metadata")
 
     assert (
@@ -471,68 +547,96 @@ def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_log
 def test_extract_acquisition_metadata_persists_long_values_despite_store_close_failure(
     monkeypatch,
 ):
+    """Verify test extract acquisition metadata persists lo behavior."""
+
     class _OriginalFileStub:
+        """Represent original file stub."""
+
         def __init__(self):
             self._id = _Value(321)
 
         def setName(self, value):
+            """Store set name."""
             self.name = value
 
         def setPath(self, value):
+            """Store set path."""
             self.path = value
 
         def setSize(self, value):
+            """Store set size."""
             self.size = value
 
         def setMimetype(self, value):
+            """Store set mimetype."""
             self.mimetype = value
 
         def getId(self):
+            """Return get identifier."""
             return self._id
 
     class _FileAnnotationStub:
+        """Represent file annotation stub."""
+
         def setNs(self, value):
+            """Store set ns."""
             self.ns = value
 
         def setFile(self, value):
+            """Store set file."""
             self.file = value
 
     class _ImageAnnotationLinkStub:
+        """Represent image annotation link stub."""
+
         def setParent(self, value):
+            """Store set parent."""
             self.parent = value
 
         def setChild(self, value):
+            """Store set child."""
             self.child = value
 
     class _ImageStub:
+        """Represent image stub."""
+
         def __init__(self, image_id, loaded):
             self.image_id = image_id
             self.loaded = loaded
 
     class _RawStore:
+        """Represent raw store."""
+
         def __init__(self):
             self.file_id = None
             self.saved_payload = None
             self.saved = False
 
         def setFileId(self, value):
+            """Store set file identifier."""
             self.file_id = value
 
         def write(self, payload, offset, length):
+            """Store write."""
             self.saved_payload = payload
 
         def save(self):
+            """Store save."""
             self.saved = True
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close failed")
 
     class _UpdateService:
+        """Represent update service."""
+
         def __init__(self):
             self.saved_objects = []
 
         def saveAndReturnObject(self, obj):
+            """Store save and return object."""
             self.saved_objects.append(obj)
             return obj
 
@@ -551,6 +655,8 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
     monkeypatch.setattr(metadata_service, "rlong", lambda value: value)
 
     class _ImageWithLongMetadata:
+        """Represent image with long metadata."""
+
         _obj = "image-object"
         _conn = SimpleNamespace(
             getUpdateService=lambda: update_service,
@@ -559,26 +665,32 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
 
         @staticmethod
         def getId():
+            """Return get identifier."""
             return 7
 
         @staticmethod
         def getAcquisitionDate():
+            """Return get acquisition date."""
             return _Value("x" * 260)
 
         @staticmethod
         def getObjectiveSettings():
+            """Return get objective settings."""
             return None
 
         @staticmethod
         def getChannels():
+            """Return get channels."""
             return []
 
         @staticmethod
         def getDetectorSettings():
+            """Return get detector settings."""
             return []
 
         @staticmethod
         def loadOriginalMetadata():
+            """Return load original metadata."""
             return None
 
     cleaned = metadata_service.extract_acquisition_metadata(_ImageWithLongMetadata())
@@ -594,7 +706,11 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
     assert update_service.saved_objects[-1].parent.loaded is False
 
     def _image_with_identifier(image_id, update_service, raw_store):
+        """Handle image with identifier."""
+
         class _ImageWithIdentifier:
+            """Represent image with identifier."""
+
             _obj = "image-object"
             _conn = SimpleNamespace(
                 getUpdateService=lambda: update_service,
@@ -605,26 +721,32 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
 
             @staticmethod
             def getId():
+                """Return get identifier."""
                 return image_id
 
             @staticmethod
             def getAcquisitionDate():
+                """Return get acquisition date."""
                 return _Value("y" * 260)
 
             @staticmethod
             def getObjectiveSettings():
+                """Return get objective settings."""
                 return None
 
             @staticmethod
             def getChannels():
+                """Return get channels."""
                 return []
 
             @staticmethod
             def getDetectorSettings():
+                """Return get detector settings."""
                 return []
 
             @staticmethod
             def loadOriginalMetadata():
+                """Return load original metadata."""
                 return None
 
         return _ImageWithIdentifier()
@@ -648,28 +770,36 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
     assert invalid_id_update.saved_objects == []
 
     class _ImageWithoutConnection:
+        """Represent image without connection."""
+
         @staticmethod
         def getId():
+            """Return get identifier."""
             return 11
 
         @staticmethod
         def getAcquisitionDate():
+            """Return get acquisition date."""
             return _Value("z" * 260)
 
         @staticmethod
         def getObjectiveSettings():
+            """Return get objective settings."""
             return None
 
         @staticmethod
         def getChannels():
+            """Return get channels."""
             return []
 
         @staticmethod
         def getDetectorSettings():
+            """Return get detector settings."""
             return []
 
         @staticmethod
         def loadOriginalMetadata():
+            """Return load original metadata."""
             return None
 
     no_connection_cleaned = metadata_service.extract_acquisition_metadata(
@@ -680,7 +810,10 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
     }
 
     class _FailingRawStore(_RawStore):
+        """Represent failing raw store."""
+
         def write(self, payload, offset, length):
+            """Store write."""
             raise RuntimeError("write failed")
 
     failing_update = _UpdateService()

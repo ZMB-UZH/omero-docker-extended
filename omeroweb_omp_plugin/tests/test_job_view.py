@@ -15,35 +15,47 @@ TEST_AUTH_INPUT = "fixture-auth-input"
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self._raw_value = value
 
     def getValue(self):
+        """Return get value."""
         return self._raw_value
 
 
 class _User:
+    """Represent user."""
+
     def __init__(self, name="alice"):
         self._name = name
 
     def getName(self):
+        """Return get name."""
         return self._name
 
 
 class _Image:
+    """Represent image."""
+
     def __init__(self, image_id, name):
         self.id = image_id
         self._name = name
         self._obj = object()
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self.id)
 
     def getName(self):
+        """Return get name."""
         return self._name
 
 
 class _Conn:
+    """Represent conn."""
+
     def __init__(self, username="alice", host="omeroserver", port=4064):
         self.host = host
         self.port = port
@@ -53,49 +65,65 @@ class _Conn:
         )
 
     def getUser(self):
+        """Return get user."""
         return self._user
 
     def getUpdateService(self):
+        """Return get update service."""
         return self._update
 
     @staticmethod
     def getObjects(object_type):
+        """Return get objects."""
         assert object_type == "Image"
         return iter([])
 
 
 class _FakeMapAnnotation:
+    """Test double for fake map annotation."""
+
     def setNs(self, value):
+        """Store set ns."""
         self.ns = value
 
     def setMapValue(self, values):
+        """Store set map value."""
         self.values = list(values)
 
 
 class _FakeLink:
+    """Test double for fake link."""
+
     def setParent(self, parent):
+        """Store set parent."""
         self.parent = parent
 
     def setChild(self, child):
+        """Store set child."""
         self.child = child
 
 
 class _FakeImageRef:
+    """Test double for fake image ref."""
+
     def __init__(self, image_id, loaded):
         self.image_id = image_id
         self.loaded = loaded
 
 
 def _json_request(payload):
+    """Handle JSON request."""
     factory = RequestFactory()
     return factory.post("/", data=json.dumps(payload), content_type="application/json")
 
 
 def _json_payload(response):
+    """Handle JSON payload."""
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_parse_image_ids_and_regex_safety_helpers():
+    """Verify test parse image identifiers and regex safety behavior."""
     assert job_view.parse_image_ids("1, 2, nope, 3") == [1, 2, 3]
     assert sorted(job_view.parse_image_ids({4, "5", "bad"})) == [4, 5]
     assert job_view.parse_image_ids(object()) == []
@@ -110,6 +138,7 @@ def test_parse_image_ids_and_regex_safety_helpers():
 def test_job_view_helper_guards_cover_ownership_host_resolution_and_link_save(
     monkeypatch,
 ):
+    """Verify test job view helper guards cover ownership h behavior."""
     request = RequestFactory().get("/")
     conn = _Conn()
 
@@ -160,6 +189,7 @@ def test_job_view_helper_guards_cover_ownership_host_resolution_and_link_save(
 
 
 def test_annotation_mapping_helpers_preserve_user_keys_and_hash_marker(monkeypatch):
+    """Verify test annotation mapping helpers preserve user behavior."""
     monkeypatch.setattr(job_view, "compute_plugin_hash", lambda mapping: "hash")
 
     mapping = {}
@@ -195,10 +225,12 @@ def test_annotation_mapping_helpers_preserve_user_keys_and_hash_marker(monkeypat
 
 
 def test_save_image_map_annotation_builds_expected_link(monkeypatch):
+    """Verify test save image map annotation builds expecte behavior."""
     saved_links = []
     image = _Image(7, "sample.ome.tif")
 
     def save_link(link):
+        """Store save link."""
         saved_links.append(link)
         return link
 
@@ -221,6 +253,7 @@ def test_save_image_map_annotation_builds_expected_link(monkeypatch):
 
 
 def test_save_image_map_annotation_rejects_missing_or_invalid_image_id(monkeypatch):
+    """Verify test save image map annotation rejects missin behavior."""
     update = SimpleNamespace(saveAndReturnObject=lambda link: link)
 
     monkeypatch.setattr(job_view, "get_id", lambda obj: None)
@@ -235,6 +268,7 @@ def test_save_image_map_annotation_rejects_missing_or_invalid_image_id(monkeypat
 
 
 def test_validate_user_password_handles_missing_details_and_auth_failure(monkeypatch):
+    """Verify test validate user password handles missing d behavior."""
     conn = _Conn()
     missing_host_conn = _Conn(host=None, port=None)
 
@@ -243,12 +277,16 @@ def test_validate_user_password_handles_missing_details_and_auth_failure(monkeyp
     assert error is not None
 
     class FailingClient:
+        """Represent failing client."""
+
         @staticmethod
         def createSession(username, password):
+            """Build create session."""
             raise RuntimeError("bad password")
 
         @staticmethod
         def closeSession():
+            """Handle close session."""
             return None
 
     monkeypatch.setattr(
@@ -269,6 +307,7 @@ def test_validate_user_password_handles_missing_details_and_auth_failure(monkeyp
 def test_resolve_image_ids_prefers_selected_ids_and_deduplicates_project_images(
     monkeypatch,
 ):
+    """Verify test resolve image identifiers prefers select behavior."""
     conn = _Conn()
     monkeypatch.setattr(
         job_view,
@@ -285,6 +324,7 @@ def test_resolve_image_ids_prefers_selected_ids_and_deduplicates_project_images(
 
 
 def test_start_job_rejects_invalid_regex_and_persists_expected_payload(monkeypatch):
+    """Verify test start job rejects invalid regex and pers behavior."""
     conn = _Conn()
     saved = {}
     monkeypatch.setattr(job_view, "_resolve_image_ids", lambda *_args: [11, 12])
@@ -334,6 +374,7 @@ def test_start_job_rejects_invalid_regex_and_persists_expected_payload(monkeypat
 
 
 def test_start_acq_and_delete_jobs_apply_types_and_password_checks(monkeypatch):
+    """Verify test start acq and delete jobs apply types an behavior."""
     conn = _Conn()
     saved_jobs = []
     monkeypatch.setattr(job_view, "_resolve_image_ids", lambda *_args: [21, 22])
@@ -378,6 +419,7 @@ def test_start_acq_and_delete_jobs_apply_types_and_password_checks(monkeypatch):
 def test_start_job_variants_cover_methods_rate_limits_and_validation_errors(
     monkeypatch,
 ):
+    """Verify test start job variants cover methods rate li behavior."""
     conn = _Conn()
     factory = RequestFactory()
 
@@ -427,6 +469,7 @@ def test_start_job_variants_cover_methods_rate_limits_and_validation_errors(
 
 
 def test_start_job_variants_cover_exception_paths(monkeypatch):
+    """Verify test start job variants cover exception paths."""
     conn = _Conn()
     failing_request = _json_request({"project_id": 5})
 
@@ -453,6 +496,7 @@ def test_start_job_variants_cover_exception_paths(monkeypatch):
 
 
 def test_job_progress_rejects_other_users_and_reports_lock_contention(monkeypatch):
+    """Verify test job progress rejects other users and rep behavior."""
     conn = _Conn()
     request = RequestFactory().get("/")
     request.user = SimpleNamespace(username="alice")
@@ -473,11 +517,14 @@ def test_job_progress_rejects_other_users_and_reports_lock_contention(monkeypatc
     forbidden = inspect.unwrap(job_view.job_progress)(request, "a" * 32, conn=conn)
 
     class BusyLock:
+        """Represent busy lock."""
+
         def __init__(self, *_args, **_kwargs):
             return None
 
         @staticmethod
         def acquire():
+            """Handle acquire."""
             raise job_view.portalocker.exceptions.LockException("busy")
 
     monkeypatch.setattr(job_view, "load_job", lambda job_id: running_job)
@@ -497,6 +544,7 @@ def test_job_progress_rejects_other_users_and_reports_lock_contention(monkeypatc
 
 
 def test_job_progress_processes_acquisition_batches(monkeypatch):
+    """Verify test job progress processes acquisition batches."""
     conn = _Conn()
     request = RequestFactory().get("/")
     request.user = SimpleNamespace(username="alice")
@@ -517,15 +565,19 @@ def test_job_progress_processes_acquisition_batches(monkeypatch):
     }
 
     class Lock:
+        """Represent lock."""
+
         def __init__(self, *_args, **_kwargs):
             return None
 
         @staticmethod
         def acquire():
+            """Handle acquire."""
             return None
 
         @staticmethod
         def release():
+            """Handle release."""
             return None
 
     monkeypatch.setattr(job_view, "load_job", lambda *_args: job)
@@ -571,6 +623,7 @@ def test_job_progress_processes_acquisition_batches(monkeypatch):
 def test_job_progress_processes_filename_mapping_and_duplicate_variable_names(
     monkeypatch,
 ):
+    """Verify test job progress processes filename mapping behavior."""
     conn = _Conn()
     request = RequestFactory().get("/")
     request.user = SimpleNamespace(username="alice")
@@ -592,15 +645,19 @@ def test_job_progress_processes_filename_mapping_and_duplicate_variable_names(
     }
 
     class Lock:
+        """Represent lock."""
+
         def __init__(self, *_args, **_kwargs):
             return None
 
         @staticmethod
         def acquire():
+            """Handle acquire."""
             return None
 
         @staticmethod
         def release():
+            """Handle release."""
             return None
 
     monkeypatch.setattr(job_view, "load_job", lambda *_args: job)
@@ -647,6 +704,7 @@ def test_job_progress_processes_filename_mapping_and_duplicate_variable_names(
 
 
 def test_job_progress_preserves_reserved_hash_variable_name(monkeypatch):
+    """Verify test job progress preserves reserved hash var behavior."""
     conn = _Conn()
     request = RequestFactory().get("/")
     request.user = SimpleNamespace(username="alice")
@@ -666,15 +724,19 @@ def test_job_progress_preserves_reserved_hash_variable_name(monkeypatch):
     }
 
     class Lock:
+        """Represent lock."""
+
         def __init__(self, *_args, **_kwargs):
             return None
 
         @staticmethod
         def acquire():
+            """Handle acquire."""
             return None
 
         @staticmethod
         def release():
+            """Handle release."""
             return None
 
     monkeypatch.setattr(job_view, "load_job", lambda *_args: job)
@@ -712,20 +774,25 @@ def test_job_progress_preserves_reserved_hash_variable_name(monkeypatch):
 def test_job_progress_covers_unknown_finished_delete_paths_and_save_failures(
     monkeypatch,
 ):
+    """Verify test job progress covers unknown finished del behavior."""
     conn = _Conn()
     request = RequestFactory().get("/")
     request.user = SimpleNamespace(username="alice")
 
     class Lock:
+        """Represent lock."""
+
         def __init__(self, *_args, **_kwargs):
             return None
 
         @staticmethod
         def acquire():
+            """Handle acquire."""
             return None
 
         @staticmethod
         def release():
+            """Handle release."""
             return None
 
     monkeypatch.setattr(job_view.portalocker, "Lock", Lock)
@@ -889,20 +956,25 @@ def test_job_progress_covers_unknown_finished_delete_paths_and_save_failures(
 
 
 def test_job_progress_covers_error_logs_and_save_failures(monkeypatch):
+    """Verify test job progress covers error logs and save behavior."""
     conn = _Conn()
     request = RequestFactory().get("/")
     request.user = SimpleNamespace(username="alice")
 
     class Lock:
+        """Represent lock."""
+
         def __init__(self, *_args, **_kwargs):
             return None
 
         @staticmethod
         def acquire():
+            """Handle acquire."""
             return None
 
         @staticmethod
         def release():
+            """Handle release."""
             return None
 
     monkeypatch.setattr(job_view.portalocker, "Lock", Lock)
@@ -997,6 +1069,7 @@ def test_job_progress_covers_error_logs_and_save_failures(monkeypatch):
     )
 
     def _delete_existing_annotations(*args):
+        """Handle delete existing annotations."""
         image_id = args[2].id
         if image_id == 51:
             raise RuntimeError("delete all failed")
@@ -1057,6 +1130,7 @@ def test_job_progress_covers_error_logs_and_save_failures(monkeypatch):
 def test_job_view_start_helpers_cover_method_chunk_size_and_rate_limit_edges(
     monkeypatch,
 ):
+    """Verify test job view start helpers cover method chun behavior."""
     conn = _Conn()
     factory = RequestFactory()
     saved_jobs = []
@@ -1129,15 +1203,20 @@ def test_job_view_start_helpers_cover_method_chunk_size_and_rate_limit_edges(
 def test_validate_user_password_and_job_progress_cover_remaining_logging_and_regex_edges(
     monkeypatch,
 ):
+    """Verify test validate user password and job progress behavior."""
     conn = _Conn()
 
     class _Client:
+        """Represent client."""
+
         @staticmethod
         def createSession(username, password):
+            """Build create session."""
             return None
 
         @staticmethod
         def closeSession():
+            """Handle close session."""
             raise RuntimeError("close exploded")
 
     monkeypatch.setattr(
@@ -1155,15 +1234,19 @@ def test_validate_user_password_and_job_progress_cover_remaining_logging_and_reg
     saved_jobs = []
 
     class Lock:
+        """Represent lock."""
+
         def __init__(self, *_args, **_kwargs):
             return None
 
         @staticmethod
         def acquire():
+            """Handle acquire."""
             return None
 
         @staticmethod
         def release():
+            """Handle release."""
             return None
 
     jobs = {
@@ -1248,6 +1331,7 @@ def test_validate_user_password_and_job_progress_cover_remaining_logging_and_reg
     monkeypatch.setattr(job_view.time, "time", lambda: 14.0)
 
     def _delete_annotations(*args):
+        """Handle delete annotations."""
         image_id = args[2].id
         if image_id == 62:
             return (1, 3, 2)

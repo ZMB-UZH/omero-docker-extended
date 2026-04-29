@@ -18,6 +18,8 @@ from omeroweb_admin_tools.services.log_query import (
 
 
 class _DummyResponse:
+    """Test double for dummy response."""
+
     def __init__(self, payload, status=200):
         self._payload = payload
         self.status = status
@@ -27,10 +29,12 @@ class _DummyResponse:
         self.text = payload.decode("utf-8", errors="replace")
 
     def read(self):
+        """Return read."""
         return self._payload
 
 
 def _config():
+    """Handle config."""
     return LogConfig(
         loki_url="https://loki:3100",
         lookback_seconds=900,
@@ -43,6 +47,7 @@ def _config():
 
 
 def test_execute_loki_query_returns_json_payload(monkeypatch) -> None:
+    """Verify test execute loki query returns JSON payload."""
     payload = {"status": "success", "data": {"result": []}}
     monkeypatch.setattr(
         log_query_module.requests,
@@ -58,6 +63,7 @@ def test_execute_loki_query_returns_json_payload(monkeypatch) -> None:
 def test_execute_loki_query_wraps_non_json_http_and_timeout_errors(
     monkeypatch,
 ) -> None:
+    """Verify test execute loki query wraps non JSON HTTP a behavior."""
     config = _config()
 
     monkeypatch.setattr(
@@ -86,6 +92,7 @@ def test_execute_loki_query_wraps_non_json_http_and_timeout_errors(
 
 
 def test_parse_entries_from_payload_handles_internal_streams_and_detected_levels():
+    """Verify test parse entries from payload handles inter behavior."""
     payload = {
         "data": {
             "result": [
@@ -127,6 +134,7 @@ def test_parse_entries_from_payload_handles_internal_streams_and_detected_levels
 
 
 def test_build_logs_cache_key_varies_by_internal_files_and_text_query() -> None:
+    """Verify test build logs cache key varies by internal behavior."""
     config = _config()
     base = _build_logs_cache_key(config, ["omeroserver"], 60, 20)
     text = _build_logs_cache_key(
@@ -148,6 +156,7 @@ def test_build_logs_cache_key_varies_by_internal_files_and_text_query() -> None:
 
 
 def test_apply_global_cap_keeps_most_recent_entries() -> None:
+    """Verify test apply global cap keeps most recent entries."""
     entries = [
         LogEntry(
             timestamp="2026-03-09T00:00:01+00:00",
@@ -177,6 +186,7 @@ def test_apply_global_cap_keeps_most_recent_entries() -> None:
 def test_fetch_loki_logs_uncached_aggregates_jobs_and_filters_internal_batches(
     monkeypatch,
 ) -> None:
+    """Verify test fetch loki logs uncached aggregates jobs behavior."""
     config = _config()
     docker_job = log_query_module._QueryJob(
         query='{compose_service="omeroserver"}',
@@ -196,6 +206,7 @@ def test_fetch_loki_logs_uncached_aggregates_jobs_and_filters_internal_batches(
     )
 
     def fake_execute_query_job(config, job, lookback_seconds, max_entries, since_ns):
+        """Handle fake execute query job."""
         if job.source_type == "docker":
             return job, [
                 LogEntry(
@@ -237,6 +248,7 @@ def test_fetch_loki_logs_uncached_aggregates_jobs_and_filters_internal_batches(
 
 
 def test_internal_batch_query_splits_after_failure(monkeypatch) -> None:
+    """Verify test internal batch query splits after failure."""
     config = _config()
     job = log_query_module._QueryJob(
         query='{compose_service="omeroweb", log_type="internal"}',
@@ -247,6 +259,7 @@ def test_internal_batch_query_splits_after_failure(monkeypatch) -> None:
     calls = []
 
     def fake_execute_query_job(config, job, lookback_seconds, max_entries, since_ns):
+        """Handle fake execute query job."""
         calls.append(job.selected_files)
         if len(job.selected_files) > 1:
             raise RuntimeError("batch too slow")

@@ -10,10 +10,12 @@ DASHBOARD_DIR = REPO_ROOT / "monitoring" / "grafana" / "dashboards"
 
 
 def _dashboard(name: str) -> dict[str, Any]:
+    """Handle dashboard."""
     return json.loads((DASHBOARD_DIR / name).read_text(encoding="utf-8"))
 
 
 def _expressions(value: Any) -> list[str]:
+    """Handle expressions."""
     if isinstance(value, dict):
         expressions = []
         if isinstance(value.get("expr"), str):
@@ -30,11 +32,13 @@ def _expressions(value: Any) -> list[str]:
 
 
 def test_grafana_dashboards_are_valid_json() -> None:
+    """Verify test grafana dashboards are valid JSON."""
     for dashboard_path in sorted(DASHBOARD_DIR.glob("*.json")):
         json.loads(dashboard_path.read_text(encoding="utf-8"))
 
 
 def test_database_cache_hit_ratio_queries_guard_zero_denominators() -> None:
+    """Verify test database cache hit ratio queries guard z behavior."""
     expressions = _expressions(_dashboard("database-metrics.json"))
 
     assert (
@@ -50,6 +54,7 @@ def test_database_cache_hit_ratio_queries_guard_zero_denominators() -> None:
 
 
 def test_plugin_database_cache_hit_ratio_queries_guard_zero_denominators() -> None:
+    """Verify test plugin database cache hit ratio queries behavior."""
     expressions = _expressions(_dashboard("plugin-database-metrics.json"))
 
     assert (
@@ -65,6 +70,7 @@ def test_plugin_database_cache_hit_ratio_queries_guard_zero_denominators() -> No
 
 
 def test_redis_dashboard_queries_do_not_emit_infinite_ratios() -> None:
+    """Verify test redis dashboard queries do not emit infi behavior."""
     expressions = _expressions(_dashboard("redis-metrics.json"))
 
     assert (

@@ -5,8 +5,11 @@ from pathlib import Path
 
 
 class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
+    """Test cases for OMERO web bootstrap runtime log contract tests."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.bootstrap_text = (
             cls.repo_root / "startup" / "10-web-bootstrap.sh"
@@ -16,6 +19,7 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
         )
 
     def test_supervisord_declares_expected_log_targets(self) -> None:
+        """Verify test supervisord declares expected log targets."""
         self.assertIn(
             "logfile=/opt/omero/web/logs/supervisord.log", self.supervisord_text
         )
@@ -55,6 +59,7 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
     def test_bootstrap_prepares_runtime_log_targets_from_supervisord_config(
         self,
     ) -> None:
+        """Verify test bootstrap prepares runtime log targets f behavior."""
         self.assertIn(
             'supervisord_config_path="${OMERO_WEB_SUPERVISORD_CONFIG:-/etc/supervisord.conf}"',
             self.bootstrap_text,
@@ -73,6 +78,7 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
         )
 
     def test_bootstrap_ensures_tmpdir_for_session_storage(self) -> None:
+        """Verify test bootstrap ensures tmpdir for session sto behavior."""
         self.assertIn(
             'ensure_runtime_directory "${TMPDIR}" "OMERO.web TMPDIR (session storage)"',
             self.bootstrap_text,
@@ -83,6 +89,7 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
         )
 
     def test_bootstrap_repairs_plugin_tmp_subtrees_for_runtime_user(self) -> None:
+        """Verify test bootstrap repairs plugin tmp subtrees fo behavior."""
         self.assertIn("repair_plugin_tmp_layout()", self.bootstrap_text)
         self.assertIn('local tmp_root="${OMERO_TMP_PATH:-}"', self.bootstrap_text)
         self.assertIn(
@@ -99,6 +106,7 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
     def test_bootstrap_verifies_runtime_user_write_path_instead_of_root_only(
         self,
     ) -> None:
+        """Verify test bootstrap verifies runtime user write pa behavior."""
         self.assertIn("ensure_runtime_identity()", self.bootstrap_text)
         self.assertIn(
             'runuser -u "${runtime_user}" -- touch "${probe_path}"', self.bootstrap_text

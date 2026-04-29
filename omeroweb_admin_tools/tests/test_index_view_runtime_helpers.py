@@ -20,6 +20,8 @@ LOKI_URL = "https://loki.example.test:3100"
 
 
 class _HttpResponseStub:
+    """Represent HTTP response stub."""
+
     def __init__(self, status: int, payload: bytes):
         self.status = status
         self._payload = payload
@@ -31,10 +33,13 @@ class _HttpResponseStub:
         return False
 
     def read(self):
+        """Return read."""
         return self._payload
 
 
 class _RequestsResponseStub:
+    """Represent requests response stub."""
+
     def __init__(
         self,
         status_code: int,
@@ -51,10 +56,13 @@ class _RequestsResponseStub:
         self.raw = SimpleNamespace(headers=raw_headers)
 
     def json(self):
+        """Handle JSON."""
         return json.loads(self.content.decode("utf-8"))
 
 
 class _DockerConnection:
+    """Represent docker connection."""
+
     def __init__(self, response=None, request_error: Exception | None = None):
         self._response = response
         self._request_error = request_error
@@ -62,22 +70,27 @@ class _DockerConnection:
         self.closed = False
 
     def request(self, method, path):
+        """Handle request."""
         if self._request_error is not None:
             raise self._request_error
         self.requested = (method, path)
 
     def getresponse(self):
+        """Return getresponse."""
         return self._response
 
     def close(self):
+        """Handle close."""
         self.closed = True
 
 
 def _payload(response):
+    """Handle payload."""
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) -> None:
+    """Verify test env probe and prometheus helpers cover r behavior."""
     monkeypatch.setenv("ADMIN_TOOLS_SAMPLE_INT", "12")
     assert index_view._to_int_env("ADMIN_TOOLS_SAMPLE_INT", 5) == 12
     monkeypatch.setenv("ADMIN_TOOLS_SAMPLE_INT", "bad")
@@ -140,6 +153,7 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
     seen = []
 
     def _query_metric(_base_url, expr):
+        """Handle query metric."""
         seen.append(expr)
         if "network_receive" in expr:
             raise RuntimeError("probe failed")
@@ -154,6 +168,7 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
 
 
 def test_internal_service_base_url_builds_valid_defaults(monkeypatch) -> None:
+    """Verify test internal service base URL builds valid d behavior."""
     monkeypatch.delenv("ADMIN_TOOLS_GRAFANA_URL", raising=False)
     monkeypatch.delenv("ADMIN_TOOLS_PROMETHEUS_URL", raising=False)
     monkeypatch.delenv("ADMIN_TOOLS_INTERNAL_SERVICE_SCHEME", raising=False)
@@ -188,6 +203,7 @@ def test_internal_service_base_url_builds_valid_defaults(monkeypatch) -> None:
 
 
 def test_collect_recently_seen_services_and_parse_since_ns() -> None:
+    """Verify test collect recently seen services and parse behavior."""
     response = _RequestsResponseStub(
         200,
         payload=json.dumps(
@@ -229,6 +245,7 @@ def test_collect_recently_seen_services_and_parse_since_ns() -> None:
 def test_logs_view_and_internal_log_labels_cover_configuration_paths(
     monkeypatch,
 ) -> None:
+    """Verify test logs view and internal log labels cover behavior."""
     request = RequestFactory().get("/admin_tools/logs/")
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.utils.current_username",
@@ -308,6 +325,7 @@ def test_docker_compose_and_api_helpers_cover_json_and_socket_errors(
     monkeypatch,
     tmp_path,
 ) -> None:
+    """Verify test docker compose and API helpers cover JSO behavior."""
     monkeypatch.setattr(
         index_view.subprocess,
         "run",
@@ -370,6 +388,7 @@ def test_docker_compose_and_api_helpers_cover_json_and_socket_errors(
 def test_docker_diagnostics_and_compose_health_helpers_cover_inspection_paths(
     monkeypatch,
 ) -> None:
+    """Verify test docker diagnostics and compose health he behavior."""
     monkeypatch.setenv("ADMIN_TOOLS_DOCKER_SOCKET", "/var/run/docker.sock")
     monkeypatch.setattr(index_view.os.path, "exists", lambda path: True)
     monkeypatch.setattr(index_view.os, "access", lambda path, mode: True)
@@ -382,6 +401,7 @@ def test_docker_diagnostics_and_compose_health_helpers_cover_inspection_paths(
     )
 
     def _docker_api(path, timeout_seconds=3.0):
+        """Handle docker API."""
         if path == "/containers/json?all=1":
             return [
                 {
@@ -439,19 +459,24 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
     monkeypatch,
     tmp_path,
 ) -> None:
+    """Verify test unix socket connection and docker runtim behavior."""
     events = {}
     socket_path = tmp_path / "docker.sock"
 
     class _SocketStub:
+        """Represent socket stub."""
+
         def __init__(self, family, sock_type):
             events["created"] = (family, sock_type)
 
         @staticmethod
         def settimeout(timeout):
+            """Store settimeout."""
             events["timeout"] = timeout
 
         @staticmethod
         def connect(path):
+            """Handle connect."""
             events["path"] = path
 
     monkeypatch.setattr(index_view.socket, "socket", _SocketStub)
@@ -498,6 +523,7 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
     assert diagnostics["api_error"] == "Docker API request failed"
 
     def docker_api(path, timeout_seconds=3.0):
+        """Handle docker API."""
         if path == "/containers/json?all=1":
             return [
                 42,
@@ -555,6 +581,7 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
 def test_index_helper_functions_cover_render_permissions_and_time_parsing(
     monkeypatch,
 ) -> None:
+    """Verify test index helper functions cover render perm behavior."""
     monkeypatch.setattr(
         index_view,
         "render",
@@ -578,19 +605,25 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
     )
 
     class _Permissions:
+        """Represent permissions."""
+
         @staticmethod
         def isGroupRead():
+            """Handle is group read."""
             return True
 
         @staticmethod
         def isGroupWrite():
+            """Handle is group write."""
             return True
 
         @staticmethod
         def isGroupAnnotate():
+            """Handle is group annotate."""
             return False
 
     def _read_write_group_details():
+        """Handle read write group details."""
         return SimpleNamespace(getPermissions=_Permissions)
 
     read_write_group = SimpleNamespace(getDetails=_read_write_group_details)
@@ -609,6 +642,7 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
 def test_refactored_monitoring_helpers_preserve_guard_branch_contracts(
     monkeypatch,
 ) -> None:
+    """Verify test refactored monitoring helpers preserve g behavior."""
     headers = {"Origin": "https://omero.example.org"}
     index_view._rewrite_origin_headers(headers, "not-a-url")
     assert headers == {"Origin": "https://omero.example.org"}
@@ -642,6 +676,7 @@ def test_refactored_monitoring_helpers_preserve_guard_branch_contracts(
     calls = []
 
     def _docker_api(path, timeout_seconds=3.0):
+        """Handle docker API."""
         calls.append((path, timeout_seconds))
         return {"Config": {}, "State": {"Health": {"Status": "healthy"}}}
 
@@ -675,6 +710,7 @@ def test_logs_compose_prometheus_and_proxy_helpers_cover_remaining_runtime_guard
     monkeypatch,
     tmp_path,
 ) -> None:
+    """Verify test logs compose prometheus and proxy helper behavior."""
     root_error = HttpResponse("root-only", status=403)
     monkeypatch.setattr(
         index_view, "_require_root_user", lambda request, conn: root_error

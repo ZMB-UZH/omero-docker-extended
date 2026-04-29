@@ -53,6 +53,8 @@ from .search_query_builder import build_omero_fulltext_query
 
 
 class _AcquisitionSearchKwargs(TypedDict):
+    """Represent acquisition search kwargs."""
+
     visible_group_ids: list[int] | None
     current_user_id: int
     scope_type: str
@@ -113,6 +115,8 @@ class ScopeSyncCancelledError(RuntimeError):
 
 @dataclass(frozen=True)
 class SearchQuery:
+    """Represent search query."""
+
     query_text: str = ""
     indexed_scope: str = SEARCH_SCOPE_ALL_INDEXED
     acquisition_date_from: datetime | None = None
@@ -121,6 +125,7 @@ class SearchQuery:
 
     @staticmethod
     def _display_date(value: datetime | None) -> str:
+        """Handle display date."""
         if value is None:
             return ""
         return value.astimezone(timezone.utc).strftime("%d-%m-%Y")
@@ -134,6 +139,7 @@ class SearchQuery:
         return self._display_date(self.acquisition_date_to)
 
     def to_payload(self) -> dict[str, Any]:
+        """Handle to payload."""
         payload = {
             "query_text": self.query_text,
             "indexed_scope": self.indexed_scope,
@@ -148,9 +154,11 @@ class SearchQuery:
         return payload
 
     def with_page(self, page: int) -> "SearchQuery":
+        """Handle with page."""
         return SearchQuery(**{**self.__dict__, "page": max(1, int(page))})
 
     def to_querystring(self, *, page: int | None = None) -> str:
+        """Handle to querystring."""
         payload = self.to_payload()
         if page is not None:
             payload["page"] = max(1, int(page))
@@ -165,14 +173,17 @@ class SearchQuery:
 
 
 def runtime_config() -> EnhancedSearchRuntimeConfig:
+    """Run runtime config."""
     return build_enhanced_search_config()
 
 
 def runtime_celery_config() -> EnhancedSearchCeleryConfig:
+    """Run runtime celery config."""
     return build_enhanced_search_celery_config()
 
 
 def acquisition_index_status_message(enabled: bool) -> str:
+    """Handle acquisition index status message."""
     return (
         ACQUISITION_INDEXING_ENABLED_MESSAGE
         if enabled
@@ -181,24 +192,29 @@ def acquisition_index_status_message(enabled: bool) -> str:
 
 
 def acquisition_index_disabled_detail_message() -> str:
+    """Handle acquisition index disabled detail message."""
     return ACQUISITION_INDEXING_DISABLED_DETAIL_MESSAGE
 
 
 def user_settings_load_error_message() -> str:
+    """Handle user settings load error message."""
     return USER_SETTINGS_LOAD_ERROR_MESSAGE
 
 
 def user_settings_save_error_message() -> str:
+    """Handle user settings save error message."""
     return USER_SETTINGS_SAVE_ERROR_MESSAGE
 
 
 def _default_scope_label(scope_type: str, scope_id: int) -> str:
+    """Handle default scope label."""
     if scope_type == USER_SCOPE_TYPE:
         return USER_SCOPE_LABEL
     return f"{scope_type.title()} {scope_id}"
 
 
 def user_scope(user_id: int, username: str) -> EnhancedSearchScope:
+    """Handle user scope."""
     return EnhancedSearchScope(
         scope_type=USER_SCOPE_TYPE,
         scope_id=int(user_id),
@@ -211,6 +227,7 @@ def user_scope(user_id: int, username: str) -> EnhancedSearchScope:
 def scope_from_key(
     scope_key: str, *, label: str | None = None
 ) -> EnhancedSearchScope | None:
+    """Handle scope from key."""
     raw_scope_key = str(scope_key or "").strip()
     if ":" not in raw_scope_key:
         return None
@@ -233,6 +250,7 @@ def scope_from_key(
 def ensure_scope_state(
     scopes: tuple[EnhancedSearchScope, ...] | list[EnhancedSearchScope],
 ) -> list[dict[str, Any]]:
+    """Handle ensure scope state."""
     normalized_scopes = tuple(scopes or ())
     if not normalized_scopes:
         return []
@@ -248,6 +266,7 @@ def ensure_scope_state(
 def current_sync_states(
     scopes: tuple[EnhancedSearchScope, ...] | list[EnhancedSearchScope],
 ) -> list[dict[str, Any]]:
+    """Handle current sync states."""
     by_key = {
         f"{state['scope_type']}:{state['scope_id']}": state
         for state in ensure_scope_state(scopes)
@@ -278,6 +297,7 @@ def current_sync_states(
 
 
 def _normalized_sync_detail_message(raw_message: Any) -> str:
+    """Handle normalized sync detail message."""
     message = str(raw_message or "")
     if message in {
         ACQUISITION_INDEXING_DISABLED_MESSAGE,
@@ -291,6 +311,7 @@ def _normalized_sync_detail_message(raw_message: Any) -> str:
 
 
 def _parse_date(raw_value: Any, *, end_of_day: bool = False) -> datetime | None:
+    """Handle parse date."""
     if raw_value is None:
         return None
     text = str(raw_value).strip()
@@ -321,9 +342,11 @@ def _parse_date(raw_value: Any, *, end_of_day: bool = False) -> datetime | None:
 
 
 def parse_search_query(params) -> tuple[SearchQuery, list[str]]:
+    """Validate parse search query."""
     errors: list[str] = []
 
     def read_text(name: str) -> str:
+        """Return read text."""
         return str(params.get(name) or "").strip()
 
     page = 1
@@ -371,6 +394,7 @@ def parse_search_query(params) -> tuple[SearchQuery, list[str]]:
 
 
 def _query_filters(query: SearchQuery) -> dict[str, Any]:
+    """Handle query filters."""
     return {
         "acquisition_date_from": query.acquisition_date_from,
         "acquisition_date_to": query.acquisition_date_to,
@@ -380,6 +404,7 @@ def _query_filters(query: SearchQuery) -> dict[str, Any]:
 def _empty_search_payload(
     *, page: int = 1, page_size: int | None = None
 ) -> dict[str, Any]:
+    """Handle empty search payload."""
     return {
         "results": [],
         "page": page,
@@ -391,6 +416,7 @@ def _empty_search_payload(
 
 
 def search_scope_options() -> tuple[dict[str, str], ...]:
+    """Handle search scope options."""
     return tuple(
         {"value": value, "label": SEARCH_SCOPE_LABELS[value]}
         for value in (
@@ -402,6 +428,7 @@ def search_scope_options() -> tuple[dict[str, str], ...]:
 
 
 def default_user_settings() -> dict[str, Any]:
+    """Handle default user settings."""
     return {
         "acquisition_metadata_enabled": False,
         "collapsed_sections": [],
@@ -409,6 +436,7 @@ def default_user_settings() -> dict[str, Any]:
 
 
 def _coerce_bool(raw_value: Any) -> bool:
+    """Handle coerce bool."""
     if isinstance(raw_value, bool):
         return raw_value
     if isinstance(raw_value, str):
@@ -423,6 +451,7 @@ def _coerce_bool(raw_value: Any) -> bool:
 def _normalized_user_settings(
     settings_payload: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    """Handle normalized user settings."""
     raw_payload = settings_payload or {}
     payload = dict(default_user_settings())
     payload["acquisition_metadata_enabled"] = _coerce_bool(
@@ -440,6 +469,7 @@ def _normalized_user_settings(
 
 
 def user_settings(username: str) -> dict[str, Any]:
+    """Handle user settings."""
     if not username:
         return default_user_settings()
     with db_connect() as conn:
@@ -453,6 +483,7 @@ def user_settings(username: str) -> dict[str, Any]:
 
 
 def sync_states_for_user(conn, username: str) -> list[dict[str, Any]]:
+    """Handle sync states for user."""
     scope = current_user_scope(conn, username)
     if scope is None:
         return []
@@ -460,6 +491,7 @@ def sync_states_for_user(conn, username: str) -> list[dict[str, Any]]:
 
 
 def current_user_scope(conn, username: str) -> EnhancedSearchScope | None:
+    """Handle current user scope."""
     user_id = _current_user_id(conn)
     if not username or user_id is None:
         return None
@@ -467,6 +499,7 @@ def current_user_scope(conn, username: str) -> EnhancedSearchScope | None:
 
 
 def _current_user_id(conn) -> int | None:
+    """Handle current user identifier."""
     try:
         user = conn.getUser()
         user_id = user.getId() if user is not None else None
@@ -478,6 +511,7 @@ def _current_user_id(conn) -> int | None:
 
 
 def _sync_state_needs_refresh(state: dict[str, Any] | None) -> bool:
+    """Handle sync state needs refresh."""
     if not state:
         return True
     stale_after = timedelta(seconds=runtime_config().sync_stale_seconds)
@@ -498,6 +532,7 @@ def ensure_user_index_sync(
     *,
     settings_payload: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], bool, str]:
+    """Handle ensure user index sync."""
     scope = current_user_scope(conn, username)
     if scope is None:
         return [], False, ""
@@ -522,6 +557,7 @@ def ensure_user_index_sync(
 def save_user_settings(
     conn, username: str, settings_payload: dict[str, Any]
 ) -> dict[str, Any]:
+    """Store save user settings."""
     user_id = _current_user_id(conn)
     previous = user_settings(username)
     normalized = _normalized_user_settings({**previous, **(settings_payload or {})})
@@ -562,6 +598,7 @@ def save_user_settings(
 
 
 def _visible_group_ids(conn) -> list[int] | None:
+    """Handle visible group identifiers."""
     try:
         admin_service = conn.getAdminService()
         user_id = _current_user_id(conn)
@@ -585,6 +622,7 @@ def _visible_group_ids(conn) -> list[int] | None:
 
 
 def _datetime_to_rtime(value: datetime):
+    """Handle datetime to rtime."""
     normalized = (
         value.astimezone(timezone.utc)
         if value.tzinfo
@@ -594,6 +632,7 @@ def _datetime_to_rtime(value: datetime):
 
 
 def _omero_search_created_range(query: SearchQuery):
+    """Handle OMERO search created range."""
     if query.acquisition_date_from is None and query.acquisition_date_to is None:
         return None
     lower_bound = query.acquisition_date_from or datetime(
@@ -604,6 +643,7 @@ def _omero_search_created_range(query: SearchQuery):
 
 
 def _result_row_from_image(image) -> dict[str, Any]:
+    """Handle result row from image."""
     image_row, _channels, _attributes = _document_for_image(
         image,
         runtime_config().schema_version,
@@ -612,6 +652,7 @@ def _result_row_from_image(image) -> dict[str, Any]:
 
 
 def _images_from_builtin_search_hit(hit) -> list[Any]:
+    """Handle images from builtin search hit."""
     omero_class = str(getattr(hit, "OMERO_CLASS", "") or "").lower()
     if omero_class == "image":
         return [hit]
@@ -632,6 +673,7 @@ def _images_from_builtin_search_hit(hit) -> list[Any]:
 
 
 def _merge_indexed_sources(existing: list[str], incoming: list[str]) -> list[str]:
+    """Handle merge indexed sources."""
     merged = set(existing or [])
     merged.update(incoming or [])
     ordered = [source for source in SEARCH_SOURCE_DISPLAY_ORDER if source in merged]
@@ -642,6 +684,7 @@ def _merge_indexed_sources(existing: list[str], incoming: list[str]) -> list[str
 
 
 def _normalized_sort_datetime(value: Any) -> datetime | None:
+    """Handle normalized sort datetime."""
     if not isinstance(value, datetime):
         return None
     return (
@@ -652,6 +695,7 @@ def _normalized_sort_datetime(value: Any) -> datetime | None:
 
 
 def _merged_result_sort_key(row: dict[str, Any]) -> tuple[int, datetime, int]:
+    """Handle merged result sort key."""
     acquisition_date = _normalized_sort_datetime(row.get("acquisition_date"))
     return (
         1 if acquisition_date is not None else 0,
@@ -661,6 +705,7 @@ def _merged_result_sort_key(row: dict[str, Any]) -> tuple[int, datetime, int]:
 
 
 def _search_omero_builtin_rows(conn, query: SearchQuery) -> list[dict[str, Any]]:
+    """Handle search OMERO builtin rows."""
     if not query.query_text:
         return []
 
@@ -740,6 +785,7 @@ def _search_acquisition_index_rows(
     limit: int | None,
     offset: int,
 ) -> tuple[list[dict[str, Any]], int]:
+    """Handle search acquisition index rows."""
     with db_connect() as db_conn:
         return search_index_rows(
             db_conn,
@@ -758,6 +804,7 @@ def _merge_result_rows(
     acquisition_rows: list[dict[str, Any]],
     omero_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    """Handle merge result rows."""
     merged: dict[int, dict[str, Any]] = {}
 
     for row in acquisition_rows:
@@ -791,6 +838,7 @@ def _merge_result_rows(
 
 
 def _accessible_images_by_id(conn, image_ids: list[int]) -> dict[int, Any]:
+    """Handle accessible images by identifier."""
     if not image_ids:
         return {}
     try:
@@ -816,6 +864,7 @@ def search(
     *,
     acquisition_metadata_enabled: bool,
 ) -> dict[str, Any]:
+    """Handle search."""
     if conn is None:
         logger.warning("Enhanced-search request arrived without an OMERO connection.")
         return _empty_search_payload(page=query.page)
@@ -948,6 +997,7 @@ def search(
 
 
 def saved_queries(username: str) -> list[dict[str, Any]]:
+    """Store saved queries."""
     if not username:
         return []
     with db_connect() as conn:
@@ -955,16 +1005,19 @@ def saved_queries(username: str) -> list[dict[str, Any]]:
 
 
 def save_query(username: str, query_name: str, query_payload: dict[str, Any]) -> None:
+    """Store save query."""
     with db_connect() as conn:
         save_saved_query(conn, username, query_name, query_payload)
 
 
 def remove_saved_query(username: str, query_id: int) -> bool:
+    """Handle remove saved query."""
     with db_connect() as conn:
         return delete_saved_query(conn, username, query_id)
 
 
 def saved_query_redirect_url(query_payload: dict[str, Any]) -> str:
+    """Store saved query redirect URL."""
     target = reverse("omeroweb_tools_enhanced_search")
     query_string = urlencode(
         {
@@ -978,6 +1031,7 @@ def saved_query_redirect_url(query_payload: dict[str, Any]) -> str:
 
 
 def _admin_secure_flag() -> bool:
+    """Handle admin secure flag."""
     try:
         return get_bool_env(
             "CONFIG_omero_security_ssl",
@@ -989,6 +1043,7 @@ def _admin_secure_flag() -> bool:
 
 @contextmanager
 def _root_connection():
+    """Handle root connection."""
     root_password = str(os.environ.get("ROOTPASS") or "").strip()
     if not root_password:
         raise RuntimeError("ROOTPASS is missing; enhanced-search indexing cannot run.")
@@ -1020,6 +1075,7 @@ def _root_connection():
 
 
 def _group_context(group_obj) -> tuple[str, bool]:
+    """Handle group context."""
     group_name = ""
     group_can_read = False
     if group_obj is None:
@@ -1038,6 +1094,7 @@ def _group_context(group_obj) -> tuple[str, bool]:
 
 
 def _owner_name(image) -> str:
+    """Handle owner name."""
     try:
         owner = image.getOwner()
     except Exception:
@@ -1059,6 +1116,7 @@ def _owner_name(image) -> str:
 
 
 def _images_for_scope(admin_conn, scope: EnhancedSearchScope) -> list[Any]:
+    """Handle images for scope."""
     try:
         return list(
             admin_conn.getObjects(
@@ -1075,6 +1133,7 @@ def _scope_image_rows(
     admin_conn,
     scope: EnhancedSearchScope,
 ) -> list[Any]:
+    """Handle scope image rows."""
     images = _images_for_scope(admin_conn, scope)
     deduped = []
     seen: set[int] = set()
@@ -1097,6 +1156,7 @@ def _document_for_image(
     image,
     schema_version: int,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Handle document for image."""
     document, context = extract_search_document(image)
     group = None
     try:
@@ -1161,6 +1221,7 @@ def _sync_scope(
     scope: EnhancedSearchScope,
     run_token: str,
 ) -> dict[str, Any]:
+    """Handle sync scope."""
     config = runtime_config()
     processed_count = 0
     try:
@@ -1264,6 +1325,7 @@ def _process_sync_batch(
     processed_count: int,
     schema_version: int,
 ) -> int:
+    """Handle process sync batch."""
     last_image_id = None
     with db_connect() as db_conn:
         for image in images:
@@ -1309,6 +1371,7 @@ def _process_sync_batch(
 
 
 def run_scope_sync_task(scope_key: str, run_token: str) -> dict[str, Any]:
+    """Run run scope sync task."""
     scope = scope_from_key(scope_key)
     if scope is None:
         raise RuntimeError("Selected search scope is not valid.")
@@ -1316,6 +1379,7 @@ def run_scope_sync_task(scope_key: str, run_token: str) -> dict[str, Any]:
 
 
 def _start_threaded_sync(scope: EnhancedSearchScope, run_token: str) -> None:
+    """Handle start threaded sync."""
     worker = threading.Thread(
         target=run_scope_sync_task,
         args=(scope.scope_key, run_token),
@@ -1336,6 +1400,7 @@ def _dispatch_scope_sync_task(
     # queue without recreating a module-load cycle. The broker connection is
     # created explicitly here because OMERO.web hosts multiple Celery apps in
     # the same long-lived web process.
+    """Handle dispatch scope sync task."""
     from ..celery_app import app as enhanced_search_celery_app
     from kombu import Connection
 
@@ -1354,6 +1419,7 @@ def request_scope_sync(
     *,
     scope_label: str | None = None,
 ) -> tuple[bool, str]:
+    """Handle request scope sync."""
     scope = scope_from_key(scope_key, label=scope_label)
     if scope is None:
         return False, "Selected search scope is not valid."

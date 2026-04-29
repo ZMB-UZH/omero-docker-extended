@@ -8,31 +8,41 @@ from omeroweb_omp_plugin.services.omero import annotation_service
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self.val = value
 
     def getValue(self):
+        """Return get value."""
         return self.val
 
 
 class _BadValue:
+    """Represent bad value."""
+
     def __init__(self, value):
         self.val = value
 
     @staticmethod
     def getValue():
+        """Return get value."""
         raise RuntimeError("bad wrapped value")
 
 
 class _Params:
+    """Represent params."""
+
     def __init__(self):
         self.values = {}
 
     def add(self, key, value):
+        """Handle add."""
         self.values[key] = value
 
 
 def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch):
+    """Verify test annotation service covers wrapped values behavior."""
     monkeypatch.setattr(
         annotation_service,
         "get_env",
@@ -49,6 +59,8 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     mapping[HASH_KEY] = annotation_service.compute_plugin_hash(mapping)
 
     class _NamedValue:
+        """Represent named value."""
+
         def __init__(self, name, value):
             self.name = name
             self.value = value
@@ -62,8 +74,11 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     assert annotation_service.is_plugin_annotation(wrapped_ann) is True
 
     class _LookupFailureQS:
+        """Represent lookup failure qs."""
+
         @staticmethod
         def projection(hql, params, service_opts=None):
+            """Handle projection."""
             raise RuntimeError("query failed")
 
     qs_backed_ann = SimpleNamespace(
@@ -80,8 +95,11 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     )
 
     class _UnreadableMapValue:
+        """Represent unreadable map value."""
+
         @staticmethod
         def getValue():
+            """Return get value."""
             raise RuntimeError("map wrapper unavailable")
 
         def __iter__(self):
@@ -91,8 +109,11 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     assert annotation_service.is_plugin_annotation(unreadable_ann) is False
 
     class _QueryService:
+        """Represent query service."""
+
         @staticmethod
         def projection(hql, params, service_opts=None):
+            """Handle projection."""
             if "where l.parent.id = :iid and a.ns = :ns" in hql:
                 return [[_Value(1)], [_Value(2)]]
             if "join a.mapValue mv" in hql:
@@ -134,11 +155,13 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
 def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_failures(
     monkeypatch,
 ):
+    """Verify test delete existing annotations handles spar behavior."""
     monkeypatch.setattr(annotation_service, "ParametersI", _Params)
     monkeypatch.setattr(annotation_service, "rlong", lambda value: value)
     monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "")
 
     def _get_id(obj):
+        """Handle get identifier."""
         if getattr(obj, "explode_id", False):
             raise RuntimeError("id lookup failed")
         return getattr(obj, "id", None)
@@ -146,8 +169,11 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     monkeypatch.setattr(annotation_service, "get_id", _get_id)
 
     class _NsWrapper:
+        """Represent ns wrapper."""
+
         @staticmethod
         def getValue():
+            """Return get value."""
             raise RuntimeError("namespace missing")
 
     plugin_cleanup_result = annotation_service.delete_existing_annotations(
@@ -181,6 +207,7 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     delete_attempts = []
 
     def _find_link_ids(_conn, annotation_id):
+        """Handle find link identifiers."""
         if annotation_id == 13:
             raise RuntimeError("link query failed")
         if annotation_id in deleted_annotation_ids:
@@ -203,6 +230,8 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     )
 
     class _BrokenLenMapValue:
+        """Represent broken len map value."""
+
         def __bool__(self):
             return True
 
@@ -210,8 +239,11 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
             raise RuntimeError("cannot measure pairs")
 
     class _AnnotationQueryService:
+        """Represent annotation query service."""
+
         @staticmethod
         def projection(hql, params, service_opts=None):
+            """Handle projection."""
             if "select a.id from MapAnnotation a where a.id = :aid" in hql:
                 aid = params.values["aid"]
                 if aid == 14:
@@ -228,14 +260,18 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     }
 
     class _Conn:
+        """Represent conn."""
+
         SERVICE_OPTS = object()
 
         @staticmethod
         def getQueryService():
+            """Return get query service."""
             return _AnnotationQueryService()
 
         @staticmethod
         def getObject(kind, obj_id):
+            """Return get object."""
             if kind == "ImageAnnotationLink":
                 raise RuntimeError("link lookup unavailable")
             if kind == "MapAnnotation" and obj_id == 12:
@@ -244,6 +280,7 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
 
         @staticmethod
         def deleteObjects(kind, object_ids, wait=True):
+            """Handle delete objects."""
             delete_attempts.extend((kind, object_id, wait) for object_id in object_ids)
             for object_id in object_ids:
                 if object_id == 12:
@@ -280,6 +317,7 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
 
 
 def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
+    """Verify test rate limit covers dummy cache cleanup an behavior."""
     current_time = [100.0]
     monkeypatch.setattr(rate_limit.time, "time", lambda: current_time[0])
 
@@ -291,20 +329,25 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
     assert "expired" not in cache._store
 
     class _DummyCache:
+        """Test double for dummy cache."""
+
         def __init__(self):
             self.deleted = []
 
         @staticmethod
         def get(key):
+            """Return get."""
             return {"actions": "bad", "blocked_until": "bad"}
 
         @staticmethod
         def set(key, value, timeout=None):
+            """Store set."""
             raise AssertionError(
                 "django dummy cache backend should not be used directly"
             )
 
         def delete(self, key):
+            """Handle delete."""
             self.deleted.append(key)
 
     dummy_cache = _DummyCache()
@@ -337,9 +380,11 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
     state = {}
 
     def _cache_get(_key):
+        """Handle cache get."""
         return {"actions": "bad", "blocked_until": 150.0}
 
     def _cache_set(key, value, timeout):
+        """Handle cache set."""
         state["value"] = value
         state["timeout"] = timeout
         return True
@@ -359,6 +404,7 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
 
 
 def test_rate_limit_non_dummy_cache_and_delete_miss_paths(monkeypatch):
+    """Verify test rate limit non dummy cache and delete mi behavior."""
     current_time = [10.0]
     monkeypatch.setattr(rate_limit.time, "time", lambda: current_time[0])
 
@@ -369,17 +415,22 @@ def test_rate_limit_non_dummy_cache_and_delete_miss_paths(monkeypatch):
     backend_calls = []
 
     class _CacheBackend:
+        """Represent cache backend."""
+
         @staticmethod
         def get(key):
+            """Return get."""
             backend_calls.append(("get", key))
             return {"cached": key}
 
         @staticmethod
         def set(key, value, timeout=None):
+            """Store set."""
             backend_calls.append(("set", key, value, timeout))
 
         @staticmethod
         def delete(key):
+            """Handle delete."""
             backend_calls.append(("delete", key))
 
     monkeypatch.setattr(rate_limit, "DummyCache", type("_OtherDummyCache", (), {}))

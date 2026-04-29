@@ -1338,12 +1338,14 @@ def run_benchmark(
 
 
 def command_install(_args: argparse.Namespace) -> None:
+    """Handle command install."""
     context = resolve_mcp_handshake_context()
     ensure_installed(context)
     print(f"installed {PACKAGE_REQUIREMENT} at {context.venv_dir}")
 
 
 def command_prepare(args: argparse.Namespace) -> None:
+    """Handle command prepare."""
     allow_dirty = getattr(args, "allow_dirty_mirror", False)
     repo_root = resolve_repo_root()
     require_clean_index_target(repo_root, allow_dirty=allow_dirty)
@@ -1358,6 +1360,7 @@ def command_prepare(args: argparse.Namespace) -> None:
 
 
 def command_index(args: argparse.Namespace) -> None:
+    """Handle command index."""
     allow_dirty = getattr(args, "allow_dirty_index", False)
     repo_root = resolve_repo_root()
     require_clean_index_target(repo_root, allow_dirty=allow_dirty)
@@ -1367,6 +1370,7 @@ def command_index(args: argparse.Namespace) -> None:
 
 
 def command_search(args: argparse.Namespace) -> None:
+    """Handle command search."""
     allow_dirty = getattr(args, "allow_dirty_index", False)
     if getattr(args, "refresh", False) or getattr(args, "index_if_missing", False):
         repo_root = resolve_repo_root()
@@ -1416,6 +1420,7 @@ def run_search(
 
 
 def command_status(_args: argparse.Namespace) -> None:
+    """Handle command status."""
     context = resolve_active_index_context()
     output = run_ccc_existing(context, ["status"], timeout=timeout_seconds("status"))
     print(output.stdout, end="")
@@ -1548,6 +1553,7 @@ def sanitize_mcp_error_text(
     replacements: dict[str, str] = {}
 
     def add_path(path: Path, label: str) -> None:
+        """Handle add path."""
         try:
             paths = {str(path.expanduser()), str(path.expanduser().resolve())}
         except OSError:
@@ -1675,6 +1681,7 @@ def run_lightweight_mcp_server(
 
 
 def command_mcp(_args: argparse.Namespace) -> None:
+    """Handle command mcp."""
     run_lightweight_mcp_server()
 
 
@@ -1832,6 +1839,7 @@ def mcp_config_payload(
 
 
 def command_mcp_config(args: argparse.Namespace) -> None:
+    """Handle command mcp config."""
     context = resolve_mcp_handshake_context()
     print(json.dumps(mcp_config_payload(context, pin_repo=args.pin_repo), indent=2))
 
@@ -2010,6 +2018,7 @@ def ensure_codex_mcp_timeouts(config_path: Path) -> None:
 
 
 def command_mcp_install(_args: argparse.Namespace) -> None:
+    """Handle command mcp install."""
     context = resolve_mcp_handshake_context()
     codex = resolve_required_executable("codex")
     config_path = codex_config_path()
@@ -2064,6 +2073,7 @@ def run_mcp_stdio_smoke(
     stdio_client = cast(Any, stdio_module).stdio_client
 
     async def probe() -> dict[str, object]:
+        """Handle probe."""
         params = server_parameters(
             command=sys.executable,
             args=[str(Path(__file__).resolve()), "mcp"],
@@ -2210,6 +2220,7 @@ def run_mcp_jsonrpc_smoke(context: CocoIndexContext) -> list[dict[str, object]]:
 
 
 def command_mcp_smoke(args: argparse.Namespace) -> None:
+    """Handle command mcp smoke."""
     payload: dict[str, object] = {}
     handshake_context = resolve_mcp_handshake_context()
     payload["stdio_probe"] = run_mcp_stdio_smoke(
@@ -2227,6 +2238,7 @@ def command_mcp_smoke(args: argparse.Namespace) -> None:
 
 
 def command_benchmark(args: argparse.Namespace) -> None:
+    """Handle command benchmark."""
     repo_root = resolve_repo_root()
     allow_dirty = args.allow_dirty_index
     require_clean_index_target(repo_root, allow_dirty=allow_dirty)
