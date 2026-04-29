@@ -54,7 +54,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
             index_text,
         )
         self.assertIn(".github/workflows/ruff.yml", doc_text)
-        self.assertIn("0.15.11", doc_text)
+        self.assertIn("0.15.12", doc_text)
         self.assertIn("pre-commit install", doc_text)
         self.assertIn("ruff format .", doc_text)
 
@@ -105,7 +105,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
 
     def test_ruff_config_is_pinned_and_repo_specific(self) -> None:
         config = tomllib.loads(self.read_text(".ruff.toml"))
-        self.assertEqual("==0.15.11", config["required-version"])
+        self.assertEqual("==0.15.12", config["required-version"])
         self.assertEqual("py39", config["target-version"])
         self.assertEqual(["F", "E7", "E9"], config["lint"]["select"])
         self.assertEqual({}, config["lint"].get("per-file-ignores", {}))
@@ -115,7 +115,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertEqual(1, len(config["repos"]))
         repo = config["repos"][0]
         self.assertEqual("https://github.com/astral-sh/ruff-pre-commit", repo["repo"])
-        self.assertEqual("v0.15.11", repo["rev"])
+        self.assertEqual("v0.15.12", repo["rev"])
         hooks = {hook["id"]: hook for hook in repo["hooks"]}
         self.assertEqual(["--fix"], hooks["ruff-check"]["args"])
         self.assertEqual(["python", "pyi"], hooks["ruff-check"]["types_or"])
@@ -154,7 +154,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         install_step = next_or_fail(
             step for step in steps if step.get("name") == "Install Ruff"
         )
-        self.assertEqual("0.15.11", install_step["with"]["version"])
+        self.assertEqual("0.15.12", install_step["with"]["version"])
         self.assertEqual("--version", install_step["with"]["args"])
 
 

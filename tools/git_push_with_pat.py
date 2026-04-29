@@ -62,7 +62,7 @@ def _validate_git_argument(name: str, value: str) -> None:
     if not value or value.startswith("-") or "\x00" in value:
         raise SystemExit(f"{name} must be a non-option Git argument")
     if any(ord(character) < 32 for character in value):
-            raise SystemExit(f"{name} must not contain control characters")
+        raise SystemExit(f"{name} must not contain control characters")
 
 
 def _validate_force_with_lease(value: str | None) -> str | None:

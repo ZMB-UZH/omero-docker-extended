@@ -149,9 +149,8 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             )
             for role, name, email in identities:
                 lower_name = name.casefold()
-                bad_name = (
-                    lower_name in {"ai-agent", "codex"}
-                    or (lower_name == "ai agent" and name != "AI Agent")
+                bad_name = lower_name in {"ai-agent", "codex"} or (
+                    lower_name == "ai agent" and name != "AI Agent"
                 )
                 bad_ai_email = name == "AI Agent" and email != ""
                 if bad_name or bad_ai_email or email in forbidden_emails:
