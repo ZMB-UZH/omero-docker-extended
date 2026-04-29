@@ -624,7 +624,7 @@ def copy_repo_files(
         target.parent.mkdir(parents=True, exist_ok=True)
         copied_files += 1
         with source_path.open("rb") as source, target.open("wb") as destination:
-            for chunk in iter(lambda: source.read(FILE_COPY_CHUNK_BYTES), b""):
+            while chunk := source.read(FILE_COPY_CHUNK_BYTES):
                 file_digest_value.update(chunk)
                 destination.write(chunk)
         digest.update(file_digest_value.digest())
