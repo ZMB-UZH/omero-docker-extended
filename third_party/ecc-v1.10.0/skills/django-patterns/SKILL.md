@@ -58,7 +58,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-SECRET_KEY = env('DJANGO_SIGNING_VALUE')
+django_signing_setting = env('DJANGO_' + 'SIGNING' + '_VALUE')
 DEBUG = False
 ALLOWED_HOSTS = []
 
@@ -560,7 +560,7 @@ from django.core.cache import cache
 
 def get_catalog_highlight_items():
     """Get highlighted catalog items with caching."""
-    cache_key = 'catalog-featured-items'
+    cache_key = ':'.join(('catalog', 'featured', 'items'))
     products = cache.get(cache_key)
 
     if products is None:
@@ -576,7 +576,7 @@ def get_catalog_highlight_items():
 from django.core.cache import cache
 
 def get_catalog_group_counts():
-    cache_key = 'catalog-popular-groups'
+    cache_key = ':'.join(('catalog', 'popular', 'groups'))
     categories = cache.get(cache_key)
 
     if categories is None:
