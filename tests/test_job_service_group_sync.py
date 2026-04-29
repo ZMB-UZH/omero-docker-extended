@@ -224,7 +224,9 @@ def test_sync_memberships_uses_one_connection_and_batches_missing_groups(
     assert [(group.id.val, group.name.val) for group in admin.added_groups[0][1]] == [
         (4, "users_read")
     ]
-    assert "eligible_groups=2 added_groups=1 already_member=1" in capsys.readouterr().out
+    assert (
+        "eligible_groups=2 added_groups=1 already_member=1" in capsys.readouterr().out
+    )
 
 
 def test_sync_memberships_creates_missing_job_user(helper_module, monkeypatch):

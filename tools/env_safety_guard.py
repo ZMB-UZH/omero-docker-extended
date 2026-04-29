@@ -95,9 +95,7 @@ DOT_ENV_REQUIRED_KEYS = (
 )
 DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS = frozenset({"REDIS_SAVE_POLICY"})
 
-ENV_ACTIVE_ASSIGNMENT_RE = re.compile(
-    r"^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$"
-)
+ENV_ACTIVE_ASSIGNMENT_RE = re.compile(r"^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 ENV_COMMENTED_ASSIGNMENT_RE = re.compile(
     r"^#\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$"
 )
@@ -449,9 +447,7 @@ def validate_group_list(value: str) -> list[str]:
             continue
         group_name, permission = entry.split(":", 1)
         if not is_safe_omero_group_name(group_name):
-            errors.append(
-                "OMERO_INSTALL_GROUP_LIST contains an invalid group name"
-            )
+            errors.append("OMERO_INSTALL_GROUP_LIST contains an invalid group name")
         if permission not in OMERO_GROUP_PERMISSIONS:
             errors.append(
                 "OMERO_INSTALL_GROUP_LIST contains an unsupported group permission"
@@ -459,7 +455,9 @@ def validate_group_list(value: str) -> list[str]:
     return errors
 
 
-def validate_assignment_value(key: str, raw_value: str, resolved_value: str) -> list[str]:
+def validate_assignment_value(
+    key: str, raw_value: str, resolved_value: str
+) -> list[str]:
     """Validate one env assignment's type without exposing the value."""
     errors: list[str] = []
     value = resolved_value
@@ -781,7 +779,9 @@ def validate_env_file_pair(
     actual_keys = set(actual_assignments)
 
     missing = [key for key in required_assignments if key not in actual_keys]
-    extra = [key for key in actual_assignments if key not in required_keys | optional_keys]
+    extra = [
+        key for key in actual_assignments if key not in required_keys | optional_keys
+    ]
 
     if missing:
         errors.append(f"{actual_rel}: missing required keys: {', '.join(missing)}")
@@ -792,13 +792,17 @@ def validate_env_file_pair(
         if key in extra:
             continue
         try:
-            resolved_value = resolve_env_references(raw_value, context | actual_assignments)
+            resolved_value = resolve_env_references(
+                raw_value, context | actual_assignments
+            )
         except ValueError as exc:
             errors.append(f"{actual_rel}: {key} has an unsafe value: {exc}")
             continue
 
         context[key] = resolved_value
-        template_value = required_assignments.get(key, optional_assignments.get(key, ""))
+        template_value = required_assignments.get(
+            key, optional_assignments.get(key, "")
+        )
         required_nonempty = bool(template_value) and key not in ALLOW_EMPTY_KEYS
         if required_nonempty and not resolved_value:
             errors.append(f"{actual_rel}: {key} must not be empty")
@@ -862,7 +866,11 @@ def validate_dot_env_values(repo_root: Path, context: dict[str, str]) -> list[st
         except ValueError as exc:
             errors.append(f"{DOT_ENV_NAME}: {key} has an unsafe value: {exc}")
             continue
-        if key not in DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS and key in DOT_ENV_REQUIRED_KEYS and not resolved_value:
+        if (
+            key not in DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS
+            and key in DOT_ENV_REQUIRED_KEYS
+            and not resolved_value
+        ):
             errors.append(f"{DOT_ENV_NAME}: {key} must not be empty")
             continue
         if not resolved_value and key in DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS:

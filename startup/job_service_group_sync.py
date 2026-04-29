@@ -45,11 +45,7 @@ def _group_id(group) -> int:
 
 
 def _eligible_groups(groups: Iterable) -> list:
-    return [
-        group
-        for group in groups
-        if _group_name(group) not in EXCLUDED_GROUP_NAMES
-    ]
+    return [group for group in groups if _group_name(group) not in EXCLUDED_GROUP_NAMES]
 
 
 def _new_job_experimenter(job_user: str):
@@ -109,14 +105,18 @@ def sync_memberships(args: argparse.Namespace) -> int:
     try:
         admin = conn.getAdminService()
         job_exp = ensure_job_user(admin, args.job_user, job_pass, args.user_retries)
-        current_group_ids = {int(group_id) for group_id in admin.getMemberOfGroupIds(job_exp)}
+        current_group_ids = {
+            int(group_id) for group_id in admin.getMemberOfGroupIds(job_exp)
+        }
         groups = _eligible_groups(admin.lookupGroups())
         missing_groups = [
             group for group in groups if _group_id(group) not in current_group_ids
         ]
 
         if missing_groups:
-            admin.addGroups(ExperimenterI(int(_value(job_exp.id)), False), missing_groups)
+            admin.addGroups(
+                ExperimenterI(int(_value(job_exp.id)), False), missing_groups
+            )
 
         print(
             "job-service group sync complete: "
