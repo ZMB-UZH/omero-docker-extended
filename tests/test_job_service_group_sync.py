@@ -66,7 +66,8 @@ class FakeAdmin:
         experimenter.omeName = FakeRValue(name)
         return experimenter
 
-    def lookupGroup(self, name: str):
+    @staticmethod
+    def lookupGroup(name: str):
         return FakeGroup(2, name)
 
     def createExperimenterWithPassword(
@@ -129,8 +130,8 @@ def helper_module(monkeypatch):
     fake_model = types.ModuleType("omero.model")
     fake_model.ExperimenterI = FakeExperimenterI
     fake_rtypes = types.ModuleType("omero.rtypes")
-    fake_rtypes.rbool = lambda value: FakeRValue(value)
-    fake_rtypes.rstring = lambda value: FakeRValue(value)
+    fake_rtypes.rbool = FakeRValue
+    fake_rtypes.rstring = FakeRValue
 
     monkeypatch.setitem(sys.modules, "omero", fake_omero)
     monkeypatch.setitem(sys.modules, "omero.gateway", fake_gateway)
