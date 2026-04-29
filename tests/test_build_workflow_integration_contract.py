@@ -818,11 +818,12 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_prometheus_yml_contains_crowdsec_probe_marker(self) -> None:
-        """The marker comment must always be present so the installation script
-        can locate the injection point.  The actual CrowdSec probe line may or
-        may not be present — the installation script injects it when CrowdSec
-        is enabled and removes it when disabled.  Both states are valid for the
-        checked-in file.
+        """Require the CrowdSec probe marker comment.
+
+        The installation script uses the marker as the injection point. The actual
+        CrowdSec probe line may or may not be present — the installation script
+        injects it when CrowdSec is enabled and removes it when disabled. Both
+        states are valid for the checked-in file.
         """
         prom_text = (
             self.repo_root / "monitoring" / "prometheus" / "prometheus.yml"
@@ -961,11 +962,12 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_docker_compose_omeroserver_passes_omero_data_dir_and_omero_dir(
         self,
     ) -> None:
-        """The omeroserver service MUST pass OMERO_DATA_DIR and OMERO_DIR into
-        the container environment so the OMERO server resolves managed
-        repository paths against the bind-mounted data volume, not the
-        ephemeral server install directory.  Removing these causes imports
-        to land inside the container and be lost on restart.
+        """Require OMERO data path environment in the server container.
+
+        The server must receive OMERO_DATA_DIR and OMERO_DIR so it resolves
+        managed repository paths against the bind-mounted data volume, not the
+        ephemeral server install directory. Removing these causes imports to land
+        inside the container and be lost on restart.
         """
         compose_text = (self.repo_root / "docker-compose.yml").read_text(
             encoding="utf-8"
@@ -993,9 +995,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_omeroserver_example_env_uses_absolute_managed_dir(self) -> None:
-        """CONFIG_omero_managed_dir in the tracked env template must be an
-        absolute path so OMERO never resolves it against the server install
-        directory.  A relative value causes silent data loss on restart.
+        """Require an absolute managed repository path in the env template.
+
+        CONFIG_omero_managed_dir must be absolute so OMERO never resolves it
+        against the server install directory. A relative value causes silent data
+        loss on restart.
         """
         env_text = (self.repo_root / "env" / "omeroserver_example.env").read_text(
             encoding="utf-8"
@@ -1013,9 +1017,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.fail("CONFIG_omero_managed_dir not found in omeroserver_example.env")
 
     def test_server_bootstrap_rejects_managed_dir_outside_omero_dir(self) -> None:
-        """The managed-repository guard must check that the configured path
-        lives inside OMERO_DIR and must produce a clear error when it does
-        not, so the container refuses to start with a misconfigured path.
+        """Reject managed repository paths outside OMERO_DIR.
+
+        The managed-repository guard must check that the configured path lives
+        inside OMERO_DIR and must produce a clear error when it does not, so the
+        container refuses to start with a misconfigured path.
         """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
@@ -1031,8 +1037,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_coveragerc_tracks_all_python_source_directories(self) -> None:
-        """Every plugin/library directory that contains Python source must
-        appear in .coveragerc [run] source so coverage.py traces it.
+        """Require coverage tracing for every Python source directory.
+
+        Every plugin/library directory that contains Python source must appear in
+        .coveragerc [run] source so coverage.py traces it.
         """
         expected_dirs = [
             "./omero_plugin_common",
@@ -1052,7 +1060,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             )
 
     def test_ci_workflow_runs_all_test_suites(self) -> None:
-        """The CI workflow must run every test suite as a separate coverage
+        """Require a separate coverage invocation for every test suite.
+
+        The CI workflow must run every test suite as a separate coverage
         invocation so the conftest mock stubs do not interfere.
         """
         expected_suites = [
@@ -1147,8 +1157,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_codecov_yml_has_component_for_each_source_directory(self) -> None:
-        """Each plugin/library tracked in .coveragerc must have a matching
-        Codecov project component so per-module coverage is reported.
+        """Require Codecov components for every covered source directory.
+
+        Each plugin/library tracked in .coveragerc must have a matching Codecov
+        project component so per-module coverage is reported.
         """
         import yaml  # noqa: F811  — available in CI
 
