@@ -17,6 +17,10 @@ is_positive_integer() {
     is_non_negative_integer "$1" && [ "$1" -gt 0 ]
 }
 
+is_tcp_port() {
+    is_positive_integer "$1" && [ "$1" -le 65535 ]
+}
+
 is_env_var_name() {
     case "$1" in
         ""|[0-9]*|*[!A-Za-z0-9_]*) return 1 ;;
@@ -65,6 +69,26 @@ require_positive_integer_env_var() {
     fi
 }
 
+require_tcp_port_env_var() {
+    local var_name="$1"
+    local value="${!var_name-}"
+
+    if [[ -z "${value+x}" ]]; then
+        echo "ERROR: Required environment variable '${var_name}' is not set." >&2
+        exit 1
+    fi
+
+    if [[ -z "${value}" ]]; then
+        echo "ERROR: Required environment variable '${var_name}' is empty." >&2
+        exit 1
+    fi
+
+    if ! is_tcp_port "${value}"; then
+        echo "ERROR: Required environment variable '${var_name}' must be a TCP port between 1 and 65535, got '${value}'." >&2
+        exit 1
+    fi
+}
+
 require_nonempty_env_var() {
     local var_name="$1"
     local value="${!var_name-}"
@@ -99,6 +123,7 @@ REPO_ROOT_SYNC_HELPER="${SCRIPT_DIR}/repo_root_sync_helper.py"
 DROPBOX_USER_DIR_SYNC_STATUS_FILE="${SERVER_VAR_DIR}/dropbox-user-dir-sync.status"
 DROPBOX_USER_DIR_SYNC_HELPER="${SCRIPT_DIR}/dropbox_user_dir_sync.py"
 DROPBOX_ICE_BOOTSTRAP_STATUS_FILE="${SERVER_VAR_DIR}/dropbox-ice-bootstrap.status"
+JOB_SERVICE_GROUP_SYNC_HELPER="${SCRIPT_DIR}/job_service_group_sync.py"
 resolve_omero_bin() {
     local configured_bin="${OMERO_BIN:-}"
     if [[ -n "${configured_bin}" ]]; then
@@ -131,6 +156,8 @@ resolve_omero_bin() {
 
 OMERO_BIN="$(resolve_omero_bin)"
 require_nonempty_env_var "OMERO_CLI_USER"
+require_nonempty_env_var "OMERO_CLI_HOST"
+require_tcp_port_env_var "OMERO_CLI_PORT"
 
 resolve_omero_cli_tmpdir() {
     local candidate="${OMERO_TMPDIR:-${TMPDIR:-${OMERO_TEMPDIR:-}}}"
@@ -652,6 +679,11 @@ validate_ldap_new_user_group_configuration() {
 }
 
 validate_job_service_bootstrap_configuration() {
+    require_nonempty_env_var "OMERO_JOB_SERVICE_USERNAME"
+    require_nonempty_env_var "OMERO_JOB_SERVICE_JOIN_ALL_GROUPS"
+    require_nonempty_env_var "OMERO_JOB_SERVICE_HOST"
+    require_tcp_port_env_var "OMERO_JOB_SERVICE_PORT"
+
     local required_positive_integer_vars=(
         "OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS"
         "OMERO_JOB_SERVICE_READINESS_POLL_SECONDS"
@@ -662,18 +694,29 @@ validate_job_service_bootstrap_configuration() {
 
     local var_name
     for var_name in "${required_positive_integer_vars[@]}"; do
-        if [[ -n "${!var_name-}" ]]; then
-            require_positive_integer_env_var "${var_name}"
-        fi
+        require_positive_integer_env_var "${var_name}"
     done
 
-    # Jitter may be zero (disable jitter), so validate as non-negative integer
-    if [[ -n "${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS-}" ]]; then
-        local jitter_val="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS}"
-        if ! is_non_negative_integer "${jitter_val}"; then
-            echo "ERROR: OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS must be a non-negative integer, got: '${jitter_val}'" >&2
-            exit 1
-        fi
+    local jitter_val="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS-}"
+    if [[ -z "${jitter_val}" ]] || ! is_non_negative_integer "${jitter_val}"; then
+        echo "ERROR: OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS must be a non-negative integer, got: '${jitter_val}'" >&2
+        exit 1
+    fi
+
+    if [[ "${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS}" != "0" && "${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS}" != "1" ]]; then
+        echo "ERROR: OMERO_JOB_SERVICE_JOIN_ALL_GROUPS must be 0 or 1, got: '${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS}'" >&2
+        exit 1
+    fi
+
+    if [[ -z "${OMERO_JOB_SERVICE_SECURE-}" ]]; then
+        echo "ERROR: OMERO_JOB_SERVICE_SECURE must be set." >&2
+        exit 1
+    fi
+
+    if ! is_truthy_bool "${OMERO_JOB_SERVICE_SECURE}" \
+        && ! is_falsey_bool "${OMERO_JOB_SERVICE_SECURE}"; then
+        echo "ERROR: OMERO_JOB_SERVICE_SECURE must be a boolean value, got: '${OMERO_JOB_SERVICE_SECURE}'" >&2
+        exit 1
     fi
 }
 
@@ -1191,17 +1234,18 @@ ensure_certificate_sans() {
 
 schedule_job_service_bootstrap() {
     local root_pass="${ROOTPASS:-}"
-    local job_user="${OMERO_JOB_SERVICE_USERNAME:-job-service}"
+    local job_user="${OMERO_JOB_SERVICE_USERNAME}"
     local job_pass="${OMERO_JOB_SERVICE_PASS:-}"
-    local join_all="${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS:-0}"
-    local interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS:-3600}"
-    local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES:-3}"
-    local jitter_max="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS:-20}"
-    local startup_wait="${OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS:-900}"
-    local poll_interval="${OMERO_JOB_SERVICE_READINESS_POLL_SECONDS:-10}"
-    local host="${OMERO_JOB_SERVICE_HOST:-localhost}"
-    local port="${OMERO_JOB_SERVICE_PORT:-4064}"
-    local user_ensure_retries="${OMERO_JOB_SERVICE_USER_ENSURE_RETRIES:-3}"
+    local join_all="${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS}"
+    local interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS}"
+    local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES}"
+    local jitter_max="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS}"
+    local startup_wait="${OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS}"
+    local poll_interval="${OMERO_JOB_SERVICE_READINESS_POLL_SECONDS}"
+    local host="${OMERO_JOB_SERVICE_HOST}"
+    local port="${OMERO_JOB_SERVICE_PORT}"
+    local secure="${OMERO_JOB_SERVICE_SECURE}"
+    local user_ensure_retries="${OMERO_JOB_SERVICE_USER_ENSURE_RETRIES}"
     local log_file="${SERVER_LOG_DIR}/job-service-bootstrap.log"
     local pidfile="${SERVER_VAR_DIR}/job-service-sync.pid"
 
@@ -1246,49 +1290,43 @@ schedule_job_service_bootstrap() {
             return 1
         }
 
-        ensure_user_exists() {
-            local _attempt
-            for _attempt in $(seq 1 "${user_ensure_retries}"); do
-                # Note: 'omero user info' does not accept global arguments (-s -p -u -w) after 'info'.
-                # They MUST be placed BEFORE the subcommand, unlike 'omero user add'.
-                if run_omero -s "${host}" -p "${port}" -u root -w "${root_pass}" user info --user-name "${job_user}" >/dev/null 2>&1; then
-                    return 0
-                fi
+        run_job_service_group_sync_helper() {
+            local venv_py=""
+            local cli_home=""
+            local cli_tmpdir=""
+            local -a helper_cmd=()
 
-                local out="" rc=0
-                out="$(run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s "${host}" -p "${port}" -u root -w "${root_pass}" 2>&1)"
-                rc=$?
-                
-                if [[ "${rc}" -eq 0 ]]; then
-                    return 0
-                fi
-                
-                # If OMERO tells us the user exists but exited with an error code, it means it was already created. Treat as success.
-                if printf "%s" "${out}" | grep -qi "User exists:"; then
-                    return 0
-                fi
+            if [[ ! -r "${JOB_SERVICE_GROUP_SYNC_HELPER}" ]]; then
+                echo "[$(date -u)] ERROR: Missing job-service group sync helper: ${JOB_SERVICE_GROUP_SYNC_HELPER}"
+                return 1
+            fi
 
-                echo "[$(date -u)] WARN: Failed to add user ${job_user} (rc=${rc}): ${out}"
+            venv_py="$(resolve_server_venv_python)"
+            cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")" || return 1
+            cli_tmpdir="$(resolve_omero_cli_tmpdir)" || return 1
 
-                sleep $((2 * _attempt))
-            done
+            helper_cmd=(
+                env
+                HOME="${cli_home}"
+                TMPDIR="${cli_tmpdir}"
+                OMERO_TMPDIR="${cli_tmpdir}"
+                OMERO_TEMPDIR="${cli_tmpdir}"
+                ROOTPASS="${root_pass}"
+                OMERO_JOB_SERVICE_PASS="${job_pass}"
+                "${venv_py}"
+                "${JOB_SERVICE_GROUP_SYNC_HELPER}"
+                --host "${host}"
+                --port "${port}"
+                --secure "${secure}"
+                --root-user "root"
+                --job-user "${job_user}"
+                --user-retries "${user_ensure_retries}"
+            )
 
-            return 1
-        }
-
-        list_groups() {
-            local out=""
-            out="$(run_omero group list -s "${host}" -p "${port}" -u root -w "${root_pass}" 2>/dev/null || true)"
-
-            # Parse both "pipe table" and "whitespace table" formats
-            if printf "%s" "${out}" | grep -q '|'; then
-                printf "%s\n" "${out}" \
-                  | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $1); gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/) print $2}' \
-                  | sort -u
+            if [[ "$(id -u)" -eq 0 ]]; then
+                runuser -u "${OMERO_CLI_USER}" -- "${helper_cmd[@]}"
             else
-                printf "%s\n" "${out}" \
-                  | awk '($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/){print $2}' \
-                  | sort -u
+                "${helper_cmd[@]}"
             fi
         }
 
@@ -1301,44 +1339,9 @@ schedule_job_service_bootstrap() {
                 echo "[$(date -u)] WARN: OMERO not ready after ${ready_wait}s"
                 return 1
             fi
-            echo "[$(date -u)] DEBUG: OMERO is ready. Ensuring user exists..."
+            echo "[$(date -u)] DEBUG: OMERO is ready. Running job-service group sync helper..."
 
-            if ! ensure_user_exists; then
-                echo "[$(date -u)] ERROR: Failed to ensure ${job_user} exists"
-                return 1
-            fi
-            echo "[$(date -u)] DEBUG: User ${job_user} exists. Listing groups..."
-
-            local groups=""
-            groups="$(list_groups | grep -v -E '^(root|system|user)$' || true)"
-            if [[ -z "${groups}" ]]; then
-                echo "[$(date -u)] ERROR: No groups found (or parsing failed)"
-                return 1
-            fi
-
-            local failed=0
-            while IFS= read -r g; do
-                [[ -z "${g}" ]] && continue
-                local out="" rc=0
-                out="$(run_omero user joingroup "${g}" --name="${job_user}" -s "${host}" -p "${port}" -u root -w "${root_pass}" 2>&1)"
-                rc=$?
-
-                if [[ "${rc}" -eq 0 ]]; then
-                    echo "[$(date -u)] OK: ensured ${job_user} in ${g}"
-                    continue
-                fi
-
-                # Accept common idempotency errors
-                if printf "%s" "${out}" | grep -qiE 'already.*(member|in group)|duplicate'; then
-                    echo "[$(date -u)] OK: ${job_user} already in ${g}"
-                    continue
-                fi
-
-                echo "[$(date -u)] ERROR: joingroup failed for ${g} (rc=${rc}): ${out}"
-                failed=1
-            done <<< "${groups}"
-
-            return "${failed}"
+            run_job_service_group_sync_helper
         }
 
         while true; do
@@ -1411,7 +1414,7 @@ schedule_ldap_group_bootstrap() {
         local attempt=1
 
         for attempt in $(seq 1 "${retry_limit}"); do
-            if run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; then
+            if run_omero -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root -w "${root_pass}" >/dev/null 2>&1; then
                 login_ok=1
                 break
             fi
@@ -1425,7 +1428,7 @@ schedule_ldap_group_bootstrap() {
 
         for attempt in $(seq 1 "${retry_limit}"); do
             set +e
-            add_output="$(run_omero group add "${ldap_group_setting}" --type=private -s localhost -p 4064 -u root -w "${root_pass}" 2>&1)"
+            add_output="$(run_omero group add "${ldap_group_setting}" --type=private -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" -u root -w "${root_pass}" 2>&1)"
             add_exit_code=$?
             set -e
 
@@ -1508,6 +1511,8 @@ lookup_repo_root_prefix() {
 
     run_repo_root_sync_helper "${python_bin}" "${cli_home}" lookup \
         --root-pass "${root_pass}" \
+        --host "${OMERO_CLI_HOST}" \
+        --port "${OMERO_CLI_PORT}" \
         --repo-dir-path "${repo_dir_path}" \
         --expected-managed-dir "${managed_repo_root}"
 }
@@ -1569,7 +1574,7 @@ run_repo_root_bootstrap_once() {
     local last_success_epoch=0
 
     for attempt in $(seq 1 "${retry_limit}"); do
-        if run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; then
+        if run_omero -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root -w "${root_pass}" >/dev/null 2>&1; then
             login_ok=1
             break
         fi
@@ -2177,7 +2182,7 @@ schedule_binary_repository_cleanse() {
         local deadline=$(( $(date +%s) + startup_wait ))
         local login_ok=0
         while [[ "$(date +%s)" -lt "${deadline}" ]]; do
-            if run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; then
+            if run_omero -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root -w "${root_pass}" >/dev/null 2>&1; then
                 login_ok=1
                 break
             fi
@@ -2200,7 +2205,7 @@ schedule_binary_repository_cleanse() {
 
         run_omero_with_keepalive \
             "${keepalive_seconds}" \
-            admin cleanse -q -C -s localhost -p 4064 -u root -w "${root_pass}" "${data_dir}" || rc=$?
+            admin cleanse -q -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" -u root -w "${root_pass}" "${data_dir}" || rc=$?
 
         local elapsed=$(( $(date +%s) - start_epoch ))
         if [[ "${rc}" -eq 0 ]]; then
@@ -2308,7 +2313,7 @@ schedule_script_registration() {
 
         local scripts_dir="${SERVER_HOME}/lib/scripts/omero"
 
-        until run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; do
+        until run_omero -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root -w "${root_pass}" >/dev/null 2>&1; do
             sleep 2
         done
 
@@ -2379,7 +2384,8 @@ def sync_scripts(conn, script_dir):
                 cmd = (
                     f"omero script upload --official --sudo root "
                     f"'{filepath}' "
-                    f"-s localhost -p 4064 -u root -w '{sys.argv[1]}'"
+                    f"-s '{os.environ['OMERO_CLI_HOST']}' -p '{os.environ['OMERO_CLI_PORT']}' "
+                    f"-u root -w '{sys.argv[1]}'"
                 )
                 rc = os.system(cmd)
                 if rc != 0:
@@ -2389,7 +2395,8 @@ def sync_scripts(conn, script_dir):
                 cmd = (
                     f"omero script upload --official --sudo root "
                     f"'{filepath}' "
-                    f"-s localhost -p 4064 -u root -w '{sys.argv[1]}'"
+                    f"-s '{os.environ['OMERO_CLI_HOST']}' -p '{os.environ['OMERO_CLI_PORT']}' "
+                    f"-u root -w '{sys.argv[1]}'"
                 )
                 rc = os.system(cmd)
                 if rc != 0:
@@ -2401,8 +2408,10 @@ if __name__ == "__main__":
 
     root_pass = sys.argv[1]
     script_dir = sys.argv[2]
+    omero_host = os.environ["OMERO_CLI_HOST"]
+    omero_port = int(os.environ["OMERO_CLI_PORT"])
 
-    conn = BlitzGateway('root', root_pass, host='localhost', port=4064)
+    conn = BlitzGateway('root', root_pass, host=omero_host, port=omero_port)
     try:
         if conn.connect():
             sync_scripts(conn, script_dir)

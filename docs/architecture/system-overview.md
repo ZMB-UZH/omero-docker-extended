@@ -16,10 +16,12 @@ Stateful backend providing the OMERO API, image storage, script execution, and d
 - Installs pinned `pytest` in the OMERO.server virtualenv for in-container regression checks.
 - Clones official OME scripts and BIOP scripts during build, and bundles a pinned `Figure_To_Pdf.py` from `ome/omero-figure` so PDF export does not depend on runtime GitHub access.
 - Bootstrap script (`startup/10-server-bootstrap.sh`) configures Python path, TLS certificates, job-service user, requires `OMERO_FIGURE_VERSION` from `env/omeroserver.env`, validates or upgrades the OMERO.Figure PDF export script, and registers official scripts.
-- Optional runtime installations: OMERO.downloader (`startup/50-install-omero-downloader.sh`) and ImarisConvertBioformats (`startup/51-install-imarisconvert.sh`).
+- Optional runtime installation: OMERO.downloader (`startup/50-install-omero-downloader.sh`).
+- ImarisConvertBioformats is installed during the `omeroserver` image build from the pinned `BIOFORMATS_VERSION`; `startup/51-install-imarisconvert.sh` verifies the build artifact at container start and fails fast if the image is incomplete.
 - Compose starts the service as `root` only for bind-mount reconciliation; the
-  long-running OMERO.server process runs as `omero-server` and is exposed on
-  port 4064.
+  long-running OMERO.server process runs as `omero-server`. The host/container
+  API port mapping is driven by `OMERO_SERVER_HOST_PORT` and `OMERO_CLI_PORT`
+  from `env/omeroserver.env`.
 - Health check: admin login attempt via OMERO CLI.
 
 ### OMERO.web (`omeroweb`)

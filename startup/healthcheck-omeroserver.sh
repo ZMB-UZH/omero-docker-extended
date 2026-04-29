@@ -4,8 +4,22 @@ set -euo pipefail
 : "${ROOTPASS:?ROOTPASS is required for the OMERO.server healthcheck}"
 : "${CONFIG_omero_managed_dir:?CONFIG_omero_managed_dir is required for the OMERO.server healthcheck}"
 : "${OMERO_CLI_USER:?OMERO_CLI_USER is required for the OMERO.server healthcheck}"
+: "${OMERO_CLI_HOST:?OMERO_CLI_HOST is required for the OMERO.server healthcheck}"
+: "${OMERO_CLI_PORT:?OMERO_CLI_PORT is required for the OMERO.server healthcheck}"
 : "${OMERO_TMPDIR:?OMERO_TMPDIR is required for the OMERO.server healthcheck}"
 : "${OMERODIR:?OMERODIR is required for the OMERO.server healthcheck}"
+
+case "${OMERO_CLI_PORT}" in
+    ""|*[!0-9]*)
+        echo "FATAL: OMERO_CLI_PORT must be an integer TCP port." >&2
+        exit 1
+        ;;
+esac
+
+if (( OMERO_CLI_PORT < 1 || OMERO_CLI_PORT > 65535 )); then
+    echo "FATAL: OMERO_CLI_PORT must be between 1 and 65535." >&2
+    exit 1
+fi
 
 resolve_omero_bin() {
     local candidate=""
@@ -75,7 +89,7 @@ run_omero_cli() {
         "${omero_bin}" "$@"
 }
 
-if ! OMERO_PASSWORD="${ROOTPASS}" run_omero_cli -s 127.0.0.1 -p 4064 login -u root >/dev/null 2>/dev/null; then
+if ! OMERO_PASSWORD="${ROOTPASS}" run_omero_cli -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root >/dev/null 2>/dev/null; then
     echo "FATAL: OMERO CLI login failed via configured service user ${OMERO_CLI_USER}" >&2
     exit 1
 fi

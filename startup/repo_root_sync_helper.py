@@ -215,7 +215,13 @@ def planned_paths(
     )
 
 
-def lookup_prefix(root_pass: str, repo_dir_path: str, expected_managed_dir: str) -> int:
+def lookup_prefix(
+    root_pass: str,
+    host: str,
+    port: int,
+    repo_dir_path: str,
+    expected_managed_dir: str,
+) -> int:
     try:
         from omero.gateway import BlitzGateway
     except Exception as exc:  # pragma: no cover - exercised in runtime only
@@ -263,7 +269,7 @@ def lookup_prefix(root_pass: str, repo_dir_path: str, expected_managed_dir: str)
     def repo_description_uuid(model_obj):
         return unwrap_text(model_attr(model_obj, "hash"))
 
-    conn = BlitzGateway("root", root_pass, host="localhost", port=4064)
+    conn = BlitzGateway("root", root_pass, host=host, port=port)
     try:
         if not conn.connect():
             print("ERROR: failed to connect as root", file=sys.stderr)
@@ -333,6 +339,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Look up a repository prefix directory in the active repository.",
     )
     lookup_parser.add_argument("--root-pass", required=True)
+    lookup_parser.add_argument("--host", required=True)
+    lookup_parser.add_argument("--port", required=True, type=int)
     lookup_parser.add_argument("--repo-dir-path", required=True)
     lookup_parser.add_argument("--expected-managed-dir", required=True)
 
@@ -360,8 +368,12 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "lookup":
+            if args.port <= 0:
+                parser.error("--port must be a positive integer")
             return lookup_prefix(
                 args.root_pass,
+                args.host,
+                args.port,
                 args.repo_dir_path,
                 args.expected_managed_dir,
             )

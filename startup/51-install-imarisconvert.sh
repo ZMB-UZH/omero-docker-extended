@@ -7,7 +7,14 @@ fail() {
     exit 1
 }
 
-INSTALL_DIR="/opt/omero/imarisconvert"
+INSTALL_MODE="verify"
+case "${1:-}" in
+    verify|--install-build-time)
+        INSTALL_MODE="$1"
+        ;;
+esac
+INSTALL_DIR="${IMARISCONVERT_INSTALL_DIR:-/opt/omero/imarisconvert}"
+WRAPPER_PATH="${IMARISCONVERT_WRAPPER_PATH:-/usr/local/bin/imarisconvert}"
 VERSION_FILE="${INSTALL_DIR}/.version"
 TARGET_VERSION="1.0.0"
 BIOFORMATS_SUBDIR="bioformats"
@@ -93,14 +100,38 @@ copy_bioformats_jar() {
 }
 
 install_imarisconvert_wrapper() {
-    cat > /usr/local/bin/imarisconvert <<'SH'
+    local escaped_default_install_dir=""
+    printf -v escaped_default_install_dir "%q" "${INSTALL_DIR}"
+
+    cat > "${WRAPPER_PATH}" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
-INSTALL_DIR="/opt/omero/imarisconvert"
-cd "${INSTALL_DIR}"
-exec "${INSTALL_DIR}/ImarisConvertBioformats" "$@"
+INSTALL_DIR="\${IMARISCONVERT_INSTALL_DIR:-${escaped_default_install_dir}}"
+cd "\${INSTALL_DIR}"
+exec "\${INSTALL_DIR}/ImarisConvertBioformats" "\$@"
 SH
-    chmod 0755 /usr/local/bin/imarisconvert
+    chmod 0755 "${WRAPPER_PATH}"
+}
+
+verify_imarisconvert_installation() {
+    local installed_version=""
+
+    if [[ -f "${VERSION_FILE}" ]]; then
+        installed_version="$(cat "${VERSION_FILE}")"
+    fi
+
+    [[ "${installed_version}" = "${TARGET_VERSION}" ]] \
+        || fail "ImarisConvertBioformats version marker is missing or unexpected: expected=${TARGET_VERSION} actual=${installed_version:-missing}"
+    [[ -x "${INSTALL_DIR}/ImarisConvertBioformats" ]] \
+        || fail "ImarisConvertBioformats binary is missing or not executable: ${INSTALL_DIR}/ImarisConvertBioformats"
+    is_valid_bioformats_jar "${BIOFORMATS_JAR}" \
+        || fail "Bio-Formats runtime jar is missing or invalid: ${BIOFORMATS_JAR}"
+    is_valid_bioformats_cache \
+        || fail "Bio-Formats local artifact cache is missing or invalid: ${BIOFORMATS_CACHE_JAR}"
+    [[ -x "${WRAPPER_PATH}" ]] \
+        || fail "ImarisConvertBioformats wrapper is missing or not executable: ${WRAPPER_PATH}"
+
+    echo "ImarisConvertBioformats ${TARGET_VERSION} verified (binary + runtime jar + local cache)."
 }
 
 seed_bioformats_cache_from_runtime() {
@@ -114,6 +145,15 @@ restore_runtime_jar_from_cache() {
     copy_bioformats_jar "${BIOFORMATS_CACHE_JAR}" "${BIOFORMATS_JAR}" 0644
 }
 
+case "${INSTALL_MODE}" in
+    verify)
+        verify_imarisconvert_installation
+        exit 0
+        ;;
+    --install-build-time)
+        ;;
+esac
+
 if [[ -f "${VERSION_FILE}" ]]; then
     INSTALLED_VERSION="$(cat "${VERSION_FILE}")"
 else
@@ -121,7 +161,7 @@ else
 fi
 
 if [[ "${INSTALLED_VERSION}" = "${TARGET_VERSION}" && -x "${INSTALL_DIR}/ImarisConvertBioformats" ]]; then
-    if ! [[ -x /usr/local/bin/imarisconvert ]]; then
+    if ! [[ -x "${WRAPPER_PATH}" ]]; then
         echo "Recreating missing ImarisConvert wrapper..."
         install_imarisconvert_wrapper
     fi
@@ -143,11 +183,14 @@ if [[ "${INSTALLED_VERSION}" = "${TARGET_VERSION}" && -x "${INSTALL_DIR}/ImarisC
 fi
 
 echo "Installing ImarisConvertBioformats ${TARGET_VERSION}..."
+mkdir -p "${INSTALL_DIR}"
 
 # Clean up any previous failed attempts
-rm -rf /tmp/ImarisConvertBioformats /tmp/ImarisWriter
+BUILD_ROOT="${IMARISCONVERT_BUILD_ROOT:-${TMPDIR:-/tmp}/ImarisConvertBioformats-build}"
+rm -rf "${BUILD_ROOT}"
+mkdir -p "${BUILD_ROOT}"
 
-cd /tmp
+cd "${BUILD_ROOT}"
 
 # Clone ImarisConvertBioformats
 if ! git clone --depth 1 https://github.com/imaris/ImarisConvertBioformats.git; then
@@ -252,6 +295,6 @@ echo "${TARGET_VERSION}" > "${VERSION_FILE}"
 
 # Cleanup
 cd /
-rm -rf /tmp/ImarisConvertBioformats /tmp/ImarisWriter
+rm -rf "${BUILD_ROOT}"
 
 echo "ImarisConvertBioformats installed successfully!"

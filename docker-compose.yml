@@ -349,6 +349,7 @@ services:
       dockerfile: docker/omero-server.Dockerfile
       args:
         OMERO_DROPBOX_VERSION: "${OMERO_DROPBOX_VERSION:?Set OMERO_DROPBOX_VERSION in env/omeroserver.env}"
+        BIOFORMATS_VERSION: "${BIOFORMATS_VERSION:?Set BIOFORMATS_VERSION in env/omeroserver.env}"
     restart: unless-stopped
     # Startup reconciles bind-mounted runtime paths, then drops to omero-server.
     user: root
@@ -380,7 +381,7 @@ services:
         aliases:
           - omeroserver
     ports:
-      - "4064:4064"
+      - "${OMERO_SERVER_HOST_PORT:?Set OMERO_SERVER_HOST_PORT in env/omeroserver.env}:${OMERO_CLI_PORT:?Set OMERO_CLI_PORT in env/omeroserver.env}"
     volumes:
       - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/OMERO:rw
       - ${OMERO_SERVER_VAR_PATH:?Set OMERO_SERVER_VAR_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var:rw
@@ -396,8 +397,8 @@ services:
         - /startup/healthcheck-omeroserver.sh
       interval: 10s
       timeout: 10s
-      retries: 30
-      start_period: 60s
+      retries: 120
+      start_period: 900s
     security_opt:
       - no-new-privileges:true
 

@@ -56,6 +56,34 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("ERROR: Compose image flatten workflow failed.", script_text)
         self.assertIn("ERROR: Buildx compressed build workflow failed.", script_text)
 
+    def test_installation_script_runs_env_contract_check_before_workflow(self) -> None:
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("run_runtime_env_contract_check()", script_text)
+        self.assertIn('runtime-env-check "$@"', script_text)
+        self.assertIn(
+            'run_runtime_env_contract_check "${REPO_ROOT_DIR}" --skip-dot-env',
+            script_text,
+        )
+        self.assertIn(
+            'run_runtime_env_contract_check "${OMERO_INSTALLATION_PATH%/}"',
+            script_text,
+        )
+        self.assertLess(
+            script_text.index(
+                'run_runtime_env_contract_check "${REPO_ROOT_DIR}" --skip-dot-env'
+            ),
+            script_text.index("resolve_delete_images_choice"),
+        )
+        self.assertLess(
+            script_text.index(
+                'run_runtime_env_contract_check "${OMERO_INSTALLATION_PATH%/}"'
+            ),
+            script_text.index('cd "${OMERO_INSTALLATION_PATH}"'),
+        )
+
     def test_installation_script_propagates_omero_data_dir_into_generated_compose_env(
         self,
     ) -> None:
@@ -116,7 +144,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn('HOME="/tmp"', script_text)
         self.assertNotIn("su omero-server", script_text)
 
-    def test_server_bootstrap_job_service_uses_cli_autodetection_and_hosted_login(
+    def test_server_bootstrap_job_service_uses_python_api_helper_and_configured_port(
         self,
     ) -> None:
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
@@ -131,14 +159,22 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             'for candidate in "${server_root}"/venv*/bin/omero "${SERVER_HOME}"/bin/omero; do',
             script_text,
         )
+        self.assertIn(
+            'JOB_SERVICE_GROUP_SYNC_HELPER="${SCRIPT_DIR}/job_service_group_sync.py"',
+            script_text,
+        )
+        self.assertIn('require_tcp_port_env_var "OMERO_CLI_PORT"', script_text)
+        self.assertIn('require_tcp_port_env_var "OMERO_JOB_SERVICE_PORT"', script_text)
+        self.assertIn('"${venv_py}"', script_text)
+        self.assertIn('"${JOB_SERVICE_GROUP_SYNC_HELPER}"', script_text)
+        self.assertIn('--host "${host}"', script_text)
+        self.assertIn('--port "${port}"', script_text)
         self.assertNotIn(
             "for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do",
             script_text,
         )
-        self.assertIn(
-            'run_omero -C -s "${host}" -p "${port}" login -u root -w "${root_pass}"',
-            script_text,
-        )
+        self.assertNotIn("user joingroup", script_text)
+        self.assertNotIn("-p 4064", script_text)
 
     def test_server_bootstrap_normalizes_managed_repo_shared_prefixes_for_runtime_groups(
         self,
@@ -516,7 +552,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("OMERO_REPOSITORY_LOCK_CLEANUP_ON_START", script_text)
         self.assertIn("run_omero_with_keepalive", script_text)
         self.assertIn(
-            'admin cleanse -q -C -s localhost -p 4064 -u root -w "${root_pass}" "${data_dir}"',
+            'admin cleanse -q -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" -u root -w "${root_pass}" "${data_dir}"',
             script_text,
         )
         self.assertIn("proc_start_ticks", script_text)

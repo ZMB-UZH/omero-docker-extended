@@ -15,10 +15,16 @@ KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing 
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
 INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE:-0}" # set to 1 to run fully non-interactive (no /dev/tty prompts)
-COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-3}"
-COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-5}"
+COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-2}"
+COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-30}"
+COMPOSE_UP_WAIT_TIMEOUT_SECONDS="${COMPOSE_UP_WAIT_TIMEOUT_SECONDS:-2400}"
 OMERO_WEB_HOST_PORT="${OMERO_WEB_HOST_PORT:-}"
 CONFIG_omero_web_application__server_port="${CONFIG_omero_web_application__server_port:-}"
+OMERO_SERVER_HOST_PORT="${OMERO_SERVER_HOST_PORT:-}"
+OMERO_CLI_HOST="${OMERO_CLI_HOST:-}"
+OMERO_CLI_PORT="${OMERO_CLI_PORT:-}"
+OMERO_JOB_SERVICE_HOST="${OMERO_JOB_SERVICE_HOST:-}"
+OMERO_JOB_SERVICE_PORT="${OMERO_JOB_SERVICE_PORT:-}"
 OMERO_SERVER_UID="${OMERO_SERVER_UID:-}"
 OMERO_SERVER_GID="${OMERO_SERVER_GID:-}"
 OMERO_WEB_UID="${OMERO_WEB_UID:-}"
@@ -41,6 +47,8 @@ CROWDSEC_UID="${CROWDSEC_UID:-}"
 CROWDSEC_GID="${CROWDSEC_GID:-}"
 OMERO_SERVER_ENV_FILE="${REPO_ROOT_DIR}/env/omeroserver.env"
 OMERO_WEB_ENV_FILE="${REPO_ROOT_DIR}/env/omeroweb.env"
+OMERO_CELERY_ENV_FILE="${REPO_ROOT_DIR}/env/omero-celery.env"
+GRAFANA_ENV_FILE="${REPO_ROOT_DIR}/env/grafana.env"
 
 # Allow override, but default to the repo's current image names (adjust via env vars if you rename them in compose)
 OMERO_SERVER_IMAGE="${OMERO_SERVER_IMAGE:-omeroserver:custom}"
@@ -281,7 +289,7 @@ load_installation_paths_env() {
                     return 1
                 fi
                 printf -v "${env_key}" '%s' "${resolved_value}"
-                export "${env_key}"
+                export "${env_key?}"
                 ;;
             *)
                 ;;
@@ -301,6 +309,25 @@ load_secrets_env() {
     set -a
     load_installation_paths_env "${secrets_env_file}"
     set +a
+}
+
+run_runtime_env_contract_check() {
+    local repo_root="${1:?BUG: run_runtime_env_contract_check requires repo root}"
+    shift
+
+    local guard_path="${repo_root%/}/tools/env_safety_guard.py"
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "ERROR: python3 is required for initial deployment env validation." >&2
+        return 1
+    fi
+
+    if [ ! -r "${guard_path}" ]; then
+        echo "ERROR: Missing deployment env validator: ${guard_path}" >&2
+        return 1
+    fi
+
+    python3 "${guard_path}" --repo-root "${repo_root}" runtime-env-check "$@"
 }
 
 
@@ -367,17 +394,23 @@ if ! load_secrets_env "${SECRETS_ENV_FILE}"; then
     exit 1
 fi
 
-if [ -r "${OMERO_SERVER_ENV_FILE}" ]; then
-    set -a
-    load_installation_paths_env "${OMERO_SERVER_ENV_FILE}"
-    set +a
+if ! run_runtime_env_contract_check "${REPO_ROOT_DIR}" --skip-dot-env; then
+    exit 1
 fi
 
-if [ -r "${OMERO_WEB_ENV_FILE}" ]; then
+for required_runtime_env_file in \
+    "${OMERO_SERVER_ENV_FILE}" \
+    "${OMERO_WEB_ENV_FILE}" \
+    "${OMERO_CELERY_ENV_FILE}" \
+    "${GRAFANA_ENV_FILE}"
+do
     set -a
-    load_installation_paths_env "${OMERO_WEB_ENV_FILE}"
+    if ! load_installation_paths_env "${required_runtime_env_file}"; then
+        set +a
+        exit 1
+    fi
     set +a
-fi
+done
 
 require_nonempty_config_var() {
     local variable_name="$1"
@@ -417,6 +450,11 @@ validate_retry_config() {
 
     if ! is_non_negative_integer "${COMPOSE_UP_RETRY_DELAY_SECONDS}"; then
         echo "ERROR: COMPOSE_UP_RETRY_DELAY_SECONDS must be an integer >= 0. Got: ${COMPOSE_UP_RETRY_DELAY_SECONDS}" >&2
+        return 1
+    fi
+
+    if ! is_positive_integer "${COMPOSE_UP_WAIT_TIMEOUT_SECONDS}"; then
+        echo "ERROR: COMPOSE_UP_WAIT_TIMEOUT_SECONDS must be an integer >= 1. Got: ${COMPOSE_UP_WAIT_TIMEOUT_SECONDS}" >&2
         return 1
     fi
 
@@ -523,6 +561,11 @@ run_image_build() {
 
     if [ -z "${BIOFORMATS2RAW_VERSION:-}" ]; then
         echo "ERROR: Missing required configuration variable BIOFORMATS2RAW_VERSION in ${server_env_source}" >&2
+        return 1
+    fi
+
+    if [ -z "${BIOFORMATS_VERSION:-}" ]; then
+        echo "ERROR: Missing required configuration variable BIOFORMATS_VERSION in ${server_env_source}" >&2
         return 1
     fi
 
@@ -713,8 +756,15 @@ export_compose_interpolation_env() {
         NODE_EXPORTER_TEXTFILE_PATH
         CROWDSEC_DB_PATH
         CROWDSEC_CONFIG_PATH
+        OMERO_SERVER_HOST_PORT
+        OMERO_CLI_PORT
         OMERO_DB_PASS
         OMP_PLUGIN_DB_PASS
+        OMERO_DROPBOX_VERSION
+        OMERO_CLI_ZARR_VERSION
+        OME_ZARR_PY_VERSION
+        BIOFORMATS2RAW_VERSION
+        BIOFORMATS_VERSION
     )
 
     for env_var_name in "${required_compose_env_vars[@]}"; do
@@ -773,15 +823,18 @@ print_compose_failure_context() {
     echo "ERROR: docker compose up failed. Collecting service health details..." >&2
     compose_with_installation_env "${compose_file}" ps >&2 || true
 
-    local failed_services
-    failed_services="$(compose_with_installation_env "${compose_file}" ps --services --filter "status=exited" 2>/dev/null || true)"
+    local failed_services=""
+    local ps_lines=""
+
+    ps_lines="$(compose_with_installation_env "${compose_file}" ps --format '{{.Service}} {{.State}} {{.Health}}' 2>/dev/null || true)"
+    failed_services="$(
+        printf '%s\n' "${ps_lines}" \
+            | awk '$2 ~ /^(exited|dead|restarting)$/ || $3 == "unhealthy" {print $1}' \
+            | sort -u
+    )"
 
     if [ -z "${failed_services}" ]; then
-        failed_services="$(compose_with_installation_env "${compose_file}" ps --services --filter "status=restarting" 2>/dev/null || true)"
-    fi
-
-    if [ -z "${failed_services}" ]; then
-        echo "ERROR: Could not identify exited/restarting services. Inspect health status and logs manually." >&2
+        echo "ERROR: Could not identify exited, restarting, dead, or unhealthy services. Inspect health status and logs manually." >&2
         return 0
     fi
 
@@ -790,6 +843,9 @@ print_compose_failure_context() {
         if [ -z "${service_name}" ]; then
             continue
         fi
+        echo "----- BEGIN STATUS: ${service_name} -----" >&2
+        compose_with_installation_env "${compose_file}" ps "${service_name}" >&2 || true
+        echo "----- END STATUS: ${service_name} -----" >&2
         echo "----- BEGIN LOGS: ${service_name} -----" >&2
         compose_with_installation_env "${compose_file}" logs --tail 120 "${service_name}" >&2 || true
         echo "----- END LOGS: ${service_name} -----" >&2
@@ -938,7 +994,7 @@ compose_up_with_retries() {
     while [ "${attempt}" -le "${COMPOSE_UP_RETRIES}" ]; do
         echo "Starting containers (attempt ${attempt}/${COMPOSE_UP_RETRIES})..."
 
-        if CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${crowdsec_bootstrap_enroll}" compose_with_installation_env "${compose_file}" up -d; then
+        if CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${crowdsec_bootstrap_enroll}" compose_with_installation_env "${compose_file}" up -d --wait --wait-timeout "${COMPOSE_UP_WAIT_TIMEOUT_SECONDS}"; then
             echo "Containers started successfully."
             return 0
         fi
@@ -1081,17 +1137,24 @@ create_omero_groups_from_list() {
             # The < /dev/null redirect ensures if any prompt triggers it fails instead of hanging forever
             add_output="$(compose_with_installation_env "${compose_file}" exec -T \
                 -e ROOTPASS="${ROOTPASS}" \
+                -e OMERO_CLI_HOST="${OMERO_CLI_HOST}" \
+                -e OMERO_CLI_PORT="${OMERO_CLI_PORT}" \
                 -e TARGET_GROUP_NAME="${group_name}" \
                 -e TARGET_GROUP_PERMISSION="${group_permission}" \
                 omeroserver bash -s 2>&1 <<'EOS_GROUP_BOOTSTRAP'
 set -euo pipefail
 
 : "${OMERO_CLI_USER:?OMERO_CLI_USER is required}"
+: "${OMERO_CLI_HOST:?OMERO_CLI_HOST is required}"
+: "${OMERO_CLI_PORT:?OMERO_CLI_PORT is required}"
 : "${OMERO_TMP_PATH:?OMERO_TMP_PATH is required}"
+: "${OMERODIR:?OMERODIR is required}"
 
 resolve_omero_bin() {
     local candidate=""
-    for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do
+    local server_root=""
+    server_root="$(dirname "${OMERODIR}")"
+    for candidate in "${server_root}"/venv*/bin/omero "${OMERODIR}"/bin/omero; do
         [ -x "${candidate}" ] || continue
         printf "%s" "${candidate}"
         return 0
@@ -1111,7 +1174,7 @@ resolve_cli_home() {
 
 OMERO_BIN="$(resolve_omero_bin || true)"
 if [ -z "${OMERO_BIN}" ]; then
-    echo "OMERO CLI executable not found under /opt/omero/server/venv*/bin/omero or /opt/omero/server/OMERO.server/bin/omero"
+    echo "OMERO CLI executable not found from OMERODIR=${OMERODIR}"
     exit 127
 fi
 
@@ -1131,11 +1194,11 @@ run_omero_cli() {
         "${OMERO_BIN}" "$@"
 }
 
-if ! run_omero_cli -C -s localhost -p 4064 login -u root </dev/null >/dev/null 2>&1; then
+if ! run_omero_cli -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root </dev/null >/dev/null 2>&1; then
     echo "Failed to login or ICE not ready"
     exit 1
 fi
-run_omero_cli -s localhost -p 4064 -u root group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}" </dev/null
+run_omero_cli -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" -u root group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}" </dev/null
 EOS_GROUP_BOOTSTRAP
             )"
             add_exit_code=$?
@@ -1173,9 +1236,14 @@ EOS_GROUP_BOOTSTRAP
 add_job_service_to_install_groups() {
     local compose_file="$1"
     local raw_group_list="${2:-}"
-    local job_user="${OMERO_JOB_SERVICE_USERNAME:-job-service}"
+    local job_user="${OMERO_JOB_SERVICE_USERNAME:?OMERO_JOB_SERVICE_USERNAME is required}"
     local job_pass="${OMERO_JOB_SERVICE_PASS:-}"
-    local join_all="${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS:-0}"
+    local join_all="${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS:?OMERO_JOB_SERVICE_JOIN_ALL_GROUPS is required}"
+    local job_secure="${OMERO_JOB_SERVICE_SECURE:?OMERO_JOB_SERVICE_SECURE is required}"
+    local job_host="${OMERO_JOB_SERVICE_HOST:?OMERO_JOB_SERVICE_HOST is required}"
+    local job_port="${OMERO_JOB_SERVICE_PORT:?OMERO_JOB_SERVICE_PORT is required}"
+    local user_ensure_retries="${OMERO_JOB_SERVICE_USER_ENSURE_RETRIES:?OMERO_JOB_SERVICE_USER_ENSURE_RETRIES is required}"
+    local helper_path="/startup/job_service_group_sync.py"
 
     if [ "${join_all}" != "1" ]; then
         echo "Skipping job-service group membership (OMERO_JOB_SERVICE_JOIN_ALL_GROUPS != 1)."
@@ -1205,33 +1273,36 @@ add_job_service_to_install_groups() {
         set +e
         output="$(compose_with_installation_env "${compose_file}" exec -T \
             -e ROOTPASS="${ROOTPASS}" \
+            -e OMERO_JOB_SERVICE_PASS="${job_pass}" \
             -e JOB_USER="${job_user}" \
-            -e JOB_PASS="${job_pass}" \
+            -e JOB_SERVICE_HOST="${job_host}" \
+            -e JOB_SERVICE_PORT="${job_port}" \
+            -e JOB_SERVICE_SECURE="${job_secure}" \
+            -e JOB_SERVICE_USER_RETRIES="${user_ensure_retries}" \
+            -e JOB_SERVICE_SYNC_HELPER="${helper_path}" \
             omeroserver bash -s 2>&1 <<'EOS_JOB_SERVICE'
-set -uo pipefail
+set -euo pipefail
 
 : "${OMERO_CLI_USER:?OMERO_CLI_USER is required}"
 : "${OMERO_TMP_PATH:?OMERO_TMP_PATH is required}"
+: "${OMERODIR:?OMERODIR is required}"
+: "${JOB_USER:?JOB_USER is required}"
+: "${JOB_SERVICE_HOST:?JOB_SERVICE_HOST is required}"
+: "${JOB_SERVICE_PORT:?JOB_SERVICE_PORT is required}"
+: "${JOB_SERVICE_SECURE:?JOB_SERVICE_SECURE is required}"
+: "${JOB_SERVICE_USER_RETRIES:?JOB_SERVICE_USER_RETRIES is required}"
+: "${JOB_SERVICE_SYNC_HELPER:?JOB_SERVICE_SYNC_HELPER is required}"
 
-resolve_omero_bin() {
+resolve_server_python() {
     local candidate=""
-    for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do
+    local server_root=""
+    server_root="$(dirname "${OMERODIR}")"
+    for candidate in "${server_root}"/venv*/bin/python "${OMERODIR}"/bin/python; do
         [ -x "${candidate}" ] || continue
         printf "%s" "${candidate}"
         return 0
     done
     return 1
-}
-
-parse_group_names() {
-    local output_text="$1"
-    if printf '%s' "${output_text}" | grep -q '|'; then
-        printf '%s\n' "${output_text}" \
-            | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $1); gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/) print $2}'
-    else
-        printf '%s\n' "${output_text}" \
-            | awk '($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/){print $2}'
-    fi
 }
 
 resolve_cli_home() {
@@ -1244,26 +1315,14 @@ resolve_cli_home() {
     printf "%s" "${cli_home}"
 }
 
-run_omero_cli() {
-    runuser -u "${OMERO_CLI_USER}" -- env \
-        HOME="${OMERO_CLI_HOME}" \
-        TMPDIR="${OMERO_TMPDIR_VALUE}" \
-        OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" \
-        OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}" \
-        OMERO_PASSWORD="${ROOTPASS}" \
-        "${OMERO_BIN}" "$@"
-}
+SERVER_PYTHON="$(resolve_server_python || true)"
+if [ -z "${SERVER_PYTHON}" ]; then
+    echo "OMERO server Python executable not found from OMERODIR=${OMERODIR}"
+    exit 127
+fi
 
-omero_user_exists() {
-    local users_out=""
-    users_out="$(run_omero_cli -s localhost -p 4064 -u root user list </dev/null 2>/dev/null || true)"
-    printf '%s\n' "${users_out}" \
-        | awk '{for (i = 1; i <= NF; i++) if ($i == ENVIRON["JOB_USER"]) found = 1} END {exit(found ? 0 : 1)}'
-}
-
-OMERO_BIN="$(resolve_omero_bin || true)"
-if [ -z "${OMERO_BIN}" ]; then
-    echo "OMERO CLI not found"
+if [ ! -r "${JOB_SERVICE_SYNC_HELPER}" ]; then
+    echo "Job-service group sync helper is missing: ${JOB_SERVICE_SYNC_HELPER}"
     exit 127
 fi
 
@@ -1273,46 +1332,20 @@ mkdir -p "${OMERO_TMPDIR_VALUE}"
 chown "$(id -u "${OMERO_CLI_USER}")":"$(id -g "${OMERO_CLI_USER}")" "${OMERO_TMPDIR_VALUE}"
 chmod 0700 "${OMERO_TMPDIR_VALUE}"
 
-if ! run_omero_cli -C -s localhost -p 4064 login -u root </dev/null >/dev/null 2>&1; then
-    echo "ICE not ready"
-    exit 1
-fi
-
-if ! omero_user_exists >/dev/null 2>&1; then
-    create_out="$(run_omero_cli -s localhost -p 4064 -u root user add "${JOB_USER}" Job Service --group-name user -P "${JOB_PASS}" </dev/null 2>&1)"
-    create_rc=$?
-    if [ "${create_rc}" -ne 0 ] && ! printf '%s' "${create_out}" | grep -qiE 'already exists|User exists|name already in use'; then
-        echo "Failed to create ${JOB_USER}: ${create_out}"
-        exit 1
-    fi
-    echo "Ensured user ${JOB_USER} exists"
-fi
-
-group_out="$(run_omero_cli -s localhost -p 4064 -u root group list </dev/null 2>&1 || true)"
-eligible_groups="$(parse_group_names "${group_out}" | grep -v -E '^(root|system|user)$' | sort -u || true)"
-if [ -z "${eligible_groups}" ]; then
-    echo "No eligible groups found"
-    exit 1
-fi
-
-failed=0
-for group_name in ${eligible_groups}; do
-    [ -z "${group_name}" ] && continue
-    out="$(run_omero_cli -s localhost -p 4064 -u root user joingroup "${group_name}" --name="${JOB_USER}" </dev/null 2>&1)" && {
-        echo "Added ${JOB_USER} to ${group_name}"
-        continue
-    }
-
-    if printf '%s' "${out}" | grep -qiE 'already.*(member|in group)|duplicate'; then
-        echo "${JOB_USER} already in ${group_name}"
-        continue
-    fi
-
-    echo "WARN: joingroup ${group_name} failed: ${out}"
-    failed=1
-done
-
-exit "${failed}"
+exec runuser -u "${OMERO_CLI_USER}" -- env \
+    HOME="${OMERO_CLI_HOME}" \
+    TMPDIR="${OMERO_TMPDIR_VALUE}" \
+    OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" \
+    OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}" \
+    ROOTPASS="${ROOTPASS}" \
+    OMERO_JOB_SERVICE_PASS="${OMERO_JOB_SERVICE_PASS}" \
+    "${SERVER_PYTHON}" "${JOB_SERVICE_SYNC_HELPER}" \
+    --host "${JOB_SERVICE_HOST}" \
+    --port "${JOB_SERVICE_PORT}" \
+    --secure "${JOB_SERVICE_SECURE}" \
+    --root-user root \
+    --job-user "${JOB_USER}" \
+    --user-retries "${JOB_SERVICE_USER_RETRIES}"
 EOS_JOB_SERVICE
         )"
         exit_code=$?
@@ -1329,10 +1362,9 @@ EOS_JOB_SERVICE
     done
 
     if [ "${exit_code}" -ne 0 ]; then
-        echo "WARNING: Could not add ${job_user} to all eligible groups during installation. The hourly runtime sync will retry." >&2
-        echo "WARNING: Last output: ${output}" >&2
-        # Non-fatal: the background sync in 10-server-bootstrap.sh will catch up
-        return 0
+        echo "ERROR: Could not add ${job_user} to all eligible groups during installation." >&2
+        echo "ERROR: Last output: ${output}" >&2
+        return 1
     fi
 
     echo "Job-service installation & group membership completed."
@@ -2040,6 +2072,9 @@ OMERO_WEB_LOGS_PATH=${OMERO_WEB_LOGS_PATH}
 OMERO_WEB_SUPERVISOR_LOGS_PATH=${OMERO_WEB_SUPERVISOR_LOGS_PATH}
 OMERO_WEB_HOST_PORT=${OMERO_WEB_HOST_PORT}
 CONFIG_omero_web_application__server_port=${CONFIG_omero_web_application__server_port}
+OMERO_SERVER_HOST_PORT=${OMERO_SERVER_HOST_PORT}
+OMERO_CLI_HOST=${OMERO_CLI_HOST}
+OMERO_CLI_PORT=${OMERO_CLI_PORT}
 PORTAINER_DATA_PATH=${PORTAINER_DATA_PATH}
 PROMETHEUS_DATA_PATH=${PROMETHEUS_DATA_PATH}
 GRAFANA_DATA_PATH=${GRAFANA_DATA_PATH}
@@ -2053,6 +2088,7 @@ OMERO_DROPBOX_VERSION=${OMERO_DROPBOX_VERSION}
 OMERO_CLI_ZARR_VERSION=${OMERO_CLI_ZARR_VERSION}
 OME_ZARR_PY_VERSION=${OME_ZARR_PY_VERSION}
 BIOFORMATS2RAW_VERSION=${BIOFORMATS2RAW_VERSION}
+BIOFORMATS_VERSION=${BIOFORMATS_VERSION}
 REDIS_SAVE_POLICY=
 REDIS_APPENDONLY=no
 REDIS_MAXMEMORY=512mb
@@ -2914,12 +2950,29 @@ require_nonempty_config_var "OMERO_DB_PASS" "${SECRETS_ENV_FILE}"
 require_nonempty_config_var "OMP_PLUGIN_DB_PASS" "${SECRETS_ENV_FILE}"
 require_nonempty_config_var "OMERO_WEB_HOST_PORT" "${OMERO_WEB_ENV_FILE}"
 require_nonempty_config_var "CONFIG_omero_web_application__server_port" "${OMERO_WEB_ENV_FILE}"
+require_nonempty_config_var "OMERO_SERVER_HOST_PORT" "${OMERO_SERVER_ENV_FILE}"
+require_nonempty_config_var "OMERO_CLI_HOST" "${OMERO_SERVER_ENV_FILE}"
+require_nonempty_config_var "OMERO_CLI_PORT" "${OMERO_SERVER_ENV_FILE}"
+require_nonempty_config_var "OMERO_JOB_SERVICE_HOST" "${OMERO_SERVER_ENV_FILE}"
+require_nonempty_config_var "OMERO_JOB_SERVICE_PORT" "${OMERO_SERVER_ENV_FILE}"
 
 if ! validate_tcp_port_config "OMERO_WEB_HOST_PORT" "${OMERO_WEB_HOST_PORT}"; then
     exit 1
 fi
 
 if ! validate_tcp_port_config "CONFIG_omero_web_application__server_port" "${CONFIG_omero_web_application__server_port}"; then
+    exit 1
+fi
+
+if ! validate_tcp_port_config "OMERO_SERVER_HOST_PORT" "${OMERO_SERVER_HOST_PORT}"; then
+    exit 1
+fi
+
+if ! validate_tcp_port_config "OMERO_CLI_PORT" "${OMERO_CLI_PORT}"; then
+    exit 1
+fi
+
+if ! validate_tcp_port_config "OMERO_JOB_SERVICE_PORT" "${OMERO_JOB_SERVICE_PORT}"; then
     exit 1
 fi
 
@@ -2992,6 +3045,9 @@ if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then
 fi
 
 write_compose_dot_env "${OMERO_INSTALLATION_PATH%/}/.env"
+if ! run_runtime_env_contract_check "${OMERO_INSTALLATION_PATH%/}"; then
+    exit 1
+fi
 
 # Workflow
 # --------
@@ -3767,7 +3823,7 @@ discover_container_default_id_or_die() {
         resolved_gid="${configured_group}"
     fi
 
-    if [ -n "${resolved_uid}" ] && ([ "${id_flag}" = "-u" ] || [ -n "${resolved_gid}" ]); then
+    if [ -n "${resolved_uid}" ] && { [ "${id_flag}" = "-u" ] || [ -n "${resolved_gid}" ]; }; then
         if [ "${id_flag}" = "-u" ]; then
             printf '%s' "${resolved_uid}"
             return 0

@@ -122,7 +122,7 @@ This means operators never need to manually edit `prometheus.yml` for CrowdSec â
 - `database-plugin:5433` (plugin PostgreSQL)
 - `redis:6379` (Redis)
 - `omeroserver:4063` (OMERO.server SSL)
-- `omeroserver:4064` (OMERO.server)
+- `omeroserver:${OMERO_CLI_PORT}` (OMERO.server; default example value 4064)
 
 ## Grafana dashboards
 

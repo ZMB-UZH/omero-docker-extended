@@ -8,7 +8,7 @@ running containers or `docker compose config`; do not assume these host ports.
 
 | Service | URL | Purpose |
 | --- | --- | --- |
-| OMERO.server | `localhost:4064` (TCP) | OMERO API (Ice protocol) |
+| OMERO.server | `${OMERO_CLI_HOST}:${OMERO_CLI_PORT}` inside the stack; `${OMERO_SERVER_HOST_PORT}` on the host | OMERO API (Ice protocol) |
 | OMERO.web | `http://localhost:4090` | Web frontend and plugin UIs |
 | Portainer | `https://localhost:9443` / `http://localhost:9000` | Container management |
 | Prometheus | `http://localhost:9090` | Metrics and targets |

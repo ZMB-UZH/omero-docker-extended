@@ -428,6 +428,7 @@ COPY startup/healthcheck-omeroserver.sh /startup/healthcheck-omeroserver.sh
 COPY startup/50-config.py /startup/50-config.py
 COPY startup/repo_root_sync_helper.py /startup/repo_root_sync_helper.py
 COPY startup/dropbox_user_dir_sync.py /startup/dropbox_user_dir_sync.py
+COPY startup/job_service_group_sync.py /startup/job_service_group_sync.py
 COPY startup/50-install-omero-downloader.sh /startup/50-install-omero-downloader.sh
 COPY startup/51-install-imarisconvert.sh /startup/51-install-imarisconvert.sh
 RUN set -euo pipefail; \
@@ -441,7 +442,9 @@ RUN set -euo pipefail; \
         /startup/51-install-imarisconvert.sh; do \
         chown root:root "${startup_script}"; \
         chmod 0555 "${startup_script}"; \
-    done
+    done; \
+    chown root:root /startup/job_service_group_sync.py; \
+    chmod 0444 /startup/job_service_group_sync.py
 
 # Remove "config drop default" and "certificates -v" from the base image's
 # /opt/omero/server/config/00-omero-server.omero.
@@ -465,6 +468,15 @@ RUN set -euo pipefail; \
 
 # Pre-configure library path for ImarisConvertBioformats
 # ------------------------------------------------------
+ARG BIOFORMATS_VERSION
+RUN set -euo pipefail; \
+    if [[ -z "${BIOFORMATS_VERSION:-}" ]]; then \
+        echo "ERROR: BIOFORMATS_VERSION must be provided from env/omeroserver.env" >&2; \
+        exit 1; \
+    fi; \
+    BIOFORMATS_VERSION="${BIOFORMATS_VERSION}" /startup/51-install-imarisconvert.sh --install-build-time; \
+    chown -R omero-server:omero-server /opt/omero/imarisconvert
+
 RUN set -euo pipefail; \
     echo "/opt/omero/imarisconvert" > /etc/ld.so.conf.d/imarisconvert.conf; \
     ldconfig

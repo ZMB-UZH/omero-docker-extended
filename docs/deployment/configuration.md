@@ -119,13 +119,18 @@ This repository expresses those OMERO properties in env files with the existing 
 - Runtime startup wrappers and the `omeroserver` healthcheck resolve the active
   OMERO virtualenv from the container's `OMERODIR` at execution time, then fail
   fast with explicit errors when required env values or executables are missing.
+- Internal OMERO CLI/API calls use `OMERO_CLI_HOST` and `OMERO_CLI_PORT` from
+  `env/omeroserver.env`; the host port published by Compose is
+  `OMERO_SERVER_HOST_PORT`. These values are validated during installation and
+  at container startup instead of being embedded in bootstrap scripts.
 - When `OMERO_JOB_SERVICE_JOIN_ALL_GROUPS=1` (in `env/omeroserver.env`) and
   both `OMERO_JOB_SERVICE_PASS` and `ROOTPASS` are set, the installation script
-  automatically adds the job-service account
-  (`OMERO_JOB_SERVICE_USERNAME`, default `job-service`) to every discovered
-  OMERO group immediately after startup, including groups created later in the
-  same installation flow. The job-service user is created if it does not
-  already exist (default group: `user`). This ensures background plugin
+  automatically adds the job-service account (`OMERO_JOB_SERVICE_USERNAME`) to
+  every discovered OMERO group immediately after startup, including groups
+  created later in the same installation flow. The job-service user is created
+  if it does not already exist. The sync uses the OMERO Python API and batches
+  missing group memberships in one admin-service call instead of running one CLI
+  command per group. This ensures background plugin
   operations (uploads, Imaris exports) can access data in all groups from the
   moment installation completes. Exceptions: the `root`, `system`, and `user`
   groups are excluded. Group membership sync does not grant OMERO
@@ -135,20 +140,20 @@ This repository expresses those OMERO properties in env files with the existing 
   `startup/10-server-bootstrap.sh` continues to synchronize the job-service
   account into any newly created groups on a configurable interval
   (`OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS`, default 3600 seconds). Runtime
-  sync now targets configurable OMERO endpoint settings
-  (`OMERO_JOB_SERVICE_HOST`, default `localhost`; `OMERO_JOB_SERVICE_PORT`,
-  default `4064`) to match installation-time behavior in non-default
-  deployments. The sync uses jitter (`OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS`,
-  default 20) to avoid synchronized retries and does not affect active user
+  sync targets `OMERO_JOB_SERVICE_HOST` and `OMERO_JOB_SERVICE_PORT` from
+  `env/omeroserver.env` to match installation-time behavior in non-default
+  deployments. The sync uses jitter (`OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS`)
+  to avoid synchronized retries and does not affect active user
   sessions. Each sync attempt uses the configured readiness window
-  (`OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS`, default 900 seconds) so slow first
-  starts, schema checks, or database recovery do not turn expected OMERO
+  (`OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS`) so slow first starts, schema
+  checks, or database recovery do not turn expected OMERO
   startup time into failed short probes. Retry pauses use
   `OMERO_JOB_SERVICE_READINESS_POLL_SECONDS`; no fixed sleep interval is
   embedded in the loop. The number of sync attempts per cycle is controlled by
   `OMERO_JOB_SERVICE_SYNC_MAX_RETRIES` (default 3). User creation also retries with
   `OMERO_JOB_SERVICE_USER_ENSURE_RETRIES`. All sync-loop variables
-  (`OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS`,
+  (`OMERO_JOB_SERVICE_HOST`, `OMERO_JOB_SERVICE_PORT`,
+  `OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS`,
   `OMERO_JOB_SERVICE_SYNC_MAX_RETRIES`,
   `OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS`) are defined in
   `env/omeroserver.env` and are the single source of truth.
@@ -484,11 +489,13 @@ runtime validation confirms OMERO still resolves the managed repository to the
 expected absolute path and no second repository has appeared under the server
 tree.
 
-The native OME-Zarr parser/runtime baked into `omeroweb` is also environment
+The native OME-Zarr parser/runtime baked into `omeroweb` and the
+ImarisConvertBioformats runtime baked into `omeroserver` are also environment
 driven. `OMERO_DROPBOX_VERSION`, `OMERO_CLI_ZARR_VERSION`,
-`OME_ZARR_PY_VERSION`, and `BIOFORMATS2RAW_VERSION` are defined in
-`env/omeroserver.env` and are required for manual or installer-driven image
-builds; there are no Compose or Dockerfile fallback defaults.
+`OME_ZARR_PY_VERSION`, `BIOFORMATS2RAW_VERSION`, and `BIOFORMATS_VERSION` are
+defined in `env/omeroserver.env` and are required for manual or
+installer-driven image builds; there are no Compose or Dockerfile fallback
+defaults.
 `OMERO_WEB_UPLOAD_NATIVE_ZARR_GZIP_LEVEL` controls the gzip
 level used when the disposable managed-repository handoff copy must rewrite
 Blosc-backed image arrays for render-safe native import. Those normalizations

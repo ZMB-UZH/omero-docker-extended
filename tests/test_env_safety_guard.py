@@ -314,6 +314,320 @@ class EnvSafetyGuardTests(unittest.TestCase):
 
         self.assertEqual(env_safety_guard.cmd_template_check(repo), 1)
 
+    def test_runtime_env_check_reports_missing_extra_and_type_errors(self):
+        files: dict[str, str] = {}
+        manifest_lines = []
+        for example_rel, actual_rel in env_safety_guard.ENV_TEMPLATE_PAIRS:
+            files[example_rel] = "A=example\n"
+            files[actual_rel] = "A=live\n"
+            manifest_lines.append(actual_rel)
+
+        server_example, server_actual = env_safety_guard.ENV_TEMPLATE_PAIRS[2]
+        self.assertEqual(server_example, "env/omeroserver_example.env")
+        files[server_example] = "\n".join(
+            [
+                "OMERO_CLI_HOST=localhost",
+                "OMERO_CLI_PORT=4064",
+                "OMERO_JOB_SERVICE_SECURE=true",
+                "OMERO_INSTALL_GROUP_LIST=users:private",
+                "",
+            ]
+        )
+        files[server_actual] = "\n".join(
+            [
+                "OMERO_CLI_HOST=localhost",
+                "OMERO_CLI_PORT=bad-port",
+                "OMERO_JOB_SERVICE_SECURE=maybe",
+                "EXTRA_KEY=value",
+                "",
+            ]
+        )
+        repo = self._make_repo(manifest_lines, files)
+
+        self.assertEqual(
+            env_safety_guard.cmd_runtime_env_check(repo, include_dot_env=False),
+            1,
+        )
+
+    def test_runtime_env_check_accepts_optional_commented_keys_and_references(self):
+        files: dict[str, str] = {}
+        manifest_lines = []
+        for example_rel, actual_rel in env_safety_guard.ENV_TEMPLATE_PAIRS:
+            files[example_rel] = "A=example\n# OPTIONAL=value\n"
+            files[actual_rel] = "A=live\nOPTIONAL=custom\n"
+            manifest_lines.append(actual_rel)
+
+        paths_example, paths_actual = env_safety_guard.ENV_TEMPLATE_PAIRS[0]
+        files[paths_example] = (
+            "OMERO_DATA_PATH=/srv/omero/data\n"
+            "OMERO_USER_DATA_PATH=${OMERO_DATA_PATH}/user\n"
+        )
+        files[paths_actual] = (
+            "OMERO_DATA_PATH=/srv/omero/data\n"
+            "OMERO_USER_DATA_PATH=${OMERO_DATA_PATH}/user\n"
+        )
+        repo = self._make_repo(manifest_lines, files)
+
+        self.assertEqual(
+            env_safety_guard.cmd_runtime_env_check(repo, include_dot_env=False),
+            0,
+        )
+
+    def test_runtime_value_validators_cover_supported_contract_types(self):
+        invalid_cases = [
+            ("OMERO_JOB_SERVICE_SECURE", "maybe", "maybe", "must be a boolean"),
+            ("OMERO_CLI_PORT", "0", "0", "must be a TCP port"),
+            ("OMERO_WEB_HOST_PORT", "65536", "65536", "must be a TCP port"),
+            (
+                "ADMIN_TOOLS_DEFAULT_GROUP_QUOTA_GB",
+                "abc",
+                "abc",
+                "must be a numeric decimal value",
+            ),
+            ("CONFIG_omero_web_apps", "[bad", "[bad", "must be valid JSON"),
+            (
+                "OMERO_INSTALL_GROUP_LIST",
+                "bad group:private",
+                "bad group:private",
+                "invalid group name",
+            ),
+            (
+                "OMERO_INSTALL_GROUP_LIST",
+                "users:admin",
+                "users:admin",
+                "unsupported group permission",
+            ),
+            (
+                "OMERO_INSTALL_GROUP_LIST",
+                "users",
+                "users",
+                "entries must be name:permission",
+            ),
+            (
+                "OMERO_DROPBOX_USER_DIR_MODE",
+                "9999",
+                "9999",
+                "must be an octal mode",
+            ),
+            ("REDIS_MAXMEMORY", "ten", "ten", "must be a memory size"),
+            ("OMERO_DATA_PATH", "relative", "relative", "must be an absolute path"),
+            (
+                "CONFIG_omero_fs_watchDir",
+                "relative",
+                "relative",
+                "must be empty or an absolute path",
+            ),
+            (
+                "ADMIN_TOOLS_LOG_CACHE_MAX_MB",
+                "nope",
+                "nope",
+                "must be a non-negative integer",
+            ),
+            (
+                "OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS",
+                "0",
+                "0",
+                "must be a positive integer",
+            ),
+            ("BIOFORMATS_VERSION", "@bad", "@bad", "must be a non-empty version"),
+        ]
+
+        for key, raw_value, resolved_value, expected_error in invalid_cases:
+            with self.subTest(key=key):
+                errors = env_safety_guard.validate_assignment_value(
+                    key,
+                    raw_value,
+                    resolved_value,
+                )
+                self.assertTrue(
+                    any(expected_error in error for error in errors),
+                    errors,
+                )
+
+        valid_cases = [
+            ("OMERO_JOB_SERVICE_SECURE", "true", "true"),
+            ("OMERO_CLI_PORT", "4064", "4064"),
+            ("CONFIG_omero_web_apps", "[]", "[]"),
+            ("OMERO_INSTALL_GROUP_LIST", "users:read-write", "users:read-write"),
+            ("OMERO_DROPBOX_USER_DIR_MODE", "2775", "2775"),
+            ("REDIS_MAXMEMORY", "512mb", "512mb"),
+            ("OMERO_DATA_PATH", "/srv/omero", "/srv/omero"),
+            ("CONFIG_omero_fs_watchDir", "", ""),
+            ("ADMIN_TOOLS_LOG_CACHE_MAX_MB", "0", "0"),
+            ("OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS", "1", "1"),
+            ("BIOFORMATS_VERSION", "8.5.0", "8.5.0"),
+        ]
+
+        for key, raw_value, resolved_value in valid_cases:
+            with self.subTest(key=key):
+                self.assertEqual(
+                    [],
+                    env_safety_guard.validate_assignment_value(
+                        key,
+                        raw_value,
+                        resolved_value,
+                    ),
+                )
+
+    def test_runtime_env_parsers_reject_duplicates_and_unsafe_references(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / "example.env"
+            env_path.write_text(
+                "\n".join(
+                    [
+                        "# OPTIONAL='quoted'",
+                        "export ACTIVE=\"quoted\"",
+                        "ACTIVE=duplicate",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                {"OPTIONAL": "quoted"},
+                env_safety_guard.parse_commented_env_assignments(env_path),
+            )
+            with self.assertRaises(ValueError):
+                env_safety_guard.parse_active_env_assignments(env_path)
+
+        self.assertEqual(
+            "/srv/omero/data",
+            env_safety_guard.resolve_env_references(
+                "${ROOT}/$NAME",
+                {"ROOT": "/srv/omero", "NAME": "data"},
+            ),
+        )
+        with self.assertRaises(ValueError):
+            env_safety_guard.resolve_env_references("$(id)", {})
+        with self.assertRaises(ValueError):
+            env_safety_guard.resolve_env_references("${ROOT:-/tmp}", {})
+
+    def test_validate_env_file_pair_reports_missing_empty_duplicate_and_bad_values(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            errors = env_safety_guard.validate_env_file_pair(
+                repo,
+                "env/example.env",
+                "env/actual.env",
+                {},
+            )
+            self.assertEqual(["env/example.env: template is missing"], errors)
+
+            (repo / "env").mkdir()
+            (repo / "env/example.env").write_text("OMERO_CLI_PORT=4064\n")
+            errors = env_safety_guard.validate_env_file_pair(
+                repo,
+                "env/example.env",
+                "env/actual.env",
+                {},
+            )
+            self.assertEqual(["env/actual.env: deployment env file is missing"], errors)
+
+            (repo / "env/actual.env").write_text("", encoding="utf-8")
+            errors = env_safety_guard.validate_env_file_pair(
+                repo,
+                "env/example.env",
+                "env/actual.env",
+                {},
+            )
+            self.assertEqual(["env/actual.env: deployment env file is empty"], errors)
+
+            (repo / "env/actual.env").write_text(
+                "OMERO_CLI_PORT=bad\nOMERO_CLI_PORT=4064\n",
+                encoding="utf-8",
+            )
+            errors = env_safety_guard.validate_env_file_pair(
+                repo,
+                "env/example.env",
+                "env/actual.env",
+                {},
+            )
+            self.assertEqual(
+                ["env/actual.env: actual.env defines OMERO_CLI_PORT more than once"],
+                errors,
+            )
+
+            (repo / "env/actual.env").write_text(
+                "OMERO_CLI_PORT=bad\nUNSUPPORTED=value\n",
+                encoding="utf-8",
+            )
+            errors = env_safety_guard.validate_env_file_pair(
+                repo,
+                "env/example.env",
+                "env/actual.env",
+                {},
+            )
+            self.assertTrue(
+                any("unsupported keys: UNSUPPORTED" in error for error in errors)
+            )
+            self.assertTrue(any("must be a TCP port" in error for error in errors))
+
+    def test_validate_dot_env_values_reports_shape_and_type_errors(self):
+        compose_env_files = ",".join(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES)
+        repo = self._make_repo(
+            ["installation_paths.env"],
+            {"installation_paths.env": "OMERO_INSTALLATION_PATH=/srv/omero\n"},
+        )
+        errors = env_safety_guard.validate_dot_env_values(repo, {})
+        self.assertEqual([".env: file is missing"], errors)
+
+        (repo / ".env").write_text(
+            "\n".join(
+                [
+                    "COMPOSE_PROJECT_NAME=wrong",
+                    "COMPOSE_ENV_FILES=stale.env",
+                    "OMERO_CLI_PORT=bad",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        errors = env_safety_guard.validate_dot_env_values(repo, {})
+        self.assertTrue(any("missing required keys" in error for error in errors))
+        self.assertTrue(any("COMPOSE_ENV_FILES must be" in error for error in errors))
+        self.assertTrue(any("COMPOSE_PROJECT_NAME" in error for error in errors))
+        self.assertTrue(
+            any("OMERO_CLI_PORT must be a TCP port" in error for error in errors)
+        )
+
+        def valid_dot_env_value(key: str) -> str:
+            if key in env_safety_guard.DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS:
+                return ""
+            if key in env_safety_guard.BOOL_KEYS:
+                return "true"
+            if key in env_safety_guard.PORT_KEYS or key.endswith("_PORT"):
+                return "4064"
+            if key in env_safety_guard.FLOAT_KEYS:
+                return "1.5"
+            if key in env_safety_guard.JSON_KEYS:
+                return "[]"
+            if key in {"REDIS_MAXMEMORY", "REDIS_DATA_TMPFS_SIZE"}:
+                return "512mb"
+            if key in env_safety_guard.ABSOLUTE_PATH_KEYS:
+                return "/srv/omero"
+            if key in env_safety_guard.NON_NEGATIVE_INTEGER_KEYS:
+                return "0"
+            if key.endswith(env_safety_guard.POSITIVE_INTEGER_SUFFIXES):
+                return "1"
+            if key.endswith("_VERSION"):
+                return "1.0.0"
+            return "value"
+
+        dot_env_lines = [
+            f"COMPOSE_ENV_FILES={compose_env_files}",
+            "COMPOSE_PROJECT_NAME=omero",
+        ]
+        dot_env_lines.extend(
+            f"{key}={valid_dot_env_value(key)}"
+            for key in env_safety_guard.DOT_ENV_REQUIRED_KEYS
+            if key != "COMPOSE_PROJECT_NAME"
+        )
+        (repo / ".env").write_text("\n".join(dot_env_lines) + "\n", encoding="utf-8")
+        self.assertEqual([], env_safety_guard.validate_dot_env_values(repo, {}))
+
     # ---- backup command ----
 
     def test_backup_creates_timestamped_copy(self):

@@ -594,6 +594,8 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
                 set -euo pipefail
                 TMPDIR="{tmpdir}"
                 OMERO_CLI_USER=omero-server
+                OMERO_CLI_HOST=omeroserver.internal
+                OMERO_CLI_PORT=14064
                 REPO_ROOT_SYNC_HELPER=/bin/true
                 SERVER_VAR_DIR="{tmpdir}"
                 REPO_ROOT_SYNC_STATUS_FILE="{status_file}"
@@ -665,6 +667,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_repo_root_bootstrap_lookup_is_repo_aware(self) -> None:
         self.assertIn('target_repo_uuid = ""', self.helper_script)
         self.assertIn("sharedResources().repositories()", self.helper_script)
+        self.assertIn("host=host, port=port", self.helper_script)
         self.assertIn(
             "repo_description_path(description) != expected_managed_dir",
             self.helper_script,
@@ -673,6 +676,32 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             "obj.getPath() == parent_path and obj.getRepo() == target_repo_uuid",
             self.helper_script,
         )
+
+    def test_helper_lookup_rejects_non_positive_port(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(self.helper_path),
+                "lookup",
+                "--root-pass",
+                "secret",
+                "--host",
+                "omeroserver",
+                "--port",
+                "0",
+                "--repo-dir-path",
+                "users_read",
+                "--expected-managed-dir",
+                "/OMERO/ManagedRepository",
+            ],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("--port must be a positive integer", result.stderr)
 
     def test_validate_managed_repository_configuration_rejects_relative_path(
         self,
