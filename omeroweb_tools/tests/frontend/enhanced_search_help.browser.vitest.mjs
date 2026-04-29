@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+const { describe, expect, it } = globalThis;
 
 const fetchText = async (url) => {
   const response = await fetch(url);
