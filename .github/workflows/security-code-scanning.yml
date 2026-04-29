@@ -45,9 +45,11 @@ jobs:
           js_candidates="$(mktemp "${tmp_dir%/}/codeql-js-candidates.XXXXXX")"
           trap 'rm -f "$python_sources" "$python_stubs" "$js_candidates"' EXIT
 
-          git ls-files '*.py' > "$python_sources"
+          git ls-files '*.py' ':!:third_party/**' > "$python_sources"
           git ls-files '*.pyi' > "$python_stubs"
-          git ls-files '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' > "$js_candidates"
+          git ls-files \
+            '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' \
+            ':!:third_party/**' > "$js_candidates"
 
           echo "::group::CodeQL language candidate files"
           if [ "${{ matrix.language }}" = "python" ]; then
@@ -72,6 +74,7 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: none
           dependency-caching: true
+          config-file: ./.github/codeql/codeql-config.yml
           queries: security-extended,security-and-quality
 
       - name: Analyze
@@ -102,12 +105,13 @@ jobs:
           find . -maxdepth 5 \( -name 'requirements*.txt' -o -name 'Pipfile.lock' \
             -o -name 'poetry.lock' -o -name 'package-lock.json' -o -name 'yarn.lock' \
             -o -name 'Gemfile.lock' -o -name 'go.sum' -o -name 'pom.xml' \) \
-            -not -path './.git/*' | sort
+            -not -path './.git/*' -not -path './third_party/*' | sort
           echo "--- Config files (misconfig scan) ---"
           find . -maxdepth 5 \( -name 'Dockerfile' -o -name '*.Dockerfile' \
             -o -name 'docker-compose*.yml' -o -name '*.yaml' -o -name '*.yml' \
             -o -name '*.tf' -o -name '*.json' \) \
-            -not -path './.git/*' -not -path './node_modules/*' | sort | head -100
+            -not -path './.git/*' -not -path './node_modules/*' \
+            -not -path './third_party/*' | sort | head -100
           echo "::endgroup::"
 
       - name: Run Trivy vulnerability scan
@@ -119,6 +123,7 @@ jobs:
           scanners: vuln,misconfig,secret,license
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          skip-dirs: third_party
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
@@ -148,20 +153,22 @@ jobs:
           echo "::group::Semgrep scan scope"
           echo "Scanning all source files for SAST findings."
           echo "--- Python files ---"
-          find . -name '*.py' -not -path './.git/*' | wc -l
-          find . -name '*.py' -not -path './.git/*' | sort
+          find . -name '*.py' -not -path './.git/*' -not -path './third_party/*' | wc -l
+          find . -name '*.py' -not -path './.git/*' -not -path './third_party/*' | sort
           echo "--- JavaScript/TypeScript files ---"
           find . \( -name '*.js' -o -name '*.ts' -o -name '*.jsx' -o -name '*.tsx' \) \
-            -not -path './.git/*' -not -path './node_modules/*' | sort
+            -not -path './.git/*' -not -path './node_modules/*' \
+            -not -path './third_party/*' | sort
           echo "--- HTML templates ---"
-          find . -name '*.html' -not -path './.git/*' | sort
+          find . -name '*.html' -not -path './.git/*' -not -path './third_party/*' | sort
           echo "--- YAML/JSON config ---"
           find . \( -name '*.yml' -o -name '*.yaml' -o -name '*.json' \) \
-            -not -path './.git/*' -not -path './node_modules/*' | sort | head -50
+            -not -path './.git/*' -not -path './node_modules/*' \
+            -not -path './third_party/*' | sort | head -50
           echo "::endgroup::"
 
       - name: Run Semgrep scan
-        run: semgrep scan --sarif --config auto . > semgrep-results.sarif
+        run: semgrep scan --sarif --config auto --exclude third_party . > semgrep-results.sarif
 
       - name: Upload Semgrep results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
@@ -439,26 +446,28 @@ jobs:
         run: |
           echo "::group::DevSkim scan scope"
           echo "Scanning all source files for security anti-patterns."
-          echo "Excluded globs: **/.git/**, **/pgdata/**, **/omero_data/**, **/omero_temp/**"
+          echo "Excluded globs: **/.git/**, **/pgdata/**, **/omero_data/**, **/omero_temp/**, **/third_party/**"
           echo "Excluded rules: DS162092 (localhost references in container infrastructure)"
           echo "--- All scannable files ---"
           find . -type f \( -name '*.py' -o -name '*.js' -o -name '*.ts' -o -name '*.html' \
             -o -name '*.yml' -o -name '*.yaml' -o -name '*.json' -o -name '*.sh' \
             -o -name '*.sql' -o -name '*.xml' -o -name 'Dockerfile' -o -name '*.Dockerfile' \) \
             -not -path './.git/*' -not -path '*/pgdata/*' \
-            -not -path '*/omero_data/*' -not -path '*/omero_temp/*' | sort
+            -not -path '*/omero_data/*' -not -path '*/omero_temp/*' \
+            -not -path '*/third_party/*' | sort
           echo "Total: $(find . -type f \( -name '*.py' -o -name '*.js' -o -name '*.ts' -o -name '*.html' \
             -o -name '*.yml' -o -name '*.yaml' -o -name '*.json' -o -name '*.sh' \
             -o -name '*.sql' -o -name '*.xml' -o -name 'Dockerfile' -o -name '*.Dockerfile' \) \
             -not -path './.git/*' -not -path '*/pgdata/*' \
-            -not -path '*/omero_data/*' -not -path '*/omero_temp/*' | wc -l) files"
+            -not -path '*/omero_data/*' -not -path '*/omero_temp/*' \
+            -not -path '*/third_party/*' | wc -l) files"
           echo "::endgroup::"
 
       - name: Run DevSkim scan
         uses: microsoft/DevSkim-Action@4b5047945a44163b94642a1cecc0d93a3f428cc6 # v1.0.16
         with:
           directory-to-scan: .
-          ignore-globs: "**/.git/**,**/pgdata/**,**/omero_data/**,**/omero_temp/**"
+          ignore-globs: "**/.git/**,**/pgdata/**,**/omero_data/**,**/omero_temp/**,**/third_party/**"
           exclude-rules: DS162092
 
       - name: Upload DevSkim results to GitHub Security tab

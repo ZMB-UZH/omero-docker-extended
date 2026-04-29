@@ -1,0 +1,4 @@
+name: OMERO Docker Extended CodeQL
+
+paths-ignore:
+  - third_party/**
