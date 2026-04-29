@@ -4,6 +4,7 @@ All non-view functions extracted here to reduce index_view.py size.
 """
 
 import errno
+import hashlib
 import os
 import json
 import logging
@@ -182,6 +183,7 @@ __all__ = [
     "_safe_relative_path",
     "_save_job",
     "_staged_upload_size",
+    "_staged_upload_chunk_matches",
     "_native_zarr_import_enabled",
     "_special_methods_enabled",
     "_should_auto_skip_import",
@@ -1334,6 +1336,78 @@ def _staged_upload_size(upload_root: Path, staged_path: str):
     finally:
         if parent_fd is not None:
             os.close(parent_fd)
+
+
+def _staged_upload_chunk_matches(
+    upload_root: Path,
+    staged_path: str,
+    chunk_start: int,
+    chunk_end: int,
+    expected_sha256: str,
+):
+    """Return whether a staged byte range matches the expected SHA-256."""
+    normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
+    if normalize_error:
+        return False, normalize_error
+
+    digest = str(expected_sha256 or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        return False, errors.upload_chunk_metadata_invalid(
+            "chunk_sha256 must be a 64-character hexadecimal SHA-256 digest"
+        )
+
+    expected_size = max(0, int(chunk_end) - int(chunk_start))
+    relative_parts = PurePosixPath(normalized_path).parts
+    runtime_error = _managed_parent_runtime_error(
+        Path(upload_root),
+        relative_parts,
+        max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
+        create_parents=False,
+    )
+    if runtime_error:
+        return False, runtime_error
+
+    parent_fd = None
+    display_path = "/".join(relative_parts)
+    try:
+        parent_fd, file_name = _managed_parent_directory_fd(
+            Path(upload_root),
+            relative_parts,
+            max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
+            create_parents=False,
+        )
+        with os.fdopen(
+            _open_managed_upload_file_fd(
+                parent_fd,
+                file_name,
+                os.O_RDONLY,
+                display_path,
+            ),
+            "rb",
+        ) as handle:
+            handle.seek(int(chunk_start))
+            staged_bytes = handle.read(expected_size)
+    except FileNotFoundError:
+        return False, None
+    except (ValueError, OSError) as exc:
+        logger.warning(
+            "Failed to inspect staged upload chunk for %s: %s",
+            sanitize_log_value(normalized_path),
+            sanitize_log_value(exc),
+        )
+        return (
+            False,
+            _managed_upload_internal_error(
+                errors.unexpected_server_error_uploading_files()
+            ),
+        )
+    finally:
+        if parent_fd is not None:
+            os.close(parent_fd)
+
+    if len(staged_bytes) != expected_size:
+        return False, None
+    return hashlib.sha256(staged_bytes).hexdigest() == digest, None
 
 
 def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
@@ -4434,6 +4508,28 @@ def _image_name_requires_normalization(
     return normalized_current == (group_header_name or "").strip()
 
 
+def _open_import_name_normalization_connection(
+    session_key: str,
+    host: str,
+    port: int,
+    group_id: Optional[int],
+):
+    """Open a group-scoped session for post-import name normalization."""
+    try:
+        return _open_group_scoped_session_connection(
+            session_key,
+            host,
+            port,
+            group_id=group_id,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Post-import name normalization could not open a scoped OMERO session: %s",
+            sanitize_log_value(exc),
+        )
+        return None
+
+
 def _apply_import_name_normalization_context(
     entry: dict,
     context: Optional[_ImportNameNormalizationContext],
@@ -4451,11 +4547,11 @@ def _apply_import_name_normalization_context(
     if not imported_image_ids:
         return []
 
-    conn = _open_group_scoped_session_connection(
+    conn = _open_import_name_normalization_connection(
         session_key,
         host,
         port,
-        group_id=group_id,
+        group_id,
     )
     if conn is None:
         return []
@@ -5236,6 +5332,9 @@ def _classify_compatibility_output(
         "cannot determine reader",
         "no reader found",
         "failed to determine reader",
+        "file_exception",
+        "formatexception",
+        "unknown pixel type",
     ]
 
     if any(marker in lowered for marker in incompatible_markers):

@@ -1331,7 +1331,14 @@ def test_native_bridge_runner_uses_fixed_python_command_and_json_payload(
         """Handle fake run."""
         calls.append((cmd, kwargs))
         payload = json.loads(kwargs["input"])
-        assert cmd == [python_exe, "-c", module._NATIVE_BRIDGE_OPEN_HELPER]
+        assert cmd[0] == python_exe
+        assert len(cmd) == 2
+        assert "-c" not in cmd
+        assert module._NATIVE_BRIDGE_OPEN_HELPER not in cmd
+        assert (
+            Path(cmd[1]).read_text(encoding="utf-8")
+            == module._NATIVE_BRIDGE_OPEN_HELPER
+        )
         assert kwargs["check"] is False
         assert kwargs["universal_newlines"] is True
         assert "shell" not in kwargs
@@ -1350,6 +1357,7 @@ def test_native_bridge_runner_uses_fixed_python_command_and_json_payload(
 
     assert module._run_native_bridge_open_helper(python_exe, ims_path, "17") is True
     assert len(calls) == 1
+    assert not Path(calls[0][0][1]).exists()
 
 
 def test_native_bridge_runner_allows_original_file_when_ims_not_required(
@@ -1414,7 +1422,14 @@ def test_native_bridge_probe_helper_checks_bridge_without_file_open(monkeypatch)
     def _fake_run(cmd, **kwargs):
         """Handle fake run."""
         payload = json.loads(kwargs["input"])
-        assert cmd == [python_exe, "-c", module._NATIVE_BRIDGE_OPEN_HELPER]
+        assert cmd[0] == python_exe
+        assert len(cmd) == 2
+        assert "-c" not in cmd
+        assert module._NATIVE_BRIDGE_OPEN_HELPER not in cmd
+        assert (
+            Path(cmd[1]).read_text(encoding="utf-8")
+            == module._NATIVE_BRIDGE_OPEN_HELPER
+        )
         assert payload["mode"] == "probe"
         assert "file_path" not in payload
         assert payload["app_id"] == 17
@@ -1689,7 +1704,10 @@ def test_native_bridge_runner_suppresses_plural_ice_shutdown_warning(
 
     def _fake_run(cmd, **kwargs):
         """Handle fake run."""
-        assert cmd == [python_exe, "-c", module._NATIVE_BRIDGE_OPEN_HELPER]
+        assert cmd[0] == python_exe
+        assert len(cmd) == 2
+        assert "-c" not in cmd
+        assert module._NATIVE_BRIDGE_OPEN_HELPER not in cmd
         return types.SimpleNamespace(
             returncode=2,
             stdout="BRIDGE_RUNNER_HANDLE_UNAVAILABLE\n",
@@ -1736,7 +1754,10 @@ def test_native_bridge_runner_reports_raw_fileopen_as_submitted_request(
 
     def _fake_run(cmd, **kwargs):
         """Handle fake run."""
-        assert cmd == [python_exe, "-c", module._NATIVE_BRIDGE_OPEN_HELPER]
+        assert cmd[0] == python_exe
+        assert len(cmd) == 2
+        assert "-c" not in cmd
+        assert module._NATIVE_BRIDGE_OPEN_HELPER not in cmd
         return types.SimpleNamespace(
             returncode=0,
             stdout="BRIDGE_RUNNER_OPENED\n",
@@ -1760,6 +1781,66 @@ def test_native_bridge_runner_reports_raw_fileopen_as_submitted_request(
         for message in messages
     )
     assert not any("completed open request" in message for message in messages)
+
+
+def test_native_bridge_runner_timeout_log_does_not_leak_helper_source(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify native bridge timeout logging never includes helper source code."""
+    module = _load_xt_module()
+    python_exe = str(tmp_path / "python.exe")
+    messages = []
+    helper_paths = []
+    monkeypatch.setattr(module, "_xt_debug", messages.append)
+    monkeypatch.setattr(
+        module,
+        "_resolve_python_executable_candidate",
+        lambda path: python_exe if path == python_exe else None,
+    )
+
+    def _fake_run(cmd, **kwargs):
+        """Raise a timeout carrying the command object."""
+        helper_paths.append(cmd[1])
+        raise subprocess.TimeoutExpired(cmd=cmd, timeout=kwargs["timeout"])
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    assert (
+        module._run_native_bridge_helper(
+            python_exe,
+            {"mode": "probe", "app_id": 17},
+            "probe",
+            60,
+        )
+        is False
+    )
+
+    assert helper_paths
+    assert not Path(helper_paths[0]).exists()
+    assert any("timed out after 60 seconds" in message for message in messages)
+    assert not any(module._NATIVE_BRIDGE_OPEN_HELPER in message for message in messages)
+    assert not any("python -c" in message.lower() for message in messages)
+
+
+def test_native_bridge_helper_exception_does_not_emit_traceback():
+    """Verify native bridge helper exceptions do not leak Python traceback text."""
+    module = _load_xt_module()
+
+    completed = subprocess.run(
+        [sys.executable, "-c", module._NATIVE_BRIDGE_OPEN_HELPER],
+        check=False,
+        input="{",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        timeout=10,
+    )
+
+    assert completed.returncode == 70
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_EXCEPTION:JSONDecodeError"
+    assert "Traceback" not in completed.stderr
+    assert module._NATIVE_BRIDGE_OPEN_HELPER not in completed.stderr
 
 
 def test_safe_download_filename_removes_paths_markers_and_reserved_names():
@@ -1955,7 +2036,10 @@ def test_dialog_native_bridge_probe_runs_before_export_and_blocks_when_unavailab
     dialog._set_status = lambda text, _color="#ecf0f1": status_updates.append(text)
 
     assert dialog._ensure_native_open_ready_before_export() is False
-    assert status_updates == ["Checking Imaris same-session open support..."]
+    assert status_updates == [
+        "Checking Imaris same-session open support...",
+        "Opening a new Imaris session...",
+    ]
 
 
 def test_dialog_native_bridge_probe_does_not_trust_non_opening_handle():
@@ -1975,7 +2059,10 @@ def test_dialog_native_bridge_probe_does_not_trust_non_opening_handle():
     dialog._set_status = lambda text, _color="#ecf0f1": status_updates.append(text)
 
     assert dialog._ensure_native_open_ready_before_export() is False
-    assert status_updates == ["Checking Imaris same-session open support..."]
+    assert status_updates == [
+        "Checking Imaris same-session open support...",
+        "Opening a new Imaris session...",
+    ]
 
 
 def test_dialog_native_bridge_probe_revalidates_stale_cached_python(
@@ -2258,9 +2345,9 @@ def test_set_converter_options_populates_menu_without_blank_entry():
             """Handle delete."""
             self.deleted = (start, end)
 
-        def add_command(self, label, command):
+        def add_command(self, label, command, **kwargs):
             """Handle add command."""
-            self.commands.append((label, command))
+            self.commands.append((label, command, kwargs))
 
     class DummyFrame:
         """Test double for dummy frame."""
@@ -2302,11 +2389,15 @@ def test_set_converter_options_populates_menu_without_blank_entry():
 
     module.OMEROBrowserDialog._set_converter_options(dialog, ["OMERO", "Imaris"])
 
-    labels = [label for label, _command in menu.commands]
+    labels = [label for label, _command, _kwargs in menu.commands]
     assert menu.deleted == (0, "end")
     assert labels == ["OMERO", "Imaris"]
     assert "" not in labels
     assert "-" not in labels
+    assert all(
+        kwargs == {"font": module.CONVERTER_MENU_FONT, "hidemargin": True}
+        for _label, _command, kwargs in menu.commands
+    )
     assert dialog.converter_var.value == "OMERO"
     assert dialog.converter_frame.shown is True
     assert dialog.load_btn.state == "normal"
@@ -2420,7 +2511,7 @@ def test_refresh_preserves_project_and_dataset_but_clears_image_selection():
         """Represent client."""
 
         @staticmethod
-        def list_projects():
+        def list_projects(**_kwargs):
             """Return list projects."""
             calls.append("projects")
             return [
@@ -2429,7 +2520,7 @@ def test_refresh_preserves_project_and_dataset_but_clears_image_selection():
             ]
 
         @staticmethod
-        def list_datasets(project_id):
+        def list_datasets(project_id, **_kwargs):
             """Return list datasets."""
             calls.append(("datasets", project_id))
             return [
@@ -2438,7 +2529,7 @@ def test_refresh_preserves_project_and_dataset_but_clears_image_selection():
             ]
 
         @staticmethod
-        def list_images(dataset_id):
+        def list_images(dataset_id, **_kwargs):
             """Return list images."""
             calls.append(("images", dataset_id))
             return [
@@ -2495,19 +2586,19 @@ def test_refresh_dataset_disappeared_keeps_project_and_clears_images():
         """Represent client."""
 
         @staticmethod
-        def list_projects():
+        def list_projects(**_kwargs):
             """Return list projects."""
             calls.append("projects")
             return [{"id": "project-1", "name": "Project A"}]
 
         @staticmethod
-        def list_datasets(project_id):
+        def list_datasets(project_id, **_kwargs):
             """Return list datasets."""
             calls.append(("datasets", project_id))
             return [{"id": "dataset-2", "name": "Dataset B"}]
 
         @staticmethod
-        def list_images(dataset_id):
+        def list_images(dataset_id, **_kwargs):
             """Return list images."""
             calls.append(("images", dataset_id))
             return []
@@ -2545,19 +2636,19 @@ def test_refresh_project_disappeared_clears_dataset_and_images():
         """Represent client."""
 
         @staticmethod
-        def list_projects():
+        def list_projects(**_kwargs):
             """Return list projects."""
             calls.append("projects")
             return [{"id": "project-2", "name": "Project B"}]
 
         @staticmethod
-        def list_datasets(project_id):
+        def list_datasets(project_id, **_kwargs):
             """Return list datasets."""
             calls.append(("datasets", project_id))
             return []
 
         @staticmethod
-        def list_images(dataset_id):
+        def list_images(dataset_id, **_kwargs):
             """Return list images."""
             calls.append(("images", dataset_id))
             return []

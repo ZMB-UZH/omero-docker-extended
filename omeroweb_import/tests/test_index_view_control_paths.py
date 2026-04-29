@@ -293,6 +293,85 @@ def test_start_upload_success_normalizes_entries_and_captures_group_context(
     assert job["files"][3]["import_skip"] is False
 
 
+def test_start_upload_uses_client_retry_id_idempotently(tmp_path, monkeypatch):
+    """Verify client upload retry IDs return existing matching jobs."""
+    upload_root = tmp_path / "upload-root"
+    jobs_root = tmp_path / "jobs-root"
+    existing_job = {
+        "job_id": "f" * 32,
+        "username": "alice",
+        "client_upload_id": "retry-123",
+        "dataset_name_override": "Import Batch",
+        "project_id": None,
+        "files": [
+            {
+                "relative_path": "folder/sample.tif",
+                "size": 3,
+                "status": "pending",
+            }
+        ],
+    }
+    save_calls = []
+    request = RequestFactory().post(
+        "/omeroweb_import/start/",
+        data=json.dumps(
+            {
+                "client_upload_id": "retry-123",
+                "dataset_name_override": "Import Batch",
+                "files": [{"relative_path": "folder/sample.tif", "size": 3}],
+            }
+        ),
+        content_type="application/json",
+    )
+
+    monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(index_view, "_get_jobs_root", lambda: jobs_root)
+    monkeypatch.setattr(index_view, "_ensure_dir", lambda path: True)
+    monkeypatch.setattr(
+        index_view, "_resolve_omero_host_port", lambda conn: ("omeroserver", 4064)
+    )
+    monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(
+        index_view,
+        "_find_client_upload_job",
+        lambda username, client_upload_id: existing_job,
+    )
+    monkeypatch.setattr(index_view, "_save_job", save_calls.append)
+    monkeypatch.setattr(
+        index_view,
+        "reverse",
+        lambda name, kwargs=None: (
+            f"/mock/{name}/{kwargs['job_id']}" if kwargs else f"/mock/{name}"
+        ),
+    )
+
+    response = index_view._start_upload(request, conn=_Conn())
+    payload = _payload(response)
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["job_id"] == "f" * 32
+    assert payload["upload_url"] == "/mock/omeroweb_import_files/" + "f" * 32
+    assert save_calls == []
+
+    conflict = RequestFactory().post(
+        "/omeroweb_import/start/",
+        data=json.dumps(
+            {
+                "client_upload_id": "retry-123",
+                "dataset_name_override": "Other Batch",
+                "files": [{"relative_path": "folder/sample.tif", "size": 3}],
+            }
+        ),
+        content_type="application/json",
+    )
+    conflict_response = index_view._start_upload(conflict, conn=_Conn())
+
+    assert conflict_response.status_code == 409
+    assert _payload(conflict_response)["error"] == errors.upload_retry_id_conflict()
+    assert save_calls == []
+
+
 def test_start_upload_handles_disabled_special_methods_event_context_failures_and_save_errors(
     tmp_path, monkeypatch
 ):

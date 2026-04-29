@@ -127,6 +127,16 @@ def unable_update_upload_job_state():
     return "Unable to update upload job state."
 
 
+def invalid_client_upload_id():
+    """Handle invalid client upload id."""
+    return "Invalid upload retry identifier."
+
+
+def upload_retry_id_conflict():
+    """Handle upload retry id conflict."""
+    return "Upload retry identifier already belongs to a different upload."
+
+
 def unexpected_server_error_uploading_files():
     """Handle unexpected server error uploading files."""
     return "Unexpected server error while uploading files."

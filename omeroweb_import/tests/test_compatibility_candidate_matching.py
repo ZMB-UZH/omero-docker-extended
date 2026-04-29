@@ -72,3 +72,21 @@ def test_classify_marks_compatible_for_quoted_expected_candidate(tmp_path: Path)
     )
 
     assert status == "compatible"
+
+
+def test_classify_bioformats_unknown_pixel_type_as_incompatible(tmp_path: Path):
+    """Verify Bio-Formats unknown pixel type output is skippable."""
+    expected_file = tmp_path / "image.ims"
+    stderr = (
+        "loci.formats.FormatException: Unknown pixel type: null\n"
+        "at loci.formats.in.ImarisHDFReader.initFile(ImarisHDFReader.java:117)"
+    )
+
+    status, _details = _classify_compatibility_output(
+        1,
+        "",
+        stderr,
+        expected_file_path=expected_file,
+    )
+
+    assert status == "incompatible"
