@@ -572,6 +572,9 @@ RUN set -euo pipefail; \
         "    exit 127" \
         "fi" \
         "source \"\$VENV_ACTIVATE\"" \
+        "if [ -z \"\${CONFIG_omero_db_pass+x}\" ] && [ -n \"\${OMERO_DB_PASS:-}\" ]; then" \
+        "    export CONFIG_omero_db_pass=\"\$OMERO_DB_PASS\"" \
+        "fi" \
         "for f in /startup/*; do" \
         "    if [ -f \"\$f\" ] && [ -x \"\$f\" ]; then" \
         "        printf 'Running %s %s\n' \"\$f\" \"\$*\"" \

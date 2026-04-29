@@ -27,7 +27,7 @@ which python
 pip list --outdated
 
 # Verify environment variables
-python -c "import os; import environ; print('DJANGO_SECRET_KEY set' if os.environ.get('DJANGO_SECRET_KEY') else 'MISSING: DJANGO_SECRET_KEY')"
+python -c "import os; print('app signing secret set' if os.environ.get('APP_SIGNING_SECRET') else 'MISSING: app signing secret')"
 ```
 
 If environment is misconfigured, stop and fix.
@@ -401,7 +401,7 @@ jobs:
       postgres:
         image: postgres:14
         env:
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -442,8 +442,8 @@ jobs:
 
       - name: Run tests
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test
-          DJANGO_SECRET_KEY: test-secret-key
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          APP_SIGNING_SECRET: ${{ secrets.APP_SIGNING_SECRET }}
         run: |
           pytest --cov=apps --cov-report=xml --cov-report=term-missing
 

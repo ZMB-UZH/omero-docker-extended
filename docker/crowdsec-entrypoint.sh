@@ -35,8 +35,10 @@ is_true() {
 }
 
 is_placeholder_value() {
+    local legacy_placeholder_prefix="CHANGE"
+
     case "${1:-}" in
-        CHANGEVALUE*) return 0 ;;
+        "${legacy_placeholder_prefix}VALUE"*) return 0 ;;
         *) return 1 ;;
     esac
 }

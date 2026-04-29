@@ -112,7 +112,7 @@ immediately after it. The installation script
 is present or absent at that marker:
 
 - **CrowdSec enabled** (valid `CROWDSEC_ENROLL_KEY` in `omero_secrets.env`): the script injects `- http://crowdsec:8080/health` after the marker so blackbox-exporter monitors CrowdSec.
-- **CrowdSec disabled** (key empty, missing, or set to placeholder `CHANGEVALUE2`/`CHANGEVALUE3`): the script removes any previously injected CrowdSec probe line, preventing blackbox-exporter from producing recurring connection-refused errors for a non-existent service.
+- **CrowdSec disabled** (key empty, missing, or set to one of the legacy generated placeholder values): the script removes any previously injected CrowdSec probe line, preventing blackbox-exporter from producing recurring connection-refused errors for a non-existent service.
 
 This means operators never need to manually edit `prometheus.yml` for CrowdSec — the installation script handles it automatically based on credentials.
 

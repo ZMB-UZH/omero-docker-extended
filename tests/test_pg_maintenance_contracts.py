@@ -104,6 +104,31 @@ def test_entrypoint_fails_before_cron_when_required_env_is_missing(
     assert not env_file.exists()
 
 
+def test_entrypoint_derives_plugin_database_auth_from_compose_secret_name(
+    tmp_path: Path,
+) -> None:
+    env_file = tmp_path / "pg-maintenance-env"
+    expected_plugin_auth = "plugin-auth-from-env-file"
+    env = _maintenance_env(
+        PG_MAINTENANCE_ENV_FILE=str(env_file),
+        OMP_PLUGIN_DB_PASS=expected_plugin_auth,
+    )
+    del env[PLUGIN_DB_AUTH_ENV]
+
+    result = _run_bash(
+        f"""
+        set -euo pipefail
+        source {ENTRYPOINT}
+        write_cron_env
+        source {env_file}
+        [[ "$PLUGIN_DB_PASS" == "{expected_plugin_auth}" ]]
+        """,
+        env,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_cron_schedule_uses_runner_without_self_rewriting_or_guard_leak() -> None:
     cron_text = CRON.read_text(encoding="utf-8")
 

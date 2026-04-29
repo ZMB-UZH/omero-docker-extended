@@ -9,7 +9,7 @@ Security practices and controls for this deployment.
 - `env/omero_secrets.env` is operator-managed secret material. AI agents must never create, edit, overwrite, or delete it.
 - `env/omeroserver.env`, `env/omeroweb.env`, `env/omero-celery.env`, and `env/grafana.env` contain credentials and must never be committed.
 - `installation_paths.env` is also gitignored (contains site-specific paths).
-- Rotate all default credentials from example env files before deployment. This includes: database passwords, OMERO root password, job-service account password, Grafana admin password, hash secrets (`FMP_HASH_SECRET`, `OMERO_FIGURE_HASH_SECRET`), and LDAP bind credentials/filter settings.
+- Provide deployment-local credentials before deployment. The tracked secret example keeps values empty; database passwords, OMERO root password, job-service account password, Grafana admin password, hash secrets (`OMP_HASH_SECRET`, `FMP_HASH_SECRET`), and LDAP bind credentials/filter settings must be set only in deployment-local env files.
 - The `github_pull_project_bash_example` update script preserves `env/` and `installation_paths.env`, keeps existing site-local `logo/logo.png` in place (while refreshing `logo/logo_example.png` from templates), and does not overwrite non-example runtime files during repository updates. The real `logo/logo.png` asset is deployment-local and gitignored.
 
 ## Container security

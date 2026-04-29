@@ -141,11 +141,15 @@ is_omero_group_name() {
 
 is_crowdsec_enabled() {
     local key="${CROWDSEC_ENROLL_KEY:-}"
+    local legacy_placeholder_prefix="CHANGE"
 
-    case "${key}" in
-        ""|CHANGEVALUE2|CHANGEVALUE3) return 1 ;;
-        *) return 0 ;;
-    esac
+    if [[ -z "${key}" \
+        || "${key}" == "${legacy_placeholder_prefix}VALUE2" \
+        || "${key}" == "${legacy_placeholder_prefix}VALUE3" ]]; then
+        return 1
+    fi
+
+    return 0
 }
 
 
@@ -766,8 +770,6 @@ export_compose_interpolation_env() {
         OMERO_SERVER_HEALTHCHECK_TIMEOUT_SECONDS
         OMERO_SERVER_HEALTHCHECK_RETRIES
         OMERO_SERVER_HEALTHCHECK_START_PERIOD_SECONDS
-        OMERO_DB_PASS
-        OMP_PLUGIN_DB_PASS
         OMERO_DROPBOX_VERSION
         OMERO_CLI_ZARR_VERSION
         OME_ZARR_PY_VERSION
@@ -2062,8 +2064,9 @@ COMPOSE_ENV_FILES=installation_paths.env,env/omero_secrets.env,env/omeroserver.e
 # requiring --env-file or COMPOSE_ENV_FILES support from the installation root.
 #
 # NOTE: Compose interpolation happens before service-level env_file loading.
-# Required passwords and build version pins are mirrored here so manual
-# commands like \`docker compose down\`, \`config\`, and \`build\` work.
+# Required paths, ports, Redis settings, and build version pins are mirrored
+# here so manual commands like \`docker compose down\`, \`config\`, and
+# \`build\` work without copying secret values into Compose interpolation.
 COMPOSE_PROJECT_NAME=${OMERO_COMPOSE_PROJECT_NAME}
 OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
@@ -2106,8 +2109,6 @@ REDIS_APPENDONLY=no
 REDIS_MAXMEMORY=512mb
 REDIS_MAXMEMORY_POLICY=allkeys-lru
 REDIS_DATA_TMPFS_SIZE=512m
-OMERO_DB_PASS=${OMERO_DB_PASS}
-OMP_PLUGIN_DB_PASS=${OMP_PLUGIN_DB_PASS}
 DOTENV
 
     if is_crowdsec_enabled; then

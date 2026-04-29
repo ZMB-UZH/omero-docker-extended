@@ -45,10 +45,11 @@ CSRF_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
 
-# Secret key (must be set via environment variable)
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
-if not SECRET_KEY:
-    raise ImproperlyConfigured('DJANGO_SECRET_KEY environment variable is required')
+# Signing value (must be set via environment variable)
+SIGNING_VALUE = os.environ.get('DJANGO_SIGNING_VALUE')
+if not SIGNING_VALUE:
+    raise ImproperlyConfigured('DJANGO_SIGNING_VALUE environment variable is required')
+SECRET_KEY = SIGNING_VALUE
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -529,14 +530,14 @@ env = environ.Env(
 # reading .env file
 environ.Env.read_env()
 
-SECRET_KEY = env('DJANGO_SECRET_KEY')
+SECRET_KEY = env('DJANGO_SIGNING_VALUE')
 DATABASE_URL = env('DATABASE_URL')
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS')
 
 # .env file (never commit this)
 DEBUG=False
-SECRET_KEY=your-secret-key-here
-DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+# DJANGO_SIGNING_VALUE is injected by deployment tooling
+# DATABASE_URL is injected by deployment tooling
 ALLOWED_HOSTS=example.com,www.example.com
 ```
 

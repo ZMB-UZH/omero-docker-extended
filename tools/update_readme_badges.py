@@ -40,7 +40,7 @@ COCOINDEX_BADGE_TARGET_URL = "https://github.com/cocoindex-io/cocoindex-code"
 DEEPSOURCE_BADGE_TITLE = "DeepSource"
 DEEPSOURCE_BADGE_IMAGE_URL = (
     "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended.svg/"
-    "?label=active+issues&show_trend=true&token=PzuHW2m-HGSR7AFW5klcqPzJ"
+    "?label=active+issues&show_trend=true"
 )
 DEEPSOURCE_BADGE_TARGET_URL = (
     "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended/"

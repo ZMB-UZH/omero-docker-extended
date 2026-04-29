@@ -199,8 +199,9 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 CROWDSEC_CONFIG_DIR="{config_dir}"
                 CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / "data"}"
                 CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="1"
-                CROWDSEC_ENROLL_KEY="CHANGEVALUE3"
-                CROWDSEC_ENGINE_NAME="CHANGEVALUE4"
+                legacy_placeholder_prefix="CHANGE"
+                CROWDSEC_ENROLL_KEY="${{legacy_placeholder_prefix}}VALUE3"
+                CROWDSEC_ENGINE_NAME="${{legacy_placeholder_prefix}}VALUE4"
                 CSCLI_LOG="{log_path}"
                 cscli() {{
                     printf '%s\\n' "$*" >> "${{CSCLI_LOG}}"

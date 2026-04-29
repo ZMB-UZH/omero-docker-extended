@@ -565,6 +565,35 @@ class EnvSafetyGuardTests(unittest.TestCase):
             )
             self.assertTrue(any("must be a TCP port" in error for error in errors))
 
+    def test_validate_env_file_pair_requires_secret_values_when_template_is_empty(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            (repo / "env").mkdir()
+            (repo / "env/example.env").write_text(
+                "OMERO_DB_PASS=\nCROWDSEC_ENROLL_KEY=\n",
+                encoding="utf-8",
+            )
+            (repo / "env/actual.env").write_text(
+                "OMERO_DB_PASS=\nCROWDSEC_ENROLL_KEY=\n",
+                encoding="utf-8",
+            )
+
+            errors = env_safety_guard.validate_env_file_pair(
+                repo,
+                "env/example.env",
+                "env/actual.env",
+                {},
+            )
+
+            self.assertIn("env/actual.env: OMERO_DB_PASS must not be empty", errors)
+            self.assertFalse(
+                any(
+                    "CROWDSEC_ENROLL_KEY must not be empty" in error for error in errors
+                )
+            )
+
     def test_validate_dot_env_values_reports_shape_and_type_errors(self):
         compose_env_files = ",".join(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES)
         repo = self._make_repo(

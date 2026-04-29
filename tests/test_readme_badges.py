@@ -118,7 +118,7 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block,
         )
         self.assertIn(
-            "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended.svg/?label=active+issues&show_trend=true&token=PzuHW2m-HGSR7AFW5klcqPzJ",
+            "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended.svg/?label=active+issues&show_trend=true",
             badge_block,
         )
         self.assertIn(
