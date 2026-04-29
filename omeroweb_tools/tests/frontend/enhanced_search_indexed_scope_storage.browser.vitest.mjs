@@ -6,17 +6,17 @@
   const stylesUrl = "/__preview_static__/omeroweb_tools/styles.css";
 
   /** Loads the indexed-scope persistence script into the preview page. */
-  async function loadPersistenceScript() {
+  const loadPersistenceScript = async () => {
     window.OmeroEnhancedSearchIndexedScope = undefined;
     const response = await fetch(scriptUrl);
     expect(response.ok).toBe(true);
     const source = await response.text();
     Function(source)();
     expect(window.OmeroEnhancedSearchIndexedScope).toBeTruthy();
-  }
+  };
 
   /** Installs the minimal indexed-scope form fixture used by persistence tests. */
-  function installFixture({ search = "", storageKey = "scope-key" } = {}) {
+  const installFixture = ({ search = "", storageKey = "scope-key" } = {}) => {
     window.history.replaceState({}, "", `/${search}`);
     document.body.innerHTML = `
     <script id="tools-search-indexed-scope-storage-key" type="application/json">${JSON.stringify(storageKey)}</script>
@@ -25,19 +25,19 @@
       <option value="acquisition_metadata">Universal metadata index</option>
       <option value="all_indexed_scopes">All searchable sources</option>
     </select>
-  `;
+    `;
     window.localStorage.clear();
     return document.getElementById("indexed_scope");
-  }
+  };
 
   /** Loads Enhanced Search styles into the preview page for layout assertions. */
-  async function loadStyles() {
+  const loadStyles = async () => {
     const response = await fetch(stylesUrl);
     expect(response.ok).toBe(true);
     const style = document.createElement("style");
     style.textContent = await response.text();
     document.head.appendChild(style);
-  }
+  };
 
   describe("Enhanced Search indexed-scope browser persistence", () => {
     beforeEach(async () => {
