@@ -250,8 +250,8 @@ def test_export_root_and_checksum_helpers_cover_fallback_cleanup_and_altsep(
     )
 
 
-def test_run_conversion_returns_missing_original_file_error(tmp_path) -> None:
-    """Verify test run conversion returns missing original behavior."""
+def test_run_conversion_returns_unprepared_source_error(tmp_path) -> None:
+    """Verify run conversion reports source-preparation failures."""
     module = _load_script_module()
 
     class _Conn:
@@ -265,7 +265,7 @@ def test_run_conversion_returns_missing_original_file_error(tmp_path) -> None:
     module.get_original_file_path = lambda conn, image: None
     assert module.run_conversion(_Conn(), 7, str(tmp_path)) == (
         False,
-        "Could not get original file path",
+        "Could not prepare source image for IMS conversion",
         None,
     )
     assert module._safe_filename(None, fallback="") == ""
@@ -404,9 +404,12 @@ def test_copy_and_path_helpers_cover_error_and_exception_fallbacks(
     )
 
 
-def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks() -> None:
+def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks(
+    monkeypatch,
+) -> None:
     """Verify test voxel size and original file path helper behavior."""
     module = _load_script_module()
+    monkeypatch.delenv(module._CONFIG_MANAGED_DIR_ENV, raising=False)
 
     class _PhysicalSize:
         """Represent physical size."""
@@ -526,6 +529,334 @@ def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks() -> Non
     )
 
 
+def test_original_file_path_uses_declared_env_and_absolute_original_paths(
+    monkeypatch, tmp_path
+) -> None:
+    """Verify original file path resolution without managed-repository assumptions."""
+    module = _load_script_module()
+    env_root = tmp_path / "managed-root"
+    monkeypatch.setenv(module._CONFIG_MANAGED_DIR_ENV, str(env_root))
+
+    managed_file = types.SimpleNamespace(
+        getPath=lambda: "user/demo",
+        getName=lambda: "sample.ome.tif",
+    )
+    image = types.SimpleNamespace(
+        getFileset=lambda: types.SimpleNamespace(listFiles=lambda: [managed_file])
+    )
+    blocked_conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(
+                getConfigService=lambda: (_ for _ in ()).throw(
+                    RuntimeError("security violation")
+                )
+            )
+        )
+    )
+
+    assert module.get_original_file_path(blocked_conn, image) == str(
+        env_root / "user" / "demo" / "sample.ome.tif"
+    )
+
+    monkeypatch.delenv(module._CONFIG_MANAGED_DIR_ENV, raising=False)
+    absolute_dir = tmp_path / "absolute-source"
+    absolute_file = types.SimpleNamespace(
+        getPath=lambda: str(absolute_dir),
+        getName=lambda: "input.ome.tif",
+    )
+    absolute_image = types.SimpleNamespace(
+        getFileset=lambda: types.SimpleNamespace(listFiles=lambda: [absolute_file])
+    )
+    assert module.get_original_file_path(object(), absolute_image) == str(
+        absolute_dir / "input.ome.tif"
+    )
+
+    unsafe_name_file = types.SimpleNamespace(
+        getPath=lambda: str(absolute_dir),
+        getName=lambda: "../escape.ome.tif",
+    )
+    unsafe_image = types.SimpleNamespace(
+        getFileset=lambda: types.SimpleNamespace(listFiles=lambda: [unsafe_name_file])
+    )
+    assert module.get_original_file_path(object(), unsafe_image) is None
+
+
+def test_original_file_path_helpers_reject_invalid_roots_and_paths(
+    monkeypatch, tmp_path
+) -> None:
+    """Verify managed and absolute source path validation edge cases."""
+    module = _load_script_module()
+
+    class _BrokenStr:
+        """Represent value that cannot be stringified."""
+
+        def __str__(self):
+            raise RuntimeError("bad value")
+
+    assert module._managed_repository_root_from_value("env", _BrokenStr()) is None
+    assert module._managed_repository_root_from_value("env", "/bad\x00root") is None
+
+    real_path = module.Path
+
+    class _UnresolvablePath:
+        """Represent path whose resolution fails."""
+
+        def __init__(self, value):
+            self.value = value
+
+        def resolve(self, strict=False):
+            """Raise resolution failure."""
+            raise OSError("resolve failed")
+
+    monkeypatch.setattr(module, "Path", _UnresolvablePath)
+    assert module._managed_repository_root_from_value("env", "/managed") is None
+    monkeypatch.setattr(module, "Path", real_path)
+
+    managed_root = tmp_path / "ManagedRepository"
+    assert (
+        module._managed_original_file_path(managed_root, "user\x00demo", "image.tif")
+        is None
+    )
+    assert (
+        module._managed_original_file_path(managed_root, "user/demo", "../image.tif")
+        is None
+    )
+    assert module._absolute_original_file_path("/data\x00source", "image.tif") is None
+
+    class _BrokenAbsolutePath:
+        """Represent absolute path whose resolution fails."""
+
+        def __init__(self, value):
+            self.value = value
+
+        @staticmethod
+        def is_absolute():
+            """Return whether is absolute."""
+            return False
+
+        @property
+        def parts(self):
+            """Return path parts."""
+            return ()
+
+        def __truediv__(self, other):
+            """Return joined path."""
+            return self
+
+        def resolve(self, strict=False):
+            """Raise resolution failure."""
+            raise OSError("resolve failed")
+
+    monkeypatch.setattr(module, "Path", _BrokenAbsolutePath)
+    assert module._absolute_original_file_path("/data/source", "image.tif") is None
+
+
+def test_ome_tiff_source_materialization_covers_wrapper_and_exporter_paths(
+    monkeypatch, tmp_path
+) -> None:
+    """Verify OMERO API source materialization for non-shared storage layouts."""
+    module = _load_script_module()
+
+    class _FixedDatetime:
+        """Represent fixed datetime."""
+
+        @staticmethod
+        def now(_timezone):
+            """Handle now."""
+
+            class _Now:
+                """Represent now."""
+
+                @staticmethod
+                def strftime(fmt):
+                    """Handle strftime."""
+                    return "20260429T120000Z"
+
+            return _Now()
+
+    monkeypatch.setattr(module, "datetime", _FixedDatetime)
+    image = types.SimpleNamespace(
+        getName=lambda: "demo.ome.tif",
+        exportOmeTiff=lambda bufsize: (8, iter([b"ome-", b"tiff"])),
+    )
+    source = module._materialize_ome_tiff_source(
+        object(), image, 7, str(tmp_path / "exports")
+    )
+    assert source is not None
+    assert source.endswith("demo.ome.tif_20260429T120000Z.ome.tif")
+    assert pathlib.Path(source).read_bytes() == b"ome-tiff"
+    assert not pathlib.Path(source + ".tmp").exists()
+
+    class _Exporter:
+        """Represent exporter service."""
+
+        def __init__(self):
+            self.closed = False
+
+        @staticmethod
+        def addImage(image_id):
+            """Handle add image."""
+            assert image_id == 8
+
+        @staticmethod
+        def generateTiff(_service_opts):
+            """Handle generate TIFF."""
+            return 6
+
+        @staticmethod
+        def read(offset, size):
+            """Handle read."""
+            chunks = {0: b"abc", 3: b"def"}
+            return chunks.get(offset, b"")[:size]
+
+        def close(self):
+            """Handle close."""
+            self.closed = True
+
+    exporter = _Exporter()
+    conn = types.SimpleNamespace(
+        SERVICE_OPTS=object(),
+        createExporter=lambda: exporter,
+    )
+    wrapperless_image = types.SimpleNamespace(getName=lambda: "other.ome.tif")
+    source = module._materialize_ome_tiff_source(
+        conn, wrapperless_image, 8, str(tmp_path / "exports")
+    )
+    assert source is not None
+    assert pathlib.Path(source).read_bytes() == b"abcdef"
+    assert exporter.closed is True
+
+
+def test_ome_tiff_source_materialization_covers_chunk_and_cleanup_edges(
+    monkeypatch, tmp_path
+) -> None:
+    """Verify chunk coercion, exporter fallbacks, and cleanup failures."""
+    module = _load_script_module()
+    chunk_file = tmp_path / "chunk.bin"
+    with chunk_file.open("wb") as handle:
+        assert module._write_binary_chunk(handle, None) == 0
+        assert module._write_binary_chunk(handle, "abc") == 3
+        assert module._write_binary_chunk(handle, [100, 101, 102]) == 3
+    assert chunk_file.read_bytes() == b"abcdef"
+
+    direct_image = types.SimpleNamespace(exportOmeTiff=lambda bufsize: "direct")
+    direct_output = tmp_path / "direct.ome.tif"
+    assert module._write_ome_tiff_from_image_wrapper(direct_image, str(direct_output))
+    assert direct_output.read_bytes() == b"direct"
+
+    class _NoServiceOptsExporter:
+        """Represent exporter used without service options."""
+
+        @staticmethod
+        def addImage(image_id):
+            """Handle add image."""
+
+        @staticmethod
+        def generateTiff():
+            """Return generated size."""
+            return 3
+
+        @staticmethod
+        def read(offset, size):
+            """Return one export chunk."""
+            return b"xyz"[offset : offset + size]
+
+        @staticmethod
+        def close():
+            """Handle close."""
+
+    no_opts_output = tmp_path / "no-opts.ome.tif"
+    assert module._write_ome_tiff_from_exporter(
+        types.SimpleNamespace(createExporter=lambda: _NoServiceOptsExporter()),
+        7,
+        str(no_opts_output),
+    )
+    assert no_opts_output.read_bytes() == b"xyz"
+
+    class _TypeErrorExporter:
+        """Represent exporter whose generateTiff has the old signature."""
+
+        @staticmethod
+        def addImage(image_id):
+            """Handle add image."""
+
+        @staticmethod
+        def generateTiff(*args):
+            """Return generated size."""
+            if args:
+                raise TypeError("old signature")
+            return 2
+
+        @staticmethod
+        def read(offset, size):
+            """Return one export chunk."""
+            return b"mn"[offset : offset + size]
+
+    type_error_output = tmp_path / "type-error.ome.tif"
+    assert module._write_ome_tiff_from_exporter(
+        types.SimpleNamespace(
+            SERVICE_OPTS=object(),
+            createExporter=lambda: _TypeErrorExporter(),
+        ),
+        8,
+        str(type_error_output),
+    )
+    assert type_error_output.read_bytes() == b"mn"
+
+    class _ShortReadExporter:
+        """Represent exporter that returns no bytes before declared size."""
+
+        @staticmethod
+        def addImage(image_id):
+            """Handle add image."""
+
+        @staticmethod
+        def generateTiff():
+            """Return generated size."""
+            return 4
+
+        @staticmethod
+        def read(offset, size):
+            """Return an empty chunk."""
+            return b""
+
+    assert not module._write_ome_tiff_from_exporter(
+        types.SimpleNamespace(createExporter=lambda: _ShortReadExporter()),
+        9,
+        str(tmp_path / "short.ome.tif"),
+    )
+
+    monkeypatch.setattr(
+        module,
+        "_write_ome_tiff_from_image_wrapper",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("wrapper failed")),
+    )
+    monkeypatch.setattr(
+        module,
+        "_write_ome_tiff_from_exporter",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("exporter failed")),
+    )
+    monkeypatch.setattr(
+        module.os.path, "exists", lambda path: str(path).endswith(".tmp")
+    )
+    monkeypatch.setattr(
+        module.os,
+        "remove",
+        lambda path: (_ for _ in ()).throw(OSError("cleanup failed")),
+    )
+    assert (
+        module._materialize_ome_tiff_source(
+            object(),
+            types.SimpleNamespace(getName=lambda: "cleanup.ome.tif"),
+            10,
+            str(tmp_path / "exports"),
+        )
+        is None
+    )
+    monkeypatch.setattr(module.os.path, "exists", lambda path: True)
+    module._remove_intermediate_source(str(tmp_path / "generated.ome.tif"))
+
+
 def test_convert_to_ims_uses_resolved_binary_runtime_env_and_output(
     monkeypatch, tmp_path
 ) -> None:
@@ -612,8 +943,8 @@ def test_convert_and_run_conversion_cover_missing_runtime_and_success_paths(
         """Represent fixed datetime."""
 
         @staticmethod
-        def utcnow():
-            """Handle utcnow."""
+        def now(_timezone):
+            """Handle now."""
 
             class _Now:
                 """Represent now."""
@@ -655,8 +986,8 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
         """Represent fixed datetime."""
 
         @staticmethod
-        def utcnow():
-            """Handle utcnow."""
+        def now(_timezone):
+            """Handle now."""
 
             class _Now:
                 """Represent now."""
@@ -738,9 +1069,40 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
     )
     assert module.run_conversion(conn, 7, str(tmp_path)) == (
         False,
-        f"Original file not found: {missing_source}",
+        "Could not prepare source image for IMS conversion",
         None,
     )
+
+    generated_source = tmp_path / "generated.ome.tif"
+
+    def _materialize_source(current_conn, current_image, image_id, export_root):
+        """Handle materialize source."""
+        generated_source.write_text("generated", encoding="utf-8")
+        return str(generated_source)
+
+    captured = {}
+
+    def _successful_conversion(current_image, src, dst):
+        """Handle successful conversion."""
+        captured["src"] = src
+        captured["dst"] = dst
+        assert generated_source.exists()
+        pathlib.Path(dst).write_text("ims", encoding="utf-8")
+        return True
+
+    monkeypatch.setattr(
+        module,
+        "get_original_file_path",
+        lambda current_conn, current_image: None,
+    )
+    monkeypatch.setattr(module, "_materialize_ome_tiff_source", _materialize_source)
+    monkeypatch.setattr(module, "convert_to_ims", _successful_conversion)
+    ok, message, export_path = module.run_conversion(conn, 7, str(tmp_path))
+    assert ok is True
+    assert captured["src"] == str(generated_source)
+    assert export_path == captured["dst"]
+    assert message == f"Successfully exported IMS: {export_path}"
+    assert not generated_source.exists()
 
     source_file = tmp_path / "source.ome.tif"
     source_file.write_text("source", encoding="utf-8")

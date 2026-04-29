@@ -5,7 +5,7 @@ import logging
 import os
 import re
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import omero.rtypes
@@ -28,8 +28,10 @@ BIOFORMATS_ARTIFACTS_SUBDIR = os.path.join("artifacts", BIOFORMATS_SUBDIR)
 BIOFORMATS_JAR_NAME = "bioformats_package.jar"
 BIOFORMATS_MIN_SIZE_BYTES = 10_000_000
 DEFAULT_TIMEOUT_SECONDS = 600
+EXPORT_READ_CHUNK_BYTES = 1024 * 1024
 _PRIVATE_FILE_MODE = 0o600
 _CONFIG_MANAGED_DIR = "omero.managed.dir"
+_CONFIG_MANAGED_DIR_ENV = "CONFIG_omero_managed_dir"
 subprocess = process_utils
 
 
@@ -288,8 +290,37 @@ def _get_voxel_size_from_image(image):
     return vx, vy, vz
 
 
+def _managed_repository_root_from_value(source, value):
+    """Resolve a managed repository root from a configured value."""
+    try:
+        managed_root = str(value or "").strip()
+    except Exception:
+        print(f"Error reading {source}: value is invalid")
+        return None
+    if not managed_root:
+        print(f"Error reading {source}: value is empty")
+        return None
+    if "\x00" in managed_root:
+        print(f"Error reading {source}: value contains invalid characters")
+        return None
+    if not os.path.isabs(managed_root):
+        print(f"Error reading {source}: value must be absolute")
+        return None
+    try:
+        return Path(managed_root).resolve(strict=False)
+    except OSError:
+        print(f"Error reading {source}: value could not be resolved")
+        return None
+
+
 def _get_managed_repository_root(conn):
-    """Handle get managed repository root."""
+    """Return the configured OMERO managed repository root."""
+    if _CONFIG_MANAGED_DIR_ENV in os.environ:
+        return _managed_repository_root_from_value(
+            _CONFIG_MANAGED_DIR_ENV,
+            os.environ.get(_CONFIG_MANAGED_DIR_ENV),
+        )
+
     try:
         config_service = conn.c.sf.getConfigService()
     except Exception:
@@ -299,25 +330,24 @@ def _get_managed_repository_root(conn):
         print("Error getting original file path: OMERO config service is unavailable")
         return None
     try:
-        managed_root = str(config_service.getConfigValue(_CONFIG_MANAGED_DIR) or "")
+        managed_root = config_service.getConfigValue(_CONFIG_MANAGED_DIR)
     except Exception:
         print(f"Error reading {_CONFIG_MANAGED_DIR}: lookup failed")
         return None
-    managed_root = managed_root.strip()
-    if not managed_root:
-        print(f"Error reading {_CONFIG_MANAGED_DIR}: value is empty")
-        return None
-    if not os.path.isabs(managed_root):
-        print(f"Error reading {_CONFIG_MANAGED_DIR}: value must be absolute")
-        return None
-    return Path(managed_root).resolve(strict=False)
+    return _managed_repository_root_from_value(_CONFIG_MANAGED_DIR, managed_root)
 
 
 def _managed_original_file_path(managed_root, file_path, file_name):
     """Handle managed original file path."""
     relative_dir = str(file_path or "").strip().strip("/\\")
     relative_name = str(file_name or "").strip().strip("/\\")
+    if "\x00" in relative_dir or "\x00" in relative_name:
+        print("Error getting original file path: value contains invalid characters")
+        return None
     if not relative_name:
+        return None
+    if Path(relative_name).is_absolute() or ".." in Path(relative_name).parts:
+        print("Error getting original file path: file name is invalid")
         return None
     candidate = (managed_root / relative_dir / relative_name).resolve(strict=False)
     try:
@@ -326,6 +356,28 @@ def _managed_original_file_path(managed_root, file_path, file_name):
         print("Error getting original file path: managed file path escapes repository")
         return None
     return str(candidate)
+
+
+def _absolute_original_file_path(file_path, file_name):
+    """Return an absolute OriginalFile path when OMERO stores one directly."""
+    path_text = str(file_path or "").strip()
+    name_text = str(file_name or "").strip().strip("/\\")
+    if "\x00" in path_text or "\x00" in name_text:
+        print("Error getting original file path: value contains invalid characters")
+        return None
+    if not path_text or not os.path.isabs(path_text):
+        return None
+    if name_text and (Path(name_text).is_absolute() or ".." in Path(name_text).parts):
+        print("Error getting original file path: file name is invalid")
+        return None
+    candidate = Path(path_text)
+    if name_text:
+        candidate = candidate / name_text
+    try:
+        return str(candidate.resolve(strict=False))
+    except OSError:
+        print("Error getting original file path: absolute path could not be resolved")
+        return None
 
 
 def get_original_file_path(conn, image):
@@ -338,6 +390,12 @@ def get_original_file_path(conn, image):
         if not files:
             return None
         original_file = files[0]
+        absolute_path = _absolute_original_file_path(
+            original_file.getPath(),
+            original_file.getName(),
+        )
+        if absolute_path:
+            return absolute_path
         managed_root = _get_managed_repository_root(conn)
         if managed_root is None:
             return None
@@ -439,10 +497,128 @@ def convert_to_ims(image, input_file, output_file):
 def _build_export_path(export_root, image, image_id):
     """Handle build export path."""
     safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
-    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output_dir = os.path.join(export_root, f"image_{image_id}")
     os.makedirs(output_dir, exist_ok=True)
     return os.path.join(output_dir, f"{safe_name}_{timestamp}.ims")
+
+
+def _build_intermediate_ome_tiff_path(export_root, image, image_id):
+    """Build a temporary OME-TIFF source path for conversion."""
+    safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    output_dir = os.path.join(export_root, f"image_{image_id}", "source")
+    os.makedirs(output_dir, exist_ok=True)
+    return os.path.join(output_dir, f"{safe_name}_{timestamp}.ome.tif")
+
+
+def _write_binary_chunk(handle, chunk):
+    """Write one OMERO export chunk and return the byte count."""
+    if chunk is None:
+        return 0
+    if isinstance(chunk, str):
+        chunk = chunk.encode("latin-1")
+    elif not isinstance(chunk, (bytes, bytearray, memoryview)):
+        chunk = bytes(chunk)
+    handle.write(chunk)
+    return len(chunk)
+
+
+def _write_ome_tiff_from_image_wrapper(image, output_file):
+    """Export an OMERO image wrapper to an OME-TIFF file."""
+    exporter = getattr(image, "exportOmeTiff", None)
+    if not callable(exporter):
+        return False
+    exported = exporter(bufsize=EXPORT_READ_CHUNK_BYTES)
+    with open(output_file, "wb") as handle:
+        if isinstance(exported, tuple) and len(exported) == 2:
+            _size, chunks = exported
+            total = 0
+            for chunk in chunks:
+                total += _write_binary_chunk(handle, chunk)
+            return total > 0
+        return _write_binary_chunk(handle, exported) > 0
+
+
+def _write_ome_tiff_from_exporter(conn, image_id, output_file):
+    """Export an OMERO image to OME-TIFF through the raw exporter service."""
+    create_exporter = getattr(conn, "createExporter", None)
+    if not callable(create_exporter):
+        return False
+    exporter = create_exporter()
+    try:
+        exporter.addImage(int(image_id))
+        service_opts = getattr(conn, "SERVICE_OPTS", None)
+        try:
+            if service_opts is None:
+                total_size = exporter.generateTiff()
+            else:
+                total_size = exporter.generateTiff(service_opts)
+        except TypeError:
+            total_size = exporter.generateTiff()
+        total_size = int(total_size)
+        offset = 0
+        written = 0
+        with open(output_file, "wb") as handle:
+            while offset < total_size:
+                chunk_size = min(EXPORT_READ_CHUNK_BYTES, total_size - offset)
+                chunk = exporter.read(offset, chunk_size)
+                if not chunk:
+                    break
+                written += _write_binary_chunk(handle, chunk)
+                offset += len(chunk)
+        return written > 0 and written == total_size
+    finally:
+        close = getattr(exporter, "close", None)
+        if callable(close):
+            close()
+
+
+def _materialize_ome_tiff_source(conn, image, image_id, export_root):
+    """Create a converter-readable OME-TIFF source through OMERO APIs."""
+    output_file = _build_intermediate_ome_tiff_path(export_root, image, image_id)
+    tmp_file = output_file + ".tmp"
+    try:
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        for writer in (
+            lambda path: _write_ome_tiff_from_image_wrapper(image, path),
+            lambda path: _write_ome_tiff_from_exporter(conn, image_id, path),
+        ):
+            try:
+                if writer(tmp_file):
+                    os.chmod(tmp_file, _PRIVATE_FILE_MODE)
+                    os.replace(tmp_file, output_file)
+                    print(f"Prepared OME-TIFF source via OMERO API: {output_file}")
+                    return output_file
+            except Exception as exc:
+                print(f"WARNING: OMERO OME-TIFF export attempt failed: {exc}")
+                try:
+                    if os.path.exists(tmp_file):
+                        os.remove(tmp_file)
+                except OSError as cleanup_exc:
+                    logger.debug(
+                        "Suppressed non-fatal exception in IMS_Export.py",
+                        exc_info=cleanup_exc,
+                    )
+        print("ERROR: OMERO OME-TIFF export did not produce a readable source file")
+        return None
+    finally:
+        try:
+            if os.path.exists(tmp_file):
+                os.remove(tmp_file)
+        except OSError as cleanup_exc:
+            logger.debug(
+                "Suppressed non-fatal exception in IMS_Export.py", exc_info=cleanup_exc
+            )
+
+
+def _remove_intermediate_source(path):
+    """Remove a generated converter source file."""
+    try:
+        if path and os.path.exists(path):
+            os.remove(path)
+    except OSError as exc:
+        print(f"WARNING: Failed to remove temporary source file {path}: {exc}")
 
 
 def run_conversion(conn, image_id, export_root):
@@ -454,18 +630,36 @@ def run_conversion(conn, image_id, export_root):
     print(f"Converting image: {image.getName()} (ID: {image_id})")
 
     input_file = get_original_file_path(conn, image)
-    if not input_file:
-        return (False, "Could not get original file path", None)
-    if not os.path.exists(input_file):
-        return (False, f"Original file not found: {input_file}", None)
-
-    print(f"Input file: {input_file}")
+    generated_input = False
+    existing_input = _existing_regular_path(input_file) if input_file else None
+    if existing_input is not None:
+        input_file = str(existing_input)
+        print(f"Input file: {input_file}")
+    else:
+        if input_file:
+            print(
+                "Original source file is not available in this runtime; "
+                "exporting OME-TIFF through OMERO API"
+            )
+        else:
+            print(
+                "Original source file path is unavailable; "
+                "exporting OME-TIFF through OMERO API"
+            )
+        input_file = _materialize_ome_tiff_source(conn, image, image_id, export_root)
+        generated_input = input_file is not None
+        if not input_file:
+            return (False, "Could not prepare source image for IMS conversion", None)
 
     output_file = _build_export_path(export_root, image, image_id)
 
-    success = convert_to_ims(image, input_file, output_file)
-    if not success:
-        return (False, "Conversion to IMS failed", None)
+    try:
+        success = convert_to_ims(image, input_file, output_file)
+        if not success:
+            return (False, "Conversion to IMS failed", None)
+    finally:
+        if generated_input:
+            _remove_intermediate_source(input_file)
 
     return (True, f"Successfully exported IMS: {output_file}", output_file)
 

@@ -23,14 +23,55 @@ from .imaris_service import (
 logger = logging.getLogger(__name__)
 subprocess = process_utils
 
+_GENERIC_EXPORT_ERROR = "IMS export job failed."
+_PUBLIC_SCRIPT_MESSAGES = {
+    "Conversion to IMS failed",
+    "Could not get original file path",
+    "Could not prepare source image for IMS conversion",
+}
 
-def _build_failure_meta(exc: Exception) -> dict[str, str]:
+
+class IMSExportTaskError(RuntimeError):
+    """Error whose public message is safe to return to the XT client."""
+
+    def __init__(self, message: str, public_message: str | None = None) -> None:
+        """Initialize the error with an optional sanitized public message."""
+        super().__init__(message)
+        self.public_message = public_message
+
+
+def _public_script_message(message: str | None) -> str | None:
+    """Return a safe public message from script-controlled output."""
+    if message is None:
+        return None
+    cleaned = str(message).strip()
+    if not cleaned:
+        return None
+    if cleaned in _PUBLIC_SCRIPT_MESSAGES:
+        return cleaned
+    if cleaned.startswith("Image ") and cleaned.endswith(" not found"):
+        return cleaned
+    if cleaned.startswith("Original file not found:"):
+        return "Original file not found."
+    return None
+
+
+def _public_failure_message(exc: Exception) -> str:
+    """Return the public failure message for a task exception."""
+    if isinstance(exc, IMSExportTaskError):
+        return exc.public_message or _GENERIC_EXPORT_ERROR
+    return _GENERIC_EXPORT_ERROR
+
+
+def _build_failure_meta(exc: Exception) -> dict[str, Any]:
     """Build metadata dictionary for failed tasks."""
+    public_message = _public_failure_message(exc)
     return {
         "exc_type": exc.__class__.__name__,
         "exc_module": exc.__class__.__module__,
-        "exc_message": "IMS export job failed.",
-        "error": "IMS export job failed.",
+        "exc_message": public_message,
+        "error": public_message,
+        "public_error": isinstance(exc, IMSExportTaskError),
     }
 
 
@@ -149,6 +190,7 @@ def _run_script_via_omero_cli(
     outputs = _extract_cli_outputs(combined)
 
     if result.returncode != 0:
+        public_message = _public_script_message(outputs.get("Message"))
         logger.error(
             "OMERO CLI launch failed script_id=%s image_id=%s exit_code=%s %s",
             script_id,
@@ -156,18 +198,26 @@ def _run_script_via_omero_cli(
             result.returncode,
             summarize_process_output(result.stdout, result.stderr),
         )
-        raise RuntimeError("IMS export CLI launch failed.")
+        raise IMSExportTaskError(
+            "IMS export CLI launch failed.",
+            public_message=public_message,
+        )
 
     if outputs.get("Export_Path"):
         return outputs
 
+    public_message = _public_script_message(outputs.get("Message"))
     logger.error(
         "OMERO CLI launch returned no export path script_id=%s image_id=%s %s",
         script_id,
         image_id,
         summarize_process_output(result.stdout, result.stderr),
     )
-    raise RuntimeError("IMS export CLI launch returned no export path.")
+    detail = public_message or "script returned no public failure message"
+    raise IMSExportTaskError(
+        f"IMS export CLI launch returned no export path: {detail}",
+        public_message=public_message,
+    )
 
 
 def _open_session_connection(session_key, host, port, secure=None):
@@ -360,7 +410,15 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
 
     except Exception as exc:
         logger.exception("IMS export task failed: %s", exc)
-        self.update_state(state=states.FAILURE, meta=_build_failure_meta(exc))
+        failure_meta = _build_failure_meta(exc)
+        if isinstance(exc, IMSExportTaskError):
+            return {
+                "state": "FAILED",
+                "outputs": None,
+                "error": failure_meta["error"],
+                "public_error": True,
+            }
+        self.update_state(state=states.FAILURE, meta=failure_meta)
         raise
     finally:
         if conn:

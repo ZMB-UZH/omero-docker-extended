@@ -227,12 +227,26 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
         "run",
         lambda *args, **kwargs: types.SimpleNamespace(
             returncode=0,
+            stdout="* Message = Could not get original file path",
+            stderr="",
+        ),
+    )
+    with pytest.raises(tasks.IMSExportTaskError, match="no export path") as exc_info:
+        tasks._run_script_via_omero_cli(7, 11, "omeroserver", 4064, "session-key")
+    assert exc_info.value.public_message == "Could not get original file path"
+
+    monkeypatch.setattr(
+        tasks.subprocess,
+        "run",
+        lambda *args, **kwargs: types.SimpleNamespace(
+            returncode=0,
             stdout="* Message = done",
             stderr="",
         ),
     )
-    with pytest.raises(RuntimeError, match="no export path"):
+    with pytest.raises(tasks.IMSExportTaskError, match="no export path") as exc_info:
         tasks._run_script_via_omero_cli(7, 11, "omeroserver", 4064, "session-key")
+    assert exc_info.value.public_message is None
 
 
 def test_session_and_job_service_connections_cover_success_and_validation(monkeypatch):
@@ -360,7 +374,25 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
         "exc_module": "builtins",
         "exc_message": "IMS export job failed.",
         "error": "IMS export job failed.",
+        "public_error": False,
     }
+    assert tasks._public_script_message(None) is None
+    assert tasks._public_script_message("   ") is None
+    assert tasks._public_script_message("Image 7 not found") == "Image 7 not found"
+    assert (
+        tasks._public_script_message("Original file not found: /private/source.tif")
+        == "Original file not found."
+    )
+    public_payload = tasks._build_failure_meta(
+        tasks.IMSExportTaskError(
+            "internal detail",
+            public_message="Could not prepare source image for IMS conversion",
+        )
+    )
+    assert (
+        public_payload["error"] == "Could not prepare source image for IMS conversion"
+    )
+    assert public_payload["public_error"] is True
 
     with pytest.raises(RuntimeError, match="Session key is required"):
         tasks._open_session_connection("", "omeroserver", 4064)
@@ -467,6 +499,34 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
         "state": "FINISHED",
         "outputs": {"Export_Name": "demo.ims"},
         "error": None,
+    }
+    assert closed == [True]
+
+    updates.clear()
+    closed.clear()
+    monkeypatch.setattr(
+        tasks,
+        "_run_script_via_omero_cli",
+        lambda **kwargs: (_ for _ in ()).throw(
+            tasks.IMSExportTaskError(
+                "script did not return export path",
+                public_message="Image 7 not found",
+            )
+        ),
+    )
+    result = tasks.run_ims_export_task(
+        task_self,
+        image_id=7,
+        session_key="session-key",
+        host="omeroserver",
+        port=4064,
+        secure=True,
+    )
+    assert result == {
+        "state": "FAILED",
+        "outputs": None,
+        "error": "Image 7 not found",
+        "public_error": True,
     }
     assert closed == [True]
 

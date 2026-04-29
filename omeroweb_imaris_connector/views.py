@@ -29,6 +29,7 @@ INVALID_BASE_URL_MESSAGE = "Invalid base_url parameter."
 INVALID_OMERO_PORT_MESSAGE = "Invalid OMERO port parameter."
 IMS_EXPORT_FAILED_MESSAGE = "IMS export failed."
 IMS_EXPORT_JOB_FAILED_MESSAGE = "IMS export job failed."
+TEXT_PLAIN_CONTENT_TYPE = "text/plain; charset=utf-8"
 
 
 def _parse_base_url(value):
@@ -65,6 +66,20 @@ def _get_client_ip(request):
     if x_forwarded_for:
         return x_forwarded_for.split(",")[0].strip()
     return request.META.get("REMOTE_ADDR", "unknown")
+
+
+def _job_error_message(error, meta):
+    """Return the public error message for a polled job result."""
+    if meta and meta.get("public_error") and meta.get("error"):
+        return str(meta.get("error"))
+    return IMS_EXPORT_JOB_FAILED_MESSAGE
+
+
+def _text_response(message, status):
+    """Return plain-text response content without HTML interpretation."""
+    response = HttpResponse(status=status, content_type=TEXT_PLAIN_CONTENT_TYPE)
+    response.write(str(message))
+    return response
 
 
 @login_required()
@@ -131,7 +146,7 @@ def imaris_export(request, conn=None, **kwargs):
                 "Only Celery-backed IMS export jobs are supported.",
                 status=400,
             )
-        state, outputs, _, meta = _poll_celery_job(job_id)
+        state, outputs, _error, meta = _poll_celery_job(job_id)
         normalized_state = _normalize_job_state(state)
         finished_states = {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}
         failed_states = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
@@ -168,7 +183,7 @@ def imaris_export(request, conn=None, **kwargs):
             )
             payload["download_url"] = download_url
         if is_failed:
-            payload["error"] = "IMS export job failed."
+            payload["error"] = _job_error_message(_error, meta)
         return JsonResponse(payload)
 
     image_id = request.GET.get("image") or request.GET.get("image_id")
@@ -251,7 +266,7 @@ def imaris_export(request, conn=None, **kwargs):
                     image_id,
                     sanitize_log_value(last_error or "unknown error"),
                 )
-                return HttpResponse(IMS_EXPORT_JOB_FAILED_MESSAGE, status=500)
+                return _text_response(_job_error_message(error, meta), status=500)
             time.sleep(EXPORT_POLL_INTERVAL)
 
         if not last_state:
@@ -308,11 +323,12 @@ def _poll_celery_job(job_id):
         logger.debug(
             "Celery job %s success payload=%s", sanitize_log_value(task_id), payload
         )
+        result_meta = payload if payload.get("public_error") else meta
         return (
             payload.get("state", "FINISHED"),
             payload.get("outputs"),
             payload.get("error"),
-            meta,
+            result_meta,
         )
     if async_result.state == celery_states.REVOKED:
         return "CANCELLED", None, "Job was cancelled", meta
