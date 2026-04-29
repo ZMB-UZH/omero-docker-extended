@@ -305,7 +305,7 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
     ),
     "frontend-preview": SkillScenario(
         scenario=(
-            "An AI agent needs to visually validate HTML, CSS, or JavaScript changes "
+            "An AI Agent needs to visually validate HTML, CSS, or JavaScript changes "
             "in plugin templates without rebuilding the Docker container."
         ),
         skill_phrases=(
@@ -594,8 +594,8 @@ class AgentSkillCatalogTests(unittest.TestCase):
                 self.assertContainsAll(
                     surface_text,
                     (
-                        "AI agent <>",
-                        "Co-authored-by: AI agent",
+                        "AI Agent <>",
+                        "Co-authored-by: AI Agent",
                         "contributors?anon=1",
                         "real human GitHub",
                         ("host/local placeholders", "host usernames"),

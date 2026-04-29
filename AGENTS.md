@@ -36,17 +36,17 @@ verification, or required workflow checks.
 
 ## AI commit identity
 
-- AI agents that create, amend, merge, cherry-pick, squash, rebase, or rewrite commits must use `AI agent <>` for author and committer, and any AI co-author trailer must be `Co-authored-by: AI agent` with no email. Use command-scoped config such as `git -c user.name='AI agent' -c user.email= commit ...`; never reuse human, host, GitHub, previous-commit, or global identity.
-- If a tool cannot produce the empty email field shown as `<>`, or would insert a named AI tool, host, local account, fake address, vendor identity, or profile-mapped AI address such as `ai-agent@users.noreply.github.com`, `codex@openai.com`, or `codex@openai.invalid`, stop before committing. Human contributors are not required to use the AI identity.
+- AI Agents that create, amend, merge, cherry-pick, squash, rebase, or rewrite commits must use `AI Agent <>` for author and committer, and any AI co-author trailer must be `Co-authored-by: AI Agent` with no email. Use command-scoped config such as `git -c user.name='AI Agent' -c user.email= commit ...`; never reuse human, host, GitHub, previous-commit, or global identity.
+- If a tool cannot produce the empty email field shown as `<>`, or would insert a named AI tool, host, local account, fake address, vendor identity, or profile-mapped AI/tool address, stop before committing. Human contributors are not required to use the AI identity.
 - Identity audits must check authors, committers, `Co-authored-by` trailers, and GitHub anonymous contributors (`contributors?anon=1`) from fresh branch-head fetches; report PR-head refs separately. Non-AI commit identities must be real human GitHub identities or actual human author names with real email addresses, never host/local placeholders or fake emails.
 
 ## Single-session rule
 
-- AI agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
+- AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
 
 ## Default-branch development rule
 
-- AI agents must develop, commit, push, and verify on the repository's current remote default branch unless the user explicitly names another branch. Resolve it from the remote, for example with `git remote show origin` or `git symbolic-ref refs/remotes/origin/HEAD`, and never hard-code `main` in agent workflow decisions.
+- AI Agents must develop, commit, push, and verify on the repository's current remote default branch unless the user explicitly names another branch. Resolve it from the remote, for example with `git remote show origin` or `git symbolic-ref refs/remotes/origin/HEAD`, and never hard-code `main` in agent workflow decisions.
 - Do not create feature branches, PR branches, temporary remote branches, or draft PRs for routine coding, verification, workflow checks, or scanner checks. If one is created accidentally, move the work back to the resolved default branch, delete the temporary branch, close any PR, and continue there.
 
 ## Mandatory security read order

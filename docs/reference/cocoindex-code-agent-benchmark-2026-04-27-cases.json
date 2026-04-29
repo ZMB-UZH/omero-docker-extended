@@ -83,7 +83,7 @@
   },
   {
     "name": "agent_context_caps",
-    "query": "AI agent context routing numeric caps smallest correct docs test lanes",
+    "query": "AI Agent context routing numeric caps smallest correct docs test lanes",
     "rg": "context-routing|numeric caps|smallest correct|test lanes|agent_context",
     "expected": [
       "docs/reference/ai-agent-context-routing.md",

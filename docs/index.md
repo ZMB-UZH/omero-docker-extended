@@ -71,13 +71,13 @@ Central navigation hub for all project documentation. Start here, then follow li
 ## 8. Reference
 
 - `reference/ai-agent-context-routing.md` -- minimal task router for docs, code roots, skills, and split test lanes
-- `reference/ai-agent-runtime-playbook.md` -- deep Git, Docker, OMERO CLI, testing, logging, and joined-session procedure for AI agents
-- `reference/ai-agent-skills.md` -- harness-neutral catalog for repo-local AI-agent skills under `.agents/skills/`
-- `reference/ai-agent-web-research-stack.md` -- safe public-web research, extraction, browser fallback, and source-audit pattern for AI agents
+- `reference/ai-agent-runtime-playbook.md` -- deep Git, Docker, OMERO CLI, testing, logging, and joined-session procedure for AI Agents
+- `reference/ai-agent-skills.md` -- harness-neutral catalog for repo-local AI Agent skills under `.agents/skills/`
+- `reference/ai-agent-web-research-stack.md` -- safe public-web research, extraction, browser fallback, and source-audit pattern for AI Agents
 - `reference/ai-agent-integrations.md` -- platform adapter map for Copilot, Cursor, Claude, Gemini, shared skill loaders, and the single-session policy
 - `reference/ai-agent-upstream-sources.md` -- pinned upstream provenance for ECC-derived local skills, Karpathy baseline, and vendored caveman prompt references
 - `reference/cocoindex-code-agent-benchmark-2026-04-27.md` -- one-off benchmark and MCP verification for the hybrid CocoIndex Code plus `rg` agent workflow
-- `reference/ai-agent-security-prevention-playbook.md` -- canonical anti-regression security playbook for AI agents; external best-practice links, concrete examples, and document ownership rules
+- `reference/ai-agent-security-prevention-playbook.md` -- canonical anti-regression security playbook for AI Agents; external best-practice links, concrete examples, and document ownership rules
 - `reference/plugin-help-page-style-guide.md` -- canonical user-help formatting, screenshot, collapse, and verification rules for plugin help pages
 - `reference/service-endpoints.md` -- infrastructure ports, plugin routes, proxy forwarding
 - `reference/release-notes.md` -- release history and change documentation template

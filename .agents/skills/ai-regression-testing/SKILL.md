@@ -7,7 +7,7 @@ upstream: third_party/ecc-v1.10.0/skills/ai-regression-testing/SKILL.md
 
 # AI Regression Testing
 
-Use this skill when an AI agent has changed helpers, views, startup scripts, workflows, or data-flow boundaries that are easy to "fix" incompletely.
+Use this skill when an AI Agent has changed helpers, views, startup scripts, workflows, or data-flow boundaries that are easy to "fix" incompletely.
 
 ## Upstream baseline
 

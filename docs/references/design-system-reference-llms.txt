@@ -1,4 +1,4 @@
-Design system reference notes for AI agent workflows.
+Design system reference notes for AI Agent workflows.
 
 Repository structure:
 - AGENTS.md is the table of contents (start here). It is intentionally short.

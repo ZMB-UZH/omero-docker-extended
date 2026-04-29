@@ -6,7 +6,7 @@ Security practices and controls for this deployment.
 
 - Keep secrets out of source control. The `env/` directory is gitignored except for `*_example.env` templates.
 - Treat `*_example*` files as the authoritative in-repo templates; corresponding non-example files are deployment-local runtime artifacts managed by the sysadmin.
-- `env/omero_secrets.env` is operator-managed secret material. AI agents must never create, edit, overwrite, or delete it.
+- `env/omero_secrets.env` is operator-managed secret material. AI Agents must never create, edit, overwrite, or delete it.
 - `env/omeroserver.env`, `env/omeroweb.env`, `env/omero-celery.env`, and `env/grafana.env` contain credentials and must never be committed.
 - `installation_paths.env` is also gitignored (contains site-specific paths).
 - Provide deployment-local credentials before deployment. The tracked secret example keeps values empty; database passwords, OMERO root password, job-service account password, Grafana admin password, hash secrets (`OMP_HASH_SECRET`, `FMP_HASH_SECRET`), and LDAP bind credentials/filter settings must be set only in deployment-local env files.

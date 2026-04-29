@@ -1,6 +1,6 @@
 # AI Agent Runtime Playbook
 
-Deep operational guidance for AI agents. `AGENTS.md` should route here instead of duplicating these details.
+Deep operational guidance for AI Agents. `AGENTS.md` should route here instead of duplicating these details.
 
 ## Git ownership and local clones
 
@@ -32,7 +32,7 @@ Deep operational guidance for AI agents. `AGENTS.md` should route here instead o
 - `COMPOSE_ENV_FILES` is comma-separated when exported in the shell, but do not rely on a value inside `.env` to activate additional env files for first-attempt agent commands. Use explicit `--env-file` arguments.
 - `docker compose --env-file installation_paths.env ps` fails when the required secrets/server/web/Celery/Grafana env files are absent. Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as the fallback probe.
 - Before any `docker compose` command, run `python3 tools/env_safety_guard.py check` and `python3 tools/env_safety_guard.py compose-guard`. The compose guard refuses non-canonical worktrees and `.env` files whose `COMPOSE_PROJECT_NAME` does not match the installation path, preventing a second Compose project from attaching to the same live bind mounts.
-- AI agents may inspect non-example deployment env files and run `python3 tools/env_safety_guard.py template-check`, but must not create, edit, overwrite, delete, normalize, or print values from non-example env files unless the user explicitly grants a one-off exception for that exact operation.
+- AI Agents may inspect non-example deployment env files and run `python3 tools/env_safety_guard.py template-check`, but must not create, edit, overwrite, delete, normalize, or print values from non-example env files unless the user explicitly grants a one-off exception for that exact operation.
 - Functional OMERO, installation, Compose, startup, plugin-behavior, and env-contract changes require fresh-code live verification before commit/push when live testing makes sense or the user explicitly requests it: reconcile the canonical live root to the exact checkout under test, then rebuild, inject, or restart affected services so containers cannot run stale code.
 - A stale or dirty canonical live root is cleanup work, not a reason to skip live verification. Inspect `git status` before rebuilds; preserve unrelated dirty work non-destructively with a commit, stash, patch, or user-approved cleanup; then update the live root, rerun env guards, rebuild/restart, and test. Stop only when safe reconciliation is impossible.
 - Treat env files and Compose as mutable administrator-owned contracts. Product

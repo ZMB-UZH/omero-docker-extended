@@ -5,7 +5,7 @@ Start with `AGENTS.md`, including its pinned Karpathy agent baseline.
 
 ## Single-session rule
 
-- AI agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
+- AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
 
 ## Fast load order
 
@@ -18,7 +18,7 @@ Start with `AGENTS.md`, including its pinned Karpathy agent baseline.
 ## Core rules
 
 - Treat `AGENTS.md` as the universal baseline and this file as a Claude-specific adapter.
-- Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI agent <>`; never use profile-mapped AI emails such as `ai-agent@users.noreply.github.com`, `codex@openai.com`, or `codex@openai.invalid`; AI co-author trailers use `Co-authored-by: AI agent` with no email; audits include anonymous contributors (`contributors?anon=1`).
+- Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI Agent <>`; never use profile-mapped AI/tool emails; AI co-author trailers use `Co-authored-by: AI Agent` with no email; audits include anonymous contributors (`contributors?anon=1`).
 - Non-AI commits use real human GitHub or actual human author identities, never host/local placeholders.
 - Develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch; resolve it dynamically and do not create feature branches, PR branches, temporary remote branches, or draft PRs for routine work.
 - Keep context small: load one task class, one code root, one nearest test module, and one matching skill, and follow the routing doc's numeric caps before broadening scope.

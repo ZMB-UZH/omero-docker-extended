@@ -1,6 +1,6 @@
 # AI Agent Upstream Sources
 
-This document records the pinned upstream AI-agent material vendored into this repository.
+This document records the pinned upstream AI Agent material vendored into this repository.
 
 ## ECC snapshot
 

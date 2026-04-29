@@ -1,4 +1,4 @@
-Docker Compose reference notes for AI agent workflows.
+Docker Compose reference notes for AI Agent workflows.
 
 Service topology (docker-compose.yml):
 - 21 Compose services total on a single "omero" bridge network: 19 long-running runtime containers by default, 20 when the profile-gated crowdsec service is enabled. The one-shot redis-sysctl-init helper is also profile-gated (sysctl-init); the installation script persists the sysctl on the host.

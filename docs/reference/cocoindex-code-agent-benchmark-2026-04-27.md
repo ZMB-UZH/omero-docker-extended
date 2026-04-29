@@ -5,7 +5,7 @@ request or after a major CocoIndex Code release.
 
 ## Scope
 
-This benchmark validates the repository's hybrid AI-agent search workflow:
+This benchmark validates the repository's hybrid AI Agent search workflow:
 
 1. Check for an MCP server or tool named `cocoindex-code`.
 2. Use CocoIndex Code only for broad semantic routing.

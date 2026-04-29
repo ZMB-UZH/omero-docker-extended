@@ -1,6 +1,6 @@
 # AI Agent Skills
 
-This document catalogs the repository's shared skill surface for AI agents.
+This document catalogs the repository's shared skill surface for AI Agents.
 
 The skills live under `.agents/skills/`. Harnesses that support skill discovery can load them directly. Harnesses that do not can still read the corresponding `SKILL.md` files manually.
 

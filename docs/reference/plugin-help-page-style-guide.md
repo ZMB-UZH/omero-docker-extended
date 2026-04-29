@@ -1,7 +1,7 @@
 # Plugin Help Page Style Guide
 
 This guide is the canonical pattern for user-facing help pages in OMERO Docker
-Extended plugins. AI agents must load it before creating or rewriting plugin
+Extended plugins. AI Agents must load it before creating or rewriting plugin
 help pages, help templates, help screenshots, or route-level help copy.
 
 The current reference implementation is:
