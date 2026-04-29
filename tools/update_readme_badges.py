@@ -225,17 +225,57 @@ def render_badge_block(
     lines = [
         BADGE_BLOCK_BEGIN,
         f"[![License](https://img.shields.io/github/license/{github_path})](LICENSE)",
-        f"[![tests](https://img.shields.io/github/actions/workflow/status/{github_path}/tests.yml?branch={branch}&label=tests)](https://github.com/{github_path}/actions/workflows/tests.yml)",
-        f"[![security-code-scanning](https://img.shields.io/github/actions/workflow/status/{github_path}/security-code-scanning.yml?branch={branch}&label=security-code-scanning)](https://github.com/{github_path}/actions/workflows/security-code-scanning.yml)",
-        f"[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/{github_path})](https://github.com/{github_path}/commits/{branch})",
-        f"[![{DEEPSOURCE_BADGE_TITLE}]({DEEPSOURCE_BADGE_IMAGE_URL})]({DEEPSOURCE_BADGE_TARGET_URL})",
-        f"[![Codecov](https://img.shields.io/codecov/c/github/{github_path}?label=Codecov&logo=codecov)](https://codecov.io/gh/{github_path})",
-        f"[![Mypy](https://img.shields.io/github/actions/workflow/status/{github_path}/mypy.yml?branch={branch}&logo=python&label=Mypy)](https://github.com/python/mypy)",
-        f"[![super-linter](https://img.shields.io/github/actions/workflow/status/{github_path}/super-linter.yml?branch={branch}&label=super-linter&logo=github)](https://github.com/super-linter/super-linter)",
-        f"[![Ruff](https://img.shields.io/github/actions/workflow/status/{github_path}/ruff.yml?branch={branch}&logo=ruff&label=Ruff)](https://github.com/astral-sh/ruff)",
-        f"[![Vulture](https://img.shields.io/github/actions/workflow/status/{github_path}/vulture.yml?branch={branch}&logo=python&label=Vulture)](https://github.com/jendrikseipp/vulture)",
+        (
+            "[![tests](https://img.shields.io/github/actions/workflow/status/"
+            f"{github_path}/tests.yml?branch={branch}&label=tests)]"
+            f"(https://github.com/{github_path}/actions/workflows/tests.yml)"
+        ),
+        (
+            "[![security-code-scanning](https://img.shields.io/github/actions/"
+            f"workflow/status/{github_path}/security-code-scanning.yml?"
+            f"branch={branch}&label=security-code-scanning)]"
+            f"(https://github.com/{github_path}/actions/workflows/"
+            "security-code-scanning.yml)"
+        ),
+        (
+            "[![GitHub commit activity](https://img.shields.io/github/"
+            f"commit-activity/m/{github_path})]"
+            f"(https://github.com/{github_path}/commits/{branch})"
+        ),
+        (
+            f"[![{DEEPSOURCE_BADGE_TITLE}]({DEEPSOURCE_BADGE_IMAGE_URL})]"
+            f"({DEEPSOURCE_BADGE_TARGET_URL})"
+        ),
+        (
+            f"[![Codecov](https://img.shields.io/codecov/c/github/{github_path}"
+            f"?label=Codecov&logo=codecov)](https://codecov.io/gh/{github_path})"
+        ),
+        (
+            "[![Mypy](https://img.shields.io/github/actions/workflow/status/"
+            f"{github_path}/mypy.yml?branch={branch}&logo=python&label=Mypy)]"
+            "(https://github.com/python/mypy)"
+        ),
+        (
+            "[![super-linter](https://img.shields.io/github/actions/workflow/"
+            f"status/{github_path}/super-linter.yml?branch={branch}&"
+            "label=super-linter&logo=github)]"
+            "(https://github.com/super-linter/super-linter)"
+        ),
+        (
+            "[![Ruff](https://img.shields.io/github/actions/workflow/status/"
+            f"{github_path}/ruff.yml?branch={branch}&logo=ruff&label=Ruff)]"
+            "(https://github.com/astral-sh/ruff)"
+        ),
+        (
+            "[![Vulture](https://img.shields.io/github/actions/workflow/status/"
+            f"{github_path}/vulture.yml?branch={branch}&logo=python&"
+            "label=Vulture)](https://github.com/jendrikseipp/vulture)"
+        ),
         f"[![{COCOINDEX_BADGE_TITLE}]({COCOINDEX_BADGE_IMAGE_URL})]({COCOINDEX_BADGE_TARGET_URL})",
-        f"[![{upstream_sources.badge_title}]({upstream_sources.badge_image_url})]({upstream_sources.repo_url})",
+        (
+            f"[![{upstream_sources.badge_title}]"
+            f"({upstream_sources.badge_image_url})]({upstream_sources.repo_url})"
+        ),
         f"[![{CAVEMAN_BADGE_TITLE}]({CAVEMAN_BADGE_IMAGE_URL})]({CAVEMAN_BADGE_TARGET_URL})",
         f"[![{KARPATHY_BADGE_TITLE}]({KARPATHY_BADGE_IMAGE_URL})]({KARPATHY_BADGE_TARGET_URL})",
         BADGE_BLOCK_END,

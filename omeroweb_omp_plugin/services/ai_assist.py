@@ -367,7 +367,8 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
             "generationConfig": {"temperature": 0.0, "maxOutputTokens": max_tokens},
         }
         # FIX: URL-encode the user-provided parts of the URL to prevent SSRF via path traversal
-        # or query injection ( CodeQL #89 ). We do NOT enforce strict https allowlist to allow local proxies.
+        # or query injection (CodeQL #89). We allow local proxies here, so
+        # this intentionally does not enforce a strict HTTPS allowlist.
         safe_model_path = urllib.parse.quote(model_path, safe="/")
         safe_api_key = urllib.parse.quote(api_key, safe="")
         url = (

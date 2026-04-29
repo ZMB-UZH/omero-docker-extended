@@ -46,8 +46,6 @@ class _JsonResponse(_BaseResponse):
 class _HttpResponse(_BaseResponse):
     """Represent HTTP response."""
 
-    pass
-
 
 class _HttpResponseBadRequest(_HttpResponse):
     """Represent HTTP response bad request."""

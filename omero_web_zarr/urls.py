@@ -56,7 +56,8 @@ urlpatterns = [
         name="zarr_preview_image_zarray",
     ),
     re_path(
-        r"^v(?P<version>0\.[3-4]+)/image/(?P<iid>[0-9]+).zarr/(?P<level>[0-9]+)/(?P<chunk>[0-9/]+)$",
+        r"^v(?P<version>0\.[3-4]+)/image/(?P<iid>[0-9]+).zarr/"
+        r"(?P<level>[0-9]+)/(?P<chunk>[0-9/]+)$",
         views.image_chunk,
         name="zarr_image_chunk",
     ),

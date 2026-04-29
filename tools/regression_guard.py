@@ -216,7 +216,8 @@ def _ast_assert_in_production(
                 (
                     node.lineno,
                     node.col_offset,
-                    "Production code uses `assert`. Replace with explicit `if not cond: raise ValueError(...)`.",
+                    "Production code uses `assert`. Replace with explicit "
+                    "`if not cond: raise ValueError(...)`.",
                     snippet.splitlines()[0] if snippet else "assert ...",
                 )
             )
@@ -295,7 +296,8 @@ def _ast_silent_except(tree: ast.AST, src: str) -> list[tuple[int, int, str, str
             (
                 stmt.lineno,
                 stmt.col_offset,
-                "Silent broad-exception handler. Catch a specific exception or add `logger.debug('...', exc_info=True)`.",
+                "Silent broad-exception handler. Catch a specific exception "
+                "or add `logger.debug('...', exc_info=True)`.",
                 snippet.splitlines()[0],
             )
         )
@@ -339,7 +341,8 @@ def _ast_hardcoded_tmp(tree: ast.AST, _src: str) -> list[tuple[int, int, str, st
                     (
                         node.lineno,
                         node.col_offset,
-                        "Hardcoded `/tmp` path. Use `tempfile.mkdtemp()` or a configured runtime path.",
+                        "Hardcoded `/tmp` path. Use `tempfile.mkdtemp()` or "
+                        "a configured runtime path.",
                         repr(value),
                     )
                 )
@@ -379,7 +382,8 @@ def _ast_sql_interpolation(tree: ast.AST, _src: str) -> list[tuple[int, int, str
             (
                 node.lineno,
                 node.col_offset,
-                "SQL string built with f-string/%/format passed to execute(). Use parameterized queries.",
+                "SQL string built with f-string/%/format passed to execute(). "
+                "Use parameterized queries.",
                 f"{attr_name}(<dynamic string>...)",
             )
         )
@@ -432,7 +436,8 @@ def _ast_mark_safe(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]]:
                 (
                     node.lineno,
                     node.col_offset,
-                    "mark_safe(...) bypasses Django auto-escaping. Use format_html() / format_html_join().",
+                    "mark_safe(...) bypasses Django auto-escaping. Use "
+                    "format_html() / format_html_join().",
                     "mark_safe(...)",
                 )
             )
@@ -485,7 +490,8 @@ def _ast_urllib_urlopen(tree: ast.AST, _src: str) -> list[tuple[int, int, str, s
                 (
                     node.lineno,
                     node.col_offset,
-                    "urlopen() called directly. Validate scheme/host/timeout via the SSRF helper before request.",
+                    "urlopen() called directly. Validate scheme/host/timeout "
+                    "via the SSRF helper before request.",
                     "urlopen(...)",
                 )
             )
@@ -556,7 +562,8 @@ def _ast_httpresponse_dynamic_string(
             (
                 node.lineno,
                 node.col_offset,
-                "HttpResponse(<f-string/%/format>) reflects user data. Use JsonResponse or format_html().",
+                "HttpResponse(<f-string/%/format>) reflects user data. Use "
+                "JsonResponse or format_html().",
                 "HttpResponse(<dynamic string>)",
             )
         )
@@ -605,7 +612,8 @@ def _custom_pat_in_file(_path: Path, content: str) -> list[tuple[int, int, str, 
                 (
                     idx,
                     match.start(),
-                    "GitHub PAT-shaped value detected. Rotate the credential and use env vars instead.",
+                    "GitHub PAT-shaped value detected. Rotate the credential "
+                    "and use env vars instead.",
                     raw.strip()[:160],
                 )
             )
@@ -622,7 +630,11 @@ CATALOG: tuple[Rule, ...] = (
         id="RG001",
         severity="high",
         title="`assert` used in production Python",
-        fix="Replace `assert cond, msg` with `if not cond: raise ValueError(msg)`. `assert` is stripped under `python -O`.",
+        fix=(
+            "Replace `assert cond, msg` with "
+            "`if not cond: raise ValueError(msg)`. `assert` is stripped "
+            "under `python -O`."
+        ),
         scanner="bandit/B101",
         closed_history=499,
         applies_to=("*.py",),
@@ -671,7 +683,11 @@ CATALOG: tuple[Rule, ...] = (
         id="RG005",
         severity="high",
         title="SQL composed with f-string / %-format / .format() before execute()",
-        fix="Use parameterized queries: `cursor.execute('… WHERE x = %s', (val,))` or `psycopg2.sql.SQL`.",
+        fix=(
+            "Use parameterized queries: "
+            "`cursor.execute('… WHERE x = %s', (val,))` or "
+            "`psycopg2.sql.SQL`."
+        ),
         scanner="bandit/B608+semgrep/sqlalchemy-execute-raw-query",
         closed_history=182,
         applies_to=("*.py",),
@@ -719,7 +735,10 @@ CATALOG: tuple[Rule, ...] = (
         id="RG009",
         severity="high",
         title="Overly permissive os.chmod mode literal",
-        fix="Tighten to 0o640 (files) or 0o750 (directories) unless documented runtime contract requires otherwise.",
+        fix=(
+            "Tighten to 0o640 (files) or 0o750 (directories) unless "
+            "documented runtime contract requires otherwise."
+        ),
         scanner="codeql/py/overly-permissive-file+bandit/B103",
         closed_history=34,
         applies_to=("*.py",),
@@ -731,7 +750,10 @@ CATALOG: tuple[Rule, ...] = (
         id="RG010",
         severity="medium",
         title="`urlopen(...)` direct call",
-        fix="Validate scheme/host/timeout against an allowlist and prefer `requests` with explicit timeout.",
+        fix=(
+            "Validate scheme/host/timeout against an allowlist and prefer "
+            "`requests` with explicit timeout."
+        ),
         scanner="semgrep/dynamic-urllib-use+codeql/py/partial-ssrf",
         closed_history=20,
         applies_to=("*.py",),
@@ -789,7 +811,10 @@ CATALOG: tuple[Rule, ...] = (
         id="RG014",
         severity="high",
         title="Final USER directive in Dockerfile is `root`",
-        fix="Default to a non-root application user; isolate root work to an explicit Compose entrypoint handoff.",
+        fix=(
+            "Default to a non-root application user; isolate root work to an "
+            "explicit Compose entrypoint handoff."
+        ),
         scanner="trivy/DS002+semgrep/last-user-is-root+hadolint/DL3002",
         closed_history=8,
         applies_to=("*.Dockerfile", "Dockerfile", "Dockerfile.*"),
@@ -978,10 +1003,13 @@ def render_markdown() -> str:
     lines = [
         "# Regression Guard Rule Catalog",
         "",
-        "This file is **generated** by `python3 tools/regression_guard.py catalog --format markdown`.",
+        "This file is **generated** by `python3 tools/regression_guard.py "
+        "catalog --format markdown`.",
         "Edit the catalog in `tools/regression_guard.py`; do not edit this file by hand.",
         "",
-        "Each rule below maps to one or more closed scanner alert families on this repository. The Python tool is the canonical anti-regression gate; the historical Markdown ledgers are reference only.",
+        "Each rule below maps to one or more closed scanner alert families on "
+        "this repository. The Python tool is the canonical anti-regression "
+        "gate; the historical Markdown ledgers are reference only.",
         "",
         "| ID | Sev | Scanner family | Title | Fix |",
         "| --- | --- | --- | --- | --- |",
@@ -994,7 +1022,8 @@ def render_markdown() -> str:
     lines.extend(
         [
             "",
-            "Closed-alert recurrence counts are stored on each Rule's `closed_history` field; render JSON for the full data:",
+            "Closed-alert recurrence counts are stored on each Rule's "
+            "`closed_history` field; render JSON for the full data:",
             "",
             "```bash",
             "python3 tools/regression_guard.py catalog --format json",
@@ -1035,7 +1064,9 @@ def _selfcheck_fixtures() -> dict[str, tuple[str, str]]:
         ),
         "RG006": (
             "module/csrf_exempt.py",
-            "from django.views.decorators.csrf import csrf_exempt\n@csrf_exempt\ndef view(request): pass\n",
+            "from django.views.decorators.csrf import csrf_exempt\n"
+            "@csrf_exempt\n"
+            "def view(request): pass\n",
         ),
         "RG007": (
             "module/mark_safe_use.py",
@@ -1043,7 +1074,9 @@ def _selfcheck_fixtures() -> dict[str, tuple[str, str]]:
         ),
         "RG008": (
             "module/httpresponse_dynamic.py",
-            "from django.http import HttpResponse\ndef v(request):\n    return HttpResponse(f\"hi {request.GET.get('x')}\")\n",
+            "from django.http import HttpResponse\n"
+            "def v(request):\n"
+            "    return HttpResponse(f\"hi {request.GET.get('x')}\")\n",
         ),
         "RG009": (
             "module/chmod_777.py",

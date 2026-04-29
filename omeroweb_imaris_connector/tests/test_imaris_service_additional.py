@@ -349,8 +349,6 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
     class SecurityViolation(Exception):
         """Represent security violation."""
 
-        pass
-
     assert imaris_service._get_script_processor_config(None) is None
     assert imaris_service._get_node_descriptors_config(None) is None
     assert (
@@ -703,8 +701,6 @@ def test_imaris_service_remaining_job_state_and_output_paths_are_exercised(
     class _NonNumericJobId:
         """Represent non numeric job identifier."""
 
-        pass
-
     assert imaris_service._extract_job_id({"job_id": _NonNumericJobId()}) is None
     assert imaris_service._extract_output_value(None, "Export_Name") is None
     assert imaris_service._infer_finished_from_outputs({"Other": "value"}) is False
@@ -783,8 +779,6 @@ def test_imaris_service_covers_remaining_descriptor_and_job_iteration_edges(
 
     class _NonNumericValue:
         """Represent non numeric value."""
-
-        pass
 
     class _BadJobId:
         """Represent bad job identifier."""

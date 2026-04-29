@@ -990,7 +990,8 @@ _SEARCH_FROM_WHERE_SQL = """
             )
             AND (
                 %s = ''
-                OR to_tsvector('simple', images.search_document) @@ to_tsquery('simple', NULLIF(%s, ''))
+                OR to_tsvector('simple', images.search_document)
+                    @@ to_tsquery('simple', NULLIF(%s, ''))
                 OR images.image_id IN (
                     SELECT attributes.image_id
                     FROM {} attributes

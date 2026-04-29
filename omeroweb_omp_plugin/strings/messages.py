@@ -392,7 +392,10 @@ def job_started_for_images():
 
 def max_variables_reached():
     """Handle max variables reached."""
-    return "Maximum of {maxParsedVariables} variables allowed. Cannot add more variable name fields."
+    return (
+        "Maximum of {maxParsedVariables} variables allowed. Cannot add more "
+        "variable name fields."
+    )
 
 
 def unable_load_variable_sets():

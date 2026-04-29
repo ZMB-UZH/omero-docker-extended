@@ -898,7 +898,8 @@ def create_spectrum_table(
         dataset_object = getattr(dataset, "_obj", None)
         if dataset_object is None:
             logger.warning(
-                "Dataset wrapper for image %d has no OMERO object; skipping SEM EDX table creation for %s",
+                "Dataset wrapper for image %d has no OMERO object; "
+                "skipping SEM EDX table creation for %s",
                 image_id,
                 txt_filename,
             )
@@ -1034,13 +1035,13 @@ def attach_sem_edx_tables(
                 "Created spectrum table for image %d from %s", image_id, txt_path.name
             )
             return table_id
-        else:
-            logger.error(
-                "Failed to create spectrum table for image %d from %s",
-                image_id,
-                txt_path.name,
-            )
-            return None
-    else:
-        logger.warning("No spectrum data found in %s", txt_path.name)
+
+        logger.error(
+            "Failed to create spectrum table for image %d from %s",
+            image_id,
+            txt_path.name,
+        )
         return None
+
+    logger.warning("No spectrum data found in %s", txt_path.name)
+    return None

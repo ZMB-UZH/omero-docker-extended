@@ -667,7 +667,10 @@ def _grafana_proxy_home_fallback_response(proxy_prefix: str) -> HttpResponse:
         ).strip(),
         "server-infrastructure",
     )
-    dashboard_path = f"{normalized_prefix}/d/{quote(dashboard_uid, safe='')}/{quote(dashboard_slug, safe='')}"
+    dashboard_path = (
+        f"{normalized_prefix}/d/{quote(dashboard_uid, safe='')}/"
+        f"{quote(dashboard_slug, safe='')}"
+    )
 
     response = HttpResponse(status=302)
     response["Location"] = dashboard_path
@@ -737,7 +740,10 @@ def _grafana_unavailable_response(
   <body>
     <div class="panel">
       <h1>Grafana is temporarily unavailable</h1>
-      <p>The monitoring dashboard cannot be loaded right now because Grafana is not reachable from OMERO.web.</p>
+      <p>
+        The monitoring dashboard cannot be loaded right now because Grafana is
+        not reachable from OMERO.web.
+      </p>
       <p><strong>Upstream status:</strong> <code>{{ status_code }}</code></p>
       <p><strong>Checked endpoints:</strong> <code>{{ attempted_targets }}</code></p>
       <p>Recommended checks: ensure the Grafana container is running and healthy, then retry.</p>
@@ -1451,8 +1457,14 @@ def _collect_system_metrics(prometheus_base_url: str) -> Dict[str, Optional[floa
     }
     expressions = {
         "cpu_usage_percent": '100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))',
-        "memory_usage_percent": "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))",
-        "disk_usage_percent": '100 * (1 - (node_filesystem_avail_bytes{fstype!="tmpfs",mountpoint="/"} / node_filesystem_size_bytes{fstype!="tmpfs",mountpoint="/"}))',
+        "memory_usage_percent": (
+            "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))"
+        ),
+        "disk_usage_percent": (
+            '100 * (1 - (node_filesystem_avail_bytes{fstype!="tmpfs",'
+            'mountpoint="/"} / node_filesystem_size_bytes{fstype!="tmpfs",'
+            'mountpoint="/"}))'
+        ),
         "network_receive_bps": 'sum(rate(node_network_receive_bytes_total{device!="lo"}[5m]))',
         "network_transmit_bps": 'sum(rate(node_network_transmit_bytes_total{device!="lo"}[5m]))',
     }

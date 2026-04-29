@@ -72,7 +72,8 @@ def validate_user_password(conn, password):
     host, port = resolve_omero_host_port(conn)
     if not username or not host or not port:
         logger.error(
-            "Unable to resolve OMERO connection details for re-authentication (username=%s, host=%s, port=%s).",
+            "Unable to resolve OMERO connection details for re-authentication "
+            "(username=%s, host=%s, port=%s).",
             sanitize_log_value(username),
             sanitize_log_value(host),
             sanitize_log_value(port),

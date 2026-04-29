@@ -108,7 +108,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--config-file",
         default=DEFAULT_CONFIG_FILE,
-        help=f"Mypy config path relative to the repository root. Defaults to {DEFAULT_CONFIG_FILE}.",
+        help=(
+            "Mypy config path relative to the repository root. Defaults to "
+            f"{DEFAULT_CONFIG_FILE}."
+        ),
     )
     parser.add_argument(
         "--print-files",

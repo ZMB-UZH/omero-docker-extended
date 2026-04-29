@@ -33,6 +33,23 @@ _DEFAULT_LABEL_CACHE_MAX_BYTES = 8 * 1024 * 1024
 _CACHE_MAX_ITEMS = 128
 _COMPOSE_SERVICE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _INTERNAL_LOG_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$")
+_LEVEL_MAP = {
+    "TRACE": "debug",
+    "DEBUG": "debug",
+    "INFO": "info",
+    "NOTICE": "info",
+    "WARN": "warn",
+    "WARNING": "warn",
+    "ERROR": "error",
+    "SEVERE": "error",
+    "CRITICAL": "fatal",
+    "FATAL": "fatal",
+    "PANIC": "fatal",
+    "LOG": "info",  # Postgres uses "LOG"
+}
+_LEVEL_TOKEN_PATTERN = (
+    r"(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|SEVERE|CRITICAL|FATAL|PANIC|LOG)"
+)
 
 _INTERNAL_LOG_GLOB_PATTERNS = {
     "omeroserver": (
@@ -370,22 +387,6 @@ def _parse_level_from_message(message: str) -> Optional[str]:
     if not message:
         return None
 
-    # Map of recognised tokens → canonical level names.
-    _LEVEL_MAP = {
-        "TRACE": "debug",
-        "DEBUG": "debug",
-        "INFO": "info",
-        "NOTICE": "info",
-        "WARN": "warn",
-        "WARNING": "warn",
-        "ERROR": "error",
-        "SEVERE": "error",
-        "CRITICAL": "fatal",
-        "FATAL": "fatal",
-        "PANIC": "fatal",
-        "LOG": "info",  # Postgres uses "LOG"
-    }
-
     # Pattern 1: level keyword in square brackets or after a timestamp, e.g.
     #   "2026-02-02 11:01:49,631 DEBUG [... "
     #   "[INFO] some message"
@@ -393,7 +394,7 @@ def _parse_level_from_message(message: str) -> Optional[str]:
     # We look for a standalone level token surrounded by whitespace, brackets,
     # or start/end of string.
     m = re.search(
-        r"(?:^|[\s\[\(])(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|SEVERE|CRITICAL|FATAL|PANIC|LOG)(?:[\s\]\):]|$)",
+        rf"(?:^|[\s\[\(]){_LEVEL_TOKEN_PATTERN}(?:[\s\]\):]|$)",
         message[:500],  # limit search to first 500 chars for performance
     )
     if m:
@@ -734,7 +735,8 @@ def _prepare_query_jobs(
         jobs.append(
             _QueryJob(
                 query=_append_text_filter(
-                    f'{{compose_service="{_escape_logql_string(normalized)}", log_type="internal"}}',
+                    f'{{compose_service="{_escape_logql_string(normalized)}", '
+                    'log_type="internal"}',
                     text_query,
                 ),
                 source_type="internal_all",
@@ -1028,11 +1030,11 @@ def _strip_message_prefix(message: str) -> str:
     patterns = [
         re.compile(
             r"^\s*\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,6})?\s+"
-            r"\[?(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|SEVERE|CRITICAL|FATAL|PANIC|LOG)\]?\s+",
+            rf"\[?{_LEVEL_TOKEN_PATTERN}\]?\s+",
             re.IGNORECASE,
         ),
         re.compile(
-            r"^\s*\[?(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|SEVERE|CRITICAL|FATAL|PANIC|LOG)\]?\s+"
+            rf"^\s*\[?{_LEVEL_TOKEN_PATTERN}\]?\s+"
             r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,6})?\s+",
             re.IGNORECASE,
         ),
@@ -1062,7 +1064,10 @@ def _build_internal_file_query(
     # LogQL string parsing consumes backslashes before the regex engine sees
     # them, so regex escapes must be doubled to survive into the matcher.
     escaped = re.escape(filename).replace("\\", "\\\\")
-    return f'{{compose_service="{_escape_logql_string(normalized)}", log_type="internal", {label_key}=~"(^|.*/){escaped}$"}}'
+    return (
+        f'{{compose_service="{_escape_logql_string(normalized)}", '
+        f'log_type="internal", {label_key}=~"(^|.*/){escaped}$"}}'
+    )
 
 
 def _build_internal_files_query(

@@ -16,13 +16,9 @@ HELPER_PATH = REPO_ROOT / "startup" / "job_service_group_sync.py"
 class FakeApiUsageException(Exception):
     """Test double for fake API usage exception."""
 
-    pass
-
 
 class FakeValidationException(Exception):
     """Test double for fake validation exception."""
-
-    pass
 
 
 class FakeRValue:

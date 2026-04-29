@@ -576,8 +576,6 @@ def test_exception_helpers_detect_chained_security_and_processor_errors(
     class SecurityViolation(Exception):
         """Represent security violation."""
 
-        pass
-
     outer = RuntimeError("outer")
     outer.__cause__ = SecurityViolation("permission denied")
     processor_exc = RuntimeError("wrapper")
@@ -1336,8 +1334,6 @@ def test_imaris_helper_fallbacks_cover_call_signatures_and_config_failures(
 
     class SecurityViolation(Exception):
         """Represent security violation."""
-
-        pass
 
     class _ConfigService:
         """Represent config service."""

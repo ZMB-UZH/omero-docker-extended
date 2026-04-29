@@ -109,8 +109,6 @@ def _install_import_stubs() -> None:
     class LockException(Exception):
         """Represent lock exception."""
 
-        pass
-
     portalocker_module.Lock = Lock
     portalocker_module.exceptions = types.SimpleNamespace(LockException=LockException)
     sys.modules["portalocker"] = portalocker_module
@@ -249,8 +247,6 @@ def _install_omp_dependency_stubs() -> None:
     class AiAssistError(Exception):
         """Represent ai assist error."""
 
-        pass
-
     ai_assist_module.AiAssistError = AiAssistError
     ai_assist_module.generate_ai_regex = lambda *args, **kwargs: {
         "regex": "_",
@@ -267,22 +263,14 @@ def _install_omp_dependency_stubs() -> None:
     class VariableStoreError(Exception):
         """Represent variable store error."""
 
-        pass
-
     class AiCredentialStoreError(Exception):
         """Represent ai credential store error."""
-
-        pass
 
     class UserSettingsStoreError(Exception):
         """Represent user settings store error."""
 
-        pass
-
     class UserDataStoreError(Exception):
         """Represent user data store error."""
-
-        pass
 
     data_store_module.VariableStoreError = VariableStoreError
     data_store_module.AiCredentialStoreError = AiCredentialStoreError
