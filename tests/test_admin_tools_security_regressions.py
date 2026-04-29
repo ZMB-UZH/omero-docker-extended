@@ -47,8 +47,6 @@ class _JsonResponse(_BaseResponse):
 class _HttpResponse(_BaseResponse):
     """Represent HTTP response."""
 
-    pass
-
 
 class _HttpResponseRedirect(_HttpResponse):
     """Represent HTTP response redirect."""

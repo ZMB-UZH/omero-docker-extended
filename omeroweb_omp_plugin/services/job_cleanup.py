@@ -1,6 +1,7 @@
 """
 Job cleanup for RAM-based job storage (redis).
-This module handles automatic cleanup of old job files to prevent RAM accumulation in the tmpfs-mounted job directory.
+This module handles automatic cleanup of old job files to prevent RAM
+accumulation in the tmpfs-mounted job directory.
 """
 
 import logging

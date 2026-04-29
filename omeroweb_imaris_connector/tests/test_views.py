@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from iter_test_helpers import next_or_fail
-
-import json
 import django
+import json
 import logging
 from types import SimpleNamespace
 
 from django.conf import settings
-import pytest
 from django.test import RequestFactory
+from iter_test_helpers import next_or_fail
+import pytest
 
 if not settings.configured:
     settings.configure(

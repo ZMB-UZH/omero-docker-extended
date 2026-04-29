@@ -665,6 +665,18 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             if not _is_group_folder_available(group_path):
                 pending.append(group_name)
                 if not _can_manage_group_directories(group_root):
+                    effective_ids = (
+                        f"{group_root_access['effective_uid']}:"
+                        f"{group_root_access['effective_gid']}"
+                    )
+                    effective_names = (
+                        f"{group_root_access['effective_user']}:"
+                        f"{group_root_access['effective_group']}"
+                    )
+                    owner_names = (
+                        f"{group_root_access.get('owner_user', 'unknown')}:"
+                        f"{group_root_access.get('owner_group', 'unknown')}"
+                    )
                     _append_reconcile_event(
                         state,
                         event_key=group_key,
@@ -672,11 +684,11 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
                         message=(
                             f"Quota pending for group '{group_name}': managed root "
                             f"{group_root} is not writable by the omeroweb process "
-                            f"(uid={group_root_access['effective_uid']}:{group_root_access['effective_gid']} "
-                            f"{group_root_access['effective_user']}:{group_root_access['effective_group']}; "
+                            f"(uid={effective_ids} {effective_names}; "
                             f"mode={group_root_access.get('mode_octal', 'unknown')}; "
-                            f"owner={group_root_access.get('owner_user', 'unknown')}:{group_root_access.get('owner_group', 'unknown')}). "
-                            "Waiting for OMERO.server to create/register the directory during normal import/group operations. "
+                            f"owner={owner_names}). "
+                            "Waiting for OMERO.server to create/register the "
+                            "directory during normal import/group operations. "
                             f"enforcer_available={enforcer_available} marker={enforcer_marker}"
                         ),
                     )
@@ -686,8 +698,10 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
                         event_key=group_key,
                         level="info",
                         message=(
-                            f"Quota pending for group '{group_name}': directory not present at {group_path}. "
-                            "Waiting for OMERO.server to create/register the directory during normal import/group operations. "
+                            f"Quota pending for group '{group_name}': "
+                            f"directory not present at {group_path}. "
+                            "Waiting for OMERO.server to create/register the "
+                            "directory during normal import/group operations. "
                             f"enforcer_available={enforcer_available} marker={enforcer_marker}"
                         ),
                     )

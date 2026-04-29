@@ -188,7 +188,10 @@ def wrong_password():
 
 def validation_unavailable():
     """Handle validation unavailable."""
-    return "Unable to validate credentials. Please try again later or contact the server administrator."
+    return (
+        "Unable to validate credentials. Please try again later or contact the "
+        "server administrator."
+    )
 
 
 def provider_and_key_required():

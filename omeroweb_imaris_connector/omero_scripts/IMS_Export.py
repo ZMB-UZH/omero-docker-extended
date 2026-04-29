@@ -1,20 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging
-
-logger = logging.getLogger(__name__)
-
-from omero.gateway import BlitzGateway
-from omero.rtypes import rstring
-from omero import scripts
-import omero.rtypes
-import os
-import shutil
-import re
 import hashlib
+import logging
+import os
+import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 
+import omero.rtypes
+from omero import scripts
+from omero.gateway import BlitzGateway
+from omero.rtypes import rstring
 from omero_plugin_common import process_utils
 from omero_plugin_common.env_utils import (
     ENV_FILE_OMERO_CELERY,
@@ -22,6 +19,8 @@ from omero_plugin_common.env_utils import (
     get_env,
 )
 from omero_plugin_common.logging_utils import summarize_process_output
+
+logger = logging.getLogger(__name__)
 
 IMARISCONVERT_INSTALL_DIR = "/opt/omero/imarisconvert"
 BIOFORMATS_SUBDIR = "bioformats"
@@ -131,7 +130,10 @@ def _ensure_bioformats_jar(install_dir):
             return jar_path
 
     bf_version = get_env("BIOFORMATS_VERSION", env_file=ENV_FILE_OMEROSERVER)
-    bf_url = f"https://downloads.openmicroscopy.org/bio-formats/{bf_version}/artifacts/{BIOFORMATS_JAR_NAME}"
+    bf_url = (
+        f"https://downloads.openmicroscopy.org/bio-formats/{bf_version}/"
+        f"artifacts/{BIOFORMATS_JAR_NAME}"
+    )
     print(f"ERROR: Missing Bio-Formats jar at: {jar_path}")
     print(
         "ERROR: Refusing runtime network download for security reasons. "

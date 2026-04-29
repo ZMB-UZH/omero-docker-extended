@@ -112,7 +112,8 @@ def _open_service_connection(host: str, port: int, group_id=None):
             ok = conn.connect()
         except Exception as exc:
             logger.error(
-                "job-service connect() raised: host=%s port=%s tls=%s error_type=%s has_last_error=%s",
+                "job-service connect() raised: host=%s port=%s tls=%s "
+                "error_type=%s has_last_error=%s",
                 sanitize_log_value(host),
                 port,
                 "enabled" if credentials.secure else "disabled",

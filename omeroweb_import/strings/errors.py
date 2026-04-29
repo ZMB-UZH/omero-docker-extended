@@ -208,12 +208,18 @@ def import_session_expired():
 
 def import_parent_directory_not_writable(group_name=None, parent_id=None):
     """Handle import parent directory not writable."""
-    detail = "Import failed because OMERO denied write access to the managed repository parent directory"
+    detail = (
+        "Import failed because OMERO denied write access to the managed "
+        "repository parent directory"
+    )
     if group_name:
         detail += f" for group '{group_name}'"
     if parent_id:
         detail += f" (directory id {parent_id})"
-    detail += ". This usually means the group-level repository folder already exists but is owned by a different user."
+    detail += (
+        ". This usually means the group-level repository folder already exists "
+        "but is owned by a different user."
+    )
     return detail
 
 

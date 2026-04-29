@@ -716,7 +716,8 @@ def job_progress(request, job_id, conn=None, _url=None, **kwargs):
                         )
                         if saved:
                             batch_logs.append(
-                                f"Image {iid} ({filename}): saved {len(metadata_mapping)}+1 acquisition entries."
+                                f"Image {iid} ({filename}): saved "
+                                f"{len(metadata_mapping)}+1 acquisition entries."
                             )
                         else:
                             batch_logs.append(

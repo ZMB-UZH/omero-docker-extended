@@ -551,26 +551,26 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
                 return False
 
             return _directory_is_usable(path)
-        else:
-            # Directory exists - check and fix permissions if necessary
-            # NEVER delete any files
-            try:
-                current_perms = stat.S_IMODE(path.stat().st_mode)
-                if current_perms != mode:
-                    path.chmod(mode)
-                    logger.warning(
-                        "Fixed permissions for existing directory: %s (was %s, now %s)",
-                        sanitize_log_value(path),
-                        oct(current_perms),
-                        oct(mode),
-                    )
-            except OSError as perm_exc:
+
+        # Directory exists - check and fix permissions if necessary
+        # NEVER delete any files
+        try:
+            current_perms = stat.S_IMODE(path.stat().st_mode)
+            if current_perms != mode:
+                path.chmod(mode)
                 logger.warning(
-                    "Could not verify/fix permissions for %s: %s",
+                    "Fixed permissions for existing directory: %s (was %s, now %s)",
                     sanitize_log_value(path),
-                    sanitize_log_value(perm_exc),
+                    oct(current_perms),
+                    oct(mode),
                 )
-            return _directory_is_usable(path)
+        except OSError as perm_exc:
+            logger.warning(
+                "Could not verify/fix permissions for %s: %s",
+                sanitize_log_value(path),
+                sanitize_log_value(perm_exc),
+            )
+        return _directory_is_usable(path)
     except OSError as exc:
         logger.error(
             "Unable to create/verify directory %s: %s",
@@ -1882,14 +1882,16 @@ def _finalize_imported_zarr_image_metadata(
                 continue
             if image is None:
                 errors_found.append(
-                    f"Image:{image_id} could not be loaded during native Zarr metadata finalization."
+                    f"Image:{image_id} could not be loaded during native "
+                    "Zarr metadata finalization."
                 )
                 continue
 
             lsid, _entity_type = _query_image_external_info(conn, int(image_id))
             if not lsid:
                 errors_found.append(
-                    f"Image:{image_id} is missing externalInfo.lsid during native Zarr metadata finalization."
+                    f"Image:{image_id} is missing externalInfo.lsid during "
+                    "native Zarr metadata finalization."
                 )
                 continue
 
@@ -1919,13 +1921,15 @@ def _finalize_imported_zarr_image_metadata(
                 pixels = image.getPrimaryPixels()
             except Exception as exc:
                 errors_found.append(
-                    f"Image:{image_id} primary Pixels lookup failed during metadata finalization: {exc}"
+                    f"Image:{image_id} primary Pixels lookup failed during "
+                    f"metadata finalization: {exc}"
                 )
                 continue
             pixels_obj = getattr(pixels, "_obj", None)
             if pixels_obj is None:
                 errors_found.append(
-                    f"Image:{image_id} primary Pixels object was unavailable during metadata finalization."
+                    f"Image:{image_id} primary Pixels object was unavailable "
+                    "during metadata finalization."
                 )
                 continue
 
@@ -1948,7 +1952,8 @@ def _finalize_imported_zarr_image_metadata(
                 changed = True
             if setter_error:
                 errors_found.append(
-                    f"Image:{image_id} Pixels object is missing a physical-size setter for axis {setter_error}."
+                    f"Image:{image_id} Pixels object is missing a "
+                    f"physical-size setter for axis {setter_error}."
                 )
                 continue
             if changed:
@@ -1956,7 +1961,8 @@ def _finalize_imported_zarr_image_metadata(
                     update_service.saveAndReturnObject(pixels_obj)
                 except Exception as exc:
                     errors_found.append(
-                        f"Image:{image_id} physical pixel-size save failed during metadata finalization: {exc}"
+                        f"Image:{image_id} physical pixel-size save failed "
+                        f"during metadata finalization: {exc}"
                     )
                     continue
 
@@ -1969,14 +1975,16 @@ def _finalize_imported_zarr_image_metadata(
                 continue
             if refreshed_image is None:
                 errors_found.append(
-                    f"Image:{image_id} could not be reloaded after native Zarr metadata finalization."
+                    f"Image:{image_id} could not be reloaded after native "
+                    "Zarr metadata finalization."
                 )
                 continue
             try:
                 refreshed_pixels = refreshed_image.getPrimaryPixels()
             except Exception as exc:
                 errors_found.append(
-                    f"Image:{image_id} primary Pixels reload failed after native Zarr metadata finalization: {exc}"
+                    f"Image:{image_id} primary Pixels reload failed after "
+                    f"native Zarr metadata finalization: {exc}"
                 )
                 continue
             for axis_name, expected_length in expected_sizes.items():
@@ -1988,7 +1996,8 @@ def _finalize_imported_zarr_image_metadata(
                     actual_length
                 ) != _native_zarr_length_signature(expected_length):
                     errors_found.append(
-                        f"Image:{image_id} physicalSize{axis_name.upper()} did not persist from native Zarr metadata."
+                        f"Image:{image_id} physicalSize{axis_name.upper()} "
+                        "did not persist from native Zarr metadata."
                     )
                     break
 
@@ -2660,7 +2669,8 @@ def _prepare_request_job_import_datasets(
                 )
                 if dataset_id is None:
                     logger.warning(
-                        "Failed to create dataset %s for job %s using the request OMERO connection.",
+                        "Failed to create dataset %s for job %s using the "
+                        "request OMERO connection.",
                         sanitize_log_value(dataset_name),
                         sanitize_log_value(job_id),
                     )
@@ -2762,7 +2772,8 @@ def _ensure_job_dataset_targets(
                 )
                 if dataset_id is None:
                     logger.warning(
-                        "Failed to create dataset %s for job %s using the request OMERO connection.",
+                        "Failed to create dataset %s for job %s using the "
+                        "request OMERO connection.",
                         sanitize_log_value(dataset_name),
                         sanitize_log_value(job_dict.get("job_id")),
                     )
@@ -2770,7 +2781,8 @@ def _ensure_job_dataset_targets(
             return True, None
         except Exception as exc:
             logger.warning(
-                "Failed to prepare dataset targets for job %s using the request OMERO connection: %s",
+                "Failed to prepare dataset targets for job %s using the "
+                "request OMERO connection: %s",
                 sanitize_log_value(job_dict.get("job_id")),
                 sanitize_log_value(exc),
             )
@@ -2796,7 +2808,8 @@ def _ensure_job_dataset_targets(
     ) as user_conn:
         if not user_conn:
             logger.warning(
-                "Background dataset preparation for job %s could not open an independent user session.",
+                "Background dataset preparation for job %s could not open an "
+                "independent user session.",
                 sanitize_log_value(job_dict.get("job_id")),
             )
             return False, generic_error
@@ -2810,7 +2823,8 @@ def _ensure_job_dataset_targets(
             )
             if dataset_id is None:
                 logger.warning(
-                    "Failed to create dataset %s for job %s using an independent background OMERO session.",
+                    "Failed to create dataset %s for job %s using an "
+                    "independent background OMERO session.",
                     sanitize_log_value(dataset_name),
                     sanitize_log_value(job_dict.get("job_id")),
                 )
@@ -3083,7 +3097,8 @@ def _open_admin_connection(host: str, port: int) -> Optional[BlitzGateway]:
             except Exception:
                 last_err = None
             logger.error(
-                "root connect() failed for background import sessions: host=%s port=%s tls=%s lastError=%r",
+                "root connect() failed for background import sessions: "
+                "host=%s port=%s tls=%s lastError=%r",
                 sanitize_log_value(host),
                 sanitize_log_value(port),
                 "enabled" if credentials.secure else "disabled",
@@ -3790,19 +3805,19 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
 
             images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
 
-            if images:
-                elapsed = time.time() - start_time
-                if len(images) > 1:
-                    logger.warning(
-                        "Found %d images named '%s' - using first",
-                        len(images),
-                        file_name,
-                    )
-                logger.debug("Found image '%s' globally in %.2fs", file_name, elapsed)
-                return conn.getObject("Image", images[0].getId().getValue())
-            else:
+            if not images:
                 logger.warning("Image '%s' not found", file_name)
                 return None
+
+            elapsed = time.time() - start_time
+            if len(images) > 1:
+                logger.warning(
+                    "Found %d images named '%s' - using first",
+                    len(images),
+                    file_name,
+                )
+            logger.debug("Found image '%s' globally in %.2fs", file_name, elapsed)
+            return conn.getObject("Image", images[0].getId().getValue())
         except Exception as exc:
             logger.error("Global search failed for '%s': %s", file_name, exc)
             return None
@@ -4094,7 +4109,8 @@ def _open_service_connection(
             ok = conn.connect()
         except Exception as exc:
             logger.error(
-                "job-service connect() raised: host=%s port=%s tls=%s error_type=%s has_last_error=%s",
+                "job-service connect() raised: host=%s port=%s tls=%s "
+                "error_type=%s has_last_error=%s",
                 sanitize_log_value(host),
                 port,
                 "enabled" if credentials.secure else "disabled",
@@ -4334,7 +4350,8 @@ def _build_ome_zarr_import_name_normalization_context(
     )
     if image_node_paths and len(image_node_paths) != len(image_display_names):
         logger.warning(
-            "Ignoring inconsistent OME-Zarr naming metadata for %s: %d image nodes but %d display names.",
+            "Ignoring inconsistent OME-Zarr naming metadata for %s: "
+            "%d image nodes but %d display names.",
             sanitize_log_value(file_path),
             len(image_node_paths),
             len(image_display_names),
@@ -4461,7 +4478,8 @@ def _apply_import_name_normalization_context(
         if any(target_image_names):
             if len(images) != len(target_image_names):
                 logger.warning(
-                    "Skipping metadata-driven name normalization for %s because %d imported images do not match %d expected names.",
+                    "Skipping metadata-driven name normalization for %s "
+                    "because %d imported images do not match %d expected names.",
                     sanitize_log_value(entry.get("relative_path") or ""),
                     len(images),
                     len(target_image_names),
@@ -4754,8 +4772,6 @@ _MANAGED_COMPONENT_RE = re.compile(r"(?!\.{1,2}$)[^/\\\x00]+")
 class _ManagedPathValidationError(ValueError):
     """Represent managed path validation error."""
 
-    pass
-
 
 def _invalid_managed_path(display_path: str) -> _ManagedPathValidationError:
     """Handle invalid managed path."""
@@ -5027,11 +5043,11 @@ def _managed_parent_runtime_error(
         )
     except (OSError, ValueError):
         return errors.invalid_filename("/".join(relative_parts))
-    else:
-        os.close(dir_fd)
-        if not file_name:
-            return errors.invalid_filename("/".join(relative_parts))
-        return None
+
+    os.close(dir_fd)
+    if not file_name:
+        return errors.invalid_filename("/".join(relative_parts))
+    return None
 
 
 def _resolve_managed_child_parts(
@@ -6101,7 +6117,8 @@ def _run_compatibility_check_inner(job_id: str):
             )
             if staged_error:
                 logger.warning(
-                    "Compatibility check rejected staged path for job %s: relative_path=%s staged_path=%s error=%s",
+                    "Compatibility check rejected staged path for job %s: "
+                    "relative_path=%s staged_path=%s error=%s",
                     job_id,
                     unit.get("relative_path"),
                     staged_path,
@@ -7277,7 +7294,8 @@ def _verify_imported_zarr_images_renderable(
                     break
                 if not thumbnail:
                     errors_found.append(
-                        f"Image:{image_id} thumbnail {thumb_size[0]}x{thumb_size[1]} returned no data."
+                        f"Image:{image_id} thumbnail {thumb_size[0]}x"
+                        f"{thumb_size[1]} returned no data."
                     )
                     break
 
@@ -7585,7 +7603,10 @@ def _import_job_entry(
             and zarr_import_backend == _ZARR_IMPORT_BACKEND_NATIVE
         ):
             if not native_plan or not native_plan.kind:
-                error_msg = "Native OME-Zarr routing metadata is missing for the staged .zarr store."
+                error_msg = (
+                    "Native OME-Zarr routing metadata is missing for the "
+                    "staged .zarr store."
+                )
                 job_error = messages.job_error_with_path(rel_path, error_msg)
                 return {
                     "cleanup_staged_paths": cleanup_staged_paths,
@@ -7743,7 +7764,8 @@ def _import_job_entry(
                     )
                 elif needs_api_image_lookup:
                     logger.info(
-                        "OMERO API verification found imported images for post-import naming on %s: %s",
+                        "OMERO API verification found imported images for "
+                        "post-import naming on %s: %s",
                         sanitize_log_value(rel_path),
                         sanitize_log_value(api_verified_image_ids[:5]),
                     )
@@ -7987,7 +8009,8 @@ def _process_import_job(job_id: str):
 
             if skipped_count or incompatible_skipped:
                 logger.info(
-                    "Import thread: pre-skipped %d non-importable + %d incompatible files for job %s",
+                    "Import thread: pre-skipped %d non-importable + "
+                    "%d incompatible files for job %s",
                     skipped_count,
                     incompatible_skipped,
                     safe_job_id_for_log,
@@ -8042,7 +8065,8 @@ def _process_import_job(job_id: str):
 
                     _append_job_message(
                         job,
-                        f"OME-NGFF converter (OME-Zarr) ({entry_idx + 1}/{len(importable_entries)}): "
+                        f"OME-NGFF converter (OME-Zarr) ({entry_idx + 1}/"
+                        f"{len(importable_entries)}): "
                         f"converting {rel_path}",
                     )
                     _save_job(job)
@@ -8067,7 +8091,8 @@ def _process_import_job(job_id: str):
                             )
                             _append_job_error(
                                 job,
-                                f"OME-NGFF converter (OME-Zarr) failed for {rel_path}: {error_summary}",
+                                "OME-NGFF converter (OME-Zarr) failed for "
+                                f"{rel_path}: {error_summary}",
                             )
                             conversion_errors += 1
                             _save_job(job)
@@ -8326,14 +8351,17 @@ def _process_import_job(job_id: str):
                 if derived:
                     sem_edx_associations = derived
                     job["sem_edx_associations"] = derived
+                    derived_txt_count = sum(len(value) for value in derived.values())
                     _append_job_message(
                         job,
-                        f"SEM EDX: derived {sum(len(v) for v in derived.values())} TXT attachment(s) from uploaded files (no UI associations received)",
+                        f"SEM EDX: derived {derived_txt_count} TXT attachment(s) "
+                        "from uploaded files (no UI associations received)",
                     )
                     _save_job(job)
                 else:
                     logger.info(
-                        "SEM EDX mode enabled for job %s but no TXT/image associations could be derived; skipping TXT attachments",
+                        "SEM EDX mode enabled for job %s but no TXT/image "
+                        "associations could be derived; skipping TXT attachments",
                         safe_job_id_for_log,
                     )
                     _append_job_message(
@@ -8476,14 +8504,16 @@ def _process_import_job(job_id: str):
                                     and not _validate_session(conn)
                                 ):
                                     logger.warning(
-                                        "job-service session expired, reopening service connection..."
+                                        "job-service session expired, reopening "
+                                        "service connection..."
                                     )
                                     try:
                                         try:
                                             conn.close()
                                         except Exception as close_exc:
                                             logger.debug(
-                                                "Failed to close expired job-service connection: %s",
+                                                "Failed to close expired "
+                                                "job-service connection: %s",
                                                 sanitize_log_value(close_exc),
                                             )
                                         conn = _open_service_connection(
@@ -8494,7 +8524,8 @@ def _process_import_job(job_id: str):
 
                                     if not conn:
                                         logger.error(
-                                            "Failed to reopen job-service connection, aborting SEM EDX attachments"
+                                            "Failed to reopen job-service "
+                                            "connection, aborting SEM EDX attachments"
                                         )
                                         break
 
@@ -8573,7 +8604,9 @@ def _process_import_job(job_id: str):
                                         sem_dataset_id = None
 
                                     logger.info(
-                                        "SEM-EDX: SEM image dataset resolved from OMERO: image=%s image_id=%s sem_dataset_id=%s",
+                                        "SEM-EDX: SEM image dataset resolved "
+                                        "from OMERO: image=%s image_id=%s "
+                                        "sem_dataset_id=%s",
                                         image_name,
                                         image_id,
                                         sem_dataset_id,
@@ -8600,7 +8633,8 @@ def _process_import_job(job_id: str):
                                     )
                                     if staged_error:
                                         logger.warning(
-                                            "Rejected SEM-EDX text staged path for job %s: txt=%s staged=%s error=%s",
+                                            "Rejected SEM-EDX text staged path "
+                                            "for job %s: txt=%s staged=%s error=%s",
                                             safe_job_id_for_log,
                                             sanitize_log_value(txt_rel),
                                             sanitize_log_value(staged_path),
@@ -8667,7 +8701,9 @@ def _process_import_job(job_id: str):
                                         )
                                         if staged_plot_error:
                                             logger.warning(
-                                                "Rejected SEM-EDX plot staged path for job %s: rel=%s staged=%s error=%s",
+                                                "Rejected SEM-EDX plot staged "
+                                                "path for job %s: rel=%s staged=%s "
+                                                "error=%s",
                                                 safe_job_id_for_log,
                                                 sanitize_log_value(plot_import_rel),
                                                 sanitize_log_value(plot_staged_rel),
@@ -8683,7 +8719,8 @@ def _process_import_job(job_id: str):
                                             shutil.copy2(plot_path, staged_plot_path)
                                         except Exception as exc:
                                             logger.error(
-                                                "Failed to stage SEM-EDX plot PNG for import: src=%s dst=%s error=%s",
+                                                "Failed to stage SEM-EDX plot PNG "
+                                                "for import: src=%s dst=%s error=%s",
                                                 sanitize_log_value(plot_path),
                                                 sanitize_log_value(staged_plot_path),
                                                 sanitize_log_value(exc),
@@ -8691,13 +8728,15 @@ def _process_import_job(job_id: str):
                                             )
                                             _append_job_error(
                                                 job,
-                                                f"Failed to stage SEM-EDX plot PNG for import: {staged_plot_path.name}",
+                                                "Failed to stage SEM-EDX plot PNG "
+                                                f"for import: {staged_plot_path.name}",
                                             )
                                             imported_plots.add(txt_rel)
                                             continue
 
                                         logger.info(
-                                            "SEM-EDX: plot staged for import: rel=%s staged=%s exists=%s",
+                                            "SEM-EDX: plot staged for import: "
+                                            "rel=%s staged=%s exists=%s",
                                             sanitize_log_value(plot_import_rel),
                                             sanitize_log_value(staged_plot_path),
                                             staged_plot_path.exists(),
@@ -8731,7 +8770,8 @@ def _process_import_job(job_id: str):
                                                     job, import_result["job_message"]
                                                 )
                                             logger.error(
-                                                "Failed to import SEM EDX plot %s (dataset_id=%s staged=%s)",
+                                                "Failed to import SEM EDX plot %s "
+                                                "(dataset_id=%s staged=%s)",
                                                 sanitize_log_value(plot_import_rel),
                                                 sem_dataset_id,
                                                 sanitize_log_value(
@@ -8750,9 +8790,10 @@ def _process_import_job(job_id: str):
                                             )
                                         imported_plots.add(txt_rel)
 
-                                    # Attach via OMERO API with a detached user session when available.
+                                    # Attach through the API with a detached
+                                    # user session when available.
                                     # This keeps ownership/group context aligned with the importing
-                                    # user without requiring job-service to be an OMERO administrator.
+                                    # user without requiring job-service admin rights.
                                     try:
                                         logger.info(
                                             "Attaching %s to %s (Image:%d)",
@@ -8810,7 +8851,8 @@ def _process_import_job(job_id: str):
                             # Final save
                             _save_job(job)
                             logger.info(
-                                "Completed SEM EDX attachment processing for job %s: %d/%d processed",
+                                "Completed SEM EDX attachment processing for "
+                                "job %s: %d/%d processed",
                                 safe_job_id_for_log,
                                 attachment_count,
                                 total_attachments,

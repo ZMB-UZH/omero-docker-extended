@@ -10,15 +10,15 @@ from django.conf import settings
 from django.http import Http404
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
-import omero
 from django.urls.resolvers import URLPattern, URLResolver
 import numpy as np
+import omero
 from omero.rtypes import rlong
 from omeroweb.httprsp import HttpJavascriptResponseServerError
 from omeroweb.webclient.decorators import login_required
 from omeroweb.webgateway.marshal import channelMarshal
 
-from omero_plugin_common.env_utils import get_bool_env, ENV_FILE_OMEROWEB
+from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_bool_env
 
 from .utils import encode_store_backed_pil_image
 from .utils import get_safe_image_tile_size

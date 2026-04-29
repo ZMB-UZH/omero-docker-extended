@@ -147,8 +147,6 @@ def _install_import_stubs():
         class LockException(Exception):
             """Represent lock exception."""
 
-            pass
-
         class Lock:
             """Represent lock."""
 
@@ -216,8 +214,6 @@ def _install_import_stubs():
 
         class UserSettingsStoreError(Exception):
             """Represent user settings store error."""
-
-            pass
 
         data_store.UserSettingsStoreError = UserSettingsStoreError
         data_store.save_user_settings = lambda username, settings: None

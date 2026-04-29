@@ -901,8 +901,6 @@ def test_load_store_backed_image_node_reader_and_cache_fallbacks(tmp_path, monke
     class _MissingStoreImage:
         """Represent missing store image."""
 
-        pass
-
     missing_store_image = _MissingStoreImage()
     monkeypatch.setattr(
         "omero_web_zarr.utils.resolve_image_backing_zarr_store",

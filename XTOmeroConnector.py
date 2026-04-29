@@ -1,8 +1,3 @@
-import logging
-import traceback
-import importlib
-
-logger = logging.getLogger(__name__)
 #
 # <CustomTools>
 #  <Menu>
@@ -18,26 +13,31 @@ ImarisXT OMERO Connector
 Requests server-side IMS conversion and opens the resulting IMS in Imaris.
 """
 
-import sys
-import os
-import json
-import ntpath
-import stat
-import tkinter as tk
-from tkinter import filedialog, messagebox
-import threading
-import re
-import tempfile
-import time
 import datetime
-import posixpath
-import urllib.request
-import urllib.parse
-import urllib.error
 import http.cookiejar
+import importlib
+import json
+import logging
+import ntpath
+import os
+import posixpath
+import re
+import stat
+import sys
+import tempfile
+import threading
+import time
+import tkinter as tk
+import traceback
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from tkinter import filedialog, messagebox
 from typing import Any, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # Default timeout/poll values for client-side export polling.
 # These must NOT depend on server-side packages (omero_plugin_common)
@@ -678,7 +678,8 @@ def _stringvar_value(variable):
 
 def _multipart_form_body(fields, file_field_name, file_name, file_bytes):
     """Handle multipart form body."""
-    boundary = f"----OMEROConnector{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}{os.getpid()}{int(time.time() * 1000000)}"
+    timestamp = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    boundary = f"----OMEROConnector{timestamp}{os.getpid()}{int(time.time() * 1000000)}"
     body = bytearray()
 
     def append_text(value):
@@ -2171,10 +2172,11 @@ def _collect_imaris_xt_diagnostics():
         seen.add(normalized)
         deduped_xt_paths.append(normalized)
 
+    python_version_short = ".".join(str(part) for part in sys.version_info[:3])
     return {
         "python_executable": sys.executable,
         "python_version": sys.version.replace("\n", " "),
-        "python_version_short": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        "python_version_short": python_version_short,
         "imaris_exe_env": os.environ.get("IMARIS_EXE", ""),
         "imaris_home_env": os.environ.get("IMARIS_HOME", ""),
         "imaris_executable": exe_path or "",
@@ -2284,7 +2286,7 @@ def _resolve_imaris_application(
                 if app is not None:
                     return app
         except Exception as exc:
-            version_info = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+            version_info = ".".join(str(part) for part in sys.version_info[:3])
             _xt_debug(
                 "Direct Imaris XT bridge is unavailable in this Python: "
                 f"{exc}. Current Python={version_info}. "
@@ -3167,7 +3169,8 @@ class OMEROWebClient:
             "base_url": base,
         }
 
-        export_url = f"{base}/omeroweb_imaris_connector/imaris-export/?{urllib.parse.urlencode(query_params)}"
+        encoded_query = urllib.parse.urlencode(query_params)
+        export_url = f"{base}/omeroweb_imaris_connector/imaris-export/?{encoded_query}"
         _xt_debug(f"Requesting IMS export endpoint={_safe_url_for_log(export_url)}")
 
         os.makedirs(download_dir, exist_ok=True)
@@ -3180,7 +3183,8 @@ class OMEROWebClient:
                 if self._check_login_redirect(response, "IMS export request"):
                     if not self._attempt_reauth("IMS export request"):
                         raise RuntimeError(
-                            "Not authenticated to OMERO.web (redirected to login). Please login again."
+                            "Not authenticated to OMERO.web (redirected to login). "
+                            "Please login again."
                         )
                     return self.download_ims_export(
                         image_id,
@@ -3239,7 +3243,8 @@ class OMEROWebClient:
                                 if self._attempt_reauth("IMS export poll"):
                                     continue
                             raise RuntimeError(
-                                "Not authenticated to OMERO.web (redirected to login) while polling IMS export. "
+                                "Not authenticated to OMERO.web (redirected to login) "
+                                "while polling IMS export. "
                                 "Session may have expired. Please try again."
                             )
 
@@ -3298,7 +3303,8 @@ class OMEROWebClient:
             ) as response:
                 if self._check_login_redirect(response, "IMS export download"):
                     raise RuntimeError(
-                        "Not authenticated to OMERO.web (redirected to login) while downloading IMS export."
+                        "Not authenticated to OMERO.web (redirected to login) "
+                        "while downloading IMS export."
                     )
 
                 cd = response.headers.get("Content-Disposition", "")
@@ -4372,7 +4378,8 @@ class OMEROBrowserDialog:
 
         if self.imaris is None and self._get_native_bridge_python_executable():
             _xt_debug(
-                "Opening selected files in the current Imaris session via compatible native bridge runner"
+                "Opening selected files in the current Imaris session via "
+                "compatible native bridge runner"
             )
             return self._open_files_with_native_bridge_runner(
                 downloaded_files,
@@ -5509,7 +5516,7 @@ def XTOmeroConnector(aImarisId):
                 retry_interval=IMARIS_HANDLE_RETRY_INTERVAL,
             )
         except Exception:
-            # When run outside Imaris (manual debug), aImarisId may be None or already an app object.
+            # When run outside Imaris, aImarisId may be None or an app object.
             vImaris = aImarisId if _looks_like_imaris_application(aImarisId) else None
 
         if vImaris is None:
@@ -5520,7 +5527,8 @@ def XTOmeroConnector(aImarisId):
         else:
             _xt_write_log(
                 log_path,
-                f"Resolved Imaris handle type={type(vImaris).__name__} for entrypoint={aImarisId!r}",
+                f"Resolved Imaris handle type={type(vImaris).__name__} "
+                f"for entrypoint={aImarisId!r}",
             )
 
         dialog = OMEROBrowserDialog(vImaris, imaris_id=aImarisId)

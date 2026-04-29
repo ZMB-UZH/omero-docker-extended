@@ -463,7 +463,8 @@ def evaluate_workflow_run(
             return EvaluationResult(
                 status="fail",
                 message=(
-                    "security-code-scanning push payload is missing default or head branch information."
+                    "security-code-scanning push payload is missing default "
+                    "or head branch information."
                 ),
             )
         if head_branch != default_branch:

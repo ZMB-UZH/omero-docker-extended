@@ -1,5 +1,6 @@
 """Root conftest — mock heavy OMERO/Ice dependencies for test collection."""
 
+import importlib
 from importlib.machinery import ModuleSpec
 import os
 import sys
@@ -280,8 +281,8 @@ for _parent_name, _children in _submodule_wiring.items():
         if _child is not None:
             setattr(_parent, _child_name, _child)
 
-import django
-from django.conf import settings
+django = importlib.import_module("django")
+settings = importlib.import_module("django.conf").settings
 
 if not settings.configured:
     settings.configure(

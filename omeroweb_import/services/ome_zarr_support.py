@@ -141,12 +141,18 @@ def _load_root_ome_zarr_metadata(
     if "plate" in metadata_payload:
         return None, OMEZarrImageInspection(
             recognized=True,
-            support_error="OME-Zarr plate layouts are not supported by the native image-import path.",
+            support_error=(
+                "OME-Zarr plate layouts are not supported by the native "
+                "image-import path."
+            ),
         )
     if "well" in metadata_payload:
         return None, OMEZarrImageInspection(
             recognized=True,
-            support_error="OME-Zarr well layouts are not supported by the native image-import path.",
+            support_error=(
+                "OME-Zarr well layouts are not supported by the native "
+                "image-import path."
+            ),
         )
 
     return metadata_payload, None
@@ -335,7 +341,10 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
             )
             return OMEZarrImageInspection(
                 recognized=True,
-                support_error=f"Series {series_dir.name} is not a supported OME-Zarr image: {error_text}",
+                support_error=(
+                    f"Series {series_dir.name} is not a supported "
+                    f"OME-Zarr image: {error_text}"
+                ),
             )
         if series_metadata is None:
             return OMEZarrImageInspection(
@@ -350,7 +359,10 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
             )
             return OMEZarrImageInspection(
                 recognized=True,
-                support_error=f"Series {series_dir.name} is not a supported OME-Zarr image: {error_text}",
+                support_error=(
+                    f"Series {series_dir.name} is not a supported "
+                    f"OME-Zarr image: {error_text}"
+                ),
             )
         if first_supported is None:
             first_supported = series_inspection
@@ -510,7 +522,8 @@ def _extract_physical_sizes(
     if not isinstance(transforms_payload, list) or not transforms_payload:
         return (
             {},
-            "OME-Zarr metadata is missing coordinate transformations for the primary resolution level.",
+            "OME-Zarr metadata is missing coordinate transformations for the "
+            "primary resolution level.",
         )
 
     primary_transforms = transforms_payload[0]
@@ -615,7 +628,10 @@ def _rewrite_problematic_native_image_arrays(
                 decoded_bytes = source_codec.decode(encoded_bytes)
                 chunk_path.write_bytes(gzip_codec.encode(decoded_bytes))
             except Exception as exc:
-                return f"Failed to normalize OME-Zarr chunk {chunk_path.relative_to(store_root)}: {exc}"
+                relative_chunk_path = chunk_path.relative_to(store_root)
+                return (
+                    f"Failed to normalize OME-Zarr chunk {relative_chunk_path}: {exc}"
+                )
 
         metadata_payload["compressor"] = gzip_spec
         try:

@@ -69,7 +69,8 @@ OLLAMA_MODEL = (
 OLLAMA_TIMEOUT_SECONDS = 120
 
 # Namespaces used for MapAnnotations
-MAP_NS = "openmicroscopy.org/omero/client/mapAnnotation"  # default client namespace that allows editing in OMERO.web
+MAP_NS = "openmicroscopy.org/omero/client/mapAnnotation"
+# Default client namespace that allows editing in OMERO.web.
 
 # Plugin prefix marker (hash) for safe delete only what this plugin created
 
@@ -82,7 +83,8 @@ HASH_PREFIX = "omphash_v1:"
 # Stable plugin identifier used in the hash payload
 PLUGIN_ID = "omeroweb_omp_plugin"
 
-# Optional secret for hashing. If unset/empty, hashing falls back to plain SHA256, which anyone could theoretically forge.
+# Optional secret for hashing. If unset/empty, hashing falls back to plain
+# SHA256, which anyone could theoretically forge.
 # Recommended: set this as an environment variable for OMERO.web container.
 HASH_HMAC_KEY_ENV = "FMP_HASH_SECRET"
 
@@ -92,7 +94,8 @@ MAJOR_ACTION_WINDOW_SECONDS = 60
 MAJOR_ACTION_BLOCK_SECONDS = 60
 
 # Job cleanup parameters (prevent RAM hogging)
-JOB_MAX_AGE_SECONDS = 7200  # Delete jobs older than 2 hours - increase if problem with ultralong jobs appear
+JOB_MAX_AGE_SECONDS = 7200
+# Delete jobs older than 2 hours; raise this if ultralong jobs need more time.
 JOB_CLEANUP_INTERVAL = 300  # Run cleanup every 5 minutes
 
 # Hyphen protection patterns for scientific nomenclature, used in "Local Regex" creation

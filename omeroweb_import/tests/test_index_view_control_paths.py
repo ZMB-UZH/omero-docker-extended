@@ -54,8 +54,6 @@ class _NamedObject:
 class _Project(_NamedObject):
     """Represent project."""
 
-    pass
-
 
 class _Conn:
     """Represent conn."""

@@ -372,12 +372,8 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
     class _ClientError(Exception):
         """Represent client error."""
 
-        pass
-
     class _SecurityViolation(Exception):
         """Represent security violation."""
-
-        pass
 
     omero_stub = types.SimpleNamespace(
         ClientError=_ClientError,
@@ -496,12 +492,8 @@ def test_task_helpers_cover_security_validation_and_close_warning_paths(
     class _ClientError(Exception):
         """Represent client error."""
 
-        pass
-
     class _SecurityViolation(Exception):
         """Represent security violation."""
-
-        pass
 
     omero_stub = types.SimpleNamespace(
         ClientError=_ClientError,

@@ -881,7 +881,7 @@ def _get_job_state_and_outputs(conn, job_id):
                     "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
                 )
 
-        # 2) Older pattern: getJobs() returns job objects with .id/.status and maybe outputs elsewhere
+        # 2) Older pattern: getJobs() returns job objects with .id/.status.
         get_jobs = getattr(svc, "getJobs", None)
         if get_jobs:
             try:

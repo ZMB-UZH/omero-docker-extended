@@ -156,7 +156,8 @@ def delete_plugin_keyvaluepairs(request, conn=None, _url=None, **kwargs):
                         )
                         if link_result.returncode != 0:
                             logger.warning(
-                                "Failed to delete annotation link %s for image %s annotation %s: rc=%s %s",
+                                "Failed to delete annotation link %s for image %s "
+                                "annotation %s: rc=%s %s",
                                 lid,
                                 iid,
                                 aid,
