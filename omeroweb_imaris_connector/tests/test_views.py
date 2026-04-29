@@ -107,6 +107,34 @@ def test_imaris_export_capabilities_hides_omero_without_script(monkeypatch) -> N
     }
 
 
+def test_imaris_export_capabilities_hides_probe_exceptions(monkeypatch, caplog) -> None:
+    """Verify capability probes fail closed without leaking backend details."""
+    request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"capabilities": "1"},
+    )
+    request.session = SimpleNamespace(session_key=None)
+
+    views = _import_views()
+    monkeypatch.setattr(views, "use_celery", lambda: True)
+    monkeypatch.setattr(
+        views,
+        "_find_script_id",
+        lambda conn: (_ for _ in ()).throw(RuntimeError("backend secret")),
+    )
+
+    with caplog.at_level(logging.WARNING, logger=views.logger.name):
+        response = views.imaris_export(request, conn=SimpleNamespace())
+    payload = json.loads(response.content.decode("utf-8"))
+
+    assert response.status_code == 200
+    assert payload == {
+        "converters": {"OMERO": False, "Imaris": True},
+        "omero_ims_export": False,
+    }
+    assert "backend secret" in caplog.text
+
+
 def test_imaris_export_hides_job_failure_details(monkeypatch) -> None:
     """Verify test imaris export hides job failure details."""
     request = RequestFactory().get(
@@ -138,6 +166,64 @@ def test_imaris_export_hides_job_failure_details(monkeypatch) -> None:
 
     assert response.status_code == 500
     assert response.content.decode("utf-8") == views.IMS_EXPORT_JOB_FAILED_MESSAGE
+
+
+def test_imaris_export_returns_public_task_failure_messages(monkeypatch) -> None:
+    """Verify public task failures reach XT clients without backend details."""
+    views = _import_views()
+    public_error = "Could not prepare source image for IMS conversion"
+
+    status_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"job": "celery-job-public"},
+    )
+    status_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(
+        views,
+        "_poll_celery_job",
+        lambda job_id: (
+            "FAILED",
+            None,
+            "internal traceback",
+            {"error": public_error, "public_error": True},
+        ),
+    )
+    status_response = views.imaris_export(status_request, conn=None)
+    assert status_response.status_code == 200
+    status_payload = json.loads(status_response.content.decode("utf-8"))
+    assert status_payload["failed"] is True
+    assert status_payload["error"] == public_error
+    assert "internal traceback" not in status_response.content.decode("utf-8")
+
+    monkeypatch.setattr(
+        views,
+        "_poll_celery_job",
+        lambda job_id: (
+            "FAILED",
+            None,
+            public_error,
+            {"error": public_error, "public_error": True},
+        ),
+    )
+    status_response = views.imaris_export(status_request, conn=None)
+    status_payload = json.loads(status_response.content.decode("utf-8"))
+    assert status_payload["failed"] is True
+    assert status_payload["error"] == public_error
+
+    start_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"image": "1"},
+    )
+    start_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(views, "use_celery", lambda: True)
+    monkeypatch.setattr(views, "_find_script_id", lambda conn: 1)
+    monkeypatch.setattr(
+        views, "_start_celery_job", lambda *args, **kwargs: "celery-job-public"
+    )
+    monkeypatch.setattr(views.time, "sleep", lambda *_args: None)
+    start_response = views.imaris_export(start_request, conn=SimpleNamespace())
+    assert start_response.status_code == 500
+    assert start_response.content.decode("utf-8") == public_error
 
 
 def test_imaris_export_hides_internal_exception_text(monkeypatch) -> None:
@@ -752,6 +838,38 @@ def test_imaris_view_failure_paths_cover_meta_errors_missing_host_port_and_port_
         None,
         "meta boom",
         {"error": "meta boom"},
+    )
+
+    monkeypatch.setattr(
+        views.celery_app,
+        "AsyncResult",
+        lambda task_id: SimpleNamespace(
+            state=views.celery_states.SUCCESS,
+            result={
+                "state": "FAILED",
+                "outputs": None,
+                "error": "Image 7 not found",
+                "public_error": True,
+            },
+            info={
+                "state": "FAILED",
+                "outputs": None,
+                "error": "Image 7 not found",
+                "public_error": True,
+            },
+        ),
+        raising=False,
+    )
+    assert views._poll_celery_job("celery-job-15") == (
+        "FAILED",
+        None,
+        "Image 7 not found",
+        {
+            "state": "FAILED",
+            "outputs": None,
+            "error": "Image 7 not found",
+            "public_error": True,
+        },
     )
 
     with pytest.raises(ValueError, match="out of range"):

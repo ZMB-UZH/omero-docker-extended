@@ -36,9 +36,9 @@ Answer four architecture questions before any implementation work:
 ### Python footprint
 
 - Production Python files: `149`
-- Production Python lines: `58,868`
+- Production Python lines: `59,136`
 - Test Python files: `176`
-- Test Python lines: `93,952`
+- Test Python lines: `94,492`
 
 Most tracked Python in the repository is test code, so any "convert all Python"
 strategy would mostly compile tests unless the build is carefully filtered.
