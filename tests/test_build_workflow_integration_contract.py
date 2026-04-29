@@ -1223,6 +1223,18 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertEqual("none", init_step["with"]["build-mode"])
         self.assertEqual("true", str(init_step["with"]["dependency-caching"]).lower())
+        self.assertEqual(
+            "./.github/codeql/codeql-config.yml", init_step["with"]["config-file"]
+        )
+        codeql_config = yaml.safe_load(
+            (self.repo_root / ".github" / "codeql" / "codeql-config.yml").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            ["third_party/**"],
+            codeql_config["paths-ignore"],
+        )
         self.assertFalse(
             any(
                 step.get("uses")
@@ -1239,8 +1251,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual("bash", audit_step["shell"])
         self.assertIn("RUNNER_TEMP", audit_step["run"])
         self.assertIn("git ls-files '*.py'", audit_step["run"])
+        self.assertIn("':!:third_party/**'", audit_step["run"])
         self.assertIn("git ls-files '*.pyi'", audit_step["run"])
-        self.assertIn("git ls-files '*.js' '*.jsx' '*.mjs'", audit_step["run"])
+        self.assertIn("'*.js' '*.jsx' '*.mjs'", audit_step["run"])
         self.assertIn("grep -v '^\\.agents/'", audit_step["run"])
         self.assertIn("grep '^\\.agents/'", audit_step["run"])
 
@@ -1508,7 +1521,8 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             if step.get("name") == "Run Semgrep scan"
         )["run"]
         self.assertEqual(
-            "semgrep scan --sarif --config auto . > semgrep-results.sarif", semgrep_run
+            "semgrep scan --sarif --config auto --exclude third_party . > semgrep-results.sarif",
+            semgrep_run,
         )
 
         trivy_with = next_or_fail(
@@ -1518,7 +1532,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )["with"]
         self.assertEqual("fs", trivy_with["scan-type"])
         self.assertEqual("vuln,misconfig,secret,license", trivy_with["scanners"])
-        self.assertNotIn("skip-dirs", trivy_with)
+        self.assertEqual("third_party", trivy_with["skip-dirs"])
         self.assertNotIn("skip-files", trivy_with)
         self.assertNotIn("trivyignores", trivy_with)
 
@@ -1546,7 +1560,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             if step.get("name") == "Run DevSkim scan"
         )["with"]
         self.assertEqual(
-            "**/.git/**,**/pgdata/**,**/omero_data/**,**/omero_temp/**",
+            "**/.git/**,**/pgdata/**,**/omero_data/**,**/omero_temp/**,**/third_party/**",
             devskim_with["ignore-globs"],
         )
         self.assertEqual("DS162092", devskim_with["exclude-rules"])
@@ -1555,6 +1569,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.repo_root / "docs" / "operations" / "code-scanning.md"
         ).read_text(encoding="utf-8")
         self.assertIn("Do not narrow scanner scope to improve scores.", docs_text)
+        self.assertIn(
+            "CodeQL/Semgrep/Trivy/DevSkim exclusion of vendored `third_party`",
+            docs_text,
+        )
         self.assertIn("DevSkim `DS162092`", docs_text)
 
     def test_security_sarif_upload_jobs_can_read_workflow_run_metadata(self) -> None:

@@ -29,9 +29,10 @@ what is excluded, and a contract test.
 The current allowed scanner-scope exclusions are: Bandit production/test split
 with test-only `B101`/`B106` skips, global Bandit informational `B603`/`B404`
 skips, DevSkim `DS162092` for container-internal localhost infrastructure,
-Super-Linter exclusion of vendored `third_party` upstream references, and
-generated runtime data directories that must never be tracked or scanned as
-source.
+Super-Linter exclusion of vendored `third_party` upstream references,
+CodeQL/Semgrep/Trivy/DevSkim exclusion of vendored `third_party` upstream
+snapshots, and generated runtime data directories that must never be tracked or
+scanned as source.
 
 ## CodeQL File-Count Coverage
 

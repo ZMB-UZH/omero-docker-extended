@@ -620,7 +620,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("Audit — explain CodeQL language candidates", workflow_text)
         self.assertIn("git ls-files '*.py'", workflow_text)
         self.assertIn("git ls-files '*.pyi'", workflow_text)
-        self.assertIn("git ls-files '*.js' '*.jsx' '*.mjs'", workflow_text)
+        self.assertIn("'*.js' '*.jsx' '*.mjs'", workflow_text)
 
     def test_python_acceleration_doc_counts_match_current_tree(self) -> None:
         doc_text = self.read_text("docs/design-docs/python-acceleration-options.md")
