@@ -48,7 +48,7 @@ class FakeAdmin:
         groups: list[FakeGroup],
         member_group_ids: list[int],
         existing_user: bool = True,
-        create_exception: BaseException | None = None,
+        create_exception: Exception | None = None,
     ):
         self.groups = groups
         self.member_group_ids = member_group_ids
@@ -317,6 +317,35 @@ def test_ensure_job_user_retries_and_reports_last_failure(helper_module, monkeyp
         module.ensure_job_user(admin, "job-service", "secret", retries=2)
 
     assert sleeps == [2]
+
+
+def test_ensure_job_user_does_not_retry_keyboard_interrupt(helper_module, monkeypatch):
+    module = helper_module
+    admin = FakeAdmin(
+        groups=[],
+        member_group_ids=[],
+        existing_user=False,
+        create_exception=KeyboardInterrupt(),
+    )
+    sleeps: list[int] = []
+    monkeypatch.setattr(module.time, "sleep", sleeps.append)
+
+    with pytest.raises(KeyboardInterrupt):
+        module.ensure_job_user(admin, "job-service", "secret", retries=2)
+
+    assert sleeps == []
+
+
+def test_main_does_not_convert_keyboard_interrupt(helper_module, monkeypatch):
+    module = helper_module
+    monkeypatch.setattr(
+        module,
+        "sync_memberships",
+        lambda _args: (_ for _ in ()).throw(KeyboardInterrupt()),
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        module.main(["--host", "localhost", "--port", "4064", "--job-user", "job"])
 
 
 def test_main_reports_failed_connection(helper_module, monkeypatch, capsys):

@@ -58,7 +58,7 @@ def _new_job_experimenter(job_user: str):
 
 
 def ensure_job_user(admin, job_user: str, job_pass: str, retries: int):
-    last_error: BaseException | None = None
+    last_error: Exception | None = None
     for attempt in range(1, retries + 1):
         try:
             return admin.lookupExperimenter(job_user)
@@ -76,7 +76,7 @@ def ensure_job_user(admin, job_user: str, job_pass: str, retries: int):
             return admin.lookupExperimenter(job_user)
         except omero.ValidationException:
             return admin.lookupExperimenter(job_user)
-        except BaseException as exc:
+        except Exception as exc:
             last_error = exc
             if attempt >= retries:
                 break
@@ -151,7 +151,7 @@ def main(argv: list[str]) -> int:
         parser.error("--user-retries must be a positive integer")
     try:
         return sync_memberships(args)
-    except BaseException as exc:
+    except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 

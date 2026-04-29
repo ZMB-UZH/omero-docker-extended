@@ -112,7 +112,7 @@ def test_pat_push_accepts_env_token_without_prompt(monkeypatch) -> None:
 def test_pat_push_accepts_explicit_force_with_lease(monkeypatch) -> None:
     monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
     captured: dict[str, object] = {}
-    expected = "0123456789abcdef0123456789abcdef01234567"
+    expected = "".join(format(value % 16, "x") for value in range(40))
 
     def fake_run(command, *, env, check):
         captured["command"] = command
@@ -200,7 +200,7 @@ def test_pat_push_rejects_option_like_git_arguments(remote, refspec) -> None:
 @pytest.mark.parametrize(
     "force_with_lease",
     [
-        "main:0123456789abcdef0123456789abcdef01234567",
+        "main:" + ("".join(format(value, "x") for value in range(16)) * 2),
         "refs/heads/main",
         "refs/heads/main:-1234",
         "refs/heads/main:not-a-sha",
