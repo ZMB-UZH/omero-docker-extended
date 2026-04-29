@@ -1,5 +1,6 @@
 """Import plugin views."""
 
+import hashlib
 import json
 import time
 import uuid
@@ -55,6 +56,7 @@ from .core_functions import (
     _safe_job_id,
     _safe_relative_path,
     _save_job,
+    _staged_upload_chunk_matches,
     _staged_upload_size,
     _should_auto_skip_import,
     _special_methods_enabled,
@@ -131,177 +133,246 @@ def start_upload(request, conn=None, _url=None, **kwargs):
         return json_error(errors.unexpected_server_error_start_upload(), status=500)
 
 
-def _start_upload(request, conn):
-    """Handle start upload."""
-    if request.method != "POST":
-        return json_error(errors.upload_start_post_required())
-
-    upload_root = _get_upload_root()
-    if not _ensure_dir(upload_root) or not _ensure_dir(_get_jobs_root()):
-        logger.warning("Upload folder not writable or job dir missing.")
-        return json_error(errors.upload_folder_not_writable())
-
+def _upload_start_payload(request):
+    """Return a dictionary payload for upload-start requests."""
     payload = load_json_body(request)
-    if not isinstance(payload, dict):
-        payload = {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _upload_start_roots_response():
+    """Prepare upload-start roots and return an error response when unavailable."""
+    upload_root = _get_upload_root()
+    if _ensure_dir(upload_root) and _ensure_dir(_get_jobs_root()):
+        return upload_root, None
+    logger.warning("Upload folder not writable or job dir missing.")
+    return None, json_error(errors.upload_folder_not_writable())
+
+
+def _upload_start_identity(payload):
+    """Validate upload-start idempotency and dataset override fields."""
+    client_upload_id, client_upload_id_error = _normalize_client_upload_id(
+        payload.get("client_upload_id")
+    )
+    if client_upload_id_error:
+        return None, None, json_error(client_upload_id_error, status=400)
+
     dataset_name_override, dataset_name_override_error = (
         _normalize_dataset_name_override(payload.get("dataset_name_override"))
     )
     if dataset_name_override_error:
-        return json_error(dataset_name_override_error, status=400)
+        return None, None, json_error(dataset_name_override_error, status=400)
 
-    raw_project_id = (payload.get("project_id") or "").strip()
-    project_id = None
-    project_name = ""
-    if raw_project_id:
-        try:
-            project_id = int(raw_project_id)
-        except (TypeError, ValueError):
-            return json_error(errors.invalid_project_selection(), status=400)
+    return client_upload_id, dataset_name_override, None
 
-        project = conn.getObject("Project", project_id)
-        if project is None or not (
-            _is_owned_by_user(project, _current_user_id(conn))
-            or _has_read_write_permissions(project)
-        ):
-            return json_error(errors.invalid_project_selection(), status=400)
-        project_name = _get_text(project.getName())
 
+def _upload_start_files_payload(payload):
+    """Return the upload-start file list or a validation response."""
     files = payload.get("files") or []
     if not isinstance(files, list):
         files = []
-    if not files:
-        logger.info("Upload start request missing files payload.")
-        return json_error(errors.no_files_provided())
+    if files:
+        return files, None
+    logger.info("Upload start request missing files payload.")
+    return None, json_error(errors.no_files_provided())
+
+
+def _upload_start_options(payload):
+    """Normalize optional upload-start mode settings."""
     special_upload = (payload.get("special_upload") or "").strip()
     compatibility_enabled = payload.get("compatibility_enabled")
     if compatibility_enabled is None:
         compatibility_enabled = True
     else:
         compatibility_enabled = bool(compatibility_enabled)
+
     raw_sem_edx_associations = payload.get("sem_edx_associations") or {}
     raw_sem_edx_settings = payload.get("sem_edx_settings") or {}
     raw_ngff_converter_settings = payload.get("ngff_converter_settings") or {}
+
     if not _special_methods_enabled():
-        special_upload = ""
-        raw_sem_edx_associations = {}
-        raw_sem_edx_settings = {}
-        raw_ngff_converter_settings = {}
+        return "", compatibility_enabled, {}, {}, {}
     if special_upload != "sem_edx_spectra":
         raw_sem_edx_associations = {}
         raw_sem_edx_settings = {}
     if special_upload != "ngff_converter":
         raw_ngff_converter_settings = {}
+    return (
+        special_upload,
+        compatibility_enabled,
+        raw_sem_edx_associations,
+        raw_sem_edx_settings,
+        raw_ngff_converter_settings,
+    )
+
+
+def _upload_start_batch_size(payload):
+    """Return the normalized upload-start job batch size."""
     default_batch_size = _get_env_int(
         UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10
     )
-    batch_size = _normalize_job_batch_size(
-        payload.get("batch_size"), default_batch_size
+    return _normalize_job_batch_size(payload.get("batch_size"), default_batch_size)
+
+
+def _upload_path_conflict(rel_path, seen_relative_paths, seen_parent_paths):
+    """Return a path hierarchy conflict message for an upload path, if any."""
+    if rel_path in seen_relative_paths:
+        return f"Duplicate file path: {rel_path}"
+    if rel_path in seen_parent_paths:
+        return f"Conflicting file path hierarchy: {rel_path}"
+
+    rel_parts = PurePosixPath(rel_path).parts
+    for depth in range(1, len(rel_parts)):
+        ancestor = PurePosixPath(*rel_parts[:depth]).as_posix()
+        if ancestor in seen_relative_paths:
+            return f"Conflicting file path hierarchy: {ancestor} <-> {rel_path}"
+    return None
+
+
+def _upload_start_file_path(entry, seen_relative_paths, seen_parent_paths):
+    """Validate and reserve one upload-start relative path."""
+    raw_name = entry.get("relative_path") or entry.get("name")
+    rel_path, rel_error = _normalize_upload_relative_path(raw_name or "")
+    if rel_error:
+        return None, rel_error
+
+    conflict_error = _upload_path_conflict(
+        rel_path,
+        seen_relative_paths,
+        seen_parent_paths,
+    )
+    if conflict_error:
+        return None, conflict_error
+
+    seen_relative_paths.add(rel_path)
+    rel_parts = PurePosixPath(rel_path).parts
+    for depth in range(1, len(rel_parts)):
+        seen_parent_paths.add(PurePosixPath(*rel_parts[:depth]).as_posix())
+    return rel_path, None
+
+
+def _upload_start_file_size(raw_size):
+    """Normalize an upload-start file size."""
+    try:
+        if raw_size is None:
+            raise ValueError
+        size = int(raw_size)
+    except (TypeError, ValueError):
+        size = 0
+    return max(size, 0)
+
+
+def _upload_start_file_flags(entry, rel_path, special_upload):
+    """Return compatibility/import skip flags for one upload-start file."""
+    compatibility_skip = bool(entry.get("compatibility_skip"))
+    import_skip = bool(entry.get("import_skip"))
+    filename = PurePosixPath(rel_path).name
+
+    # SEM-EDX TXT files are metadata and must not be imported as images.
+    if special_upload == "sem_edx_spectra" and filename.lower().endswith(".txt"):
+        import_skip = True
+        compatibility_skip = True
+    if _should_auto_skip_import(rel_path):
+        import_skip = True
+        compatibility_skip = True
+    return compatibility_skip, import_skip
+
+
+def _normalize_upload_start_file(
+    entry,
+    upload_root,
+    special_upload,
+    seen_relative_paths,
+    seen_parent_paths,
+):
+    """Normalize one upload-start file descriptor."""
+    if not isinstance(entry, dict):
+        return None, str(entry)
+
+    rel_path, rel_error = _upload_start_file_path(
+        entry,
+        seen_relative_paths,
+        seen_parent_paths,
+    )
+    if rel_error:
+        return None, rel_error
+
+    staged_path = _build_staged_relative_path(rel_path)
+    staged_error = _validate_staged_target_path(upload_root / ("0" * 32), staged_path)
+    if staged_error:
+        return None, staged_error
+
+    compatibility_skip, import_skip = _upload_start_file_flags(
+        entry,
+        rel_path,
+        special_upload,
+    )
+    return (
+        {
+            "upload_id": uuid.uuid4().hex,
+            "relative_path": rel_path,
+            "staged_path": staged_path,
+            "size": _upload_start_file_size(entry.get("size")),
+            "status": "pending",
+            "errors": [],
+            "compatibility_skip": compatibility_skip,
+            "import_skip": import_skip,
+        },
+        None,
     )
 
-    host, port = _resolve_omero_host_port(conn)
-    if not host or not port:
-        logger.warning("Unable to resolve OMERO host/port for upload start.")
-        return json_error(errors.unable_resolve_host_port())
 
+def _normalize_upload_start_files(request, conn, upload_root, files, special_upload):
+    """Normalize upload-start files and enforce batch limits."""
     normalized = []
     total_bytes = 0
     invalid = []
-    seen_relative_paths = set()
-    seen_parent_paths = set()
+    seen_relative_paths: set[str] = set()
+    seen_parent_paths: set[str] = set()
 
     for entry in files:
-        if not isinstance(entry, dict):
-            invalid.append(str(entry))
-            continue
-        raw_name = entry.get("relative_path") or entry.get("name")
-        raw_size = entry.get("size")
-        rel_path, rel_error = _normalize_upload_relative_path(raw_name or "")
-        if rel_error:
-            invalid.append(rel_error)
-            continue
-        if rel_path in seen_relative_paths:
-            invalid.append(f"Duplicate file path: {rel_path}")
-            continue
-        if rel_path in seen_parent_paths:
-            invalid.append(f"Conflicting file path hierarchy: {rel_path}")
-            continue
-        rel_parts = PurePosixPath(rel_path).parts
-        conflicting_ancestor = None
-        for depth in range(1, len(rel_parts)):
-            ancestor = PurePosixPath(*rel_parts[:depth]).as_posix()
-            if ancestor in seen_relative_paths:
-                conflicting_ancestor = ancestor
-                break
-        if conflicting_ancestor:
-            invalid.append(
-                f"Conflicting file path hierarchy: {conflicting_ancestor} <-> {rel_path}"
-            )
-            continue
-        seen_relative_paths.add(rel_path)
-        for depth in range(1, len(rel_parts)):
-            seen_parent_paths.add(PurePosixPath(*rel_parts[:depth]).as_posix())
-        try:
-            if raw_size is None:
-                raise ValueError
-            size = int(raw_size)
-        except (TypeError, ValueError):
-            size = 0
-        size = max(size, 0)
-        upload_id = uuid.uuid4().hex
-        compatibility_skip = bool(entry.get("compatibility_skip"))
-        import_skip = bool(entry.get("import_skip"))
-
-        filename = PurePosixPath(rel_path).name
-
-        # SEM-EDX: TXT files must NEVER be imported or compatibility-checked
-        if special_upload == "sem_edx_spectra" and filename.lower().endswith(".txt"):
-            import_skip = True
-            compatibility_skip = True
-
-        # Auto-skip OS junk files (Thumbs.db, .DS_Store, macOS resource
-        # forks, lost+found contents, etc.).  All other files are left to OMERO.
-        if _should_auto_skip_import(rel_path):
-            import_skip = True
-            compatibility_skip = True
-
-        staged_path = _build_staged_relative_path(rel_path)
-        staged_error = _validate_staged_target_path(
-            upload_root / ("0" * 32), staged_path
+        normalized_entry, entry_error = _normalize_upload_start_file(
+            entry,
+            upload_root,
+            special_upload,
+            seen_relative_paths,
+            seen_parent_paths,
         )
-        if staged_error:
-            invalid.append(staged_error)
+        if entry_error:
+            invalid.append(entry_error)
             continue
 
-        total_bytes += size
+        total_bytes += normalized_entry["size"]
         if total_bytes > MAX_UPLOAD_BATCH_BYTES:
             logger.info(
                 "Upload start rejected batch exceeding %d GB for user %s.",
                 MAX_UPLOAD_BATCH_GB,
                 sanitize_log_value(current_username(request, conn)),
             )
-            return json_error(errors.upload_batch_too_large(MAX_UPLOAD_BATCH_GB))
-        normalized.append(
-            {
-                "upload_id": upload_id,
-                "relative_path": rel_path,
-                "staged_path": staged_path,
-                "size": size,
-                "status": "pending",
-                "errors": [],
-                "compatibility_skip": compatibility_skip,
-                "import_skip": import_skip,
-            }
-        )
+            return (
+                None,
+                0,
+                json_error(errors.upload_batch_too_large(MAX_UPLOAD_BATCH_GB)),
+            )
+        normalized.append(normalized_entry)
 
     if invalid:
         logger.info(
             "Upload start rejected invalid paths: %s", sanitize_log_value(invalid)
         )
-        return json_error(errors.invalid_file_paths(invalid))
+        return None, 0, json_error(errors.invalid_file_paths(invalid))
+    return normalized, total_bytes, None
 
+
+def _upload_start_special_settings(
+    special_upload,
+    raw_sem_edx_associations,
+    raw_sem_edx_settings,
+    raw_ngff_converter_settings,
+    normalized_files,
+):
+    """Normalize special upload settings for persisted upload jobs."""
     sem_edx_associations = _normalize_sem_edx_associations(
-        raw_sem_edx_associations, normalized
+        raw_sem_edx_associations, normalized_files
     )
     sem_edx_settings = (
         _normalize_sem_edx_settings(raw_sem_edx_settings)
@@ -313,16 +384,33 @@ def _start_upload(request, conn):
         if special_upload == "ngff_converter"
         else {}
     )
+    return sem_edx_associations, sem_edx_settings, ngff_converter_settings
 
-    dataset_map: dict[str, str] = {}
-    orphan_dataset_name = None
-    if not dataset_name_override and any(
-        _dataset_name_for_path(entry["relative_path"]) is None for entry in normalized
-    ):
-        orphan_dataset_name = _generate_orphan_dataset_name()
 
-    job_id = uuid.uuid4().hex
-    username = current_username(request, conn)
+def _upload_start_orphan_dataset_name(dataset_name_override, normalized_files):
+    """Return a generated orphan dataset name when upload paths need one."""
+    if dataset_name_override:
+        return None
+    needs_orphan_dataset = any(
+        _dataset_name_for_path(entry["relative_path"]) is None
+        for entry in normalized_files
+    )
+    return _generate_orphan_dataset_name() if needs_orphan_dataset else None
+
+
+def _upload_start_group_name(conn, current_group_id):
+    """Resolve an OMERO group name from an event-context group ID."""
+    try:
+        group_obj = conn.getObject("ExperimenterGroup", int(current_group_id))
+    except Exception:
+        group_obj = None
+    if group_obj is None:
+        return None
+    return _get_text(group_obj.getName()) or None
+
+
+def _upload_start_group_context(conn, username):
+    """Return the active OMERO group context for a new upload job."""
     current_group_id = None
     current_group_name = None
     try:
@@ -332,12 +420,7 @@ def _start_upload(request, conn):
         if current_group_name:
             current_group_name = str(current_group_name).strip() or None
         if not current_group_name and current_group_id is not None:
-            try:
-                group_obj = conn.getObject("ExperimenterGroup", int(current_group_id))
-            except Exception:
-                group_obj = None
-            if group_obj is not None:
-                current_group_name = _get_text(group_obj.getName()) or None
+            current_group_name = _upload_start_group_name(conn, current_group_id)
         logger.debug(
             "Captured user's group context for upload start: group_id=%s group_name=%s user=%s",
             current_group_id,
@@ -348,10 +431,88 @@ def _start_upload(request, conn):
         logger.warning(
             "Unable to get user's group context: %s", sanitize_log_value(exc)
         )
-        current_group_id = None
-        current_group_name = None
+    return current_group_id, current_group_name
+
+
+def _start_upload(request, conn):
+    """Handle start upload."""
+    if request.method != "POST":
+        return json_error(errors.upload_start_post_required())
+
+    upload_root, roots_error = _upload_start_roots_response()
+    if roots_error is not None:
+        return roots_error
+
+    payload = _upload_start_payload(request)
+    client_upload_id, dataset_name_override, identity_error = _upload_start_identity(
+        payload
+    )
+    if identity_error is not None:
+        return identity_error
+
+    project_id, project_name, project_error = _resolve_upload_project(
+        conn, payload.get("project_id")
+    )
+    if project_error is not None:
+        return project_error
+
+    files, files_error = _upload_start_files_payload(payload)
+    if files_error is not None:
+        return files_error
+    (
+        special_upload,
+        compatibility_enabled,
+        raw_sem_edx_associations,
+        raw_sem_edx_settings,
+        raw_ngff_converter_settings,
+    ) = _upload_start_options(payload)
+    batch_size = _upload_start_batch_size(payload)
+
+    normalized, total_bytes, normalize_error = _normalize_upload_start_files(
+        request,
+        conn,
+        upload_root,
+        files,
+        special_upload,
+    )
+    if normalize_error is not None:
+        return normalize_error
+
+    host, port = _resolve_omero_host_port(conn)
+    if not host or not port:
+        logger.warning("Unable to resolve OMERO host/port for upload start.")
+        return json_error(errors.unable_resolve_host_port())
+
+    sem_edx_associations, sem_edx_settings, ngff_converter_settings = (
+        _upload_start_special_settings(
+            special_upload,
+            raw_sem_edx_associations,
+            raw_sem_edx_settings,
+            raw_ngff_converter_settings,
+            normalized,
+        )
+    )
+    username = current_username(request, conn)
+    retry_response = _client_upload_retry_response(
+        username,
+        client_upload_id,
+        normalized,
+        dataset_name_override,
+        project_id,
+    )
+    if retry_response is not None:
+        return retry_response
+
+    dataset_map: dict[str, str] = {}
+    orphan_dataset_name = _upload_start_orphan_dataset_name(
+        dataset_name_override,
+        normalized,
+    )
+    job_id = uuid.uuid4().hex
+    current_group_id, current_group_name = _upload_start_group_context(conn, username)
     job = {
         "job_id": job_id,
+        "client_upload_id": client_upload_id,
         "username": username,
         "group_id": current_group_id,
         "group_name": current_group_name,
@@ -393,28 +554,14 @@ def _start_upload(request, conn):
         return json_error(errors.unable_update_upload_job_state(), status=500)
 
     logger.info(
-        "Upload job %s created for user %s with %d files (%d bytes).",
+        "Upload job %s created for user %s with %d files (%s bytes).",
         sanitize_log_value(job_id),
         sanitize_log_value(username),
         len(normalized),
-        total_bytes,
+        sanitize_log_value(total_bytes),
     )
 
-    return JsonResponse(
-        {
-            "ok": True,
-            "job_id": job_id,
-            "upload_url": reverse("omeroweb_import_files", kwargs={"job_id": job_id}),
-            "import_step_url": reverse(
-                "omeroweb_import_import_step", kwargs={"job_id": job_id}
-            ),
-            "status_url": reverse("omeroweb_import_status", kwargs={"job_id": job_id}),
-            "confirm_url": reverse(
-                "omeroweb_import_confirm", kwargs={"job_id": job_id}
-            ),
-            "prune_url": reverse("omeroweb_import_prune", kwargs={"job_id": job_id}),
-        }
-    )
+    return JsonResponse(_upload_job_response(job))
 
 
 @login_required()
@@ -432,12 +579,13 @@ def upload_files(request, job_id, conn=None, _url=None, **kwargs):
         return json_error(errors.unexpected_server_error_uploading_files(), status=500)
 
 
-def _find_job_upload_entry(job, rel_path):
+def _find_job_upload_entry(job, rel_path, statuses=("pending", "error")):
     """Handle find job upload entry."""
+    allowed_statuses = set(statuses or ())
     for entry in job.get("files", []):
-        if entry.get("relative_path") == rel_path and entry.get("status") in (
-            "pending",
-            "error",
+        if (
+            entry.get("relative_path") == rel_path
+            and entry.get("status") in allowed_statuses
         ):
             return entry
     return None
@@ -544,201 +692,147 @@ def _as_bool(raw_value):
     return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _handle_chunk_upload(request, job_id, conn, job, job_root):
-    """Handle handle chunk upload."""
-    upload = request.FILES.get("file")
-    if upload is None:
-        return json_error(errors.upload_chunk_missing_file(), status=400)
+def _normalize_client_upload_id(raw_value):
+    """Normalize an optional client-provided upload retry identifier."""
+    value = str(raw_value or "").strip()
+    if not value:
+        return "", None
+    if len(value) > 64 or not all(
+        char.isalnum() or char in {"_", "-"} for char in value
+    ):
+        return "", errors.invalid_client_upload_id()
+    return value, None
 
-    rel_path, rel_error = _normalize_upload_relative_path(
-        request.POST.get("relative_path") or ""
+
+def _resolve_upload_project(conn, raw_project_id):
+    """Resolve and authorize an optional upload target project."""
+    raw_project_id = (raw_project_id or "").strip()
+    if not raw_project_id:
+        return None, "", None
+    try:
+        project_id = int(raw_project_id)
+    except (TypeError, ValueError):
+        return None, "", json_error(errors.invalid_project_selection(), status=400)
+
+    project = conn.getObject("Project", project_id)
+    can_write = project is not None and (
+        _is_owned_by_user(project, _current_user_id(conn))
+        or _has_read_write_permissions(project)
     )
-    if rel_error:
-        return json_error(rel_error, status=400)
+    if not can_write:
+        return None, "", json_error(errors.invalid_project_selection(), status=400)
+    return project_id, _get_text(project.getName()), None
 
-    chunk_start, start_error = _parse_chunk_int(
-        request.POST.get("chunk_start"), "chunk_start"
-    )
-    if start_error:
-        return json_error(start_error, status=400)
 
-    chunk_end, end_error = _parse_chunk_int(request.POST.get("chunk_end"), "chunk_end")
-    if end_error:
-        return json_error(end_error, status=400)
+def _upload_job_response(job):
+    """Build the upload-start response for a persisted job."""
+    job_id = job.get("job_id")
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "upload_url": reverse("omeroweb_import_files", kwargs={"job_id": job_id}),
+        "import_step_url": reverse(
+            "omeroweb_import_import_step", kwargs={"job_id": job_id}
+        ),
+        "status_url": reverse("omeroweb_import_status", kwargs={"job_id": job_id}),
+        "confirm_url": reverse("omeroweb_import_confirm", kwargs={"job_id": job_id}),
+        "prune_url": reverse("omeroweb_import_prune", kwargs={"job_id": job_id}),
+    }
 
-    file_size, size_error = _parse_chunk_int(request.POST.get("file_size"), "file_size")
-    if size_error:
-        return json_error(size_error, status=400)
 
-    if chunk_end < chunk_start:
-        return json_error(
-            errors.upload_chunk_metadata_invalid(
-                "chunk_end must be greater than or equal to chunk_start"
-            ),
-            status=400,
+def _same_upload_manifest(job, normalized_files, dataset_name_override, project_id):
+    """Return whether a retry matches the already-created upload job."""
+    if job.get("dataset_name_override") != dataset_name_override:
+        return False
+    if job.get("project_id") != project_id:
+        return False
+    existing = [
+        (entry.get("relative_path"), int(entry.get("size") or 0))
+        for entry in list(job.get("files") or [])
+    ]
+    requested = [
+        (entry.get("relative_path"), int(entry.get("size") or 0))
+        for entry in list(normalized_files or [])
+    ]
+    return existing == requested
+
+
+def _find_client_upload_job(username, client_upload_id):
+    """Find an existing upload job for an idempotent client retry."""
+    if not username or not client_upload_id:
+        return None
+    try:
+        job_paths = sorted(_get_jobs_root().glob("*.json"))
+    except OSError as exc:
+        logger.warning(
+            "Unable to list upload jobs while resolving retry id: %s",
+            sanitize_log_value(exc),
         )
-    if chunk_end > file_size:
-        return json_error(
-            errors.upload_chunk_metadata_invalid("chunk_end cannot exceed file_size"),
-            status=400,
-        )
-
-    entry = _find_job_upload_entry(job, rel_path)
-    if not entry:
-        return json_error(errors.unexpected_file(rel_path), status=400)
-
-    staged_path = entry.get("staged_path") or rel_path
-    if chunk_start == 0:
-        reset_error = _reset_staged_upload_file(job_root, staged_path)
-    else:
-        reset_error = None
-    if reset_error:
-        if _is_managed_upload_internal_error(reset_error) or isinstance(
-            reset_error, OSError
+        return None
+    for job_path in job_paths:
+        job_id = job_path.stem
+        if not _safe_job_id(job_id):
+            continue
+        job = _load_job(job_id)
+        if (
+            isinstance(job, dict)
+            and job.get("client_upload_id") == client_upload_id
+            and str(job.get("username") or "").strip() == username
         ):
-            logger.warning(
-                "Failed to reset staged upload %s for chunked retry.",
-                sanitize_log_value(rel_path),
-            )
-            generic_error = (
-                _managed_upload_error_message(reset_error)
-                if _is_managed_upload_internal_error(reset_error)
-                else errors.unexpected_server_error_uploading_files()
-            )
-            updated_job = _apply_upload_updates(
-                job_id,
-                [
-                    {
-                        "upload_id": entry.get("upload_id"),
-                        "status": "error",
-                        "errors": [generic_error],
-                    }
-                ],
-                [generic_error],
-            )
-            if not updated_job:
-                return json_error(errors.unable_update_upload_job_state(), status=500)
-            return json_error(generic_error, status=500)
-        return json_error(reset_error, status=400)
+            return job
+    return None
 
-    existing_size, staged_error = _staged_upload_size(job_root, staged_path)
-    if staged_error:
-        if _is_managed_upload_internal_error(staged_error) or isinstance(
-            staged_error, OSError
-        ):
-            logger.warning(
-                "Failed to inspect staged upload %s.",
-                sanitize_log_value(rel_path),
-            )
-            generic_error = (
-                _managed_upload_error_message(staged_error)
-                if _is_managed_upload_internal_error(staged_error)
-                else errors.unexpected_server_error_uploading_files()
-            )
-            updated_job = _apply_upload_updates(
-                job_id,
-                [
-                    {
-                        "upload_id": entry.get("upload_id"),
-                        "status": "error",
-                        "errors": [generic_error],
-                    }
-                ],
-                [generic_error],
-            )
-            if not updated_job:
-                return json_error(errors.unable_update_upload_job_state(), status=500)
-            return json_error(generic_error, status=500)
-        return json_error(staged_error, status=400)
-    if existing_size != chunk_start:
-        logger.warning(
-            "Chunk offset mismatch for %s in job %s: existing=%s request_start=%s",
-            sanitize_log_value(rel_path),
-            sanitize_log_value(job_id),
-            sanitize_log_value(existing_size),
-            sanitize_log_value(chunk_start),
-        )
-        return json_error(
-            errors.upload_chunk_offset_mismatch(rel_path, existing_size, chunk_start),
-            status=409,
-        )
 
-    bytes_written, saved_size, write_error = _append_upload_chunks_to_staged_path(
-        job_root, staged_path, upload
+def _client_upload_retry_response(
+    username,
+    client_upload_id,
+    normalized_files,
+    dataset_name_override,
+    project_id,
+):
+    """Return an existing upload response for a matching client retry id."""
+    if not client_upload_id:
+        return None
+    existing_job = _find_client_upload_job(username, client_upload_id)
+    if existing_job is None:
+        return None
+    if not _same_upload_manifest(
+        existing_job,
+        normalized_files,
+        dataset_name_override,
+        project_id,
+    ):
+        return json_error(errors.upload_retry_id_conflict(), status=409)
+    logger.info(
+        "Returning existing upload job %s for idempotent retry.",
+        sanitize_log_value(existing_job.get("job_id")),
     )
-    if write_error:
-        if isinstance(write_error, str) and not _is_managed_upload_internal_error(
-            write_error
-        ):
-            return json_error(write_error, status=400)
-        logger.warning(
-            "Failed to save chunk for %s.",
-            sanitize_log_value(rel_path),
-        )
-        generic_error = (
-            _managed_upload_error_message(write_error)
-            if _is_managed_upload_internal_error(write_error)
-            else errors.unexpected_server_error_uploading_files()
-        )
-        updated_job = _apply_upload_updates(
-            job_id,
-            [
-                {
-                    "upload_id": entry.get("upload_id"),
-                    "status": "error",
-                    "errors": [generic_error],
-                }
-            ],
-            [generic_error],
-        )
-        if not updated_job:
-            return json_error(errors.unable_update_upload_job_state(), status=500)
-        return json_error(generic_error, status=500)
+    return JsonResponse(_upload_job_response(existing_job))
 
-    expected_chunk_size = chunk_end - chunk_start
-    if bytes_written != expected_chunk_size:
-        logger.warning(
-            "Chunk size mismatch for %s in job %s: expected=%s wrote=%s",
-            sanitize_log_value(rel_path),
-            sanitize_log_value(job_id),
-            sanitize_log_value(expected_chunk_size),
-            sanitize_log_value(bytes_written),
-        )
-        return json_error(
-            errors.upload_chunk_size_mismatch(
-                rel_path, expected_chunk_size, bytes_written
-            ),
-            status=400,
-        )
 
-    is_last_chunk = (
-        _as_bool(request.POST.get("is_last_chunk")) or saved_size >= file_size
-    )
-    if not is_last_chunk:
-        return JsonResponse(
-            {
-                "ok": True,
-                "complete": False,
-                "saved": [],
-                "errors": [],
-                "error": None,
-                "relative_path": rel_path,
-                "uploaded_bytes_for_file": saved_size,
-            }
-        )
+def _uploaded_file_sha256(upload):
+    """Hash an uploaded chunk and rewind it for later saving."""
+    digest = hashlib.sha256()
+    try:
+        for piece in upload.chunks():
+            digest.update(piece)
+        if hasattr(upload, "seek"):
+            upload.seek(0)
+        elif hasattr(getattr(upload, "file", None), "seek"):
+            upload.file.seek(0)
+    except OSError as exc:
+        logger.warning("Unable to hash uploaded chunk: %s", sanitize_log_value(exc))
+        return None, errors.unexpected_server_error_uploading_files()
+    return digest.hexdigest(), None
 
-    if saved_size != file_size:
-        logger.warning(
-            "Final chunk saved unexpected size for %s in job %s: expected=%s actual=%s",
-            sanitize_log_value(rel_path),
-            sanitize_log_value(job_id),
-            sanitize_log_value(file_size),
-            sanitize_log_value(saved_size),
-        )
-        return json_error(
-            errors.upload_chunk_incomplete(rel_path, file_size, saved_size), status=400
-        )
 
+def _is_sha256_digest(value):
+    """Return whether a text value is a lowercase SHA-256 hex digest."""
+    return len(value) == 64 and all(char in "0123456789abcdef" for char in value)
+
+
+def _complete_chunk_upload_response(job_id, conn, entry, rel_path):
+    """Mark an uploaded file complete and return the chunk response."""
     updated_job = _apply_upload_updates(
         job_id, [{"upload_id": entry.get("upload_id"), "status": "uploaded"}], []
     )
@@ -775,6 +869,366 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
             "ready": updated_job.get("status") == "ready",
         }
     )
+
+
+def _chunk_upload_already_complete_response(job, rel_path):
+    """Return an idempotent completion response for an already uploaded file."""
+    return JsonResponse(
+        {
+            "ok": True,
+            "complete": True,
+            "saved": [rel_path],
+            "errors": [],
+            "error": None,
+            "relative_path": rel_path,
+            "uploaded_bytes": job.get("uploaded_bytes", 0),
+            "total_bytes": job.get("total_bytes", 0),
+            "ready": job.get("status") == "ready",
+        }
+    )
+
+
+def _chunk_upload_incomplete_retry_response(rel_path, existing_size):
+    """Return an idempotent response for a previously staged non-final chunk."""
+    return JsonResponse(
+        {
+            "ok": True,
+            "complete": False,
+            "saved": [],
+            "errors": [],
+            "error": None,
+            "relative_path": rel_path,
+            "uploaded_bytes_for_file": existing_size,
+        }
+    )
+
+
+def _find_chunk_upload_entry(job, rel_path):
+    """Return the upload entry accepted by chunked upload handling."""
+    entry = _find_job_upload_entry(job, rel_path)
+    if entry is not None:
+        return entry
+    for candidate in job.get("files", []):
+        if (
+            candidate.get("relative_path") == rel_path
+            and candidate.get("status") == "uploaded"
+        ):
+            return candidate
+    return None
+
+
+def _chunk_upload_error_response(job_id, entry, rel_path, upload_error):
+    """Persist and return a staged-upload error response."""
+    if not (
+        _is_managed_upload_internal_error(upload_error)
+        or isinstance(upload_error, OSError)
+    ):
+        return json_error(upload_error, status=400)
+    logger.warning(
+        "Failed to handle staged upload %s.",
+        sanitize_log_value(rel_path),
+    )
+    generic_error = (
+        _managed_upload_error_message(upload_error)
+        if _is_managed_upload_internal_error(upload_error)
+        else errors.unexpected_server_error_uploading_files()
+    )
+    updated_job = _apply_upload_updates(
+        job_id,
+        [
+            {
+                "upload_id": entry.get("upload_id"),
+                "status": "error",
+                "errors": [generic_error],
+            }
+        ],
+        [generic_error],
+    )
+    if not updated_job:
+        return json_error(errors.unable_update_upload_job_state(), status=500)
+    return json_error(generic_error, status=500)
+
+
+def _validate_uploaded_chunk_checksum(upload, expected_checksum):
+    """Validate a client-provided chunk checksum when present."""
+    if not expected_checksum:
+        return None
+    if not _is_sha256_digest(expected_checksum):
+        return json_error(
+            errors.upload_chunk_metadata_invalid(
+                "chunk_sha256 must be a 64-character hexadecimal SHA-256 digest"
+            ),
+            status=400,
+        )
+    actual_checksum, checksum_error = _uploaded_file_sha256(upload)
+    if checksum_error:
+        return json_error(checksum_error, status=500)
+    if actual_checksum != expected_checksum:
+        return json_error(
+            errors.upload_chunk_metadata_invalid(
+                "chunk_sha256 does not match uploaded bytes"
+            ),
+            status=400,
+        )
+    return None
+
+
+def _idempotent_chunk_retry_response(
+    request,
+    job_id,
+    conn,
+    job,
+    job_root,
+    entry,
+    rel_path,
+    staged_path,
+    existing_size,
+    chunk_start,
+    chunk_end,
+    file_size,
+    expected_checksum,
+):
+    """Return a response for a chunk retry already present in staging."""
+    if existing_size <= chunk_start or not expected_checksum:
+        return None
+    already_saved, match_error = _staged_upload_chunk_matches(
+        job_root,
+        staged_path,
+        chunk_start,
+        chunk_end,
+        expected_checksum,
+    )
+    if match_error:
+        if _is_managed_upload_internal_error(match_error):
+            return json_error(_managed_upload_error_message(match_error), status=500)
+        return json_error(match_error, status=400)
+    if not already_saved:
+        return None
+    logger.info(
+        "Accepted idempotent chunk retry for %s in job %s.",
+        sanitize_log_value(rel_path),
+        sanitize_log_value(job_id),
+    )
+    is_last_retry = _as_bool(request.POST.get("is_last_chunk")) or (
+        existing_size >= file_size and chunk_end >= file_size
+    )
+    if not is_last_retry:
+        return _chunk_upload_incomplete_retry_response(rel_path, existing_size)
+    if entry.get("status") == "uploaded":
+        return _chunk_upload_already_complete_response(job, rel_path)
+    return _complete_chunk_upload_response(job_id, conn, entry, rel_path)
+
+
+def _reset_staged_chunk_upload(job_id, job_root, entry, rel_path, staged_path):
+    """Reset the staged file for a first-chunk retry."""
+    reset_error = _reset_staged_upload_file(job_root, staged_path)
+    if reset_error:
+        return _chunk_upload_error_response(job_id, entry, rel_path, reset_error)
+    return None
+
+
+def _prepare_staged_chunk_write(
+    job_id,
+    job_root,
+    entry,
+    rel_path,
+    staged_path,
+    existing_size,
+    chunk_start,
+):
+    """Validate or reset staged bytes before appending a chunk."""
+    if chunk_start == 0:
+        return _reset_staged_chunk_upload(
+            job_id, job_root, entry, rel_path, staged_path
+        )
+    if existing_size == chunk_start:
+        return None
+
+    logger.warning(
+        "Chunk offset mismatch for %s in job %s: existing=%s request_start=%s",
+        sanitize_log_value(rel_path),
+        sanitize_log_value(job_id),
+        sanitize_log_value(existing_size),
+        sanitize_log_value(chunk_start),
+    )
+    return json_error(
+        errors.upload_chunk_offset_mismatch(rel_path, existing_size, chunk_start),
+        status=409,
+    )
+
+
+def _incomplete_chunk_upload_response(rel_path, saved_size):
+    """Return the standard response for a chunked upload still in progress."""
+    return JsonResponse(
+        {
+            "ok": True,
+            "complete": False,
+            "saved": [],
+            "errors": [],
+            "error": None,
+            "relative_path": rel_path,
+            "uploaded_bytes_for_file": saved_size,
+        }
+    )
+
+
+def _chunk_write_validation_response(
+    job_id,
+    rel_path,
+    bytes_written,
+    saved_size,
+    chunk_start,
+    chunk_end,
+    file_size,
+    is_last_chunk,
+):
+    """Return a chunk write validation error, an incomplete response, or None."""
+    expected_chunk_size = chunk_end - chunk_start
+    if bytes_written != expected_chunk_size:
+        logger.warning(
+            "Chunk size mismatch for %s in job %s: expected=%s wrote=%s",
+            sanitize_log_value(rel_path),
+            sanitize_log_value(job_id),
+            sanitize_log_value(expected_chunk_size),
+            sanitize_log_value(bytes_written),
+        )
+        return json_error(
+            errors.upload_chunk_size_mismatch(
+                rel_path, expected_chunk_size, bytes_written
+            ),
+            status=400,
+        )
+
+    if not is_last_chunk:
+        return _incomplete_chunk_upload_response(rel_path, saved_size)
+
+    if saved_size != file_size:
+        logger.warning(
+            "Final chunk saved unexpected size for %s in job %s: expected=%s actual=%s",
+            sanitize_log_value(rel_path),
+            sanitize_log_value(job_id),
+            sanitize_log_value(file_size),
+            sanitize_log_value(saved_size),
+        )
+        return json_error(
+            errors.upload_chunk_incomplete(rel_path, file_size, saved_size), status=400
+        )
+    return None
+
+
+def _chunk_upload_request_metadata(request):
+    """Validate and return chunk upload request metadata."""
+    upload = request.FILES.get("file")
+    if upload is None:
+        return None, json_error(errors.upload_chunk_missing_file(), status=400)
+
+    rel_path, rel_error = _normalize_upload_relative_path(
+        request.POST.get("relative_path") or ""
+    )
+    if rel_error:
+        return None, json_error(rel_error, status=400)
+
+    chunk_start, start_error = _parse_chunk_int(
+        request.POST.get("chunk_start"), "chunk_start"
+    )
+    if start_error:
+        return None, json_error(start_error, status=400)
+    chunk_end, end_error = _parse_chunk_int(request.POST.get("chunk_end"), "chunk_end")
+    if end_error:
+        return None, json_error(end_error, status=400)
+    file_size, size_error = _parse_chunk_int(request.POST.get("file_size"), "file_size")
+    if size_error:
+        return None, json_error(size_error, status=400)
+
+    if chunk_end < chunk_start:
+        return None, json_error(
+            errors.upload_chunk_metadata_invalid(
+                "chunk_end must be greater than or equal to chunk_start"
+            ),
+            status=400,
+        )
+    if chunk_end > file_size:
+        return None, json_error(
+            errors.upload_chunk_metadata_invalid("chunk_end cannot exceed file_size"),
+            status=400,
+        )
+    return (upload, rel_path, chunk_start, chunk_end, file_size), None
+
+
+def _handle_chunk_upload(request, job_id, conn, job, job_root):
+    """Handle handle chunk upload."""
+    metadata, metadata_error = _chunk_upload_request_metadata(request)
+    if metadata_error is not None:
+        return metadata_error
+    upload, rel_path, chunk_start, chunk_end, file_size = metadata
+
+    entry = _find_chunk_upload_entry(job, rel_path)
+    if not entry:
+        return json_error(errors.unexpected_file(rel_path), status=400)
+
+    staged_path = entry.get("staged_path") or rel_path
+    expected_checksum = str(request.POST.get("chunk_sha256") or "").strip().lower()
+    checksum_response = _validate_uploaded_chunk_checksum(upload, expected_checksum)
+    if checksum_response is not None:
+        return checksum_response
+
+    existing_size, staged_error = _staged_upload_size(job_root, staged_path)
+    if staged_error:
+        return _chunk_upload_error_response(job_id, entry, rel_path, staged_error)
+
+    retry_response = _idempotent_chunk_retry_response(
+        request,
+        job_id,
+        conn,
+        job,
+        job_root,
+        entry,
+        rel_path,
+        staged_path,
+        existing_size,
+        chunk_start,
+        chunk_end,
+        file_size,
+        expected_checksum,
+    )
+    if retry_response is not None:
+        return retry_response
+
+    write_ready_response = _prepare_staged_chunk_write(
+        job_id,
+        job_root,
+        entry,
+        rel_path,
+        staged_path,
+        existing_size,
+        chunk_start,
+    )
+    if write_ready_response is not None:
+        return write_ready_response
+
+    bytes_written, saved_size, write_error = _append_upload_chunks_to_staged_path(
+        job_root, staged_path, upload
+    )
+    if write_error:
+        return _chunk_upload_error_response(job_id, entry, rel_path, write_error)
+
+    is_last_chunk = (
+        _as_bool(request.POST.get("is_last_chunk")) or saved_size >= file_size
+    )
+    validation_response = _chunk_write_validation_response(
+        job_id,
+        rel_path,
+        bytes_written,
+        saved_size,
+        chunk_start,
+        chunk_end,
+        file_size,
+        is_last_chunk,
+    )
+    if validation_response is not None:
+        return validation_response
+
+    return _complete_chunk_upload_response(job_id, conn, entry, rel_path)
 
 
 def _upload_files(request, job_id, conn):

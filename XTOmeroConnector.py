@@ -14,6 +14,8 @@ Requests server-side IMS conversion and opens the resulting IMS in Imaris.
 """
 
 import datetime
+import hashlib
+import http.client
 import http.cookiejar
 import importlib
 import json
@@ -21,7 +23,9 @@ import logging
 import ntpath
 import os
 import posixpath
+import random
 import re
+import socket
 import stat
 import sys
 import tempfile
@@ -29,6 +33,7 @@ import threading
 import time
 import tkinter as tk
 import traceback
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -56,15 +61,34 @@ MAX_UPLOAD_CHUNK_SIZE_BYTES = 64 * 1024 * 1024
 FOLDER_IMPORT_TIMEOUT = 3600
 FOLDER_IMPORT_POLL_INTERVAL = 2.0
 FOLDER_IMPORT_CONFIRM_PREVIEW_LIMIT = 10
+HTTP_TRANSIENT_RETRY_ATTEMPTS_ENV = "OMERO_IMARIS_HTTP_RETRY_ATTEMPTS"
+HTTP_TRANSIENT_RETRY_DELAY_ENV = "OMERO_IMARIS_HTTP_RETRY_DELAY_SECONDS"
+DEFAULT_HTTP_TRANSIENT_RETRY_ATTEMPTS = 3
+DEFAULT_HTTP_TRANSIENT_RETRY_DELAY_SECONDS = 2.0
+REFRESH_REQUEST_TIMEOUT_ENV = "OMERO_IMARIS_REFRESH_TIMEOUT_SECONDS"
+REFRESH_RETRY_ATTEMPTS_ENV = "OMERO_IMARIS_REFRESH_RETRY_ATTEMPTS"
+REFRESH_RETRY_DELAY_ENV = "OMERO_IMARIS_REFRESH_RETRY_DELAY_SECONDS"
+DEFAULT_REFRESH_REQUEST_TIMEOUT_SECONDS = 30
+DEFAULT_REFRESH_RETRY_ATTEMPTS = 3
+DEFAULT_REFRESH_RETRY_DELAY_SECONDS = 2.0
+HEALTH_PING_INTERVAL_ENV = "OMERO_IMARIS_HEALTH_PING_INTERVAL_SECONDS"
+HEALTH_PING_TIMEOUT_ENV = "OMERO_IMARIS_HEALTH_PING_TIMEOUT_SECONDS"
+DEFAULT_HEALTH_PING_INTERVAL_SECONDS = 30
+DEFAULT_HEALTH_PING_TIMEOUT_SECONDS = 10
 IMARIS_HANDLE_RETRY_ATTEMPTS = 10
 IMARIS_HANDLE_RETRY_INTERVAL = 0.25
 NATIVE_BRIDGE_RUNNER_TIMEOUT = 600
 NATIVE_BRIDGE_PROBE_TIMEOUT = 60
+NATIVE_BRIDGE_REVALIDATION_TIMEOUT = 30
+NATIVE_BRIDGE_LAUNCH_TIMEOUT = 600
+NATIVE_BRIDGE_LAUNCH_POLL_INTERVAL = 1.0
 NATIVE_BRIDGE_REVALIDATE_AFTER = 30.0
 IMARIS_OPEN_VERIFY_TIMEOUT = 10.0
 IMARIS_OPEN_VERIFY_INTERVAL = 0.25
 OMERO_CONNECTOR_WINDOW_WIDTH = 1000
 OMERO_CONNECTOR_WINDOW_HEIGHT = 700
+CONVERTER_MENU_FONT = ("Arial", 10)
+STATUS_NEUTRAL_BG = "#dfe5eb"
 _XT_DLL_DIR_HANDLES: List[Any] = []
 _WINDOWS_RESERVED_FILENAMES = {
     "CON",
@@ -499,8 +523,8 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:
-        print("BRIDGE_RUNNER_EXCEPTION: " + str(exc))
-        raise
+        print("BRIDGE_RUNNER_EXCEPTION:" + type(exc).__name__)
+        raise SystemExit(70)
 """
 
 
@@ -617,6 +641,128 @@ def _download_chunk_size_bytes():
     )
 
 
+def _bounded_env_int(env_name, default, minimum, maximum):
+    """Return a bounded integer from the environment."""
+    raw_value = os.environ.get(env_name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        value = int(raw_value, 10)
+    except ValueError:
+        return default
+    return max(minimum, min(value, maximum))
+
+
+def _bounded_env_float(env_name, default, minimum, maximum):
+    """Return a bounded float from the environment."""
+    raw_value = os.environ.get(env_name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        value = float(raw_value)
+    except ValueError:
+        return default
+    return max(minimum, min(value, maximum))
+
+
+def _http_retry_attempts():
+    """Return transient HTTP retry attempts for connector requests."""
+    return _bounded_env_int(
+        HTTP_TRANSIENT_RETRY_ATTEMPTS_ENV,
+        DEFAULT_HTTP_TRANSIENT_RETRY_ATTEMPTS,
+        1,
+        10,
+    )
+
+
+def _http_retry_delay_seconds():
+    """Return transient HTTP retry delay in seconds."""
+    return _bounded_env_float(
+        HTTP_TRANSIENT_RETRY_DELAY_ENV,
+        DEFAULT_HTTP_TRANSIENT_RETRY_DELAY_SECONDS,
+        0.0,
+        30.0,
+    )
+
+
+def _refresh_request_timeout_seconds():
+    """Return bounded timeout for each refresh request."""
+    return _bounded_env_int(
+        REFRESH_REQUEST_TIMEOUT_ENV,
+        DEFAULT_REFRESH_REQUEST_TIMEOUT_SECONDS,
+        5,
+        300,
+    )
+
+
+def _refresh_retry_attempts():
+    """Return refresh retry attempts."""
+    return _bounded_env_int(
+        REFRESH_RETRY_ATTEMPTS_ENV,
+        DEFAULT_REFRESH_RETRY_ATTEMPTS,
+        1,
+        10,
+    )
+
+
+def _refresh_retry_delay_seconds():
+    """Return refresh retry delay in seconds."""
+    return _bounded_env_float(
+        REFRESH_RETRY_DELAY_ENV,
+        DEFAULT_REFRESH_RETRY_DELAY_SECONDS,
+        0.0,
+        30.0,
+    )
+
+
+def _health_ping_interval_seconds():
+    """Return read-only health ping interval in seconds."""
+    return _bounded_env_int(
+        HEALTH_PING_INTERVAL_ENV,
+        DEFAULT_HEALTH_PING_INTERVAL_SECONDS,
+        5,
+        3600,
+    )
+
+
+def _health_ping_timeout_seconds():
+    """Return read-only health ping timeout in seconds."""
+    return _bounded_env_int(
+        HEALTH_PING_TIMEOUT_ENV,
+        DEFAULT_HEALTH_PING_TIMEOUT_SECONDS,
+        2,
+        120,
+    )
+
+
+def _is_transient_network_error(error):
+    """Return True for network failures that are safe to retry."""
+    transient_types = (
+        ConnectionResetError,
+        TimeoutError,
+        socket.timeout,
+        http.client.BadStatusLine,
+        http.client.IncompleteRead,
+        http.client.RemoteDisconnected,
+    )
+    if isinstance(error, transient_types):
+        return True
+    if isinstance(error, urllib.error.URLError):
+        reason = getattr(error, "reason", None)
+        if isinstance(reason, transient_types):
+            return True
+        return any(
+            marker in str(error).lower()
+            for marker in (
+                "connection reset",
+                "forcibly closed",
+                "timed out",
+                "temporarily unavailable",
+            )
+        )
+    return False
+
+
 def _upload_chunk_size_bytes():
     """Return a bounded upload chunk size for streaming multipart requests."""
     raw_value = os.environ.get(UPLOAD_CHUNK_SIZE_ENV, "").strip()
@@ -674,6 +820,17 @@ def _stringvar_value(variable):
     else:
         value = getattr(variable, "value", "")
     return str(value or "")
+
+
+def _pluralize(count, singular, plural=None):
+    """Return singular or plural text for a numeric count."""
+    try:
+        numeric_count = int(count)
+    except (TypeError, ValueError):
+        numeric_count = 0
+    if numeric_count == 1:
+        return singular
+    return plural if plural is not None else f"{singular}s"
 
 
 def _multipart_form_body(fields, file_field_name, file_name, file_bytes):
@@ -1778,6 +1935,99 @@ def _native_bridge_payload(
     return payload
 
 
+def _write_native_bridge_helper_file():
+    """Write the native bridge helper source to a temporary script path."""
+    with tempfile.NamedTemporaryFile(
+        "w",
+        suffix=".py",
+        prefix="omero_imaris_bridge_",
+        encoding="utf-8",
+        delete=False,
+    ) as helper_file:
+        helper_file.write(_NATIVE_BRIDGE_OPEN_HELPER)
+        return helper_file.name
+
+
+def _cleanup_native_bridge_helper_file(helper_path):
+    """Remove a temporary native bridge helper script."""
+    if not helper_path:
+        return
+    try:
+        os.unlink(helper_path)
+    except OSError as exc:
+        _xt_debug(f"Native bridge helper cleanup failed: {type(exc).__name__}: {exc}")
+
+
+def _native_bridge_open_action(stdout, payload):
+    """Return a log phrase for successful native bridge open output."""
+    if payload.get("require_ims") is not False:
+        return "completed open request in the current Imaris session"
+    if stdout == "BRIDGE_RUNNER_OPENED_MANY":
+        return (
+            "submitted the selected original-file open requests in the current "
+            "Imaris session"
+        )
+    return "submitted the original-file open request in the current Imaris session"
+
+
+def _log_native_bridge_stdout(stdout, context, payload):
+    """Log sanitized native bridge stdout."""
+    if not stdout:
+        return
+    if stdout == "BRIDGE_RUNNER_PROBE_OK":
+        _xt_debug(
+            f"Native bridge runner ({context}) resolved the current Imaris session"
+        )
+    elif stdout in {"BRIDGE_RUNNER_OPENED", "BRIDGE_RUNNER_OPENED_MANY"}:
+        _xt_debug(
+            f"Native bridge runner ({context}) "
+            f"{_native_bridge_open_action(stdout, payload)}"
+        )
+    elif stdout == "BRIDGE_RUNNER_HANDLE_UNAVAILABLE":
+        _xt_debug(
+            f"Native bridge runner ({context}) could not resolve the current Imaris session"
+        )
+    elif stdout == "BRIDGE_RUNNER_OPEN_METHOD_UNAVAILABLE":
+        _xt_debug(
+            f"Native bridge runner ({context}) resolved Imaris but FileOpen is unavailable"
+        )
+    elif stdout in {
+        "BRIDGE_RUNNER_INVALID_FILE_LIST",
+        "BRIDGE_RUNNER_MISSING_FILE",
+        "BRIDGE_RUNNER_INVALID_IMS",
+        "BRIDGE_RUNNER_OPEN_FAILED",
+        "BRIDGE_RUNNER_OPEN_UNVERIFIED",
+    }:
+        _xt_debug(f"Native bridge runner ({context}) result: {stdout}")
+    elif stdout.startswith("BRIDGE_RUNNER_EXCEPTION:"):
+        _xt_debug(f"Native bridge runner ({context}) result: {stdout[:4000]}")
+    else:
+        _xt_debug(f"Native bridge runner ({context}) stdout: {stdout[:4000]}")
+
+
+def _log_native_bridge_stderr(stderr, context):
+    """Log sanitized native bridge stderr."""
+    if not stderr:
+        return
+    stderr_lines = [
+        line
+        for line in stderr.splitlines()
+        if (
+            "communicator not destroyed during global destruction" not in line
+            and "communicators not destroyed during global destruction" not in line
+        )
+    ]
+    if stderr_lines:
+        _xt_debug(
+            f"Native bridge runner ({context}) stderr: "
+            f"{os.linesep.join(stderr_lines)[:4000]}"
+        )
+        return
+    _xt_debug(
+        f"Native bridge runner ({context}) suppressed benign Ice shutdown warning"
+    )
+
+
 def _run_native_bridge_helper(python_executable, payload, context, timeout):
     """Run a fixed native bridge helper under a candidate Python executable."""
     if payload is None:
@@ -1790,9 +2040,11 @@ def _run_native_bridge_helper(python_executable, payload, context, timeout):
     import subprocess
 
     _xt_debug(f"Trying native Imaris bridge runner ({context}) with {resolved_python}")
+    helper_path = None
     try:
+        helper_path = _write_native_bridge_helper_file()
         completed = subprocess.run(
-            [resolved_python, "-c", _NATIVE_BRIDGE_OPEN_HELPER],
+            [resolved_python, helper_path],
             check=False,
             input=json.dumps(payload),
             stdout=subprocess.PIPE,
@@ -1800,65 +2052,24 @@ def _run_native_bridge_helper(python_executable, payload, context, timeout):
             universal_newlines=True,
             timeout=timeout,
         )
-    except Exception as exc:
-        _xt_debug(f"Native Imaris bridge runner ({context}) failed to start: {exc}")
+    except subprocess.TimeoutExpired:
+        _xt_debug(
+            f"Native Imaris bridge runner ({context}) timed out after {timeout} seconds"
+        )
         return False
+    except Exception as exc:
+        _xt_debug(
+            "Native Imaris bridge runner "
+            f"({context}) failed to start: {type(exc).__name__}: {exc}"
+        )
+        return False
+    finally:
+        _cleanup_native_bridge_helper_file(helper_path)
 
     stdout = (completed.stdout or "").strip()
     stderr = (completed.stderr or "").strip()
-    if stdout:
-        if stdout == "BRIDGE_RUNNER_PROBE_OK":
-            _xt_debug(
-                f"Native bridge runner ({context}) resolved the current Imaris session"
-            )
-        elif stdout in {"BRIDGE_RUNNER_OPENED", "BRIDGE_RUNNER_OPENED_MANY"}:
-            if payload.get("require_ims") is False:
-                action = (
-                    "submitted the selected original-file open requests in the "
-                    "current Imaris session"
-                    if stdout == "BRIDGE_RUNNER_OPENED_MANY"
-                    else "submitted the original-file open request in the current "
-                    "Imaris session"
-                )
-            else:
-                action = "completed open request in the current Imaris session"
-            _xt_debug(f"Native bridge runner ({context}) {action}")
-        elif stdout == "BRIDGE_RUNNER_HANDLE_UNAVAILABLE":
-            _xt_debug(
-                f"Native bridge runner ({context}) could not resolve the current Imaris session"
-            )
-        elif stdout == "BRIDGE_RUNNER_OPEN_METHOD_UNAVAILABLE":
-            _xt_debug(
-                f"Native bridge runner ({context}) resolved Imaris but FileOpen is unavailable"
-            )
-        elif stdout in {
-            "BRIDGE_RUNNER_INVALID_FILE_LIST",
-            "BRIDGE_RUNNER_MISSING_FILE",
-            "BRIDGE_RUNNER_INVALID_IMS",
-            "BRIDGE_RUNNER_OPEN_FAILED",
-            "BRIDGE_RUNNER_OPEN_UNVERIFIED",
-        }:
-            _xt_debug(f"Native bridge runner ({context}) result: {stdout}")
-        else:
-            _xt_debug(f"Native bridge runner ({context}) stdout: {stdout[:4000]}")
-    if stderr:
-        stderr_lines = [
-            line
-            for line in stderr.splitlines()
-            if (
-                "communicator not destroyed during global destruction" not in line
-                and "communicators not destroyed during global destruction" not in line
-            )
-        ]
-        if stderr_lines:
-            _xt_debug(
-                f"Native bridge runner ({context}) stderr: "
-                f"{os.linesep.join(stderr_lines)[:4000]}"
-            )
-        else:
-            _xt_debug(
-                f"Native bridge runner ({context}) suppressed benign Ice shutdown warning"
-            )
+    _log_native_bridge_stdout(stdout, context, payload)
+    _log_native_bridge_stderr(stderr, context)
     _xt_debug(f"Native bridge runner ({context}) exit code: {completed.returncode}")
     return completed.returncode == 0
 
@@ -1925,6 +2136,94 @@ def _find_compatible_native_bridge_python(imaris_id):
         if _run_native_bridge_probe_helper(python_executable, imaris_id):
             return python_executable
     return None
+
+
+def _imaris_server_executable_for_imaris(imaris_executable):
+    """Return the adjacent ImarisServerIce executable when present."""
+    candidate = _coerce_path(imaris_executable)
+    if candidate is None:
+        return None
+    server_name = "ImarisServerIce.exe" if os.name == "nt" else "ImarisServerIce"
+    server_path = candidate.with_name(server_name)
+    if server_path.is_file():
+        return str(server_path)
+    return None
+
+
+def _start_imaris_server_ice_if_available(imaris_executable):
+    """Best-effort start for ImarisServerIce before launching a fresh Imaris."""
+    server_executable = _imaris_server_executable_for_imaris(imaris_executable)
+    if not server_executable:
+        return False
+
+    import subprocess
+
+    try:
+        subprocess.Popen(
+            [server_executable],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+        _xt_debug("Started ImarisServerIce for fresh Imaris launch")
+        return True
+    except Exception as exc:
+        _xt_debug(f"Unable to start ImarisServerIce: {type(exc).__name__}: {exc}")
+        return False
+
+
+def _generate_imaris_application_id():
+    """Generate a non-reserved Imaris application id for a launched instance."""
+    return 1000 + random.randint(0, 100000)
+
+
+def _launch_imaris_process(imaris_executable, app_id):
+    """Launch Imaris with the requested XT application id."""
+    exe_path = _existing_regular_file_path(imaris_executable)
+    if exe_path is None:
+        return False
+
+    import subprocess
+
+    try:
+        subprocess.Popen(
+            [str(exe_path), f"id{int(app_id)}"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+        _xt_debug(f"Launched a fresh Imaris session with application id {int(app_id)}")
+        return True
+    except Exception as exc:
+        _xt_debug(f"Unable to launch Imaris: {type(exc).__name__}: {exc}")
+        return False
+
+
+def _launch_imaris_and_find_bridge_python():
+    """Launch a fresh Imaris session and return its id plus bridge Python."""
+    if os.name != "nt":
+        return None, None
+    imaris_executable = _find_imaris_executable()
+    if not imaris_executable:
+        _xt_debug("Fresh Imaris launch unavailable: Imaris.exe was not found")
+        return None, None
+
+    _start_imaris_server_ice_if_available(imaris_executable)
+    app_id = _generate_imaris_application_id()
+    if not _launch_imaris_process(imaris_executable, app_id):
+        return None, None
+
+    deadline = time.time() + NATIVE_BRIDGE_LAUNCH_TIMEOUT
+    while time.time() < deadline:
+        bridge_python = _find_compatible_native_bridge_python(app_id)
+        if bridge_python:
+            return app_id, bridge_python
+        time.sleep(NATIVE_BRIDGE_LAUNCH_POLL_INTERVAL)
+
+    _xt_debug("Fresh Imaris launch did not expose a compatible bridge before timeout")
+    return None, None
 
 
 def _open_file_in_imaris_with_native_bridge_runner(
@@ -2454,6 +2753,10 @@ class OMEROWebClient:
         _xt_debug("Re-authentication failed.")
         return False
 
+    def reauthenticate(self, context):
+        """Attempt to re-authenticate through the public client API."""
+        return self._attempt_reauth(context)
+
     def connect(self):
         """Authenticate with OMERO.web."""
         try:
@@ -2541,41 +2844,98 @@ class OMEROWebClient:
             _xt_debug(f"Connection error: {e}")
             return False
 
-    def _api_request(self, endpoint):
+    @staticmethod
+    def _api_auth_failure(raise_on_error):
+        """Raise the standard API authentication failure when requested."""
+        if raise_on_error:
+            raise RuntimeError("Not authenticated to OMERO.web. Please connect again.")
+
+    @staticmethod
+    def _should_retry_transient(attempt, attempts, retry_transient, error):
+        """Return whether a transient request failure should be retried."""
+        return (
+            attempt < attempts
+            and retry_transient
+            and _is_transient_network_error(error)
+        )
+
+    def _api_request_once(self, url, *, timeout, raise_on_error):
+        """Perform one OMERO.web API GET and decode JSON."""
+        req = self._create_request_with_cookies(url)
+        response = self.opener.open(req, timeout=timeout)
+        if self._check_login_redirect(response, "API request"):
+            self._api_auth_failure(raise_on_error)
+            return None
+        _xt_debug(f"API GET response={getattr(response, 'status', 'unknown')}")
+        content_type = (response.headers.get("Content-Type") or "").lower()
+        raw = response.read()
+        if "text/html" in content_type and self._looks_like_login_page(raw):
+            _xt_debug("API request returned login HTML instead of JSON")
+            self._api_auth_failure(raise_on_error)
+            return None
+        return json.loads(raw.decode("utf-8"))
+
+    @staticmethod
+    def _api_error_result(error, *, raise_on_error):
+        """Return or raise the standard API error result."""
+        if isinstance(error, json.JSONDecodeError):
+            _xt_debug(f"API error: invalid JSON response ({error})")
+            if raise_on_error:
+                raise RuntimeError(
+                    "OMERO.web returned an invalid JSON response."
+                ) from error
+            return None
+        if isinstance(error, urllib.error.HTTPError):
+            _xt_debug(f"API error ({error.code}): {error.reason}")
+            if raise_on_error:
+                raise RuntimeError(
+                    f"OMERO.web API request failed: HTTP {error.code}."
+                ) from error
+            return None
+        _xt_debug(f"API error: {error}")
+        if raise_on_error:
+            raise RuntimeError(f"OMERO.web API request failed: {error}") from error
+        return None
+
+    def _api_request(
+        self,
+        endpoint,
+        *,
+        timeout=30,
+        raise_on_error=False,
+        retry_transient=False,
+    ):
         """Make API request with explicit cookie handling."""
         if not self.session_id:
             _xt_debug("API request skipped: no session")
+            self._api_auth_failure(raise_on_error)
             return None
 
         url = f"{self.api_url}/{endpoint}"
         _xt_debug(f"API GET endpoint={_safe_url_for_log(url)}")
+        attempts = _http_retry_attempts() if retry_transient else 1
+        delay = _http_retry_delay_seconds()
 
-        # Create request with explicit cookies
-        req = self._create_request_with_cookies(url)
+        for attempt in range(1, attempts + 1):
+            try:
+                return self._api_request_once(
+                    url,
+                    timeout=timeout,
+                    raise_on_error=raise_on_error,
+                )
+            except Exception as exc:
+                if self._should_retry_transient(
+                    attempt, attempts, retry_transient, exc
+                ):
+                    _xt_debug(
+                        "API request transient failure "
+                        f"(attempt {attempt}/{attempts}): {exc}"
+                    )
+                    time.sleep(delay)
+                    continue
+                return self._api_error_result(exc, raise_on_error=raise_on_error)
 
-        try:
-            # Use opener for cookie jar updates, but we've also set explicit headers
-            response = self.opener.open(req, timeout=30)
-
-            if self._check_login_redirect(response, "API request"):
-                return None
-
-            _xt_debug(f"API GET response={getattr(response, 'status', 'unknown')}")
-            content_type = (response.headers.get("Content-Type") or "").lower()
-            raw = response.read()
-            if "text/html" in content_type and self._looks_like_login_page(raw):
-                _xt_debug("API request returned login HTML instead of JSON")
-                return None
-            return json.loads(raw.decode("utf-8"))
-        except json.JSONDecodeError as e:
-            _xt_debug(f"API error: invalid JSON response ({e})")
-            return None
-        except urllib.error.HTTPError as e:
-            _xt_debug(f"API error ({e.code}): {e.reason}")
-            return None
-        except Exception as e:
-            _xt_debug(f"API error: {e}")
-            return None
+        return None
 
     def _api_post(self, endpoint, payload=None):
         """POST JSON to OMERO.web API with explicit cookie handling."""
@@ -2645,6 +3005,63 @@ class OMEROWebClient:
                 return normalized
         return default_message
 
+    @staticmethod
+    def _json_request_data(payload, raw_data, content_type):
+        """Return request body bytes and content type for JSON URL requests."""
+        data = raw_data
+        if data is None and payload is not None:
+            data = json.dumps(payload).encode("utf-8")
+            if content_type is None:
+                content_type = "application/json"
+        return data, content_type
+
+    @staticmethod
+    def _decode_json_response(raw_body):
+        """Decode optional JSON response body."""
+        raw_text = raw_body.decode("utf-8", errors="replace") if raw_body else ""
+        decoded = None
+        if raw_text.strip():
+            try:
+                decoded = json.loads(raw_text)
+            except json.JSONDecodeError:
+                decoded = None
+        return decoded, raw_text
+
+    def _open_json_request_once(
+        self,
+        url,
+        *,
+        request_method,
+        data,
+        content_type,
+        headers,
+        timeout,
+        context,
+    ):
+        """Open one JSON URL request and return status plus raw body."""
+        req = self._create_request_with_cookies(url, data=data, method=request_method)
+        if content_type:
+            req.add_header("Content-Type", content_type)
+        for key, value in list((headers or {}).items()):
+            req.add_header(key, value)
+        try:
+            with self.opener.open(req, timeout=timeout) as response:
+                if self._check_login_redirect(response, context):
+                    raise RuntimeError(
+                        "Not authenticated to OMERO.web. Please connect again."
+                    )
+                raw_body = response.read()
+                if self._looks_like_login_page(raw_body):
+                    raise RuntimeError(
+                        "Not authenticated to OMERO.web. Please connect again."
+                    )
+                return getattr(response, "status", 200), raw_body
+        except urllib.error.HTTPError as exc:
+            try:
+                return exc.code, exc.read()
+            except Exception:
+                return exc.code, b""
+
     def _request_json_url(
         self,
         url,
@@ -2656,54 +3073,42 @@ class OMEROWebClient:
         headers=None,
         timeout=30,
         context="request",
+        retry_transient=False,
     ):
         """Handle request JSON URL."""
         if not self.session_id:
             raise RuntimeError("Not authenticated to OMERO.web. Please connect again.")
 
-        data = raw_data
-        if data is None and payload is not None:
-            data = json.dumps(payload).encode("utf-8")
-            if content_type is None:
-                content_type = "application/json"
-
+        data, content_type = self._json_request_data(payload, raw_data, content_type)
         request_method = method or ("POST" if data is not None else "GET")
-        req = self._create_request_with_cookies(url, data=data, method=request_method)
-        if content_type:
-            req.add_header("Content-Type", content_type)
-        for key, value in list((headers or {}).items()):
-            req.add_header(key, value)
-
-        raw_body = b""
-        try:
-            with self.opener.open(req, timeout=timeout) as response:
-                if self._check_login_redirect(response, context):
-                    raise RuntimeError(
-                        "Not authenticated to OMERO.web. Please connect again."
-                    )
-                status_code = getattr(response, "status", 200)
-                raw_body = response.read()
-                if self._looks_like_login_page(raw_body):
-                    raise RuntimeError(
-                        "Not authenticated to OMERO.web. Please connect again."
-                    )
-        except urllib.error.HTTPError as exc:
-            status_code = exc.code
+        attempts = _http_retry_attempts() if retry_transient else 1
+        delay = _http_retry_delay_seconds()
+        for attempt in range(1, attempts + 1):
             try:
-                raw_body = exc.read()
-            except Exception:
-                raw_body = b""
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"{context} failed: {exc}") from exc
+                status_code, raw_body = self._open_json_request_once(
+                    url,
+                    request_method=request_method,
+                    data=data,
+                    content_type=content_type,
+                    headers=headers,
+                    timeout=timeout,
+                    context=context,
+                )
+                decoded, raw_text = self._decode_json_response(raw_body)
+                return status_code, decoded, raw_text
+            except Exception as exc:
+                if self._should_retry_transient(
+                    attempt, attempts, retry_transient, exc
+                ):
+                    _xt_debug(
+                        f"{context} transient failure "
+                        f"(attempt {attempt}/{attempts}): {exc}"
+                    )
+                    time.sleep(delay)
+                    continue
+                raise RuntimeError(f"{context} failed: {exc}") from exc
 
-        raw_text = raw_body.decode("utf-8", errors="replace") if raw_body else ""
-        decoded = None
-        if raw_text.strip():
-            try:
-                decoded = json.loads(raw_text)
-            except json.JSONDecodeError:
-                decoded = None
-        return status_code, decoded, raw_text
+        raise RuntimeError(f"{context} failed after {attempts} attempts")
 
     def get_image_metadata(self, image_id):
         """Get image metadata including original filename."""
@@ -2901,16 +3306,19 @@ class OMEROWebClient:
             "Starting OMERO folder import job via endpoint="
             f"{_safe_url_for_log(start_url)}"
         )
+        client_upload_id = uuid.uuid4().hex
         status_code, payload, raw_text = self._request_json_url(
             start_url,
             method="POST",
             payload={
+                "client_upload_id": client_upload_id,
                 "files": files,
                 "dataset_name_override": dataset_name.strip(),
                 "compatibility_enabled": True,
             },
             timeout=60,
             context="folder import start",
+            retry_transient=True,
         )
         if (
             status_code >= 400
@@ -2953,6 +3361,7 @@ class OMEROWebClient:
                 "chunk_end": int(chunk_start) + len(chunk_bytes or b""),
                 "file_size": int(file_size),
                 "is_last_chunk": "1" if is_last_chunk else "0",
+                "chunk_sha256": hashlib.sha256(chunk_bytes or b"").hexdigest(),
             },
             "file",
             os.path.basename(safe_relative_path) or "upload.bin",
@@ -2965,6 +3374,7 @@ class OMEROWebClient:
             content_type=f"multipart/form-data; boundary={boundary}",
             timeout=EXPORT_TIMEOUT + 60,
             context="folder import chunk upload",
+            retry_transient=True,
         )
         if (
             status_code >= 400
@@ -3072,9 +3482,23 @@ class OMEROWebClient:
 
         return None
 
-    def list_projects(self):
+    def ping(self, timeout=10):
+        """Check that the authenticated OMERO.web session still answers."""
+        data = self._api_request(
+            self._with_all_groups("m/projects/?limit=1"),
+            timeout=timeout,
+            raise_on_error=True,
+        )
+        return data is not None
+
+    def list_projects(self, *, timeout=30, raise_on_error=False, retry_transient=False):
         """List all projects."""
-        data = self._api_request(self._with_all_groups("m/projects/"))
+        data = self._api_request(
+            self._with_all_groups("m/projects/"),
+            timeout=timeout,
+            raise_on_error=raise_on_error,
+            retry_transient=retry_transient,
+        )
         if not data:
             return []
         projects = self._extract_items(
@@ -3083,10 +3507,20 @@ class OMEROWebClient:
         )
         return self._build_named_entities(projects, default_prefix="Project")
 
-    def list_datasets(self, project_id):
+    def list_datasets(
+        self,
+        project_id,
+        *,
+        timeout=30,
+        raise_on_error=False,
+        retry_transient=False,
+    ):
         """List datasets in a project."""
         data = self._api_request(
-            self._with_all_groups(f"m/projects/{project_id}/datasets/")
+            self._with_all_groups(f"m/projects/{project_id}/datasets/"),
+            timeout=timeout,
+            raise_on_error=raise_on_error,
+            retry_transient=retry_transient,
         )
         datasets = self._extract_items(
             data,
@@ -3095,7 +3529,12 @@ class OMEROWebClient:
         if datasets:
             return self._build_named_entities(datasets, default_prefix="Dataset")
 
-        data = self._api_request(self._with_all_groups(f"m/projects/{project_id}/"))
+        data = self._api_request(
+            self._with_all_groups(f"m/projects/{project_id}/"),
+            timeout=timeout,
+            raise_on_error=raise_on_error,
+            retry_transient=retry_transient,
+        )
         if not data:
             return []
 
@@ -3109,10 +3548,20 @@ class OMEROWebClient:
         )
         return self._build_named_entities(datasets, default_prefix="Dataset")
 
-    def list_images(self, dataset_id):
+    def list_images(
+        self,
+        dataset_id,
+        *,
+        timeout=30,
+        raise_on_error=False,
+        retry_transient=False,
+    ):
         """List images in a dataset."""
         data = self._api_request(
-            self._with_all_groups(f"m/datasets/{dataset_id}/images/")
+            self._with_all_groups(f"m/datasets/{dataset_id}/images/"),
+            timeout=timeout,
+            raise_on_error=raise_on_error,
+            retry_transient=retry_transient,
         )
         if not data:
             return []
@@ -3505,6 +3954,7 @@ class OMEROBrowserDialog:
         self._native_bridge_probe_lock = threading.Lock()
         self._native_bridge_probe_done = threading.Event()
         self._native_bridge_probe_started = False
+        self._native_bridge_probe_in_progress = False
         self._native_bridge_available = _looks_like_imaris_application(self.imaris)
         self._native_bridge_python_executable = None
         self._native_bridge_probe_error = ""
@@ -3516,12 +3966,20 @@ class OMEROBrowserDialog:
         self._folder_import_available = False
         self._folder_import_reason = "Connect to OMERO first."
         self._import_in_progress = False
+        self._load_in_progress = False
         self._image_selection_anchor = None
+        self._health_ping_generation = 0
+        self._health_ping_in_progress = False
+        self._health_ping_after_id: Optional[str] = None
+        self._indicator_state = "disconnected"
+        self._indicator_blink_on = False
+        self._indicator_after_id: Optional[str] = None
 
         # Get export directory
         self.export_dir = self._get_export_dir()
 
         self.root = tk.Tk()
+        self._ui_thread_id = threading.get_ident()
         self.root.title("OMERO Connector")
         self.root.geometry(
             f"{OMERO_CONNECTOR_WINDOW_WIDTH}x{OMERO_CONNECTOR_WINDOW_HEIGHT}"
@@ -3535,6 +3993,8 @@ class OMEROBrowserDialog:
 
     def _on_close(self):
         """Handle window close - don't delete temp files as Imaris might still be using them."""
+        self._cancel_health_ping()
+        self._cancel_indicator_blink()
         self.root.destroy()
 
     def _build_ui(self):
@@ -3616,14 +4076,24 @@ class OMEROBrowserDialog:
             fg="#2c3e50",
             activebackground="#e9eef3",
             activeforeground="#2c3e50",
-            font=("Arial", 10),
+            font=CONVERTER_MENU_FONT,
             width=10,
             padx=10,
             pady=4,
             anchor=tk.W,
+            justify=tk.LEFT,
             indicatoron=True,
         )
-        self.converter_menu_menu = tk.Menu(self.converter_menu, tearoff=0)
+        self.converter_menu_menu = tk.Menu(
+            self.converter_menu,
+            tearoff=0,
+            font=CONVERTER_MENU_FONT,
+            bg="#f8f9fa",
+            fg="#2c3e50",
+            activebackground="#e9eef3",
+            activeforeground="#2c3e50",
+            activeborderwidth=0,
+        )
         self.converter_menu.config(menu=self.converter_menu_menu)
         self.converter_menu.pack(side=tk.LEFT)
         self.refresh_btn = _RoundedButton(
@@ -3713,9 +4183,9 @@ class OMEROBrowserDialog:
             actions,
             text="Close",
             command=self._on_close,
-            bg="#95a5a6",
+            bg="#4b5563",
             fg="white",
-            activebackground="#7f8c8d",
+            activebackground="#374151",
             activeforeground="white",
             font=("Arial", 12, "bold"),
             width=120,
@@ -3724,17 +4194,29 @@ class OMEROBrowserDialog:
         close_btn.pack(side=tk.LEFT, padx=2)
 
         # Status
+        status_frame = tk.Frame(self.root, bg=STATUS_NEUTRAL_BG)
+        status_frame.pack(fill=tk.X, side=tk.BOTTOM)
         self.status = tk.Label(
-            self.root,
+            status_frame,
             text="Ready - Please connect to OMERO",
-            bg="#ecf0f1",
+            bg=STATUS_NEUTRAL_BG,
             anchor=tk.W,
             padx=10,
             pady=5,
             font=("Arial", 9),
             height=2,
         )
-        self.status.pack(fill=tk.X, side=tk.BOTTOM)
+        self.status.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.connection_indicator = tk.Canvas(
+            status_frame,
+            width=34,
+            height=30,
+            bg=STATUS_NEUTRAL_BG,
+            highlightthickness=0,
+            bd=0,
+        )
+        self.connection_indicator.pack(side=tk.RIGHT, padx=(4, 10), pady=2)
+        self._draw_connection_indicator("disconnected")
 
     @staticmethod
     def _build_scrolled_listbox(parent, selectmode=None):
@@ -3799,6 +4281,8 @@ class OMEROBrowserDialog:
         for option in options:
             menu.add_command(
                 label=option,
+                font=CONVERTER_MENU_FONT,
+                hidemargin=True,
                 command=lambda value=option: self.converter_var.set(value),
             )
         self.converter_var.set(options[0])
@@ -3990,6 +4474,7 @@ class OMEROBrowserDialog:
 
     def _import_folder_worker(self, selected_folder, folder_name):
         """Handle import folder worker."""
+        import_succeeded = False
         try:
             self._set_status("Scanning selected folder...", "#fff3cd")
             local_entries = _collect_local_folder_entries(selected_folder)
@@ -4093,6 +4578,7 @@ class OMEROBrowserDialog:
 
             incompatible_files = list(final_status.get("incompatible_files") or [])
             if incompatible_files:
+                skipped_count = len(incompatible_files)
                 self._set_status(
                     "Folder import completed with compatibility skips",
                     "#fff3cd",
@@ -4102,7 +4588,9 @@ class OMEROBrowserDialog:
                     (
                         f"The folder was imported into OMERO root as dataset "
                         f"'{folder_name}'.\n\n"
-                        f"{len(incompatible_files)} incompatible file(s) were skipped."
+                        f"{skipped_count} incompatible "
+                        f"{_pluralize(skipped_count, 'file')} "
+                        f"{_pluralize(skipped_count, 'was', 'were')} skipped."
                     ),
                 )
             else:
@@ -4114,13 +4602,16 @@ class OMEROBrowserDialog:
                         f"'{folder_name}'."
                     ),
                 )
+            import_succeeded = True
         except Exception as exc:
             self._set_status("Folder import failed", "#f8d7da")
             self._show_error("Folder Import Failed", str(exc))
             _xt_debug(f"Folder import failed: {type(exc).__name__}: {exc}")
         finally:
             self._invoke_on_ui_thread(
-                self._clear_actions_busy_for_import,
+                lambda succeeded=import_succeeded: self._finish_import_workflow(
+                    succeeded
+                ),
                 wait=False,
             )
 
@@ -4161,6 +4652,7 @@ class OMEROBrowserDialog:
 
     def _disconnect(self):
         """Clear the current OMERO.web session and reset browser state."""
+        self._cancel_health_ping()
         if self.client is not None:
             try:
                 if self.client.cookie_jar is not None:
@@ -4195,7 +4687,8 @@ class OMEROBrowserDialog:
             "#3498db",
             active_bg="#2f85c7",
         )
-        self._set_status("Disconnected", "#ecf0f1")
+        self._set_status("Disconnected")
+        self._set_connection_indicator("disconnected")
 
     def _detect_converter_options_after_connection(self):
         """Populate converter options only after login and native-open checks."""
@@ -4247,7 +4740,7 @@ class OMEROBrowserDialog:
         os.makedirs(export_dir, exist_ok=True)
         return export_dir
 
-    def _set_status(self, text, color="#ecf0f1"):
+    def _set_status(self, text, color=STATUS_NEUTRAL_BG):
         """Handle set status."""
 
         def update():
@@ -4256,6 +4749,162 @@ class OMEROBrowserDialog:
             self.root.update_idletasks()
 
         self.root.after(0, update)
+
+    def _draw_connection_indicator(self, state):
+        """Draw a compact status indicator in the bottom status row."""
+        canvas = getattr(self, "connection_indicator", None)
+        if canvas is None:
+            return
+        palette = {
+            "connected": ("#1f9d55", "#7ee2a8", "#0f5f34"),
+            "busy": (
+                ("#2f80ed", "#93c5fd", "#1d4ed8")
+                if self._indicator_blink_on
+                else ("#93c5fd", "#dbeafe", "#2f80ed")
+            ),
+            "error": ("#d64545", "#ff9b9b", "#8f1d1d"),
+            "disconnected": ("#8a949e", "#d5dadd", "#5e666e"),
+        }
+        fill, highlight, shadow = palette.get(state, palette["disconnected"])
+        canvas.delete("all")
+        canvas.create_oval(7, 5, 29, 27, fill=shadow, outline="")
+        canvas.create_oval(5, 3, 27, 25, fill=fill, outline="#ffffff", width=1)
+        canvas.create_oval(9, 6, 16, 13, fill=highlight, outline="")
+
+    def _set_connection_indicator(self, state):
+        """Set the connection indicator without changing connection state."""
+        ui_thread_id = getattr(self, "_ui_thread_id", None)
+        root = getattr(self, "root", None)
+        if (
+            ui_thread_id is not None
+            and threading.get_ident() != ui_thread_id
+            and root is not None
+            and hasattr(root, "after")
+        ):
+            self.root.after(0, lambda: self._set_connection_indicator(state))
+            return
+        self._indicator_state = state
+        self._indicator_blink_on = state == "busy" and getattr(
+            self,
+            "_indicator_blink_on",
+            False,
+        )
+        self._draw_connection_indicator(state)
+        indicator_after_id: Optional[str] = getattr(self, "_indicator_after_id", None)
+        if (
+            indicator_after_id is not None
+            and root is not None
+            and hasattr(root, "after_cancel")
+        ):
+            try:
+                root.after_cancel(indicator_after_id)
+            except Exception as exc:
+                _xt_debug(f"Indicator timer cancellation failed: {exc}")
+            self._indicator_after_id = None
+        if state == "busy" and root is not None and hasattr(root, "after"):
+            self._schedule_indicator_blink()
+
+    def _cancel_indicator_blink(self):
+        """Cancel pending indicator animation callbacks."""
+        self._indicator_state = "disconnected"
+        self._indicator_blink_on = False
+        indicator_after_id: Optional[str] = getattr(self, "_indicator_after_id", None)
+        if indicator_after_id is not None:
+            try:
+                self.root.after_cancel(indicator_after_id)
+            except Exception as exc:
+                _xt_debug(f"Indicator timer cancellation failed: {exc}")
+            self._indicator_after_id = None
+
+    def _schedule_indicator_blink(self):
+        """Keep the busy indicator blinking while work is active."""
+        if self._indicator_state != "busy":
+            return
+        root = getattr(self, "root", None)
+        if root is None or not hasattr(root, "after"):
+            return
+        self._indicator_blink_on = not self._indicator_blink_on
+        self._draw_connection_indicator("busy")
+        self._indicator_after_id = self.root.after(650, self._schedule_indicator_blink)
+
+    def _restore_idle_connection_indicator(self):
+        """Restore the indicator after foreground work completes."""
+        if getattr(self, "_connected", False):
+            self._set_connection_indicator("connected")
+        else:
+            self._set_connection_indicator("disconnected")
+
+    def _schedule_health_ping(self):
+        """Schedule a read-only connection health check."""
+        if not getattr(self, "_connected", False) or self.client is None:
+            return
+        if self._health_ping_after_id is not None:
+            try:
+                self.root.after_cancel(self._health_ping_after_id)
+            except Exception as exc:
+                _xt_debug(f"Health ping timer cancellation failed: {exc}")
+        interval_ms = int(_health_ping_interval_seconds() * 1000)
+        self._health_ping_after_id = self.root.after(
+            interval_ms, self._start_health_ping
+        )
+
+    def _cancel_health_ping(self):
+        """Cancel pending health checks and invalidate in-flight ping results."""
+        self._health_ping_generation += 1
+        self._health_ping_in_progress = False
+        if self._health_ping_after_id is not None:
+            try:
+                self.root.after_cancel(self._health_ping_after_id)
+            except Exception as exc:
+                _xt_debug(f"Health ping timer cancellation failed: {exc}")
+            self._health_ping_after_id = None
+
+    def _start_health_ping(self):
+        """Start a bounded, read-only health check in the background."""
+        self._health_ping_after_id = None
+        if (
+            not getattr(self, "_connected", False)
+            or self.client is None
+            or self._health_ping_in_progress
+        ):
+            return
+        self._health_ping_in_progress = True
+        self._health_ping_generation += 1
+        generation = self._health_ping_generation
+        threading.Thread(
+            target=self._health_ping_worker,
+            args=(generation,),
+            daemon=True,
+        ).start()
+
+    def _health_ping_worker(self, generation):
+        """Run the read-only health check."""
+        error = None
+        try:
+            self.client.ping(timeout=_health_ping_timeout_seconds())
+        except Exception as exc:
+            error = exc
+        self._invoke_on_ui_thread(
+            lambda: self._finish_health_ping(generation, error),
+            wait=False,
+        )
+
+    def _finish_health_ping(self, generation, error):
+        """Apply the health-check result without reconnecting or disconnecting."""
+        if generation != self._health_ping_generation:
+            return
+        self._health_ping_in_progress = False
+        if not getattr(self, "_connected", False):
+            self._set_connection_indicator("disconnected")
+            return
+        if error is None:
+            if self._indicator_state != "busy":
+                self._set_connection_indicator("connected")
+        else:
+            _xt_debug(f"Read-only OMERO health check failed: {error}")
+            if self._indicator_state != "busy":
+                self._set_connection_indicator("error")
+        self._schedule_health_ping()
 
     def _show_error(self, title, message):
         """Handle show error."""
@@ -4293,6 +4942,28 @@ class OMEROBrowserDialog:
         """Handle get native bridge python executable."""
         with self._native_bridge_probe_lock:
             return self._native_bridge_python_executable
+
+    def _launch_fresh_imaris_bridge(self):
+        """Launch a fresh Imaris session and cache its native bridge."""
+        self._set_status("Opening a new Imaris session...", "#fff3cd")
+        launched_app_id, launched_bridge_python = (
+            _launch_imaris_and_find_bridge_python()
+        )
+        if launched_app_id is None or not launched_bridge_python:
+            return False
+
+        self.imaris = None
+        self.imaris_id = launched_app_id
+        with self._native_bridge_probe_lock:
+            self._native_bridge_python_executable = launched_bridge_python
+            self._native_bridge_available = True
+            self._native_bridge_probe_error = ""
+            self._native_bridge_last_verified_at = time.time()
+            self._native_bridge_probe_started = True
+            self._native_bridge_probe_in_progress = False
+            self._native_bridge_probe_done.set()
+        _xt_debug("Fresh Imaris session is ready for connector handoff")
+        return True
 
     def _open_with_native_bridge_runner(self, downloaded_file, require_ims=True):
         """Handle open with native bridge runner."""
@@ -4358,10 +5029,21 @@ class OMEROBrowserDialog:
             "Direct Imaris handle path did not open the file; "
             "trying compatible native bridge runner"
         )
-        return self._open_with_native_bridge_runner(
+        if self._open_with_native_bridge_runner(
             downloaded_file,
             require_ims=require_ims,
+        ):
+            return True
+
+        _xt_debug(
+            "Native bridge runner did not open the file; attempting fresh Imaris launch"
         )
+        if self._launch_fresh_imaris_bridge():
+            return self._open_with_native_bridge_runner(
+                downloaded_file,
+                require_ims=require_ims,
+            )
+        return False
 
     def _open_downloaded_files_in_imaris(self, downloaded_files, require_ims=True):
         """Open a fully prepared batch in the current Imaris session."""
@@ -4407,25 +5089,63 @@ class OMEROBrowserDialog:
             "Direct Imaris handle path did not complete the batch open; "
             "trying compatible native bridge runner"
         )
-        return self._open_files_with_native_bridge_runner(
+        if self._open_files_with_native_bridge_runner(
             downloaded_files,
             require_ims=require_ims,
+        ):
+            return True
+
+        _xt_debug(
+            "Native bridge runner did not complete the batch open; "
+            "attempting fresh Imaris launch"
         )
+        if self._launch_fresh_imaris_bridge():
+            return self._open_files_with_native_bridge_runner(
+                downloaded_files,
+                require_ims=require_ims,
+            )
+        return False
 
     def _start_native_bridge_probe(self):
         """Probe native Imaris opening capability in the background."""
         with self._native_bridge_probe_lock:
-            if self._native_bridge_probe_started:
+            if self._native_bridge_probe_in_progress:
                 return
+            if (
+                self._native_bridge_probe_started
+                and self._native_bridge_probe_done.is_set()
+            ):
+                return
+            self._native_bridge_probe_in_progress = True
             self._native_bridge_probe_started = True
             if _looks_like_imaris_application(self.imaris):
                 self._native_bridge_available = True
                 self._native_bridge_last_verified_at = time.time()
+                self._native_bridge_probe_in_progress = False
                 self._native_bridge_probe_done.set()
                 _xt_debug("Native bridge probe skipped: current Imaris handle is live")
                 return
 
         threading.Thread(target=self._native_bridge_probe_worker, daemon=True).start()
+
+    def _reset_native_bridge_probe(self):
+        """Clear cached native-bridge probe state so a later Imaris session is detected."""
+        with self._native_bridge_probe_lock:
+            self._native_bridge_probe_done.clear()
+            self._native_bridge_probe_started = False
+            self._native_bridge_probe_in_progress = False
+            self._native_bridge_available = _looks_like_imaris_application(self.imaris)
+            self._native_bridge_python_executable = None
+            self._native_bridge_probe_error = ""
+            self._native_bridge_last_verified_at = (
+                time.time() if self._native_bridge_available else 0.0
+            )
+
+    def _run_native_bridge_probe_now(self, timeout=NATIVE_BRIDGE_REVALIDATION_TIMEOUT):
+        """Run or restart a bounded native-bridge probe and wait for its result."""
+        self._reset_native_bridge_probe()
+        self._start_native_bridge_probe()
+        return self._native_bridge_probe_done.wait(timeout=max(0.0, float(timeout)))
 
     def _native_bridge_probe_worker(self):
         """Handle native bridge probe worker."""
@@ -4456,6 +5176,7 @@ class OMEROBrowserDialog:
                 self._native_bridge_available = bool(bridge_python)
                 self._native_bridge_probe_error = bridge_error
                 self._native_bridge_last_verified_at = verified_at
+                self._native_bridge_probe_in_progress = False
                 self._native_bridge_probe_done.set()
 
     def _revalidate_native_bridge(self):
@@ -4513,25 +5234,51 @@ class OMEROBrowserDialog:
         """Return True only when the final open can use a native Imaris bridge."""
         if _looks_like_imaris_application(self.imaris):
             return True
-        self._start_native_bridge_probe()
+
         self._set_status("Checking Imaris same-session open support...", "#fff3cd")
-        if not self._native_bridge_probe_done.wait(timeout=NATIVE_BRIDGE_PROBE_TIMEOUT):
-            _xt_debug("Native bridge probe timed out before export")
-            return False
         with self._native_bridge_probe_lock:
             available = self._native_bridge_available
             bridge_error = self._native_bridge_probe_error
             last_verified_at = self._native_bridge_last_verified_at
+
+        if (
+            available
+            and time.time() - last_verified_at <= NATIVE_BRIDGE_REVALIDATE_AFTER
+        ):
+            return True
+        if available and self._revalidate_native_bridge():
+            return True
+
+        if not available:
+            if not self._run_native_bridge_probe_now(
+                timeout=NATIVE_BRIDGE_REVALIDATION_TIMEOUT
+            ):
+                _xt_debug("Native bridge probe timed out before export")
+                with self._native_bridge_probe_lock:
+                    self._native_bridge_available = False
+                    self._native_bridge_probe_error = "probe timed out"
+                    self._native_bridge_last_verified_at = 0.0
+            with self._native_bridge_probe_lock:
+                available = self._native_bridge_available
+                bridge_error = self._native_bridge_probe_error
+                last_verified_at = self._native_bridge_last_verified_at
+            if (
+                available
+                and time.time() - last_verified_at <= NATIVE_BRIDGE_REVALIDATE_AFTER
+            ):
+                return True
+            if available and self._revalidate_native_bridge():
+                return True
+
         if not available:
             _xt_debug(
                 "Imaris same-session open bridge is unavailable before export: "
                 f"{bridge_error}"
             )
-            return False
-        if time.time() - last_verified_at <= NATIVE_BRIDGE_REVALIDATE_AFTER:
+
+        if self._launch_fresh_imaris_bridge():
             return True
-        if self._revalidate_native_bridge():
-            return True
+
         with self._native_bridge_probe_lock:
             bridge_error = self._native_bridge_probe_error
         _xt_debug(
@@ -4571,6 +5318,7 @@ class OMEROBrowserDialog:
             "#8fb7d9",
         )
         self._set_status("Connecting to OMERO...", "#fff3cd")
+        self._set_connection_indicator("busy")
 
         scheme = "https" if self.https_var.get() else "http"
         self.client = OMEROWebClient(h, port, u, pw, scheme=scheme)
@@ -4585,6 +5333,8 @@ class OMEROBrowserDialog:
                     active_bg="#d68910",
                 )
                 self._set_status("Connected to OMERO", "#d4edda")
+                self._set_connection_indicator("connected")
+                self._schedule_health_ping()
                 self._load_projects()
                 self._set_status("Detecting connector capabilities...", "#fff3cd")
                 converter_options = self._detect_converter_options_after_connection()
@@ -4616,6 +5366,7 @@ class OMEROBrowserDialog:
                     active_bg="#2f85c7",
                 )
                 self._set_status("Connection failed", "#f8d7da")
+                self._set_connection_indicator("error")
                 messagebox.showerror(
                     "Connection Failed",
                     "Cannot connect to OMERO server.\nPlease check your credentials.",
@@ -4670,6 +5421,7 @@ class OMEROBrowserDialog:
         self.datasets_data = self.client.list_datasets(self._pid)
         for d in self.datasets_data:
             self.dlist.insert(_tk_constant("END", "end"), self._dataset_list_label(d))
+        self._refresh_load_button_text()
 
     def _load_imgs(self, did):
         """Handle load imgs."""
@@ -4679,6 +5431,7 @@ class OMEROBrowserDialog:
         self._image_selection_anchor = None
         for img in self.images_data:
             self.ilist.insert(_tk_constant("END", "end"), self._image_list_label(img))
+        self._refresh_load_button_text()
 
     @classmethod
     def _project_list_label(cls, project):
@@ -4779,6 +5532,8 @@ class OMEROBrowserDialog:
             self._on_image_listbox_click,
             add="+",
         )
+        self.ilist.bind("<Control-a>", self._on_images_select_all)
+        self.ilist.bind("<Control-A>", self._on_images_select_all)
 
     @staticmethod
     def _listbox_size(listbox):
@@ -4806,6 +5561,40 @@ class OMEROBrowserDialog:
                 selection_anchor(index)
             except Exception as exc:
                 _xt_debug(f"Listbox anchor failed: {type(exc).__name__}")
+
+    def _selected_image_count(self):
+        """Return the number of currently selected valid images."""
+        return len(self._selected_images())
+
+    def _load_button_text(self):
+        """Return load-button text using singular/plural wording."""
+        count = self._selected_image_count()
+        return f"Load {_pluralize(count, 'image')} into Imaris"
+
+    def _refresh_load_button_text(self):
+        """Refresh the load button label to match the selected image count."""
+        load_btn = getattr(self, "load_btn", None)
+        if load_btn is not None:
+            load_btn.config(text=self._load_button_text())
+
+    def _on_images_select_all(self, event):
+        """Select every image in the Images panel only."""
+        listbox = getattr(event, "widget", None)
+        if listbox is not self.ilist:
+            return None
+
+        size = self._listbox_size(listbox)
+        if size <= 0:
+            return "break"
+
+        self._clear_listbox_selection(listbox)
+        for index in range(size):
+            listbox.selection_set(index)
+        self._image_selection_anchor = 0
+        self._set_listbox_anchor(listbox, 0)
+        listbox.see(size - 1)
+        self._refresh_load_button_text()
+        return "break"
 
     def _on_image_listbox_click(self, event):
         """Handle on image listbox click."""
@@ -4837,6 +5626,7 @@ class OMEROBrowserDialog:
                 listbox.selection_set(selected_index)
             self._set_listbox_anchor(listbox, index)
             listbox.see(index)
+            self._refresh_load_button_text()
             return "break"
 
         if ctrl_pressed:
@@ -4847,6 +5637,7 @@ class OMEROBrowserDialog:
             self._image_selection_anchor = index
             self._set_listbox_anchor(listbox, index)
             listbox.see(index)
+            self._refresh_load_button_text()
             return "break"
 
         self._clear_listbox_selection(listbox)
@@ -4854,6 +5645,7 @@ class OMEROBrowserDialog:
         self._image_selection_anchor = index
         self._set_listbox_anchor(listbox, index)
         listbox.see(index)
+        self._refresh_load_button_text()
         return "break"
 
     def _current_selected_project_id(self):
@@ -4898,6 +5690,7 @@ class OMEROBrowserDialog:
             and not getattr(self, "_connection_in_progress", False)
             and not getattr(self, "_refresh_in_progress", False)
             and not getattr(self, "_import_in_progress", False)
+            and not getattr(self, "_load_in_progress", False)
         )
         self._set_import_button_state(
             _tk_constant("NORMAL", "normal")
@@ -4918,31 +5711,39 @@ class OMEROBrowserDialog:
             _tk_constant("NORMAL", "normal")
             if (
                 converter_value in {"OMERO", "Imaris"}
+                and not getattr(self, "_load_in_progress", False)
                 and not getattr(self, "_import_in_progress", False)
             )
             else _tk_constant("DISABLED", "disabled")
         )
-        self.load_btn.config(state=state)
+        load_btn = getattr(self, "load_btn", None)
+        if load_btn is not None:
+            load_btn.config(state=state, text=self._load_button_text())
 
     def _set_actions_busy_for_import(self, active):
         """Handle set actions busy for import."""
         self._import_in_progress = bool(active)
         disabled = _tk_constant("DISABLED", "disabled")
+        load_btn = getattr(self, "load_btn", None)
+        connect_btn = getattr(self, "connect_btn", None)
         if active:
-            self.load_btn.config(state=disabled)
+            self._set_connection_indicator("busy")
+            if load_btn is not None:
+                load_btn.config(state=disabled)
             self._set_import_button_state(disabled)
             self._set_refresh_button_state(disabled)
-            self.connect_btn.config(state=disabled)
+            if connect_btn is not None:
+                connect_btn.config(state=disabled)
             return
 
-        if self._connected:
+        if connect_btn is not None and getattr(self, "_connected", False):
             self._set_connect_button(
                 "Disconnect",
                 _tk_constant("NORMAL", "normal"),
                 "#f39c12",
                 active_bg="#d68910",
             )
-        else:
+        elif connect_btn is not None:
             self._set_connect_button(
                 "Connect",
                 _tk_constant("NORMAL", "normal"),
@@ -4951,17 +5752,83 @@ class OMEROBrowserDialog:
             )
         self._set_load_button_for_converter()
         self._update_import_button_state()
-        if self._connected and _stringvar_value(
-            getattr(self, "converter_var", None)
-        ) in {
-            "OMERO",
-            "Imaris",
-        }:
+        if (
+            getattr(self, "_connected", False)
+            and _stringvar_value(getattr(self, "converter_var", None))
+            in {
+                "OMERO",
+                "Imaris",
+            }
+            and not getattr(self, "_load_in_progress", False)
+        ):
             self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
 
     def _clear_actions_busy_for_import(self):
         """Handle clear actions busy for import."""
         self._set_actions_busy_for_import(False)
+
+    def _finish_import_workflow(self, succeeded):
+        """Restore import action state and reflect final connection indicator state."""
+        self._set_actions_busy_for_import(False)
+        if succeeded:
+            self._restore_idle_connection_indicator()
+        else:
+            self._set_connection_indicator("error")
+
+    def _set_actions_busy_for_load(self, active):
+        """Handle set actions busy for image loading."""
+        self._load_in_progress = bool(active)
+        disabled = _tk_constant("DISABLED", "disabled")
+        load_btn = getattr(self, "load_btn", None)
+        connect_btn = getattr(self, "connect_btn", None)
+        if active:
+            self._set_connection_indicator("busy")
+            if load_btn is not None:
+                load_btn.config(state=disabled, text=self._load_button_text())
+            self._set_import_button_state(disabled)
+            self._set_refresh_button_state(disabled)
+            if connect_btn is not None:
+                connect_btn.config(state=disabled)
+            return
+
+        if connect_btn is not None and getattr(self, "_connected", False):
+            self._set_connect_button(
+                "Disconnect",
+                _tk_constant("NORMAL", "normal"),
+                "#f39c12",
+                active_bg="#d68910",
+            )
+        elif connect_btn is not None:
+            self._set_connect_button(
+                "Connect",
+                _tk_constant("NORMAL", "normal"),
+                "#3498db",
+                active_bg="#2f85c7",
+            )
+        self._set_load_button_for_converter()
+        self._update_import_button_state()
+        if (
+            getattr(self, "_connected", False)
+            and _stringvar_value(getattr(self, "converter_var", None))
+            in {
+                "OMERO",
+                "Imaris",
+            }
+            and not getattr(self, "_import_in_progress", False)
+        ):
+            self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
+
+    def _clear_actions_busy_for_load(self):
+        """Handle clear actions busy for image loading."""
+        self._set_actions_busy_for_load(False)
+
+    def _finish_load_workflow(self, succeeded):
+        """Restore load action state and reflect final connection indicator state."""
+        self._set_actions_busy_for_load(False)
+        if succeeded:
+            self._restore_idle_connection_indicator()
+        else:
+            self._set_connection_indicator("error")
 
     def _refresh_browser(self):
         """Handle refresh browser."""
@@ -4977,31 +5844,98 @@ class OMEROBrowserDialog:
         project_id = self._current_selected_project_id()
         dataset_id = self._current_selected_dataset_id()
         self._set_refresh_button_state(_tk_constant("DISABLED", "disabled"))
-        self.load_btn.config(state=_tk_constant("DISABLED", "disabled"))
+        load_btn = getattr(self, "load_btn", None)
+        if load_btn is not None:
+            load_btn.config(state=_tk_constant("DISABLED", "disabled"))
         self._set_import_button_state(_tk_constant("DISABLED", "disabled"))
         self._set_status("Refreshing OMERO browser...", "#fff3cd")
+        self._set_connection_indicator("busy")
         threading.Thread(
             target=self._refresh_worker,
             args=(project_id, dataset_id, generation),
             daemon=True,
         ).start()
 
+    def _fetch_browser_state_for_refresh(self, project_id, dataset_id):
+        """Fetch browser state using bounded requests that fail explicitly."""
+        timeout = _refresh_request_timeout_seconds()
+        projects = self.client.list_projects(
+            timeout=timeout,
+            raise_on_error=True,
+            retry_transient=True,
+        )
+        project_index = self._find_entity_index(projects, project_id)
+        datasets = []
+        dataset_index = None
+        images = []
+
+        if project_index is not None:
+            refreshed_project_id = self._entity_id(projects[project_index])
+            datasets = self.client.list_datasets(
+                refreshed_project_id,
+                timeout=timeout,
+                raise_on_error=True,
+                retry_transient=True,
+            )
+            dataset_index = self._find_entity_index(datasets, dataset_id)
+            if dataset_index is not None:
+                refreshed_dataset_id = self._entity_id(datasets[dataset_index])
+                images = self.client.list_images(
+                    refreshed_dataset_id,
+                    timeout=timeout,
+                    raise_on_error=True,
+                    retry_transient=True,
+                )
+
+        return projects, project_index, datasets, dataset_index, images
+
     def _refresh_worker(self, project_id, dataset_id, generation):
         """Handle refresh worker."""
         try:
-            projects = self.client.list_projects()
-            project_index = self._find_entity_index(projects, project_id)
-            datasets = []
-            dataset_index = None
-            images = []
+            attempts = _refresh_retry_attempts()
+            delay = _refresh_retry_delay_seconds()
+            last_error = None
+            for attempt in range(1, attempts + 1):
+                if generation != self._refresh_generation:
+                    return
+                try:
+                    (
+                        projects,
+                        project_index,
+                        datasets,
+                        dataset_index,
+                        images,
+                    ) = self._fetch_browser_state_for_refresh(project_id, dataset_id)
+                    last_error = None
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    if attempt >= attempts:
+                        break
+                    _xt_debug(
+                        "Refresh attempt "
+                        f"{attempt}/{attempts} failed; attempting re-authentication: {exc}"
+                    )
+                    self._set_status(
+                        f"Refresh failed; reconnecting ({attempt + 1}/{attempts})...",
+                        "#fff3cd",
+                    )
+                    try:
+                        if self.client is not None:
+                            reauthenticate = getattr(
+                                self.client, "reauthenticate", None
+                            )
+                            if callable(reauthenticate):
+                                reauthenticate("browser refresh")
+                    except Exception as reauth_exc:
+                        _xt_debug(
+                            "Refresh re-authentication attempt failed: "
+                            f"{type(reauth_exc).__name__}: {reauth_exc}"
+                        )
+                    time.sleep(delay)
 
-            if project_index is not None:
-                refreshed_project_id = self._entity_id(projects[project_index])
-                datasets = self.client.list_datasets(refreshed_project_id)
-                dataset_index = self._find_entity_index(datasets, dataset_id)
-                if dataset_index is not None:
-                    refreshed_dataset_id = self._entity_id(datasets[dataset_index])
-                    images = self.client.list_images(refreshed_dataset_id)
+            if last_error is not None:
+                raise last_error
 
             self._invoke_on_ui_thread(
                 lambda: self._apply_refresh_result(
@@ -5057,6 +5991,7 @@ class OMEROBrowserDialog:
             self._replace_listbox_items(self.dlist, [])
             self._replace_listbox_items(self.ilist, [])
             self._clear_listbox_selection(self.plist)
+            self._refresh_load_button_text()
             if requested_project_id is None:
                 self._set_status("Project list refreshed", "#d4edda")
             else:
@@ -5065,6 +6000,7 @@ class OMEROBrowserDialog:
                     "#fff3cd",
                 )
             self._finish_refresh_buttons()
+            self._restore_idle_connection_indicator()
             return
 
         self._pid = self._entity_id(projects[project_index])
@@ -5081,6 +6017,7 @@ class OMEROBrowserDialog:
             self._image_selection_anchor = None
             self._replace_listbox_items(self.ilist, [])
             self._clear_listbox_selection(self.dlist)
+            self._refresh_load_button_text()
             if requested_dataset_id is None:
                 self._set_status("Datasets refreshed", "#d4edda")
             else:
@@ -5089,6 +6026,7 @@ class OMEROBrowserDialog:
                     "#fff3cd",
                 )
             self._finish_refresh_buttons()
+            self._restore_idle_connection_indicator()
             return
 
         self._did = self._entity_id(datasets[dataset_index])
@@ -5100,14 +6038,17 @@ class OMEROBrowserDialog:
             [self._image_list_label(img) for img in images],
         )
         self._clear_listbox_selection(self.ilist)
+        self._refresh_load_button_text()
         self._set_status("OMERO browser refreshed", "#d4edda")
         self._finish_refresh_buttons()
+        self._restore_idle_connection_indicator()
 
     def _finish_refresh_error(self, generation, refresh_error):
         """Handle finish refresh error."""
         if generation != self._refresh_generation:
             return
         self._set_status("Refresh failed", "#f8d7da")
+        self._set_connection_indicator("error")
         self._show_error("Refresh Failed", str(refresh_error))
         _xt_debug(f"Refresh failed: {type(refresh_error).__name__}: {refresh_error}")
         self._finish_refresh_buttons()
@@ -5117,10 +6058,11 @@ class OMEROBrowserDialog:
         self._refresh_in_progress = False
         self._set_refresh_button_state(
             _tk_constant("NORMAL", "normal")
-            if self._connected
+            if getattr(self, "_connected", False)
             and _stringvar_value(getattr(self, "converter_var", None))
             in {"OMERO", "Imaris"}
             and not getattr(self, "_import_in_progress", False)
+            and not getattr(self, "_load_in_progress", False)
             else _tk_constant("DISABLED", "disabled")
         )
         self._set_load_button_for_converter()
@@ -5150,14 +6092,19 @@ class OMEROBrowserDialog:
 
     def _selected_images(self):
         """Handle selected images."""
-        selected = []
-        for raw_index in self.ilist.curselection():
+        selected: List[Any] = []
+        ilist = getattr(self, "ilist", None)
+        curselection = getattr(ilist, "curselection", None)
+        if not callable(curselection):
+            return selected
+        images_data = list(getattr(self, "images_data", []) or [])
+        for raw_index in curselection():
             try:
                 index = int(raw_index)
             except (TypeError, ValueError):
                 continue
-            if 0 <= index < len(self.images_data):
-                selected.append(self.images_data[index])
+            if 0 <= index < len(images_data):
+                selected.append(images_data[index])
         return selected
 
     def _load(self):
@@ -5199,7 +6146,7 @@ class OMEROBrowserDialog:
         ):
             return
 
-        self.load_btn.config(state=_tk_constant("DISABLED", "disabled"))
+        self._set_actions_busy_for_load(True)
         threading.Thread(
             target=worker_target,
             args=worker_args,
@@ -5208,10 +6155,17 @@ class OMEROBrowserDialog:
 
     def _reenable_load_button(self):
         """Handle reenable load button."""
-        self.load_btn.config(state=_tk_constant("NORMAL", "normal"))
+        clear_busy = getattr(self, "_set_actions_busy_for_load", None)
+        if callable(clear_busy):
+            clear_busy(False)
+            return
+        load_btn = getattr(self, "load_btn", None)
+        if load_btn is not None:
+            load_btn.config(state=_tk_constant("NORMAL", "normal"))
 
     def _load_worker(self, img, converter):
         """Handle load worker."""
+        workflow_succeeded = False
         try:
             image_id = img.get("id") if isinstance(img, dict) else None
             if image_id is None:
@@ -5312,6 +6266,7 @@ class OMEROBrowserDialog:
                     success_title,
                     success_message,
                 )
+                workflow_succeeded = True
             else:
                 raise RuntimeError(failure_message)
 
@@ -5320,10 +6275,16 @@ class OMEROBrowserDialog:
             self._show_error("Error", str(e))
             _xt_debug(f"Load worker failed: {type(e).__name__}: {e}")
         finally:
-            self._invoke_on_ui_thread(self._reenable_load_button, wait=False)
+            self._invoke_on_ui_thread(
+                lambda succeeded=workflow_succeeded: self._finish_load_workflow(
+                    succeeded
+                ),
+                wait=False,
+            )
 
     def _load_multiple_worker(self, images, converter):
         """Handle load multiple worker."""
+        workflow_succeeded = False
         try:
             selected_images = [
                 img for img in list(images or []) if isinstance(img, dict)
@@ -5444,6 +6405,7 @@ class OMEROBrowserDialog:
             if success:
                 self._set_status(success_status, "#d4edda")
                 self._show_info(success_title, success_message)
+                workflow_succeeded = True
             else:
                 raise RuntimeError(failure_message)
 
@@ -5452,7 +6414,12 @@ class OMEROBrowserDialog:
             self._show_error("Error", str(e))
             _xt_debug(f"Multi-image load worker failed: {type(e).__name__}: {e}")
         finally:
-            self._invoke_on_ui_thread(self._reenable_load_button, wait=False)
+            self._invoke_on_ui_thread(
+                lambda succeeded=workflow_succeeded: self._finish_load_workflow(
+                    succeeded
+                ),
+                wait=False,
+            )
 
     def show(self):
         """Handle show."""

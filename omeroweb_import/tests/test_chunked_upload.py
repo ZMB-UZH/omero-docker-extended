@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 from pathlib import Path
 
 import django
+import pytest
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
@@ -152,6 +154,151 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(
     assert job["files"][0]["status"] == "uploaded"
     assert import_started == [job_id]
     assert prepare_calls == [(job_id, fake_conn)]
+
+
+def test_upload_files_accepts_idempotent_final_chunk_retry_with_checksum(
+    tmp_path: Path,
+    monkeypatch,
+):
+    """Verify final chunk retry is accepted without mutating completed jobs."""
+    upload_root = tmp_path / "upload-root"
+    job_id = _test_job_id("c3")
+    job = {
+        "job_id": job_id,
+        "status": "uploading",
+        "uploaded_bytes": 0,
+        "total_bytes": 5,
+        "files": [
+            {
+                "upload_id": "u1",
+                "relative_path": "folder/retry.bin",
+                "staged_path": "_staged/folder/retry.bin",
+                "size": 5,
+                "status": "pending",
+                "errors": [],
+            }
+        ],
+    }
+    _mark_job_owned(monkeypatch, job)
+    monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
+    monkeypatch.setattr(
+        index_view, "_load_job", lambda value: job if value == job_id else None
+    )
+    apply_calls = []
+    import_started = []
+
+    def fake_apply_upload_updates(current_job_id, updates, upload_errors):
+        """Mark the job as uploaded once."""
+        apply_calls.append((current_job_id, updates, upload_errors))
+        job["files"][0]["status"] = "uploaded"
+        job["uploaded_bytes"] = 5
+        job["status"] = "ready"
+        return job
+
+    monkeypatch.setattr(index_view, "_apply_upload_updates", fake_apply_upload_updates)
+    monkeypatch.setattr(index_view, "_start_import_thread", import_started.append)
+    monkeypatch.setattr(
+        index_view,
+        "_prepare_uploaded_job_for_request_path_import",
+        lambda current_job_id, current_job, conn: (current_job, None),
+    )
+
+    factory = RequestFactory()
+    body = b"retry"
+    checksum = hashlib.sha256(body).hexdigest()
+    request_payload = {
+        "upload_mode": "chunked",
+        "relative_path": "folder/retry.bin",
+        "chunk_start": "0",
+        "chunk_end": "5",
+        "file_size": "5",
+        "is_last_chunk": "1",
+        "chunk_sha256": checksum,
+    }
+
+    first_response = index_view._upload_files(
+        factory.post(
+            f"/omeroweb_import/upload/{job_id}/",
+            data={**request_payload, "file": SimpleUploadedFile("retry.bin", body)},
+        ),
+        job_id,
+        object(),
+    )
+    duplicate_response = index_view._upload_files(
+        factory.post(
+            f"/omeroweb_import/upload/{job_id}/",
+            data={**request_payload, "file": SimpleUploadedFile("retry.bin", body)},
+        ),
+        job_id,
+        object(),
+    )
+
+    assert first_response.status_code == 200
+    assert duplicate_response.status_code == 200
+    assert json.loads(duplicate_response.content)["complete"] is True
+    assert (upload_root / job_id / "_staged/folder/retry.bin").read_bytes() == body
+    assert len(apply_calls) == 1
+    assert import_started == [job_id]
+
+
+def test_upload_files_rejects_chunk_checksum_mismatch(tmp_path: Path, monkeypatch):
+    """Verify chunk checksum mismatch is rejected before staging bytes."""
+    upload_root = tmp_path / "upload-root"
+    job_id = _test_job_id("c4")
+    job = {
+        "job_id": job_id,
+        "status": "uploading",
+        "uploaded_bytes": 0,
+        "total_bytes": 5,
+        "files": [
+            {
+                "upload_id": "u1",
+                "relative_path": "folder/bad.bin",
+                "staged_path": "_staged/folder/bad.bin",
+                "size": 5,
+                "status": "pending",
+                "errors": [],
+            }
+        ],
+    }
+    _mark_job_owned(monkeypatch, job)
+    monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
+    monkeypatch.setattr(
+        index_view, "_load_job", lambda value: job if value == job_id else None
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_apply_upload_updates",
+        lambda *_args: pytest.fail("checksum failures must not update the job"),
+    )
+
+    response = index_view._upload_files(
+        RequestFactory().post(
+            f"/omeroweb_import/upload/{job_id}/",
+            data={
+                "upload_mode": "chunked",
+                "relative_path": "folder/bad.bin",
+                "chunk_start": "0",
+                "chunk_end": "5",
+                "file_size": "5",
+                "is_last_chunk": "1",
+                "chunk_sha256": "0" * 64,
+                "file": SimpleUploadedFile("bad.bin", b"fresh"),
+            },
+        ),
+        job_id,
+        object(),
+    )
+
+    assert response.status_code == 400
+    assert json.loads(response.content)["error"] == (
+        errors.upload_chunk_metadata_invalid(
+            "chunk_sha256 does not match uploaded bytes"
+        )
+    )
+    assert not (upload_root / job_id / "_staged/folder/bad.bin").exists()
 
 
 def test_upload_files_defers_noncompat_import_until_background_plan_exists(
