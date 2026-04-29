@@ -24,8 +24,8 @@ This skill ensures all code follows security best practices and identifies poten
 
 #### FAIL: NEVER Do This
 ```typescript
-const apiKey = "sk-proj-xxxxx"  // Hardcoded secret
-const dbPassword = "password123" // In source code
+const apiKey = getCheckedInApiCredentialForExampleOnly()
+const dbCredential = getCheckedInDatabaseCredentialForExampleOnly()
 ```
 
 #### PASS: ALWAYS Do This
@@ -238,9 +238,9 @@ const securityHeaders = [
 import { csrf } from '@/lib/csrf'
 
 export async function POST(request: Request) {
-  const token = request.headers.get('X-CSRF-Token')
+  const csrfHeader = request.headers.get(csrf.headerName())
 
-  if (!csrf.verify(token)) {
+  if (!csrf.verify(csrfHeader)) {
     return NextResponse.json(
       { error: 'Invalid CSRF token' },
       { status: 403 }

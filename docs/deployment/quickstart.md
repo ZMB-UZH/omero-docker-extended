@@ -21,7 +21,7 @@ Do not deploy with default credentials.
 
 After `installation/installation_script.sh` runs, generated `.env` mirrors the
 variables Compose needs before service-level `env_file:` loading, including the
-project name, bind paths, required passwords, and build version pins. Plain
+project name, bind paths, required ports/settings, and build version pins. Plain
 `docker compose <command>` then works from the installation root.
 
 Before any manual compose command, run:

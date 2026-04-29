@@ -39,6 +39,12 @@ log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*"; }
 
 die() { log "FATAL: $*" >&2; exit 1; }
 
+derive_runtime_env_aliases() {
+    if [ -z "${PLUGIN_DB_PASS:-}" ] && [ -n "${OMP_PLUGIN_DB_PASS:-}" ]; then
+        export PLUGIN_DB_PASS="${OMP_PLUGIN_DB_PASS}"
+    fi
+}
+
 write_export() {
     local name="$1"
     local value="${!name-}"
@@ -53,6 +59,7 @@ write_cron_env() {
     local tmp_file
     local name
 
+    derive_runtime_env_aliases
     for name in "${REQUIRED_ENV_VARS[@]}"; do
         if [ -z "${!name:-}" ]; then
             missing+=("$name")

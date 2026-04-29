@@ -35,7 +35,7 @@ This repository expresses those OMERO properties in env files with the existing 
 - `env/omeroserver.env` is also loaded by `omeroweb` for shared server-derived settings (for example `CONFIG_omero_fs_repo_path` consumed by admin-tools quota compatibility checks).
 - `env/omero-celery_example.env` -> `env/omero-celery.env`: Celery and Imaris connector processing controls.
 - `env/grafana_example.env` -> `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
-- `env/omero_secrets_example.env` -> `env/omero_secrets.env`: credentials and secrets (deployment-local only; never commit runtime secrets). This now includes the local `supervisord` socket credentials used by the `omeroweb` container's `supervisorctl` interface.
+- `env/omero_secrets_example.env` -> `env/omero_secrets.env`: credentials and secrets (deployment-local only; never commit runtime secrets). The tracked example keeps secret values empty; deployment-local values must be non-empty except for intentionally optional fields such as CrowdSec enrollment.
 - Redis memory sizing is interpolated from the generated `.env` file. The
   installer writes `REDIS_MAXMEMORY=512mb`,
   `REDIS_MAXMEMORY_POLICY=allkeys-lru`, `REDIS_DATA_TMPFS_SIZE=512m`,
@@ -189,7 +189,7 @@ This repository expresses those OMERO properties in env files with the existing 
 3. Review open host ports and reduce exposure.
 4. Confirm TLS and secure session settings.
 5. Restrict external access to monitoring services.
-6. Replace example `SUPERVISOR_USERNAME` / `SUPERVISOR_PASSWORD` values before production rollout.
+6. Confirm that deployment-local secret files remain untracked and mode-restricted.
 
 ## Plugin Registration
 

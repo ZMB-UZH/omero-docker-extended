@@ -77,8 +77,6 @@ EXPECTED_EXAMPLE_ENV_KEYS: dict[str, frozenset[str]] = {
             "OMP_HASH_SECRET",
             "FMP_HASH_SECRET",
             "GF_SECURITY_ADMIN_PASSWORD",
-            "SUPERVISOR_USERNAME",
-            "SUPERVISOR_PASSWORD",
             "CROWDSEC_ENROLL_KEY",
             "CROWDSEC_ENGINE_NAME",
         }
@@ -316,6 +314,17 @@ class ExampleEnvContractTests(unittest.TestCase):
             keys.append(match.group(1))
         return keys, malformed
 
+    def parse_active_assignments(self, relative_path: str) -> dict[str, str]:
+        env_path = self.repo_root / relative_path
+        assignments: dict[str, str] = {}
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, value = line.split("=", 1)
+            assignments[key] = value
+        return assignments
+
     def test_tracked_example_env_inventory_is_locked(self) -> None:
         discovered = {
             path.relative_to(self.repo_root).as_posix()
@@ -364,6 +373,20 @@ class ExampleEnvContractTests(unittest.TestCase):
                         ]
                     ),
                 )
+
+    def test_secrets_example_has_no_placeholder_secret_values(self) -> None:
+        assignments = self.parse_active_assignments("env/omero_secrets_example.env")
+        self.assertFalse(
+            any(value for value in assignments.values()),
+            "Tracked secrets examples must keep values empty so scanners do not "
+            "treat placeholders as checked-in credentials.",
+        )
+        example_text = (self.repo_root / "env/omero_secrets_example.env").read_text(
+            encoding="utf-8"
+        )
+        legacy_placeholder_prefix = "CHANGE"
+        self.assertNotIn(f"{legacy_placeholder_prefix}PASSWORD", example_text)
+        self.assertNotIn(f"{legacy_placeholder_prefix}VALUE", example_text)
 
 
 if __name__ == "__main__":

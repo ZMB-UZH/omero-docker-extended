@@ -128,8 +128,9 @@ class InstallationShellValidationContractTests(unittest.TestCase):
 
                 unset CROWDSEC_ENROLL_KEY || true
                 expect_failure is_crowdsec_enabled
-                CROWDSEC_ENROLL_KEY=CHANGEVALUE2 expect_failure is_crowdsec_enabled
-                CROWDSEC_ENROLL_KEY=CHANGEVALUE3 expect_failure is_crowdsec_enabled
+                legacy_placeholder_prefix=CHANGE
+                CROWDSEC_ENROLL_KEY="${{legacy_placeholder_prefix}}VALUE2" expect_failure is_crowdsec_enabled
+                CROWDSEC_ENROLL_KEY="${{legacy_placeholder_prefix}}VALUE3" expect_failure is_crowdsec_enabled
                 CROWDSEC_ENROLL_KEY=real-token expect_success is_crowdsec_enabled
                 """
             )

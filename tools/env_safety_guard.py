@@ -94,10 +94,21 @@ DOT_ENV_REQUIRED_KEYS = (
     "REDIS_MAXMEMORY",
     "REDIS_MAXMEMORY_POLICY",
     "REDIS_DATA_TMPFS_SIZE",
-    "OMERO_DB_PASS",
-    "OMP_PLUGIN_DB_PASS",
 )
 DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS = frozenset({"REDIS_SAVE_POLICY"})
+REQUIRED_NONEMPTY_ENV_KEYS = frozenset(
+    {
+        "OMERO_DB_PASS",
+        "OMP_PLUGIN_DB_PASS",
+        "OMP_DATA_PASS",
+        "ROOTPASS",
+        "OMERO_JOB_SERVICE_PASS",
+        "OMERO_WEB_JOB_SERVICE_PASS",
+        "OMP_HASH_SECRET",
+        "FMP_HASH_SECRET",
+        "GF_SECURITY_ADMIN_PASSWORD",
+    }
+)
 
 ENV_ACTIVE_ASSIGNMENT_RE = re.compile(r"^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 ENV_COMMENTED_ASSIGNMENT_RE = re.compile(
@@ -807,7 +818,9 @@ def validate_env_file_pair(
         template_value = required_assignments.get(
             key, optional_assignments.get(key, "")
         )
-        required_nonempty = bool(template_value) and key not in ALLOW_EMPTY_KEYS
+        required_nonempty = (
+            bool(template_value) or key in REQUIRED_NONEMPTY_ENV_KEYS
+        ) and key not in ALLOW_EMPTY_KEYS
         if required_nonempty and not resolved_value:
             errors.append(f"{actual_rel}: {key} must not be empty")
             continue

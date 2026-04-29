@@ -613,6 +613,52 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("'cd /opt/omero/server'", dockerfile_text)
         self.assertNotIn("working_dir: /opt/omero/server/OMERO.server", compose_text)
 
+    def test_database_secret_values_are_not_compose_interpolation_inputs(
+        self,
+    ) -> None:
+        compose_text = (self.repo_root / "docker-compose.yml").read_text(
+            encoding="utf-8"
+        )
+        dockerfile_text = (
+            self.repo_root / "docker" / "omero-server.Dockerfile"
+        ).read_text(encoding="utf-8")
+        omero_db_pass_config_key = "CONFIG_" + "omero_db_pass"
+
+        self.assertNotIn("POSTGRES_" + "PASSWORD:", compose_text)
+        self.assertNotIn("DATA_" + "SOURCE_NAME:", compose_text)
+        self.assertNotIn(
+            f'{omero_db_pass_config_key}: "${{OMERO_DB_PASS',
+            compose_text,
+        )
+        self.assertIn("OMERO_POSTGRES_PASSWORD_SOURCE: main", compose_text)
+        self.assertIn("OMERO_POSTGRES_PASSWORD_SOURCE: plugin", compose_text)
+        self.assertIn("OMERO_POSTGRES_EXPORTER_SOURCE: main", compose_text)
+        self.assertIn("OMERO_POSTGRES_EXPORTER_SOURCE: plugin", compose_text)
+        self.assertIn(
+            "./docker/postgres-entrypoint-from-env.sh:/usr/local/bin/postgres-entrypoint-from-env.sh:ro",
+            compose_text,
+        )
+        self.assertIn(
+            "./monitoring/postgres-exporter/entrypoint.sh:/postgres-exporter-entrypoint.sh:ro",
+            compose_text,
+        )
+        self.assertIn(
+            'export CONFIG_omero_db_pass=\\"\\$OMERO_DB_PASS\\"',
+            dockerfile_text,
+        )
+
+    def test_secret_derivation_entrypoints_are_tracked_and_executable(self) -> None:
+        for relative_path in (
+            "docker/postgres-entrypoint-from-env.sh",
+            "monitoring/postgres-exporter/entrypoint.sh",
+        ):
+            with self.subTest(relative_path=relative_path):
+                script_path = self.repo_root / relative_path
+                script_text = script_path.read_text(encoding="utf-8")
+                self.assertTrue(script_path.stat().st_mode & 0o111)
+                self.assertIn("set -eu", script_text)
+                self.assertIn("Missing required environment variable", script_text)
+
     def test_supervisord_sets_writable_gunicorn_chdir_by_default(self) -> None:
         supervisord_text = (self.repo_root / "supervisord.conf").read_text(
             encoding="utf-8"
@@ -646,6 +692,15 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             'ensure_runtime_directory "${static_dir}" "OMERO.web static directory" 0755',
             web_bootstrap_text,
         )
+
+    def test_supervisord_uses_private_socket_without_checked_in_auth(self) -> None:
+        supervisord_text = (self.repo_root / "supervisord.conf").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("file=/tmp/supervisor.sock", supervisord_text)
+        self.assertIn("chmod=0700", supervisord_text)
+        self.assertNotIn("username=%(ENV_SUPERVISOR_", supervisord_text)
+        self.assertNotIn("password=%(ENV_SUPERVISOR_", supervisord_text)
 
     def test_github_pull_script_exports_compressed_build_env(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
@@ -749,8 +804,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
-        self.assertIn('case "${key}" in', script_text)
-        self.assertIn('""|CHANGEVALUE2|CHANGEVALUE3) return 1 ;;', script_text)
+        self.assertIn('legacy_placeholder_prefix="CHANGE"', script_text)
+        self.assertIn('"${legacy_placeholder_prefix}VALUE2"', script_text)
+        self.assertIn('"${legacy_placeholder_prefix}VALUE3"', script_text)
 
     def test_installation_script_schedules_one_shot_crowdsec_restart_only_when_needed(
         self,

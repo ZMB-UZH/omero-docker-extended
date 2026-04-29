@@ -98,7 +98,7 @@ env-file list for `build`, `up`, `down`, `ps`, `logs`, and `exec`.
 If you installed with `installation/installation_script.sh`, generated `.env` already sets
 `COMPOSE_ENV_FILES=installation_paths.env,env/omero_secrets.env,env/omeroserver.env,env/omeroweb.env,env/omero-celery.env,env/grafana.env`
 for shells/tools that honor it and mirrors the compose-interpolated paths,
-passwords, and build version pins (mode `0600`), so plain
+ports, Redis settings, and build version pins (mode `0600`), so plain
 `docker compose <command>` works from the installation root.
 
 If you run the installer with `sudo`, the script now assigns `.env` ownership to
@@ -205,11 +205,12 @@ Cause:
 
 - `database` initialization uses `OMERO_DB_PASS` from `env/omero_secrets.env`.
 - OMERO.server expects the variable name `CONFIG_omero_db_pass`.
-- If `CONFIG_omero_db_pass` is not explicitly mapped from `OMERO_DB_PASS`, OMERO.server can continuously retry with the wrong credential and generate auth-failure loops.
+- The OMERO.server entrypoint derives `CONFIG_omero_db_pass` from `OMERO_DB_PASS` before running the startup scripts.
+- If this derivation is missing or broken, OMERO.server can continuously retry with the wrong credential and generate auth-failure loops.
 
 Fix:
 
-- Ensure compose maps `CONFIG_omero_db_pass` from `OMERO_DB_PASS` for the `omeroserver` service.
+- Rebuild the `omeroserver` image from the current checkout and confirm the entrypoint derives `CONFIG_omero_db_pass` from `OMERO_DB_PASS`.
 - Restart and inspect logs:
 
 ```bash

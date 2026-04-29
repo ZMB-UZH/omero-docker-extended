@@ -216,9 +216,12 @@ services:
   postgres-exporter:
     image: "prometheuscommunity/postgres-exporter:v0.19.1"
     restart: unless-stopped
+    entrypoint: ["/postgres-exporter-entrypoint.sh"]
     command: ["--config.file=/etc/postgres-exporter/postgres_exporter.yml"]
+    env_file:
+      - ./env/omero_secrets.env
     environment:
-      DATA_SOURCE_NAME: "postgresql://omero:${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}@database:5432/omero?sslmode=disable"
+      OMERO_POSTGRES_EXPORTER_SOURCE: main
     networks:
       omero:
         aliases:
@@ -229,6 +232,7 @@ services:
       database_plugin:
         condition: service_healthy
     volumes:
+      - ./monitoring/postgres-exporter/entrypoint.sh:/postgres-exporter-entrypoint.sh:ro
       - ./monitoring/postgres-exporter/postgres_exporter.yml:/etc/postgres-exporter/postgres_exporter.yml:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
@@ -242,9 +246,12 @@ services:
   postgres-exporter-plugin:
     image: "prometheuscommunity/postgres-exporter:v0.19.1"
     restart: unless-stopped
+    entrypoint: ["/postgres-exporter-entrypoint.sh"]
     command: ["--config.file=/etc/postgres-exporter/postgres_exporter.yml"]
+    env_file:
+      - ./env/omero_secrets.env
     environment:
-      DATA_SOURCE_NAME: "postgresql://omero-plugin:${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}@database-plugin:5433/omero-plugin?sslmode=disable"
+      OMERO_POSTGRES_EXPORTER_SOURCE: plugin
     networks:
       omero:
         aliases:
@@ -253,6 +260,7 @@ services:
       database_plugin:
         condition: service_healthy
     volumes:
+      - ./monitoring/postgres-exporter/entrypoint.sh:/postgres-exporter-entrypoint.sh:ro
       - ./monitoring/postgres-exporter/postgres_exporter.yml:/etc/postgres-exporter/postgres_exporter.yml:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
@@ -320,6 +328,7 @@ services:
   database:
     image: "postgres:16.12"
     restart: unless-stopped
+    entrypoint: ["/usr/local/bin/postgres-entrypoint-from-env.sh"]
     env_file:
       - ./env/omero_secrets.env
     command:
@@ -329,9 +338,9 @@ services:
       - "-c"
       - "log_timezone=Europe/Zurich"
     environment:
+      OMERO_POSTGRES_PASSWORD_SOURCE: main
       POSTGRES_USER: omero
       POSTGRES_DB: omero
-      POSTGRES_PASSWORD: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
       PGDATA: /var/lib/postgresql/data/pgdata
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
@@ -340,6 +349,7 @@ services:
         aliases:
           - database
     volumes:
+      - ./docker/postgres-entrypoint-from-env.sh:/usr/local/bin/postgres-entrypoint-from-env.sh:ro
       - ${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -h 127.0.0.1 -p 5432"]
@@ -369,7 +379,6 @@ services:
       - ./env/omero_secrets.env
       - ./env/omero-celery.env
     environment:
-      CONFIG_omero_db_pass: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
       # -----------------------------------------------------------------
       # OMERO_DATA_DIR / OMERO_DIR: CRITICAL — DO NOT REMOVE.
       # These tell the OMERO server where the bind-mounted data volume is.
@@ -518,6 +527,7 @@ services:
   database_plugin:
     image: "postgres:16.12"
     restart: unless-stopped
+    entrypoint: ["/usr/local/bin/postgres-entrypoint-from-env.sh"]
     env_file:
       - ./env/omero_secrets.env
     command:
@@ -527,9 +537,9 @@ services:
       - "-c"
       - "log_timezone=Europe/Zurich"
     environment:
+      OMERO_POSTGRES_PASSWORD_SOURCE: plugin
       POSTGRES_USER: omero-plugin
       POSTGRES_DB: omero-plugin
-      POSTGRES_PASSWORD: "${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}"
       PGDATA: /var/lib/postgresql/data/pgdata
       PGPORT: 5433
       TZ: Europe/Zurich
@@ -539,6 +549,7 @@ services:
         aliases:
           - database-plugin
     volumes:
+      - ./docker/postgres-entrypoint-from-env.sh:/usr/local/bin/postgres-entrypoint-from-env.sh:ro
       - ${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -h 127.0.0.1 -p 5433"]
@@ -567,12 +578,10 @@ services:
       OMERO_DB_PORT: 5432
       OMERO_DB_NAME: omero
       OMERO_DB_USER: omero
-      OMERO_DB_PASS: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
       PLUGIN_DB_HOST: database-plugin
       PLUGIN_DB_PORT: 5433
       PLUGIN_DB_NAME: omero-plugin
       PLUGIN_DB_USER: omero-plugin
-      PLUGIN_DB_PASS: "${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}"
     volumes:
       - ${PG_MAINTENANCE_DATA_PATH:?Set PG_MAINTENANCE_DATA_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     networks:
