@@ -1,11 +1,13 @@
 const { describe, expect, it } = globalThis;
 
+/** Fetches preview-hosted text and asserts that the asset was served. */
 const fetchText = async (url) => {
   const response = await fetch(url);
   expect(response.ok).toBe(true);
   return response.text();
 };
 
+/** Renders the generated help page HTML inside the browser test document. */
 const installHelpPage = async () => {
   const html = await fetchText('/help.html');
   const parsed = new DOMParser().parseFromString(html, 'text/html');
