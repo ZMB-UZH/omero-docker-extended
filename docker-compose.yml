@@ -84,10 +84,18 @@ services:
   prometheus:
     image: "prom/prometheus:v3.11.2"
     restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -ec
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--web.enable-lifecycle"
+      - |
+        sed "s/__OMERO_CLI_PORT__/$${OMERO_CLI_PORT}/g" /etc/prometheus/prometheus.yml.template > /tmp/prometheus.yml
+        exec /bin/prometheus \
+          --config.file=/tmp/prometheus.yml \
+          --storage.tsdb.path=/prometheus \
+          --web.enable-lifecycle
+    environment:
+      OMERO_CLI_PORT: "${OMERO_CLI_PORT:?Set OMERO_CLI_PORT in env/omeroserver.env}"
     networks:
       omero:
         aliases:
@@ -95,7 +103,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml.template:ro
       - ${PROMETHEUS_DATA_PATH:?Set PROMETHEUS_DATA_PATH (run installation/installation_script.sh)}:/prometheus:rw
     depends_on:
       blackbox-exporter:
@@ -395,10 +403,10 @@ services:
       test:
         - CMD
         - /startup/healthcheck-omeroserver.sh
-      interval: 10s
-      timeout: 10s
-      retries: 120
-      start_period: 900s
+      interval: "${OMERO_SERVER_HEALTHCHECK_INTERVAL_SECONDS:?Set OMERO_SERVER_HEALTHCHECK_INTERVAL_SECONDS in env/omeroserver.env}s"
+      timeout: "${OMERO_SERVER_HEALTHCHECK_TIMEOUT_SECONDS:?Set OMERO_SERVER_HEALTHCHECK_TIMEOUT_SECONDS in env/omeroserver.env}s"
+      retries: "${OMERO_SERVER_HEALTHCHECK_RETRIES:?Set OMERO_SERVER_HEALTHCHECK_RETRIES in env/omeroserver.env}"
+      start_period: "${OMERO_SERVER_HEALTHCHECK_START_PERIOD_SECONDS:?Set OMERO_SERVER_HEALTHCHECK_START_PERIOD_SECONDS in env/omeroserver.env}s"
     security_opt:
       - no-new-privileges:true
 

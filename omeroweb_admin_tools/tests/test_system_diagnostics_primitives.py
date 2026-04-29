@@ -321,6 +321,12 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
 
 
 def test_diagnostic_aggregators_return_expected_checks(monkeypatch):
+    monkeypatch.setenv("ADMIN_TOOLS_OMERO_SERVER_HOST", "omeroserver")
+    monkeypatch.setenv("ADMIN_TOOLS_OMERO_BLITZ_PORT", "4064")
+    monkeypatch.setenv("ADMIN_TOOLS_OMERO_SECURE_PORT", "4063")
+    monkeypatch.setenv("ADMIN_TOOLS_OMERO_WEB_HOST", "omeroweb")
+    monkeypatch.setenv("ADMIN_TOOLS_OMERO_WEB_PORT", "4090")
+    monkeypatch.setenv("ADMIN_TOOLS_OMERO_WEB_PATH", "/webclient/")
     monkeypatch.setattr(
         system_diagnostics,
         "_resolve_hostname",
@@ -364,3 +370,28 @@ def test_diagnostic_aggregators_return_expected_checks(monkeypatch):
     assert len(db_checks) == 4
     assert core_checks[0].check_id == "omero_host_dns"
     assert db_checks[-1].check_id == "omero_database_sql"
+
+
+def test_omero_server_core_reports_missing_runtime_config(monkeypatch):
+    for name in (
+        "ADMIN_TOOLS_OMERO_SERVER_HOST",
+        "OMEROHOST",
+        "CONFIG_omero_host",
+        "ADMIN_TOOLS_OMERO_BLITZ_PORT",
+        "OMERO_PORT",
+        "OMERO_CLI_PORT",
+        "ADMIN_TOOLS_OMERO_SECURE_PORT",
+        "OMERO_SECURE_PORT",
+        "ADMIN_TOOLS_OMERO_WEB_HOST",
+        "ADMIN_TOOLS_OMERO_WEB_PORT",
+        "CONFIG_omero_web_application__server_port",
+        "ADMIN_TOOLS_OMERO_WEB_PATH",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    checks = system_diagnostics._run_omero_server_core()
+
+    assert len(checks) == 1
+    assert checks[0].check_id == "omero_runtime_config"
+    assert checks[0].status == "fail"
+    assert "Missing required runtime environment" in checks[0].details

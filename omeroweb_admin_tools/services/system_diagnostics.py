@@ -101,6 +101,35 @@ def _first_present_env(names: Sequence[str], default: str = "") -> str:
     return default
 
 
+def _config_failure(summary: str, details: str, start: float) -> DiagnosticCheckResult:
+    return DiagnosticCheckResult(
+        check_id="omero_runtime_config",
+        label="Validate OMERO runtime diagnostic configuration",
+        status="fail",
+        duration_ms=_elapsed_ms(start),
+        summary=summary,
+        details=details,
+    )
+
+
+def _parse_runtime_port(raw_value: str, env_names: Sequence[str]) -> int:
+    try:
+        port = int(raw_value)
+    except ValueError as exc:
+        names_label = ", ".join(env_names)
+        raise RuntimeError(
+            f"Invalid TCP port value {raw_value!r} in runtime env ({names_label})."
+        ) from exc
+
+    if port < 1 or port > 65535:
+        names_label = ", ".join(env_names)
+        raise RuntimeError(
+            f"TCP port value {raw_value!r} is outside 1-65535 "
+            f"in runtime env ({names_label})."
+        )
+    return port
+
+
 def _elapsed_ms(start: float) -> int:
     return int(max(0.0, (time.monotonic() - start) * 1000.0))
 
@@ -610,15 +639,66 @@ def list_diagnostic_scripts() -> List[DiagnosticScript]:
 
 
 def _run_omero_server_core() -> List[DiagnosticCheckResult]:
-    # Source of truth: docker-compose.yml
-    # omeroserver: ports 4064 (blitz), 4063 (secure/ssl)
-    # omeroweb: port 4090, healthcheck hits http://127.0.0.1:4090/webgateway/
-    host = _get_env("ADMIN_TOOLS_OMERO_SERVER_HOST", "omeroserver")
-    blitz_port = int(_get_env("ADMIN_TOOLS_OMERO_BLITZ_PORT", "4064"))
-    secure_port = int(_get_env("ADMIN_TOOLS_OMERO_SECURE_PORT", "4063"))
-    web_url = _get_env(
-        "ADMIN_TOOLS_OMERO_WEB_HEALTH_URL",
-        "http://omeroweb:4090/webclient/",  # DevSkim: ignore DS137138
+    config_start = time.monotonic()
+    host = _first_present_env(
+        ("ADMIN_TOOLS_OMERO_SERVER_HOST", "OMEROHOST", "CONFIG_omero_host")
+    )
+    blitz_port_names = ("ADMIN_TOOLS_OMERO_BLITZ_PORT", "OMERO_PORT", "OMERO_CLI_PORT")
+    secure_port_names = ("ADMIN_TOOLS_OMERO_SECURE_PORT", "OMERO_SECURE_PORT")
+    web_host = _first_present_env(("ADMIN_TOOLS_OMERO_WEB_HOST",))
+    web_port_names = (
+        "ADMIN_TOOLS_OMERO_WEB_PORT",
+        "CONFIG_omero_web_application__server_port",
+    )
+    web_path = _first_present_env(("ADMIN_TOOLS_OMERO_WEB_PATH",))
+
+    missing_config = []
+    if not host:
+        missing_config.append(
+            "ADMIN_TOOLS_OMERO_SERVER_HOST/OMEROHOST/CONFIG_omero_host"
+        )
+    if not _first_present_env(blitz_port_names):
+        missing_config.append("/".join(blitz_port_names))
+    if not _first_present_env(secure_port_names):
+        missing_config.append("/".join(secure_port_names))
+    if not web_host:
+        missing_config.append("ADMIN_TOOLS_OMERO_WEB_HOST")
+    if not _first_present_env(web_port_names):
+        missing_config.append("/".join(web_port_names))
+    if not web_path:
+        missing_config.append("ADMIN_TOOLS_OMERO_WEB_PATH")
+    if missing_config:
+        return [
+            _config_failure(
+                "Missing OMERO runtime diagnostic configuration.",
+                "Missing required runtime environment: "
+                + ", ".join(sorted(missing_config)),
+                config_start,
+            )
+        ]
+
+    try:
+        blitz_port = _parse_runtime_port(
+            _first_present_env(blitz_port_names), blitz_port_names
+        )
+        secure_port = _parse_runtime_port(
+            _first_present_env(secure_port_names), secure_port_names
+        )
+        web_port = _parse_runtime_port(
+            _first_present_env(web_port_names), web_port_names
+        )
+    except RuntimeError as exc:
+        return [
+            _config_failure(
+                "Invalid OMERO runtime diagnostic port configuration.",
+                str(exc),
+                config_start,
+            )
+        ]
+
+    configured_web_url = _first_present_env(("ADMIN_TOOLS_OMERO_WEB_HEALTH_URL",))
+    web_url = configured_web_url or urllib.parse.urlunsplit(
+        ("http", f"{web_host}:{web_port}", web_path, "", "")
     )
     timeout_s = _to_float_env("ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS", 3.5)
 
