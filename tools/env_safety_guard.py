@@ -23,6 +23,7 @@ Design goals:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shutil
 import sys
@@ -67,6 +68,9 @@ DOT_ENV_REQUIRED_KEYS = (
     "OMERO_WEB_SUPERVISOR_LOGS_PATH",
     "OMERO_WEB_HOST_PORT",
     "CONFIG_omero_web_application__server_port",
+    "OMERO_SERVER_HOST_PORT",
+    "OMERO_CLI_HOST",
+    "OMERO_CLI_PORT",
     "PORTAINER_DATA_PATH",
     "PROMETHEUS_DATA_PATH",
     "GRAFANA_DATA_PATH",
@@ -80,6 +84,7 @@ DOT_ENV_REQUIRED_KEYS = (
     "OMERO_CLI_ZARR_VERSION",
     "OME_ZARR_PY_VERSION",
     "BIOFORMATS2RAW_VERSION",
+    "BIOFORMATS_VERSION",
     "REDIS_SAVE_POLICY",
     "REDIS_APPENDONLY",
     "REDIS_MAXMEMORY",
@@ -89,6 +94,172 @@ DOT_ENV_REQUIRED_KEYS = (
     "OMP_PLUGIN_DB_PASS",
 )
 DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS = frozenset({"REDIS_SAVE_POLICY"})
+
+ENV_ACTIVE_ASSIGNMENT_RE = re.compile(
+    r"^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$"
+)
+ENV_COMMENTED_ASSIGNMENT_RE = re.compile(
+    r"^#\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$"
+)
+ENV_REF_RE = re.compile(r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
+
+BOOL_KEYS = frozenset(
+    {
+        "GF_AUTH_ANONYMOUS_ENABLED",
+        "GF_ANALYTICS_REPORTING_ENABLED",
+        "GF_ANALYTICS_CHECK_FOR_UPDATES",
+        "GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES",
+        "GF_PLUGINS_PREINSTALL_AUTO_UPDATE",
+        "OMERO_JOB_SERVICE_JOIN_ALL_GROUPS",
+        "OMERO_JOB_SERVICE_SECURE",
+        "OMERO_BINARY_REPO_CLEANSE_ON_START",
+        "OMERO_REPOSITORY_LOCK_CLEANUP_ON_START",
+        "OMERO_RENDERING_CACHE_CLEANUP_ON_START",
+        "OMERO_DROPBOX_ENABLED",
+        "CONFIG_omero_fs_platformCheck",
+        "CONFIG_omero_fs_ignoreSysFiles",
+        "CONFIG_omero_fs_ignoreDirEvents",
+        "OMERO_DROPBOX_USER_DIR_SYNC_OMERO_SECURE",
+        "OMERO_DROPBOX_USER_DIR_CREATE_ROOT",
+        "OMERO_DROPBOX_USER_DIR_ALLOW_WORLD_WRITABLE",
+        "REGISTER_OFFICIAL_SCRIPTS",
+        "OMERO_ZARR_PIXEL_BUFFER_ENABLED",
+        "CONFIG_omero_security_ssl",
+        "CONFIG_omero_web_session__cookie__secure",
+        "CONFIG_omero_web_session__expire__at__browser__close",
+        "ADMIN_TOOLS_AUTO_SET_DEFAULT_GROUP_QUOTA",
+        "OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT",
+        "OMERO_WEB_UPLOAD_DISABLE_SPECIAL_METHODS",
+        "OMERO_WEB_ZARR_ALTERNATIVE_RENDERING",
+        "CONFIG_omero_web_debug",
+        "OMERO_IMS_USE_CELERY",
+        "TOOLS_ENHANCED_SEARCH_USE_CELERY",
+        "OMERO_IMS_USE_JOB_SERVICE_SESSION",
+        "REDIS_APPENDONLY",
+    }
+)
+PORT_KEYS = frozenset(
+    {
+        "OMERO_SERVER_HOST_PORT",
+        "OMERO_CLI_PORT",
+        "OMERO_JOB_SERVICE_PORT",
+        "CONFIG_omero_fs_port",
+        "OMERO_DROPBOX_USER_DIR_SYNC_OMERO_PORT",
+        "OMERO_PORT",
+        "OMERO_WEB_HOST_PORT",
+        "CONFIG_omero_web_application__server_port",
+        "OMP_DATA_PORT",
+    }
+)
+FLOAT_KEYS = frozenset(
+    {
+        "CONFIG_omero_fs_timeout",
+        "OMERO_IMS_EXPORT_POLL_INTERVAL",
+        "ADMIN_TOOLS_MIN_QUOTA_GB",
+        "ADMIN_TOOLS_DEFAULT_GROUP_QUOTA_GB",
+    }
+)
+JSON_KEYS = frozenset(
+    {
+        "CONFIG_omero_web_caches",
+        "CONFIG_omero_web_apps",
+        "CONFIG_omero_web_ui_right__plugins",
+        "CONFIG_omero_web_ui_center__plugins",
+        "CONFIG_omero_web_open__with",
+        "CONFIG_omero_web_ui_top__links",
+    }
+)
+NON_NEGATIVE_INTEGER_KEYS = frozenset(
+    {
+        "CONFIG_omero_security_login__failure__throttle__count",
+        "CONFIG_omero_security_login__failure__throttle__time",
+        "CONFIG_omero_db_poolsize",
+        "CONFIG_omero_scripts_processors",
+        "CONFIG_omero_pixeldata_threads",
+        "CONFIG_omero_fs_maxRetries",
+        "CONFIG_omero_fs_retryInterval",
+        "CONFIG_omero_fs_timeToLive",
+        "CONFIG_omero_fs_timeToIdle",
+        "CONFIG_omero_fs_blockSize",
+        "CONFIG_omero_fs_dirImportWait",
+        "CONFIG_omero_fs_fileBatch",
+        "CONFIG_omero_fs_throttleImport",
+        "OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS",
+        "OMERO_REPO_ROOT_SYNC_JITTER_SECONDS",
+        "OMERO_DROPBOX_USER_DIR_SYNC_JITTER_SECONDS",
+        "ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN",
+        "ADMIN_TOOLS_LOG_CACHE_MAX_MB",
+        "ADMIN_TOOLS_LOG_INTERNAL_FILE_BATCH_SIZE",
+        "ADMIN_TOOLS_LOG_MAX_PARALLEL_QUERIES",
+        "TOOLS_ENHANCED_SEARCH_SCHEMA_VERSION",
+        "OMERO_WEB_UPLOAD_NATIVE_ZARR_GZIP_LEVEL",
+    }
+)
+POSITIVE_INTEGER_SUFFIXES = (
+    "_SECONDS",
+    "_RETRIES",
+    "_MAX_RETRIES",
+    "_CONCURRENCY",
+    "_PREFETCH",
+    "_BATCH_FILES",
+    "_BATCH_SIZE",
+    "_MAX_RESULTS",
+    "_MAX_ENTRIES",
+    "_TIME_LIMIT",
+    "_RESULT_EXPIRES",
+)
+ABSOLUTE_PATH_KEYS = frozenset(
+    {
+        "OMERO_INSTALLATION_PATH",
+        "OMERO_DATABASE_PATH",
+        "OMERO_PLUGIN_DATABASE_PATH",
+        "OMERO_DATA_PATH",
+        "OMERO_TMP_PATH",
+        "OMERO_DATA_DIR",
+        "OMERO_USER_DATA_PATH",
+        "OMERO_IMPORT_PATH",
+        "OMERO_SERVER_VAR_PATH",
+        "OMERO_SERVER_LOGS_PATH",
+        "OMERO_WEB_VAR_PATH",
+        "OMERO_WEB_LOGS_PATH",
+        "OMERO_WEB_SUPERVISOR_LOGS_PATH",
+        "PORTAINER_DATA_PATH",
+        "PROMETHEUS_DATA_PATH",
+        "GRAFANA_DATA_PATH",
+        "LOKI_DATA_PATH",
+        "ALLOY_DATA_PATH",
+        "PG_MAINTENANCE_DATA_PATH",
+        "BUILDX_DATA_PATH",
+        "NODE_EXPORTER_TEXTFILE_PATH",
+        "CROWDSEC_DB_PATH",
+        "CROWDSEC_CONFIG_PATH",
+        "GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH",
+        "OMERO_WEB_ROOT",
+        "CONFIG_omero_web_logdir",
+        "CONFIG_omero_web_login__logo",
+        "ADMIN_TOOLS_QUOTA_PROJECTS_FILE",
+        "ADMIN_TOOLS_QUOTA_PROJID_FILE",
+        "OMERO_BINARY_REPO_CLEANSE_DATA_DIR",
+        "CONFIG_omero_managed_dir",
+        "OMERO_IMS_EXPORT_DIR",
+    }
+)
+ALLOW_EMPTY_KEYS = frozenset(
+    {
+        "OMERO_JOB_SERVICE_GROUP",
+        "CONFIG_omero_fs_watchDir",
+        "CONFIG_omero_fs_whitelist",
+        "CONFIG_omero_fs_blacklist",
+        "CONFIG_omero_fs_readers",
+        "CONFIG_omero_fs_importArgs",
+        "OMERO_DROPBOX_USER_DIR_OWNER",
+        "OMERO_DROPBOX_USER_DIR_GROUP",
+        "REDIS_SAVE_POLICY",
+    }
+)
+OMERO_GROUP_PERMISSIONS = frozenset(
+    {"private", "read-only", "read-annotate", "read-write"}
+)
 
 # ---------------------------------------------------------------------------
 # Manifest helpers
@@ -167,13 +338,11 @@ def load_env_assignments(env_path: Path) -> dict[str, str]:
     assignments: dict[str, str] = {}
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+        match = ENV_ACTIVE_ASSIGNMENT_RE.match(line)
+        if not match:
             continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        if not key:
-            continue
-        assignments[key] = value.strip().strip("\"'")
+        key, value = match.groups()
+        assignments[key] = strip_env_quotes(value.strip())
     return assignments
 
 
@@ -188,6 +357,175 @@ def parse_env_keys(env_path: Path) -> list[str]:
         if key:
             keys.append(key)
     return keys
+
+
+def strip_env_quotes(value: str) -> str:
+    """Remove one balanced shell-style quote pair from a simple env value."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def parse_active_env_assignments(env_path: Path) -> dict[str, str]:
+    """Return active env assignments in file order, failing on duplicates."""
+    assignments: dict[str, str] = {}
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        match = ENV_ACTIVE_ASSIGNMENT_RE.match(line)
+        if not match:
+            continue
+        key, raw_value = match.groups()
+        if key in assignments:
+            raise ValueError(f"{env_path.name} defines {key} more than once")
+        assignments[key] = strip_env_quotes(raw_value.strip())
+    return assignments
+
+
+def parse_commented_env_assignments(env_path: Path) -> dict[str, str]:
+    """Return commented-out example assignments, used as optional known keys."""
+    assignments: dict[str, str] = {}
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        match = ENV_COMMENTED_ASSIGNMENT_RE.match(line)
+        if not match:
+            continue
+        key, raw_value = match.groups()
+        assignments.setdefault(key, strip_env_quotes(raw_value.strip()))
+    return assignments
+
+
+def resolve_env_references(value: str, assignments: dict[str, str]) -> str:
+    """Resolve simple $NAME and ${NAME} references without shell evaluation."""
+    if "$(" in value or "`" in value or "$[" in value:
+        raise ValueError("unsupported shell expression")
+
+    resolved = value
+    for _ in range(1024):
+        match = ENV_REF_RE.search(resolved)
+        if not match:
+            if "${" in resolved:
+                raise ValueError("unsupported parameter expansion")
+            return resolved
+        ref_name = match.group(1) or match.group(2) or ""
+        ref_value = assignments.get(ref_name, "")
+        resolved = resolved[: match.start()] + ref_value + resolved[match.end() :]
+
+    raise ValueError("too many nested env references")
+
+
+def is_bool_value(value: str) -> bool:
+    return value.lower() in {"0", "1", "true", "false", "yes", "no", "on", "off"}
+
+
+def is_non_negative_integer_text(value: str) -> bool:
+    return bool(re.fullmatch(r"[0-9]+", value))
+
+
+def is_positive_integer_text(value: str) -> bool:
+    return is_non_negative_integer_text(value) and int(value) > 0
+
+
+def is_float_text(value: str) -> bool:
+    return bool(re.fullmatch(r"(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)", value))
+
+
+def is_size_text(value: str) -> bool:
+    return bool(re.fullmatch(r"[1-9][0-9]*(?:[kKmMgGtT]?[bB]?)?", value))
+
+
+def is_safe_omero_group_name(value: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9_.-]+", value))
+
+
+def validate_group_list(value: str) -> list[str]:
+    errors: list[str] = []
+    if not value:
+        return errors
+    for entry in value.split(","):
+        if not entry:
+            continue
+        if ":" not in entry:
+            errors.append("OMERO_INSTALL_GROUP_LIST entries must be name:permission")
+            continue
+        group_name, permission = entry.split(":", 1)
+        if not is_safe_omero_group_name(group_name):
+            errors.append(
+                "OMERO_INSTALL_GROUP_LIST contains an invalid group name"
+            )
+        if permission not in OMERO_GROUP_PERMISSIONS:
+            errors.append(
+                "OMERO_INSTALL_GROUP_LIST contains an unsupported group permission"
+            )
+    return errors
+
+
+def validate_assignment_value(key: str, raw_value: str, resolved_value: str) -> list[str]:
+    """Validate one env assignment's type without exposing the value."""
+    errors: list[str] = []
+    value = resolved_value
+
+    if key in BOOL_KEYS:
+        if not is_bool_value(value):
+            errors.append(f"{key} must be a boolean")
+        return errors
+
+    if key in PORT_KEYS or key.endswith("_PORT"):
+        if not is_positive_integer_text(value) or int(value) > 65535:
+            errors.append(f"{key} must be a TCP port between 1 and 65535")
+        return errors
+
+    if key in FLOAT_KEYS:
+        if not is_float_text(value):
+            errors.append(f"{key} must be a numeric decimal value")
+        return errors
+
+    if key in JSON_KEYS:
+        try:
+            json.loads(raw_value)
+        except json.JSONDecodeError:
+            errors.append(f"{key} must be valid JSON")
+        return errors
+
+    if key == "OMERO_INSTALL_GROUP_LIST":
+        errors.extend(validate_group_list(value))
+        return errors
+
+    if key == "OMERO_DROPBOX_USER_DIR_MODE":
+        if not re.fullmatch(r"[0-7]{3,4}", value):
+            errors.append(f"{key} must be an octal mode such as 2775")
+        return errors
+
+    if key in {"REDIS_MAXMEMORY", "REDIS_DATA_TMPFS_SIZE"}:
+        if not is_size_text(value):
+            errors.append(f"{key} must be a memory size such as 512mb")
+        return errors
+
+    if key in ABSOLUTE_PATH_KEYS:
+        if value and not value.startswith("/"):
+            errors.append(f"{key} must be an absolute path")
+        return errors
+
+    if key == "CONFIG_omero_fs_watchDir":
+        if value and not value.startswith("/"):
+            errors.append(f"{key} must be empty or an absolute path")
+        return errors
+
+    if key in NON_NEGATIVE_INTEGER_KEYS:
+        if not is_non_negative_integer_text(value):
+            errors.append(f"{key} must be a non-negative integer")
+        return errors
+
+    if key.endswith(POSITIVE_INTEGER_SUFFIXES):
+        if not is_positive_integer_text(value):
+            errors.append(f"{key} must be a positive integer")
+        return errors
+
+    if key.endswith("_VERSION"):
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", value):
+            errors.append(f"{key} must be a non-empty version token")
+        return errors
+
+    return errors
 
 
 def parse_compose_env_files(raw_value: str) -> list[str]:
@@ -413,6 +751,155 @@ def cmd_template_check(repo_root: Path) -> int:
     return 0
 
 
+def validate_env_file_pair(
+    repo_root: Path,
+    example_rel: str,
+    actual_rel: str,
+    context: dict[str, str],
+) -> list[str]:
+    """Validate one deployment env file against its tracked example template."""
+    errors: list[str] = []
+    example_path = repo_root / example_rel
+    actual_path = repo_root / actual_rel
+
+    if not example_path.is_file():
+        return [f"{example_rel}: template is missing"]
+    if not actual_path.is_file():
+        return [f"{actual_rel}: deployment env file is missing"]
+    if actual_path.stat().st_size == 0:
+        return [f"{actual_rel}: deployment env file is empty"]
+
+    try:
+        required_assignments = parse_active_env_assignments(example_path)
+        optional_assignments = parse_commented_env_assignments(example_path)
+        actual_assignments = parse_active_env_assignments(actual_path)
+    except ValueError as exc:
+        return [f"{actual_rel}: {exc}"]
+
+    required_keys = set(required_assignments)
+    optional_keys = set(optional_assignments)
+    actual_keys = set(actual_assignments)
+
+    missing = [key for key in required_assignments if key not in actual_keys]
+    extra = [key for key in actual_assignments if key not in required_keys | optional_keys]
+
+    if missing:
+        errors.append(f"{actual_rel}: missing required keys: {', '.join(missing)}")
+    if extra:
+        errors.append(f"{actual_rel}: unsupported keys: {', '.join(extra)}")
+
+    for key, raw_value in actual_assignments.items():
+        if key in extra:
+            continue
+        try:
+            resolved_value = resolve_env_references(raw_value, context | actual_assignments)
+        except ValueError as exc:
+            errors.append(f"{actual_rel}: {key} has an unsafe value: {exc}")
+            continue
+
+        context[key] = resolved_value
+        template_value = required_assignments.get(key, optional_assignments.get(key, ""))
+        required_nonempty = bool(template_value) and key not in ALLOW_EMPTY_KEYS
+        if required_nonempty and not resolved_value:
+            errors.append(f"{actual_rel}: {key} must not be empty")
+            continue
+
+        if not resolved_value and key in ALLOW_EMPTY_KEYS:
+            continue
+
+        errors.extend(
+            f"{actual_rel}: {message}"
+            for message in validate_assignment_value(key, raw_value, resolved_value)
+        )
+
+    return errors
+
+
+def validate_dot_env_values(repo_root: Path, context: dict[str, str]) -> list[str]:
+    """Validate generated .env keys and value types without printing values."""
+    dot_env_path = repo_root / DOT_ENV_NAME
+    errors: list[str] = []
+
+    if not dot_env_path.is_file():
+        return [f"{DOT_ENV_NAME}: file is missing"]
+
+    try:
+        assignments = parse_active_env_assignments(dot_env_path)
+    except ValueError as exc:
+        return [f"{DOT_ENV_NAME}: {exc}"]
+
+    missing = [
+        key
+        for key in DOT_ENV_REQUIRED_KEYS
+        if key not in assignments
+        or (key not in DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS and not assignments[key])
+    ]
+    if missing:
+        errors.append(f"{DOT_ENV_NAME}: missing required keys: {', '.join(missing)}")
+
+    if "COMPOSE_ENV_FILES" in assignments:
+        configured_env_files = parse_compose_env_files(assignments["COMPOSE_ENV_FILES"])
+        if tuple(configured_env_files) != EXPECTED_COMPOSE_ENV_FILES:
+            errors.append(
+                f"{DOT_ENV_NAME}: COMPOSE_ENV_FILES must be "
+                f"{','.join(EXPECTED_COMPOSE_ENV_FILES)}"
+            )
+
+    try:
+        expected_project_name = expected_compose_project_name(repo_root)
+    except ValueError as exc:
+        errors.append(f"{DOT_ENV_NAME}: {exc}")
+    else:
+        configured_project_name = assignments.get("COMPOSE_PROJECT_NAME", "").strip()
+        if configured_project_name != expected_project_name:
+            errors.append(
+                f"{DOT_ENV_NAME}: COMPOSE_PROJECT_NAME does not match canonical project name"
+            )
+
+    for key, raw_value in assignments.items():
+        try:
+            resolved_value = resolve_env_references(raw_value, context | assignments)
+        except ValueError as exc:
+            errors.append(f"{DOT_ENV_NAME}: {key} has an unsafe value: {exc}")
+            continue
+        if key not in DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS and key in DOT_ENV_REQUIRED_KEYS and not resolved_value:
+            errors.append(f"{DOT_ENV_NAME}: {key} must not be empty")
+            continue
+        if not resolved_value and key in DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS:
+            continue
+        errors.extend(
+            f"{DOT_ENV_NAME}: {message}"
+            for message in validate_assignment_value(key, raw_value, resolved_value)
+        )
+
+    return errors
+
+
+def cmd_runtime_env_check(repo_root: Path, include_dot_env: bool = True) -> int:
+    """Validate all deployment env files against templates and type contracts."""
+    context: dict[str, str] = {}
+    errors: list[str] = []
+
+    for example_rel, actual_rel in ENV_TEMPLATE_PAIRS:
+        errors.extend(
+            validate_env_file_pair(repo_root, example_rel, actual_rel, context)
+        )
+
+    if include_dot_env:
+        errors.extend(validate_dot_env_values(repo_root, context))
+
+    if errors:
+        print("ERROR: Deployment env validation failed.", file=sys.stderr)
+        for error in errors:
+            print(f"  - {error}", file=sys.stderr)
+        print("No env values were printed.", file=sys.stderr)
+        return 1
+
+    checked_files = len(ENV_TEMPLATE_PAIRS) + (1 if include_dot_env else 0)
+    print(f"OK: Validated {checked_files} deployment env file(s).")
+    return 0
+
+
 def cmd_backup(repo_root: Path) -> int:
     """Create a timestamped backup of all manifest entries."""
     entries = load_manifest(repo_root)
@@ -559,6 +1046,15 @@ def build_parser() -> argparse.ArgumentParser:
         "template-check",
         help="Compare deployment env assignment keys against tracked templates.",
     )
+    runtime_env_parser = sub.add_parser(
+        "runtime-env-check",
+        help="Validate deployment env files against templates and type contracts.",
+    )
+    runtime_env_parser.add_argument(
+        "--skip-dot-env",
+        action="store_true",
+        help="Skip .env validation before the installer has generated it.",
+    )
     sub.add_parser(
         "backup", help="Create a timestamped backup of all manifest entries."
     )
@@ -593,6 +1089,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_dot_env_check(repo_root)
     if args.command == "template-check":
         return cmd_template_check(repo_root)
+    if args.command == "runtime-env-check":
+        return cmd_runtime_env_check(repo_root, include_dot_env=not args.skip_dot_env)
     if args.command == "backup":
         return cmd_backup(repo_root)
     if args.command == "restore":

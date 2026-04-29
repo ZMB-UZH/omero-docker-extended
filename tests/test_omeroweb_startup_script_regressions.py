@@ -257,6 +257,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
                 "OMERO_CALLS_FILE": str(calls_file),
                 "OMERO_WEB_OMERO_BIN": str(fake_omero),
                 "OMEROHOST": "omeroserver",
+                "OMERO_PORT": "14064",
             }
 
             subprocess.run(
@@ -266,7 +267,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             calls = calls_file.read_text(encoding="utf-8").splitlines()
             self.assertEqual(
                 calls,
-                ['config set omero.web.server_list [["omeroserver", 4064, "omero"]]'],
+                ['config set omero.web.server_list [["omeroserver", 14064, "omero"]]'],
             )
 
     def test_98_cleanprevious_removes_stale_pid_file(self) -> None:

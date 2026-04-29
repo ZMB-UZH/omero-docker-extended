@@ -6,6 +6,10 @@ Practices and invariants that keep the platform running predictably.
 
 - All startup scripts (`startup/*.sh`) run sequentially before the main process starts.
 - Scripts fail fast with descriptive error messages when required environment variables or paths are missing.
+- The installer runs `tools/env_safety_guard.py runtime-env-check` before any
+  build/startup work and again after generating `.env`, so missing, extra, or
+  wrongly typed variables across `installation_paths.env`, `.env`, and
+  `env/*.env` stop the installation with a single redacted error list.
 - `10-server-bootstrap.sh` validates writable directories, auto-detects the
   OMERO CLI binary (with optional `OMERO_BIN` override), explicitly prepares a
   clean OMERO CLI runtime temp namespace under
@@ -42,10 +46,14 @@ Practices and invariants that keep the platform running predictably.
 
 ## Health checks
 
-Every service in `docker-compose.yml` has a health check with consistent parameters:
+Every service in `docker-compose.yml` has a health check. Most probes use
+consistent short intervals:
 
 - Interval: 10s, timeout: 10s, retries: 30.
-- Start periods vary by service (10s for fast services, 30-60s for OMERO server/web).
+- `omeroserver` is deliberately more generous for slow hosts and fresh
+  databases: start period 900s and retries 120.
+- Start periods vary by service (10s for fast services, longer for OMERO
+  server/web).
 - Services with `depends_on:` use `condition: service_healthy` to enforce startup order.
 
 Health check methods by service type:

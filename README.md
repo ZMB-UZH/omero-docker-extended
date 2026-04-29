@@ -93,7 +93,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 │   ├── 40-start-imaris-celery-worker.sh # Imaris Celery worker startup
 │   ├── 40-start-tools-celery-worker.sh # Tools enhanced-search Celery worker startup
 │   ├── 50-install-omero-downloader.sh #   OMERO.downloader from GitHub releases
-│   └── 51-install-imarisconvert.sh    #   ImarisConvertBioformats compilation
+│   └── 51-install-imarisconvert.sh    #   ImarisConvert build-time install/runtime verification
 ├── omero_plugin_common/               # Shared Python library for all plugins
 ├── omeroweb_omp_plugin/               # Metadata filename parsing plugin
 ├── omeroweb_import/                   # Import plugin
@@ -146,7 +146,7 @@ The table below lists the long-running services available in the full profile se
 
 | Service | Image | Purpose | Port |
 | --- | --- | --- | --- |
-| `omeroserver` | Custom (CentOS) | OMERO.server: image storage, metadata API, script execution | 4064 |
+| `omeroserver` | Custom (CentOS) | OMERO.server: image storage, metadata API, script execution | `OMERO_SERVER_HOST_PORT` -> `OMERO_CLI_PORT` |
 | `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery workers (supervisord) | 4090 |
 | `database` | postgres:16.12 | Primary OMERO PostgreSQL database | 5432 (internal) |
 | `database_plugin` | postgres:16.12 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |

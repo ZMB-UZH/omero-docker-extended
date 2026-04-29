@@ -55,9 +55,11 @@ The Celery worker runs inside the `omeroweb` container, managed by supervisord a
 - Celery worker running and consuming the configured queue (`OMERO_IMS_CELERY_QUEUE`).
 - OMERO script `IMS_Export.py` registered in the OMERO script service (done by `startup/10-server-bootstrap.sh`).
 - Valid OMERO session context for the requesting user, or job-service account configured.
-- ImarisConvertBioformats installed on OMERO.server (done by `startup/51-install-imarisconvert.sh`).
-- Bio-Formats JAR is downloaded and provisioned automatically by
-  `startup/51-install-imarisconvert.sh` at
+- ImarisConvertBioformats installed on OMERO.server during the `omeroserver`
+  image build. `startup/51-install-imarisconvert.sh` verifies the build artifact
+  at container start.
+- Bio-Formats JAR is downloaded and provisioned automatically at image build
+  time by `startup/51-install-imarisconvert.sh` at
   `/opt/omero/imarisconvert/bioformats/bioformats_package.jar`, with an
   internal local repair copy at
   `/opt/omero/imarisconvert/artifacts/bioformats/bioformats_package.jar`;

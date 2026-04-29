@@ -20,13 +20,20 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertNotIn("OMERO_CLI_ZARR_VERSION=", env_text)
         self.assertNotIn("OME_ZARR_PY_VERSION=", env_text)
         self.assertNotIn("BIOFORMATS2RAW_VERSION=", env_text)
+        self.assertNotIn("BIOFORMATS_VERSION=", env_text)
 
     def test_omeroserver_example_defines_native_zarr_build_versions(self) -> None:
         env_text = self.read_text("env/omeroserver_example.env")
         self.assertIn("OMERO_DROPBOX_VERSION=5.7.0", env_text)
+        self.assertIn("OMERO_CLI_HOST=localhost", env_text)
+        self.assertIn("OMERO_CLI_PORT=4064", env_text)
+        self.assertIn("OMERO_SERVER_HOST_PORT=4064", env_text)
+        self.assertIn("OMERO_JOB_SERVICE_HOST=localhost", env_text)
+        self.assertIn("OMERO_JOB_SERVICE_PORT=4064", env_text)
         self.assertIn("OMERO_CLI_ZARR_VERSION=0.8.0", env_text)
         self.assertIn("OME_ZARR_PY_VERSION=0.15.0", env_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=0.11.0", env_text)
+        self.assertIn("BIOFORMATS_VERSION=8.5.0", env_text)
 
     def test_compose_requires_build_versions_from_omeroserver_env(self) -> None:
         compose_text = self.read_text("docker-compose.yml")
@@ -44,6 +51,14 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn(
             'BIOFORMATS2RAW_VERSION: "${BIOFORMATS2RAW_VERSION:?Set BIOFORMATS2RAW_VERSION in env/omeroserver.env}"',
+            compose_text,
+        )
+        self.assertIn(
+            'BIOFORMATS_VERSION: "${BIOFORMATS_VERSION:?Set BIOFORMATS_VERSION in env/omeroserver.env}"',
+            compose_text,
+        )
+        self.assertIn(
+            '${OMERO_SERVER_HOST_PORT:?Set OMERO_SERVER_HOST_PORT in env/omeroserver.env}:${OMERO_CLI_PORT:?Set OMERO_CLI_PORT in env/omeroserver.env}',
             compose_text,
         )
 
@@ -191,6 +206,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("OMERO_CLI_ZARR_VERSION=${OMERO_CLI_ZARR_VERSION}", script_text)
         self.assertIn("OME_ZARR_PY_VERSION=${OME_ZARR_PY_VERSION}", script_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=${BIOFORMATS2RAW_VERSION}", script_text)
+        self.assertIn("BIOFORMATS_VERSION=${BIOFORMATS_VERSION}", script_text)
+        self.assertIn("OMERO_SERVER_HOST_PORT=${OMERO_SERVER_HOST_PORT}", script_text)
+        self.assertIn("OMERO_CLI_HOST=${OMERO_CLI_HOST}", script_text)
+        self.assertIn("OMERO_CLI_PORT=${OMERO_CLI_PORT}", script_text)
         self.assertIn('OMERO_WEB_HOST_PORT="${OMERO_WEB_HOST_PORT:-}"', script_text)
         self.assertIn(
             'CONFIG_omero_web_application__server_port="${CONFIG_omero_web_application__server_port:-}"',
@@ -218,11 +237,23 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             script_text,
         )
         self.assertIn(
+            "Missing required configuration variable BIOFORMATS_VERSION in ${server_env_source}",
+            script_text,
+        )
+        self.assertIn(
             'validate_tcp_port_config "OMERO_WEB_HOST_PORT"',
             script_text,
         )
         self.assertIn(
             'validate_tcp_port_config "CONFIG_omero_web_application__server_port"',
+            script_text,
+        )
+        self.assertIn(
+            'validate_tcp_port_config "OMERO_SERVER_HOST_PORT"',
+            script_text,
+        )
+        self.assertIn(
+            'validate_tcp_port_config "OMERO_CLI_PORT"',
             script_text,
         )
         self.assertIn('case "${variable_value}" in', script_text)

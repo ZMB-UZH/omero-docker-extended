@@ -2,13 +2,13 @@ Docker Compose reference notes for AI agent workflows.
 
 Service topology (docker-compose.yml):
 - 21 Compose services total on a single "omero" bridge network: 19 long-running runtime containers by default, 20 when the profile-gated crowdsec service is enabled. The one-shot redis-sysctl-init helper is also profile-gated (sysctl-init); the installation script persists the sysctl on the host.
-- All services have explicit healthcheck: blocks (interval 10s, timeout 10s, retries 30).
+- All services have explicit healthcheck: blocks. Most use interval 10s, timeout 10s, retries 30; omeroserver uses a 900s start period and 120 retries for slow first starts.
 - Service startup ordering via depends_on with condition: service_healthy.
 - All services use security_opt: no-new-privileges:true.
 - All images use pinned version tags. Never use :latest.
 
 Core services:
-- omeroserver (port 4064): OMERO.server, custom Dockerfile, depends on database.
+- omeroserver (host port from OMERO_SERVER_HOST_PORT, default 4064; container/API port from OMERO_CLI_PORT, default 4064): OMERO.server, custom Dockerfile, depends on database.
 - omeroweb (port 4090): OMERO.web + plugins + Celery workers + storage-quota reconciliation loop via supervisord, depends on omeroserver + redis.
 - database (port 5432): PostgreSQL 16.12, OMERO core database.
 - database_plugin (port 5433): PostgreSQL 16.12, OMERO plugin database.
@@ -58,4 +58,4 @@ and OMERO.server env files when not relying on repo-root `.env`):
 - docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs -f <service>
 
 Network: single "omero" bridge network. All services communicate by service name/alias.
-Only 7 services expose host ports: omeroserver (4064), omeroweb (4090), portainer (9000/9443), prometheus (9090), grafana (3000), loki (3100), crowdsec (8080).
+Only 7 services expose host ports: omeroserver (`OMERO_SERVER_HOST_PORT`, default 4064), omeroweb (`OMERO_WEB_HOST_PORT`, default 4090), portainer (9000/9443), prometheus (9090), grafana (3000), loki (3100), crowdsec (8080).
