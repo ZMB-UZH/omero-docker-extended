@@ -17,6 +17,7 @@ TEST_RUNTIME_ROOT = __import__("pathlib").Path(__file__).resolve().parent / "_ru
 
 
 def _install_omero_stub() -> None:
+    """Handle install OMERO stub."""
     omero_module = types.ModuleType("omero")
     omero_module.NoProcessorAvailable = NoProcessorAvailable
 
@@ -31,6 +32,7 @@ def _install_omero_stub() -> None:
 
 
 def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Handle set required env."""
     monkeypatch.setenv("OMERO_IMS_SCRIPT_NAME", "IMS_Export.py")
     monkeypatch.setenv("OMERO_IMS_EXPORT_DIR", str(TEST_RUNTIME_ROOT / "export"))
     monkeypatch.setenv("OMERO_IMS_EXPORT_TIMEOUT", "10")
@@ -42,6 +44,7 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _import_imaris_service(monkeypatch: pytest.MonkeyPatch):
+    """Handle import imaris service."""
     _set_required_env(monkeypatch)
     sys.modules.pop("omeroweb_imaris_connector.imaris_service", None)
     package = sys.modules.get("omeroweb_imaris_connector")
@@ -58,6 +61,7 @@ def test_process_job_file_helpers_cover_cleanup_and_timeout_payloads(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
+    """Verify test process job file helpers cover cleanup a behavior."""
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
     monkeypatch.setattr(imaris_service, "PROCESS_JOB_DIR", str(tmp_path))
@@ -74,6 +78,7 @@ def test_process_job_file_helpers_cover_cleanup_and_timeout_payloads(
     monkeypatch.setattr(imaris_service, "_ensure_process_job_dir", lambda: None)
 
     def _tracking_open(path, mode="r", encoding=None):
+        """Handle tracking open."""
         return real_open(path, mode, encoding=encoding)
 
     monkeypatch.setattr(builtins, "open", _tracking_open)
@@ -128,6 +133,7 @@ def test_process_job_file_helpers_cover_cleanup_and_timeout_payloads(
 def test_script_service_helpers_cover_discovery_selection_and_introspection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify test script service helpers cover discovery s behavior."""
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
 
@@ -164,24 +170,30 @@ def test_script_service_helpers_cover_discovery_selection_and_introspection(
     assert imaris_service._find_script_id(object()) == 9
 
     class _Service:
+        """Represent service."""
+
         @property
         def brokenScriptRunner(self):
             raise RuntimeError("broken attribute")
 
         @staticmethod
         def runScript():
+            """Run run script."""
             return "run-script"
 
         @staticmethod
         def executeCustomScript():
+            """Run execute custom script."""
             return "execute-script"
 
         @staticmethod
         def begin_runScript():
+            """Handle begin run script."""
             raise AssertionError("begin_ methods must be ignored")
 
         @staticmethod
         def canRunScript():
+            """Handle can run script."""
             raise AssertionError("canRun methods must be ignored")
 
         def __dir__(self):
@@ -200,28 +212,36 @@ def test_script_service_helpers_cover_discovery_selection_and_introspection(
 def test_async_and_script_start_helpers_cover_getter_failures_and_retries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify test async and script start helpers cover get behavior."""
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
 
     class _AsyncResult:
+        """Represent async result."""
+
         @staticmethod
         def waitForCompleted():
+            """Handle wait for completed."""
             raise RuntimeError("wait failed")
 
         @staticmethod
         def getResponse():
+            """Return get response."""
             raise RuntimeError("response failed")
 
         @staticmethod
         def getResult():
+            """Return get result."""
             raise RuntimeError("result failed")
 
         @staticmethod
         def getResults():
+            """Return get results."""
             raise RuntimeError("results failed")
 
         @staticmethod
         def get():
+            """Return get."""
             return {"job": 5}
 
     resolved = imaris_service._resolve_async_result(
@@ -273,10 +293,13 @@ def test_async_and_script_start_helpers_cover_getter_failures_and_retries(
         imaris_service._run_script(None, 1, 2, wait_secs=0)
 
     class _RetryService:
+        """Represent retry service."""
+
         def __init__(self):
             self.calls = 0
 
         def runScript(self, *args):
+            """Run run script."""
             self.calls += 1
             if self.calls == 1:
                 raise NoProcessorAvailable("No processor available")
@@ -299,6 +322,7 @@ def test_async_and_script_start_helpers_cover_getter_failures_and_retries(
     monkeypatch.setattr(imaris_service.time, "sleep", lambda *_args: None)
 
     def _status_callback(state, payload):
+        """Handle status callback."""
         callback_events.append((state, payload["attempt"]))
         raise RuntimeError("callback failed")
 
@@ -317,11 +341,14 @@ def test_async_and_script_start_helpers_cover_getter_failures_and_retries(
 def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify test config and job state helpers cover secur behavior."""
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
     original_detach = imaris_service._detach_script_process
 
     class SecurityViolation(Exception):
+        """Represent security violation."""
+
         pass
 
     assert imaris_service._get_script_processor_config(None) is None
@@ -398,6 +425,7 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
     time_values = iter((0.0, 0.0, 0.5))
 
     def _fake_time():
+        """Handle fake time."""
         try:
             return next(time_values)
         except StopIteration:
@@ -413,10 +441,13 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
     )
 
     class _WaitingProcess:
+        """Represent waiting process."""
+
         def __init__(self):
             self.poll_calls = 0
 
         def poll(self):
+            """Handle poll."""
             self.poll_calls += 1
             if self.poll_calls == 1:
                 raise RuntimeError("poll failed")
@@ -424,6 +455,7 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
 
         @staticmethod
         def getResults(*_args):
+            """Return get results."""
             raise RuntimeError("results failed")
 
     state, outputs = imaris_service._wait_for_process(_WaitingProcess(), timeout=1)
@@ -433,12 +465,15 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
     monkeypatch.setattr(imaris_service, "_detach_script_process", original_detach)
 
     class _BadValue:
+        """Represent bad value."""
+
         @property
         def val(self):
             raise RuntimeError("val failed")
 
         @staticmethod
         def getValue():
+            """Return get value."""
             raise RuntimeError("getValue failed")
 
         @property
@@ -455,8 +490,11 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
     imaris_service._detach_script_process(SimpleNamespace(), reason="no-close")
 
     class _FailingDetach:
+        """Represent failing detach."""
+
         @staticmethod
         def close(*args):
+            """Handle close."""
             raise RuntimeError("detach failed")
 
     imaris_service._detach_script_process(_FailingDetach(), reason="detach failure")
@@ -464,8 +502,11 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
     close_calls = []
 
     class _FallbackClose:
+        """Represent fallback close."""
+
         @staticmethod
         def close(*args):
+            """Handle close."""
             close_calls.append(args)
             if args:
                 raise TypeError("flag unsupported")
@@ -482,12 +523,16 @@ def test_config_and_job_state_helpers_cover_security_getjobs_and_cleanup_paths(
 def test_imaris_service_additional_helper_edges_cover_remaining_type_and_config_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify test imaris service additional helper edges c behavior."""
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
 
     class _BadValue:
+        """Represent bad value."""
+
         @staticmethod
         def getValue():
+            """Return get value."""
             raise RuntimeError("getter exploded")
 
         def __str__(self):
@@ -513,12 +558,15 @@ def test_imaris_service_additional_helper_edges_cover_remaining_type_and_config_
     assert imaris_service._is_async_result(None) is False
 
     class _BrokenService:
+        """Represent broken service."""
+
         @property
         def runScript(self):
             raise RuntimeError("broken preferred method")
 
         @staticmethod
         def executeScript():
+            """Run execute script."""
             return "ok"
 
         def __dir__(self):
@@ -594,6 +642,7 @@ def test_imaris_service_additional_helper_edges_cover_remaining_type_and_config_
 def test_no_processor_detector_ignores_non_exception_tuple_members(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify test no processor detector ignores non except behavior."""
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
     monkeypatch.setattr(
@@ -617,6 +666,7 @@ def test_no_processor_detector_ignores_non_exception_tuple_members(
 def test_imaris_service_remaining_job_state_and_output_paths_are_exercised(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify test imaris service remaining job state and o behavior."""
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
 
@@ -625,6 +675,7 @@ def test_imaris_service_remaining_job_state_and_output_paths_are_exercised(
     def _failing_rlong_import(
         name, global_vars=None, local_vars=None, fromlist=(), level=0
     ):
+        """Handle failing rlong import."""
         if name == "omero.rtypes" and tuple(fromlist or ()) == ("rlong",):
             raise ImportError("rlong missing")
         return original_import(name, global_vars, local_vars, fromlist, level)
@@ -650,6 +701,8 @@ def test_imaris_service_remaining_job_state_and_output_paths_are_exercised(
     assert imaris_service._get_job_state_and_outputs(object(), 12) == (None, None)
 
     class _NonNumericJobId:
+        """Represent non numeric job identifier."""
+
         pass
 
     assert imaris_service._extract_job_id({"job_id": _NonNumericJobId()}) is None
@@ -660,10 +713,13 @@ def test_imaris_service_remaining_job_state_and_output_paths_are_exercised(
 def test_imaris_service_covers_remaining_descriptor_and_job_iteration_edges(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify test imaris service covers remaining descript behavior."""
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
 
     class _BrokenId:
+        """Represent broken identifier."""
+
         def __init__(self):
             self._reads = 0
 
@@ -695,6 +751,8 @@ def test_imaris_service_covers_remaining_descriptor_and_job_iteration_edges(
     ]
 
     class _TypeOnlyMethod:
+        """Represent type only method."""
+
         def __call__(self, *args):
             raise TypeError("bad signature")
 
@@ -724,20 +782,28 @@ def test_imaris_service_covers_remaining_descriptor_and_job_iteration_edges(
     )
 
     class _NonNumericValue:
+        """Represent non numeric value."""
+
         pass
 
     class _BadJobId:
+        """Represent bad job identifier."""
+
         @staticmethod
         def getValue():
+            """Return get value."""
             return _NonNumericValue()
 
     assert imaris_service._extract_job_id(_BadJobId()) is None
 
     class _BadAccessorJob:
+        """Represent bad accessor job."""
+
         job_id = 19
 
         @staticmethod
         def getJobId():
+            """Return get job identifier."""
             return _NonNumericValue()
 
     assert imaris_service._extract_job_id(_BadAccessorJob()) == 19
@@ -759,6 +825,8 @@ def test_imaris_service_covers_remaining_descriptor_and_job_iteration_edges(
     assert imaris_service._get_job_state_and_outputs(object(), 7) == ("RUNNING", {})
 
     class _BrokenStatus:
+        """Represent broken status."""
+
         @property
         def val(self):
             raise RuntimeError("bad status")

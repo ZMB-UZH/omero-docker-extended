@@ -1,6 +1,4 @@
-"""
-OMERO metadata extraction services.
-"""
+"""OMERO metadata extraction services."""
 
 import logging
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
@@ -13,11 +11,13 @@ logger = logging.getLogger(__name__)
 
 
 def _long_value_marker(key, *, stored):
+    """Handle long value marker."""
     status = "STORED_IN_FILEANNOTATION" if stored else "NOT_STORED"
     return f"[LONG_VALUE_{status} key={key}]"
 
 
 def _set_long_value_markers(cleaned, long_values, *, stored):
+    """Handle set long value markers."""
     for key in long_values:
         cleaned[key] = _long_value_marker(key, stored=stored)
 

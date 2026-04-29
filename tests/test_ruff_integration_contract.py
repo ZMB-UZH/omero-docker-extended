@@ -12,14 +12,19 @@ import yaml
 
 
 class RuffIntegrationContractTests(unittest.TestCase):
+    """Test cases for ruff integration contract tests."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def read_text(self, relative_path: str) -> str:
+        """Return read text."""
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
 
     def test_readme_has_ruff_badge_in_top_row(self) -> None:
+        """Verify test readme has ruff badge in top row."""
         readme_text = self.read_text("README.md")
         self.assertIn(
             "[![License](",
@@ -47,6 +52,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         )
 
     def test_docs_index_links_to_python_style_reference(self) -> None:
+        """Verify test docs index links to python style reference."""
         index_text = self.read_text("docs/index.md")
         doc_text = self.read_text("docs/reference/python-style-and-linting.md")
         self.assertIn(
@@ -59,6 +65,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertIn("ruff format .", doc_text)
 
     def test_agents_document_ruff_commands(self) -> None:
+        """Verify test agents document ruff commands."""
         agents_text = self.read_text("AGENTS.md")
         self.assertIn("Use Ruff as the canonical Python formatter", agents_text)
         self.assertIn("lint gate", agents_text)
@@ -104,6 +111,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertIn("python3 -m ruff format --check .", agents_text)
 
     def test_ruff_config_is_pinned_and_repo_specific(self) -> None:
+        """Verify test ruff config is pinned and repo specific."""
         config = tomllib.loads(self.read_text(".ruff.toml"))
         self.assertEqual("==0.15.12", config["required-version"])
         self.assertEqual("py39", config["target-version"])
@@ -111,6 +119,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertEqual({}, config["lint"].get("per-file-ignores", {}))
 
     def test_pre_commit_uses_pinned_ruff_hooks(self) -> None:
+        """Verify test pre commit uses pinned ruff hooks."""
         config = yaml.safe_load(self.read_text(".pre-commit-config.yaml"))
         self.assertEqual(1, len(config["repos"]))
         repo = config["repos"][0]
@@ -122,6 +131,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertEqual(["python", "pyi"], hooks["ruff-format"]["types_or"])
 
     def test_ruff_workflow_is_pinned_and_runs_on_default_branch_only(self) -> None:
+        """Verify test ruff workflow is pinned and runs on defa behavior."""
         workflow = yaml.safe_load(self.read_text(".github/workflows/ruff.yml"))
         # yaml.safe_load parses the YAML key `on:` as boolean True
         triggers = workflow[True]

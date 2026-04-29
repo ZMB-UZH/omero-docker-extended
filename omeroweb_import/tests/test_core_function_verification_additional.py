@@ -6,30 +6,41 @@ from omeroweb_import.views import core_functions
 
 
 class _Params:
+    """Represent params."""
+
     def __init__(self):
         self.values = {}
 
     def add(self, key, value):
+        """Handle add."""
         self.values[key] = value
 
     def addId(self, value):
+        """Handle add identifier."""
         self.values["id"] = value
 
 
 class _ServiceOpts:
+    """Represent service opts."""
+
     def __init__(self):
         self.group = None
 
     def setOmeroGroup(self, value):
+        """Store set OMERO group."""
         self.group = value
 
 
 class _ProjectionValue:
+    """Represent projection value."""
+
     def __init__(self, value):
         self.val = value
 
 
 class _RenderImage:
+    """Represent render image."""
+
     def __init__(
         self,
         image_id,
@@ -47,21 +58,27 @@ class _RenderImage:
         self._thumbnail_behavior = thumbnail_behavior
 
     def getSizeX(self):
+        """Return get size x."""
         return self._sizes[0]
 
     def getSizeY(self):
+        """Return get size y."""
         return self._sizes[1]
 
     def getSizeZ(self):
+        """Return get size z."""
         return self._sizes[2]
 
     def getSizeC(self):
+        """Return get size c."""
         return self._sizes[3]
 
     def getSizeT(self):
+        """Return get size t."""
         return self._sizes[4]
 
     def getThumbnail(self, size=None, direct=None):
+        """Return get thumbnail."""
         if self._thumbnail_behavior == "raise":
             raise RuntimeError("thumbnail failed")
         if self._thumbnail_behavior == "empty":
@@ -72,6 +89,7 @@ class _RenderImage:
 def test_verify_import_via_api_covers_missing_prerequisites_and_query_failures(
     monkeypatch,
 ) -> None:
+    """Verify test verify import via API covers missing pre behavior."""
     monkeypatch.setattr(
         core_functions,
         "_params_add_string",
@@ -185,6 +203,7 @@ def test_verify_import_via_api_covers_missing_prerequisites_and_query_failures(
 def test_verify_zarr_import_via_api_and_cleanup_imported_images_cover_edge_cases(
     monkeypatch,
 ) -> None:
+    """Verify test verify Zarr import via API and cleanup i behavior."""
     monkeypatch.setattr(
         core_functions.omero,
         "sys",
@@ -291,6 +310,7 @@ def test_verify_zarr_import_via_api_and_cleanup_imported_images_cover_edge_cases
 def test_verify_imported_zarr_images_renderable_reports_remaining_failures(
     monkeypatch,
 ) -> None:
+    """Verify test verify imported Zarr images renderable r behavior."""
     assert core_functions._verify_imported_zarr_images_renderable(
         "",
         "omeroserver",
@@ -349,6 +369,7 @@ def test_verify_imported_zarr_images_renderable_reports_remaining_failures(
     state = {"conn_closed": False, "admin_closed": False}
 
     def _get_object(_kind, image_id):
+        """Handle get object."""
         payload = failures[image_id]
         if isinstance(payload, Exception):
             raise payload
@@ -401,6 +422,7 @@ def test_run_zarr_managed_repo_script_and_cleanup_helpers_cover_error_paths(
     monkeypatch,
     tmp_path,
 ) -> None:
+    """Verify test run Zarr managed repo script and cleanup behavior."""
     monkeypatch.setattr(
         core_functions, "_open_admin_connection", lambda host, port: None
     )

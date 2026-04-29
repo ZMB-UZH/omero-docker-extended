@@ -1,3 +1,1 @@
-"""
-Utility modules for the import plugin.
-"""
+"""Utility modules for the import plugin."""

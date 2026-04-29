@@ -42,6 +42,7 @@ USER_SETTINGS_NOT_PERSISTED_ERROR = "Enhanced-search user settings were not pers
 
 
 def _schema_ready(conn) -> bool:
+    """Handle schema ready."""
     try:
         return bool(_SCHEMA_READY_CONNECTIONS.get(conn))
     except TypeError:
@@ -49,6 +50,7 @@ def _schema_ready(conn) -> bool:
 
 
 def _mark_schema_ready(conn) -> None:
+    """Handle mark schema ready."""
     try:
         _SCHEMA_READY_CONNECTIONS[conn] = True
     except TypeError:
@@ -56,6 +58,7 @@ def _mark_schema_ready(conn) -> None:
 
 
 def _clear_schema_ready(conn) -> None:
+    """Handle clear schema ready."""
     try:
         _SCHEMA_READY_CONNECTIONS.pop(conn, None)
     except TypeError:
@@ -64,6 +67,7 @@ def _clear_schema_ready(conn) -> None:
 
 @cache
 def _load_psycopg2():
+    """Handle load psycopg2."""
     try:
         import psycopg2
         from psycopg2 import extras
@@ -76,6 +80,7 @@ def _load_psycopg2():
 
 @cache
 def _load_psycopg2_sql():
+    """Handle load psycopg2 SQL."""
     try:
         from psycopg2 import sql
     except ImportError as exc:
@@ -86,11 +91,13 @@ def _load_psycopg2_sql():
 
 
 def _safe_query(template, *identifiers):
+    """Handle safe query."""
     sql_mod = _load_psycopg2_sql()
     return sql_mod.SQL(template).format(*[sql_mod.Identifier(i) for i in identifiers])
 
 
 def _db_params():
+    """Handle database params."""
     user = get_env(ENV_USER, env_file=ENV_FILE_OMEROWEB)
     password = get_env(ENV_AUTH, env_file=ENV_FILE_OMEROWEB)
     host = get_env(ENV_HOST, env_file=ENV_FILE_OMEROWEB)
@@ -107,6 +114,7 @@ def _db_params():
 
 @contextmanager
 def connect():
+    """Handle connect."""
     psycopg2, _ = _load_psycopg2()
     conn = None
     try:
@@ -137,6 +145,7 @@ def connect():
 
 
 def ensure_schema(conn) -> None:
+    """Handle ensure schema."""
     if _schema_ready(conn):
         return
     _load_psycopg2_sql()
@@ -337,6 +346,7 @@ def ensure_schema(conn) -> None:
 def ensure_sync_state_rows(
     conn, scopes: Iterable[dict[str, Any]], schema_version: int
 ) -> None:
+    """Handle ensure sync state rows."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         for scope in scopes:
@@ -369,6 +379,7 @@ def ensure_sync_state_rows(
 
 
 def list_sync_states(conn) -> list[dict[str, Any]]:
+    """Return list sync states."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         cur.execute(
@@ -427,6 +438,7 @@ def try_start_scope_sync(
     run_token: str,
     stale_after_seconds: int,
 ) -> bool:
+    """Handle try start scope sync."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         cur.execute(
@@ -559,6 +571,7 @@ def sync_run_is_active(
     *,
     run_token: str,
 ) -> bool:
+    """Handle sync run is active."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         cur.execute(
@@ -595,6 +608,7 @@ def update_sync_progress(
     current_message: str,
     last_cursor_image_id: int | None,
 ) -> None:
+    """Handle update sync progress."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         cur.execute(
@@ -632,6 +646,7 @@ def mark_sync_complete(
     indexed_image_count: int,
     current_message: str,
 ) -> None:
+    """Handle mark sync complete."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         cur.execute(
@@ -671,6 +686,7 @@ def mark_sync_error(
     error_text: str,
     indexed_image_count: int,
 ) -> None:
+    """Handle mark sync error."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         cur.execute(
@@ -710,6 +726,7 @@ def upsert_search_document(
     scope_id: int,
     run_token: str,
 ) -> None:
+    """Handle upsert search document."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         cur.execute(
@@ -888,6 +905,7 @@ def upsert_search_document(
 
 
 def prune_scope_membership(conn, scope_type: str, scope_id: int, run_token: str) -> int:
+    """Handle prune scope membership."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         cur.execute(
@@ -906,6 +924,7 @@ def prune_scope_membership(conn, scope_type: str, scope_id: int, run_token: str)
 
 
 def prune_orphan_documents(conn) -> int:
+    """Handle prune orphan documents."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         cur.execute(
@@ -993,6 +1012,7 @@ _SEARCH_ORDER_SQL = """
 
 
 def _search_count_sql():
+    """Handle search count SQL."""
     return _safe_query(
         f"""
         SELECT COUNT(DISTINCT images.image_id)
@@ -1005,6 +1025,7 @@ def _search_count_sql():
 
 
 def _search_rows_sql(*, paged: bool):
+    """Handle search rows SQL."""
     pagination_sql = "\n        LIMIT %s OFFSET %s" if paged else ""
     return _safe_query(
         f"""
@@ -1031,6 +1052,7 @@ def search_index_rows(
     limit: int | None = None,
     offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
+    """Handle search index rows."""
     ensure_schema(conn)
     if visible_group_ids is not None:
         if not visible_group_ids:
@@ -1119,6 +1141,7 @@ def load_user_settings(
     *,
     defaults: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Return load user settings."""
     ensure_schema(conn)
     resolved = dict(defaults or {})
     with conn.cursor() as cur:
@@ -1143,6 +1166,7 @@ def load_user_settings(
 def save_user_settings(
     conn, username: str, settings_payload: dict[str, Any]
 ) -> dict[str, Any]:
+    """Store save user settings."""
     _, extras = _load_psycopg2()
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -1175,6 +1199,7 @@ def clear_scope_index(
     *,
     current_message: str,
 ) -> dict[str, int]:
+    """Handle clear scope index."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         cur.execute(
@@ -1219,6 +1244,7 @@ def clear_scope_index(
 
 
 def list_saved_queries(conn, username: str) -> list[dict[str, Any]]:
+    """Return list saved queries."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         cur.execute(
@@ -1249,6 +1275,7 @@ def list_saved_queries(conn, username: str) -> list[dict[str, Any]]:
 def save_saved_query(
     conn, username: str, query_name: str, query_payload: dict[str, Any]
 ) -> None:
+    """Store save saved query."""
     _, extras = _load_psycopg2()
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -1272,6 +1299,7 @@ def save_saved_query(
 
 
 def delete_saved_query(conn, username: str, query_id: int) -> bool:
+    """Handle delete saved query."""
     ensure_schema(conn)
     with conn.cursor() as cur:
         cur.execute(

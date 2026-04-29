@@ -11,6 +11,7 @@ from omeroweb_omp_plugin.views import save_keyvaluepairs_view
 
 
 def test_filename_utils_cover_whitespace_and_separator_fallback_paths():
+    """Verify test filename utils cover whitespace and sepa behavior."""
     no_pairs = [
         "alpha-A-01.tif",
         "beta-B-02.tif",
@@ -31,6 +32,7 @@ def test_filename_utils_cover_whitespace_and_separator_fallback_paths():
 
 
 def test_http_utils_internal_response_helpers_cover_none_and_empty_payloads():
+    """Verify test HTTP utils internal response helpers cov behavior."""
     assert http_utils._extract_message_from_response(None) is None
 
     empty_payload_response = SimpleNamespace(
@@ -41,6 +43,7 @@ def test_http_utils_internal_response_helpers_cover_none_and_empty_payloads():
 
 
 def test_save_keyvaluepairs_ready_endpoint_returns_plain_response():
+    """Verify test save keyvaluepairs ready endpoint return behavior."""
     response = inspect.unwrap(save_keyvaluepairs_view.save_keyvaluepairs)(
         RequestFactory().get("/omeroweb_omp_plugin/save-keyvaluepairs/")
     )

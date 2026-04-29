@@ -292,6 +292,7 @@ class ExampleEnvContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def parse_assignment_keys(
@@ -315,6 +316,7 @@ class ExampleEnvContractTests(unittest.TestCase):
         return keys, malformed
 
     def parse_active_assignments(self, relative_path: str) -> dict[str, str]:
+        """Validate parse active assignments."""
         env_path = self.repo_root / relative_path
         assignments: dict[str, str] = {}
         for raw_line in env_path.read_text(encoding="utf-8").splitlines():
@@ -326,6 +328,7 @@ class ExampleEnvContractTests(unittest.TestCase):
         return assignments
 
     def test_tracked_example_env_inventory_is_locked(self) -> None:
+        """Verify test tracked example env inventory is locked."""
         discovered = {
             path.relative_to(self.repo_root).as_posix()
             for path in (self.repo_root / "env").glob("*_example.env")
@@ -334,6 +337,7 @@ class ExampleEnvContractTests(unittest.TestCase):
         self.assertEqual(set(EXPECTED_EXAMPLE_ENV_KEYS), discovered)
 
     def test_example_env_files_have_only_assignment_or_comment_lines(self) -> None:
+        """Verify test example env files have only assignment o behavior."""
         for relative_path in EXPECTED_EXAMPLE_ENV_KEYS:
             with self.subTest(relative_path=relative_path):
                 _, malformed = self.parse_assignment_keys(relative_path)
@@ -344,6 +348,7 @@ class ExampleEnvContractTests(unittest.TestCase):
                 )
 
     def test_example_env_files_do_not_repeat_active_keys(self) -> None:
+        """Verify test example env files do not repeat active keys."""
         for relative_path in EXPECTED_EXAMPLE_ENV_KEYS:
             with self.subTest(relative_path=relative_path):
                 keys, _ = self.parse_assignment_keys(relative_path)
@@ -355,6 +360,7 @@ class ExampleEnvContractTests(unittest.TestCase):
                 )
 
     def test_example_env_assignment_keys_match_locked_contract(self) -> None:
+        """Verify test example env assignment keys match locked behavior."""
         for relative_path, expected_keys in EXPECTED_EXAMPLE_ENV_KEYS.items():
             with self.subTest(relative_path=relative_path):
                 actual_keys, _ = self.parse_assignment_keys(relative_path)
@@ -375,6 +381,7 @@ class ExampleEnvContractTests(unittest.TestCase):
                 )
 
     def test_secrets_example_has_no_placeholder_secret_values(self) -> None:
+        """Verify test secrets example has no placeholder secre behavior."""
         assignments = self.parse_active_assignments("env/omero_secrets_example.env")
         self.assertFalse(
             any(value for value in assignments.values()),

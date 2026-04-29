@@ -14,6 +14,8 @@ if str(REPO_ROOT) not in sys.path:
 
 
 class _BaseResponse:
+    """Represent base response."""
+
     def __init__(self, content="", status=200, content_type=None):
         self.status_code = status
         self.content_type = content_type
@@ -31,6 +33,8 @@ class _BaseResponse:
 
 
 class _JsonResponse(_BaseResponse):
+    """Represent JSON response."""
+
     def __init__(self, payload=None, status=200, **_kwargs):
         self.payload = payload
         super().__init__(
@@ -41,21 +45,29 @@ class _JsonResponse(_BaseResponse):
 
 
 class _HttpResponse(_BaseResponse):
+    """Represent HTTP response."""
+
     pass
 
 
 class _HttpResponseRedirect(_HttpResponse):
+    """Represent HTTP response redirect."""
+
     def __init__(self, location):
         super().__init__("", status=302)
         self["Location"] = location
 
 
 class _DjangoTemplates:
+    """Represent django templates."""
+
     def __init__(self, config):
         self.config = config
 
 
 class _TemplateResponse(_HttpResponse):
+    """Represent template response."""
+
     def __init__(self, request, template, context=None, status=200, **_kwargs):
         super().__init__("", status=status)
         self.request = request
@@ -64,16 +76,20 @@ class _TemplateResponse(_HttpResponse):
 
 
 class _SimpleTemplateResponse(_HttpResponse):
+    """Represent simple template response."""
+
     def __init__(self, template, context=None, status=200, **_kwargs):
         super().__init__("", status=status)
         self.template_name = template
         self.context_data = context or {}
 
     def render(self):
+        """Build render."""
         return self
 
 
 def _install_import_stubs():
+    """Handle install import stubs."""
     if "django.http" not in sys.modules:
         django_module = types.ModuleType("django")
         django_module.__path__ = []
@@ -136,11 +152,15 @@ from omeroweb_admin_tools.views import utils as admin_utils
 
 
 class AdminToolsSecurityRegressionTests(TestCase):
+    """Test cases for admin tools security regression tests."""
+
     def test_normalize_proxy_request_target_rejects_traversal(self):
+        """Verify test normalize proxy request target rejects t behavior."""
         with self.assertRaises(ValueError):
             index_view._normalize_proxy_request_target("../api/admin")
 
     def test_rewrite_proxied_location_blocks_external_redirects(self):
+        """Verify test rewrite proxied location blocks external behavior."""
         location = index_view._rewrite_proxied_location(
             "https://evil.example.org/steal",
             "https://grafana:3000",
@@ -153,6 +173,7 @@ class AdminToolsSecurityRegressionTests(TestCase):
         )
 
     def test_grafana_proxy_home_fallback_response_sanitizes_segments(self):
+        """Verify test grafana proxy home fallback response san behavior."""
         with mock.patch.dict(
             os.environ,
             {
@@ -172,6 +193,7 @@ class AdminToolsSecurityRegressionTests(TestCase):
         )
 
     def test_storage_quota_update_hides_payload_details(self):
+        """Verify test storage quota update hides payload details."""
         request = types.SimpleNamespace(
             method="POST",
             body=b'{"updates":"bad"}',
@@ -192,12 +214,14 @@ class AdminToolsSecurityRegressionTests(TestCase):
         )
 
     def test_write_state_temp_file_is_not_world_writable(self):
+        """Verify test write state temp file is not world writable."""
         with tempfile.TemporaryDirectory() as tmpdir:
             state_path = Path(tmpdir) / "quotas.json"
             seen_modes = []
             real_replace = os.replace
 
             def _capturing_replace(src, dst):
+                """Handle capturing replace."""
                 seen_modes.append(stat.S_IMODE(Path(src).stat().st_mode))
                 real_replace(src, dst)
 

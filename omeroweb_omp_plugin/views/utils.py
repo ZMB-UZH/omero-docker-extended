@@ -21,14 +21,17 @@ logger = logging.getLogger(__name__)
 
 
 def current_username(request, conn):
+    """Handle current username."""
     return _current_username(request, conn)
 
 
 def load_request_data(request):
+    """Return load request data."""
     return _load_request_data(request)
 
 
 def load_json_body(request):
+    """Return load JSON body."""
     payload, error = parse_json_body(request)
     if error:
         return None, errors.invalid_json_body()
@@ -134,6 +137,8 @@ def build_omero_cli_base_command(conn):
 
 
 def require_non_root_user(view_func):
+    """Handle require non root user."""
+
     @wraps(view_func)
     def _wrapped(request, *args, conn=None, url=None, **kwargs):
         remaining_args = args

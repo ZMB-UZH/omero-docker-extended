@@ -8,56 +8,74 @@ from omeroweb_import.views import core_functions
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self.val = value
 
     def getValue(self):
+        """Return get value."""
         return self.val
 
 
 class _Owner:
+    """Represent owner."""
+
     def __init__(self, owner_id, *, ome_name=None, first_name=None):
         self._owner_id = owner_id
         self._ome_name = ome_name
         self._first_name = first_name
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self._owner_id)
 
     def getOmeName(self):
+        """Return get ome name."""
         if self._ome_name is None:
             raise RuntimeError("no ome name")
         return self._ome_name
 
     def getFirstName(self):
+        """Return get first name."""
         return self._first_name
 
 
 class _Permissions:
+    """Represent permissions."""
+
     def __init__(self, can_read, can_write):
         self._can_read = can_read
         self._can_write = can_write
 
     def isRead(self):
+        """Handle is read."""
         return self._can_read
 
     def isWrite(self):
+        """Handle is write."""
         return self._can_write
 
 
 class _Details:
+    """Represent details."""
+
     def __init__(self, *, owner=None, permissions=None):
         self._owner = owner
         self._permissions = permissions
 
     def getOwner(self):
+        """Return get owner."""
         return self._owner
 
     def getPermissions(self):
+        """Return get permissions."""
         return self._permissions
 
 
 class _NamedProject:
+    """Represent named project."""
+
     def __init__(
         self,
         project_id,
@@ -77,39 +95,51 @@ class _NamedProject:
         self._children = list(children or [])
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self._project_id)
 
     def getName(self):
+        """Return get name."""
         return self._name
 
     def getDetails(self):
+        """Return get details."""
         return self._details
 
     def listChildren(self):
+        """Return list children."""
         return list(self._children)
 
 
 class _DatasetChild:
+    """Represent dataset child."""
+
     def __init__(self, dataset_id, name):
         self._dataset_id = dataset_id
         self._name = name
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self._dataset_id)
 
     def getName(self):
+        """Return get name."""
         return self._name
 
 
 class _ExistingDataset:
+    """Represent existing dataset."""
+
     def __init__(self, dataset_id):
         self._dataset_id = dataset_id
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self._dataset_id)
 
 
 def test_owner_and_permission_helpers_cover_fallback_paths() -> None:
+    """Verify test owner and permission helpers cover fallb behavior."""
     owner = _Owner(7, ome_name="alice")
     details_obj = SimpleNamespace(
         getDetails=lambda: _Details(owner=owner, permissions=_Permissions(True, True))
@@ -133,6 +163,7 @@ def test_owner_and_permission_helpers_cover_fallback_paths() -> None:
 
 
 def test_iter_accessible_projects_and_collect_project_payload_cover_fallbacks() -> None:
+    """Verify test iter accessible projects and collect pro behavior."""
     service_opts = SimpleNamespace(
         current="5",
         set_calls=[],
@@ -152,6 +183,7 @@ def test_iter_accessible_projects_and_collect_project_payload_cover_fallbacks() 
     )
 
     def _get_objects(model, opts=None):
+        """Handle get objects."""
         assert model == "Project"
         if opts is None and service_opts.current == "-1":
             raise RuntimeError("cross-group query failed")
@@ -181,6 +213,7 @@ def test_iter_accessible_projects_and_collect_project_payload_cover_fallbacks() 
 def test_dataset_target_helpers_cover_existing_new_and_planned_units(
     monkeypatch,
 ) -> None:
+    """Verify test dataset target helpers cover existing ne behavior."""
     project = _NamedProject(
         3,
         "Project",
@@ -188,10 +221,13 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
     )
 
     class _NewDataset:
+        """Represent new dataset."""
+
         def __init__(self):
             self.name = None
 
         def setName(self, value):
+            """Store set name."""
             self.name = value
 
     monkeypatch.setattr(core_functions, "DatasetI", _NewDataset)
@@ -206,6 +242,7 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
     )
 
     def _get_objects(model, *args, **kwargs):
+        """Handle get objects."""
         if model == "Dataset":
             name = kwargs.get("attributes", {}).get("name")
             if name == "Existing":
@@ -321,9 +358,12 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
 def test_request_path_dataset_preparation_covers_success_and_failure(
     monkeypatch,
 ) -> None:
+    """Verify test request path dataset preparation covers behavior."""
     group_calls = []
 
     class _Conn:
+        """Represent conn."""
+
         SERVICE_OPTS = SimpleNamespace(setOmeroGroup=group_calls.append)
 
     monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
@@ -413,11 +453,16 @@ def test_request_path_dataset_preparation_covers_success_and_failure(
 def test_dataset_creation_helpers_cover_cache_link_and_failure_paths(
     monkeypatch,
 ) -> None:
+    """Verify test dataset creation helpers cover cache lin behavior."""
+
     class _NewDataset:
+        """Represent new dataset."""
+
         def __init__(self):
             self.name = None
 
         def setName(self, value):
+            """Store set name."""
             self.name = value
 
     link_calls = []
@@ -472,6 +517,7 @@ def test_dataset_creation_helpers_cover_cache_link_and_failure_paths(
 def test_request_path_dataset_helpers_cover_fallback_and_save_failures(
     monkeypatch,
 ) -> None:
+    """Verify test request path dataset helpers cover fallb behavior."""
     monkeypatch.setattr(
         core_functions, "_generate_orphan_dataset_name", lambda: "UploadRoot_TEST"
     )
@@ -504,6 +550,8 @@ def test_request_path_dataset_helpers_cover_fallback_and_save_failures(
     monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
 
     class _ScopeFailConn:
+        """Represent scope fail conn."""
+
         SERVICE_OPTS = SimpleNamespace(
             setOmeroGroup=lambda value: (_ for _ in ()).throw(
                 RuntimeError("scope exploded")
@@ -571,6 +619,7 @@ def test_request_path_dataset_helpers_cover_fallback_and_save_failures(
 def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_branches(
     monkeypatch,
 ) -> None:
+    """Verify test request path job preparation and dataset behavior."""
     saved = {}
     monkeypatch.setattr(core_functions, "_load_job", lambda job_id: {"job_id": job_id})
     monkeypatch.setattr(
@@ -580,6 +629,8 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
     )
 
     class _Conn:
+        """Represent conn."""
+
         SERVICE_OPTS = SimpleNamespace(
             setOmeroGroup=lambda value: (_ for _ in ()).throw(
                 RuntimeError("scope exploded")
@@ -778,6 +829,7 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
 
     @contextmanager
     def _missing_background_user_connection(*args, **kwargs):
+        """Handle missing background user connection."""
         yield None
 
     monkeypatch.setattr(
@@ -803,10 +855,13 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
     ) == (False, import_errors.unable_prepare_import_destination())
 
     class _UserConn:
+        """Represent user conn."""
+
         def __init__(self):
             self.closed = False
 
         def close(self):
+            """Handle close."""
             self.closed = True
             raise RuntimeError("user close exploded")
 
@@ -814,6 +869,7 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
 
     @contextmanager
     def _background_user_connection(*args, **kwargs):
+        """Handle background user connection."""
         try:
             yield user_conn
         finally:

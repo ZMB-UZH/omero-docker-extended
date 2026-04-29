@@ -12,6 +12,7 @@ RETENTION_FILE_MARKER_SUFFIX = ".retain-until"
 
 
 def _resolve_existing(path: Path) -> Path | None:
+    """Handle resolve existing."""
     try:
         return path.resolve(strict=True)
     except (OSError, RuntimeError):
@@ -19,6 +20,7 @@ def _resolve_existing(path: Path) -> Path | None:
 
 
 def _resolve_child_candidate(path: Path) -> Path | None:
+    """Handle resolve child candidate."""
     if path.exists() or path.is_symlink():
         return _resolve_existing(path)
     parent = _resolve_existing(path.parent)
@@ -28,6 +30,7 @@ def _resolve_child_candidate(path: Path) -> Path | None:
 
 
 def _is_safe_path_component(value: str) -> bool:
+    """Handle is safe path component."""
     return (
         value not in {"", ".", ".."}
         and "/" not in value
@@ -95,12 +98,14 @@ def safe_remove_job_data(job_id: str, upload_root: Path) -> bool:
 
 
 def _retention_marker_path(path: Path) -> Path:
+    """Handle retention marker path."""
     if path.is_dir():
         return path / RETENTION_DIR_MARKER_NAME
     return path.parent / f".{path.name}{RETENTION_FILE_MARKER_SUFFIX}"
 
 
 def _fsync_directory(path: Path) -> None:
+    """Handle fsync directory."""
     try:
         dir_fd = os.open(path, os.O_DIRECTORY)
     except (AttributeError, OSError):

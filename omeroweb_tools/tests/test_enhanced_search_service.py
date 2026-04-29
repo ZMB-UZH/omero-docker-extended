@@ -12,6 +12,7 @@ from omeroweb_tools.services import enhanced_search_service as service
 
 
 def test_parse_search_query_validates_scope_and_date_ranges():
+    """Verify test parse search query validates scope and d behavior."""
     query, errors = service.parse_search_query(
         {
             "indexed_scope": "invalid-scope",
@@ -28,6 +29,7 @@ def test_parse_search_query_validates_scope_and_date_ranges():
 
 
 def test_parse_search_query_accepts_display_date_formats():
+    """Verify test parse search query accepts display date behavior."""
     query, errors = service.parse_search_query(
         {
             "acquisition_date_from": "12--04--2026",
@@ -50,6 +52,7 @@ def test_parse_search_query_accepts_display_date_formats():
 
 
 def test_search_query_display_dates_do_not_localize_end_of_day_forward():
+    """Verify test search query display dates do not locali behavior."""
     assert service.SearchQuery().acquisition_date_from_display == ""
     assert service.SearchQuery().acquisition_date_to_display == ""
 
@@ -77,6 +80,7 @@ def test_search_query_display_dates_do_not_localize_end_of_day_forward():
 
 
 def test_saved_query_redirect_url_urlencodes_payload():
+    """Verify test saved query redirect URL urlencodes payload."""
     with override_settings(ROOT_URLCONF="omeroweb_tools.urls"):
         target = service.saved_query_redirect_url(
             {
@@ -93,6 +97,7 @@ def test_saved_query_redirect_url_urlencodes_payload():
 
 
 def test_search_without_live_omero_connection_returns_empty_payload():
+    """Verify test search without live OMERO connection ret behavior."""
     payload = service.search(
         None,
         service.SearchQuery(query_text="anything"),
@@ -110,6 +115,7 @@ def test_search_without_live_omero_connection_returns_empty_payload():
 
 
 def test_search_without_query_text_or_date_filters_returns_empty_payload():
+    """Verify test search without query text or date filter behavior."""
     payload = service.search(
         object(),
         service.SearchQuery(query_text=""),
@@ -127,6 +133,7 @@ def test_search_without_query_text_or_date_filters_returns_empty_payload():
 
 
 def test_search_omero_builtin_scope_runs_without_acquisition_index(monkeypatch):
+    """Verify test search OMERO builtin scope runs without behavior."""
     calls = []
     monkeypatch.setattr(
         service, "runtime_config", lambda: SimpleNamespace(max_results=10)
@@ -152,6 +159,7 @@ def test_search_omero_builtin_scope_runs_without_acquisition_index(monkeypatch):
 
 
 def test_search_does_not_query_user_index_without_current_user(monkeypatch):
+    """Verify test search does not query user index without behavior."""
     called = []
     monkeypatch.setattr(
         service, "runtime_config", lambda: SimpleNamespace(max_results=10)
@@ -198,7 +206,11 @@ def test_search_runs_with_one_sided_date_filters(
     query,
     expected_filter_key,
 ):
+    """Verify test search runs with one sided date filters."""
+
     class _DbConn:
+        """Represent database conn."""
+
         def __enter__(self):
             return self
 
@@ -277,6 +289,7 @@ def test_search_runs_with_one_sided_date_filters(
 
 
 def test_sync_state_needs_refresh_for_stale_running_state(monkeypatch):
+    """Verify test sync state needs refresh for stale runni behavior."""
     monkeypatch.setattr(
         service,
         "runtime_config",
@@ -292,6 +305,7 @@ def test_sync_state_needs_refresh_for_stale_running_state(monkeypatch):
 
 
 def test_sync_state_needs_refresh_for_recent_running_state(monkeypatch):
+    """Verify test sync state needs refresh for recent runn behavior."""
     monkeypatch.setattr(
         service,
         "runtime_config",
@@ -307,7 +321,11 @@ def test_sync_state_needs_refresh_for_recent_running_state(monkeypatch):
 
 
 def test_save_user_settings_clears_current_user_scope_when_disabled(monkeypatch):
+    """Verify test save user settings clears current user s behavior."""
+
     class _DbConn:
+        """Represent database conn."""
+
         def __enter__(self):
             return self
 
@@ -367,7 +385,11 @@ def test_save_user_settings_clears_current_user_scope_when_disabled(monkeypatch)
 
 
 def test_save_user_settings_auto_starts_indexing_for_enabled_user(monkeypatch):
+    """Verify test save user settings auto starts indexing behavior."""
+
     class _DbConn:
+        """Represent database conn."""
+
         def __enter__(self):
             return self
 
@@ -427,6 +449,7 @@ def test_save_user_settings_auto_starts_indexing_for_enabled_user(monkeypatch):
 
 
 def test_scope_from_key_rejects_non_user_scopes():
+    """Verify test scope from key rejects non user scopes."""
     assert service.scope_from_key("dataset:7") is None
     assert service.scope_from_key("group:9") is None
 
@@ -434,6 +457,7 @@ def test_scope_from_key_rejects_non_user_scopes():
 def test_ensure_user_index_sync_autostarts_enabled_user_when_state_is_missing(
     monkeypatch,
 ):
+    """Verify test ensure user index sync autostarts enable behavior."""
     monkeypatch.setattr(
         service,
         "current_user_scope",
@@ -478,6 +502,7 @@ def test_ensure_user_index_sync_autostarts_enabled_user_when_state_is_missing(
 
 
 def test_ensure_user_index_sync_skips_recent_success(monkeypatch):
+    """Verify test ensure user index sync skips recent success."""
     recent_success = datetime.now(timezone.utc) - timedelta(seconds=30)
     monkeypatch.setattr(
         service,
@@ -530,6 +555,7 @@ def test_ensure_user_index_sync_skips_recent_success(monkeypatch):
 
 
 def test_search_merges_omero_and_acquisition_results(monkeypatch):
+    """Verify test search merges OMERO and acquisition results."""
     monkeypatch.setattr(
         service, "runtime_config", lambda: SimpleNamespace(max_results=10)
     )
@@ -537,6 +563,8 @@ def test_search_merges_omero_and_acquisition_results(monkeypatch):
     monkeypatch.setattr(service, "_current_user_id", lambda conn: 11)
 
     class _DbConn:
+        """Represent database conn."""
+
         def __enter__(self):
             return self
 
@@ -645,6 +673,7 @@ def test_search_merges_omero_and_acquisition_results(monkeypatch):
     )
 
     def _image(name):
+        """Handle image."""
         return SimpleNamespace(getName=lambda: name)
 
     monkeypatch.setattr(
@@ -683,19 +712,25 @@ def test_search_merges_omero_and_acquisition_results(monkeypatch):
 
 
 def test_all_indexed_search_dispatches_independent_sources_concurrently(monkeypatch):
+    """Verify test all indexed search dispatches independen behavior."""
     events = []
     executor_inits = []
 
     class _Future:
+        """Represent future."""
+
         def __init__(self, func, kwargs):
             self._func = func
             self._kwargs = kwargs
 
         def result(self):
+            """Handle result."""
             events.append("future-result")
             return self._func(**self._kwargs)
 
     class _Executor:
+        """Represent executor."""
+
         def __init__(self, max_workers, thread_name_prefix):
             executor_inits.append(
                 {
@@ -712,6 +747,7 @@ def test_all_indexed_search_dispatches_independent_sources_concurrently(monkeypa
 
         @staticmethod
         def submit(func, **kwargs):
+            """Handle submit."""
             events.append("submit-acquisition")
             return _Future(func, kwargs)
 
@@ -755,11 +791,15 @@ def test_all_indexed_search_dispatches_independent_sources_concurrently(monkeypa
 
 
 def test_search_omero_builtin_rows_uses_prefix_query_for_partial_matching(monkeypatch):
+    """Verify test search OMERO builtin rows uses prefix qu behavior."""
     captured = {}
 
     class _Conn:
+        """Represent conn."""
+
         @staticmethod
         def searchObjects(obj_types, text, **kwargs):
+            """Handle search objects."""
             captured["obj_types"] = obj_types
             captured["text"] = text
             captured["kwargs"] = kwargs
@@ -777,11 +817,15 @@ def test_search_omero_builtin_rows_uses_prefix_query_for_partial_matching(monkey
 
 
 def test_search_omero_builtin_rows_drops_single_letter_noise_terms(monkeypatch):
+    """Verify test search OMERO builtin rows drops single l behavior."""
     captured = {}
 
     class _Conn:
+        """Represent conn."""
+
         @staticmethod
         def searchObjects(obj_types, text, **kwargs):
+            """Handle search objects."""
             captured["obj_types"] = obj_types
             captured["text"] = text
             captured["kwargs"] = kwargs
@@ -799,6 +843,7 @@ def test_search_omero_builtin_rows_drops_single_letter_noise_terms(monkeypatch):
 
 
 def test_request_scope_sync_dispatches_celery_task(monkeypatch):
+    """Verify test request scope sync dispatches celery task."""
     scope = service.EnhancedSearchScope("user", 7, "Your universal metadata index")
     monkeypatch.setattr(service, "scope_from_key", lambda scope_key, label=None: scope)
     celery_config = SimpleNamespace(
@@ -818,6 +863,8 @@ def test_request_scope_sync_dispatches_celery_task(monkeypatch):
     )
 
     class _Conn:
+        """Represent conn."""
+
         def __enter__(self):
             return self
 
@@ -862,6 +909,7 @@ def test_request_scope_sync_dispatches_celery_task(monkeypatch):
 
 
 def test_request_scope_sync_marks_error_when_celery_dispatch_fails(monkeypatch):
+    """Verify test request scope sync marks error when cele behavior."""
     scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
     monkeypatch.setattr(service, "scope_from_key", lambda scope_key, label=None: scope)
     celery_config = SimpleNamespace(
@@ -881,6 +929,8 @@ def test_request_scope_sync_marks_error_when_celery_dispatch_fails(monkeypatch):
     )
 
     class _Conn:
+        """Represent conn."""
+
         def __enter__(self):
             return self
 
@@ -933,9 +983,12 @@ def test_request_scope_sync_marks_error_when_celery_dispatch_fails(monkeypatch):
 
 
 def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
+    """Verify test dispatch scope sync task uses explicit b behavior."""
     send_calls = {}
 
     class _FakeConnection:
+        """Test double for fake connection."""
+
         def __init__(self, url):
             self.url = url
             self.closed = False
@@ -950,8 +1003,11 @@ def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
             return False
 
     class _FakeApp:
+        """Test double for fake app."""
+
         @staticmethod
         def send_task(name, *, args, queue, connection):
+            """Handle send task."""
             send_calls.update(
                 {
                     "name": name,
@@ -991,6 +1047,7 @@ def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
 
 
 def test_request_scope_sync_uses_thread_fallback_when_celery_is_disabled(monkeypatch):
+    """Verify test request scope sync uses thread fallback behavior."""
     scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
     monkeypatch.setattr(service, "scope_from_key", lambda scope_key, label=None: scope)
     monkeypatch.setattr(
@@ -1005,6 +1062,8 @@ def test_request_scope_sync_uses_thread_fallback_when_celery_is_disabled(monkeyp
     )
 
     class _Conn:
+        """Represent conn."""
+
         def __enter__(self):
             return self
 
@@ -1036,9 +1095,12 @@ def test_request_scope_sync_uses_thread_fallback_when_celery_is_disabled(monkeyp
 
 
 def test_process_sync_batch_stops_when_sync_lease_is_not_active(monkeypatch):
+    """Verify test process sync batch stops when sync lease behavior."""
     scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
 
     class _Conn:
+        """Represent conn."""
+
         def __enter__(self):
             return self
 
@@ -1068,10 +1130,13 @@ def test_process_sync_batch_stops_when_sync_lease_is_not_active(monkeypatch):
 
 
 def test_process_sync_batch_commits_after_progress_update(monkeypatch):
+    """Verify test process sync batch commits after progres behavior."""
     scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
     lease_id = f"{scope.scope_key}:lease"
 
     class _Conn:
+        """Represent conn."""
+
         def __init__(self):
             self.commits = 0
 
@@ -1082,6 +1147,7 @@ def test_process_sync_batch_commits_after_progress_update(monkeypatch):
             return False
 
         def commit(self):
+            """Handle commit."""
             self.commits += 1
 
     conn = _Conn()
@@ -1137,9 +1203,12 @@ def test_process_sync_batch_commits_after_progress_update(monkeypatch):
 
 
 def test_process_sync_batch_skips_non_callable_commit_attribute(monkeypatch):
+    """Verify test process sync batch skips non callable co behavior."""
     scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
 
     class _Conn:
+        """Represent conn."""
+
         commit = "not-callable"
 
         def __enter__(self):

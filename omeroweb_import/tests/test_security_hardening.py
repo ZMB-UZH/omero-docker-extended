@@ -15,6 +15,7 @@ def _test_job_id(suffix: str) -> str:
 
 
 def test_ensure_dir_rejects_unmanaged_path(tmp_path, monkeypatch):
+    """Verify test ensure dir rejects unmanaged path."""
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
     upload_root.mkdir()
@@ -29,6 +30,7 @@ def test_ensure_dir_rejects_unmanaged_path(tmp_path, monkeypatch):
 
 
 def test_ensure_dir_accepts_managed_upload_subdirectory(tmp_path, monkeypatch):
+    """Verify test ensure dir accepts managed upload subdir behavior."""
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
     upload_root.mkdir()
@@ -43,6 +45,7 @@ def test_ensure_dir_accepts_managed_upload_subdirectory(tmp_path, monkeypatch):
 
 
 def test_job_paths_are_canonical_and_anchored_under_jobs_root(tmp_path, monkeypatch):
+    """Verify test job paths are canonical and anchored und behavior."""
     jobs_root = tmp_path / "jobs-root"
     jobs_root.mkdir()
 
@@ -60,6 +63,7 @@ def test_job_paths_are_canonical_and_anchored_under_jobs_root(tmp_path, monkeypa
 
 
 def test_load_job_reads_from_canonical_jobs_path(tmp_path, monkeypatch):
+    """Verify test load job reads from canonical jobs path."""
     jobs_root = tmp_path / "jobs-root"
     jobs_root.mkdir()
 
@@ -79,10 +83,13 @@ def test_load_job_reads_from_canonical_jobs_path(tmp_path, monkeypatch):
 def test_open_service_connection_redacts_password_when_connect_raises(
     monkeypatch, caplog
 ):
+    """Verify test open service connection redacts password behavior."""
     for module in (import_service, core_functions):
         created = []
 
         class FakeConn:
+            """Test double for fake conn."""
+
             def __init__(self, *_args, **_kwargs):
                 self.closed = False
                 self.SERVICE_OPTS = type(
@@ -91,16 +98,20 @@ def test_open_service_connection_redacts_password_when_connect_raises(
 
             @staticmethod
             def connect():
+                """Handle connect."""
                 raise RuntimeError("authentication failed for password super-secret")
 
             @staticmethod
             def getLastError():
+                """Return get last error."""
                 return "password=super-secret"
 
             def close(self):
+                """Handle close."""
                 self.closed = True
 
         def fake_gateway(*args, _created=created, _conn_factory=FakeConn, **kwargs):
+            """Handle fake gateway."""
             conn = _conn_factory(*args, **kwargs)
             _created.append(conn)
             return conn
@@ -127,10 +138,13 @@ def test_open_service_connection_redacts_password_when_connect_raises(
 def test_open_service_connection_redacts_password_when_connect_returns_false(
     monkeypatch, caplog
 ):
+    """Verify test open service connection redacts password behavior."""
     for module in (import_service, core_functions):
         created = []
 
         class FakeConn:
+            """Test double for fake conn."""
+
             def __init__(self, *_args, **_kwargs):
                 self.closed = False
                 self.SERVICE_OPTS = type(
@@ -139,16 +153,20 @@ def test_open_service_connection_redacts_password_when_connect_returns_false(
 
             @staticmethod
             def connect():
+                """Handle connect."""
                 return False
 
             @staticmethod
             def getLastError():
+                """Return get last error."""
                 return "password=super-secret"
 
             def close(self):
+                """Handle close."""
                 self.closed = True
 
         def fake_gateway(*args, _created=created, _conn_factory=FakeConn, **kwargs):
+            """Handle fake gateway."""
             conn = _conn_factory(*args, **kwargs)
             _created.append(conn)
             return conn
@@ -172,23 +190,31 @@ def test_open_service_connection_redacts_password_when_connect_returns_false(
 
 
 def _assert_service_connection_falls_back_to_job_group(module, monkeypatch):
+    """Handle assert service connection falls back to job g behavior."""
     group_calls = []
 
     class ServiceOpts:
+        """Represent service opts."""
+
         @staticmethod
         def setOmeroGroup(value):
+            """Store set OMERO group."""
             group_calls.append(value)
 
     class FakeConn:
+        """Test double for fake conn."""
+
         def __init__(self, *_args, **_kwargs):
             self.SERVICE_OPTS = ServiceOpts()
 
         @staticmethod
         def connect():
+            """Handle connect."""
             return True
 
         @staticmethod
         def close():
+            """Handle close."""
             return None
 
     monkeypatch.setattr(
@@ -207,5 +233,6 @@ def _assert_service_connection_falls_back_to_job_group(module, monkeypatch):
 def test_open_service_connection_falls_back_to_job_group_when_override_is_invalid(
     monkeypatch,
 ):
+    """Verify test open service connection falls back to jo behavior."""
     for module in (import_service, core_functions):
         _assert_service_connection_falls_back_to_job_group(module, monkeypatch)

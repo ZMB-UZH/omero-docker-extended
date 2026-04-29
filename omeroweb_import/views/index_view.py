@@ -1,6 +1,4 @@
-"""
-Import plugin views.
-"""
+"""Import plugin views."""
 
 import json
 import time
@@ -72,6 +70,7 @@ from .utils import current_username, json_error, load_json_body, require_non_roo
 @login_required()
 @ensure_csrf_cookie
 def index(request, conn=None, _url=None, **kwargs):
+    """Handle index."""
     user_id = _current_user_id(conn)
     upload_root = _get_upload_root()
     upload_enabled = _ensure_dir(upload_root)
@@ -105,6 +104,7 @@ def index(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def list_projects(request, conn=None, _url=None, **kwargs):
+    """Return list projects."""
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
     return JsonResponse(payload, safe=False)
@@ -112,6 +112,7 @@ def list_projects(request, conn=None, _url=None, **kwargs):
 
 @login_required()
 def root_status(request, conn=None, _url=None, **kwargs):
+    """Handle root status."""
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})
 
@@ -119,6 +120,7 @@ def root_status(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_upload(request, conn=None, _url=None, **kwargs):
+    """Run start upload."""
     try:
         return _start_upload(request, conn)
     except Exception as exc:
@@ -130,6 +132,7 @@ def start_upload(request, conn=None, _url=None, **kwargs):
 
 
 def _start_upload(request, conn):
+    """Handle start upload."""
     if request.method != "POST":
         return json_error(errors.upload_start_post_required())
 
@@ -417,6 +420,7 @@ def _start_upload(request, conn):
 @login_required()
 @require_non_root_user
 def upload_files(request, job_id, conn=None, _url=None, **kwargs):
+    """Handle upload files."""
     try:
         return _upload_files(request, job_id, conn)
     except Exception as exc:
@@ -429,6 +433,7 @@ def upload_files(request, job_id, conn=None, _url=None, **kwargs):
 
 
 def _find_job_upload_entry(job, rel_path):
+    """Handle find job upload entry."""
     for entry in job.get("files", []):
         if entry.get("relative_path") == rel_path and entry.get("status") in (
             "pending",
@@ -439,6 +444,7 @@ def _find_job_upload_entry(job, rel_path):
 
 
 def _job_owned_by_request(job, request, conn):
+    """Handle job owned by request."""
     if not isinstance(job, dict):
         return False
     job_username = str(job.get("username") or "").strip()
@@ -447,6 +453,7 @@ def _job_owned_by_request(job, request, conn):
 
 
 def _load_owned_job(request, conn, job_id, missing_error):
+    """Handle load owned job."""
     if not _safe_job_id(job_id):
         return None, json_error(missing_error)
     job = _load_job(job_id)
@@ -456,6 +463,7 @@ def _load_owned_job(request, conn, job_id, missing_error):
 
 
 def _prepare_ready_job_for_import_start(job_id, job, conn):
+    """Handle prepare ready job for import start."""
     prepared_job, prep_error = _prepare_uploaded_job_dataset_targets(job_id, job, conn)
     if prep_error:
         return prepared_job or job, prep_error
@@ -468,6 +476,7 @@ def _prepare_ready_job_for_import_start(job_id, job, conn):
 
 
 def _prepare_uploaded_job_dataset_targets(job_id, job, conn):
+    """Handle prepare uploaded job dataset targets."""
     return _prepare_uploaded_job_for_request_path_import(job_id, job, conn)
 
 
@@ -480,6 +489,7 @@ def _prepare_job_import_datasets(job_id, job, conn):
 
 
 def _upload_internal_error_response(job_id, detail, *, context: str):
+    """Handle upload internal error response."""
     logger.warning(
         "%s for upload job %s: %s",
         context,
@@ -490,6 +500,7 @@ def _upload_internal_error_response(job_id, detail, *, context: str):
 
 
 def _import_internal_error_response(job_id, detail, *, context: str):
+    """Handle import internal error response."""
     logger.warning(
         "%s for import job %s: %s",
         context,
@@ -500,18 +511,21 @@ def _import_internal_error_response(job_id, detail, *, context: str):
 
 
 def _get_session_key(conn):
+    """Handle get session key."""
     from .core_functions import _get_session_key as _core_get_session_key
 
     return _core_get_session_key(conn)
 
 
 def _get_or_create_dataset(conn, name, dataset_map, project_id=None):
+    """Handle get or create dataset."""
     from .core_functions import _get_or_create_dataset as _core_get_or_create_dataset
 
     return _core_get_or_create_dataset(conn, name, dataset_map, project_id=project_id)
 
 
 def _parse_chunk_int(raw_value, field_name):
+    """Handle parse chunk int."""
     try:
         value = int(raw_value)
     except (TypeError, ValueError):
@@ -526,10 +540,12 @@ def _parse_chunk_int(raw_value, field_name):
 
 
 def _as_bool(raw_value):
+    """Handle as bool."""
     return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _handle_chunk_upload(request, job_id, conn, job, job_root):
+    """Handle handle chunk upload."""
     upload = request.FILES.get("file")
     if upload is None:
         return json_error(errors.upload_chunk_missing_file(), status=400)
@@ -762,6 +778,7 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
 
 
 def _upload_files(request, job_id, conn):
+    """Handle upload files."""
     safe_job_id = sanitize_log_value(job_id)
     if request.method != "POST":
         return json_error(errors.upload_endpoint_post_required())
@@ -935,6 +952,7 @@ def _upload_files(request, job_id, conn):
 @login_required()
 @require_non_root_user
 def import_step(request, job_id, conn=None, _url=None, **kwargs):
+    """Handle import step."""
     try:
         return _import_step(request, job_id, conn)
     except Exception as exc:
@@ -947,6 +965,7 @@ def import_step(request, job_id, conn=None, _url=None, **kwargs):
 
 
 def _import_step(request, job_id, conn):
+    """Handle import step."""
     safe_job_id = sanitize_log_value(job_id)
     if request.method != "POST":
         return json_error(errors.import_endpoint_post_required())
@@ -987,6 +1006,7 @@ def _import_step(request, job_id, conn):
 @login_required()
 @require_non_root_user
 def confirm_import(request, job_id, conn=None, _url=None, **kwargs):
+    """Handle confirm import."""
     if request.method != "POST":
         return json_error(errors.method_post_required())
 
@@ -1027,6 +1047,7 @@ def confirm_import(request, job_id, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def prune_upload(request, job_id, conn=None, _url=None, **kwargs):
+    """Handle prune upload."""
     if request.method != "POST":
         return json_error(errors.method_post_required())
 
@@ -1056,6 +1077,7 @@ def prune_upload(request, job_id, conn=None, _url=None, **kwargs):
     upload_root = _get_upload_root() / job_id
 
     def apply_prune(job_dict):
+        """Handle apply prune."""
         removed = []
         kept_entries = []
         for entry in job_dict.get("files", []):
@@ -1138,6 +1160,7 @@ def prune_upload(request, job_id, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def job_status(request, job_id, conn=None, _url=None, **kwargs):
+    """Handle job status."""
     job, error_response = _load_owned_job(
         request,
         conn,

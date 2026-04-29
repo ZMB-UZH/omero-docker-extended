@@ -14,8 +14,11 @@ BASH_BIN = "/bin/bash"
 
 
 class InstallationShellValidationContractTests(unittest.TestCase):
+    """Test cases for installation shell validation contract tests."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.script_text = (
             cls.repo_root / "installation" / "installation_script.sh"
@@ -35,6 +38,7 @@ class InstallationShellValidationContractTests(unittest.TestCase):
     def _extract_script_block(
         start_marker: str, end_marker: str, source_text: str
     ) -> str:
+        """Handle extract script block."""
         start = source_text.find(start_marker)
         if start == -1:
             raise AssertionError(f"Unable to find script marker: {start_marker}")
@@ -47,10 +51,12 @@ class InstallationShellValidationContractTests(unittest.TestCase):
 
     @staticmethod
     def _write_executable(path: Path, content: str) -> None:
+        """Handle write executable."""
         path.write_text(content, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
     def _run_harness(self, script_text: str) -> subprocess.CompletedProcess[str]:
+        """Handle run harness."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             harness_path = temp_path / "run.sh"
@@ -64,6 +70,7 @@ class InstallationShellValidationContractTests(unittest.TestCase):
             )
 
     def test_installer_avoids_bash_regex_operator(self) -> None:
+        """Verify test installer avoids bash regex operator."""
         self.assertNotRegex(self.script_text, r"\[\[\s+[^\n]*=~")
         self.assertIn("is_non_negative_integer()", self.script_text)
         self.assertIn("is_positive_integer()", self.script_text)
@@ -71,6 +78,7 @@ class InstallationShellValidationContractTests(unittest.TestCase):
         self.assertIn("is_omero_group_name()", self.script_text)
 
     def test_shell_validation_helpers_accept_only_expected_values(self) -> None:
+        """Verify test shell validation helpers accept only exp behavior."""
         result = self._run_harness(
             textwrap.dedent(
                 f"""\
@@ -139,6 +147,7 @@ class InstallationShellValidationContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
 
     def test_group_list_validator_uses_same_name_contract(self) -> None:
+        """Verify test group list validator uses same name cont behavior."""
         result = self._run_harness(
             textwrap.dedent(
                 f"""\

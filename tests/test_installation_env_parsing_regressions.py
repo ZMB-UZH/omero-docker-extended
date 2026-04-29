@@ -14,8 +14,11 @@ BASH_BIN = "/bin/bash"
 
 
 class InstallationEnvParsingRegressionTests(unittest.TestCase):
+    """Test cases for installation env parsing regression tests."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.script_path = cls.repo_root / "installation" / "installation_script.sh"
         cls.script_text = cls.script_path.read_text(encoding="utf-8")
@@ -47,6 +50,7 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
     def _extract_script_block(
         cls, start_marker: str, end_marker: str | None, source_text: str
     ) -> str:
+        """Handle extract script block."""
         start = source_text.find(start_marker)
         if start == -1:
             raise AssertionError(f"Unable to find script marker: {start_marker}")
@@ -62,10 +66,12 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _write_executable(path: Path, content: str) -> None:
+        """Handle write executable."""
         path.write_text(content, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
     def _run_harness(self, script_text: str) -> subprocess.CompletedProcess[str]:
+        """Handle run harness."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             harness_path = temp_path / "run.sh"
@@ -79,6 +85,7 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
             )
 
     def test_installation_env_loader_resolves_safe_variable_references(self) -> None:
+        """Verify test installation env loader resolves safe va behavior."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             env_file = temp_path / "installation_paths.env"
@@ -128,6 +135,7 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
     def test_installation_env_loader_rejects_command_substitution_without_executing_it(
         self,
     ) -> None:
+        """Verify test installation env loader rejects command behavior."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             env_file = temp_path / "installation_paths.env"
@@ -155,6 +163,7 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
             self.assertIn("Refusing unsafe value", result.stderr)
 
     def test_installation_env_loader_rejects_invalid_variable_names(self) -> None:
+        """Verify test installation env loader rejects invalid behavior."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             env_file = temp_path / "installation_paths.env"
@@ -179,6 +188,7 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
     def test_env_assignment_resolver_expands_safe_references_without_eval(
         self,
     ) -> None:
+        """Verify test env assignment resolver expands safe ref behavior."""
         result = self._run_harness(
             textwrap.dedent(
                 f"""\
@@ -202,6 +212,7 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
     def test_env_assignment_resolver_rejects_unsupported_parameter_expansion(
         self,
     ) -> None:
+        """Verify test env assignment resolver rejects unsuppor behavior."""
         result = self._run_harness(
             textwrap.dedent(
                 f"""\
@@ -218,6 +229,7 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
         self.assertIn("Unsupported parameter expansion", result.stderr)
 
     def test_installation_script_no_longer_re_evaluates_env_lines(self) -> None:
+        """Verify test installation script no longer re evaluat behavior."""
         self.assertNotIn('eval "${env_line}"', self.script_text)
         self.assertNotIn('eval "${env_key}', self.script_text)
         self.assertNotIn('eval "${env_line}"', self.helper_text)

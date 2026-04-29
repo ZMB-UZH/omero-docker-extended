@@ -4,6 +4,7 @@ from omeroweb_tools.services import search_query_builder
 
 
 def test_build_omero_fulltext_query_uses_prefix_matching_for_terms():
+    """Verify test build OMERO fulltext query uses prefix m behavior."""
     assert search_query_builder.build_omero_fulltext_query("104") == "104*"
     assert search_query_builder.build_omero_fulltext_query("104 204") == "104* OR 204*"
     assert (
@@ -13,6 +14,7 @@ def test_build_omero_fulltext_query_uses_prefix_matching_for_terms():
 
 
 def test_build_omero_fulltext_query_preserves_exact_phrases():
+    """Verify test build OMERO fulltext query preserves exa behavior."""
     assert (
         search_query_builder.build_omero_fulltext_query('"GFP H2B" 104')
         == '"GFP H2B" OR 104*'
@@ -20,6 +22,7 @@ def test_build_omero_fulltext_query_preserves_exact_phrases():
 
 
 def test_build_postgres_prefix_tsquery_uses_prefix_and_phrase_operators():
+    """Verify test build postgres prefix tsquery uses prefi behavior."""
     assert (
         search_query_builder.build_postgres_prefix_tsquery("104 204") == "104:* | 204:*"
     )
@@ -36,6 +39,7 @@ def test_build_postgres_prefix_tsquery_uses_prefix_and_phrase_operators():
 
 
 def test_build_query_helpers_ignore_non_search_punctuation():
+    """Verify test build query helpers ignore non search pu behavior."""
     assert search_query_builder.build_omero_fulltext_query("___") == ""
     assert search_query_builder.build_postgres_prefix_tsquery("___") == ""
     assert search_query_builder.build_omero_fulltext_query("a") == ""
@@ -43,6 +47,7 @@ def test_build_query_helpers_ignore_non_search_punctuation():
 
 
 def test_build_query_helpers_drop_single_numeric_fragments_from_decimals():
+    """Verify test build query helpers drop single numeric behavior."""
     assert (
         search_query_builder.build_postgres_prefix_tsquery("0.6240005493164062")
         == "6240005493164062:*"

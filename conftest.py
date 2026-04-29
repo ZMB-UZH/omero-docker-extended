@@ -55,7 +55,6 @@ def _set_module_metadata(
     module_name: str,
 ) -> _ModuleStubT:
     """Give test stubs enough import metadata for importlib discovery."""
-
     is_package = module_name in _PACKAGE_STUBS
     module.__name__ = module_name
     module.__package__ = module_name if is_package else module_name.rpartition(".")[0]
@@ -66,6 +65,7 @@ def _set_module_metadata(
 
 
 def _mock_module(module_name: str) -> MagicMock:
+    """Handle mock module."""
     return _set_module_metadata(MagicMock(), module_name)
 
 
@@ -79,6 +79,8 @@ def _passthrough_login_required(*args, **kwargs):
     from functools import wraps
 
     def decorator(func):
+        """Handle decorator."""
+
         @wraps(func)
         def wrapper(*a, **kw):
             return func(*a, **kw)
@@ -112,21 +114,27 @@ class _ColorHolder:
 
     @classmethod
     def fromRGBA(cls, r, g, b, a):
+        """Handle from rgba."""
         return cls(r, g, b, a)
 
     def getHtml(self):
+        """Return get HTML."""
         return f"{self._r:02X}{self._g:02X}{self._b:02X}"
 
     def getRed(self):
+        """Return get red."""
         return self._r
 
     def getGreen(self):
+        """Return get green."""
         return self._g
 
     def getBlue(self):
+        """Return get blue."""
         return self._b
 
     def getAlpha(self):
+        """Return get alpha."""
         return self._a
 
 
@@ -145,16 +153,22 @@ for _name in (
 
 
 class _DummyCelery:
+    """Test double for dummy celery."""
+
     def __init__(self, *args, **kwargs):
         self.conf = MagicMock()
 
     @staticmethod
     def autodiscover_tasks(*args, **kwargs):
+        """Handle autodiscover tasks."""
         return None
 
     @staticmethod
     def task(*args, **kwargs):
+        """Handle task."""
+
         def decorator(func):
+            """Handle decorator."""
             return func
 
         if args and callable(args[0]):
@@ -301,6 +315,7 @@ _MODULE_STATE_BASELINE: dict[str, tuple[ModuleType, dict[str, Any]]] = {}
 
 
 def _matches_isolated_prefix(module_name: str) -> bool:
+    """Handle matches isolated prefix."""
     return any(
         module_name == prefix or module_name.startswith(f"{prefix}.")
         for prefix in _ISOLATED_MODULE_PREFIXES
@@ -308,6 +323,7 @@ def _matches_isolated_prefix(module_name: str) -> bool:
 
 
 def _snapshot_module_state() -> dict[str, tuple[ModuleType, dict[str, Any]]]:
+    """Handle snapshot module state."""
     snapshot: dict[str, tuple[ModuleType, dict[str, Any]]] = {}
     for module_name, module in list(sys.modules.items()):
         if _matches_isolated_prefix(module_name):
@@ -318,6 +334,7 @@ def _snapshot_module_state() -> dict[str, tuple[ModuleType, dict[str, Any]]]:
 def _restore_module_state(
     snapshot: dict[str, tuple[ModuleType, dict[str, Any]]],
 ) -> None:
+    """Handle restore module state."""
     if not snapshot:
         return
 
@@ -337,12 +354,14 @@ def _restore_module_state(
 
 
 def pytest_collection_finish() -> None:
+    """Handle pytest collection finish."""
     _MODULE_STATE_BASELINE.clear()
     _MODULE_STATE_BASELINE.update(_snapshot_module_state())
 
 
 @pytest.fixture(autouse=True)
 def _isolate_module_state():
+    """Handle isolate module state."""
     _restore_module_state(_MODULE_STATE_BASELINE)
     yield
     _restore_module_state(_MODULE_STATE_BASELINE)

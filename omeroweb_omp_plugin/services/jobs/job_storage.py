@@ -18,16 +18,19 @@ _HELD_JOB_LOCKS = local()
 
 
 def _validate_job_id(job_id):
+    """Handle validate job identifier."""
     if not isinstance(job_id, str) or not _JOB_ID_RE.fullmatch(job_id):
         raise ValueError("Invalid job id.")
     return uuid.UUID(hex=job_id.lower()).hex
 
 
 def _jobs_root() -> Path:
+    """Handle jobs root."""
     return Path(JOBS_DIR)
 
 
 def _validated_job_path(job_id, suffix: str) -> Path:
+    """Handle validated job path."""
     return _jobs_root() / f"{_validate_job_id(job_id)}{suffix}"
 
 
@@ -42,6 +45,7 @@ def get_job_lock_path(job_id):
 
 
 def _held_job_locks() -> Counter[str]:
+    """Handle held job locks."""
     locks = getattr(_HELD_JOB_LOCKS, "locks", None)
     if locks is None:
         locks = Counter()
@@ -97,6 +101,7 @@ def save_job(job_dict):
 
 
 def _write_job_file(path, job_dict):
+    """Handle write job file."""
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(

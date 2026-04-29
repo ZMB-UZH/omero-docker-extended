@@ -33,11 +33,13 @@ def _test_job_id(suffix: str) -> str:
 
 
 def _ensure_dir(path):
+    """Handle ensure dir."""
     Path(path).mkdir(parents=True, exist_ok=True)
     return True
 
 
 def _mark_job_owned(monkeypatch, job):
+    """Handle mark job owned."""
     job["username"] = "alice"
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
 
@@ -45,6 +47,7 @@ def _mark_job_owned(monkeypatch, job):
 def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test upload files accepts chunked upload and behavior."""
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("b2")
     job = {
@@ -76,6 +79,7 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(
     fake_conn = object()
 
     def fake_apply_upload_updates(current_job_id, updates, upload_errors):
+        """Handle fake apply upload updates."""
         assert current_job_id == job_id
         assert upload_errors == []
         assert updates == [{"upload_id": "u1", "status": "uploaded"}]
@@ -153,6 +157,7 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(
 def test_upload_files_defers_noncompat_import_until_background_plan_exists(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test upload files defers noncompat import unt behavior."""
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("ff")
     job = {
@@ -185,6 +190,7 @@ def test_upload_files_defers_noncompat_import_until_background_plan_exists(
     fake_conn = object()
 
     def fake_apply_upload_updates(current_job_id, updates, upload_errors):
+        """Handle fake apply upload updates."""
         assert current_job_id == job_id
         assert upload_errors == []
         assert updates == [{"upload_id": "u1", "status": "uploaded"}]
@@ -229,6 +235,7 @@ def test_upload_files_defers_noncompat_import_until_background_plan_exists(
 def test_upload_files_resets_existing_staged_file_when_chunk_restarts(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test upload files resets existing staged file behavior."""
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("ba")
     job = {
@@ -302,6 +309,7 @@ def test_upload_files_resets_existing_staged_file_when_chunk_restarts(
 
 
 def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch):
+    """Verify test upload files rejects chunk offset mismatch."""
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("dd")
     job = {
@@ -356,6 +364,7 @@ def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch)
 
 
 def test_upload_files_rejects_unsafe_staged_path(tmp_path: Path, monkeypatch):
+    """Verify test upload files rejects unsafe staged path."""
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("f4")
     job = {
@@ -413,6 +422,7 @@ def test_upload_files_rejects_unsafe_staged_path(tmp_path: Path, monkeypatch):
 
 
 def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatch):
+    """Verify test upload files chunked save error is sanit behavior."""
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("9f")
     job = {
@@ -440,6 +450,7 @@ def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatc
     apply_calls = []
 
     def fake_apply_upload_updates(current_job_id, updates, upload_errors):
+        """Handle fake apply upload updates."""
         apply_calls.append((current_job_id, updates, upload_errors))
         return job
 
@@ -489,11 +500,13 @@ def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatc
 def test_upload_files_wrapper_returns_json_when_internal_upload_raises(
     monkeypatch, caplog
 ):
+    """Verify test upload files wrapper returns JSON when i behavior."""
     request = RequestFactory().post("/omeroweb_import/upload/test-job/")
 
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
 
     def raise_upload_error(request, job_id):
+        """Handle raise upload error."""
         raise RuntimeError("boom")
 
     monkeypatch.setattr(index_view, "_upload_files", raise_upload_error)
@@ -510,6 +523,7 @@ def test_upload_files_wrapper_returns_json_when_internal_upload_raises(
 
 
 def test_upload_files_hides_oserror_details(tmp_path: Path, monkeypatch):
+    """Verify test upload files hides oserror details."""
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("0f")
     job = {

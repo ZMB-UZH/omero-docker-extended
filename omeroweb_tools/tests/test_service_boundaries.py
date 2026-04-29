@@ -11,6 +11,8 @@ from omeroweb_tools.services import enhanced_search_service as service
 
 
 class _DbConn:
+    """Represent database conn."""
+
     def __enter__(self):
         return self
 
@@ -19,17 +21,21 @@ class _DbConn:
 
 
 def _db_connect():
+    """Handle database connect."""
     return _DbConn()
 
 
 def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch):
+    """Verify test runtime wrappers query helpers and user behavior."""
     runtime = SimpleNamespace(max_results=25, schema_version=4, sync_stale_seconds=600)
     celery = SimpleNamespace(enabled=True)
 
     def _runtime_config():
+        """Handle runtime config."""
         return runtime
 
     def _celery_config():
+        """Handle celery config."""
         return celery
 
     monkeypatch.setattr(service, "build_enhanced_search_config", _runtime_config)
@@ -133,6 +139,7 @@ def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch
     monkeypatch.setattr(service, "db_connect", _db_connect)
 
     def _load_user_settings_row(conn, username, defaults=None):
+        """Handle load user settings row."""
         assert isinstance(conn, _DbConn)
         assert username == "alice"
         assert defaults == service.default_user_settings()
@@ -146,6 +153,7 @@ def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch
 
 
 def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
+    """Verify test scope state sync state lookup and curren behavior."""
     recorded = {}
     monkeypatch.setattr(service, "db_connect", _db_connect)
     monkeypatch.setattr(
@@ -162,6 +170,7 @@ def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
     )
 
     def _runtime_config():
+        """Handle runtime config."""
         return SimpleNamespace(schema_version=3)
 
     monkeypatch.setattr(service, "runtime_config", _runtime_config)
@@ -195,13 +204,19 @@ def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
     assert service.ensure_scope_state(()) == []
 
     class _WrappedId:
+        """Represent wrapped identifier."""
+
         @staticmethod
         def getValue():
+            """Return get value."""
             return 21
 
     class _User:
+        """Represent user."""
+
         @staticmethod
         def getId():
+            """Return get identifier."""
             return _WrappedId()
 
     assert service._current_user_id(SimpleNamespace(getUser=_User)) == 21
@@ -224,6 +239,7 @@ def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
 
 
 def test_parse_search_query_sync_state_and_disabled_scope_guard_paths(monkeypatch):
+    """Verify test parse search query sync state and disabl behavior."""
     assert service._parse_date(None) is None
     assert service._parse_date("   ") is None
     converted = service._parse_date("2026-04-12T10:15:00+02:00")
@@ -274,6 +290,7 @@ def test_parse_search_query_sync_state_and_disabled_scope_guard_paths(monkeypatc
 
 
 def test_visible_group_ids_range_math_and_row_merging_boundaries(monkeypatch):
+    """Verify test visible group identifiers range math and behavior."""
     monkeypatch.setattr(service, "_current_user_id", lambda conn: 9)
     monkeypatch.setattr(service, "get_id", lambda obj: obj)
     conn = SimpleNamespace(
@@ -346,6 +363,7 @@ def test_visible_group_ids_range_math_and_row_merging_boundaries(monkeypatch):
 
 
 def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
+    """Verify test builtin search helper paths and result r behavior."""
     monkeypatch.setattr(
         service,
         "_document_for_image",
@@ -357,6 +375,7 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
     )
 
     def _runtime_config():
+        """Handle runtime config."""
         return SimpleNamespace(schema_version=5, max_results=3)
 
     monkeypatch.setattr(service, "runtime_config", _runtime_config)
@@ -366,13 +385,18 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
     }
 
     class _BrokenDatasetHit:
+        """Represent broken dataset hit."""
+
         OMERO_CLASS = "Dataset"
 
         @staticmethod
         def listChildren():
+            """Return list children."""
             raise RuntimeError("boom")
 
     class _UnknownHit:
+        """Represent unknown hit."""
+
         OMERO_CLASS = "Plate"
 
     assert service._images_from_builtin_search_hit(_BrokenDatasetHit()) == []
@@ -410,10 +434,13 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
     monkeypatch.setattr(service, "get_id", lambda obj: getattr(obj, "_id", obj))
 
     class _SearchConn:
+        """Represent search conn."""
+
         def __init__(self):
             self.calls = 0
 
         def searchObjects(self, object_types, fulltext_query, **kwargs):
+            """Handle search objects."""
             search_calls.append(kwargs["searchGroup"])
             self.calls += 1
             if self.calls == 1:
@@ -436,11 +463,14 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
     retry_calls = []
 
     class _AlwaysFailSearchConn:
+        """Represent always fail search conn."""
+
         def __init__(self):
             self.calls = 0
 
         @staticmethod
         def searchObjects(object_types, fulltext_query, **kwargs):
+            """Handle search objects."""
             retry_calls.append(kwargs["searchGroup"])
             raise RuntimeError("still failing")
 
@@ -472,10 +502,13 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
     )
 
     class _PagedSearchConn:
+        """Represent paged search conn."""
+
         def __init__(self):
             self.calls = 0
 
         def searchObjects(self, object_types, fulltext_query, **kwargs):
+            """Handle search objects."""
             paged_calls.append(kwargs["page"])
             self.calls += 1
             if self.calls == 1:
@@ -493,28 +526,41 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
 
 
 def test_image_helpers_owner_context_and_document_conversion(monkeypatch):
+    """Verify test image helpers owner context and document behavior."""
+
     class _ImageHit:
+        """Represent image hit."""
+
         OMERO_CLASS = "Image"
 
     class _DatasetHit:
+        """Represent dataset hit."""
+
         OMERO_CLASS = "Dataset"
 
         @staticmethod
         def listChildren():
+            """Return list children."""
             return ["image-a"]
 
     class _ProjectHit:
+        """Represent project hit."""
+
         OMERO_CLASS = "Project"
 
         @staticmethod
         def listChildren():
+            """Return list children."""
             return [SimpleNamespace(listChildren=lambda: ["image-b"])]
 
     class _BrokenProjectHit:
+        """Represent broken project hit."""
+
         OMERO_CLASS = "Project"
 
         @staticmethod
         def listChildren():
+            """Return list children."""
             raise RuntimeError("boom")
 
     image_hit = _ImageHit()
@@ -713,7 +759,10 @@ def test_image_helpers_owner_context_and_document_conversion(monkeypatch):
 
 
 def test_search_skips_inaccessible_images_and_handles_current_name_errors(monkeypatch):
+    """Verify test search skips inaccessible images and han behavior."""
+
     def _runtime_config():
+        """Handle runtime config."""
         return SimpleNamespace(max_results=50)
 
     monkeypatch.setattr(service, "runtime_config", _runtime_config)
@@ -767,6 +816,7 @@ def test_search_skips_inaccessible_images_and_handles_current_name_errors(monkey
 def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
     monkeypatch,
 ):
+    """Verify test root connection covers missing password behavior."""
     monkeypatch.delenv("ROOTPASS", raising=False)
     with (
         pytest.raises(RuntimeError, match="ROOTPASS is missing"),
@@ -785,11 +835,14 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
     monkeypatch.setattr(service, "get_bool_env", lambda name, env_file=None: False)
 
     class _FailingGateway:
+        """Represent failing gateway."""
+
         def __init__(self, *args, **kwargs):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def connect():
+            """Handle connect."""
             return False
 
     monkeypatch.setattr(service, "BlitzGateway", _FailingGateway)
@@ -802,6 +855,8 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
     closed = []
 
     class _WorkingGateway:
+        """Represent working gateway."""
+
         def __init__(self, *args, **kwargs):
             self.SERVICE_OPTS = SimpleNamespace(
                 setOmeroGroup=lambda value: (_ for _ in ()).throw(RuntimeError("boom"))
@@ -809,10 +864,12 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
 
         @staticmethod
         def connect():
+            """Handle connect."""
             return True
 
         @staticmethod
         def close():
+            """Handle close."""
             closed.append(True)
             raise RuntimeError("close boom")
 
@@ -823,6 +880,7 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
 
 
 def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
+    """Verify test sync scope request dispatch and saved qu behavior."""
     scope = service.EnhancedSearchScope("user", 9, service.USER_SCOPE_LABEL)
     original_process_sync_batch = service._process_sync_batch
     original_scope_from_key = service.scope_from_key
@@ -830,18 +888,21 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
     db_context = _DbConn()
 
     def _runtime_config():
+        """Handle runtime config."""
         return SimpleNamespace(batch_size=2, schema_version=5)
 
     monkeypatch.setattr(service, "runtime_config", _runtime_config)
 
     @contextmanager
     def _root_connection():
+        """Handle root connection."""
         yield object()
 
     monkeypatch.setattr(service, "_root_connection", _root_connection)
     monkeypatch.setattr(service, "_scope_image_rows", lambda admin_conn, scope: [])
 
     def _db_context_connect():
+        """Handle database context connect."""
         return db_context
 
     monkeypatch.setattr(service, "db_connect", _db_context_connect)
@@ -876,6 +937,8 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
     error_calls = []
 
     class _FailingRootConnection:
+        """Represent failing root connection."""
+
         def __enter__(self):
             raise RuntimeError("boom")
 
@@ -905,6 +968,7 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
 
     @contextmanager
     def _working_root_connection():
+        """Handle working root connection."""
         yield object()
 
     monkeypatch.setattr(service, "_root_connection", _working_root_connection)
@@ -998,6 +1062,8 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
     started = []
 
     class _FakeThread:
+        """Test double for fake thread."""
+
         def __init__(self, target, args, daemon, name):
             started.append(
                 {
@@ -1010,6 +1076,7 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
 
         @staticmethod
         def start():
+            """Run start."""
             started.append("started")
 
     monkeypatch.setattr(service.threading, "Thread", _FakeThread)
@@ -1027,6 +1094,7 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
     monkeypatch.setattr(service, "db_connect", _db_connect)
 
     def _runtime_config():
+        """Handle runtime config."""
         return SimpleNamespace(schema_version=5, sync_stale_seconds=600)
 
     monkeypatch.setattr(service, "runtime_config", _runtime_config)

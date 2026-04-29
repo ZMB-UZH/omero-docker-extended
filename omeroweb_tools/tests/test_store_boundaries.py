@@ -12,6 +12,8 @@ from omeroweb_tools.services import enhanced_search_store as store
 
 
 class _RecordingCursor:
+    """Represent recording cursor."""
+
     def __init__(self, *, fetchone_rows=None, fetchall_rows=None):
         self.executed = []
         self._fetchone_rows = list(fetchone_rows or [])
@@ -19,12 +21,15 @@ class _RecordingCursor:
         self.rowcount = 0
 
     def execute(self, sql, params=None):
+        """Run execute."""
         self.executed.append({"raw_sql": sql, "sql_text": str(sql), "params": params})
 
     def fetchone(self):
+        """Handle fetchone."""
         return self._fetchone_rows.pop(0) if self._fetchone_rows else None
 
     def fetchall(self):
+        """Handle fetchall."""
         return self._fetchall_rows.pop(0) if self._fetchall_rows else []
 
     def __enter__(self):
@@ -35,27 +40,37 @@ class _RecordingCursor:
 
 
 class _RecordingConn:
+    """Represent recording conn."""
+
     def __init__(self, cursor):
         self.cursor_obj = cursor
         self.commits = 0
         self.closed = 0
 
     def cursor(self):
+        """Handle cursor."""
         return self.cursor_obj
 
     def commit(self):
+        """Handle commit."""
         self.commits += 1
 
     def close(self):
+        """Handle close."""
         self.closed += 1
 
 
 def test_psycopg_loaders_cover_success_cache_and_missing_driver(monkeypatch):
+    """Verify test psycopg loaders cover success cache and behavior."""
+
     class _FakeSQLTemplate:
+        """Test double for fake sqltemplate."""
+
         def __init__(self, template):
             self.template = template
 
         def format(self, *identifiers):
+            """Build format."""
             return self.template.format(*identifiers)
 
     fake_extras = types.SimpleNamespace(Json=lambda payload: payload)
@@ -89,6 +104,7 @@ def test_psycopg_loaders_cover_success_cache_and_missing_driver(monkeypatch):
     original_import = builtins.__import__
 
     def _missing_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):
+        """Handle missing import."""
         if name == "psycopg2":
             raise ImportError("missing driver")
         return original_import(name, global_vars, local_vars, fromlist, level)
@@ -105,9 +121,11 @@ def test_psycopg_loaders_cover_success_cache_and_missing_driver(monkeypatch):
 def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
     monkeypatch,
 ):
+    """Verify test database params and connect cover wrappe behavior."""
     db_auth_value = "plugin-auth-value"
 
     def _env_value(name, env_file=None):
+        """Handle env value."""
         assert env_file == store.ENV_FILE_OMEROWEB
         return {
             store.ENV_USER: "plugin-user",
@@ -131,8 +149,11 @@ def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
     }
 
     class _FailingPsycopg:
+        """Represent failing psycopg."""
+
         @staticmethod
         def connect(**kwargs):
+            """Handle connect."""
             raise RuntimeError("db boom")
 
     monkeypatch.setattr(store, "_load_psycopg2", lambda: (_FailingPsycopg(), None))
@@ -164,13 +185,19 @@ def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
         pass
 
     class _BadCloseConn:
+        """Represent bad close conn."""
+
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close boom")
 
     class _OkPsycopg:
+        """Represent ok psycopg."""
+
         @staticmethod
         def connect(**kwargs):
+            """Handle connect."""
             return _BadCloseConn()
 
     monkeypatch.setattr(store, "_db_params", lambda: {"dbname": "plugin-db"})
@@ -180,10 +207,12 @@ def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
 
 
 def test_ensure_schema_bootstraps_tables_indexes_and_commit(monkeypatch):
+    """Verify test ensure schema bootstraps tables indexes behavior."""
     cursor = _RecordingCursor()
     conn = _RecordingConn(cursor)
 
     def _load_sql_module():
+        """Handle load SQL module."""
         return object()
 
     monkeypatch.setattr(
@@ -216,6 +245,7 @@ def test_ensure_schema_bootstraps_tables_indexes_and_commit(monkeypatch):
 
 
 def test_schema_ready_cache_handles_non_weakrefable_connections():
+    """Verify test schema ready cache handles non weakrefab behavior."""
     conn = ()
 
     store._clear_schema_ready(conn)
@@ -229,6 +259,7 @@ def test_schema_ready_cache_handles_non_weakrefable_connections():
 
 
 def test_list_sync_states_and_saved_queries_map_store_rows(monkeypatch):
+    """Verify test list sync states and saved queries map s behavior."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     run_marker = "sync-run-id"
     cursor = _RecordingCursor(
@@ -301,6 +332,7 @@ def test_list_sync_states_and_saved_queries_map_store_rows(monkeypatch):
 def test_prune_helpers_search_rows_without_filters_and_non_dict_settings_row(
     monkeypatch,
 ):
+    """Verify test prune helpers search rows without filter behavior."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _RecordingCursor(
         fetchone_rows=[(2,), ("not-a-dict",)], fetchall_rows=[[()]]
@@ -308,6 +340,7 @@ def test_prune_helpers_search_rows_without_filters_and_non_dict_settings_row(
     conn = _RecordingConn(cursor)
 
     def _execute(sql, params=None):
+        """Handle execute."""
         cursor.executed.append({"raw_sql": sql, "sql_text": str(sql), "params": params})
         if "DELETE FROM" in str(sql):
             cursor.rowcount = 3
@@ -338,6 +371,7 @@ def test_prune_helpers_search_rows_without_filters_and_non_dict_settings_row(
 
 
 def test_sync_markers_and_document_upsert_cover_write_paths(monkeypatch):
+    """Verify test sync markers and document upsert cover w behavior."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _RecordingCursor()
     conn = _RecordingConn(cursor)
@@ -438,12 +472,16 @@ def test_sync_markers_and_document_upsert_cover_write_paths(monkeypatch):
 
 
 def test_user_settings_and_saved_query_writes_use_json_payloads(monkeypatch):
+    """Verify test user settings and saved query writes use behavior."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     wrapped = []
 
     class _Extras:
+        """Represent extras."""
+
         @staticmethod
         def Json(payload):
+            """Handle JSON."""
             wrapped.append(payload)
             return {"wrapped": payload}
 
@@ -468,6 +506,7 @@ def test_user_settings_and_saved_query_writes_use_json_payloads(monkeypatch):
     store.save_saved_query(conn, "alice", "My query", {"query_text": "lsm"})
 
     def _delete_execute(sql, params=None):
+        """Handle delete execute."""
         cursor.executed.append({"raw_sql": sql, "sql_text": str(sql), "params": params})
         cursor.rowcount = 1
 

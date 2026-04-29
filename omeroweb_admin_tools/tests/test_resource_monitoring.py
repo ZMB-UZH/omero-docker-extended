@@ -37,6 +37,8 @@ def _make_headers(d: dict) -> HTTPMessage:
 
 
 class _RequestsResponse:
+    """Represent requests response."""
+
     def __init__(
         self,
         status_code: int,
@@ -50,14 +52,18 @@ class _RequestsResponse:
         self.raw = SimpleNamespace(headers=_make_headers(self.headers))
 
     def json(self):
+        """Handle JSON."""
         return json.loads(self.content.decode("utf-8"))
 
     @staticmethod
     def close() -> None:
+        """Handle close."""
         return None
 
 
 def _install_proxy_backend_stub(monkeypatch, handler) -> None:
+    """Handle install proxy backend stub."""
+
     def fake_backend_request(
         *,
         base_url,
@@ -67,6 +73,7 @@ def _install_proxy_backend_stub(monkeypatch, handler) -> None:
         headers,
         timeout_seconds,
     ):
+        """Handle fake backend request."""
         return handler(
             method,
             f"{base_url.rstrip('/')}{request_target}",
@@ -83,6 +90,7 @@ def _install_proxy_backend_stub(monkeypatch, handler) -> None:
 
 
 def test_load_compose_service_names_reads_service_block(tmp_path, monkeypatch) -> None:
+    """Verify test load compose service names reads service behavior."""
     compose_text = """
 services:
   app:
@@ -101,6 +109,7 @@ networks:
 
 
 def test_build_target_service_status_prefers_up() -> None:
+    """Verify test build target service status prefers up."""
     active_targets = [
         {"labels": {"job": "app"}, "health": "down"},
         {
@@ -135,6 +144,7 @@ def test_build_target_service_status_prefers_up() -> None:
 
 
 def test_build_target_service_status_resolves_container_name_variants() -> None:
+    """Verify test build target service status resolves con behavior."""
     active_targets = [
         {
             "discoveredLabels": {
@@ -170,6 +180,7 @@ def test_build_target_service_status_resolves_container_name_variants() -> None:
 
 
 def test_build_target_service_status_uses_recent_container_samples() -> None:
+    """Verify test build target service status uses recent behavior."""
     active_targets = []
 
     statuses = _build_target_service_status(
@@ -195,17 +206,20 @@ def test_build_target_service_status_uses_recent_container_samples() -> None:
 
 
 def test_origin_from_url_normalizes_scheme_and_host() -> None:
+    """Verify test origin from URL normalizes scheme and host."""
     assert _origin_from_url("https://grafana:3000/path?q=1") == "https://grafana:3000"
     assert _origin_from_url("https://example.org") == "https://example.org"
     assert _origin_from_url("not-a-url") == ""
 
 
 def test_proxy_http_request_rewrites_origin_headers_when_enabled(monkeypatch) -> None:
+    """Verify test proxy HTTP request rewrites origin heade behavior."""
     captured = {}
 
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
+        """Handle fake request."""
         captured["method"] = method
         captured["url"] = url
         captured["headers"] = dict(headers or {})
@@ -218,6 +232,8 @@ def test_proxy_http_request_rewrites_origin_headers_when_enabled(monkeypatch) ->
     _install_proxy_backend_stub(monkeypatch, fake_request)
 
     class DummyDjangoRequest:
+        """Test double for dummy django request."""
+
         method = "GET"
         body = b""
         headers = {
@@ -240,11 +256,13 @@ def test_proxy_http_request_rewrites_origin_headers_when_enabled(monkeypatch) ->
 
 
 def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
+    """Verify test proxy HTTP request forwards post body."""
     captured = {}
 
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
+        """Handle fake request."""
         captured["method"] = method
         captured["data"] = data
         captured["timeout"] = timeout
@@ -257,6 +275,8 @@ def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
     _install_proxy_backend_stub(monkeypatch, fake_request)
 
     class DummyDjangoRequest:
+        """Test double for dummy django request."""
+
         method = "POST"
         body = b'{"query":"up"}'
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -281,11 +301,13 @@ def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
 
 
 def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> None:
+    """Verify test proxy HTTP request forwards auth and coo behavior."""
     captured = {}
 
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
+        """Handle fake request."""
         captured["headers"] = dict(headers or {})
         return _RequestsResponse(
             200,
@@ -299,6 +321,8 @@ def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> Non
     _install_proxy_backend_stub(monkeypatch, fake_request)
 
     class DummyDjangoRequest:
+        """Test double for dummy django request."""
+
         method = "GET"
         body = b""
         headers = {
@@ -328,6 +352,7 @@ def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> Non
 
 
 def test_normalize_proxy_request_target_rejects_traversal() -> None:
+    """Verify test normalize proxy request target rejects t behavior."""
     try:
         _normalize_proxy_request_target("../api/admin")
     except ValueError:
@@ -337,6 +362,7 @@ def test_normalize_proxy_request_target_rejects_traversal() -> None:
 
 
 def test_normalize_proxy_request_target_rejects_absolute_url() -> None:
+    """Verify test normalize proxy request target rejects a behavior."""
     try:
         _normalize_proxy_request_target(
             "https://grafana.example.org//api/../api/search?orgId=1"
@@ -348,6 +374,7 @@ def test_normalize_proxy_request_target_rejects_absolute_url() -> None:
 
 
 def test_build_proxy_target_url_rejects_query_or_fragment_in_path() -> None:
+    """Verify test build proxy target URL rejects query or behavior."""
     for path in ("api/search?orgId=1", "api/search#fragment"):
         try:
             _build_proxy_target_url("https://grafana:3000", path, "")
@@ -365,6 +392,7 @@ def test_build_proxy_target_url_rejects_query_or_fragment_in_path() -> None:
 
 
 def test_build_proxy_target_url_rejects_backend_without_hostname() -> None:
+    """Verify test build proxy target URL rejects backend w behavior."""
     try:
         _build_proxy_target_url("https://:3000", "api/search", "")
     except ValueError:
@@ -374,6 +402,7 @@ def test_build_proxy_target_url_rejects_backend_without_hostname() -> None:
 
 
 def test_build_proxy_target_url_rejects_origin_drift(monkeypatch) -> None:
+    """Verify test build proxy target URL rejects origin drift."""
     urlunparse_results = iter(
         ("https://grafana:3000", "https://unexpected.example/api/search")
     )
@@ -391,6 +420,7 @@ def test_build_proxy_target_url_rejects_origin_drift(monkeypatch) -> None:
 
 
 def test_build_proxy_target_url_quotes_path_and_preserves_query() -> None:
+    """Verify test build proxy target URL quotes path and p behavior."""
     path, target_url = _build_proxy_target_url(
         "https://grafana:3000/root/",
         "api/search with space",
@@ -409,6 +439,7 @@ def test_build_proxy_target_url_quotes_path_and_preserves_query() -> None:
 
 
 def test_build_proxy_request_target_rejects_control_characters() -> None:
+    """Verify test build proxy request target rejects contr behavior."""
     try:
         _build_proxy_request_target("https://grafana:3000/api/search?query=up\x7f")
     except ValueError:
@@ -420,9 +451,12 @@ def test_build_proxy_request_target_rejects_control_characters() -> None:
 def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
     monkeypatch,
 ) -> None:
+    """Verify test send proxy backend request uses validate behavior."""
     captured = {}
 
     class DummyRawResponse:
+        """Test double for dummy raw response."""
+
         status = 202
 
         def __init__(self):
@@ -430,9 +464,12 @@ def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
 
         @staticmethod
         def read():
+            """Return read."""
             return b'{"ok":true}'
 
     class DummyConnection:
+        """Test double for dummy connection."""
+
         def __init__(self, host, *, port, timeout):
             captured["host"] = host
             captured["port"] = port
@@ -441,6 +478,7 @@ def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
 
         @staticmethod
         def request(method, target, *, body, headers):
+            """Handle request."""
             captured["method"] = method
             captured["target"] = target
             captured["body"] = body
@@ -448,9 +486,11 @@ def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
 
         @staticmethod
         def getresponse():
+            """Return getresponse."""
             return DummyRawResponse()
 
         def close(self):
+            """Handle close."""
             self.closed = True
             captured["closed"] = True
 
@@ -484,6 +524,7 @@ def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
 
 
 def test_send_proxy_backend_request_rejects_backend_without_hostname() -> None:
+    """Verify test send proxy backend request rejects backe behavior."""
     try:
         _send_proxy_backend_request(
             base_url="https://:3000",
@@ -500,6 +541,7 @@ def test_send_proxy_backend_request_rejects_backend_without_hostname() -> None:
 
 
 def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> None:
+    """Verify test proxy HTTP request rewrites relative loc behavior."""
     _install_proxy_backend_stub(
         monkeypatch,
         lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
@@ -515,6 +557,8 @@ def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> No
     )
 
     class DummyDjangoRequest:
+        """Test double for dummy django request."""
+
         method = "GET"
         body = b""
         headers = {}
@@ -534,6 +578,7 @@ def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> No
 
 
 def test_rewrite_proxied_location_blocks_external_redirects() -> None:
+    """Verify test rewrite proxied location blocks external behavior."""
     location = _rewrite_proxied_location(
         "https://evil.example.org/steal",
         "https://grafana:3000",
@@ -546,6 +591,7 @@ def test_rewrite_proxied_location_blocks_external_redirects() -> None:
 def test_proxy_http_request_rewrites_non_root_relative_location_header(
     monkeypatch,
 ) -> None:
+    """Verify test proxy HTTP request rewrites non root rel behavior."""
     _install_proxy_backend_stub(
         monkeypatch,
         lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
@@ -558,6 +604,8 @@ def test_proxy_http_request_rewrites_non_root_relative_location_header(
     )
 
     class DummyDjangoRequest:
+        """Test double for dummy django request."""
+
         method = "GET"
         body = b""
         headers = {}
@@ -577,6 +625,7 @@ def test_proxy_http_request_rewrites_non_root_relative_location_header(
 
 
 def test_proxy_http_request_rejects_traversal_before_backend_call(monkeypatch) -> None:
+    """Verify test proxy HTTP request rejects traversal bef behavior."""
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._send_proxy_backend_request",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
@@ -585,6 +634,8 @@ def test_proxy_http_request_rejects_traversal_before_backend_call(monkeypatch) -
     )
 
     class DummyDjangoRequest:
+        """Test double for dummy django request."""
+
         method = "GET"
         body = b""
         headers = {}
@@ -602,6 +653,7 @@ def test_proxy_http_request_rejects_traversal_before_backend_call(monkeypatch) -
 def test_grafana_proxy_home_fallback_response_sanitizes_dashboard_segments(
     monkeypatch,
 ) -> None:
+    """Verify test grafana proxy home fallback response san behavior."""
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "../../bad uid")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server dashboard")
 
@@ -617,6 +669,7 @@ def test_grafana_proxy_home_fallback_response_sanitizes_dashboard_segments(
 
 
 def test_is_internal_hostname_handles_compose_and_local_hosts() -> None:
+    """Verify test is internal hostname handles compose and behavior."""
     assert _is_internal_hostname("grafana") is True
     assert _is_internal_hostname("localhost") is True
     assert _is_internal_hostname("127.0.0.1") is True
@@ -625,6 +678,7 @@ def test_is_internal_hostname_handles_compose_and_local_hosts() -> None:
 
 
 def test_build_public_service_url_uses_request_host_and_public_port() -> None:
+    """Verify test build public service URL uses request ho behavior."""
     built = _build_public_service_url(
         "https://grafana:3000",
         "http",
@@ -636,6 +690,7 @@ def test_build_public_service_url_uses_request_host_and_public_port() -> None:
 
 
 def test_build_public_service_url_preserves_base_path() -> None:
+    """Verify test build public service URL preserves base behavior."""
     built = _build_public_service_url(
         "https://grafana:3000/grafana",
         "https",
@@ -649,6 +704,7 @@ def test_build_public_service_url_preserves_base_path() -> None:
 def test_resource_monitoring_data_prefers_public_urls_from_request_host(
     monkeypatch,
 ) -> None:
+    """Verify test resource monitoring data prefers public behavior."""
     request = RequestFactory().get("/admin_tools/resource-monitoring/data/")
 
     monkeypatch.setattr(
@@ -681,6 +737,7 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
     )
 
     def fake_get(url, timeout=5.0, allow_redirects=True, params=None):
+        """Handle fake get."""
         if "api/v1/targets" in url:
             return _RequestsResponse(
                 200,
@@ -740,6 +797,7 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
 
 
 def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> None:
+    """Verify test resource monitoring data keeps external behavior."""
     request = RequestFactory().get("/admin_tools/resource-monitoring/data/")
 
     monkeypatch.setattr(
@@ -772,6 +830,7 @@ def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> N
     )
 
     def fake_get(url, timeout=5.0, allow_redirects=True, params=None):
+        """Handle fake get."""
         if "api/v1/targets" in url:
             return _RequestsResponse(
                 200,
@@ -818,6 +877,7 @@ def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> N
 
 
 def test_build_target_service_status_prefers_docker_healthcheck_status() -> None:
+    """Verify test build target service status prefers dock behavior."""
     active_targets = [
         {"labels": {"job": "db"}, "health": "up"},
         {"labels": {"job": "cache"}, "health": "up"},
@@ -857,6 +917,7 @@ def test_build_target_service_status_prefers_docker_healthcheck_status() -> None
 def test_build_target_service_status_uses_runtime_health_when_config_unavailable() -> (
     None
 ):
+    """Verify test build target service status uses runtime behavior."""
     statuses = _build_target_service_status(
         active_targets=[{"labels": {"job": "db"}, "health": "up"}],
         expected_services=["db", "api"],
@@ -884,6 +945,7 @@ def test_build_target_service_status_uses_runtime_health_when_config_unavailable
 
 
 def test_build_target_service_status_reports_starting_healthcheck_state() -> None:
+    """Verify test build target service status reports star behavior."""
     statuses = _build_target_service_status(
         active_targets=[{"labels": {"job": "db"}, "health": "up"}],
         expected_services=["db"],
@@ -904,6 +966,7 @@ def test_build_target_service_status_reports_starting_healthcheck_state() -> Non
 def test_build_target_service_status_preserves_running_up_without_runtime_health() -> (
     None
 ):
+    """Verify test build target service status preserves ru behavior."""
     statuses = _build_target_service_status(
         active_targets=[{"labels": {"job": "db"}, "health": "up"}],
         expected_services=["db"],
@@ -922,6 +985,7 @@ def test_build_target_service_status_preserves_running_up_without_runtime_health
 
 
 def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
+    """Verify test grafana proxy forwards subpath and query."""
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure/server-infrastructure",
         {"refresh": "10s"},
@@ -948,6 +1012,7 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
     ):
+        """Handle fake proxy HTTP request."""
         captured.update(
             {
                 "base_url": base_url,
@@ -958,6 +1023,8 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
         )
 
         class DummyResponse:
+            """Test double for dummy response."""
+
             status_code = 200
             content = b"{}"
 
@@ -986,6 +1053,7 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
 
 
 def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
+    """Verify test grafana proxy root path forwards empty s behavior."""
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/grafana-proxy/",
         {"refresh": "10s"},
@@ -1012,6 +1080,7 @@ def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
     ):
+        """Handle fake proxy HTTP request."""
         captured.update(
             {
                 "base_url": base_url,
@@ -1022,6 +1091,8 @@ def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         )
 
         class DummyResponse:
+            """Test double for dummy response."""
+
             status_code = 200
             content = b"{}"
 
@@ -1041,6 +1112,7 @@ def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
 
 
 def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
+    """Verify test prometheus proxy root path forwards empt behavior."""
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/prometheus-proxy/",
         {"query": "up"},
@@ -1067,6 +1139,7 @@ def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
     ):
+        """Handle fake proxy HTTP request."""
         captured.update(
             {
                 "base_url": base_url,
@@ -1077,6 +1150,8 @@ def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         )
 
         class DummyResponse:
+            """Test double for dummy response."""
+
             status_code = 200
             content = b"{}"
 
@@ -1099,19 +1174,24 @@ def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
 
 
 def test_safe_request_host_falls_back_when_get_host_fails() -> None:
+    """Verify test safe request host falls back when get ho behavior."""
     from omeroweb_admin_tools.views.index_view import _safe_request_host
 
     class DummyRequest:
+        """Test double for dummy request."""
+
         META = {"HTTP_HOST": "172.23.208.90:4090"}
 
         @staticmethod
         def get_host() -> str:
+            """Return get host."""
             raise ValueError("invalid host header")
 
     assert _safe_request_host(DummyRequest()) == "172.23.208.90"
 
 
 def test_build_proxy_backend_urls_prefers_internal_and_deduplicates() -> None:
+    """Verify test build proxy backend URLs prefers interna behavior."""
     assert _build_proxy_backend_urls("https://grafana:3000", "") == [
         "https://grafana:3000"
     ]
@@ -1128,6 +1208,7 @@ def test_build_proxy_backend_urls_prefers_internal_and_deduplicates() -> None:
 
 
 def test_grafana_unavailable_response_has_actionable_metadata() -> None:
+    """Verify test grafana unavailable response has actiona behavior."""
     from omeroweb_admin_tools.views.index_view import _grafana_unavailable_response
 
     response = _grafana_unavailable_response(
@@ -1147,6 +1228,7 @@ def test_grafana_unavailable_response_has_actionable_metadata() -> None:
 def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
     monkeypatch,
 ) -> None:
+    """Verify test grafana proxy falls back to public URL o behavior."""
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure/server-infrastructure",
         {"refresh": "10s"},
@@ -1166,6 +1248,8 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
     attempts = []
 
     class DummyResponse:
+        """Test double for dummy response."""
+
         def __init__(self, status_code: int):
             self.status_code = status_code
             self.content = b"{}"
@@ -1180,6 +1264,7 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
     ):
+        """Handle fake proxy HTTP request."""
         attempts.append(base_url)
         if base_url == "https://grafana:3000":
             return DummyResponse(status_code=502)
@@ -1205,6 +1290,7 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
 def test_grafana_proxy_renders_custom_unavailable_page_for_gateway_errors(
     monkeypatch,
 ) -> None:
+    """Verify test grafana proxy renders custom unavailable behavior."""
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure/server-infrastructure",
     )
@@ -1221,6 +1307,8 @@ def test_grafana_proxy_renders_custom_unavailable_page_for_gateway_errors(
     )
 
     class DummyResponse:
+        """Test double for dummy response."""
+
         def __init__(self, status_code: int):
             self.status_code = status_code
             self.content = b"{}"
@@ -1245,16 +1333,19 @@ def test_grafana_proxy_renders_custom_unavailable_page_for_gateway_errors(
 
 
 def test_is_behind_reverse_proxy_detects_forwarded_proto() -> None:
+    """Verify test is behind reverse proxy detects forwarde behavior."""
     request = RequestFactory().get("/test/", HTTP_X_FORWARDED_PROTO="https")
     assert _is_behind_reverse_proxy(request) is True
 
 
 def test_is_behind_reverse_proxy_returns_false_for_direct_access() -> None:
+    """Verify test is behind reverse proxy returns false fo behavior."""
     request = RequestFactory().get("/test/")
     assert _is_behind_reverse_proxy(request) is False
 
 
 def test_build_public_service_url_omits_port_when_proxied() -> None:
+    """Verify test build public service URL omits port when behavior."""
     built = _build_public_service_url(
         "https://grafana:3000",
         "https",
@@ -1266,6 +1357,7 @@ def test_build_public_service_url_omits_port_when_proxied() -> None:
 
 
 def test_build_public_service_url_uses_forwarded_proto() -> None:
+    """Verify test build public service URL uses forwarded behavior."""
     built = _build_public_service_url(
         "https://grafana:3000",
         "http",
@@ -1277,6 +1369,7 @@ def test_build_public_service_url_uses_forwarded_proto() -> None:
 
 
 def test_build_public_service_url_direct_access_unchanged() -> None:
+    """Verify test build public service URL direct access u behavior."""
     built = _build_public_service_url(
         "https://grafana:3000",
         "http",
@@ -1288,7 +1381,6 @@ def test_build_public_service_url_direct_access_unchanged() -> None:
 
 def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
     """The proxy should rewrite Grafana appSubUrl to the proxy prefix."""
-
     _install_proxy_backend_stub(
         monkeypatch,
         lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
@@ -1305,6 +1397,8 @@ def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
     )
 
     class DummyDjangoRequest:
+        """Test double for dummy django request."""
+
         method = "GET"
         body = b""
         headers = {}
@@ -1325,6 +1419,7 @@ def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
 
 
 def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:
+    """Verify test proxy rewrites app URL for grafana."""
     _install_proxy_backend_stub(
         monkeypatch,
         lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
@@ -1341,6 +1436,8 @@ def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:
     )
 
     class DummyDjangoRequest:
+        """Test double for dummy django request."""
+
         method = "GET"
         body = b""
         headers = {}
@@ -1360,6 +1457,7 @@ def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:
 
 
 def test_grafana_proxy_root_redirects_to_default_dashboard(monkeypatch) -> None:
+    """Verify test grafana proxy root redirects to default behavior."""
     from omeroweb_admin_tools.views.index_view import grafana_proxy
 
     request = RequestFactory().get(
@@ -1376,6 +1474,7 @@ def test_grafana_proxy_root_redirects_to_default_dashboard(monkeypatch) -> None:
     )
 
     def fail_if_called(*args, **kwargs):
+        """Handle fail if called."""
         raise AssertionError(
             "_proxy_http_request should not be called for Grafana root"
         )
@@ -1394,6 +1493,7 @@ def test_grafana_proxy_root_redirects_to_default_dashboard(monkeypatch) -> None:
 
 
 def test_prometheus_proxy_root_redirects_to_targets(monkeypatch) -> None:
+    """Verify test prometheus proxy root redirects to targets."""
     from omeroweb_admin_tools.views.index_view import prometheus_proxy
 
     request = RequestFactory().get(
@@ -1424,6 +1524,7 @@ def test_prometheus_proxy_root_redirects_to_targets(monkeypatch) -> None:
 
 
 def test_grafana_proxy_root_redirect_sanitizes_env_segments(monkeypatch) -> None:
+    """Verify test grafana proxy root redirect sanitizes en behavior."""
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "https://evil.example")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "../escape")
 
@@ -1439,6 +1540,7 @@ def test_grafana_proxy_root_redirect_sanitizes_env_segments(monkeypatch) -> None
 
 
 def test_logs_data_runtime_error_is_sanitized(monkeypatch) -> None:
+    """Verify test logs data runtime error is sanitized."""
     request = RequestFactory().get(
         "/omeroweb_admin_tools/logs/data/",
         data={"container": ["omeroweb"]},
@@ -1471,6 +1573,7 @@ def test_logs_data_runtime_error_is_sanitized(monkeypatch) -> None:
 
 
 def test_logs_data_filters_entries_and_validates_inputs(monkeypatch) -> None:
+    """Verify test logs data filters entries and validates behavior."""
     captured = {}
 
     def _fake_fetch(
@@ -1483,6 +1586,7 @@ def test_logs_data_filters_entries_and_validates_inputs(monkeypatch) -> None:
         since_ns,
         text_query,
     ):
+        """Handle fake fetch."""
         captured.update(
             {
                 "containers": containers,
@@ -1575,6 +1679,7 @@ def test_logs_data_filters_entries_and_validates_inputs(monkeypatch) -> None:
 
 
 def test_logs_data_rejects_invalid_query_parameters(monkeypatch) -> None:
+    """Verify test logs data rejects invalid query parameters."""
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.utils.current_username",
         lambda request, conn: "root",
@@ -1648,6 +1753,7 @@ def test_logs_data_rejects_invalid_query_parameters(monkeypatch) -> None:
 
 
 def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -> None:
+    """Verify test resource monitoring suppresses external behavior."""
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/data/",
         HTTP_X_FORWARDED_PROTO="https",
@@ -1682,6 +1788,7 @@ def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -
     )
 
     def fake_get(url, timeout=5.0, allow_redirects=True, params=None):
+        """Handle fake get."""
         if "api/v1/targets" in url:
             return _RequestsResponse(
                 200,
@@ -1711,6 +1818,7 @@ def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -
 
 
 def test_cookie_path_for_proxy_rewrites_root_to_proxy_prefix() -> None:
+    """Verify test cookie path for proxy rewrites root to p behavior."""
     assert (
         _cookie_path_for_proxy("/", "/admin_tools/resource-monitoring/grafana-proxy")
         == "/admin_tools/resource-monitoring/grafana-proxy/"
@@ -1718,6 +1826,7 @@ def test_cookie_path_for_proxy_rewrites_root_to_proxy_prefix() -> None:
 
 
 def test_proxy_rewrites_set_cookie_path_for_grafana(monkeypatch) -> None:
+    """Verify test proxy rewrites set cookie path for grafana."""
     _install_proxy_backend_stub(
         monkeypatch,
         lambda method, url, data=None, headers=None, timeout=10.0, allow_redirects=False: (
@@ -1733,6 +1842,8 @@ def test_proxy_rewrites_set_cookie_path_for_grafana(monkeypatch) -> None:
     )
 
     class DummyDjangoRequest:
+        """Test double for dummy django request."""
+
         method = "GET"
         body = b""
         headers = {}
@@ -1759,12 +1870,15 @@ def test_proxy_http_request_forwards_extra_headers(monkeypatch) -> None:
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
+        """Handle fake request."""
         captured["headers"] = dict(headers or {})
         return _RequestsResponse(200, payload=b'{"ok":true}')
 
     _install_proxy_backend_stub(monkeypatch, fake_request)
 
     class DummyDjangoRequest:
+        """Test double for dummy django request."""
+
         method = "POST"
         body = b'{"user":"admin","credential":"test-value"}'
         headers = {
@@ -1796,12 +1910,15 @@ def test_proxy_http_request_ignores_absent_extra_headers(monkeypatch) -> None:
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
+        """Handle fake request."""
         captured["headers"] = dict(headers or {})
         return _RequestsResponse(200, payload=b'{"ok":true}')
 
     _install_proxy_backend_stub(monkeypatch, fake_request)
 
     class DummyDjangoRequest:
+        """Test double for dummy django request."""
+
         method = "GET"
         body = b""
         headers = {"Accept": "text/html"}

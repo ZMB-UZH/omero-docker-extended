@@ -7,4 +7,5 @@ from .utils import require_non_root_user
 @login_required()
 @require_non_root_user
 def help_page(request, _conn=None, **kwargs):
+    """Handle help page."""
     return render(request, "omeroweb_tools/help.html", {})

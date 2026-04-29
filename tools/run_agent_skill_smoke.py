@@ -13,11 +13,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _run_command(command: list[str]) -> int:
+    """Handle run command."""
     completed = subprocess.run(command, cwd=REPO_ROOT, check=False)
     return completed.returncode
 
 
 def _plugin_suite_fallback() -> int:
+    """Handle plugin suite fallback."""
     smoke_commands = [
         [
             sys.executable,
@@ -52,6 +54,7 @@ def _plugin_suite_fallback() -> int:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Validate parse args."""
     parser = argparse.ArgumentParser(
         description="Run a named composite smoke profile for agent-surface tests."
     )
@@ -60,6 +63,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the command-line entry point."""
     args = parse_args(argv)
     profile = args.profile
     if profile == "plugin-suite-fallback":

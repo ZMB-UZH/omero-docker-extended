@@ -24,6 +24,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.script_path = cls.repo_root / "installation" / "installation_script.sh"
         cls.script_text = cls.script_path.read_text(encoding="utf-8")
@@ -46,6 +47,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
 
     @classmethod
     def _extract_script_block(cls, start_marker: str, end_marker: str) -> str:
+        """Handle extract script block."""
         start = cls.script_text.find(start_marker)
         if start == -1:
             raise AssertionError(f"Unable to find script marker: {start_marker}")
@@ -58,11 +60,13 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _write_executable(path: Path, content: str) -> None:
+        """Handle write executable."""
         path.write_text(content, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
     @staticmethod
     def _build_harness(*blocks: str, body: str) -> str:
+        """Handle build harness."""
         joined_blocks = "\n".join(
             [InstallationInteractivePromptRegressionTests.validation_helpers, *blocks]
         )
@@ -90,6 +94,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
         wait_for: str = "> ",
         timeout_seconds: float = 8.0,
     ) -> tuple[int, str]:
+        """Handle run harness with pty."""
         pid, fd = pty.fork()
         if pid == 0:
             completed = subprocess.run(
@@ -148,6 +153,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
         return exit_status, output.decode("utf-8", errors="replace")
 
     def test_delete_images_prompt_honors_yes_input(self) -> None:
+        """Verify test delete images prompt honors yes input."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             harness_path = temp_path / "run.sh"
@@ -172,6 +178,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
             self.assertIn("KEEP_IMAGES=0", output)
 
     def test_cache_prompt_honors_negative_input(self) -> None:
+        """Verify test cache prompt honors negative input."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             harness_path = temp_path / "run.sh"
@@ -196,6 +203,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
             self.assertIn("USE_CACHE_BUILD=0", output)
 
     def test_default_path_prompt_accepts_custom_path_after_negative_input(self) -> None:
+        """Verify test default path prompt accepts custom path behavior."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             harness_path = temp_path / "run.sh"
@@ -223,6 +231,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
     def test_interactive_no_cache_choice_prunes_and_uses_no_cache_compose_build(
         self,
     ) -> None:
+        """Verify test interactive no cache choice prunes and u behavior."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             bin_dir = temp_path / "bin"
@@ -301,6 +310,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
     def test_interactive_no_cache_choice_prunes_buildx_cache_and_disables_buildx_cache_knobs(
         self,
     ) -> None:
+        """Verify test interactive no cache choice prunes build behavior."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             bin_dir = temp_path / "bin"

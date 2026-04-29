@@ -9,6 +9,7 @@ _OMERO_GATEWAY_UTILS_LOGGER = "omero.gateway.utils"
 
 
 def _safe_text(value: Any) -> str:
+    """Handle safe text."""
     try:
         return str(value)
     except Exception:
@@ -55,6 +56,7 @@ _REDACTED_VALUE = "REDACTED"
 
 
 def _quote_userinfo(value: str) -> str:
+    """Handle quote userinfo."""
     try:
         return quote(value, safe="")
     except UnicodeError:
@@ -62,6 +64,7 @@ def _quote_userinfo(value: str) -> str:
 
 
 def _redacted_netloc(parsed) -> str:
+    """Handle redacted netloc."""
     hostname = parsed.hostname or ""
     if ":" in hostname and not hostname.startswith("["):
         hostname = f"[{hostname}]"
@@ -76,6 +79,7 @@ def _redacted_netloc(parsed) -> str:
 
 
 def _redact_query(query: str) -> str:
+    """Handle redact query."""
     pairs = [
         (key, _REDACTED_VALUE if key.lower() in _SENSITIVE_QUERY_KEYS else value)
         for key, value in parse_qsl(query, keep_blank_values=True)
@@ -121,10 +125,12 @@ def sanitized_exc_info(exc: BaseException):
 
 
 def _gateway_logging_configured() -> bool:
+    """Handle gateway logging configured."""
     return bool(getattr(configure_omero_gateway_logging, "_configured", False))
 
 
 def _set_gateway_logging_configured(configured: bool) -> None:
+    """Handle set gateway logging configured."""
     setattr(configure_omero_gateway_logging, "_configured", configured)
 
 

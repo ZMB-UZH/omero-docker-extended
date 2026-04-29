@@ -13,14 +13,18 @@ BASH_BIN = "/bin/bash"
 
 
 class InstallTranscriptRegressionTests(unittest.TestCase):
+    """Test cases for install transcript regression tests."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.helper_path = cls.repo_root / "installation" / "install_transcript_utils.sh"
 
     def test_transcript_helper_saves_preinstall_and_install_output_under_omero_data_path(
         self,
     ) -> None:
+        """Verify test transcript helper saves preinstall and i behavior."""
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = Path(tmpdir)
             data_dir = temp_root / "omero_data"
@@ -78,6 +82,7 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
     def test_interactive_transcript_path_does_not_trip_on_pipestatus_under_set_u(
         self,
     ) -> None:
+        """Verify test interactive transcript path does not tri behavior."""
         if shutil.which("script") is None:
             self.skipTest("script command not available")
         script_bin = shutil.which("script")
@@ -142,6 +147,7 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
     def test_transcript_helper_rejects_unsafe_env_assignments_without_executing_them(
         self,
     ) -> None:
+        """Verify test transcript helper rejects unsafe env ass behavior."""
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = Path(tmpdir)
             env_file = temp_root / "installation_paths.env"

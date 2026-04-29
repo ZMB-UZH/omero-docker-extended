@@ -16,29 +16,38 @@ from omeroweb_import.views import core_functions
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self.val = value
 
     def getValue(self):
+        """Return get value."""
         return self.val
 
 
 class _Params:
+    """Represent params."""
+
     def __init__(self):
         self.values = {}
 
     def add(self, key, value):
+        """Handle add."""
         self.values[key] = value
 
     def addId(self, value):
+        """Handle add identifier."""
         self.values["id"] = value
 
 
 def _job_state(monkeypatch, job):
+    """Handle job state."""
     state = {"job": job}
     monkeypatch.setattr(core_functions, "_load_job", lambda job_id: state["job"])
 
     def update_job(job_id, mutator):
+        """Handle update job."""
         state["job"] = mutator(state["job"])
         return state["job"]
 
@@ -49,6 +58,7 @@ def _job_state(monkeypatch, job):
 def test_core_function_misc_edge_helpers_cover_remaining_lines(
     monkeypatch, tmp_path: Path
 ):
+    """Verify test core function misc edge helpers cover re behavior."""
     fake_units = types.ModuleType("omero.model.enums")
     pixel = SimpleNamespace(name="PIXEL")
     meter = SimpleNamespace(name="METER")
@@ -231,6 +241,7 @@ def test_core_function_misc_edge_helpers_cover_remaining_lines(
 def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
     monkeypatch, tmp_path: Path
 ):
+    """Verify test load job and path size helpers cover cor behavior."""
     job_id = "a" * 32
     job_path = tmp_path / f"{job_id}.json"
     job_path.write_text("{}", encoding="utf-8")
@@ -244,6 +255,8 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
     monkeypatch.setattr(core_functions.time, "sleep", lambda seconds: None)
 
     class _DeletingLock:
+        """Represent deleting lock."""
+
         def __init__(self, *args, **kwargs):
             self.args = args
             self.kwargs = kwargs
@@ -260,6 +273,8 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
     job_path.write_text("{}", encoding="utf-8")
 
     class _FailingLock:
+        """Represent failing lock."""
+
         def __init__(self, *args, **kwargs):
             self.args = args
             self.kwargs = kwargs
@@ -279,21 +294,29 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
     assert core_functions._load_job(job_id) is None
 
     class _BrokenFilePath:
+        """Represent broken file path."""
+
         @staticmethod
         def is_file():
+            """Return whether is file."""
             return True
 
         @staticmethod
         def stat():
+            """Handle stat."""
             raise OSError("stat failed")
 
     class _BrokenDirPath:
+        """Represent broken dir path."""
+
         @staticmethod
         def is_file():
+            """Return whether is file."""
             return False
 
         @staticmethod
         def rglob(pattern):
+            """Handle rglob."""
             raise OSError("walk failed")
 
     assert core_functions._get_path_total_size(_BrokenFilePath()) == 0
@@ -303,6 +326,7 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
 def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
     monkeypatch, tmp_path: Path
 ):
+    """Verify test import file find image and connection he behavior."""
     target = tmp_path / "sample.ome.tif"
     target.write_text("payload", encoding="utf-8")
 
@@ -326,6 +350,7 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
     monkeypatch.setattr(core_functions, "_get_import_timeout_seconds", lambda: 5)
 
     def _run_streaming_zero(cmd, *, env, timeout, on_tick):
+        """Handle run streaming zero."""
         on_tick(123, 0.0)
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -420,21 +445,26 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
     )
 
     class _FailingRootConn:
+        """Represent failing root conn."""
+
         def __init__(self, mode):
             self.mode = mode
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         def connect(self):
+            """Handle connect."""
             if self.mode == "raise":
                 raise RuntimeError("connect exploded")
             return False
 
         @staticmethod
         def getLastError():
+            """Return get last error."""
             raise RuntimeError("no last error")
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close exploded")
 
     states = iter(["fail", "raise"])
@@ -453,15 +483,19 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
     )
 
     class _ServiceConn:
+        """Represent service conn."""
+
         def __init__(self, *args, **kwargs):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def connect():
+            """Handle connect."""
             return True
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close exploded")
 
     monkeypatch.setattr(core_functions, "BlitzGateway", _ServiceConn)
@@ -476,6 +510,7 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
 def test_normalization_and_attachment_helpers_cover_remaining_paths(
     monkeypatch, tmp_path: Path
 ):
+    """Verify test normalization and attachment helpers cov behavior."""
     entry = {"relative_path": "folder/image.ome.tif"}
     context = {
         "desired_name": "image.ome.tif",
@@ -514,21 +549,27 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     )
 
     class _Image:
+        """Represent image."""
+
         def __init__(self, image_id, name):
             self._id = image_id
             self._name = name
 
         def getName(self):
+            """Return get name."""
             return self._name
 
         def setName(self, value):
+            """Store set name."""
             self._name = value
 
         @staticmethod
         def save():
+            """Store save."""
             return None
 
         def getId(self):
+            """Return get identifier."""
             return _Value(self._id)
 
     images = {
@@ -558,7 +599,10 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     )
 
     class _BrokenImage(_Image):
+        """Represent broken image."""
+
         def setName(self, value):
+            """Store set name."""
             raise RuntimeError("rename failed")
 
     broken_conn = SimpleNamespace(
@@ -584,32 +628,44 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     )
 
     class _OriginalFileI:
+        """Represent original file i."""
+
         def __init__(self):
             self._id = 0
 
         def setName(self, value):
+            """Store set name."""
             self.name = value
 
         def setPath(self, value):
+            """Store set path."""
             self.path = value
 
         def setSize(self, value):
+            """Store set size."""
             self.size = value
 
         def setMimetype(self, value):
+            """Store set mimetype."""
             self.mimetype = value
 
         def getId(self):
+            """Return get identifier."""
             return _Value(self._id)
 
         def proxy(self):
+            """Handle proxy."""
             return self
 
     class _FileAnnotationI:
+        """Represent file annotation i."""
+
         def setNs(self, value):
+            """Store set ns."""
             self.ns = value
 
         def setFile(self, value):
+            """Store set file."""
             self.file = value
 
     omero_model = types.ModuleType("omero.model")
@@ -623,6 +679,8 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     monkeypatch.setitem(sys.modules, "omero.rtypes", omero_rtypes)
 
     class _FileAnnotationWrapper:
+        """Represent file annotation wrapper."""
+
         def __init__(self, conn, annotation):
             self.annotation = annotation
 
@@ -634,10 +692,13 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     txt_path.write_text("energy,count\n1,2\n", encoding="utf-8")
 
     class _BadPath:
+        """Represent bad path."""
+
         name = "bad.txt"
 
         @staticmethod
         def read_bytes():
+            """Return read bytes."""
             raise OSError("read failed")
 
         def __str__(self):
@@ -645,6 +706,7 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
 
     @contextmanager
     def _missing_background_user_connection(*args, **kwargs):
+        """Handle missing background user connection."""
         yield None
 
     monkeypatch.setattr(
@@ -671,6 +733,7 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
 
     @contextmanager
     def _missing_image_background_user_connection(*args, **kwargs):
+        """Handle missing image background user connection."""
         yield missing_image_conn
 
     monkeypatch.setattr(
@@ -687,34 +750,48 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
         )
 
     class _RawFileStore:
+        """Represent raw file store."""
+
         def setFileId(self, value):
+            """Store set file identifier."""
             self.file_id = value
 
         def write(self, data, offset, length):
+            """Store write."""
             self.payload = data[offset : offset + length]
 
         def save(self):
+            """Store save."""
             self.saved = True
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close failed")
 
     class _UpdateService:
+        """Represent update service."""
+
         def __init__(self):
             self._next_id = 100
 
         def saveAndReturnObject(self, obj):
+            """Store save and return object."""
             if hasattr(obj, "_id"):
                 obj._id = self._next_id
                 self._next_id += 1
             return obj
 
     class _ImageObj:
+        """Represent image obj."""
+
         def linkAnnotation(self, wrapper):
+            """Handle link annotation."""
             self.wrapper = wrapper
 
     class _UserConn:
+        """Represent user conn."""
+
         def __init__(self):
             self.c = SimpleNamespace(
                 sf=SimpleNamespace(createRawFileStore=_RawFileStore)
@@ -722,14 +799,17 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
 
         @staticmethod
         def getUpdateService():
+            """Return get update service."""
             return _UpdateService()
 
         @staticmethod
         def getObject(kind, image_id):
+            """Return get object."""
             return _ImageObj()
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close failed")
 
     sem_edx_parser = types.ModuleType("omeroweb_import.services.omero.sem_edx_parser")
@@ -744,6 +824,7 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
 
     @contextmanager
     def _user_background_connection(*args, **kwargs):
+        """Handle user background connection."""
         yield _UserConn()
 
     monkeypatch.setattr(
@@ -753,14 +834,18 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     )
 
     class _BadPlotPath:
+        """Represent bad plot path."""
+
         name = "plot.png"
 
         @staticmethod
         def exists():
+            """Handle exists."""
             return True
 
         @staticmethod
         def read_bytes():
+            """Return read bytes."""
             raise OSError("plot read failed")
 
         def __str__(self):
@@ -791,14 +876,21 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
 def test_probe_and_verification_helpers_cover_remaining_paths(
     monkeypatch, tmp_path: Path
 ):
+    """Verify test probe and verification helpers cover rem behavior."""
+
     class _Relative:
+        """Represent relative."""
+
         def __init__(self, text):
             self.text = text
 
         def as_posix(self):
+            """Handle as posix."""
             return self.text
 
     class _FakePath:
+        """Test double for fake path."""
+
         def __init__(
             self,
             text,
@@ -813,11 +905,13 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
             self.relative_text = relative_text or text
 
         def resolve(self):
+            """Return resolve."""
             if self.resolve_error:
                 raise OSError("resolve failed")
             return self
 
         def relative_to(self, other):
+            """Handle relative to."""
             if self.relative_error:
                 raise ValueError("outside root")
             return _Relative(self.relative_text)
@@ -987,11 +1081,14 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
     )
 
     class _ClosingConn:
+        """Represent closing conn."""
+
         def __init__(self):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def getQueryService():
+            """Return get query service."""
             return SimpleNamespace(
                 projection=lambda *args, **kwargs: (_ for _ in ()).throw(
                     RuntimeError("projection failed")
@@ -1000,17 +1097,22 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close failed")
 
     class _ClosingAdmin:
+        """Represent closing admin."""
+
         def __init__(self):
             self.conn = _ClosingConn()
 
         def suConn(self, username):
+            """Handle su conn."""
             return self.conn
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("admin close failed")
 
     monkeypatch.setattr(
@@ -1048,24 +1150,32 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
     )
 
     class _RenderConn:
+        """Represent render conn."""
+
         def __init__(self):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def getObject(kind, image_id):
+            """Return get object."""
             return render_image
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close failed")
 
     class _RenderAdmin:
+        """Represent render admin."""
+
         @staticmethod
         def suConn(username):
+            """Handle su conn."""
             return _RenderConn()
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("admin close failed")
 
     monkeypatch.setattr(
@@ -1089,26 +1199,34 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
     assert errors == []
 
     class _VerifyConn:
+        """Represent verify conn."""
+
         def __init__(self):
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def getQueryService():
+            """Return get query service."""
             return SimpleNamespace(
                 projection=lambda *args, **kwargs: [[SimpleNamespace(val=9)]]
             )
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close failed")
 
     class _VerifyAdmin:
+        """Represent verify admin."""
+
         @staticmethod
         def suConn(username):
+            """Handle su conn."""
             return _VerifyConn()
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("admin close failed")
 
     monkeypatch.setattr(

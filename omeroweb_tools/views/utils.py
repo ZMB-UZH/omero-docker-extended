@@ -20,10 +20,12 @@ JSON_OBJECT_REQUIRED_ERROR = "Request body must be a JSON object."
 
 
 def current_username(request, conn):
+    """Handle current username."""
     return _current_username(request, conn)
 
 
 def load_json_body(request):
+    """Return load JSON body."""
     payload, error = parse_json_body(request)
     if error:
         return None, error
@@ -31,6 +33,7 @@ def load_json_body(request):
 
 
 def load_json_object(request):
+    """Return load JSON object."""
     payload, error = load_json_body(request)
     if error:
         return None, error
@@ -40,6 +43,8 @@ def load_json_object(request):
 
 
 def require_non_root_user(view_func):
+    """Handle require non root user."""
+
     @wraps(view_func)
     def _wrapped(request, *args, conn=None, url=None, **kwargs):
         remaining_args = args
@@ -63,6 +68,7 @@ def require_non_root_user(view_func):
 
 
 def resolve_omero_host_port(conn):
+    """Return resolve OMERO host port."""
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
     port = getattr(conn, "port", None) or getattr(conn, "_port", None)
     if not host:
@@ -83,6 +89,7 @@ def resolve_omero_host_port(conn):
 
 
 def validate_user_password(conn, password):
+    """Validate validate user password."""
     if not password:
         return False, "Password is required."
     username = current_username(None, conn)

@@ -6,6 +6,8 @@ from omero_plugin_common.request_utils import current_username
 
 
 def require_root_user(view_func):
+    """Handle require root user."""
+
     @wraps(view_func)
     def _wrapped(request, *args, **kwargs):
         conn = kwargs.get("conn")

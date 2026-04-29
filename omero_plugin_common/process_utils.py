@@ -64,6 +64,7 @@ class TimeoutExpired(TimeoutError):
 
 
 def _normalize_command(args: Sequence[CommandArg]) -> tuple[str, ...]:
+    """Handle normalize command."""
     if isinstance(args, (str, bytes, os.PathLike)):
         raise TypeError("Command arguments must be a sequence, not a single path.")
     normalized = tuple(os.fsdecode(os.fspath(part)) for part in args)
@@ -75,6 +76,7 @@ def _normalize_command(args: Sequence[CommandArg]) -> tuple[str, ...]:
 
 
 def _normalize_env(env: Mapping[str, str] | None) -> dict[str, str] | None:
+    """Handle normalize env."""
     if env is None:
         return None
     normalized = {
@@ -87,6 +89,7 @@ def _normalize_env(env: Mapping[str, str] | None) -> dict[str, str] | None:
 
 
 def _normalize_cwd(cwd: CommandArg | None) -> str | None:
+    """Handle normalize cwd."""
     if cwd is None:
         return None
     normalized = os.fsdecode(os.fspath(cwd))
@@ -96,6 +99,7 @@ def _normalize_cwd(cwd: CommandArg | None) -> str | None:
 
 
 def _finite_seconds(value: float | int, label: str) -> float:
+    """Handle finite seconds."""
     try:
         seconds = float(value)
     except (TypeError, ValueError) as exc:
@@ -106,6 +110,7 @@ def _finite_seconds(value: float | int, label: str) -> float:
 
 
 def _normalize_timeout(timeout: float | int | None) -> float | None:
+    """Handle normalize timeout."""
     if timeout is None:
         return None
     seconds = _finite_seconds(timeout, "timeout")
@@ -115,6 +120,7 @@ def _normalize_timeout(timeout: float | int | None) -> float | None:
 
 
 def _normalize_tick_interval(tick_interval: float | int) -> float:
+    """Handle normalize tick interval."""
     seconds = _finite_seconds(tick_interval, "tick_interval")
     if seconds <= 0:
         raise ValueError("tick_interval must be greater than zero.")
@@ -122,6 +128,7 @@ def _normalize_tick_interval(tick_interval: float | int) -> float:
 
 
 def _decode_output(payload: bytes | None) -> str:
+    """Handle decode output."""
     return "" if not payload else payload.decode("utf-8", errors="replace")
 
 
@@ -133,6 +140,7 @@ def _completed(
     *,
     check: bool,
 ) -> CompletedProcess:
+    """Handle completed."""
     completed = CompletedProcess(
         args=command,
         returncode=int(returncode or 0),
@@ -155,6 +163,7 @@ def _popen(
     env: dict[str, str] | None,
     cwd: str | None,
 ) -> subprocess.Popen[bytes]:
+    """Handle popen."""
     return subprocess.Popen(
         command,
         stdin=subprocess.DEVNULL,
@@ -166,6 +175,7 @@ def _popen(
 
 
 def _terminate(process: subprocess.Popen[bytes]) -> tuple[bytes | None, bytes | None]:
+    """Handle terminate."""
     if process.poll() is None:
         try:
             process.kill()
@@ -182,6 +192,7 @@ def _notify_tick(
     on_tick: TickCallback | None,
     elapsed: float,
 ) -> None:
+    """Handle notify tick."""
     if on_tick is None:
         return
     try:

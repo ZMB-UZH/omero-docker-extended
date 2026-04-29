@@ -10,6 +10,7 @@ from omeroweb_import.utils import file_helpers
 def test_file_helpers_return_false_for_directory_creation_and_chmod_failures(
     tmp_path, monkeypatch
 ):
+    """Verify test file helpers return false for directory behavior."""
     path_type = type(tmp_path)
     existing_dir = tmp_path / "existing"
     existing_dir.mkdir()
@@ -36,6 +37,7 @@ def test_file_helpers_return_false_for_directory_creation_and_chmod_failures(
 
 
 def test_file_helpers_cover_cache_safe_names_and_remove_failures(tmp_path, monkeypatch):
+    """Verify test file helpers cover cache safe names and behavior."""
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
     upload_root.mkdir()
@@ -79,6 +81,7 @@ def test_file_helpers_cover_cache_safe_names_and_remove_failures(tmp_path, monke
 def test_file_helpers_do_not_cache_directory_paths_when_a_root_is_a_file(
     tmp_path, monkeypatch
 ):
+    """Verify test file helpers do not cache directory path behavior."""
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
     upload_root.write_text("not a directory", encoding="utf-8")
@@ -97,6 +100,7 @@ def test_file_helpers_do_not_cache_directory_paths_when_a_root_is_a_file(
 def test_file_helpers_cover_cached_initialization_getters_and_new_dir_creation(
     tmp_path, monkeypatch
 ):
+    """Verify test file helpers cover cached initialization behavior."""
     cached_upload = tmp_path / "cached-upload"
     cached_jobs = tmp_path / "cached-jobs"
 

@@ -49,6 +49,7 @@ SAMPLE_ARGUMENTS = {
 
 
 def _public_functions(module):
+    """Handle public functions."""
     for name, value in vars(module).items():
         if name.startswith("_") or not callable(value):
             continue
@@ -56,6 +57,7 @@ def _public_functions(module):
 
 
 def _build_call_args(func):
+    """Handle build call args."""
     args = []
     for parameter in inspect.signature(func).parameters.values():
         if parameter.kind not in (
@@ -74,6 +76,7 @@ def _build_call_args(func):
 
 
 def _referenced_helper_names(package_name: str, module_alias: str) -> set[str]:
+    """Handle referenced helper names."""
     names: set[str] = set()
     for source_path in (REPO_ROOT / package_name).rglob("*.py"):
         if "strings" in source_path.parts:
@@ -92,6 +95,7 @@ def _referenced_helper_names(package_name: str, module_alias: str) -> set[str]:
 
 
 def test_referenced_string_helpers_exist_across_import_and_omp_packages():
+    """Verify test referenced string helpers exist across i behavior."""
     for package_name, modules in STRING_PACKAGES.items():
         for module_alias, module in modules.items():
             for helper_name in _referenced_helper_names(package_name, module_alias):
@@ -105,6 +109,7 @@ def test_referenced_string_helpers_exist_across_import_and_omp_packages():
 
 
 def test_public_string_helpers_return_non_empty_text():
+    """Verify test public string helpers return non empty text."""
     for package_name, modules in STRING_PACKAGES.items():
         for module_alias, module in modules.items():
             for helper_name, func in _public_functions(module):

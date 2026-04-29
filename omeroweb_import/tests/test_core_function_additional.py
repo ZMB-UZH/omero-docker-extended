@@ -11,6 +11,8 @@ from omeroweb_import.views import core_functions
 
 
 class _State:
+    """Represent state."""
+
     def __init__(self, image_id, *, persist_on_refresh=True):
         self.image_id = image_id
         self.persist_on_refresh = persist_on_refresh
@@ -18,6 +20,8 @@ class _State:
 
 
 class _PixelsWrapper:
+    """Represent pixels wrapper."""
+
     def __init__(
         self,
         state: _State,
@@ -43,6 +47,7 @@ class _PixelsWrapper:
             self._obj = None
 
     def _value(self, axis_name):
+        """Handle value."""
         if self._reload_error:
             raise RuntimeError(self._reload_error)
         if not self._state.persist_on_refresh:
@@ -50,16 +55,21 @@ class _PixelsWrapper:
         return self._state.values.get(axis_name)
 
     def getPhysicalSizeX(self):
+        """Return get physical size x."""
         return self._value("x")
 
     def getPhysicalSizeY(self):
+        """Return get physical size y."""
         return self._value("y")
 
     def getPhysicalSizeZ(self):
+        """Return get physical size z."""
         return self._value("z")
 
 
 class _ImageWrapper:
+    """Represent image wrapper."""
+
     def __init__(
         self,
         state: _State,
@@ -76,6 +86,7 @@ class _ImageWrapper:
         self._reload_error = reload_error
 
     def getPrimaryPixels(self):
+        """Return get primary pixels."""
         if self._pixels_error:
             raise RuntimeError(self._pixels_error)
         return _PixelsWrapper(
@@ -87,9 +98,11 @@ class _ImageWrapper:
 
 
 def _stateful_job_updates(monkeypatch, job):
+    """Handle stateful job updates."""
     state = {"job": job}
 
     def _update_job(job_id, mutator):
+        """Handle update job."""
         assert job_id == job["job_id"]
         state["job"] = mutator(state["job"])
         return state["job"]
@@ -101,6 +114,7 @@ def _stateful_job_updates(monkeypatch, job):
 def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify test finalize imported Zarr image metadata co behavior."""
     managed_zarr = tmp_path / "managed"
 
     assert core_functions._finalize_imported_zarr_image_metadata(
@@ -138,6 +152,8 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
     )
 
     class _Conn:
+        """Represent conn."""
+
         def __init__(self):
             self.SERVICE_OPTS = types.SimpleNamespace(
                 setOmeroGroup=lambda value: setattr(self, "group", value)
@@ -156,7 +172,10 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
 
         @staticmethod
         def getUpdateService():
+            """Return get update service."""
+
             def _save(obj):
+                """Handle save."""
                 if getattr(obj, "image_id", None) == 10:
                     raise RuntimeError("save exploded")
                 return obj
@@ -164,6 +183,7 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
             return types.SimpleNamespace(saveAndReturnObject=_save)
 
         def getObject(self, object_type, image_id):
+            """Return get object."""
             assert object_type == "Image"
             image_id = int(image_id)
             self.calls[image_id] = self.calls.get(image_id, 0) + 1
@@ -201,21 +221,26 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
             raise AssertionError(f"Unexpected image id {image_id}")
 
         def close(self):
+            """Handle close."""
             self.closed = True
             raise RuntimeError("conn close exploded")
 
     conn = _Conn()
 
     class _AdminConn:
+        """Represent admin conn."""
+
         def __init__(self):
             self.closed = False
 
         @staticmethod
         def suConn(username):
+            """Handle su conn."""
             assert username == "alice"
             return conn
 
         def close(self):
+            """Handle close."""
             self.closed = True
             raise RuntimeError("admin close exploded")
 
@@ -331,6 +356,7 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
 def test_check_import_compatibility_covers_timeout_cli_errors_and_native_routes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify test check import compatibility covers timeou behavior."""
     missing = tmp_path / "missing.ome.tif"
     missing_response = core_functions._check_import_compatibility(
         "session",
@@ -526,6 +552,7 @@ def test_check_import_compatibility_covers_timeout_cli_errors_and_native_routes(
 def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Verify test import file covers fast path timeout and behavior."""
     source = tmp_path / "image.ome.tif"
     source.write_text("payload", encoding="utf-8")
     monkeypatch.setattr(
@@ -560,6 +587,7 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
     rchar_values = iter((5, 12))
 
     def _fake_read_proc_rchar(pid):
+        """Handle fake read proc rchar."""
         assert pid == 999
         try:
             return next(rchar_values)
@@ -579,6 +607,7 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
     time_values = iter((0.0, 0.0, 10.0, 10.0))
 
     def _fake_time():
+        """Handle fake time."""
         try:
             return next(time_values)
         except StopIteration:
@@ -623,6 +652,7 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
 def test_import_file_progress_loop_covers_timeout_and_unexpected_cleanup_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify test import file progress loop covers timeout behavior."""
     source = tmp_path / "image.ome.tif"
     source.write_text("payload", encoding="utf-8")
     monkeypatch.setattr(
@@ -677,6 +707,7 @@ def test_import_file_progress_loop_covers_timeout_and_unexpected_cleanup_paths(
 def test_start_compatibility_check_thread_marks_job_and_skips_when_already_active(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify test start compatibility check thread marks j behavior."""
     inactive_job = {
         "job_id": "a" * 32,
         "compatibility_status": "incompatible",
@@ -693,12 +724,15 @@ def test_start_compatibility_check_thread_marks_job_and_skips_when_already_activ
     monkeypatch.setattr(core_functions.time, "time", lambda: 1234.5)
 
     class _Thread:
+        """Represent thread."""
+
         def __init__(self, target, args=(), daemon=None):
             self._target = target
             self._args = args
             self.daemon = daemon
 
         def start(self):
+            """Run start."""
             started.append(self._args)
 
     monkeypatch.setattr(core_functions.threading, "Thread", _Thread)
@@ -728,6 +762,7 @@ def test_start_compatibility_check_thread_marks_job_and_skips_when_already_activ
 def test_prepare_server_readable_zarr_source_cleans_failed_transfer_parent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify test prepare server readable Zarr source clea behavior."""
     source = tmp_path / "source.ome.zarr"
     source.mkdir()
     (source / "0").mkdir()

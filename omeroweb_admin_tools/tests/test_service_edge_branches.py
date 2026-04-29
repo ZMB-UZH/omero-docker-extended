@@ -13,6 +13,8 @@ from omeroweb_admin_tools.services import system_diagnostics
 
 
 class _FakeDockerResponse:
+    """Test double for fake docker response."""
+
     def __init__(self, status: int, payload: bytes):
         self.status = status
         self.status_code = status
@@ -21,27 +23,34 @@ class _FakeDockerResponse:
         self.text = payload.decode("utf-8", errors="replace")
 
     def read(self):
+        """Return read."""
         return self._payload
 
 
 class _FakeDockerConnection:
+    """Test double for fake docker connection."""
+
     def __init__(self, response=None, *, request_error=None):
         self._response = response
         self._request_error = request_error
         self.closed = False
 
     def request(self, method, path):
+        """Handle request."""
         if self._request_error is not None:
             raise self._request_error
 
     def getresponse(self):
+        """Return getresponse."""
         return self._response
 
     def close(self):
+        """Handle close."""
         self.closed = True
 
 
 def _log_config(url: str = "https://loki:3100") -> LogConfig:
+    """Handle log config."""
     return LogConfig(
         loki_url=url,
         lookback_seconds=900,
@@ -56,6 +65,7 @@ def _log_config(url: str = "https://loki:3100") -> LogConfig:
 def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
     monkeypatch, tmp_path
 ):
+    """Verify test system diagnostics helpers cover cached behavior."""
     monkeypatch.setenv("FLOAT_ENV", "not-a-number")
     assert system_diagnostics._to_float_env("FLOAT_ENV", 2.5) == 2.5
 
@@ -80,6 +90,7 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
         real_import = builtins.__import__
 
         def _fake_import(name, *args, **kwargs):
+            """Handle fake import."""
             if name == "psycopg2":
                 raise ImportError("missing psycopg2")
             return real_import(name, *args, **kwargs)
@@ -106,14 +117,18 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
     )
 
     class _FakeSocket:
+        """Test double for fake socket."""
+
         def __init__(self):
             self.timeout = None
             self.connected_path = None
 
         def settimeout(self, timeout):
+            """Store settimeout."""
             self.timeout = timeout
 
         def connect(self, path):
+            """Handle connect."""
             self.connected_path = path
 
     fake_socket = _FakeSocket()
@@ -223,6 +238,7 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
 
 
 def test_log_query_helpers_cover_validation_inference_and_job_execution(monkeypatch):
+    """Verify test log query helpers cover validation infer behavior."""
     assert log_query_module._estimate_log_entries_size("invalid") == 0
     assert log_query_module._estimate_log_entries_size((object(),)) == 0
     assert log_query_module._estimate_label_cache_size(("only-one-item",)) == 0

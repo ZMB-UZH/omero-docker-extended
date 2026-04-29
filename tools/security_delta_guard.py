@@ -29,12 +29,15 @@ REPOSITORY_COMPONENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 @dataclass(frozen=True)
 class EvaluationResult:
+    """Represent evaluation result."""
+
     status: str
     message: str
     alerts: tuple[dict[str, Any], ...] = ()
 
 
 def parse_args() -> argparse.Namespace:
+    """Validate parse args."""
     parser = argparse.ArgumentParser(
         description="Block workflow runs that add new GitHub code scanning alerts."
     )
@@ -84,6 +87,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def parse_iso8601(timestamp: str | None) -> datetime | None:
+    """Validate parse iso8601."""
     if not timestamp:
         return None
     normalized = timestamp.strip()
@@ -95,6 +99,7 @@ def parse_iso8601(timestamp: str | None) -> datetime | None:
 
 
 def _first_non_empty(*values: Any) -> str:
+    """Handle first non empty."""
     for value in values:
         normalized = str(value or "").strip()
         if normalized:
@@ -126,6 +131,7 @@ def validate_github_repository(repository: str) -> str:
 
 
 def payload_repository_full_name(event_payload: dict[str, Any]) -> str:
+    """Handle payload repository full name."""
     workflow_run = event_payload.get("workflow_run") or {}
     for candidate in (
         workflow_run.get("head_repository"),
@@ -140,6 +146,7 @@ def payload_repository_full_name(event_payload: dict[str, Any]) -> str:
 
 
 def payload_default_branch(event_payload: dict[str, Any]) -> str:
+    """Handle payload default branch."""
     workflow_run = event_payload.get("workflow_run") or {}
     for candidate in (
         workflow_run.get("repository"),
@@ -154,6 +161,7 @@ def payload_default_branch(event_payload: dict[str, Any]) -> str:
 
 
 def payload_pull_request_number(event_payload: dict[str, Any]) -> int | None:
+    """Handle payload pull request number."""
     pull_request = event_payload.get("pull_request") or {}
     if isinstance(pull_request, dict) and pull_request.get("number") is not None:
         return int(pull_request["number"])
@@ -161,10 +169,12 @@ def payload_pull_request_number(event_payload: dict[str, Any]) -> int | None:
 
 
 def payload_ref(event_payload: dict[str, Any]) -> str:
+    """Handle payload ref."""
     return _first_non_empty(event_payload.get("ref"))
 
 
 def normalize_severity(alert: dict[str, Any]) -> str:
+    """Validate normalize severity."""
     rule = alert.get("rule") or {}
     for candidate in (
         alert.get("severity"),
@@ -177,6 +187,7 @@ def normalize_severity(alert: dict[str, Any]) -> str:
 
 
 def summarize_alerts(alerts: list[dict[str, Any]]) -> str:
+    """Handle summarize alerts."""
     counts = Counter(normalize_severity(alert) for alert in alerts)
     if not counts:
         return "no open alerts"
@@ -192,22 +203,26 @@ def summarize_alerts(alerts: list[dict[str, Any]]) -> str:
 
 
 def alert_path(alert: dict[str, Any]) -> str:
+    """Handle alert path."""
     instance = alert.get("most_recent_instance") or {}
     location = instance.get("location") or {}
     return str(location.get("path") or "").strip() or "<unknown>"
 
 
 def alert_rule(alert: dict[str, Any]) -> str:
+    """Handle alert rule."""
     rule = alert.get("rule") or {}
     return str(rule.get("id") or rule.get("name") or "<unknown>").strip()
 
 
 def alert_tool(alert: dict[str, Any]) -> str:
+    """Handle alert tool."""
     tool = alert.get("tool") or {}
     return str(tool.get("name") or "<unknown>").strip()
 
 
 def format_alert(alert: dict[str, Any]) -> str:
+    """Build format alert."""
     return (
         f"#{alert.get('number', '?')} "
         f"[{normalize_severity(alert)}] "
@@ -217,6 +232,7 @@ def format_alert(alert: dict[str, Any]) -> str:
 
 
 def render_failure_message(prefix: str, alerts: list[dict[str, Any]]) -> str:
+    """Build render failure message."""
     details = "\n".join(f"- {format_alert(alert)}" for alert in alerts[:10])
     truncated = ""
     if len(alerts) > 10:
@@ -235,6 +251,7 @@ def wait_for_stable_snapshot(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> list[dict[str, Any]]:
+    """Handle wait for stable snapshot."""
     deadline = monotonic() + max(settle_timeout_seconds, 0)
     previous_numbers: tuple[int, ...] | None = None
     while True:
@@ -251,6 +268,7 @@ def wait_for_stable_snapshot(
 def select_push_delta_alerts(
     alerts: list[dict[str, Any]], workflow_started_at: datetime | None
 ) -> list[dict[str, Any]]:
+    """Handle select push delta alerts."""
     if workflow_started_at is None:
         return []
     delta_alerts = []
@@ -266,7 +284,6 @@ def select_pull_request_delta_alerts(
     base_branch_alerts: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Keep only alerts that are absent from the base branch snapshot."""
-
     base_numbers = {int(alert.get("number", 0)) for alert in base_branch_alerts}
     return [
         alert
@@ -287,6 +304,7 @@ def evaluate_default_branch_alerts(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> EvaluationResult:
+    """Handle evaluate default branch alerts."""
     if workflow_started_at is None:
         return EvaluationResult(
             status="fail",
@@ -328,6 +346,7 @@ def evaluate_pull_request_alerts(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> EvaluationResult:
+    """Handle evaluate pull request alerts."""
     alerts = wait_for_stable_snapshot(
         lambda: fetch_alerts(pr=pr_number),
         settle_timeout_seconds=settle_timeout_seconds,
@@ -369,6 +388,7 @@ def evaluate_push_alerts(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> EvaluationResult:
+    """Handle evaluate push alerts."""
     return evaluate_default_branch_alerts(
         ref,
         workflow_started_at,
@@ -392,6 +412,7 @@ def evaluate_workflow_run(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> EvaluationResult:
+    """Handle evaluate workflow run."""
     workflow_run = event_payload.get("workflow_run") or {}
     conclusion = str(workflow_run.get("conclusion") or "").strip().lower()
     if conclusion != "success":
@@ -479,6 +500,7 @@ def evaluate_workflow_run(
 
 
 def event_scan_label(event_name: str) -> str:
+    """Handle event scan label."""
     normalized_event = str(event_name or "").strip().lower()
     labels = {
         "push": "Push scan",
@@ -503,6 +525,7 @@ def evaluate_direct_event(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> EvaluationResult:
+    """Handle evaluate direct event."""
     normalized_event = _first_non_empty(event_name).lower()
     if normalized_event == "pull_request":
         pr_number = payload_pull_request_number(event_payload)
@@ -590,6 +613,7 @@ def list_code_scanning_alerts(
     ref: str | None = None,
     pr: int | None = None,
 ) -> list[dict[str, Any]]:
+    """Return list code scanning alerts."""
     repository = validate_github_repository(repository)
     query = {
         "state": "open",
@@ -619,6 +643,8 @@ def list_code_scanning_alerts(
 
 @dataclass
 class _GitHubApiVersionCache:
+    """Represent git hub API version cache."""
+
     value: str | None = None
 
 
@@ -626,6 +652,7 @@ _GITHUB_API_VERSION_CACHE = _GitHubApiVersionCache()
 
 
 def latest_github_api_version(token: str) -> str:
+    """Handle latest github API version."""
     if _GITHUB_API_VERSION_CACHE.value is not None:
         return _GITHUB_API_VERSION_CACHE.value
 
@@ -641,11 +668,13 @@ def latest_github_api_version(token: str) -> str:
 
 
 def github_api_get_json(api_path: str, token: str) -> Any:
+    """Handle github API get JSON."""
     api_version = latest_github_api_version(token)
     return _github_api_get_json(api_path, token, api_version=api_version)
 
 
 def _github_api_get_json(api_path: str, token: str, *, api_version: str | None) -> Any:
+    """Handle github API get JSON."""
     if not api_path.startswith("/"):
         raise ValueError(f"GitHub API path must start with '/': {api_path!r}")
 
@@ -693,6 +722,7 @@ def _github_api_get_json(api_path: str, token: str, *, api_version: str | None) 
 
 
 def _curl_config_quote(value: str) -> str:
+    """Handle curl config quote."""
     escaped = (
         value.replace("\\", "\\\\")
         .replace('"', '\\"')
@@ -703,6 +733,7 @@ def _curl_config_quote(value: str) -> str:
 
 
 def get_default_branch(repository: str, token: str) -> str | None:
+    """Return get default branch."""
     repository = validate_github_repository(repository)
     payload = github_api_get_json(f"/repos/{repository}", token)
     if not isinstance(payload, dict):
@@ -713,6 +744,7 @@ def get_default_branch(repository: str, token: str) -> str | None:
 def get_workflow_run_started_at(
     repository: str, token: str, run_id: str
 ) -> datetime | None:
+    """Return get workflow run started at."""
     repository = validate_github_repository(repository)
     normalized_run_id = _first_non_empty(run_id)
     if not normalized_run_id:
@@ -738,6 +770,7 @@ def get_workflow_run_started_at(
 
 
 def load_event_payload(path: str) -> dict[str, Any]:
+    """Return load event payload."""
     try:
         payload_path = Path(path).resolve(strict=True)
     except (OSError, RuntimeError) as exc:
@@ -752,6 +785,7 @@ def load_event_payload(path: str) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Run the command-line entry point."""
     args = parse_args()
     if not args.event_path:
         print("ERROR: --event-path is required.", file=sys.stderr)
@@ -777,6 +811,7 @@ def main() -> int:
         event_payload = load_event_payload(args.event_path)
 
         def fetch_alerts(**kwargs: Any) -> list[dict[str, Any]]:
+            """Handle fetch alerts."""
             return list_code_scanning_alerts(
                 repository,
                 token,
@@ -784,9 +819,11 @@ def main() -> int:
             )
 
         def resolve_default_branch(repository: str) -> str | None:
+            """Return resolve default branch."""
             return get_default_branch(repository, token)
 
         def resolve_run_started_at(repository: str, run_id: str) -> datetime | None:
+            """Return resolve run started at."""
             return get_workflow_run_started_at(
                 repository,
                 token,

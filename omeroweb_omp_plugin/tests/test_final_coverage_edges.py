@@ -11,74 +11,96 @@ from omeroweb_omp_plugin.views import ai_credentials_view, index_view
 
 
 def _json_payload(response):
+    """Handle JSON payload."""
     return json.loads(response.content.decode("utf-8"))
 
 
 def _unwrap_view(func):
+    """Handle unwrap view."""
     while hasattr(func, "__wrapped__"):
         func = func.__wrapped__
     return func
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self._raw_value = value
 
     def getValue(self):
+        """Return get value."""
         return self._raw_value
 
 
 class _Image:
+    """Represent image."""
+
     def __init__(self, image_id, name):
         self._id = image_id
         self._name = name
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self._id)
 
     def getName(self):
+        """Return get name."""
         return self._name
 
 
 class _Dataset:
+    """Represent dataset."""
+
     def __init__(self, dataset_id, name, images):
         self._id = dataset_id
         self._name = name
         self._images = list(images)
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self._id)
 
     def getName(self):
+        """Return get name."""
         return self._name
 
     def listChildren(self):
+        """Return list children."""
         return list(self._images)
 
 
 class _Project:
+    """Represent project."""
+
     def __init__(self, datasets):
         self._datasets = list(datasets)
 
     def listChildren(self):
+        """Return list children."""
         return list(self._datasets)
 
 
 class _ExplodingFormatImage:
+    """Represent exploding format image."""
+
     @property
     def getFileset(self):
         raise RuntimeError("format failure")
 
     @staticmethod
     def getId():
+        """Return get identifier."""
         return _Value(1)
 
     @staticmethod
     def getName():
+        """Return get name."""
         return "sample.tif"
 
 
 def test_list_models_covers_claude_custom_and_empty_model_sets(monkeypatch):
+    """Verify test list models covers claude custom and emp behavior."""
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "alice")
     monkeypatch.setattr(
         ai_credentials_view,
@@ -87,11 +109,14 @@ def test_list_models_covers_claude_custom_and_empty_model_sets(monkeypatch):
     )
 
     class _Response:
+        """Represent response."""
+
         def __init__(self, payload):
             self.status_code = 200
             self._payload = payload
 
         def json(self):
+            """Handle JSON."""
             return self._payload
 
     monkeypatch.setattr(
@@ -144,14 +169,20 @@ def test_list_models_covers_claude_custom_and_empty_model_sets(monkeypatch):
 def test_annotation_and_image_services_cover_remaining_nonfatal_edge_paths(
     monkeypatch,
 ):
+    """Verify test annotation and image services cover rema behavior."""
+
     def _query_service():
+        """Handle query service."""
         return object()
 
     class _NamedValueWithBrokenGetter:
+        """Represent named value with broken getter."""
+
         name = _Value("alpha")
 
         @staticmethod
         def getValue():
+            """Return get value."""
             raise RuntimeError("value unavailable")
 
     map_ann = SimpleNamespace(
@@ -207,22 +238,30 @@ def test_annotation_and_image_services_cover_remaining_nonfatal_edge_paths(
 
 
 def test_index_view_covers_remaining_group_helper_and_action_guard_edges(monkeypatch):
+    """Verify test index view covers remaining group helper behavior."""
+
     class _Group:
+        """Represent group."""
+
         def __init__(self, permissions, member_count=1):
             self._permissions = permissions
             self._member_count = member_count
 
         def getDetails(self):
+            """Return get details."""
             return SimpleNamespace(getPermissions=lambda: self._permissions)
 
         def getPermissions(self):
+            """Return get permissions."""
             return self._permissions
 
         def getMemberCount(self):
+            """Return get member count."""
             return self._member_count
 
         @staticmethod
         def getId():
+            """Return get identifier."""
             return _Value(1)
 
     blank_group = _Group(None, member_count=1)

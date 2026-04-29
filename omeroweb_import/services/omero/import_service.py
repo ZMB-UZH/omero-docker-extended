@@ -81,6 +81,7 @@ def _import_file(
 
 
 def _connection_has_last_error(conn) -> bool:
+    """Handle connection has last error."""
     try:
         return bool(conn.getLastError())
     except Exception:

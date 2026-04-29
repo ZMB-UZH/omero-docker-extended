@@ -51,19 +51,23 @@ SAVED_QUERY_PAYLOAD_INVALID_ERROR = "Saved query payload is invalid."
 
 
 def _indexed_scope_storage_key(username: str) -> str:
+    """Handle indexed scope storage key."""
     digest = hashlib.sha256(str(username or "").strip().encode("utf-8")).hexdigest()
     return f"omeroweb_tools:enhanced_search:indexed_scope:{digest}"
 
 
 def _is_root_user(request, conn) -> bool:
+    """Handle is root user."""
     return str(current_username(request, conn) or "").strip() == "root"
 
 
 def _normalize_saved_query_name(value: object) -> str:
+    """Handle normalize saved query name."""
     return " ".join(str(value or "").split())
 
 
 def _normalize_saved_query_payload(value: object) -> tuple[dict[str, Any], str]:
+    """Handle normalize saved query payload."""
     if not isinstance(value, dict):
         return {}, SAVED_QUERY_PAYLOAD_REQUIRED_ERROR
     query, errors = parse_search_query(value)
@@ -73,6 +77,7 @@ def _normalize_saved_query_payload(value: object) -> tuple[dict[str, Any], str]:
 
 
 def _parse_saved_query_id(value: object) -> int:
+    """Handle parse saved query identifier."""
     if isinstance(value, bool) or not isinstance(value, (int, str)):
         raise ValueError
     query_id = int(str(value).strip())
@@ -86,6 +91,7 @@ def _load_user_settings_context(
     *,
     blocked_for_root: bool,
 ) -> tuple[dict[str, Any], bool, str, str]:
+    """Handle load user settings context."""
     if blocked_for_root:
         payload = default_user_settings()
         return (
@@ -113,6 +119,7 @@ def _load_user_settings_context(
 
 @login_required()
 def index(request, conn=None, _url=None, **kwargs):
+    """Handle index."""
     return render(
         request,
         "omeroweb_tools/index.html",
@@ -122,12 +129,14 @@ def index(request, conn=None, _url=None, **kwargs):
 
 @login_required()
 def root_status(request, conn=None, _url=None, **kwargs):
+    """Handle root status."""
     return JsonResponse({"is_root_user": _is_root_user(request, conn)})
 
 
 @login_required()
 @ensure_csrf_cookie
 def enhanced_search_view(request, conn=None, _url=None, **kwargs):
+    """Handle enhanced search view."""
     username = str(current_username(request, conn) or "").strip()
     blocked_for_root = not username or username == "root"
     (
@@ -213,6 +222,7 @@ def enhanced_search_view(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_scope_sync_view(request, conn=None, _url=None, **kwargs):
+    """Run start scope sync view."""
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
     _payload, error = load_json_object(request)
@@ -256,6 +266,7 @@ def start_scope_sync_view(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def sync_state_view(request, conn=None, _url=None, **kwargs):
+    """Handle sync state view."""
     username = str(current_username(request, conn) or "")
     try:
         settings_payload = user_settings(username)
@@ -278,6 +289,7 @@ def sync_state_view(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def save_user_settings_view(request, conn=None, _url=None, **kwargs):
+    """Store save user settings view."""
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
     payload, error = load_json_object(request)
@@ -294,6 +306,7 @@ def save_user_settings_view(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def save_query_view(request, conn=None, _url=None, **kwargs):
+    """Store save query view."""
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
     payload, error = load_json_object(request)
@@ -323,6 +336,7 @@ def save_query_view(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def delete_query_view(request, conn=None, _url=None, **kwargs):
+    """Handle delete query view."""
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
     payload, error = load_json_object(request)
@@ -349,6 +363,7 @@ def delete_query_view(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def apply_saved_query_view(request, conn=None, _url=None, query_id=None, **kwargs):
+    """Handle apply saved query view."""
     username = str(current_username(request, conn) or "")
     try:
         user_saved_queries = saved_queries(username)

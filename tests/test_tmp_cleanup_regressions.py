@@ -17,7 +17,10 @@ from omero_plugin_common import tmp_cleanup
 
 
 class TmpCleanupRegressionTests(TestCase):
+    """Test cases for tmp cleanup regression tests."""
+
     def test_safe_mark_path_for_deferred_cleanup_marks_directory_root(self):
+        """Verify test safe mark path for deferred cleanup mark behavior."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             target = root / "upload-job"
@@ -36,6 +39,7 @@ class TmpCleanupRegressionTests(TestCase):
             self.assertEqual("1120", marker.read_text(encoding="utf-8").strip())
 
     def test_safe_mark_path_for_deferred_cleanup_marks_file_sidecar(self):
+        """Verify test safe mark path for deferred cleanup mark behavior."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             target = root / "job.json"
@@ -54,6 +58,7 @@ class TmpCleanupRegressionTests(TestCase):
             self.assertEqual("2300", marker.read_text(encoding="utf-8").strip())
 
     def test_tmp_cleaner_respects_active_directory_retention_marker(self):
+        """Verify test tmp cleaner respects active directory re behavior."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             target_dir = root / "omeroweb-import" / "data" / "job123"
@@ -89,6 +94,7 @@ class TmpCleanupRegressionTests(TestCase):
             )
 
     def test_tmp_cleaner_respects_active_file_retention_marker(self):
+        """Verify test tmp cleaner respects active file retenti behavior."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             job_file = root / "omeroweb-import" / "jobs" / "job123.json"
@@ -125,6 +131,7 @@ class TmpCleanupRegressionTests(TestCase):
             self.assertTrue(marker.exists())
 
     def test_tmp_cleaner_deletes_expired_retained_file(self):
+        """Verify test tmp cleaner deletes expired retained file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             job_file = root / "omeroweb-import" / "jobs" / "job123.json"

@@ -18,6 +18,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.script_path = cls.repo_root / "installation" / "installation_script.sh"
         cls.script_text = cls.script_path.read_text(encoding="utf-8")
@@ -32,6 +33,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
 
     @classmethod
     def _extract_script_block(cls, start_marker: str, end_marker: str) -> str:
+        """Handle extract script block."""
         start = cls.script_text.find(start_marker)
         if start == -1:
             raise AssertionError(f"Unable to find script marker: {start_marker}")
@@ -44,10 +46,12 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _write_executable(path: Path, content: str) -> None:
+        """Handle write executable."""
         path.write_text(content, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
     def test_compose_mode_disables_cache_and_uses_no_cache_build(self) -> None:
+        """Verify test compose mode disables cache and uses no behavior."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             log_path = temp_path / "compose.log"
@@ -100,6 +104,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
     def test_dockerignore_excludes_live_runtime_data_from_build_context(
         self,
     ) -> None:
+        """Verify test dockerignore excludes live runtime data behavior."""
         dockerignore_text = (self.repo_root / ".dockerignore").read_text(
             encoding="utf-8"
         )
@@ -117,6 +122,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                 self.assertIn(pattern, dockerignore_text)
 
     def test_buildx_mode_disables_all_cache_knobs_for_no_cache_run(self) -> None:
+        """Verify test buildx mode disables all cache knobs for behavior."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             env_log_path = temp_path / "buildx-env.log"
@@ -184,6 +190,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
     def test_cleanup_prunes_docker_builder_and_buildx_cache_in_buildx_mode(
         self,
     ) -> None:
+        """Verify test cleanup prunes docker builder and buildx behavior."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             bin_dir = temp_path / "bin"
@@ -246,6 +253,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
             self.assertIn("builder prune -a -f", docker_log)
 
     def test_cleanup_skips_buildx_cache_directory_in_compose_mode(self) -> None:
+        """Verify test cleanup skips buildx cache directory in behavior."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             bin_dir = temp_path / "bin"

@@ -35,8 +35,11 @@ from omeroweb_import.views import core_functions, index_view
 def _patch_background_import_session(
     monkeypatch, session_key: str = "background-session"
 ):
+    """Handle patch background import session."""
+
     @contextmanager
     def fake_background_import_session(*args, **kwargs):
+        """Handle fake background import session."""
         yield session_key
 
     monkeypatch.setattr(
@@ -47,6 +50,7 @@ def _patch_background_import_session(
 
 
 def _stage_relative_paths(upload_root: Path, relative_paths: list[str]):
+    """Handle stage relative paths."""
     staged_members = {}
     entries = []
 
@@ -71,6 +75,7 @@ def _stage_relative_paths(upload_root: Path, relative_paths: list[str]):
 
 
 def _group_stdout(group_path: Path, members: list[Path]) -> str:
+    """Handle group stdout."""
     lines = [
         f"{len(members)} file(s) parsed into 1 group(s) with 1 call(s) to setId",
         f"# Group: {group_path} SPW: false",
@@ -82,6 +87,7 @@ def _group_stdout(group_path: Path, members: list[Path]) -> str:
 def test_build_import_units_collapses_directory_package_to_single_logical_unit(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test build import units collapses directory p behavior."""
     upload_root = tmp_path / "job-root"
     job, staged_members = _stage_relative_paths(
         upload_root,
@@ -96,6 +102,7 @@ def test_build_import_units_collapses_directory_package_to_single_logical_unit(
     group_path = staged_members["plate.zarr/OME/METADATA.ome.xml"]
 
     def fake_scan(path: Path, timeout: int = 45):
+        """Handle fake scan."""
         stdout = ""
         if path == package_root:
             stdout = _group_stdout(
@@ -135,6 +142,7 @@ def test_build_import_units_collapses_directory_package_to_single_logical_unit(
 def test_build_import_units_never_widens_cleanup_beyond_group_coverage(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test build import units never widens cleanup behavior."""
     upload_root = tmp_path / "job-root"
     job, staged_members = _stage_relative_paths(
         upload_root,
@@ -150,6 +158,7 @@ def test_build_import_units_never_widens_cleanup_beyond_group_coverage(
     group_path = staged_members["plate.zarr/OME/METADATA.ome.xml"]
 
     def fake_scan(path: Path, timeout: int = 45):
+        """Handle fake scan."""
         stdout = ""
         if path == package_root:
             stdout = _group_stdout(
@@ -192,6 +201,7 @@ def test_build_import_units_never_widens_cleanup_beyond_group_coverage(
 def test_build_import_units_keeps_plain_folder_files_separate(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test build import units keeps plain folder fi behavior."""
     upload_root = tmp_path / "job-root"
     job, staged_members = _stage_relative_paths(
         upload_root,
@@ -204,6 +214,7 @@ def test_build_import_units_keeps_plain_folder_files_separate(
     plain_folder = upload_root / "_staged" / "folder"
 
     def fake_scan(path: Path, timeout: int = 45):
+        """Handle fake scan."""
         stdout = ""
         if path == plain_folder:
             stdout = _group_stdout(
@@ -245,6 +256,7 @@ def test_build_import_units_uses_member_path_for_dataset_when_group_header_is_di
     tmp_path: Path,
     monkeypatch,
 ):
+    """Verify test build import units uses member path for behavior."""
     upload_root = tmp_path / "job-root"
     job, staged_members = _stage_relative_paths(
         upload_root,
@@ -258,6 +270,7 @@ def test_build_import_units_uses_member_path_for_dataset_when_group_header_is_di
     group_header = upload_root / "_staged" / "folder" / "subfolder"
 
     def fake_scan(path: Path, timeout: int = 45):
+        """Handle fake scan."""
         stdout = ""
         if path == plain_folder:
             stdout = _group_stdout(
@@ -297,6 +310,7 @@ def test_build_import_units_uses_member_path_for_dataset_when_group_header_is_di
 def test_build_import_units_falls_back_to_per_entry_units_for_duplicate_relative_paths(
     tmp_path: Path,
 ):
+    """Verify test build import units falls back to per ent behavior."""
     upload_root = tmp_path / "job-root"
     duplicate_rel_path = "folder/a.tif"
     staged_target = upload_root / "_staged" / "folder" / "a.tif"
@@ -351,6 +365,7 @@ def test_build_import_units_falls_back_to_per_entry_units_for_duplicate_relative
 def test_start_upload_rejects_duplicate_normalized_relative_paths(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test start upload rejects duplicate normalize behavior."""
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
     upload_root.mkdir()
@@ -390,6 +405,7 @@ def test_start_upload_rejects_duplicate_normalized_relative_paths(
 def test_start_upload_rejects_ancestor_descendant_path_collisions(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test start upload rejects ancestor descendant behavior."""
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
     upload_root.mkdir()
@@ -429,6 +445,7 @@ def test_start_upload_rejects_ancestor_descendant_path_collisions(
 
 
 def test_dataset_name_for_import_entry_preserves_directory_package_root():
+    """Verify test dataset name for import entry preserves behavior."""
     entry = {
         "relative_path": "folder/plate.zarr",
         "dataset_relative_path": "folder/plate.zarr",
@@ -443,6 +460,7 @@ def test_dataset_name_for_import_entry_preserves_directory_package_root():
 
 
 def test_plan_job_dataset_targets_uses_orphan_dataset_for_top_level_file(monkeypatch):
+    """Verify test plan job dataset targets uses orphan dat behavior."""
     monkeypatch.setattr(
         core_functions, "_generate_orphan_dataset_name", lambda: "UploadRoot_TEST"
     )
@@ -457,6 +475,7 @@ def test_plan_job_dataset_targets_uses_orphan_dataset_for_top_level_file(monkeyp
 
 
 def test_start_upload_defers_dataset_creation_until_import(tmp_path: Path, monkeypatch):
+    """Verify test start upload defers dataset creation unt behavior."""
     upload_root = tmp_path / "upload-root"
     upload_root.mkdir()
     saved_job = {}
@@ -488,11 +507,16 @@ def test_start_upload_defers_dataset_creation_until_import(tmp_path: Path, monke
     )
 
     class _FakeEventContext:
+        """Test double for fake event context."""
+
         groupId = 4
 
     class _FakeConn:
+        """Test double for fake conn."""
+
         @staticmethod
         def getEventContext():
+            """Return get event context."""
             return _FakeEventContext()
 
     request = RequestFactory().post(
@@ -519,27 +543,35 @@ def test_start_upload_defers_dataset_creation_until_import(tmp_path: Path, monke
 
 
 def test_ensure_job_dataset_targets_creates_only_logical_datasets(monkeypatch):
+    """Verify test ensure job dataset targets creates only behavior."""
     created = []
 
     class _FakeServiceOpts:
+        """Test double for fake service opts."""
+
         def __init__(self):
             self.groups = []
 
         def setOmeroGroup(self, group_id):
+            """Store set OMERO group."""
             self.groups.append(group_id)
 
     class _FakeUserConn:
+        """Test double for fake user conn."""
+
         def __init__(self):
             self.SERVICE_OPTS = _FakeServiceOpts()
             self.closed = False
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     fake_user_conn = _FakeUserConn()
 
     @contextmanager
     def fake_background_user_connection(*args, **kwargs):
+        """Handle fake background user connection."""
         try:
             yield fake_user_conn
         finally:
@@ -552,6 +584,7 @@ def test_ensure_job_dataset_targets_creates_only_logical_datasets(monkeypatch):
     )
 
     def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
+        """Handle fake get or create dataset."""
         created.append((name, project_id))
         dataset_id = len(created)
         dataset_map[name] = dataset_id
@@ -594,6 +627,7 @@ def test_ensure_job_dataset_targets_creates_only_logical_datasets(monkeypatch):
 
 
 def test_ensure_job_dataset_targets_uses_request_connection_when_available(monkeypatch):
+    """Verify test ensure job dataset targets uses request behavior."""
     request_conn = object()
     created = []
 
@@ -606,6 +640,7 @@ def test_ensure_job_dataset_targets_uses_request_connection_when_available(monke
     )
 
     def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
+        """Handle fake get or create dataset."""
         created.append((conn, name, project_id))
         dataset_map[name] = 11
         return 11
@@ -645,18 +680,25 @@ def test_ensure_job_dataset_targets_uses_request_connection_when_available(monke
 def test_prepare_request_job_import_datasets_uses_zarr_package_root_without_import_scan(
     monkeypatch,
 ):
+    """Verify test prepare request job import datasets uses behavior."""
     created = []
     group_calls = []
 
     class _RequestConn:
+        """Represent request conn."""
+
         class _Opts:
+            """Represent opts."""
+
             @staticmethod
             def setOmeroGroup(value):
+                """Store set OMERO group."""
                 group_calls.append(value)
 
         SERVICE_OPTS = _Opts()
 
     def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
+        """Handle fake get or create dataset."""
         created.append((conn, name, project_id))
         dataset_map[name] = 21
         return 21
@@ -696,17 +738,24 @@ def test_prepare_request_job_import_datasets_uses_zarr_package_root_without_impo
 def test_prepare_request_job_import_datasets_uses_planned_import_units_for_generic_directory_package(
     monkeypatch,
 ):
+    """Verify test prepare request job import datasets uses behavior."""
     created = []
 
     class _RequestConn:
+        """Represent request conn."""
+
         class _Opts:
+            """Represent opts."""
+
             @staticmethod
             def setOmeroGroup(value):
+                """Store set OMERO group."""
                 return None
 
         SERVICE_OPTS = _Opts()
 
     def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
+        """Handle fake get or create dataset."""
         created.append((conn, name, project_id))
         dataset_map[name] = 44
         return 44
@@ -752,8 +801,11 @@ def test_prepare_request_job_import_datasets_uses_planned_import_units_for_gener
 
 
 def test_ensure_job_dataset_targets_hides_background_session_details(monkeypatch):
+    """Verify test ensure job dataset targets hides backgro behavior."""
+
     @contextmanager
     def fake_background_user_connection(*args, **kwargs):
+        """Handle fake background user connection."""
         yield None
 
     monkeypatch.setattr(
@@ -790,6 +842,7 @@ def test_ensure_job_dataset_targets_hides_background_session_details(monkeypatch
 def test_import_job_entry_uses_directory_package_dataset_id(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test import job entry uses directory package behavior."""
     upload_root = tmp_path / "job-root"
     package_root = upload_root / "_staged" / "plate.zarr"
     metadata_path = package_root / "OME" / "METADATA.ome.xml"
@@ -808,6 +861,7 @@ def test_import_job_entry_uses_directory_package_dataset_id(
         import_name=None,
         progress_job=None,
     ):
+        """Handle fake import file."""
         captured["path"] = path
         captured["dataset_id"] = dataset_id
         captured["import_name"] = import_name
@@ -859,6 +913,7 @@ def test_import_job_entry_uses_directory_package_dataset_id(
 
 
 def test_entry_requires_name_normalization_only_for_grouped_internal_header():
+    """Verify test entry requires name normalization only f behavior."""
     grouped_entry = {
         "group_header_name": "METADATA.ome.xml",
         "relative_path": "plate.zarr",
@@ -895,6 +950,7 @@ def test_entry_requires_name_normalization_only_for_grouped_internal_header():
 
 
 def test_extract_imported_image_ids_deduplicates_stdout():
+    """Verify test extract imported image identifiers dedup behavior."""
     stdout = """
     Image:42
     Fileset:7
@@ -906,6 +962,7 @@ def test_extract_imported_image_ids_deduplicates_stdout():
 
 
 def test_extract_imported_image_ids_parses_comma_separated_image_lists():
+    """Verify test extract imported image identifiers parse behavior."""
     stdout = """
     IMPORT_DONE Imported file: /tmp/example.zarr
     Image:565,566,567
@@ -919,35 +976,47 @@ def test_extract_imported_image_ids_parses_comma_separated_image_lists():
 def test_apply_import_name_normalization_context_renames_single_placeholder_image(
     monkeypatch,
 ):
+    """Verify test apply import name normalization context behavior."""
+
     class _FakeImage:
+        """Test double for fake image."""
+
         def __init__(self, image_id, name):
             self._id = image_id
             self._name = name
             self.saved = False
 
         def getId(self):
+            """Return get identifier."""
             return self._id
 
         def getName(self):
+            """Return get name."""
             return self._name
 
         def setName(self, value):
+            """Store set name."""
             self._name = value
 
         def save(self):
+            """Store save."""
             self.saved = True
 
     class _FakeConn:
+        """Test double for fake conn."""
+
         def __init__(self, images):
             self._images = images
             self.closed = False
 
         def getObject(self, object_type, object_id):
+            """Return get object."""
             if object_type == "Image":
                 return self._images.get(object_id)
             return None
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     existing = _FakeImage(1, "existing")
@@ -986,35 +1055,47 @@ def test_apply_import_name_normalization_context_renames_single_placeholder_imag
 def test_apply_import_name_normalization_context_suffixes_multiple_placeholder_images(
     monkeypatch,
 ):
+    """Verify test apply import name normalization context behavior."""
+
     class _FakeImage:
+        """Test double for fake image."""
+
         def __init__(self, image_id, name):
             self._id = image_id
             self._name = name
             self.saved = False
 
         def getId(self):
+            """Return get identifier."""
             return self._id
 
         def getName(self):
+            """Return get name."""
             return self._name
 
         def setName(self, value):
+            """Store set name."""
             self._name = value
 
         def save(self):
+            """Store save."""
             self.saved = True
 
     class _FakeConn:
+        """Test double for fake conn."""
+
         def __init__(self, images):
             self._images = images
             self.closed = False
 
         def getObject(self, object_type, object_id):
+            """Return get object."""
             if object_type == "Image":
                 return self._images.get(object_id)
             return None
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     existing = _FakeImage(1, "existing")
@@ -1057,6 +1138,7 @@ def test_build_import_name_normalization_context_prefers_ome_zarr_metadata_names
     tmp_path: Path,
     monkeypatch,
 ):
+    """Verify test build import name normalization context behavior."""
     zarr_dir = tmp_path / "named.ome.zarr"
     zarr_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1090,35 +1172,47 @@ def test_build_import_name_normalization_context_prefers_ome_zarr_metadata_names
 def test_apply_import_name_normalization_context_uses_metadata_image_names(
     monkeypatch,
 ):
+    """Verify test apply import name normalization context behavior."""
+
     class _FakeImage:
+        """Test double for fake image."""
+
         def __init__(self, image_id, name):
             self._id = image_id
             self._name = name
             self.saved = False
 
         def getId(self):
+            """Return get identifier."""
             return self._id
 
         def getName(self):
+            """Return get name."""
             return self._name
 
         def setName(self, value):
+            """Store set name."""
             self._name = value
 
         def save(self):
+            """Store save."""
             self.saved = True
 
     class _FakeConn:
+        """Test double for fake conn."""
+
         def __init__(self, images):
             self._images = images
             self.closed = False
 
         def getObject(self, object_type, object_id):
+            """Return get object."""
             if object_type == "Image":
                 return self._images.get(object_id)
             return None
 
         def close(self):
+            """Handle close."""
             self.closed = True
 
     imported_a = _FakeImage(42, "plate.zarr [0/0]")
@@ -1158,6 +1252,7 @@ def test_apply_import_name_normalization_context_uses_metadata_image_names(
 def test_import_job_entry_applies_name_normalization_for_grouped_package(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test import job entry applies name normalizat behavior."""
     upload_root = tmp_path / "job-root"
     package_root = upload_root / "_staged" / "plate.zarr"
     metadata_path = package_root / "OME" / "METADATA.ome.xml"
@@ -1185,6 +1280,7 @@ def test_import_job_entry_applies_name_normalization_for_grouped_package(
         import_name=None,
         progress_job=None,
     ):
+        """Handle fake import file."""
         captured["path"] = path
         captured["dataset_id"] = dataset_id
         captured["import_name"] = import_name
@@ -1235,7 +1331,8 @@ def test_import_job_entry_applies_name_normalization_for_grouped_package(
 
 def test_import_object_pattern_matches_standard_cli_output():
     """The regex must detect Image, Fileset, Plate, Dataset, and
-    OriginalFile object IDs in typical OMERO CLI stdout."""
+    OriginalFile object IDs in typical OMERO CLI stdout.
+    """
     pattern = core_functions._IMPORT_OBJECT_PATTERN
     stdout = (
         "Other:1\n"
@@ -1261,7 +1358,8 @@ def test_import_job_entry_fails_when_cli_succeeds_but_no_objects_created(
 ):
     """Malformed Zarr metadata must fail before any fallback import path is
     attempted.  Bio-Formats also rejects the store as incompatible, and the
-    native OME-Zarr branch surfaces the validation error from ome-zarr."""
+    native OME-Zarr branch surfaces the validation error from ome-zarr.
+    """
     monkeypatch.setenv("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "true")
     upload_root = tmp_path / "job-root"
     staged_file = upload_root / "_staged" / "broken.zarr" / ".zattrs"
@@ -1269,6 +1367,7 @@ def test_import_job_entry_fails_when_cli_succeeds_but_no_objects_created(
     staged_file.write_text("x", encoding="utf-8")
 
     def must_not_be_called(*args, **kwargs):
+        """Handle must not be called."""
         raise AssertionError(
             "_import_file should not be called for malformed zarr metadata"
         )
@@ -1328,6 +1427,7 @@ def test_import_job_entry_succeeds_when_stdout_contains_image_id(
         import_name=None,
         progress_job=None,
     ):
+        """Handle fake import file."""
         return True, "OriginalFile:100\nImage:42\nFileset:10\n", ""
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
@@ -1361,7 +1461,8 @@ def test_import_job_entry_salvages_success_when_cli_nonzero_but_objects_exist(
 ):
     """When the OMERO CLI returns non-zero but stdout contains created
     object IDs, the import should be treated as success — the server
-    committed the data before the CLI errored (e.g. thumbnail generation)."""
+    committed the data before the CLI errored (e.g. thumbnail generation).
+    """
     upload_root = tmp_path / "job-root"
     staged_file = upload_root / "_staged" / "test.tif"
     staged_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1378,6 +1479,7 @@ def test_import_job_entry_salvages_success_when_cli_nonzero_but_objects_exist(
         progress_job=None,
     ):
         # CLI returned non-zero but did create objects
+        """Handle fake import file."""
         return False, "Image:751\nFileset:200\n", "Some error during post-processing"
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
@@ -1410,7 +1512,8 @@ def test_import_job_entry_salvages_success_when_objects_in_stderr(
     tmp_path: Path, monkeypatch
 ):
     """Some import formats (e.g. zarr) print object IDs only to stderr.
-    The plugin must check both streams."""
+    The plugin must check both streams.
+    """
     upload_root = tmp_path / "job-root"
     staged_file = upload_root / "_staged" / "test.tif"
     staged_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1427,6 +1530,7 @@ def test_import_job_entry_salvages_success_when_objects_in_stderr(
         progress_job=None,
     ):
         # CLI returned non-zero, stdout empty, but stderr has the object IDs
+        """Handle fake import file."""
         return False, "", "Lots of debug output\nImage:805\nFileset:300\nMore output"
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
@@ -1459,7 +1563,8 @@ def test_import_job_entry_fails_when_cli_nonzero_and_no_objects(
     tmp_path: Path, monkeypatch
 ):
     """When the CLI returns non-zero and stdout has no objects, the import
-    must report failure."""
+    must report failure.
+    """
     upload_root = tmp_path / "job-root"
     staged_file = upload_root / "_staged" / "test.tif"
     staged_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1475,6 +1580,7 @@ def test_import_job_entry_fails_when_cli_nonzero_and_no_objects(
         import_name=None,
         progress_job=None,
     ):
+        """Handle fake import file."""
         return False, "Some diagnostic output\n", "Fatal error"
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
@@ -1506,6 +1612,7 @@ def test_import_job_entry_fails_when_cli_nonzero_and_no_objects(
 def test_import_job_entry_uses_api_verification_after_cli_failure(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test import job entry uses API verification a behavior."""
     upload_root = tmp_path / "job-root"
     staged_file = upload_root / "_staged" / "test.tif"
     staged_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1552,6 +1659,7 @@ def test_import_job_entry_uses_api_verification_after_cli_failure(
 def test_import_job_entry_uses_api_verified_image_ids_for_name_normalization(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test import job entry uses API verified image behavior."""
     upload_root = tmp_path / "job-root"
     staged_file = upload_root / "_staged" / "converted.ome.tif"
     staged_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1568,6 +1676,7 @@ def test_import_job_entry_uses_api_verified_image_ids_for_name_normalization(
         import_name=None,
         progress_job=None,
     ):
+        """Handle fake import file."""
         return True, "Fileset:10\nPlate:7\n", ""
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
@@ -1618,6 +1727,7 @@ def test_import_job_entry_uses_api_verified_image_ids_for_name_normalization(
 def test_import_job_entry_reports_api_verification_miss_and_import_exceptions(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test import job entry reports API verificatio behavior."""
     upload_root = tmp_path / "job-root"
     staged_file = upload_root / "_staged" / "test.tif"
     staged_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1690,7 +1800,8 @@ def test_import_job_entry_sets_import_name_for_zarr_directory(
     tmp_path: Path, monkeypatch
 ):
     """Zarr directory imports must always set an import name derived from
-    the folder name so Bio-Formats doesn't use a chunk coordinate."""
+    the folder name so Bio-Formats doesn't use a chunk coordinate.
+    """
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "myimage.ome.zarr"
     zarr_dir.mkdir(parents=True, exist_ok=True)
@@ -1708,6 +1819,7 @@ def test_import_job_entry_sets_import_name_for_zarr_directory(
         import_name=None,
         progress_job=None,
     ):
+        """Handle fake import file."""
         captured["import_name"] = import_name
         return True, "Image:1\n", ""
 
@@ -1754,7 +1866,8 @@ def test_ome_ngff_zarr_uses_cli_zarr_import_only_after_bioformats_incompatible(
     tmp_path: Path, monkeypatch
 ):
     """A standard OME-Zarr image uses the native path only when Bio-Formats
-    explicitly reports that it found no importable candidates."""
+    explicitly reports that it found no importable candidates.
+    """
     monkeypatch.setenv("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "true")
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "image.ome.zarr"
@@ -1786,6 +1899,7 @@ def test_ome_ngff_zarr_uses_cli_zarr_import_only_after_bioformats_incompatible(
 
     # _import_file should NOT be called — OME-NGFF uses cli-zarr
     def must_not_be_called(*args, **kwargs):
+        """Handle must not be called."""
         raise AssertionError("_import_file should not be called for OME-NGFF zarr")
 
     monkeypatch.setattr(core_functions, "_import_file", must_not_be_called)
@@ -1795,6 +1909,7 @@ def test_ome_ngff_zarr_uses_cli_zarr_import_only_after_bioformats_incompatible(
     called = {"value": False}
 
     def mock_zarr_import(**kwargs):
+        """Handle mock Zarr import."""
         called["value"] = True
         return {
             "cleanup_staged_paths": kwargs.get("cleanup_staged_paths", []),
@@ -1832,6 +1947,7 @@ def test_ome_ngff_zarr_uses_cli_zarr_import_only_after_bioformats_incompatible(
 def test_check_import_compatibility_marks_incompatible_ome_zarr_as_native_compatible(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test check import compatibility marks incompa behavior."""
     monkeypatch.setenv("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "true")
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "image.ome.zarr"
@@ -1873,7 +1989,8 @@ def test_check_import_compatibility_skips_native_zarr_when_disabled(
     tmp_path: Path, monkeypatch
 ):
     """When OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT=false, an incompatible
-    .zarr stays incompatible — no native import override is applied."""
+    .zarr stays incompatible — no native import override is applied.
+    """
     monkeypatch.setenv("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "false")
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "image.ome.zarr"
@@ -1914,7 +2031,8 @@ def test_bioformats_compatible_zarr_uses_standard_import_path(
     tmp_path: Path, monkeypatch
 ):
     """If Bio-Formats reports importable groups for a staged .zarr, the
-    import stays on the Bio-Formats path."""
+    import stays on the Bio-Formats path.
+    """
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "bf2raw.ome.zarr"
     series_dir = zarr_dir / "0"
@@ -1955,12 +2073,14 @@ def test_bioformats_compatible_zarr_uses_standard_import_path(
         import_name=None,
         progress_job=None,
     ):
+        """Handle fake import file."""
         import_called["value"] = True
         return True, "Image:123\n", ""
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
 
     def must_not_be_called(**kwargs):
+        """Handle must not be called."""
         raise AssertionError(
             "_import_zarr_via_cli should not be called when Bio-Formats is compatible"
         )
@@ -1992,7 +2112,8 @@ def test_incompatible_bioformats2raw_zarr_uses_native_import_path(
     tmp_path: Path, monkeypatch
 ):
     """A bioformats2raw.layout=3 store falls back to native import only when
-    Bio-Formats reports it as incompatible."""
+    Bio-Formats reports it as incompatible.
+    """
     monkeypatch.setenv("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "true")
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "bf2raw-native.ome.zarr"
@@ -2027,11 +2148,13 @@ def test_incompatible_bioformats2raw_zarr_uses_native_import_path(
     called = {"value": False}
 
     def must_not_be_called(*args, **kwargs):
+        """Handle must not be called."""
         raise AssertionError(
             "_import_file should not be called for an incompatible bioformats2raw .zarr"
         )
 
     def mock_zarr_import(**kwargs):
+        """Handle mock Zarr import."""
         called["value"] = True
         return {
             "cleanup_staged_paths": kwargs.get("cleanup_staged_paths", []),
@@ -2070,6 +2193,7 @@ def test_incompatible_bioformats2raw_zarr_uses_native_import_path(
 def test_build_import_units_preserves_precomputed_zarr_routing(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test build import units preserves precomputed behavior."""
     upload_root = tmp_path / "job-root"
     job, _ = _stage_relative_paths(upload_root, ["image.ome.zarr/.zattrs"])
     job["files"][0]["compatibility"] = "compatible"
@@ -2108,6 +2232,7 @@ def test_build_import_units_preserves_precomputed_zarr_routing(
 def test_import_job_entry_uses_precomputed_native_zarr_route_without_rescanning(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test import job entry uses precomputed native behavior."""
     monkeypatch.setenv("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "true")
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "image.ome.zarr"
@@ -2121,6 +2246,7 @@ def test_import_job_entry_uses_precomputed_native_zarr_route_without_rescanning(
     )
 
     def scan_must_not_run(path, timeout=None):
+        """Handle scan must not run."""
         raise AssertionError(
             "_run_local_import_scan should not be called for precomputed native zarr routing"
         )
@@ -2128,6 +2254,7 @@ def test_import_job_entry_uses_precomputed_native_zarr_route_without_rescanning(
     called = {"value": False}
 
     def mock_zarr_import(**kwargs):
+        """Handle mock Zarr import."""
         called["value"] = True
         return {
             "cleanup_staged_paths": kwargs.get("cleanup_staged_paths", []),
@@ -2178,6 +2305,7 @@ def test_import_job_entry_uses_precomputed_native_zarr_route_without_rescanning(
 def test_import_job_entry_uses_precomputed_bioformats_zarr_route_without_rescanning(
     tmp_path: Path, monkeypatch
 ):
+    """Verify test import job entry uses precomputed biofor behavior."""
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "bf-compatible.zarr"
     zarr_dir.mkdir(parents=True, exist_ok=True)
@@ -2190,6 +2318,7 @@ def test_import_job_entry_uses_precomputed_bioformats_zarr_route_without_rescann
     )
 
     def scan_must_not_run(path, timeout=None):
+        """Handle scan must not run."""
         raise AssertionError(
             "_run_local_import_scan should not be called for precomputed Bio-Formats routing"
         )
@@ -2206,6 +2335,7 @@ def test_import_job_entry_uses_precomputed_bioformats_zarr_route_without_rescann
         import_name=None,
         progress_job=None,
     ):
+        """Handle fake import file."""
         import_called["value"] = True
         assert path == zarr_dir
         return True, "Image:123\n", ""
@@ -2243,7 +2373,8 @@ def test_preflight_scan_passes_zarr_when_bioformats_finds_groups(
     tmp_path: Path, monkeypatch
 ):
     """When ``omero import -f`` finds importable groups for a .zarr, the
-    pre-flight check passes and the actual import proceeds normally."""
+    pre-flight check passes and the actual import proceeds normally.
+    """
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "valid.zarr"
     (zarr_dir / "OME").mkdir(parents=True, exist_ok=True)
@@ -2273,6 +2404,7 @@ def test_preflight_scan_passes_zarr_when_bioformats_finds_groups(
         import_name=None,
         progress_job=None,
     ):
+        """Handle fake import file."""
         return True, "Image:99\n", ""
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
@@ -2298,13 +2430,15 @@ def test_preflight_scan_passes_zarr_when_bioformats_finds_groups(
 
 def test_preflight_scan_timeout_does_not_block_import(tmp_path: Path, monkeypatch):
     """If the pre-flight scan times out, the import proceeds anyway (the
-    post-import validation is the safety net)."""
+    post-import validation is the safety net).
+    """
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "slow.zarr"
     zarr_dir.mkdir(parents=True, exist_ok=True)
     (zarr_dir / ".zattrs").write_text("{}", encoding="utf-8")
 
     def timeout_scan(path, timeout=None):
+        """Handle timeout scan."""
         raise core_functions.subprocess.TimeoutExpired(cmd=["omero"], timeout=60)
 
     monkeypatch.setattr(core_functions, "_run_local_import_scan", timeout_scan)
@@ -2324,6 +2458,7 @@ def test_preflight_scan_timeout_does_not_block_import(tmp_path: Path, monkeypatc
         import_name=None,
         progress_job=None,
     ):
+        """Handle fake import file."""
         return True, "Image:55\n", ""
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
@@ -2358,12 +2493,14 @@ def test_probe_import_path_returns_empty_result_on_scan_timeout(
     tmp_path: Path, monkeypatch
 ):
     """_probe_import_path must NOT crash the caller when _run_local_import_scan
-    raises (e.g. command timeout). It should return an empty result."""
+    raises (e.g. command timeout). It should return an empty result.
+    """
     upload_root = tmp_path / "job-root"
     _stage_relative_paths(upload_root, ["data.zarr/.zattrs"])
     staged_root = upload_root / "_staged"
 
     def timeout_scan(path: Path, timeout: int = 45):
+        """Handle timeout scan."""
         raise core_functions.subprocess.TimeoutExpired(
             cmd=["omero", "import"], timeout=timeout
         )
@@ -2395,6 +2532,7 @@ def test_probe_import_path_returns_empty_result_on_scan_oserror(
     staged_root = upload_root / "_staged"
 
     def oserror_scan(path: Path, timeout: int = 45):
+        """Handle oserror scan."""
         raise OSError("No space left on device")
 
     monkeypatch.setattr(core_functions, "_run_local_import_scan", oserror_scan)
@@ -2417,7 +2555,8 @@ def test_build_import_units_groups_zarr_by_extension_when_scan_fails(
 ):
     """When the OMERO CLI scan fails for every probe, _build_import_units must
     still group files under a known directory package root (.zarr) into a
-    single import unit instead of creating per-file units."""
+    single import unit instead of creating per-file units.
+    """
     upload_root = tmp_path / "job-root"
     job, _ = _stage_relative_paths(
         upload_root,
@@ -2429,6 +2568,7 @@ def test_build_import_units_groups_zarr_by_extension_when_scan_fails(
     )
 
     def failing_scan(path: Path, timeout: int = 45):
+        """Handle failing scan."""
         raise core_functions.subprocess.TimeoutExpired(
             cmd=["omero", "import"], timeout=timeout
         )
@@ -2452,7 +2592,8 @@ def test_build_import_units_does_not_use_extension_fallback_when_probe_grouped(
     tmp_path: Path, monkeypatch
 ):
     """When the probe DID find groups covering some zarr files, the
-    extension fallback must NOT re-group files that the probe excluded."""
+    extension fallback must NOT re-group files that the probe excluded.
+    """
     upload_root = tmp_path / "job-root"
     job, staged_members = _stage_relative_paths(
         upload_root,
@@ -2466,6 +2607,7 @@ def test_build_import_units_does_not_use_extension_fallback_when_probe_grouped(
     package_root = upload_root / "_staged" / "plate.zarr"
 
     def partial_scan(path: Path, timeout: int = 45):
+        """Handle partial scan."""
         stdout = ""
         if path == package_root:
             stdout = _group_stdout(
@@ -2500,7 +2642,8 @@ def test_build_import_units_groups_mixed_zarr_and_regular_files_when_scan_fails(
     tmp_path: Path, monkeypatch
 ):
     """A job with both zarr files and regular files.  The scan fails.
-    Zarr files should be grouped; regular files should remain individual."""
+    Zarr files should be grouped; regular files should remain individual.
+    """
     upload_root = tmp_path / "job-root"
     job, _ = _stage_relative_paths(
         upload_root,
@@ -2512,6 +2655,7 @@ def test_build_import_units_groups_mixed_zarr_and_regular_files_when_scan_fails(
     )
 
     def failing_scan(path: Path, timeout: int = 45):
+        """Handle failing scan."""
         raise core_functions.subprocess.TimeoutExpired(
             cmd=["omero", "import"], timeout=timeout
         )
@@ -2534,7 +2678,8 @@ def test_build_import_units_groups_multiple_zarrs_when_scan_fails(
     tmp_path: Path, monkeypatch
 ):
     """Two separate zarr directories in one upload.  Both must be grouped
-    independently when the scan fails."""
+    independently when the scan fails.
+    """
     upload_root = tmp_path / "job-root"
     job, _ = _stage_relative_paths(
         upload_root,
@@ -2547,6 +2692,7 @@ def test_build_import_units_groups_multiple_zarrs_when_scan_fails(
     )
 
     def failing_scan(path: Path, timeout: int = 45):
+        """Handle failing scan."""
         raise core_functions.subprocess.TimeoutExpired(
             cmd=["omero", "import"], timeout=timeout
         )
@@ -2575,7 +2721,8 @@ def test_build_import_units_groups_zarr_when_scan_returns_no_groups(
 ):
     """Scan succeeds (no exception, exit code 0) but returns no import groups
     (e.g. JVM OOM wrote nothing to stdout, or Bio-Formats didn't recognize the
-    format).  The extension fallback must still group zarr files."""
+    format).  The extension fallback must still group zarr files.
+    """
     upload_root = tmp_path / "job-root"
     job, _ = _stage_relative_paths(
         upload_root,
@@ -2587,6 +2734,7 @@ def test_build_import_units_groups_zarr_when_scan_returns_no_groups(
     )
 
     def empty_scan(path: Path, timeout: int = 45):
+        """Handle empty scan."""
         return subprocess.CompletedProcess(
             args=["omero", "import"], returncode=1, stdout="", stderr="Java heap space"
         )
@@ -2606,7 +2754,8 @@ def test_build_import_units_groups_zarr_when_scan_returns_no_groups(
 
 def test_compatibility_thread_resets_flag_on_crash(tmp_path: Path, monkeypatch):
     """If _run_compatibility_check_inner crashes, the wrapper must reset
-    compatibility_thread_active so the job is not stuck forever."""
+    compatibility_thread_active so the job is not stuck forever.
+    """
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
     jobs_root.mkdir()
@@ -2662,6 +2811,7 @@ def test_compatibility_thread_resets_flag_on_crash(tmp_path: Path, monkeypatch):
     # Inject a crash into _build_import_units to simulate a scan failure
     # that propagates.
     def crashing_build(*args, **kwargs):
+        """Handle crashing build."""
         raise RuntimeError("simulated JVM crash")
 
     monkeypatch.setattr(core_functions, "_build_import_units", crashing_build)
@@ -2707,12 +2857,14 @@ def test_read_proc_rchar_rejects_invalid_pid_values():
 
 
 def test_get_path_total_size_for_file(tmp_path: Path):
+    """Verify test get path total size for file."""
     f = tmp_path / "test.bin"
     f.write_bytes(b"x" * 1234)
     assert core_functions._get_path_total_size(f) == 1234
 
 
 def test_get_path_total_size_for_directory(tmp_path: Path):
+    """Verify test get path total size for directory."""
     d = tmp_path / "mydir"
     d.mkdir()
     (d / "a.txt").write_bytes(b"a" * 100)
@@ -2723,6 +2875,7 @@ def test_get_path_total_size_for_directory(tmp_path: Path):
 
 
 def test_get_path_total_size_for_missing_path(tmp_path: Path):
+    """Verify test get path total size for missing path."""
     missing = tmp_path / "nope"
     assert core_functions._get_path_total_size(missing) == 0
 
@@ -2742,7 +2895,8 @@ def test_import_file_progress_job_updates_import_progress_bytes(
     tmp_path: Path, monkeypatch
 ):
     """When progress_job is provided, _import_file should update
-    import_progress_bytes in the job dict via /proc monitoring."""
+    import_progress_bytes in the job dict via /proc monitoring.
+    """
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
     monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)

@@ -32,6 +32,7 @@ CLI_TOOLS = (
 
 @pytest.mark.parametrize("tool_name", CLI_TOOLS)
 def test_cli_tool_supports_help(tool_name: str) -> None:
+    """Verify test cli tool supports help."""
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / "tools" / tool_name), "--help"],
         cwd=REPO_ROOT,

@@ -8,14 +8,18 @@ from omeroweb_tools.services import enhanced_search_store as store
 
 
 class _SearchCursor:
+    """Represent search cursor."""
+
     def __init__(self):
         self.executed = []
         self._fetchone_calls = 0
 
     def execute(self, sql, params=None):
+        """Run execute."""
         self.executed.append({"raw_sql": sql, "sql_text": str(sql), "params": params})
 
     def fetchone(self):
+        """Handle fetchone."""
         self._fetchone_calls += 1
         if self._fetchone_calls == 1:
             return (3,)
@@ -23,6 +27,7 @@ class _SearchCursor:
 
     @staticmethod
     def fetchall():
+        """Handle fetchall."""
         return [
             (
                 17,
@@ -60,28 +65,36 @@ class _SearchCursor:
 
 
 class _SearchConn:
+    """Represent search conn."""
+
     def __init__(self):
         self.cursor_obj = _SearchCursor()
 
     def cursor(self):
+        """Handle cursor."""
         return self.cursor_obj
 
 
 class _SettingsCursor:
+    """Represent settings cursor."""
+
     def __init__(self, rows):
         self.executed = []
         self.rows = list(rows)
         self.rowcount = 0
 
     def execute(self, sql, params=None):
+        """Run execute."""
         self.executed.append({"raw_sql": sql, "sql_text": str(sql), "params": params})
         self.rowcount = 0
 
     def fetchone(self):
+        """Handle fetchone."""
         return self.rows.pop(0) if self.rows else None
 
     @staticmethod
     def fetchall():
+        """Handle fetchall."""
         return []
 
     def __enter__(self):
@@ -92,19 +105,26 @@ class _SettingsCursor:
 
 
 class _SettingsConn:
+    """Represent settings conn."""
+
     def __init__(self, cursor):
         self.cursor_obj = cursor
         self.commits = 0
 
     def cursor(self):
+        """Handle cursor."""
         return self.cursor_obj
 
     def commit(self):
+        """Handle commit."""
         self.commits += 1
 
 
 class _PlaceholderCheckingCursor(_SettingsCursor):
+    """Represent placeholder checking cursor."""
+
     def execute(self, sql, params=None):
+        """Run execute."""
         sql_text = str(sql)
         placeholder_count = sql_text.count("%s")
         if params is not None and placeholder_count != len(params):
@@ -116,17 +136,24 @@ class _PlaceholderCheckingCursor(_SettingsCursor):
 
 
 def test_connect_does_not_wrap_exceptions_raised_inside_with_block(monkeypatch):
+    """Verify test connect does not wrap exceptions raised behavior."""
     closed = []
     credential_value = "-".join(("db", "credential", "placeholder"))
 
     class _FakeConn:
+        """Test double for fake conn."""
+
         @staticmethod
         def close():
+            """Handle close."""
             closed.append(True)
 
     class _FakePsycopg:
+        """Test double for fake psycopg."""
+
         @staticmethod
         def connect(**kwargs):
+            """Handle connect."""
             return _FakeConn()
 
     monkeypatch.setattr(store, "_load_psycopg2", lambda: (_FakePsycopg(), None))
@@ -155,6 +182,7 @@ def test_connect_does_not_wrap_exceptions_raised_inside_with_block(monkeypatch):
 
 
 def test_search_index_rows_short_circuits_for_no_visible_groups(monkeypatch):
+    """Verify test search index rows short circuits for no behavior."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
 
     rows, total = store.search_index_rows(
@@ -172,6 +200,7 @@ def test_search_index_rows_short_circuits_for_no_visible_groups(monkeypatch):
 
 
 def test_search_index_rows_returns_no_rows_for_non_compilable_text(monkeypatch):
+    """Verify test search index rows returns no rows for no behavior."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
 
     rows, total = store.search_index_rows(
@@ -189,6 +218,7 @@ def test_search_index_rows_returns_no_rows_for_non_compilable_text(monkeypatch):
 
 
 def test_search_index_rows_builds_permission_and_date_aware_sql(monkeypatch):
+    """Verify test search index rows builds permission and behavior."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     conn = _SearchConn()
 
@@ -248,6 +278,7 @@ def test_search_index_rows_builds_permission_and_date_aware_sql(monkeypatch):
 
 
 def test_load_user_settings_merges_defaults(monkeypatch):
+    """Verify test load user settings merges defaults."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _SettingsCursor([({"acquisition_metadata_enabled": True},)])
     conn = _SettingsConn(cursor)
@@ -263,11 +294,15 @@ def test_load_user_settings_merges_defaults(monkeypatch):
 
 
 def test_save_user_settings_raises_when_persistence_cannot_be_verified(monkeypatch):
+    """Verify test save user settings raises when persisten behavior."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
 
     class _Extras:
+        """Represent extras."""
+
         @staticmethod
         def Json(payload):
+            """Handle JSON."""
             return {"wrapped": payload}
 
     monkeypatch.setattr(store, "_load_psycopg2", lambda: (object(), _Extras()))
@@ -286,6 +321,7 @@ def test_save_user_settings_raises_when_persistence_cannot_be_verified(monkeypat
 
 
 def test_clear_scope_index_deletes_only_selected_scope_and_prunes_orphans(monkeypatch):
+    """Verify test clear scope index deletes only selected behavior."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _SettingsCursor([])
     cursor.rowcount = 4
@@ -293,6 +329,7 @@ def test_clear_scope_index_deletes_only_selected_scope_and_prunes_orphans(monkey
     pruned = []
 
     def _execute(sql, params=None):
+        """Handle execute."""
         cursor.executed.append({"raw_sql": sql, "sql_text": str(sql), "params": params})
         cursor.rowcount = 4 if "DELETE FROM" in str(sql) else 1
 
@@ -318,6 +355,7 @@ def test_clear_scope_index_deletes_only_selected_scope_and_prunes_orphans(monkey
 
 
 def test_sync_run_is_active_checks_running_state_with_matching_token(monkeypatch):
+    """Verify test sync run is active checks running state behavior."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _SettingsCursor([(1,), None])
     conn = _SettingsConn(cursor)
@@ -329,6 +367,7 @@ def test_sync_run_is_active_checks_running_state_with_matching_token(monkeypatch
 def test_ensure_sync_state_rows_does_not_refresh_updated_at_for_existing_rows(
     monkeypatch,
 ):
+    """Verify test ensure sync state rows does not refresh behavior."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _SettingsCursor([])
     conn = _SettingsConn(cursor)
@@ -360,6 +399,7 @@ def test_ensure_sync_state_rows_does_not_refresh_updated_at_for_existing_rows(
 
 
 def test_try_start_scope_sync_placeholder_count_matches_params(monkeypatch):
+    """Verify test try start scope sync placeholder count m behavior."""
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _PlaceholderCheckingCursor([("running", "run-token")])
     conn = _SettingsConn(cursor)

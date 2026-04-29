@@ -17,6 +17,7 @@ SCRIPT_DIR = REPO_ROOT / "scripts"
 def _run_bash(
     script: str, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
+    """Handle run bash."""
     run_env = {"PATH": os.environ["PATH"], **(env or {})}
     return subprocess.run(
         [BASH_BIN, "-c", script],
@@ -29,10 +30,12 @@ def _run_bash(
 
 
 def _sh(path: Path | str) -> str:
+    """Handle sh."""
     return shlex.quote(str(path))
 
 
 def test_public_script_and_unit_entrypoints_remain_stable() -> None:
+    """Verify test public script and unit entrypoints remai behavior."""
     expected = {
         "install-quota-enforcer.sh",
         "install-tmp-cleaner.sh",
@@ -56,6 +59,7 @@ def test_public_script_and_unit_entrypoints_remain_stable() -> None:
 
 
 def test_host_timers_reschedule_after_reinstall_activation() -> None:
+    """Verify test host timers reschedule after reinstall a behavior."""
     quota_timer = (SCRIPT_DIR / "omero-quota-enforcer.timer").read_text(
         encoding="utf-8"
     )
@@ -68,6 +72,7 @@ def test_host_timers_reschedule_after_reinstall_activation() -> None:
 
 
 def test_all_host_shell_scripts_parse_with_bash() -> None:
+    """Verify test all host shell scripts parse with bash."""
     scripts = sorted(str(path) for path in SCRIPT_DIR.glob("*.sh"))
     result = subprocess.run(
         [BASH_BIN, "-n", *scripts],
@@ -80,6 +85,7 @@ def test_all_host_shell_scripts_parse_with_bash() -> None:
 
 
 def test_quota_enforcer_rejects_unexpected_cli_arguments(tmp_path: Path) -> None:
+    """Verify test quota enforcer rejects unexpected cli ar behavior."""
     env = {"OMERO_QUOTA_DEFAULTS_FILE": str(tmp_path / "missing-defaults")}
     script = f"bash {_sh(SCRIPT_DIR / 'omero-quota-enforcer.sh')}"
 
@@ -94,6 +100,7 @@ def test_quota_enforcer_rejects_unexpected_cli_arguments(tmp_path: Path) -> None
 
 
 def test_systemd_renderer_escapes_spaces_quotes_and_percent(tmp_path: Path) -> None:
+    """Verify test systemd renderer escapes spaces quotes a behavior."""
     template = tmp_path / "template.service"
     rendered = tmp_path / "rendered.service"
     template.write_text(
@@ -123,6 +130,7 @@ def test_systemd_renderer_escapes_spaces_quotes_and_percent(tmp_path: Path) -> N
 def test_systemd_renderer_replaces_stale_symlink_without_following(
     tmp_path: Path,
 ) -> None:
+    """Verify test systemd renderer replaces stale symlink behavior."""
     template = tmp_path / "template.service"
     rendered = tmp_path / "rendered.service"
     outside_target = tmp_path / "outside-target.service"
@@ -147,6 +155,7 @@ def test_systemd_renderer_replaces_stale_symlink_without_following(
 def test_install_verified_replaces_stale_symlink_without_following(
     tmp_path: Path,
 ) -> None:
+    """Verify test install verified replaces stale symlink behavior."""
     source_file = tmp_path / "source.sh"
     destination = tmp_path / "destination"
     outside_target = tmp_path / "outside-target"
@@ -174,6 +183,7 @@ def test_install_verified_replaces_stale_symlink_without_following(
 def test_environment_quote_is_safe_for_shell_sourced_defaults(
     tmp_path: Path,
 ) -> None:
+    """Verify test environment quote is safe for shell sour behavior."""
     defaults_file = tmp_path / "defaults"
     value = '/srv/OMERO data/"quoted"/dollar$HOME/back\\slash/`tick`'
 
@@ -196,6 +206,7 @@ def test_environment_quote_is_safe_for_shell_sourced_defaults(
 
 
 def test_systemd_cleanup_rejects_unsafe_scope(tmp_path: Path) -> None:
+    """Verify test systemd cleanup rejects unsafe scope."""
     unsafe_name = _run_bash(
         f"""
         set -euo pipefail
@@ -218,6 +229,7 @@ def test_systemd_cleanup_rejects_unsafe_scope(tmp_path: Path) -> None:
 
 
 def test_tmp_cleaner_unit_rendering_does_not_require_python(tmp_path: Path) -> None:
+    """Verify test tmp cleaner unit rendering does not requ behavior."""
     template = tmp_path / "template.service"
     rendered = tmp_path / "rendered.service"
     tripwire_bin = tmp_path / "bin"
@@ -248,6 +260,7 @@ def test_tmp_cleaner_unit_rendering_does_not_require_python(tmp_path: Path) -> N
 
 
 def test_tmp_cleaner_argument_validation_and_symlink_safety(tmp_path: Path) -> None:
+    """Verify test tmp cleaner argument validation and syml behavior."""
     tmp_root = tmp_path / "omero tmp root"
     tmp_root.mkdir()
     external_file = tmp_path / "external-payload"
@@ -302,6 +315,7 @@ def test_tmp_cleaner_argument_validation_and_symlink_safety(tmp_path: Path) -> N
 
 
 def test_rendered_systemd_units_verify(tmp_path: Path) -> None:
+    """Verify test rendered systemd units verify."""
     systemd_analyze = shutil.which("systemd-analyze")
     if systemd_analyze is None:
         pytest.skip("systemd-analyze is not installed")
@@ -395,6 +409,7 @@ def test_rendered_systemd_units_verify(tmp_path: Path) -> None:
 def test_quota_state_parser_is_single_pass_and_validates_records(
     tmp_path: Path,
 ) -> None:
+    """Verify test quota state parser is single pass and va behavior."""
     state_file = tmp_path / "group-quotas.json"
     records_file = tmp_path / "records.tsv"
     state_file.write_text(
@@ -435,6 +450,7 @@ def test_quota_state_parser_is_single_pass_and_validates_records(
 
 
 def test_quota_path_boundaries_and_mapping_files_are_strict(tmp_path: Path) -> None:
+    """Verify test quota path boundaries and mapping files behavior."""
     root = tmp_path / "ManagedRepository"
     child = root / "group"
     sibling = tmp_path / "ManagedRepository-other"
@@ -470,6 +486,7 @@ def test_quota_path_boundaries_and_mapping_files_are_strict(tmp_path: Path) -> N
 
 
 def test_quota_mapping_rewrites_are_exact_not_regex_based(tmp_path: Path) -> None:
+    """Verify test quota mapping rewrites are exact not reg behavior."""
     projects_file = tmp_path / "projects"
     projid_file = tmp_path / "projid"
     group_path = tmp_path / "ManagedRepository" / "group.alpha"

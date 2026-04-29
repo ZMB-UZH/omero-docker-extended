@@ -51,6 +51,8 @@ _PROCESS_JOBS_LOCK = threading.Lock()
 
 
 class _ProcessorConfigCache(TypedDict):
+    """Represent processor config cache."""
+
     value: str | None
     checked_at: float
 
@@ -59,10 +61,12 @@ _PROCESSOR_CONFIG_CACHE: _ProcessorConfigCache = {"value": None, "checked_at": 0
 
 
 def _process_job_path(job_id):
+    """Handle process job path."""
     return os.path.join(PROCESS_JOB_DIR, f"{job_id}.json")
 
 
 def _ensure_process_job_dir():
+    """Handle ensure process job dir."""
     try:
         os.makedirs(PROCESS_JOB_DIR, exist_ok=True)
     except Exception:
@@ -70,6 +74,7 @@ def _ensure_process_job_dir():
 
 
 def _write_process_job_file(job_id, payload):
+    """Handle write process job file."""
     _ensure_process_job_dir()
     path = _process_job_path(job_id)
     tmp_path = f"{path}.tmp"
@@ -89,6 +94,7 @@ def _write_process_job_file(job_id, payload):
 
 
 def _read_process_job_file(job_id):
+    """Handle read process job file."""
     path = _process_job_path(job_id)
     if not os.path.exists(path):
         return None
@@ -101,6 +107,7 @@ def _read_process_job_file(job_id):
 
 
 def _serialize_outputs(outputs):
+    """Handle serialize outputs."""
     if not isinstance(outputs, dict):
         return None
     serialized = {}
@@ -110,6 +117,7 @@ def _serialize_outputs(outputs):
 
 
 def _monitor_process_job(job_id, proc):
+    """Handle monitor process job."""
     state, outputs = _wait_for_process(proc, EXPORT_TIMEOUT)
     normalized_state = _normalize_job_state(state) if state else "TIMEOUT"
     error = None
@@ -127,6 +135,7 @@ def _monitor_process_job(job_id, proc):
 
 
 def _register_process_job(proc):
+    """Handle register process job."""
     job_id = f"proc-{uuid.uuid4().hex}"
     logger.debug("Registering IMS process job %s", job_id)
     with _PROCESS_JOBS_LOCK:
@@ -154,16 +163,19 @@ def _register_process_job(proc):
 
 
 def _get_process_job(job_id):
+    """Handle get process job."""
     with _PROCESS_JOBS_LOCK:
         return _PROCESS_JOBS.get(job_id)
 
 
 def _forget_process_job(job_id):
+    """Handle forget process job."""
     with _PROCESS_JOBS_LOCK:
         _PROCESS_JOBS.pop(job_id, None)
 
 
 def _poll_process_job(job_id):
+    """Handle poll process job."""
     logger.debug("Polling process job %s", job_id)
     record = _get_process_job(job_id)
     if not record:
@@ -226,6 +238,7 @@ def _poll_process_job(job_id):
 
 def _unwrap_rtype(v):
     # OMERO.rtypes: rstring/rlong/etc have .val
+    """Handle unwrap rtype."""
     if hasattr(v, "val"):
         return v.val
     getter = getattr(v, "getValue", None)
@@ -238,6 +251,7 @@ def _unwrap_rtype(v):
 
 
 def _get_script_services(conn):
+    """Handle get script services."""
     services: list[Any] = []
     if conn is None:
         return services
@@ -257,6 +271,7 @@ def _get_script_services(conn):
 
 
 def _find_script_id(conn):
+    """Handle find script identifier."""
     best_sid = None
     best_is_official = False
     for svc in _get_script_services(conn):
@@ -314,10 +329,12 @@ def _find_script_id(conn):
 
 
 def _is_process_handle(job):
+    """Handle is process handle."""
     return hasattr(job, "poll") and hasattr(job, "getResults")
 
 
 def _is_async_result(job):
+    """Handle is async result."""
     if job is None:
         return False
     return hasattr(job, "waitForCompleted") and (
@@ -329,6 +346,7 @@ def _is_async_result(job):
 
 
 def _resolve_async_result(svc, meth_name, async_result):
+    """Handle resolve async result."""
     if async_result is None:
         return None
     if not _is_async_result(async_result):
@@ -367,6 +385,7 @@ def _resolve_async_result(svc, meth_name, async_result):
 
 
 def _iter_script_methods(svc):
+    """Handle iter script methods."""
     preferred = [
         "runScriptAsync",
         "runScript",
@@ -413,6 +432,7 @@ def _iter_script_methods(svc):
 
 
 def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
+    """Handle call script method."""
     args_to_try = []
     lowered = meth_name.lower()
     is_async = "async" in lowered or lowered.startswith("begin_")
@@ -492,6 +512,7 @@ def _run_script(
     status_callback: Callable[[str, dict], None] | None = None,
 ):
     # Build inputs
+    """Handle run script."""
     try:
         from omero.rtypes import rlong
 
@@ -600,6 +621,7 @@ def _run_script(
 
 
 def _get_script_processor_config(conn):
+    """Handle get script processor config."""
     if conn is None:
         return None
     if not _can_read_script_config(conn):
@@ -634,6 +656,7 @@ def _get_script_processor_config(conn):
 
 
 def _can_read_script_config(conn) -> bool:
+    """Handle can read script config."""
     if conn is None:
         return False
     is_admin = getattr(conn, "isAdmin", None)
@@ -647,6 +670,7 @@ def _can_read_script_config(conn) -> bool:
 
 
 def _get_node_descriptors_config(conn):
+    """Handle get node descriptors config."""
     if conn is None:
         return None
     if not _can_read_script_config(conn):
@@ -679,6 +703,7 @@ def _get_node_descriptors_config(conn):
 
 
 def _format_script_exception(exc: Exception) -> str:
+    """Handle format script exception."""
     if _is_no_processor_available(exc):
         return (
             "No OMERO script processor is available to run IMS export. "
@@ -688,6 +713,7 @@ def _format_script_exception(exc: Exception) -> str:
 
 
 def _is_security_violation(exc: Exception) -> bool:
+    """Handle is security violation."""
     for err in _iter_exception_chain(exc):
         name = err.__class__.__name__
         if name == "SecurityViolation":
@@ -699,6 +725,7 @@ def _is_security_violation(exc: Exception) -> bool:
 
 
 def _collect_exception_types(candidate: object) -> tuple[type[BaseException], ...]:
+    """Handle collect exception types."""
     if isinstance(candidate, type):
         if issubclass(candidate, BaseException):
             return (candidate,)
@@ -714,6 +741,7 @@ def _collect_exception_types(candidate: object) -> tuple[type[BaseException], ..
 
 
 def _is_no_processor_available(exc: Exception) -> bool:
+    """Handle is no processor available."""
     no_processor_types = _collect_exception_types(
         getattr(omero, "NoProcessorAvailable", None)
     )
@@ -732,6 +760,7 @@ def _is_no_processor_available(exc: Exception) -> bool:
 
 
 def _iter_exception_chain(exc: Exception) -> Iterator[BaseException]:
+    """Handle iter exception chain."""
     seen = set()
     current: BaseException | None = exc
     while current and id(current) not in seen:
@@ -744,6 +773,7 @@ def _iter_exception_chain(exc: Exception) -> Iterator[BaseException]:
 
 
 def _extract_job_id(job):
+    """Handle extract job identifier."""
     if job is None:
         return None
     job_id = _unwrap_rtype(job)
@@ -769,6 +799,7 @@ def _extract_job_id(job):
                 continue
 
     def _get_attr_value(obj, attr_name):
+        """Handle get attr value."""
         attr = getattr(obj, attr_name, None)
         if attr is None:
             return None
@@ -893,6 +924,7 @@ def _get_job_state_and_outputs(conn, job_id):
 
 
 def _wait_for_process(proc, timeout):
+    """Handle wait for process."""
     deadline = time.time() + timeout
     last_state = None
     try:
@@ -921,6 +953,7 @@ def _wait_for_process(proc, timeout):
 
 
 def _normalize_job_state(state):
+    """Handle normalize job state."""
     if state is None:
         return None
     try:
@@ -954,6 +987,7 @@ def _normalize_job_state(state):
 
 
 def _detach_script_process(proc, reason=""):
+    """Handle detach script process."""
     if proc is None:
         return
     close = getattr(proc, "close", None)
@@ -981,6 +1015,7 @@ def _detach_script_process(proc, reason=""):
 
 
 def _extract_output_value(outputs, key):
+    """Handle extract output value."""
     if outputs is None:
         return None
     v = outputs.get(key) if isinstance(outputs, dict) else None
@@ -990,6 +1025,7 @@ def _extract_output_value(outputs, key):
 
 
 def _infer_finished_from_outputs(outputs):
+    """Handle infer finished from outputs."""
     if not isinstance(outputs, dict):
         return False
     for key in ("Export_Path", "File_Annotation_Id", "Export_Name"):
@@ -999,6 +1035,7 @@ def _infer_finished_from_outputs(outputs):
 
 
 def _raw_file_generator(store, size, chunk_size=8 * 1024 * 1024):
+    """Handle raw file generator."""
     offset = 0
     try:
         while True:
@@ -1022,6 +1059,7 @@ def _raw_file_generator(store, size, chunk_size=8 * 1024 * 1024):
 
 
 def _sanitize_filename(filename, fallback="export.ims"):
+    """Handle sanitize filename."""
     if not filename:
         return fallback
     safe_name = os.path.basename(str(filename))
@@ -1036,6 +1074,7 @@ def _sanitize_filename(filename, fallback="export.ims"):
 
 
 def _response_from_file_annotation(conn, file_ann_id, filename_fallback=None):
+    """Handle response from file annotation."""
     try:
         file_ann_id = int(file_ann_id)
     except (TypeError, ValueError):
@@ -1084,12 +1123,14 @@ def _response_from_file_annotation(conn, file_ann_id, filename_fallback=None):
 
 
 def _bool_from_request(value):
+    """Handle bool from request."""
     if value is None:
         return None
     return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _build_download_response(conn, outputs, export_name=None):
+    """Handle build download response."""
     from django.http import FileResponse, HttpResponse
 
     export_path = _extract_output_value(outputs or {}, "Export_Path")

@@ -40,16 +40,19 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _set_required_quota_env(monkeypatch) -> None:
+    """Handle set required quota env."""
     monkeypatch.setenv(MIN_GROUP_QUOTA_ENV, "0.10")
     monkeypatch.setenv(DEFAULT_GROUP_QUOTA_ENV, "0.10")
     monkeypatch.setenv(AUTO_GROUP_QUOTA_ENV, "false")
 
 
 def test_quota_csv_template_headers() -> None:
+    """Verify test quota CSV template headers."""
     assert quota_csv_template() == "Group,Quota [GB]\n"
 
 
 def test_upsert_and_import_quotas_roundtrip(tmp_path, monkeypatch) -> None:
+    """Verify test upsert and import quotas roundtrip."""
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
 
@@ -63,6 +66,7 @@ def test_upsert_and_import_quotas_roundtrip(tmp_path, monkeypatch) -> None:
 
 
 def test_upsert_writes_schema_version(tmp_path, monkeypatch) -> None:
+    """Verify test upsert writes schema version."""
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
 
@@ -73,12 +77,14 @@ def test_upsert_writes_schema_version(tmp_path, monkeypatch) -> None:
 
 
 def test_write_state_temp_file_is_not_world_writable(tmp_path) -> None:
+    """Verify test write state temp file is not world writable."""
     state_path = tmp_path / "quotas.json"
     seen_modes = []
 
     real_replace = os.replace
 
     def _capturing_replace(src: Path, dst: Path) -> None:
+        """Handle capturing replace."""
         seen_modes.append(stat.S_IMODE(Path(src).stat().st_mode))
         real_replace(src, dst)
 
@@ -93,6 +99,7 @@ def test_write_state_temp_file_is_not_world_writable(tmp_path) -> None:
 
 
 def test_reconcile_rejects_unknown_schema_version(tmp_path, monkeypatch) -> None:
+    """Verify test reconcile rejects unknown schema version."""
     state_path = tmp_path / "quotas.json"
     state_path.write_text(
         json.dumps(
@@ -113,6 +120,7 @@ def test_reconcile_rejects_unknown_schema_version(tmp_path, monkeypatch) -> None
 def test_upsert_falls_back_when_atomic_replace_is_not_permitted(
     tmp_path, monkeypatch
 ) -> None:
+    """Verify test upsert falls back when atomic replace is behavior."""
     state_path = tmp_path / "quotas.json"
     state_path.write_text(
         json.dumps(
@@ -127,6 +135,7 @@ def test_upsert_falls_back_when_atomic_replace_is_not_permitted(
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
 
     def _deny_replace(_src: Path, _dst: Path) -> None:
+        """Handle deny replace."""
         raise PermissionError("operation not permitted")
 
     monkeypatch.setattr(
@@ -143,6 +152,7 @@ def test_upsert_falls_back_when_atomic_replace_is_not_permitted(
 def test_upsert_raises_clear_error_when_replace_and_write_are_not_permitted(
     tmp_path, monkeypatch
 ) -> None:
+    """Verify test upsert raises clear error when replace a behavior."""
     state_path = tmp_path / "quotas.json"
     state_path.write_text(
         json.dumps(
@@ -157,6 +167,7 @@ def test_upsert_raises_clear_error_when_replace_and_write_are_not_permitted(
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
 
     def _deny_replace(_src: Path, _dst: Path) -> None:
+        """Handle deny replace."""
         raise PermissionError("operation not permitted")
 
     monkeypatch.setattr(
@@ -172,6 +183,7 @@ def test_upsert_raises_clear_error_when_replace_and_write_are_not_permitted(
 
 
 def test_upsert_deletes_quota_for_null_or_empty_value(tmp_path, monkeypatch) -> None:
+    """Verify test upsert deletes quota for null or empty v behavior."""
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
 
@@ -186,6 +198,7 @@ def test_upsert_deletes_quota_for_null_or_empty_value(tmp_path, monkeypatch) -> 
 
 
 def test_upsert_skips_delete_log_when_quota_not_set(tmp_path, monkeypatch) -> None:
+    """Verify test upsert skips delete log when quota not set."""
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
 
@@ -195,6 +208,7 @@ def test_upsert_skips_delete_log_when_quota_not_set(tmp_path, monkeypatch) -> No
 
 
 def test_upsert_does_not_repeat_log_for_unchanged_quota(tmp_path, monkeypatch) -> None:
+    """Verify test upsert does not repeat log for unchanged behavior."""
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
 
@@ -211,6 +225,7 @@ def test_upsert_does_not_repeat_log_for_unchanged_quota(tmp_path, monkeypatch) -
 
 
 def test_upsert_rejects_quota_below_minimum(tmp_path, monkeypatch) -> None:
+    """Verify test upsert rejects quota below minimum."""
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
 
@@ -223,6 +238,7 @@ def test_upsert_rejects_quota_below_minimum(tmp_path, monkeypatch) -> None:
 
 
 def test_upsert_respects_minimum_quota_from_environment(tmp_path, monkeypatch) -> None:
+    """Verify test upsert respects minimum quota from envir behavior."""
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
     monkeypatch.setenv(MIN_GROUP_QUOTA_ENV, "0.10")
@@ -236,6 +252,7 @@ def test_upsert_respects_minimum_quota_from_environment(tmp_path, monkeypatch) -
 def test_upsert_rejects_invalid_environment_minimum_quota(
     tmp_path, monkeypatch
 ) -> None:
+    """Verify test upsert rejects invalid environment minim behavior."""
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
     monkeypatch.setenv(MIN_GROUP_QUOTA_ENV, "invalid")
@@ -253,6 +270,7 @@ def test_upsert_rejects_invalid_environment_minimum_quota(
 def test_reconcile_marks_pending_when_group_directory_missing(
     tmp_path, monkeypatch
 ) -> None:
+    """Verify test reconcile marks pending when group direc behavior."""
     state_path = tmp_path / "quotas.json"
     group_root = tmp_path / "ManagedRepository"
     group_root.mkdir(parents=True)
@@ -270,6 +288,7 @@ def test_reconcile_marks_pending_when_group_directory_missing(
 
 
 def test_detect_filesystem_returns_metadata_for_existing_path() -> None:
+    """Verify test detect filesystem returns metadata for e behavior."""
     fs = detect_filesystem(Path(tempfile.gettempdir()))
 
     assert isinstance(fs.fs_type, str)
@@ -277,6 +296,7 @@ def test_detect_filesystem_returns_metadata_for_existing_path() -> None:
 
 
 def test_managed_group_root_uses_environment_configuration(monkeypatch) -> None:
+    """Verify test managed group root uses environment conf behavior."""
     monkeypatch.delenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", raising=False)
     monkeypatch.delenv("CONFIG_omero_managed_dir", raising=False)
     monkeypatch.setenv("OMERO_DATA_DIR", "/custom-omero")
@@ -287,6 +307,7 @@ def test_managed_group_root_uses_environment_configuration(monkeypatch) -> None:
 def test_reconcile_does_not_attempt_mkdir_when_root_is_not_writable(
     tmp_path, monkeypatch
 ) -> None:
+    """Verify test reconcile does not attempt mkdir when ro behavior."""
     state_path = tmp_path / "quotas.json"
     group_root = tmp_path / "ManagedRepository"
     group_root.mkdir(parents=True)
@@ -313,6 +334,7 @@ def test_reconcile_does_not_attempt_mkdir_when_root_is_not_writable(
 
 
 def test_reconcile_auto_sets_default_quota_for_new_group(tmp_path, monkeypatch) -> None:
+    """Verify test reconcile auto sets default quota for ne behavior."""
     state_path = tmp_path / "quotas.json"
     group_root = tmp_path / "ManagedRepository"
     group_root.mkdir(parents=True)
@@ -338,6 +360,7 @@ def test_reconcile_auto_sets_default_quota_for_new_group(tmp_path, monkeypatch) 
 
 
 def test_reconcile_rejects_default_quota_below_minimum(tmp_path, monkeypatch) -> None:
+    """Verify test reconcile rejects default quota below mi behavior."""
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
     monkeypatch.setenv(AUTO_GROUP_QUOTA_ENV, "true")
@@ -355,6 +378,7 @@ def test_reconcile_rejects_default_quota_below_minimum(tmp_path, monkeypatch) ->
 
 
 def test_get_state_requires_minimum_quota_env(monkeypatch) -> None:
+    """Verify test get state requires minimum quota env."""
     monkeypatch.delenv(MIN_GROUP_QUOTA_ENV, raising=False)
 
     try:
@@ -370,6 +394,7 @@ def test_get_state_requires_minimum_quota_env(monkeypatch) -> None:
 
 
 def test_storage_quota_update_endpoint(monkeypatch) -> None:
+    """Verify test storage quota update endpoint."""
     request = RequestFactory().post(
         "/omeroweb_admin_tools/storage/quota/update/",
         data=json.dumps({"updates": [{"group": "demo", "quota_gb": 15}]}),
@@ -398,6 +423,7 @@ def test_storage_quota_update_endpoint(monkeypatch) -> None:
 
 
 def test_storage_quota_update_endpoint_accepts_empty_body(monkeypatch) -> None:
+    """Verify test storage quota update endpoint accepts em behavior."""
     request = RequestFactory().post(
         "/omeroweb_admin_tools/storage/quota/update/",
         data="",
@@ -428,6 +454,7 @@ def test_storage_quota_update_endpoint_accepts_empty_body(monkeypatch) -> None:
 def test_storage_quota_update_endpoint_accepts_form_encoded_updates(
     monkeypatch,
 ) -> None:
+    """Verify test storage quota update endpoint accepts fo behavior."""
     request = RequestFactory().post(
         "/omeroweb_admin_tools/storage/quota/update/",
         data={"updates": json.dumps([{"group": "demo", "quota_gb": 0.5}])},
@@ -457,6 +484,7 @@ def test_storage_quota_update_endpoint_accepts_form_encoded_updates(
 def test_storage_quota_update_endpoint_treats_missing_form_updates_as_noop(
     monkeypatch,
 ) -> None:
+    """Verify test storage quota update endpoint treats mis behavior."""
     captured = {}
     request = RequestFactory().post(
         "/omeroweb_admin_tools/storage/quota/update/",
@@ -472,6 +500,7 @@ def test_storage_quota_update_endpoint_treats_missing_form_updates_as_noop(
     )
 
     def _upsert(updates, source):
+        """Handle upsert."""
         captured["updates"] = updates
         captured["source"] = source
         return {"quotas_gb": {}}
@@ -555,6 +584,7 @@ def test_storage_quota_update_returns_500_on_state_file_error(monkeypatch) -> No
 
 
 def test_storage_quota_update_hides_payload_parse_details(monkeypatch) -> None:
+    """Verify test storage quota update hides payload parse behavior."""
     request = RequestFactory().post(
         "/omeroweb_admin_tools/storage/quota/update/",
         data=json.dumps({"updates": "not-a-list"}),
@@ -580,6 +610,7 @@ def _raises(exc):
     """Return a callable that raises the given exception."""
 
     def _fn(*_a, **_kw):
+        """Handle fn."""
         raise exc
 
     return _fn
@@ -624,6 +655,7 @@ def test_storage_quota_update_endpoint_multipart_form(monkeypatch) -> None:
 
 
 def test_storage_quota_import_and_template_endpoints(monkeypatch) -> None:
+    """Verify test storage quota import and template endpoints."""
     file_payload = b"Group,Quota [GB]\ndemo,12\n"
     upload = SimpleUploadedFile("quotas.csv", file_payload, content_type="text/csv")
     request = RequestFactory().post(
@@ -657,6 +689,7 @@ def test_storage_quota_import_and_template_endpoints(monkeypatch) -> None:
 
 
 def test_storage_quota_update_invalid_payload_is_sanitized(monkeypatch) -> None:
+    """Verify test storage quota update invalid payload is behavior."""
     request = RequestFactory().post(
         "/omeroweb_admin_tools/storage/quota/update/",
         data=json.dumps({"updates": {"group": "demo"}}),
@@ -679,6 +712,7 @@ def test_storage_quota_update_invalid_payload_is_sanitized(monkeypatch) -> None:
 
 
 def test_storage_quota_import_invalid_errors_are_sanitized(monkeypatch) -> None:
+    """Verify test storage quota import invalid errors are behavior."""
     file_payload = b"Group,Quota [GB]\ndemo,broken\n"
     upload = SimpleUploadedFile("quotas.csv", file_payload, content_type="text/csv")
     request = RequestFactory().post(
@@ -707,6 +741,7 @@ def test_storage_quota_import_invalid_errors_are_sanitized(monkeypatch) -> None:
 
 
 def test_storage_data_failure_is_sanitized(monkeypatch) -> None:
+    """Verify test storage data failure is sanitized."""
     request = RequestFactory().get("/omeroweb_admin_tools/storage/data/")
     conn = SimpleNamespace(
         c=None,
@@ -737,11 +772,16 @@ def test_storage_data_failure_is_sanitized(monkeypatch) -> None:
 def test_storage_data_merges_known_users_groups_and_quota_fallback(
     monkeypatch,
 ) -> None:
+    """Verify test storage data merges known users groups a behavior."""
+
     class _Value:
+        """Represent value."""
+
         def __init__(self, value):
             self.val = value
 
         def getValue(self):
+            """Return get value."""
             return self.val
 
     rows = [
@@ -863,6 +903,7 @@ def test_storage_data_merges_known_users_groups_and_quota_fallback(
 def test_storage_quota_data_returns_current_state_and_reconcile_summary(
     monkeypatch,
 ) -> None:
+    """Verify test storage quota data returns current state behavior."""
     request = RequestFactory().get("/omeroweb_admin_tools/storage/quota/data/")
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.utils.current_username",
@@ -910,6 +951,7 @@ def test_storage_quota_data_returns_current_state_and_reconcile_summary(
 def test_storage_quota_data_uses_safe_fallbacks_when_state_or_reconcile_fail(
     monkeypatch,
 ) -> None:
+    """Verify test storage quota data uses safe fallbacks w behavior."""
     request = RequestFactory().get("/omeroweb_admin_tools/storage/quota/data/")
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.utils.current_username",
@@ -954,6 +996,7 @@ def test_storage_quota_data_uses_safe_fallbacks_when_state_or_reconcile_fail(
 def test_managed_repository_compatibility_requires_group_user_prefix(
     monkeypatch,
 ) -> None:
+    """Verify test managed repository compatibility require behavior."""
     monkeypatch.setenv(
         "CONFIG_omero_fs_repo_path",
         "%user%/%group%/%year%-%month%-%day%/%time%",
@@ -967,6 +1010,7 @@ def test_managed_repository_compatibility_requires_group_user_prefix(
 def test_reconcile_marks_all_pending_when_template_incompatible(
     tmp_path, monkeypatch
 ) -> None:
+    """Verify test reconcile marks all pending when templat behavior."""
     state_path = tmp_path / "quotas.json"
     group_root = tmp_path / "ManagedRepository"
     (group_root / "group-a").mkdir(parents=True)
@@ -985,6 +1029,7 @@ def test_reconcile_marks_all_pending_when_template_incompatible(
 
 
 def test_reconcile_deduplicates_non_warning_logs(tmp_path, monkeypatch) -> None:
+    """Verify test reconcile deduplicates non warning logs."""
     state_path = tmp_path / "quotas.json"
     group_root = tmp_path / "ManagedRepository"
     (group_root / "group-a").mkdir(parents=True)
@@ -1015,6 +1060,7 @@ def test_reconcile_deduplicates_non_warning_logs(tmp_path, monkeypatch) -> None:
 def test_reconcile_repeats_warnings_and_cleans_event_cache_after_quota_delete(
     tmp_path, monkeypatch
 ) -> None:
+    """Verify test reconcile repeats warnings and cleans ev behavior."""
     state_path = tmp_path / "quotas.json"
     group_root = tmp_path / "ManagedRepository"
     group_root.mkdir(parents=True)
@@ -1035,6 +1081,7 @@ def test_reconcile_repeats_warnings_and_cleans_event_cache_after_quota_delete(
     original_mkdir = Path.mkdir
 
     def failing_mkdir(self, *args, **kwargs):
+        """Handle failing mkdir."""
         if self.name == "group-a":
             raise OSError("Permission denied")
         return original_mkdir(self, *args, **kwargs)

@@ -427,30 +427,37 @@ def resolve_env_references(value: str, assignments: dict[str, str]) -> str:
 
 
 def is_bool_value(value: str) -> bool:
+    """Return whether is bool value."""
     return value.lower() in {"0", "1", "true", "false", "yes", "no", "on", "off"}
 
 
 def is_non_negative_integer_text(value: str) -> bool:
+    """Return whether is non negative integer text."""
     return bool(re.fullmatch(r"[0-9]+", value))
 
 
 def is_positive_integer_text(value: str) -> bool:
+    """Return whether is positive integer text."""
     return is_non_negative_integer_text(value) and int(value) > 0
 
 
 def is_float_text(value: str) -> bool:
+    """Return whether is float text."""
     return bool(re.fullmatch(r"(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)", value))
 
 
 def is_size_text(value: str) -> bool:
+    """Return whether is size text."""
     return bool(re.fullmatch(r"[1-9][0-9]*(?:[kKmMgGtT]?[bB]?)?", value))
 
 
 def is_safe_omero_group_name(value: str) -> bool:
+    """Return whether is safe OMERO group name."""
     return bool(re.fullmatch(r"[A-Za-z0-9_.-]+", value))
 
 
 def validate_group_list(value: str) -> list[str]:
+    """Validate validate group list."""
     errors: list[str] = []
     if not value:
         return errors
@@ -1053,6 +1060,7 @@ def cmd_list(repo_root: Path) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build build parser."""
     parser = argparse.ArgumentParser(
         description="Guard against accidental deletion of untracked deployment config files."
     )
@@ -1102,6 +1110,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the command-line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
     repo_root = Path(args.repo_root).resolve()

@@ -13,6 +13,7 @@ from tools import agent_skill_provenance
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build build parser."""
     parser = argparse.ArgumentParser(
         description=(
             "Verify the vendored agent-skill snapshot against the pinned upstream "
@@ -34,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the command-line entry point."""
     args = build_parser().parse_args(argv)
     repo_root = Path(args.repo_root).resolve()
     sources = agent_skill_provenance.load_upstream_sources(repo_root)

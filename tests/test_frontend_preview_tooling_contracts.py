@@ -13,6 +13,7 @@ import pytest
 
 
 def load_frontend_preview_tooling():
+    """Return load frontend preview tooling."""
     import importlib.util
 
     script_path = (
@@ -29,6 +30,7 @@ def load_frontend_preview_tooling():
 
 
 def test_frontend_preview_tooling_manifest_pins_expected_versions():
+    """Verify test frontend preview tooling manifest pins e behavior."""
     manifest_path = (
         Path(__file__).resolve().parents[1]
         / "tools"
@@ -48,6 +50,7 @@ def test_frontend_preview_tooling_manifest_pins_expected_versions():
 
 
 def test_frontend_preview_wrapper_help_surfaces_supported_commands():
+    """Verify test frontend preview wrapper help surfaces s behavior."""
     script_path = (
         Path(__file__).resolve().parents[1] / "tools" / "frontend_preview_tooling.py"
     )
@@ -68,6 +71,7 @@ def test_frontend_preview_wrapper_help_surfaces_supported_commands():
 
 
 def test_frontend_preview_wrapper_requires_exact_node_version():
+    """Verify test frontend preview wrapper requires exact behavior."""
     tooling = load_frontend_preview_tooling()
     manifest = {"node_version": "24.15.0"}
     completed = subprocess.CompletedProcess(
@@ -85,6 +89,7 @@ def test_frontend_preview_wrapper_requires_exact_node_version():
 
 
 def test_frontend_preview_safe_extract_rejects_path_traversal():
+    """Verify test frontend preview safe extract rejects pa behavior."""
     tooling = load_frontend_preview_tooling()
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -101,6 +106,7 @@ def test_frontend_preview_safe_extract_rejects_path_traversal():
 
 
 def test_frontend_preview_node_release_path_allows_only_expected_artifacts():
+    """Verify test frontend preview node release path allow behavior."""
     tooling = load_frontend_preview_tooling()
 
     assert (
@@ -120,10 +126,12 @@ def test_frontend_preview_node_release_path_allows_only_expected_artifacts():
 
 
 def test_frontend_preview_download_uses_validated_curl_args(monkeypatch, tmp_path):
+    """Verify test frontend preview download uses validated behavior."""
     tooling = load_frontend_preview_tooling()
     calls = []
 
     def _fake_run(args, **kwargs):
+        """Handle fake run."""
         calls.append((args, kwargs))
         return subprocess.CompletedProcess(
             args=args, returncode=0, stdout="", stderr=""
@@ -148,9 +156,11 @@ def test_frontend_preview_download_uses_validated_curl_args(monkeypatch, tmp_pat
 
 
 def test_frontend_preview_safe_extract_does_not_call_extractall(monkeypatch):
+    """Verify test frontend preview safe extract does not c behavior."""
     tooling = load_frontend_preview_tooling()
 
     def _fail_extractall(*args, **kwargs):
+        """Handle fail extractall."""
         raise AssertionError("extractall must not be used")
 
     monkeypatch.setattr(tarfile.TarFile, "extractall", _fail_extractall)
@@ -185,6 +195,7 @@ def test_frontend_preview_safe_extract_does_not_call_extractall(monkeypatch):
 
 
 def test_frontend_preview_skill_points_to_wrapper_and_drops_stale_temp_setup():
+    """Verify test frontend preview skill points to wrapper behavior."""
     skill_path = (
         Path(__file__).resolve().parents[1]
         / ".agents"
@@ -213,6 +224,7 @@ def test_frontend_preview_skill_points_to_wrapper_and_drops_stale_temp_setup():
 
 
 def test_frontend_preview_vitest_config_exposes_browser_mode_support():
+    """Verify test frontend preview vitest config exposes b behavior."""
     config_path = (
         Path(__file__).resolve().parents[1]
         / ".agents"
@@ -234,6 +246,7 @@ def test_frontend_preview_vitest_config_exposes_browser_mode_support():
 
 
 def test_frontend_preview_vite_config_allows_explicit_temp_spec_paths():
+    """Verify test frontend preview vite config allows expl behavior."""
     config_path = (
         Path(__file__).resolve().parents[1]
         / ".agents"

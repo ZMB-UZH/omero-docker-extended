@@ -124,6 +124,7 @@ def build_png_bytes() -> bytes:
     ihdr = struct.pack(">IIBBBBB", WIDTH, HEIGHT, 8, 6, 0, 0, 0)
 
     def chunk(tag: bytes, payload: bytes) -> bytes:
+        """Handle chunk."""
         checksum = zlib.crc32(tag + payload) & 0xFFFFFFFF
         return (
             struct.pack(">I", len(payload))
@@ -143,6 +144,7 @@ def build_png_bytes() -> bytes:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Validate parse args."""
     parser = argparse.ArgumentParser(
         description="Write the deterministic fallback branding logo PNG."
     )

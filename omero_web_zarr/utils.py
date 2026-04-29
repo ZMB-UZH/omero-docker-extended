@@ -25,6 +25,7 @@ DEFAULT_CHANNEL_COLORS = (
 
 
 def marshal_pixel_sizes(image):
+    """Handle marshal pixel sizes."""
     pixel_sizes = {}
     pix_size_x = image.getPixelSizeX(units=True)
     pix_size_y = image.getPixelSizeY(units=True)
@@ -48,6 +49,7 @@ def marshal_pixel_sizes(image):
 
 
 def marshal_axes_v3(image):
+    """Handle marshal axes v3."""
     dims = ["t", "c", "z", "y", "x"]
     axes: list[Any] = []
     for dim in dims:
@@ -57,6 +59,7 @@ def marshal_axes_v3(image):
 
 
 def marshal_axes(image, version):
+    """Handle marshal axes."""
     if version not in ("0.3", "0.4"):
         raise Http404("version not supported")
 
@@ -86,6 +89,7 @@ def marshal_axes(image, version):
 
 
 def generate_coordinate_transformations(shapes):
+    """Handle generate coordinate transformations."""
     data_shape = shapes[0]
     transformations = []
     for shape in shapes:
@@ -128,6 +132,7 @@ def open_compat_array(path, *, mode, shape, chunks, dtype):
 
 
 def resolve_image_backing_zarr_store(image):
+    """Return resolve image backing Zarr store."""
     lsid = _resolve_image_external_lsid(image)
     return resolve_local_zarr_store(lsid)
 
@@ -171,6 +176,7 @@ def require_image_rendering_engine(image, *, initialize=False):
 
 
 def _resolve_image_external_lsid(image):
+    """Handle resolve image external lsid."""
     details = image.getDetails()
     external_info = getattr(details, "externalInfo", None)
     lsid = getattr(getattr(external_info, "lsid", None), "val", None)
@@ -210,6 +216,7 @@ def _resolve_image_external_lsid(image):
 
 
 def resolve_local_zarr_store(location):
+    """Return resolve local Zarr store."""
     if not location:
         return None
 
@@ -240,6 +247,7 @@ def resolve_local_zarr_store(location):
 
 
 def resolve_local_zarr_file(store_root, *parts):
+    """Return resolve local Zarr file."""
     relative_path = Path(*parts)
     if relative_path.is_absolute() or ".." in relative_path.parts:
         raise Http404("zarr path not found")
@@ -261,14 +269,17 @@ def resolve_local_zarr_file(store_root, *parts):
 
 
 def is_store_metadata_path(path):
+    """Return whether is store metadata path."""
     return path.name in {".zattrs", ".zgroup", ".zarray", "zarr.json"}
 
 
 def is_local_zarr_store(path):
+    """Return whether is local Zarr store."""
     return (path / "zarr.json").is_file() or (path / ".zgroup").is_file()
 
 
 def _resolve_store_root(store_root):
+    """Handle resolve store root."""
     try:
         resolved = Path(store_root).resolve(strict=True)
     except (OSError, TypeError, ValueError) as exc:
@@ -279,6 +290,7 @@ def _resolve_store_root(store_root):
 
 
 def _resolve_store_metadata_file(store_root, *parts):
+    """Handle resolve store metadata file."""
     root = _resolve_store_root(store_root)
     relative_path = Path(*parts)
     if relative_path.is_absolute() or ".." in relative_path.parts:
@@ -294,10 +306,12 @@ def _resolve_store_metadata_file(store_root, *parts):
 
 
 def is_store_backed_image(image):
+    """Return whether is store backed image."""
     return resolve_image_backing_zarr_store(image) is not None
 
 
 def sanitize_download_basename(name, default="ome-zarr"):
+    """Handle sanitize download basename."""
     candidate = Path((name or "").strip()).name
     if not candidate:
         candidate = default
@@ -305,6 +319,7 @@ def sanitize_download_basename(name, default="ome-zarr"):
 
 
 def collect_store_metadata_documents(image):
+    """Handle collect store metadata documents."""
     store_root = resolve_image_backing_zarr_store(image)
     if store_root is None:
         return None
@@ -322,18 +337,21 @@ def collect_store_metadata_documents(image):
 
 
 def _read_store_root_attrs(store_root):
+    """Handle read store root attrs."""
     zattrs_path = _resolve_store_metadata_file(store_root, ".zattrs")
     with zattrs_path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
 def _read_store_json(store_root, *parts):
+    """Handle read store JSON."""
     target = _resolve_store_metadata_file(store_root, *parts)
     with target.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
 def _read_store_attrs(store_root):
+    """Handle read store attrs."""
     zattrs_path = store_root / ".zattrs"
     if zattrs_path.is_file():
         return _read_store_json(store_root, ".zattrs")
@@ -348,6 +366,7 @@ def _read_store_attrs(store_root):
 
 
 def _store_relative_metadata_path(store_root, dataset_path):
+    """Handle store relative metadata path."""
     dataset_root = (
         store_root if dataset_path in ("", ".") else store_root / dataset_path
     )
@@ -367,6 +386,7 @@ def _store_relative_metadata_path(store_root, dataset_path):
 
 
 def _store_node_signature(store_root):
+    """Handle store node signature."""
     attrs = _read_store_attrs(store_root)
     multiscales = attrs.get("multiscales") or []
     documents = []
@@ -400,6 +420,8 @@ def _store_node_signature(store_root):
 
 
 class _StoreBackedNode:
+    """Represent store backed node."""
+
     __slots__ = ("data", "metadata")
 
     def __init__(self, data, metadata):
@@ -408,6 +430,7 @@ class _StoreBackedNode:
 
 
 def _channel_limits_from_omero_channel(channel):
+    """Handle channel limits from OMERO channel."""
     window = channel.get("window") or {}
     start = window.get("start")
     end = window.get("end")
@@ -420,6 +443,7 @@ def _channel_limits_from_omero_channel(channel):
 
 
 def _build_store_backed_metadata(attrs):
+    """Handle build store backed metadata."""
     multiscales = attrs.get("multiscales") or []
     axes: list[Any] = []
     if multiscales:
@@ -449,6 +473,7 @@ def _build_store_backed_metadata(attrs):
 
 
 def _load_store_backed_image_node_from_metadata(store_root):
+    """Handle load store backed image node from metadata."""
     attrs = _read_store_attrs(store_root)
     multiscales = attrs.get("multiscales") or []
     if not multiscales:
@@ -476,6 +501,7 @@ def _load_store_backed_image_node_from_metadata(store_root):
 
 
 def _resolve_ome_zarr_format(store_root):
+    """Handle resolve ome Zarr format."""
     version = ""
     try:
         attrs = _read_store_attrs(store_root)
@@ -493,6 +519,7 @@ def _resolve_ome_zarr_format(store_root):
 
 
 def _load_store_backed_image_node_with_reader(store_root):
+    """Handle load store backed image node with reader."""
     from ome_zarr.io import parse_url
     from ome_zarr.reader import Reader
 
@@ -514,6 +541,7 @@ def _load_store_backed_image_node_with_reader(store_root):
 
 @lru_cache(maxsize=_STORE_BACKED_NODE_CACHE_SIZE)
 def _load_store_backed_image_node_cached(store_root_text, _signature):
+    """Handle load store backed image node cached."""
     store_root = Path(store_root_text)
     try:
         node = _load_store_backed_image_node_from_metadata(store_root)
@@ -530,6 +558,7 @@ def _load_store_backed_image_node_cached(store_root_text, _signature):
 
 
 def load_store_backed_image_node(image):
+    """Return load store backed image node."""
     cached = getattr(image, "_omero_web_zarr_node", _MISSING)
     if cached is not _MISSING:
         return cached
@@ -562,6 +591,7 @@ def load_store_backed_image_node(image):
 
 
 def _cached_channel_overrides(image, channels):
+    """Handle cached channel overrides."""
     cached = getattr(image, "_omero_web_zarr_channel_overrides", _MISSING)
     if (
         cached is not _MISSING
@@ -573,6 +603,7 @@ def _cached_channel_overrides(image, channels):
 
 
 def _channel_override_metadata(node):
+    """Handle channel override metadata."""
     metadata = (getattr(node, "metadata", {}) or {}) if node is not None else {}
     return (
         metadata.get("channel_names") or [],
@@ -583,6 +614,7 @@ def _channel_override_metadata(node):
 
 
 def _store_backed_channel_count(image, channels, sequences):
+    """Handle store backed channel count."""
     channel_count = 1
     if channels is not None:
         channel_count = max(channel_count, len(channels))
@@ -597,6 +629,7 @@ def _store_backed_channel_count(image, channels, sequences):
 
 
 def _sequence_value(sequence, index, default=None):
+    """Handle sequence value."""
     try:
         if index < len(sequence):
             return sequence[index]
@@ -606,6 +639,7 @@ def _sequence_value(sequence, index, default=None):
 
 
 def _channel_label(channel_names, index):
+    """Handle channel label."""
     label = _sequence_value(channel_names, index)
     if label is not None and str(label).strip():
         return str(label)
@@ -613,6 +647,7 @@ def _channel_label(channel_names, index):
 
 
 def _metadata_window(contrast_limits, index):
+    """Handle metadata window."""
     limits = _sequence_value(contrast_limits, index)
     if isinstance(limits, (list, tuple)) and len(limits) >= 2:
         return (float(limits[0]), float(limits[1]))
@@ -620,6 +655,7 @@ def _metadata_window(contrast_limits, index):
 
 
 def _omero_channel_window(channels, index):
+    """Handle OMERO channel window."""
     if channels is None or index >= len(channels):
         return None
     channel = channels[index]
@@ -637,6 +673,7 @@ def _omero_channel_window(channels, index):
 def _channel_override(
     index, channel_names, visible, contrast_limits, colormap, channels
 ):
+    """Handle channel override."""
     override = {
         "active": bool(_sequence_value(visible, index))
         if index < len(visible)
@@ -657,6 +694,7 @@ def _channel_override(
 
 
 def get_store_backed_channel_overrides(image, channels=None):
+    """Return get store backed channel overrides."""
     cached = _cached_channel_overrides(image, channels)
     if cached is not _MISSING:
         return cached
@@ -683,12 +721,14 @@ def get_store_backed_channel_overrides(image, channels=None):
 
 
 def _normalize_axis_name(axis):
+    """Handle normalize axis name."""
     if isinstance(axis, dict):
         return str(axis.get("name") or "").lower()
     return str(axis).lower()
 
 
 def get_store_backed_axis_names(node, level=0):
+    """Return get store backed axis names."""
     metadata = getattr(node, "metadata", {}) or {}
     axes = metadata.get("axes") or []
     names = [_normalize_axis_name(axis) for axis in axes if _normalize_axis_name(axis)]
@@ -699,16 +739,19 @@ def get_store_backed_axis_names(node, level=0):
 
 
 def _yx_shape(shape, axis_names):
+    """Handle yx shape."""
     shape_by_axis = dict(zip(axis_names, shape))
     return int(shape_by_axis.get("y", 1)), int(shape_by_axis.get("x", 1))
 
 
 def get_store_backed_level_count(node):
+    """Return get store backed level count."""
     data = getattr(node, "data", None) or ()
     return max(1, len(data))
 
 
 def get_store_backed_datasets(node):
+    """Return get store backed datasets."""
     metadata = getattr(node, "metadata", {}) or {}
     multiscales = metadata.get("multiscales") or []
     datasets: list[Any] = []
@@ -720,6 +763,7 @@ def get_store_backed_datasets(node):
 
 
 def get_store_backed_level_sizes(node):
+    """Return get store backed level sizes."""
     axis_names = get_store_backed_axis_names(node)
     sizes = []
     for array in getattr(node, "data", None) or ():
@@ -729,6 +773,7 @@ def get_store_backed_level_sizes(node):
 
 
 def _chunk_shape(array):
+    """Handle chunk shape."""
     chunks = getattr(array, "chunks", None)
     if chunks is None:
         return None
@@ -745,6 +790,7 @@ def _chunk_shape(array):
 
 
 def get_store_backed_tile_size(node, default=256, max_length=1024):
+    """Return get store backed tile size."""
     data = getattr(node, "data", None) or ()
     if not data:
         return {"width": int(default), "height": int(default)}
@@ -764,6 +810,7 @@ def get_store_backed_tile_size(node, default=256, max_length=1024):
 
 
 def select_store_backed_viewer_level(node, viewer_level):
+    """Handle select store backed viewer level."""
     level_count = get_store_backed_level_count(node)
     if level_count <= 1:
         return 0
@@ -772,6 +819,7 @@ def select_store_backed_viewer_level(node, viewer_level):
 
 
 def get_store_backed_zoom_level_scaling(node):
+    """Return get store backed zoom level scaling."""
     level_sizes = get_store_backed_level_sizes(node)
     base_width = max(1, int(level_sizes[0]["sizeX"]))
     return {
@@ -780,6 +828,7 @@ def get_store_backed_zoom_level_scaling(node):
 
 
 def select_store_backed_level(node, max_width=None, max_height=None):
+    """Handle select store backed level."""
     if not getattr(node, "data", None):
         return 0
     if max_width is None and max_height is None:
@@ -797,12 +846,14 @@ def select_store_backed_level(node, max_width=None, max_height=None):
 
 
 def _clamp_index(index, size):
+    """Handle clamp index."""
     if size <= 0:
         return 0
     return min(max(int(index), 0), size - 1)
 
 
 def _map_multiscale_index(full_resolution_index, full_resolution_size, level_size):
+    """Handle map multiscale index."""
     if full_resolution_size <= 1 or level_size <= 1:
         return 0
     return min(
@@ -812,6 +863,7 @@ def _map_multiscale_index(full_resolution_index, full_resolution_size, level_siz
 
 
 def _select_axis_index(axis_name, requested, full_size, level_size):
+    """Handle select axis index."""
     if axis_name == "z":
         full_index = _clamp_index(
             full_size // 2 if requested is None else requested,
@@ -824,6 +876,7 @@ def _select_axis_index(axis_name, requested, full_size, level_size):
 
 
 def read_store_backed_plane(node, *, level=0, z=None, t=None):
+    """Return read store backed plane."""
     if not getattr(node, "data", None):
         raise ValueError("store-backed node has no image data")
 
@@ -861,6 +914,7 @@ def read_store_backed_plane(node, *, level=0, z=None, t=None):
 
 
 def _channel_color(entry, index):
+    """Handle channel color."""
     if isinstance(entry, str):
         candidate = entry.strip().lstrip("#")
         if len(candidate) >= 6:
@@ -886,6 +940,7 @@ def _channel_color(entry, index):
 
 
 def _channel_limits(entry, data):
+    """Handle channel limits."""
     if isinstance(entry, (list, tuple)) and len(entry) >= 2:
         low = float(entry[0])
         high = float(entry[1])
@@ -896,6 +951,7 @@ def _channel_limits(entry, data):
 
 
 def _normalize_to_uint8(data, limits=None):
+    """Handle normalize to uint8."""
     plane = np.asarray(data, dtype=np.float32)
     low, high = _channel_limits(limits, plane)
     if not np.isfinite(low) or not np.isfinite(high):
@@ -909,6 +965,7 @@ def _normalize_to_uint8(data, limits=None):
 
 
 def render_store_backed_plane(node, *, level=0, z=None, t=None):
+    """Build render store backed plane."""
     plane, remaining_axes = read_store_backed_plane(node, level=level, z=z, t=t)
     metadata = getattr(node, "metadata", {}) or {}
 
@@ -974,6 +1031,7 @@ def render_store_backed_pil_image(
     t=None,
     level=None,
 ):
+    """Build render store backed pil image."""
     node = load_store_backed_image_node(image)
     if node is None:
         raise Http404("store-backed image data not found")
@@ -1009,6 +1067,7 @@ def render_store_backed_region_pil_image(
     t=None,
     level=0,
 ):
+    """Build render store backed region pil image."""
     node = load_store_backed_image_node(image)
     if node is None:
         raise Http404("store-backed image data not found")
@@ -1033,6 +1092,7 @@ def render_store_backed_region_pil_image(
 
 
 def encode_store_backed_pil_image(pil_image, image_format):
+    """Handle encode store backed pil image."""
     from io import BytesIO
 
     requested = (image_format or "jpeg").lower()
@@ -1062,6 +1122,7 @@ def encode_store_backed_pil_image(pil_image, image_format):
 
 
 def render_store_backed_thumbnail_bytes(image, *, size=96, z=None, t=None):
+    """Build render store backed thumbnail bytes."""
     pil_image = render_store_backed_pil_image(
         image,
         max_width=size,
@@ -1074,6 +1135,7 @@ def render_store_backed_thumbnail_bytes(image, *, size=96, z=None, t=None):
 
 
 def _exception_text(exc):
+    """Handle exception text."""
     parts = [
         str(exc),
         getattr(exc, "message", None),
@@ -1083,6 +1145,7 @@ def _exception_text(exc):
 
 
 def is_known_tile_size_failure(exc):
+    """Return whether is known tile size failure."""
     text = _exception_text(exc)
     return "ZarrReader" in text and (
         "getOptimalTileWidth" in text or "getTileSize" in text
@@ -1090,6 +1153,7 @@ def is_known_tile_size_failure(exc):
 
 
 def _configured_max_tile_length(conn, default=1024):
+    """Handle configured max tile length."""
     if conn is None:
         return int(default)
     try:
@@ -1105,6 +1169,7 @@ def _configured_max_tile_length(conn, default=1024):
 
 
 def _fallback_tile_size(image, conn=None):
+    """Handle fallback tile size."""
     max_tile_length = _configured_max_tile_length(conn or get_image_connection(image))
     return (
         max(1, min(int(image.getSizeX()), max_tile_length)),
@@ -1113,6 +1178,7 @@ def _fallback_tile_size(image, conn=None):
 
 
 def get_safe_image_tile_size(image, conn=None):
+    """Return get safe image tile size."""
     rendering_engine = get_image_rendering_engine(image)
     if rendering_engine is None:
         prepare_image_rendering_engine(image, required=False)

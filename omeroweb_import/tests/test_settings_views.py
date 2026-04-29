@@ -28,11 +28,13 @@ from omeroweb_import.strings import messages as import_messages
 
 
 def _payload(response):
+    """Handle payload."""
     return json.loads(response.content.decode("utf-8"))
 
 
 @pytest.fixture(autouse=True)
 def _regular_wrapper_user(monkeypatch):
+    """Handle regular wrapper user."""
     monkeypatch.setattr(
         import_view_utils,
         "current_username",
@@ -43,6 +45,7 @@ def _regular_wrapper_user(monkeypatch):
 def test_user_settings_view_saves_payload_and_returns_normalized_response(
     monkeypatch,
 ) -> None:
+    """Verify test user settings view saves payload and ret behavior."""
     request = RequestFactory().post(
         "/omeroweb_import/settings/save/",
         data=json.dumps({"settings": {"chunk_size": 3, "preserve_paths": True}}),
@@ -83,6 +86,7 @@ def test_user_settings_view_saves_payload_and_returns_normalized_response(
 def test_user_settings_view_rejects_invalid_method_username_and_payload(
     monkeypatch,
 ) -> None:
+    """Verify test user settings view rejects invalid metho behavior."""
     request = RequestFactory().get("/omeroweb_import/settings/save/")
 
     response = user_settings_view.save_settings(request, conn=None)
@@ -115,6 +119,7 @@ def test_user_settings_view_rejects_invalid_method_username_and_payload(
 
 
 def test_user_settings_view_hides_store_exception(monkeypatch) -> None:
+    """Verify test user settings view hides store exception."""
     request = RequestFactory().post(
         "/omeroweb_import/settings/save/",
         data=json.dumps({"settings": {"chunk_size": 3}}),
@@ -146,6 +151,7 @@ def test_user_settings_view_hides_store_exception(monkeypatch) -> None:
 
 
 def test_special_method_save_hides_store_exception(monkeypatch) -> None:
+    """Verify test special method save hides store exception."""
     request = RequestFactory().post(
         "/omeroweb_import/settings/special/save/",
         data=json.dumps({"method": "sem_edx_spectra", "settings": {"enabled": True}}),
@@ -177,6 +183,7 @@ def test_special_method_save_hides_store_exception(monkeypatch) -> None:
 
 
 def test_special_method_load_hides_store_exception(monkeypatch) -> None:
+    """Verify test special method load hides store exception."""
     request = RequestFactory().post(
         "/omeroweb_import/settings/special/load/",
         data=json.dumps({"method": "sem_edx_spectra"}),
@@ -210,6 +217,7 @@ def test_special_method_load_hides_store_exception(monkeypatch) -> None:
 def test_special_method_settings_views_normalize_and_load_payloads(
     monkeypatch,
 ) -> None:
+    """Verify test special method settings views normalize behavior."""
     save_request = RequestFactory().post(
         "/omeroweb_import/settings/special/save/",
         data=json.dumps(
@@ -292,6 +300,7 @@ def test_special_method_settings_views_normalize_and_load_payloads(
 
 
 def test_special_method_settings_views_reject_invalid_requests(monkeypatch) -> None:
+    """Verify test special method settings views reject inv behavior."""
     get_request = RequestFactory().get("/omeroweb_import/settings/special/save/")
     response = special_method_settings_view.save_settings(get_request, conn=None)
     assert response.status_code == 405

@@ -15,6 +15,7 @@ from omeroweb_import.views.core_functions import _classify_compatibility_output
 def test_classify_marks_incompatible_when_output_contains_unrelated_candidate(
     tmp_path: Path,
 ):
+    """Verify test classify marks incompatible when output behavior."""
     expected_file = tmp_path / "sample.unsupported"
     stdout = f"{tmp_path / 'other-file.tiff'}\n"
 
@@ -29,6 +30,7 @@ def test_classify_marks_incompatible_when_output_contains_unrelated_candidate(
 
 
 def test_classify_marks_compatible_when_expected_file_is_candidate(tmp_path: Path):
+    """Verify test classify marks compatible when expected behavior."""
     expected_file = tmp_path / "image.ome.tif"
     stdout = f"{expected_file}\n"
 
@@ -43,6 +45,7 @@ def test_classify_marks_compatible_when_expected_file_is_candidate(tmp_path: Pat
 
 
 def test_classify_marks_incompatible_when_stdout_has_non_path_line(tmp_path: Path):
+    """Verify test classify marks incompatible when stdout behavior."""
     expected_file = tmp_path / "sample.unsupported"
     stdout = f"Using OMERODIR={tmp_path / 'compat-check-1234'}\n"
 
@@ -57,6 +60,7 @@ def test_classify_marks_incompatible_when_stdout_has_non_path_line(tmp_path: Pat
 
 
 def test_classify_marks_compatible_for_quoted_expected_candidate(tmp_path: Path):
+    """Verify test classify marks compatible for quoted exp behavior."""
     expected_file = tmp_path / "image.ome.tif"
     stdout = f'"{expected_file}"\n'
 

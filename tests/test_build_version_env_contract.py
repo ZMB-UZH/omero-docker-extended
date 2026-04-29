@@ -8,14 +8,19 @@ from pathlib import Path
 
 
 class BuildVersionEnvContractTests(unittest.TestCase):
+    """Test cases for build version env contract tests."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def read_text(self, relative_path: str) -> str:
+        """Return read text."""
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
 
     def test_installation_paths_example_excludes_build_version_pins(self) -> None:
+        """Verify test installation paths example excludes buil behavior."""
         env_text = self.read_text("installation_paths_example.env")
         self.assertNotIn("OMERO_CLI_ZARR_VERSION=", env_text)
         self.assertNotIn("OME_ZARR_PY_VERSION=", env_text)
@@ -23,6 +28,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertNotIn("BIOFORMATS_VERSION=", env_text)
 
     def test_omeroserver_example_defines_native_zarr_build_versions(self) -> None:
+        """Verify test omeroserver example defines native Zarr behavior."""
         env_text = self.read_text("env/omeroserver_example.env")
         self.assertIn("OMERO_DROPBOX_VERSION=5.7.0", env_text)
         self.assertIn("OMERO_CLI_HOST=localhost", env_text)
@@ -36,6 +42,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("BIOFORMATS_VERSION=8.5.0", env_text)
 
     def test_compose_requires_build_versions_from_omeroserver_env(self) -> None:
+        """Verify test compose requires build versions from ome behavior."""
         compose_text = self.read_text("docker-compose.yml")
         self.assertIn(
             'OMERO_DROPBOX_VERSION: "${OMERO_DROPBOX_VERSION:?Set OMERO_DROPBOX_VERSION in env/omeroserver.env}"',
@@ -63,6 +70,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
 
     def test_compose_pins_monitoring_and_management_image_versions(self) -> None:
+        """Verify test compose pins monitoring and management i behavior."""
         compose_text = self.read_text("docker-compose.yml")
         self.assertIn('image: "portainer/portainer-ce:2.40.0-alpine"', compose_text)
         self.assertIn('image: "grafana/alloy:v1.15.1"', compose_text)
@@ -86,6 +94,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertNotIn("ollama/ollama:latest", compose_text)
 
     def test_alloy_persists_runtime_positions(self) -> None:
+        """Verify test alloy persists runtime positions."""
         compose_text = self.read_text("docker-compose.yml")
         alloy_service = compose_text.split("\n  alloy:\n", 1)[1].split(
             "\n  prometheus:\n", 1
@@ -113,6 +122,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
 
     def test_installation_script_manages_alloy_data_path_contract(self) -> None:
+        """Verify test installation script manages alloy data p behavior."""
         script_text = self.read_text("installation/installation_script.sh")
         self.assertIn('ALLOY_DATA_PATH="${OMERO_DATA_PATH%/}/alloy_data"', script_text)
         self.assertIn(
@@ -129,6 +139,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
 
     def test_compose_images_are_explicitly_tagged_and_never_latest(self) -> None:
+        """Verify test compose images are explicitly tagged and behavior."""
         compose_text = self.read_text("docker-compose.yml")
         image_refs = re.findall(r"^\s*image:\s*[\"']?([^\"'\n#]+)", compose_text, re.M)
 
@@ -141,6 +152,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             self.assertNotEqual("latest", tag, image_ref)
 
     def test_alpine_323_base_images_use_current_verified_digest(self) -> None:
+        """Verify test alpine 323 base images use current verif behavior."""
         expected_from = (
             "FROM alpine:3.23@"
             "sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11"
@@ -159,6 +171,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
                 )
 
     def test_omeroserver_dockerfile_fails_closed_without_dropbox_version(self) -> None:
+        """Verify test omeroserver dockerfile fails closed with behavior."""
         dockerfile_text = self.read_text("docker/omero-server.Dockerfile")
         self.assertIn("ARG OMERO_DROPBOX_VERSION\n", dockerfile_text)
         self.assertNotIn("ARG OMERO_DROPBOX_VERSION=", dockerfile_text)
@@ -173,6 +186,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
 
     def test_omeroweb_dockerfile_fails_closed_without_version_args(self) -> None:
+        """Verify test omeroweb dockerfile fails closed without behavior."""
         dockerfile_text = self.read_text("docker/omero-web.Dockerfile")
         self.assertIn("ARG OMERO_CLI_ZARR_VERSION\n", dockerfile_text)
         self.assertIn("ARG OME_ZARR_PY_VERSION\n", dockerfile_text)
@@ -196,6 +210,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
     def test_installation_script_generated_dot_env_includes_server_env_file(
         self,
     ) -> None:
+        """Verify test installation script generated dot env in behavior."""
         script_text = self.read_text("installation/installation_script.sh")
         self.assertIn(
             "COMPOSE_ENV_FILES=installation_paths.env,env/omero_secrets.env,env/omeroserver.env,env/omeroweb.env,env/omero-celery.env,env/grafana.env",

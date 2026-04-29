@@ -7,23 +7,31 @@ from omeroweb_tools.services.acquisition_metadata import extract_search_document
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self._raw_value = value
 
     def getValue(self):
+        """Return get value."""
         return self._raw_value
 
 
 class _UnitValue(_Value):
+    """Represent unit value."""
+
     def __init__(self, value, symbol):
         super().__init__(value)
         self._symbol = symbol
 
     def getSymbol(self):
+        """Return get symbol."""
         return self._symbol
 
 
 class _PlaneInfo:
+    """Represent plane info."""
+
     def __init__(
         self,
         the_c,
@@ -45,24 +53,31 @@ class _PlaneInfo:
         self._position_z = position_z
 
     def getDeltaT(self, units="SECOND"):
+        """Return get delta t."""
         assert units == "SECOND"
         return None if self._delta_t is None else _Value(self._delta_t)
 
     def getExposureTime(self, units="SECOND"):
+        """Return get exposure time."""
         assert units == "SECOND"
         return None if self._exposure_time is None else _Value(self._exposure_time)
 
     def getPositionX(self):
+        """Return get position x."""
         return None if self._position_x is None else _Value(self._position_x)
 
     def getPositionY(self):
+        """Return get position y."""
         return None if self._position_y is None else _Value(self._position_y)
 
     def getPositionZ(self):
+        """Return get position z."""
         return None if self._position_z is None else _Value(self._position_z)
 
 
 class _Pixels:
+    """Represent pixels."""
+
     def __init__(self):
         self.copy_plane_info_calls = []
         self._plane_infos = {
@@ -84,37 +99,46 @@ class _Pixels:
 
     @staticmethod
     def getSizeX():
+        """Return get size x."""
         return _Value(2048)
 
     @staticmethod
     def getSizeY():
+        """Return get size y."""
         return _Value(1024)
 
     @staticmethod
     def getSizeZ():
+        """Return get size z."""
         return _Value(2)
 
     @staticmethod
     def getSizeC():
+        """Return get size c."""
         return _Value(2)
 
     @staticmethod
     def getSizeT():
+        """Return get size t."""
         return _Value(2)
 
     @staticmethod
     def getPhysicalSizeX():
+        """Return get physical size x."""
         return _UnitValue("0.108", "µm")
 
     @staticmethod
     def getPhysicalSizeY():
+        """Return get physical size y."""
         return _UnitValue("0.108", "µm")
 
     @staticmethod
     def getPhysicalSizeZ():
+        """Return get physical size z."""
         return _UnitValue("0.400", "µm")
 
     def copyPlaneInfo(self, theC=None, theZ=None):
+        """Handle copy plane info."""
         self.copy_plane_info_calls.append((theC, theZ))
         if theC is None and theZ is None:
             return [
@@ -126,64 +150,84 @@ class _Pixels:
 
 
 class _DetectorSettings:
+    """Represent detector settings."""
+
     gain = _Value("1.5")
     offsetValue = _Value("2")
 
     @staticmethod
     def getBinning():
+        """Return get binning."""
         return "2x2"
 
     @staticmethod
     def getGain():
+        """Return get gain."""
         return _Value("1.5")
 
     @staticmethod
     def getDetector():
+        """Return get detector."""
         return SimpleNamespace(manufacturer="Hamamatsu", model="Orca Flash")
 
 
 class _LightSourceSettings:
+    """Represent light source settings."""
+
     attenuation = _Value("0.5")
     wavelength = _Value("488")
 
     @staticmethod
     def getLightSource():
+        """Return get light source."""
         return SimpleNamespace(manufacturer="Coherent", model="Sapphire")
 
 
 class _LightPath:
+    """Represent light path."""
+
     @staticmethod
     def getDichroic():
+        """Return get dichroic."""
         return SimpleNamespace(manufacturer="Chroma", model="T495lpxr")
 
     @staticmethod
     def getEmissionFilters():
+        """Return get emission filters."""
         return [SimpleNamespace(manufacturer="Chroma", model="ET525/50m")]
 
     @staticmethod
     def getExcitationFilters():
+        """Return get excitation filters."""
         return [SimpleNamespace(manufacturer="Chroma", model="ET470/40x")]
 
 
 class _LogicalChannel:
+    """Represent logical channel."""
+
     name = "GFP logical"
     fluor = "EGFP"
     ndFilter = _Value("0.2")
 
     @staticmethod
     def getDetectorSettings():
+        """Return get detector settings."""
         return _DetectorSettings()
 
     @staticmethod
     def getLightSourceSettings():
+        """Return get light source settings."""
         return _LightSourceSettings()
 
     @staticmethod
     def getLightPath():
+        """Return get light path."""
         return _LightPath()
 
 
 class _Channel:
+    """Represent channel."""
+
     def __init__(self, index, label, excitation, emission, logical_channel=None):
         self._index = index
         self._label = label
@@ -192,48 +236,63 @@ class _Channel:
         self._logical_channel = logical_channel
 
     def getIndex(self):
+        """Return get index."""
         return self._index
 
     def getLabel(self):
+        """Return get label."""
         return self._label
 
     def getExcitationWave(self):
+        """Return get excitation wave."""
         return self._excitation
 
     def getEmissionWave(self):
+        """Return get emission wave."""
         return self._emission
 
     def getLogicalChannel(self):
+        """Return get logical channel."""
         return self._logical_channel
 
 
 class _NamedObject:
+    """Represent named object."""
+
     def __init__(self, object_id, name, parents=None):
         self._id = object_id
         self._name = name
         self._parents = list(parents or [])
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self._id)
 
     def getName(self):
+        """Return get name."""
         return self._name
 
     def listParents(self):
+        """Return list parents."""
         return list(self._parents)
 
 
 class _ObjectiveSettings:
+    """Represent objective settings."""
+
     @staticmethod
     def getCorrectionCollar():
+        """Return get correction collar."""
         return _Value("0.17")
 
     @staticmethod
     def getID():
+        """Return get identifier."""
         return _Value(31)
 
     @staticmethod
     def getObjective():
+        """Return get objective."""
         return SimpleNamespace(
             manufacturer="Nikon",
             model="Plan Apo Lambda",
@@ -244,22 +303,29 @@ class _ObjectiveSettings:
 
 
 class _Microscope:
+    """Represent microscope."""
+
     manufacturer = "Zeiss"
     model = "LSM 980"
     serialNumber = "MS-42"
 
     @staticmethod
     def getMicroscopeType():
+        """Return get microscope type."""
         return "inverted"
 
 
 class _Instrument:
+    """Represent instrument."""
+
     @staticmethod
     def getMicroscope():
+        """Return get microscope."""
         return _Microscope()
 
     @staticmethod
     def getObjectives():
+        """Return get objectives."""
         return [
             SimpleNamespace(
                 manufacturer="Nikon",
@@ -271,68 +337,92 @@ class _Instrument:
 
     @staticmethod
     def getFilters():
+        """Return get filters."""
         return [SimpleNamespace(manufacturer="Chroma", model="ET525/50m")]
 
     @staticmethod
     def getDichroics():
+        """Return get dichroics."""
         return [SimpleNamespace(manufacturer="Chroma", model="T495lpxr")]
 
     @staticmethod
     def getDetectors():
+        """Return get detectors."""
         return [SimpleNamespace(manufacturer="Hamamatsu", model="Orca Flash")]
 
     @staticmethod
     def getLightSources():
+        """Return get light sources."""
         return [SimpleNamespace(manufacturer="Coherent", model="Sapphire")]
 
 
 class _OriginalFile:
+    """Represent original file."""
+
     @staticmethod
     def getName():
+        """Return get name."""
         return "synthetic-generated.dv"
 
     @staticmethod
     def getMimetype():
+        """Return get mimetype."""
         return "application/octet-stream"
 
     @staticmethod
     def getSize():
+        """Return get size."""
         return _Value(4096)
 
     @staticmethod
     def getPath():
+        """Return get path."""
         raise AssertionError("private file paths must not be indexed")
 
 
 class _UsedFile:
+    """Represent used file."""
+
     @staticmethod
     def getOriginalFile():
+        """Return get original file."""
         return _OriginalFile()
 
 
 class _Fileset:
+    """Represent fileset."""
+
     @staticmethod
     def copyUsedFiles():
+        """Handle copy used files."""
         return [_UsedFile()]
 
 
 class _MapAnnotation:
+    """Represent map annotation."""
+
     OMERO_CLASS = "MapAnnotation"
 
     @staticmethod
     def getValue():
+        """Return get value."""
         return [SimpleNamespace(name="Treatment", value="DMSO")]
 
 
 class _TextAnnotation:
+    """Represent text annotation."""
+
     OMERO_CLASS = "TextAnnotation"
 
     @staticmethod
     def getTextValue():
+        """Return get text value."""
         return "QC passed"
 
 
 class _Image:
+    """Represent image."""
+
     def __init__(self):
         project = _NamedObject(200, "Cell Cycle")
         self._dataset = _NamedObject(100, "Mitotic Entry", parents=[project])
@@ -340,18 +430,22 @@ class _Image:
 
     @staticmethod
     def getName():
+        """Return get name."""
         return "img-001"
 
     @staticmethod
     def getDescription():
+        """Return get description."""
         return "Synthetic search fixture"
 
     @staticmethod
     def getAcquisitionDate():
+        """Return get acquisition date."""
         return datetime(2026, 4, 12, 10, 30, 0)
 
     @staticmethod
     def getChannels():
+        """Return get channels."""
         return [
             _Channel(0, "DAPI", _Value("405"), _Value("450")),
             _Channel(1, "GFP", _Value("488"), _Value("525"), _LogicalChannel()),
@@ -359,37 +453,46 @@ class _Image:
 
     @staticmethod
     def getObjectiveSettings():
+        """Return get objective settings."""
         return _ObjectiveSettings()
 
     @staticmethod
     def getDetectorSettings():
+        """Return get detector settings."""
         return [_DetectorSettings()]
 
     @staticmethod
     def getPixelSizeX(units=True):
+        """Return get pixel size x."""
         return _UnitValue("0.108", "µm")
 
     @staticmethod
     def getPixelSizeY(units=True):
+        """Return get pixel size y."""
         return _UnitValue("0.108", "µm")
 
     @staticmethod
     def getPixelSizeZ(units=True):
+        """Return get pixel size z."""
         return _UnitValue("0.400", "µm")
 
     def getPrimaryPixels(self):
+        """Return get primary pixels."""
         return self._pixels
 
     @staticmethod
     def getInstrument():
+        """Return get instrument."""
         return _Instrument()
 
     @staticmethod
     def getImagingEnvironment():
+        """Return get imaging environment."""
         return SimpleNamespace(temperature=_Value("37"), humidity=_Value("40"))
 
     @staticmethod
     def getStageLabel():
+        """Return get stage label."""
         return SimpleNamespace(
             name="Well A1",
             x=_Value("1.0"),
@@ -399,14 +502,17 @@ class _Image:
 
     @staticmethod
     def getFileset():
+        """Return get fileset."""
         return _Fileset()
 
     @staticmethod
     def listAnnotations():
+        """Return list annotations."""
         return [_MapAnnotation(), _TextAnnotation()]
 
     @staticmethod
     def loadOriginalMetadata():
+        """Return load original metadata."""
         return (
             None,
             [
@@ -422,10 +528,12 @@ class _Image:
         )
 
     def listParents(self):
+        """Return list parents."""
         return [self._dataset]
 
 
 def test_extract_search_document_builds_canonical_fields_and_metadata_attributes():
+    """Verify test extract search document builds canonical behavior."""
     image = _Image()
     document, context = extract_search_document(image)
 

@@ -37,6 +37,7 @@ class _PyplotCompat:
 
     @staticmethod
     def subplots(*, figsize=(6.4, 4.8), dpi=None):
+        """Handle subplots."""
         fig = Figure(figsize=figsize, dpi=dpi)
         FigureCanvasAgg(fig)
         ax = fig.add_subplot(1, 1, 1)
@@ -44,6 +45,7 @@ class _PyplotCompat:
 
     @staticmethod
     def close(fig=None):
+        """Handle close."""
         if fig is None:
             return
         fig.clear()
@@ -174,6 +176,7 @@ def _nearest_spectrum_point(
     spectrum: List[Tuple[float, float]],
     energy_kev: float,
 ) -> Optional[Tuple[float, float]]:
+    """Handle nearest spectrum point."""
     if not spectrum:
         return None
     energies = [point[0] for point in spectrum]
@@ -221,6 +224,7 @@ def lines_cross(x1, y1, x2, y2, x3, y3, x4, y4):
     """Check if line segment (x1,y1)-(x2,y2) crosses (x3,y3)-(x4,y4)"""
 
     def ccw(ax, ay, bx, by, cx, cy):
+        """Handle ccw."""
         return (cy - ay) * (bx - ax) > (by - ay) * (cx - ax)
 
     return ccw(x1, y1, x3, y3, x4, y4) != ccw(x2, y2, x3, y3, x4, y4) and ccw(
@@ -260,9 +264,7 @@ class Chromosome:
 
 
 class GeneticLabelPlacer:
-    """
-    Genetic algorithm for optimal label placement
-    """
+    """Genetic algorithm for optimal label placement"""
 
     def __init__(
         self,
@@ -298,9 +300,7 @@ class GeneticLabelPlacer:
         print(f"Elite size: {elite_size}")
 
     def generate_initial_chromosome(self) -> Chromosome:
-        """
-        IMPROVEMENT 4: Initial placement in INCREASING X order (left to right)
-        """
+        """IMPROVEMENT 4: Initial placement in INCREASING X order (left to right)"""
         genes = []
 
         for spec in self.label_specs:
@@ -349,9 +349,7 @@ class GeneticLabelPlacer:
         return Chromosome(genes)
 
     def calculate_fitness(self, chromosome: Chromosome) -> float:
-        """
-        Calculate fitness score (LOWER is better)
-        """
+        """Calculate fitness score (LOWER is better)"""
         # Build bboxes
         bboxes = []
         for gene in chromosome.genes:
@@ -572,9 +570,7 @@ def genetic_label_placement(
     ax,
     renderer,
 ) -> List[Tuple[float, float, str, float, float, List[float]]]:
-    """
-    Genetic algorithm for label placement
-    """
+    """Genetic algorithm for label placement"""
     if not labels_data:
         return []
 
@@ -688,6 +684,7 @@ def create_edx_spectrum_plot(
     txt_path: Path,
     output_path: Optional[Path] = None,
 ) -> Optional[Path]:
+    """Build create edx spectrum plot."""
     parsed = parse_emsa_file(txt_path)
     spectrum = parsed.get("spectrum") or []
     if not spectrum:
@@ -835,6 +832,7 @@ def build_spectrum_columns(
     image_id: int,
     spectrum: List[Tuple[float, float]],
 ) -> List[Any]:
+    """Build build spectrum columns."""
     from omero.grid import DoubleColumn, LongColumn
 
     columns = [

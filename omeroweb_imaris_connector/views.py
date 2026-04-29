@@ -32,6 +32,7 @@ IMS_EXPORT_JOB_FAILED_MESSAGE = "IMS export job failed."
 
 
 def _parse_base_url(value):
+    """Handle parse base URL."""
     if not value:
         return None
     try:
@@ -51,6 +52,7 @@ def _parse_base_url(value):
 
 
 def _build_absolute_url(request, path, base_url_override=None):
+    """Handle build absolute URL."""
     if base_url_override:
         base = base_url_override.rstrip("/") + "/"
         return urllib.parse.urljoin(base, path.lstrip("/"))

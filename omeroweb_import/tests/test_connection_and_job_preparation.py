@@ -7,6 +7,8 @@ from omeroweb_import.views import core_functions
 
 
 class _FakeGatewayConnection:
+    """Test double for fake gateway connection."""
+
     def __init__(
         self,
         *,
@@ -23,20 +25,24 @@ class _FakeGatewayConnection:
         self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=self.group_calls.append)
 
     def connect(self):
+        """Handle connect."""
         if self._connect_exception is not None:
             raise self._connect_exception
         return self._connect_result
 
     def getLastError(self):
+        """Return get last error."""
         return self._last_error
 
     def close(self):
+        """Handle close."""
         self.closed = True
 
 
 def test_prepare_job_import_datasets_marks_missing_roots_and_dataset_failures(
     tmp_path, monkeypatch
 ):
+    """Verify test prepare job import datasets marks missin behavior."""
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
     monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
@@ -44,6 +50,7 @@ def test_prepare_job_import_datasets_marks_missing_roots_and_dataset_failures(
     updated_jobs = {}
 
     def update_job(job_id, mutator):
+        """Handle update job."""
         current = dict(updated_jobs.get(job_id, {"job_id": job_id}))
         updated_jobs[job_id] = mutator(current)
         return updated_jobs[job_id]
@@ -82,6 +89,7 @@ def test_prepare_job_import_datasets_marks_missing_roots_and_dataset_failures(
 
 
 def test_prepare_job_import_datasets_reports_save_failures(tmp_path, monkeypatch):
+    """Verify test prepare job import datasets reports save behavior."""
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
     job_id = "b" * 32
@@ -110,6 +118,7 @@ def test_prepare_job_import_datasets_reports_save_failures(tmp_path, monkeypatch
 def test_open_admin_connection_and_group_name_cover_failure_and_success_paths(
     monkeypatch,
 ):
+    """Verify test open admin connection and group name cov behavior."""
     monkeypatch.delenv("ROOTPASS", raising=False)
     assert core_functions._open_admin_connection("omeroserver", 4064) is None
 
@@ -128,6 +137,7 @@ def test_open_admin_connection_and_group_name_cover_failure_and_success_paths(
     created = []
 
     def gateway(*args, **kwargs):
+        """Handle gateway."""
         conn = connections.pop(0)
         created.append((args, kwargs, conn))
         return conn
@@ -191,6 +201,7 @@ def test_open_admin_connection_and_group_name_cover_failure_and_success_paths(
 
 
 def test_job_service_credentials_and_session_helpers_cover_env_and_cleanup(monkeypatch):
+    """Verify test job service credentials and session help behavior."""
     monkeypatch.delenv(core_functions.JOB_SERVICE_USER_ENV, raising=False)
     monkeypatch.delenv(core_functions.JOB_SERVICE_AUTH_ENV, raising=False)
     monkeypatch.delenv(core_functions.JOB_SERVICE_GROUP_ENV, raising=False)
@@ -252,6 +263,7 @@ def test_job_service_credentials_and_session_helpers_cover_env_and_cleanup(monke
 
 
 def test_background_connection_helpers_require_independent_session_keys(monkeypatch):
+    """Verify test background connection helpers require in behavior."""
     assert (
         core_functions._open_user_owned_background_connection(
             "alice",

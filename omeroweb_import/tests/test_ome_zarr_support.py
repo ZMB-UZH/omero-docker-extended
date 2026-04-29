@@ -28,21 +28,28 @@ from omeroweb_import.services.ome_zarr_support import (
 
 
 def _write_text(path: Path, payload: dict) -> None:
+    """Handle write text."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _write_chunk(path: Path) -> None:
+    """Handle write chunk."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"\x00")
 
 
 def _read_json(path: Path) -> dict:
+    """Handle read JSON."""
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _open_zarr_v2_array(store: Path, **kwargs):
+    """Handle open Zarr v2 array."""
+
     class _ArrayWriter:
+        """Represent array writer."""
+
         def __init__(self, store_path: Path, *, chunks, dtype):
             self._store_path = store_path
             self._chunks = list(chunks)
@@ -73,6 +80,7 @@ def _open_zarr_v2_array(store: Path, **kwargs):
 def test_inspect_ome_zarr_image_reads_metadata_and_physical_sizes(
     tmp_path: Path,
 ) -> None:
+    """Verify test inspect ome Zarr image reads metadata an behavior."""
     store = tmp_path / "image.ome.zarr"
     _write_text(
         store / ".zattrs",
@@ -152,6 +160,7 @@ def test_inspect_ome_zarr_image_reads_metadata_and_physical_sizes(
 
 
 def test_inspect_ome_zarr_image_rejects_plate_layout(tmp_path: Path) -> None:
+    """Verify test inspect ome Zarr image rejects plate layout."""
     store = tmp_path / "plate.ome.zarr"
     _write_text(
         store / ".zattrs",
@@ -174,6 +183,7 @@ def test_inspect_ome_zarr_image_rejects_plate_layout(tmp_path: Path) -> None:
 
 
 def test_inspect_ome_zarr_image_accepts_bioformats2raw_layout(tmp_path: Path) -> None:
+    """Verify test inspect ome Zarr image accepts bioformat behavior."""
     store = tmp_path / "bf2raw.ome.zarr"
     _write_text(store / ".zattrs", {"bioformats2raw.layout": 3})
     _write_text(store / ".zgroup", {"zarr_format": 2})
@@ -229,6 +239,7 @@ def test_inspect_ome_zarr_image_accepts_bioformats2raw_layout(tmp_path: Path) ->
 def test_inspect_ome_zarr_image_rejects_sparse_bioformats2raw_layout(
     tmp_path: Path,
 ) -> None:
+    """Verify test inspect ome Zarr image rejects sparse bi behavior."""
     store = tmp_path / "bf2raw-gap.ome.zarr"
     _write_text(store / ".zattrs", {"bioformats2raw.layout": 3})
     _write_text(store / ".zgroup", {"zarr_format": 2})
@@ -280,6 +291,7 @@ def test_inspect_ome_zarr_image_rejects_sparse_bioformats2raw_layout(
 
 
 def test_inspect_ome_zarr_image_ignores_non_ome_zarr_directory(tmp_path: Path) -> None:
+    """Verify test inspect ome Zarr image ignores non ome Z behavior."""
     store = tmp_path / "plain-folder.zarr"
     store.mkdir(parents=True, exist_ok=True)
     (store / "notes.txt").write_text("not a zarr store", encoding="utf-8")
@@ -292,6 +304,7 @@ def test_inspect_ome_zarr_image_ignores_non_ome_zarr_directory(tmp_path: Path) -
 
 
 def test_metadata_helpers_report_missing_and_invalid_payloads(tmp_path: Path) -> None:
+    """Verify test metadata helpers report missing and inva behavior."""
     store = tmp_path / "broken.ome.zarr"
     store.mkdir(parents=True, exist_ok=True)
 
@@ -346,6 +359,7 @@ def test_metadata_helpers_report_missing_and_invalid_payloads(tmp_path: Path) ->
 
 
 def test_native_gzip_level_helper_and_runtime_contract(monkeypatch) -> None:
+    """Verify test native gzip level helper and runtime con behavior."""
     monkeypatch.delenv(OME_ZARR_NATIVE_GZIP_LEVEL_ENV, raising=False)
     assert _native_ome_zarr_gzip_level() == DEFAULT_OME_ZARR_NATIVE_GZIP_LEVEL
 
@@ -372,6 +386,7 @@ def test_rewrite_problematic_native_image_arrays_recompresses_blosc_chunks(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test rewrite problematic native image arrays behavior."""
     import numcodecs
 
     store = tmp_path / "image.ome.zarr"
@@ -413,6 +428,7 @@ def test_rewrite_problematic_native_image_arrays_recompresses_blosc_chunks(
 
 
 def test_detects_and_regenerates_xy_only_pyramid(tmp_path: Path) -> None:
+    """Verify test detects and regenerates xy only pyramid."""
     store = tmp_path / "pyramid.ome.zarr"
     store.mkdir(parents=True, exist_ok=True)
     (store / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
@@ -478,6 +494,7 @@ def test_detects_and_regenerates_xy_only_pyramid(tmp_path: Path) -> None:
 
 
 def test_write_zarr_v2_level_writes_metadata_and_padded_chunks(tmp_path: Path) -> None:
+    """Verify test write Zarr v2 level writes metadata and behavior."""
     output_dir = tmp_path / "s1"
     data = np.arange(9, dtype=np.uint8).reshape(3, 3)
 

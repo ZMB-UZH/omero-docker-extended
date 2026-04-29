@@ -7,4 +7,5 @@ from .task_names import ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME
 
 @app.task(bind=True, name=ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME)
 def run_enhanced_search_scope_sync(_self, scope_key: str, run_token: str):
+    """Run run enhanced search scope sync."""
     return run_scope_sync_task(scope_key, run_token)

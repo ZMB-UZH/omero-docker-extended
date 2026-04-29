@@ -40,6 +40,8 @@ class UserDataStoreError(Exception):
 
 @dataclass
 class _Psycopg2ModuleCache:
+    """Represent psycopg2 module cache."""
+
     module: Any | None = None
     extras: Any | None = None
     sql: Any | None = None
@@ -49,6 +51,7 @@ _PSYCOPG2_MODULES = _Psycopg2ModuleCache()
 
 
 def _load_psycopg2():
+    """Handle load psycopg2."""
     if _PSYCOPG2_MODULES.module is not None and _PSYCOPG2_MODULES.extras is not None:
         return _PSYCOPG2_MODULES.module, _PSYCOPG2_MODULES.extras
 
@@ -64,6 +67,7 @@ def _load_psycopg2():
 
 
 def _load_psycopg2_sql():
+    """Handle load psycopg2 SQL."""
     if _PSYCOPG2_MODULES.sql is not None:
         return _PSYCOPG2_MODULES.sql
 
@@ -83,6 +87,7 @@ def _safe_query(template, *identifiers):
 
 
 def _db_params():
+    """Handle database params."""
     user = get_env(ENV_USER, env_file=ENV_FILE_OMEROWEB)
     password = get_env(ENV_AUTH, env_file=ENV_FILE_OMEROWEB)
     host = get_env(ENV_HOST, env_file=ENV_FILE_OMEROWEB)
@@ -112,6 +117,7 @@ def _db_params():
 
 @contextmanager
 def _connect():
+    """Handle connect."""
     psycopg2, _ = _load_psycopg2()
     param_options = _db_params()
     conn = None
@@ -156,6 +162,7 @@ def _connect():
 
 
 def _ensure_schema(conn):
+    """Handle ensure schema."""
     _load_psycopg2_sql()
     with conn.cursor() as cur:
         stmt = _safe_query(
@@ -185,6 +192,7 @@ def _ensure_schema(conn):
 
 
 def _ensure_ai_schema(conn):
+    """Handle ensure ai schema."""
     _load_psycopg2_sql()
     with conn.cursor() as cur:
         stmt = _safe_query(
@@ -214,6 +222,7 @@ def _ensure_ai_schema(conn):
 
 
 def _ensure_user_settings_schema(conn):
+    """Handle ensure user settings schema."""
     _load_psycopg2_sql()
     with conn.cursor() as cur:
         stmt = _safe_query(
@@ -241,6 +250,7 @@ def _ensure_user_settings_schema(conn):
 
 
 def list_variable_sets(username):
+    """Return list variable sets."""
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -271,6 +281,7 @@ def list_variable_sets(username):
 
 
 def save_variable_set(username, set_name, var_names):
+    """Store save variable set."""
     try:
         _, extras = _load_psycopg2()
         _load_psycopg2_sql()
@@ -317,6 +328,7 @@ def save_variable_set(username, set_name, var_names):
 
 
 def load_variable_set(username, set_name):
+    """Return load variable set."""
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -347,9 +359,7 @@ def load_variable_set(username, set_name):
 
 
 def delete_variable_set(username, set_name):
-    """
-    Delete a saved variable set for a user.
-    """
+    """Delete a saved variable set for a user."""
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -396,6 +406,7 @@ def delete_variable_set(username, set_name):
 
 
 def list_ai_credentials(username):
+    """Return list ai credentials."""
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -426,6 +437,7 @@ def list_ai_credentials(username):
 
 
 def get_ai_credential(username, provider):
+    """Return get ai credential."""
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -456,6 +468,7 @@ def get_ai_credential(username, provider):
 
 
 def save_ai_credentials(username, provider, api_key):
+    """Store save ai credentials."""
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -486,6 +499,7 @@ def save_ai_credentials(username, provider, api_key):
 
 
 def save_user_settings(username, settings_payload):
+    """Store save user settings."""
     try:
         _, extras = _load_psycopg2()
         _load_psycopg2_sql()
@@ -531,6 +545,7 @@ def save_user_settings(username, settings_payload):
 
 
 def delete_all_user_settings(username):
+    """Handle delete all user settings."""
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -560,6 +575,7 @@ def delete_all_user_settings(username):
 
 
 def delete_all_variable_sets(username):
+    """Handle delete all variable sets."""
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -589,6 +605,7 @@ def delete_all_variable_sets(username):
 
 
 def delete_all_ai_credentials(username):
+    """Handle delete all ai credentials."""
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -618,6 +635,7 @@ def delete_all_ai_credentials(username):
 
 
 def delete_all_user_data(username):
+    """Handle delete all user data."""
     try:
         with _connect() as conn:
             _load_psycopg2_sql()
@@ -649,6 +667,7 @@ def delete_all_user_data(username):
 
 
 def _list_user_scoped_tables(conn):
+    """Handle list user scoped tables."""
     with conn.cursor() as cur:
         cur.execute(  # nosemgrep
             """

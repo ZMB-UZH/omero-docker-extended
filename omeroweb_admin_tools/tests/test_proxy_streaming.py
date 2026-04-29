@@ -9,6 +9,7 @@ from omeroweb_admin_tools.views.index_view import _proxy_http_request
 
 
 def _make_headers(values: dict[str, str]) -> HTTPMessage:
+    """Handle make headers."""
     message = HTTPMessage()
     for key, value in values.items():
         message[key] = value
@@ -16,12 +17,16 @@ def _make_headers(values: dict[str, str]) -> HTTPMessage:
 
 
 class _DummyDjangoRequest:
+    """Test double for dummy django request."""
+
     method = "GET"
     body = b""
     headers: dict[str, str] = {}
 
 
 def _install_proxy_backend_stub(monkeypatch, handler) -> None:
+    """Handle install proxy backend stub."""
+
     def fake_backend_request(
         *,
         base_url,
@@ -31,6 +36,7 @@ def _install_proxy_backend_stub(monkeypatch, handler) -> None:
         headers,
         timeout_seconds,
     ):
+        """Handle fake backend request."""
         return handler(
             method,
             f"{base_url.rstrip('/')}{request_target}",
@@ -49,9 +55,12 @@ def _install_proxy_backend_stub(monkeypatch, handler) -> None:
 def test_proxy_http_request_suppresses_prometheus_live_notification_stream(
     monkeypatch,
 ) -> None:
+    """Verify test proxy HTTP request suppresses prometheus behavior."""
     read_called = {"value": False}
 
     class DummyResponse:
+        """Test double for dummy response."""
+
         status_code = 200
         headers = _make_headers({"Content-Type": "text/event-stream"})
 
@@ -62,6 +71,7 @@ def test_proxy_http_request_suppresses_prometheus_live_notification_stream(
 
         @staticmethod
         def close():
+            """Handle close."""
             return None
 
     _install_proxy_backend_stub(
@@ -86,9 +96,12 @@ def test_proxy_http_request_suppresses_prometheus_live_notification_stream(
 def test_proxy_http_request_returns_gateway_timeout_for_backend_timeout(
     monkeypatch,
 ) -> None:
+    """Verify test proxy HTTP request returns gateway timeo behavior."""
+
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
+        """Handle fake request."""
         raise requests.Timeout("timed out")
 
     _install_proxy_backend_stub(monkeypatch, fake_request)
@@ -109,9 +122,12 @@ def test_proxy_http_request_returns_gateway_timeout_for_backend_timeout(
 def test_proxy_http_request_returns_gateway_timeout_for_socket_timeout(
     monkeypatch,
 ) -> None:
+    """Verify test proxy HTTP request returns gateway timeo behavior."""
+
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
+        """Handle fake request."""
         raise socket.timeout("socket timed out")
 
     _install_proxy_backend_stub(monkeypatch, fake_request)

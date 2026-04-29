@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_owner_id(obj):
+    """Handle get owner identifier."""
     if obj is None:
         return None
     try:
@@ -64,6 +65,7 @@ def _get_owner_id(obj):
 
 
 def _current_user_id(conn):
+    """Handle current user identifier."""
     try:
         user = conn.getUser()
         if user is not None:
@@ -75,6 +77,7 @@ def _current_user_id(conn):
 
 
 def _is_owned_by_user(obj, user_id):
+    """Handle is owned by user."""
     if obj is None or user_id is None:
         return False
     owner_id = _get_owner_id(obj)
@@ -87,6 +90,7 @@ def _is_owned_by_user(obj, user_id):
 
 
 def _get_owner_username(obj):
+    """Handle get owner username."""
     if obj is None:
         return ""
     owner = None
@@ -123,6 +127,7 @@ def _get_owner_username(obj):
 
 
 def _get_permissions(obj):
+    """Handle get permissions."""
     try:
         details = obj.getDetails()
         permissions = details.getPermissions() if details else None
@@ -143,6 +148,7 @@ def _get_permissions(obj):
 
 
 def _permissions_flag(permissions, attr):
+    """Handle permissions flag."""
     try:
         flag = getattr(permissions, attr)
     except Exception:
@@ -156,6 +162,7 @@ def _permissions_flag(permissions, attr):
 
 
 def _has_read_write_permissions(obj):
+    """Handle has read write permissions."""
     permissions = _get_permissions(obj)
     if permissions is None:
         return False
@@ -165,6 +172,7 @@ def _has_read_write_permissions(obj):
 
 
 def _has_read_annotate_permissions(obj):
+    """Handle has read annotate permissions."""
     permissions = _get_permissions(obj)
     if permissions is None:
         return False
@@ -177,6 +185,7 @@ def _has_read_annotate_permissions(obj):
 
 
 def _iter_accessible_projects(conn):
+    """Handle iter accessible projects."""
     if conn is None:
         return
     current_group = None
@@ -229,6 +238,7 @@ def _iter_accessible_projects(conn):
 
 
 def _iter_member_groups(conn):
+    """Handle iter member groups."""
     if conn is None:
         return []
     try:
@@ -249,6 +259,7 @@ def _iter_member_groups(conn):
 
 
 def _group_member_count(conn, group):
+    """Handle group member count."""
     for attr in (
         "getMemberCount",
         "getMembers",
@@ -288,6 +299,7 @@ def _group_member_count(conn, group):
 
 
 def _group_has_other_members(conn, group):
+    """Handle group has other members."""
     count = _group_member_count(conn, group)
     return count > 1
 
@@ -336,6 +348,7 @@ def _group_is_read_annotate(group):
 
 
 def _has_collaboration_groups(conn):
+    """Handle has collaboration groups."""
     for group in _iter_member_groups(conn):
         if not _group_has_other_members(conn, group):
             continue
@@ -371,6 +384,7 @@ def _is_user_in_group(conn, group_id, user_id):
 
 
 def _collect_project_payload(conn, user_id):
+    """Handle collect project payload."""
     owned_projects = []
     collab_projects = []
     annotate_projects = []
@@ -432,6 +446,7 @@ def _collect_project_payload(conn, user_id):
 
 
 def _get_accessible_project(conn, project_id, user_id):
+    """Handle get accessible project."""
     if not project_id:
         return None, None
     try:
@@ -456,10 +471,12 @@ def _get_accessible_project(conn, project_id, user_id):
 
 
 def _suggest_separator_regex(filenames):
+    """Handle suggest separator regex."""
     return suggest_separator_regex(filenames)
 
 
 def _safe_index_messages_json():
+    """Handle safe index messages JSON."""
     try:
         return json.dumps(messages.index_messages())
     except Exception as exc:
@@ -475,9 +492,7 @@ def _safe_index_messages_json():
 @require_non_root_user
 @ensure_csrf_cookie
 def index(request, conn=None, _url=None, **kwargs):
-    """
-    OMP filename+metadata harverster UI
-    """
+    """OMP filename+metadata harverster UI"""
     projects: dict[str, list[Any]] = {
         "owned": [],
         "read_annotate": [],
@@ -486,6 +501,7 @@ def index(request, conn=None, _url=None, **kwargs):
     user_id = None
 
     def build_index_context(extra=None):
+        """Build build index context."""
         context = {
             "projects": projects,
             "error_message": "",
@@ -1110,6 +1126,7 @@ def index(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def list_projects(request, conn=None, _url=None, **kwargs):
+    """Return list projects."""
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
     return JsonResponse(payload)
@@ -1117,5 +1134,6 @@ def list_projects(request, conn=None, _url=None, **kwargs):
 
 @login_required()
 def root_status(request, conn=None, _url=None, **kwargs):
+    """Handle root status."""
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})

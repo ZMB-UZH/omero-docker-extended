@@ -12,30 +12,42 @@ TEST_DB_AUTH_VALUE = "plugin-db-auth-value"
 
 
 class _FakeSqlTemplate:
+    """Test double for fake SQL template."""
+
     def __init__(self, query):
         self.query = str(query)
 
     def format(self, *args, **kwargs):
+        """Build format."""
         return self.query
 
 
 class _FakeSqlModule:
+    """Test double for fake SQL module."""
+
     @staticmethod
     def SQL(query):
+        """Handle SQL."""
         return _FakeSqlTemplate(query)
 
     @staticmethod
     def Identifier(name):
+        """Handle identifier."""
         return name
 
 
 class _FakeExtras:
+    """Test double for fake extras."""
+
     @staticmethod
     def Json(payload):
+        """Handle JSON."""
         return {"json": payload}
 
 
 class _FakeCursor:
+    """Test double for fake cursor."""
+
     def __init__(self, *, fetchone=None, fetchall=None, rowcount=0, rowcounts=None):
         self.fetchone_value = fetchone
         self.fetchall_value = fetchall or []
@@ -44,14 +56,17 @@ class _FakeCursor:
         self.executed = []
 
     def execute(self, query, params=None):
+        """Run execute."""
         self.executed.append((str(query), params))
         if self.rowcounts:
             self.rowcount = self.rowcounts.pop(0)
 
     def fetchone(self):
+        """Handle fetchone."""
         return self.fetchone_value
 
     def fetchall(self):
+        """Handle fetchall."""
         return list(self.fetchall_value)
 
     def __enter__(self):
@@ -62,24 +77,31 @@ class _FakeCursor:
 
 
 class _FakeConnection:
+    """Test double for fake connection."""
+
     def __init__(self, cursors):
         self._cursors = list(cursors)
         self.commits = 0
         self.closed = False
 
     def cursor(self):
+        """Handle cursor."""
         if not self._cursors:
             self._cursors.append(_FakeCursor())
         return self._cursors.pop(0)
 
     def commit(self):
+        """Handle commit."""
         self.commits += 1
 
     def close(self):
+        """Handle close."""
         self.closed = True
 
 
 class _RaisingContext:
+    """Represent raising context."""
+
     def __init__(self, error):
         self.error = error
 
@@ -91,16 +113,19 @@ class _RaisingContext:
 
 
 def _patch_connection_queue(monkeypatch, connections):
+    """Handle patch connection queue."""
     queue = list(connections)
 
     @contextmanager
     def fake_connect():
+        """Handle fake connect."""
         yield queue.pop(0)
 
     monkeypatch.setattr(data_store, "_connect", fake_connect)
 
 
 def test_connection_and_schema_helpers_cover_env_validation_and_cleanup(monkeypatch):
+    """Verify test connection and schema helpers cover env behavior."""
     env_values = {
         data_store.ENV_USER: "plugin-user",
         data_store.ENV_AUTH: TEST_DB_AUTH_VALUE,
@@ -155,6 +180,7 @@ def test_connection_and_schema_helpers_cover_env_validation_and_cleanup(monkeypa
 
 
 def test_crud_helpers_cover_variable_sets_credentials_and_user_cleanup(monkeypatch):
+    """Verify test crud helpers cover variable sets credent behavior."""
     monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
         data_store,
@@ -204,6 +230,7 @@ def test_crud_helpers_cover_variable_sets_credentials_and_user_cleanup(monkeypat
 
 
 def test_delete_validation_and_table_listing_reject_unconfirmed_removals(monkeypatch):
+    """Verify test delete validation and table listing reje behavior."""
     monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(data_store, "_ensure_schema", lambda conn: None)
 
@@ -234,9 +261,11 @@ def test_delete_validation_and_table_listing_reject_unconfirmed_removals(monkeyp
 def test_import_and_connection_helpers_raise_store_errors_on_backend_failures(
     monkeypatch,
 ):
+    """Verify test import and connection helpers raise stor behavior."""
     original_import = builtins.__import__
 
     def failing_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):
+        """Handle failing import."""
         if name == "psycopg2" or name.startswith("psycopg2"):
             raise ImportError("psycopg2 missing")
         return original_import(name, global_vars, local_vars, fromlist, level)
@@ -342,6 +371,7 @@ def test_import_and_connection_helpers_raise_store_errors_on_backend_failures(
 def test_crud_operations_wrap_unexpected_backend_failures(
     monkeypatch, operation, args, error_type
 ):
+    """Verify test crud operations wrap unexpected backend behavior."""
     monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
         data_store,
@@ -362,6 +392,7 @@ def test_crud_operations_wrap_unexpected_backend_failures(
 def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
     monkeypatch,
 ):
+    """Verify test cached import helpers and connection cle behavior."""
     sentinel_mod = object()
     sentinel_extras = object()
     sentinel_sql = object()
@@ -403,7 +434,10 @@ def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
         pass
 
     class _ClosingConnection(_FakeConnection):
+        """Represent closing connection."""
+
         def close(self):
+            """Handle close."""
             raise RuntimeError("close exploded")
 
     closing_conn = _ClosingConnection([_FakeCursor()])
@@ -432,6 +466,7 @@ def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
 def test_specific_store_error_paths_and_confirmation_failures_are_propagated(
     monkeypatch,
 ):
+    """Verify test specific store error paths and confirmat behavior."""
     monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
         data_store,
@@ -503,6 +538,7 @@ def test_specific_store_error_paths_and_confirmation_failures_are_propagated(
 
 
 def test_real_psycopg2_loader_paths_cover_success_imports(monkeypatch):
+    """Verify test real psycopg2 loader paths cover success behavior."""
     data_store._PSYCOPG2_MODULES.module = None
     data_store._PSYCOPG2_MODULES.extras = None
     data_store._PSYCOPG2_MODULES.sql = None
@@ -516,6 +552,7 @@ def test_real_psycopg2_loader_paths_cover_success_imports(monkeypatch):
 
 
 def test_connect_re_raises_variable_store_errors_from_backend(monkeypatch):
+    """Verify test connect re raises variable store errors behavior."""
     monkeypatch.setattr(
         data_store,
         "_load_psycopg2",

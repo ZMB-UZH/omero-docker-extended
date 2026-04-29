@@ -1,3 +1,1 @@
-"""
-Job management services.
-"""
+"""Job management services."""

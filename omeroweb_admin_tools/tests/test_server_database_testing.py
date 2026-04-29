@@ -8,6 +8,7 @@ from omeroweb_admin_tools.views.index_view import server_database_testing_run
 
 
 def test_server_database_testing_run_requires_post(monkeypatch) -> None:
+    """Verify test server database testing run requires post."""
     request = RequestFactory().get("/admin_tools/server-database-testing/run/")
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.utils.current_username",
@@ -24,6 +25,7 @@ def test_server_database_testing_run_requires_post(monkeypatch) -> None:
 
 
 def test_server_database_testing_run_rejects_empty_script_ids(monkeypatch) -> None:
+    """Verify test server database testing run rejects empt behavior."""
     request = RequestFactory().post(
         "/admin_tools/server-database-testing/run/",
         data=json.dumps({"scripts": ["omero_server_core", ""]}),
@@ -46,6 +48,7 @@ def test_server_database_testing_run_rejects_empty_script_ids(monkeypatch) -> No
 
 
 def test_server_database_testing_run_returns_results(monkeypatch) -> None:
+    """Verify test server database testing run returns results."""
     request = RequestFactory().post(
         "/admin_tools/server-database-testing/run/",
         data=json.dumps({"scripts": ["omero_server_core"]}),

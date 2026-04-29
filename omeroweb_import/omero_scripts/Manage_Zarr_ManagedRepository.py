@@ -45,20 +45,24 @@ _VOLATILE_TEMPLATE_PATTERNS = {
 def _set_prefix_directory_mode(path: Path | str) -> None:
     # Allow a separate OMERO.web service account to traverse the known
     # managed-repository prefix without exposing sibling directory listings.
+    """Handle set prefix directory mode."""
     os.chmod(path, _PREFIX_DIR_MODE)
 
 
 def _set_staged_directory_mode(path: Path | str) -> None:
     # Native ``omero zarr import`` runs from OMERO.web, so the staged tree
     # must be readable across service-user boundaries on shared host mounts.
+    """Handle set staged directory mode."""
     os.chmod(path, _STAGED_DIR_MODE)
 
 
 def _set_staged_file_mode(path: Path | str) -> None:
+    """Handle set staged file mode."""
     os.chmod(path, _STAGED_FILE_MODE)
 
 
 def _require_config_value(config: dict[str, str], key: str) -> str:
+    """Handle require config value."""
     value = str(config.get(key) or "").strip()
     if not value:
         raise RuntimeError(
@@ -69,6 +73,7 @@ def _require_config_value(config: dict[str, str], key: str) -> str:
 
 
 def _load_server_config(conn: BlitzGateway) -> dict[str, str]:
+    """Handle load server config."""
     if conn is None:
         raise RuntimeError("Missing OMERO connection for managed-repository staging.")
 
@@ -98,6 +103,7 @@ def _load_server_config(conn: BlitzGateway) -> dict[str, str]:
 
 
 def _runtime_state_path() -> Path:
+    """Handle runtime state path."""
     omerodir = str(os.environ.get("OMERODIR") or "").strip()
     if not omerodir:
         raise RuntimeError(
@@ -107,6 +113,7 @@ def _runtime_state_path() -> Path:
 
 
 def _load_runtime_state_value(key: str) -> str:
+    """Handle load runtime state value."""
     state_path = _runtime_state_path()
     if not state_path.is_file():
         raise RuntimeError(
@@ -132,6 +139,7 @@ def _load_runtime_state_value(key: str) -> str:
 
 
 def _validate_path_component(value: str, label: str) -> str:
+    """Handle validate path component."""
     component = str(value or "").strip()
     if (
         not component
@@ -145,6 +153,7 @@ def _validate_path_component(value: str, label: str) -> str:
 
 
 def _repo_model_attr(model_obj, attr_name: str):
+    """Handle repo model attr."""
     value = getattr(model_obj, attr_name, None)
     if value is None:
         value = getattr(model_obj, f"_{attr_name}", None)
@@ -152,6 +161,7 @@ def _repo_model_attr(model_obj, attr_name: str):
 
 
 def _repo_text(value) -> str:
+    """Handle repo text."""
     if value is None:
         return ""
     inner = getattr(value, "val", None)
@@ -163,6 +173,7 @@ def _repo_text(value) -> str:
 
 
 def _repo_description_root(description) -> str:
+    """Handle repo description root."""
     description_path = _repo_text(_repo_model_attr(description, "path")).rstrip("/")
     description_name = _repo_text(_repo_model_attr(description, "name")).strip("/")
     if description_path and description_name:
@@ -173,6 +184,7 @@ def _repo_description_root(description) -> str:
 
 
 def _repo_template_parts(config: dict[str, str]) -> list[str]:
+    """Handle repo template parts."""
     template = _require_config_value(config, _CONFIG_REPO_PATH)
     raw_parts = [part for part in template.split("/") if part]
     if not raw_parts:
@@ -181,6 +193,7 @@ def _repo_template_parts(config: dict[str, str]) -> list[str]:
 
 
 def _assert_supported_template_tokens(raw_part: str) -> None:
+    """Handle assert supported template tokens."""
     tokens = set(_TOKEN_PATTERN.findall(raw_part))
     unknown_tokens = tokens - _KNOWN_TEMPLATE_TOKENS
     if unknown_tokens:
@@ -199,6 +212,7 @@ def _assert_supported_template_tokens(raw_part: str) -> None:
 def _render_repo_template(
     config: dict[str, str], group_name: str, username: str, when: datetime
 ) -> list[str]:
+    """Handle render repo template."""
     raw_parts = _repo_template_parts(config)
 
     values = {
@@ -230,6 +244,7 @@ def _match_repo_template(
     username: str,
     actual_parts: tuple[str, ...],
 ) -> tuple[list[str], tuple[str, ...]]:
+    """Handle match repo template."""
     raw_parts = _repo_template_parts(config)
     if len(actual_parts) < len(raw_parts):
         raise RuntimeError(
@@ -273,6 +288,7 @@ def _match_repo_template(
 
 
 def _managed_repository_root(config: dict[str, str]) -> Path:
+    """Handle managed repository root."""
     data_dir = Path(_require_config_value(config, _CONFIG_DATA_DIR)).resolve(
         strict=False
     )
@@ -296,6 +312,7 @@ def _managed_repository_root(config: dict[str, str]) -> Path:
 
 
 def _shared_tmp_root(config: dict[str, str]) -> Path:
+    """Handle shared tmp root."""
     root = Path(_require_config_value(config, _CONFIG_SHARED_TMP_PATH)).resolve(
         strict=False
     )
@@ -305,6 +322,7 @@ def _shared_tmp_root(config: dict[str, str]) -> Path:
 
 
 def _validate_source_path(config: dict[str, str], source_path: str) -> Path:
+    """Handle validate source path."""
     shared_tmp_root = _shared_tmp_root(config)
     source = Path(str(source_path or "")).resolve(strict=True)
     try:
@@ -321,6 +339,7 @@ def _validate_source_path(config: dict[str, str], source_path: str) -> Path:
 
 
 def _reject_symlinks(path: Path) -> None:
+    """Handle reject symlinks."""
     for dirpath, dirnames, filenames in os.walk(path):
         current_dir = Path(dirpath)
         if current_dir.is_symlink():
@@ -339,6 +358,7 @@ def _template_container_dir(
     username: str,
     when: datetime,
 ) -> Path:
+    """Handle template container dir."""
     managed_root = _managed_repository_root(config)
     rendered_parts = _render_repo_template(config, group_name, username, when)
     container_dir = managed_root
@@ -354,6 +374,7 @@ def _template_container_dir(
 
 
 def _managed_repository_proxy(conn: BlitzGateway, config: dict[str, str]):
+    """Handle managed repository proxy."""
     if conn is None:
         raise RuntimeError("Missing OMERO connection for managed-repository access.")
 
@@ -399,6 +420,7 @@ def _managed_repository_proxy(conn: BlitzGateway, config: dict[str, str]):
 def _repo_relative_path(
     managed_root: Path, path: Path, *, directory: bool, leading_slash: bool = False
 ) -> str:
+    """Handle repo relative path."""
     target = path.resolve(strict=False)
     try:
         relative_path = target.relative_to(managed_root)
@@ -420,6 +442,7 @@ def _repo_relative_path(
 def _register_managed_directory(
     repo_proxy, managed_root: Path, target_dir: Path
 ) -> None:
+    """Handle register managed directory."""
     repo_relative_dir = _repo_relative_path(managed_root, target_dir, directory=True)
     try:
         repo_proxy.makeDir(repo_relative_dir, True)
@@ -434,6 +457,7 @@ def _repository_directory_registered(
     managed_root: Path,
     directory: Path,
 ) -> bool:
+    """Handle repository directory registered."""
     repo_relative_dir = _repo_relative_path(managed_root, directory, directory=True)
     try:
         return bool(repo_proxy.fileExists(repo_relative_dir))
@@ -448,6 +472,7 @@ def _assert_no_unregistered_existing_dirs(
     managed_root: Path,
     target_dir: Path,
 ) -> None:
+    """Handle assert no unregistered existing dirs."""
     current = managed_root.resolve(strict=False)
     for part in target_dir.relative_to(managed_root).parts:
         current = (current / part).resolve(strict=False)
@@ -466,6 +491,7 @@ def _assert_no_unregistered_existing_dirs(
 
 
 def _registered_delete_path(managed_root: Path, target: Path) -> str:
+    """Handle registered delete path."""
     return _repo_relative_path(
         managed_root,
         target,
@@ -477,6 +503,7 @@ def _registered_delete_path(managed_root: Path, target: Path) -> str:
 def _delete_registered_managed_path(
     conn: BlitzGateway, repo_proxy, managed_root: Path, target: Path
 ) -> None:
+    """Handle delete registered managed path."""
     delete_path = _registered_delete_path(managed_root, target)
     try:
         handle = repo_proxy.deletePaths([delete_path], True, False)
@@ -488,6 +515,7 @@ def _delete_registered_managed_path(
 
 
 def _prefix_directories(managed_root: Path, leaf_parent: Path) -> list[Path]:
+    """Handle prefix directories."""
     prefix_dirs: list[Path] = []
     current = managed_root
     for part in leaf_parent.relative_to(managed_root).parts:
@@ -497,6 +525,7 @@ def _prefix_directories(managed_root: Path, leaf_parent: Path) -> list[Path]:
 
 
 def _allocate_destination_dir(target_dir: Path, source_name: str) -> Path:
+    """Handle allocate destination dir."""
     candidate = target_dir / source_name
     if not candidate.exists():
         return candidate
@@ -519,6 +548,7 @@ def _allocate_destination_dir(target_dir: Path, source_name: str) -> Path:
 
 
 def _normalize_tree_permissions(root: Path) -> None:
+    """Handle normalize tree permissions."""
     for dirpath, dirnames, filenames in os.walk(root):
         _set_staged_directory_mode(dirpath)
         for dirname in dirnames:
@@ -534,6 +564,7 @@ def _stage_zarr(
     group_name: str,
     username: str,
 ) -> Path:
+    """Handle stage Zarr."""
     when = datetime.now()
     source = _validate_source_path(config, source_path)
     _reject_symlinks(source)
@@ -563,6 +594,7 @@ def _cleanup_zarr(
     group_name: str,
     username: str,
 ) -> Path:
+    """Handle cleanup Zarr."""
     managed_root = _managed_repository_root(config)
     target = Path(str(managed_path or "")).resolve(strict=False)
     try:
@@ -605,6 +637,7 @@ def _cleanup_zarr(
 
 
 def run_script():
+    """Run run script."""
     client = scripts.client(
         "Manage_Zarr_ManagedRepository.py",
         "Stage or clean up OME-Zarr directories in the OMERO managed repository.",

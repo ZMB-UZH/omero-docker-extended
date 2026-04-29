@@ -10,26 +10,35 @@ from omeroweb_omp_plugin.views import index_view
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self._raw_value = value
 
     def getValue(self):
+        """Return get value."""
         return self._raw_value
 
 
 class _Owner:
+    """Represent owner."""
+
     def __init__(self, owner_id, name="owner"):
         self._id = owner_id
         self._name = name
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self._id)
 
     def getOmeName(self):
+        """Return get ome name."""
         return self._name
 
 
 class _Permissions:
+    """Represent permissions."""
+
     def __init__(
         self,
         label,
@@ -53,44 +62,58 @@ class _Permissions:
         return self._label
 
     def isRead(self):
+        """Handle is read."""
         return self._read
 
     def isWrite(self):
+        """Handle is write."""
         return self._write
 
     def isAnnotate(self):
+        """Handle is annotate."""
         return self._annotate
 
     def canAnnotate(self):
+        """Handle can annotate."""
         return self._annotate
 
     def isGroupRead(self):
+        """Handle is group read."""
         return self._group_read
 
     def isGroupWrite(self):
+        """Handle is group write."""
         return self._group_write
 
     def isGroupAnnotate(self):
+        """Handle is group annotate."""
         return self._group_annotate
 
 
 class _Details:
+    """Represent details."""
+
     def __init__(self, *, owner=None, permissions=None, group=None):
         self._owner = owner
         self._permissions = permissions
         self._group = group
 
     def getOwner(self):
+        """Return get owner."""
         return self._owner
 
     def getPermissions(self):
+        """Return get permissions."""
         return self._permissions
 
     def getGroup(self):
+        """Return get group."""
         return self._group
 
 
 class _Group:
+    """Represent group."""
+
     def __init__(self, group_id, permissions, member_count=1):
         self.id = group_id
         self._permissions = permissions
@@ -98,19 +121,25 @@ class _Group:
         self._details = _Details(permissions=permissions)
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self.id)
 
     def getDetails(self):
+        """Return get details."""
         return self._details
 
     def getPermissions(self):
+        """Return get permissions."""
         return self._permissions
 
     def getMemberCount(self):
+        """Return get member count."""
         return self._member_count
 
 
 class _Project:
+    """Represent project."""
+
     def __init__(self, project_id, name, *, owner=None, permissions=None, group=None):
         self.id = project_id
         self._name = name
@@ -124,64 +153,86 @@ class _Project:
         )
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self.id)
 
     def getName(self):
+        """Return get name."""
         return self._name
 
     def getDetails(self):
+        """Return get details."""
         return self._details
 
     def getOwner(self):
+        """Return get owner."""
         return self._owner
 
     def getPermissions(self):
+        """Return get permissions."""
         return self._permissions
 
 
 class _Dataset:
+    """Represent dataset."""
+
     def __init__(self, dataset_id, name):
         self.id = dataset_id
         self._name = name
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self.id)
 
     def getName(self):
+        """Return get name."""
         return self._name
 
 
 class _ImageObject:
+    """Represent image object."""
+
     def __init__(self, image_id, name):
         self.id = image_id
         self._name = name
 
     def getId(self):
+        """Return get identifier."""
         return _Value(self.id)
 
     def getName(self):
+        """Return get name."""
         return self._name
 
 
 class _BrokenProject(_Project):
+    """Represent broken project."""
+
     def getDetails(self):
+        """Return get details."""
         raise RuntimeError("details unavailable")
 
 
 class _ServiceOpts:
+    """Represent service opts."""
+
     def __init__(self, initial_group="4"):
         self.current_group = initial_group
         self.set_calls = []
 
     def getOmeroGroup(self):
+        """Return get OMERO group."""
         return self.current_group
 
     def setOmeroGroup(self, value):
+        """Store set OMERO group."""
         self.set_calls.append(value)
         self.current_group = value
 
 
 class _Conn:
+    """Represent conn."""
+
     def __init__(self, user_id=10, username="alice"):
         self.SERVICE_OPTS = _ServiceOpts()
         self._user = SimpleNamespace(
@@ -198,12 +249,15 @@ class _Conn:
         self.raise_opts_groups = False
 
     def getUser(self):
+        """Return get user."""
         return self._user
 
     def getGroupsMemberOf(self):
+        """Return get groups member of."""
         return list(self.groups)
 
     def getObjects(self, object_type, opts=None):
+        """Return get objects."""
         if object_type == "Project":
             if opts == {"group": "-1"}:
                 if self.raise_opts_groups:
@@ -219,18 +273,22 @@ class _Conn:
         raise AssertionError(f"Unexpected object request: {object_type}")
 
     def listProjects(self):
+        """Return list projects."""
         return list(self.list_projects)
 
     def getObject(self, object_type, object_id):
+        """Return get object."""
         assert object_type == "Project"
         return self.project_by_id.get(int(object_id))
 
 
 def _json_payload(response):
+    """Handle JSON payload."""
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_owner_and_permission_helpers_use_fallback_accessors():
+    """Verify test owner and permission helpers use fallbac behavior."""
     owner = _Owner(7, "alice")
     read_write = _Permissions("rwrw--", read=True, write=True)
     read_annotate = _Permissions(
@@ -258,6 +316,7 @@ def test_owner_and_permission_helpers_use_fallback_accessors():
 
 
 def test_iter_accessible_projects_restores_group_after_fallback():
+    """Verify test iter accessible projects restores group behavior."""
     conn = _Conn()
     project = _Project(1, "Fallback")
     conn.projects = [project]
@@ -271,6 +330,7 @@ def test_iter_accessible_projects_restores_group_after_fallback():
 
 
 def test_group_helpers_detect_collaboration_modes_and_membership():
+    """Verify test group helpers detect collaboration modes behavior."""
     conn = _Conn()
     rw_group = _Group(1, _Permissions("rwrw--", group_read=True, group_write=True), 3)
     ra_group = _Group(
@@ -308,6 +368,7 @@ def test_group_helpers_detect_collaboration_modes_and_membership():
 def test_collect_project_payload_separates_owned_and_collaboration_projects(
     monkeypatch,
 ):
+    """Verify test collect project payload separates owned behavior."""
     conn = _Conn()
     owner = _Owner(10, "alice")
     other_owner = _Owner(11, "bob")
@@ -351,6 +412,7 @@ def test_collect_project_payload_separates_owned_and_collaboration_projects(
 
 
 def test_get_accessible_project_returns_expected_access_levels():
+    """Verify test get accessible project returns expected behavior."""
     conn = _Conn()
     owner = _Owner(10, "alice")
     other_owner = _Owner(11, "bob")
@@ -366,6 +428,7 @@ def test_get_accessible_project_returns_expected_access_levels():
 
 
 def test_index_list_datasets_requires_project_and_uses_owner_filter(monkeypatch):
+    """Verify test index list datasets requires project and behavior."""
     factory = RequestFactory()
     request = factory.post("/", data={"action": "list_datasets", "project": "5"})
     conn = _Conn()
@@ -396,6 +459,7 @@ def test_index_list_datasets_requires_project_and_uses_owner_filter(monkeypatch)
 
 
 def test_index_ai_regex_returns_local_suggestion(monkeypatch):
+    """Verify test index ai regex returns local suggestion."""
     factory = RequestFactory()
     request = factory.post(
         "/",
@@ -435,6 +499,7 @@ def test_index_ai_regex_returns_local_suggestion(monkeypatch):
 
 
 def test_index_ai_parse_attaches_image_ids(monkeypatch):
+    """Verify test index ai parse attaches image identifiers."""
     factory = RequestFactory()
     request = factory.post(
         "/",
@@ -484,6 +549,7 @@ def test_index_ai_parse_attaches_image_ids(monkeypatch):
 
 
 def test_index_preview_renders_rows_and_caps_variables(monkeypatch):
+    """Verify test index preview renders rows and caps vari behavior."""
     factory = RequestFactory()
     request = factory.post(
         "/",
@@ -544,6 +610,7 @@ def test_index_preview_renders_rows_and_caps_variables(monkeypatch):
 
 
 def test_list_projects_and_root_status_return_json(monkeypatch):
+    """Verify test list projects and root status return JSON."""
     factory = RequestFactory()
     conn = _Conn(username="root")
     monkeypatch.setattr(
@@ -564,6 +631,7 @@ def test_list_projects_and_root_status_return_json(monkeypatch):
 
 
 def test_permission_and_group_helpers_support_attribute_style_wrappers():
+    """Verify test permission and group helpers support att behavior."""
     permissions = _Permissions("rwrw--", read=True, write=True)
     attr_owner = SimpleNamespace(
         getName="alice-property",
@@ -590,6 +658,7 @@ def test_permission_and_group_helpers_support_attribute_style_wrappers():
 def test_index_ai_regex_remote_paths_cover_credential_and_provider_failures(
     monkeypatch,
 ):
+    """Verify test index ai regex remote paths cover creden behavior."""
     factory = RequestFactory()
     request = factory.post(
         "/",
@@ -678,6 +747,7 @@ def test_index_ai_regex_remote_paths_cover_credential_and_provider_failures(
 
 
 def test_index_ai_parse_validates_provider_inputs_and_rate_limits(monkeypatch):
+    """Verify test index ai parse validates provider inputs behavior."""
     conn = _Conn()
     monkeypatch.setattr(
         index_view, "_collect_project_payload", lambda *_args: {"owned": []}
@@ -750,6 +820,7 @@ def test_index_ai_parse_validates_provider_inputs_and_rate_limits(monkeypatch):
 def test_index_preview_rejects_invalid_ai_payloads_regexes_and_empty_results(
     monkeypatch,
 ):
+    """Verify test index preview rejects invalid ai payload behavior."""
     conn = _Conn()
     rendered = {}
 
@@ -853,6 +924,7 @@ def test_index_preview_rejects_invalid_ai_payloads_regexes_and_empty_results(
 
 
 def test_index_landing_page_and_top_level_error_paths(monkeypatch):
+    """Verify test index landing page and top level error p behavior."""
     conn = _Conn()
     rendered = {}
     monkeypatch.setattr(
@@ -902,35 +974,47 @@ def test_index_landing_page_and_top_level_error_paths(monkeypatch):
 
 
 def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkeypatch):
+    """Verify test helper fallback paths cover group member behavior."""
+
     class _OwnerByName:
+        """Represent owner by name."""
+
         def __init__(self, owner_id):
             self._owner_id = owner_id
 
         def getId(self):
+            """Return get identifier."""
             return SimpleNamespace(val=self._owner_id)
 
         @staticmethod
         def getOmeName():
+            """Return get ome name."""
             raise RuntimeError("missing ome name")
 
         @staticmethod
         def getName():
+            """Return get name."""
             return "fallback-name"
 
     class _PermissionText:
+        """Represent permission text."""
+
         def __str__(self):
             raise RuntimeError("string conversion failed")
 
         @staticmethod
         def isGroupRead():
+            """Handle is group read."""
             return True
 
         @staticmethod
         def isGroupWrite():
+            """Handle is group write."""
             return False
 
         @staticmethod
         def isGroupAnnotate():
+            """Handle is group annotate."""
             return True
 
     owner = _OwnerByName(41)
@@ -962,6 +1046,7 @@ def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkey
 
 
 def test_index_request_validation_paths_cover_json_errors_and_rate_limits(monkeypatch):
+    """Verify test index request validation paths cover JSO behavior."""
     conn = _Conn()
     monkeypatch.setattr(
         index_view, "_collect_project_payload", lambda *_args: {"owned": []}
@@ -1064,6 +1149,7 @@ def test_index_request_validation_paths_cover_json_errors_and_rate_limits(monkey
 
 
 def test_index_ai_provider_and_preview_fallbacks_cover_error_paths(monkeypatch):
+    """Verify test index ai provider and preview fallbacks behavior."""
     conn = _Conn()
     monkeypatch.setattr(
         index_view, "_collect_project_payload", lambda *_args: {"owned": []}
@@ -1195,21 +1281,29 @@ def test_index_ai_provider_and_preview_fallbacks_cover_error_paths(monkeypatch):
 
 
 def test_index_helper_and_validation_edges_cover_remaining_branch_paths(monkeypatch):
+    """Verify test index helper and validation edges cover behavior."""
+
     class _OwnerWithVal:
+        """Represent owner with val."""
+
         @staticmethod
         def getOmeName():
+            """Return get ome name."""
             raise RuntimeError("no ome name")
 
         @staticmethod
         def getName():
+            """Return get name."""
             raise RuntimeError("no display name")
 
         @staticmethod
         def getFirstName():
+            """Return get first name."""
             raise RuntimeError("no first name")
 
         @staticmethod
         def getId():
+            """Return get identifier."""
             return SimpleNamespace(val=77)
 
     project = SimpleNamespace(getDetails=lambda: None, getOwner=_OwnerWithVal)
@@ -1229,6 +1323,8 @@ def test_index_helper_and_validation_edges_cover_remaining_branch_paths(monkeypa
     assert list(index_view._iter_accessible_projects(conn)) == [fallback_project]
 
     class _BrokenPermissionText:
+        """Represent broken permission text."""
+
         def __str__(self):
             raise RuntimeError("bad permissions")
 

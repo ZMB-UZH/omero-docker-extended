@@ -44,6 +44,7 @@ class QuotaError(RuntimeError):
 
 
 def _now_iso() -> str:
+    """Handle now iso."""
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -55,6 +56,7 @@ def quota_state_path() -> Path:
 
 
 def _required_env(name: str) -> str:
+    """Handle required env."""
     value = os.environ.get(name, "").strip()
     if not value:
         raise QuotaError(f"Missing required environment variable: {name}")
@@ -62,6 +64,7 @@ def _required_env(name: str) -> str:
 
 
 def _parse_bool_env(name: str) -> bool:
+    """Handle parse bool env."""
     raw_value = _required_env(name).lower()
     if raw_value in {"1", "true", "yes", "on"}:
         return True
@@ -73,6 +76,7 @@ def _parse_bool_env(name: str) -> bool:
 
 
 def _parse_quota_env(name: str) -> float:
+    """Handle parse quota env."""
     raw_value = _required_env(name)
     try:
         parsed = float(raw_value)
@@ -123,6 +127,7 @@ def quota_enforcer_marker_path() -> Path:
 
 
 def _safe_username(uid: int) -> str:
+    """Handle safe username."""
     try:
         return getpwuid(uid).pw_name
     except KeyError:
@@ -130,6 +135,7 @@ def _safe_username(uid: int) -> str:
 
 
 def _safe_groupname(gid: int) -> str:
+    """Handle safe groupname."""
     try:
         return getgrgid(gid).gr_name
     except KeyError:
@@ -192,6 +198,7 @@ def resolve_managed_group_root(_known_groups: Sequence[str]) -> Tuple[Path, str]
 
 
 def _is_safe_managed_repository_root(path: Path) -> Tuple[bool, str]:
+    """Handle is safe managed repository root."""
     try:
         resolved = path.resolve()
     except FileNotFoundError:
@@ -215,6 +222,7 @@ def _is_safe_managed_repository_root(path: Path) -> Tuple[bool, str]:
 
 
 def _ensure_parent(path: Path) -> None:
+    """Handle ensure parent."""
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
@@ -228,6 +236,7 @@ def _fresh_state() -> Dict[str, object]:
 
 
 def _load_state(path: Path) -> Dict[str, object]:
+    """Handle load state."""
     if not path.exists():
         return _fresh_state()
     raw = path.read_text(encoding="utf-8")
@@ -263,6 +272,7 @@ def _load_state(path: Path) -> Dict[str, object]:
 
 
 def _write_state(path: Path, state: Dict[str, object]) -> None:
+    """Handle write state."""
     state[STATE_SCHEMA_VERSION_KEY] = STATE_SCHEMA_VERSION
     _ensure_parent(path)
     serialized = json.dumps(state, indent=2, sort_keys=True)
@@ -312,6 +322,7 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
 
 
 def _append_log(state: Dict[str, object], level: str, message: str) -> None:
+    """Handle append log."""
     logs = state.setdefault("logs", [])
     if not isinstance(logs, list):
         raise TypeError(f"Expected 'logs' to be a list, got {type(logs).__name__}")
@@ -329,6 +340,7 @@ def _append_log(state: Dict[str, object], level: str, message: str) -> None:
 
 
 def _reconcile_event_cache(state: Dict[str, object]) -> Dict[str, str]:
+    """Handle reconcile event cache."""
     cache = state.setdefault("_reconcile_event_cache", {})
     if not isinstance(cache, dict):
         cache = {}
@@ -347,6 +359,7 @@ def _append_reconcile_event(
     level: str,
     message: str,
 ) -> None:
+    """Handle append reconcile event."""
     cache = _reconcile_event_cache(state)
     cache_value = f"{level}|{message}"
     if level != "warning" and cache.get(event_key) == cache_value:
@@ -358,6 +371,7 @@ def _append_reconcile_event(
 def _prune_reconcile_event_cache(
     state: Dict[str, object], valid_keys: Sequence[str]
 ) -> None:
+    """Handle prune reconcile event cache."""
     cache = _reconcile_event_cache(state)
     valid = {str(key) for key in valid_keys}
     stale_keys = [key for key in cache if key not in valid]
@@ -366,6 +380,7 @@ def _prune_reconcile_event_cache(
 
 
 def _normalize_group(value: str) -> str:
+    """Handle normalize group."""
     group_name = value.strip()
     if not group_name:
         raise QuotaError("Group name must not be empty")
@@ -373,6 +388,7 @@ def _normalize_group(value: str) -> str:
 
 
 def _normalize_quota_gb(value: object) -> Optional[float]:
+    """Handle normalize quota gb."""
     minimum_quota_gb = min_quota_gb()
     if value is None:
         return None
@@ -436,10 +452,12 @@ def detect_filesystem(path: Path) -> FilesystemInfo:
 
 
 def _is_group_folder_available(group_path: Path) -> bool:
+    """Handle is group folder available."""
     return group_path.exists() and group_path.is_dir()
 
 
 def _can_manage_group_directories(group_root: Path) -> bool:
+    """Handle can manage group directories."""
     return os.access(group_root, os.W_OK | os.X_OK)
 
 

@@ -13,6 +13,7 @@ TEST_SERVICE_AUTH_VALUE = "job-auth-fixture"
 
 
 def _install_omero_stubs() -> None:
+    """Handle install OMERO stubs."""
     omero_module = types.ModuleType("omero")
     omero_module.ClientError = type("ClientError", (Exception,), {})
     omero_module.SecurityViolation = type("SecurityViolation", (Exception,), {})
@@ -31,19 +32,26 @@ def _install_omero_stubs() -> None:
 
 
 def _install_celery_stubs() -> None:
+    """Handle install celery stubs."""
     celery_module = types.ModuleType("celery")
 
     class _DummyCelery:
+        """Test double for dummy celery."""
+
         def __init__(self, *_args, **_kwargs):
             self.conf = types.SimpleNamespace(update=lambda **_kwargs: None)
 
         @staticmethod
         def autodiscover_tasks(*_args, **_kwargs):
+            """Handle autodiscover tasks."""
             return None
 
         @staticmethod
         def task(*args, **kwargs):
+            """Handle task."""
+
             def _decorator(fn):
+                """Handle decorator."""
                 return fn
 
             return _decorator
@@ -62,6 +70,7 @@ def _install_celery_stubs() -> None:
 
 
 def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Handle set required env."""
     values = {
         "OMERO_IMS_USE_CELERY": "true",
         "OMERO_IMS_USE_JOB_SERVICE_SESSION": "true",
@@ -88,6 +97,7 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _import_tasks(monkeypatch: pytest.MonkeyPatch):
+    """Handle import tasks."""
     _set_required_env(monkeypatch)
     _install_omero_stubs()
     _install_celery_stubs()
@@ -106,6 +116,7 @@ def _import_tasks(monkeypatch: pytest.MonkeyPatch):
 def test_cli_resolution_output_parsing_and_connection_session_key(
     monkeypatch, tmp_path
 ):
+    """Verify test cli resolution output parsing and connec behavior."""
     tasks = _import_tasks(monkeypatch)
     cli_path = tmp_path / "omero"
     export_path = tmp_path / f"{tmp_path.name}.ims"
@@ -150,6 +161,7 @@ def test_cli_resolution_output_parsing_and_connection_session_key(
 def test_run_script_via_omero_cli_covers_success_and_failure_paths(
     monkeypatch, tmp_path, caplog
 ):
+    """Verify test run script via OMERO cli covers success behavior."""
     tasks = _import_tasks(monkeypatch)
     cli_path = tmp_path / "omero"
     export_path = tmp_path / f"{tmp_path.name}.ims"
@@ -159,6 +171,7 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
     captured = {}
 
     def successful_run(cmd, *, timeout, check, env, **_kwargs):
+        """Handle successful run."""
         captured["cmd"] = cmd
         captured["timeout"] = timeout
         captured["env"] = {
@@ -223,19 +236,25 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
 
 
 def test_session_and_job_service_connections_cover_success_and_validation(monkeypatch):
+    """Verify test session and job service connections cove behavior."""
     tasks = _import_tasks(monkeypatch)
     detach_calls = []
     join_calls = []
 
     class DummyClient:
+        """Test double for dummy client."""
+
         @staticmethod
         def joinSession(session_key):
+            """Handle join session."""
             join_calls.append(session_key)
             return types.SimpleNamespace(
                 detachOnDestroy=lambda: detach_calls.append(True)
             )
 
     class DummyGateway:
+        """Test double for dummy gateway."""
+
         def __init__(self, *args, **kwargs):
             self.kwargs = kwargs
             self.connected = kwargs.get("host") == "omeroserver"
@@ -244,6 +263,7 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
             )
 
         def connect(self):
+            """Handle connect."""
             return self.connected
 
     monkeypatch.setattr(
@@ -282,6 +302,7 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
 def test_run_ims_export_task_updates_failure_meta_and_closes_connections(
     monkeypatch, tmp_path
 ):
+    """Verify test run IMS export task updates failure meta behavior."""
     tasks = _import_tasks(monkeypatch)
     updates = []
     closed = []
@@ -326,6 +347,7 @@ def test_run_ims_export_task_updates_failure_meta_and_closes_connections(
 def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
     monkeypatch, tmp_path
 ):
+    """Verify test task helpers cover cli resolution connec behavior."""
     tasks = _import_tasks(monkeypatch)
 
     monkeypatch.setattr(tasks.os.path, "exists", lambda path: False)
@@ -348,9 +370,13 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
         tasks._open_session_connection("session", "omeroserver", None)
 
     class _ClientError(Exception):
+        """Represent client error."""
+
         pass
 
     class _SecurityViolation(Exception):
+        """Represent security violation."""
+
         pass
 
     omero_stub = types.SimpleNamespace(
@@ -379,11 +405,14 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
     )
 
     class _FailingGateway:
+        """Represent failing gateway."""
+
         def __init__(self, *args, **kwargs):
             self.SERVICE_OPTS = types.SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def connect():
+            """Handle connect."""
             return False
 
     monkeypatch.setattr(tasks, "BlitzGateway", _FailingGateway)
@@ -449,6 +478,7 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
 def test_task_helpers_cover_security_validation_and_close_warning_paths(
     monkeypatch,
 ):
+    """Verify test task helpers cover security validation a behavior."""
     tasks = _import_tasks(monkeypatch)
 
     assert tasks._get_connection_session_key(None) is None
@@ -464,9 +494,13 @@ def test_task_helpers_cover_security_validation_and_close_warning_paths(
     )
 
     class _ClientError(Exception):
+        """Represent client error."""
+
         pass
 
     class _SecurityViolation(Exception):
+        """Represent security violation."""
+
         pass
 
     omero_stub = types.SimpleNamespace(

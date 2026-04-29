@@ -28,14 +28,19 @@ from omero_web_zarr import integration
 
 
 class _Color:
+    """Represent color."""
+
     def __init__(self, html):
         self._html = html
 
     def getHtml(self):
+        """Return get HTML."""
         return self._html
 
 
 class _Channel:
+    """Represent channel."""
+
     def __init__(
         self,
         *,
@@ -54,27 +59,35 @@ class _Channel:
         self._raise_color = raise_color
 
     def getLabel(self):
+        """Return get label."""
         return self._label
 
     def getColor(self):
+        """Return get color."""
         if self._raise_color:
             raise RuntimeError("color failure")
         return _Color(self._color)
 
     def isActive(self):
+        """Handle is active."""
         return self._active
 
     def isInverted(self):
+        """Handle is inverted."""
         return self._inverted
 
     def getWindowStart(self):
+        """Return get window start."""
         return self._window[0]
 
     def getWindowEnd(self):
+        """Return get window end."""
         return self._window[1]
 
 
 class _WellSampleParent:
+    """Represent well sample parent."""
+
     OMERO_CLASS = "WellSample"
 
     def __init__(self, well_id):
@@ -82,6 +95,8 @@ class _WellSampleParent:
 
 
 class _DatasetParent:
+    """Represent dataset parent."""
+
     OMERO_CLASS = "Dataset"
 
     def __init__(self, dataset_id, name, description):
@@ -91,36 +106,49 @@ class _DatasetParent:
 
 
 class _Resolution:
+    """Represent resolution."""
+
     def __init__(self, size_x, size_y):
         self.sizeX = size_x
         self.sizeY = size_y
 
 
 class _RenderingEngine:
+    """Represent rendering engine."""
+
     @staticmethod
     def getResolutionLevels():
+        """Return get resolution levels."""
         return 2
 
     @staticmethod
     def getResolutionDescriptions():
+        """Return get resolution descriptions."""
         return [_Resolution(1024, 512), _Resolution(512, 256)]
 
     @staticmethod
     def getDefaultZ():
+        """Return get default z."""
         return 3
 
     @staticmethod
     def getDefaultT():
+        """Return get default t."""
         return 4
 
 
 class _ObjectiveSettings:
+    """Represent objective settings."""
+
     @staticmethod
     def getObjective():
+        """Return get objective."""
         return SimpleNamespace(getNominalMagnification=lambda: 40)
 
 
 class _MarshalImage:
+    """Represent marshal image."""
+
     description = "description"
     archived = False
 
@@ -133,95 +161,118 @@ class _MarshalImage:
         self._conn = object()
 
     def _prepareRenderingEngine(self):
+        """Handle prepare rendering engine."""
         if self._prepare_exception is not None:
             raise self._prepare_exception
         return self._prepare_result
 
     def getName(self):
+        """Return get name."""
         return self.name
 
     @staticmethod
     def canAnnotate():
+        """Handle can annotate."""
         return False
 
     @staticmethod
     def canEdit():
+        """Handle can edit."""
         return True
 
     @staticmethod
     def canDelete():
+        """Handle can delete."""
         return True
 
     @staticmethod
     def canLink():
+        """Handle can link."""
         return False
 
     @staticmethod
     def getObjectiveSettings():
+        """Return get objective settings."""
         return _ObjectiveSettings()
 
     @staticmethod
     def getSizeX():
+        """Return get size x."""
         return 1024
 
     @staticmethod
     def getSizeY():
+        """Return get size y."""
         return 512
 
     @staticmethod
     def getSizeZ():
+        """Return get size z."""
         return 4
 
     @staticmethod
     def getSizeT():
+        """Return get size t."""
         return 2
 
     @staticmethod
     def getSizeC():
+        """Return get size c."""
         return 1
 
     @staticmethod
     def getPixelRange():
+        """Return get pixel range."""
         raise TypeError("pixel range unavailable")
 
     @staticmethod
     def getChannels():
+        """Return get channels."""
         return [_Channel(label="DNA")]
 
     @staticmethod
     def splitChannelDims():
+        """Handle split channel dims."""
         return {"g": {"width": 1024, "height": 512}}
 
     @staticmethod
     def isGreyscaleRenderingModel():
+        """Handle is greyscale rendering model."""
         return False
 
     @staticmethod
     def getProjection():
+        """Return get projection."""
         return "normal"
 
     @staticmethod
     def isInvertedAxis():
+        """Handle is inverted axis."""
         return False
 
     @staticmethod
     def getAuthor():
+        """Return get author."""
         return "Author"
 
     @staticmethod
     def getDate():
+        """Return get date."""
         return datetime(2026, 3, 30, 12, 0, 0)
 
     @staticmethod
     def getPixelsType():
+        """Return get pixels type."""
         return "uint16"
 
     @staticmethod
     def getProject():
+        """Return get project."""
         return SimpleNamespace(id=11, name="Project", description="Project description")
 
     @staticmethod
     def listParents():
+        """Return list parents."""
         return [
             _DatasetParent(12, "Dataset", "Dataset description"),
             _WellSampleParent(13),
@@ -229,18 +280,23 @@ class _MarshalImage:
 
     @staticmethod
     def getPixelSizeX(units=None):
+        """Return get pixel size x."""
         return SimpleNamespace(getValue=lambda: 0.5)
 
     @staticmethod
     def getPixelSizeY(units=None):
+        """Return get pixel size y."""
         return SimpleNamespace(getValue=lambda: 0.75)
 
     @staticmethod
     def getPixelSizeZ(units=None):
+        """Return get pixel size z."""
         return SimpleNamespace(getValue=lambda: 1.25)
 
 
 class _SingleLevelImage:
+    """Represent single level image."""
+
     description = ""
     archived = False
 
@@ -255,26 +311,32 @@ class _SingleLevelImage:
 
     @staticmethod
     def getChannels(noRE=False):
+        """Return get channels."""
         return [_Channel(label="DNA")]
 
     def getProjection(self):
+        """Return get projection."""
         if self._projection_mode == "raise":
             raise RuntimeError("projection")
         return "maximum"
 
     @staticmethod
     def getPixelSizeX(units=None):
+        """Return get pixel size x."""
         raise RuntimeError("x")
 
     @staticmethod
     def getPixelSizeY(units=None):
+        """Return get pixel size y."""
         return None
 
     @staticmethod
     def getPixelSizeZ(units=None):
+        """Return get pixel size z."""
         return SimpleNamespace(getValue=lambda: 1.5)
 
     def getObjectiveSettings(self):
+        """Return get objective settings."""
         if self._objective_mode == "raise":
             raise RuntimeError("objective")
         if self._objective_mode == "none":
@@ -285,46 +347,57 @@ class _SingleLevelImage:
 
     @staticmethod
     def canAnnotate():
+        """Handle can annotate."""
         return True
 
     @staticmethod
     def canEdit():
+        """Handle can edit."""
         return False
 
     @staticmethod
     def canDelete():
+        """Handle can delete."""
         return False
 
     @staticmethod
     def canLink():
+        """Handle can link."""
         return True
 
     @staticmethod
     def getSizeX():
+        """Return get size x."""
         return 128
 
     @staticmethod
     def getSizeY():
+        """Return get size y."""
         return 64
 
     @staticmethod
     def getSizeZ():
+        """Return get size z."""
         return 2
 
     @staticmethod
     def getSizeT():
+        """Return get size t."""
         return 1
 
     @staticmethod
     def getSizeC():
+        """Return get size c."""
         return 1
 
     @staticmethod
     def splitChannelDims():
+        """Handle split channel dims."""
         return {"g": {"width": 128, "height": 64}}
 
 
 def test_store_backed_render_helpers_cover_metadata_ranges_and_downloads(monkeypatch):
+    """Verify test store backed render helpers cover metada behavior."""
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
     assert integration._safe_rendering_enabled() is True
 
@@ -475,6 +548,7 @@ def test_store_backed_render_helpers_cover_metadata_ranges_and_downloads(monkeyp
 def test_store_backed_image_data_covers_projection_tile_and_objective_fallbacks(
     monkeypatch,
 ):
+    """Verify test store backed image data covers projectio behavior."""
     monkeypatch.setattr(integration, "load_store_backed_image_node", lambda image: None)
     monkeypatch.setattr(
         integration,
@@ -514,6 +588,7 @@ def test_store_backed_image_data_covers_projection_tile_and_objective_fallbacks(
 def test_load_metadata_preview_with_safe_rendering_covers_share_well_and_reraises(
     monkeypatch,
 ):
+    """Verify test load metadata preview with safe renderin behavior."""
     from omeroweb.webclient import views as webclient_views
 
     preview_image = SimpleNamespace(
@@ -573,18 +648,23 @@ def test_load_metadata_preview_with_safe_rendering_covers_share_well_and_reraise
 
 
 def test_region_helpers_cover_remaining_error_paths(monkeypatch):
+    """Verify test region helpers cover remaining error paths."""
     from omeroweb.webgateway import views as webgateway_views
 
     class _RegularImage:
+        """Represent regular image."""
+
         def __init__(self, levels=2, jpeg_payload=b"jpeg"):
             self._re = SimpleNamespace(getResolutionLevels=lambda: levels)
             self._jpeg_payload = jpeg_payload
 
         @staticmethod
         def _prepareRenderingEngine():
+            """Handle prepare rendering engine."""
             return None
 
         def renderJpegRegion(self, *args, **kwargs):
+            """Build render jpeg region."""
             return self._jpeg_payload
 
     monkeypatch.setattr(
@@ -733,6 +813,7 @@ def test_region_helpers_cover_remaining_error_paths(monkeypatch):
 def test_marshal_regular_image_data_with_safe_tile_size_handles_engine_fallbacks(
     monkeypatch,
 ):
+    """Verify test marshal regular image data with safe til behavior."""
     monkeypatch.setattr(
         integration, "_store_backed_metadata", lambda image: {"imageName": image.name}
     )
@@ -759,6 +840,8 @@ def test_marshal_regular_image_data_with_safe_tile_size_handles_engine_fallbacks
     assert "tiles" not in not_ready
 
     class _FakeConcurrencyException(Exception):
+        """Test double for fake concurrency exception."""
+
         def __init__(self, back_off):
             super().__init__("busy")
             self.backOff = back_off
@@ -808,7 +891,11 @@ def test_marshal_regular_image_data_with_safe_tile_size_handles_engine_fallbacks
 def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single_level_tiles(
     monkeypatch,
 ):
+    """Verify test integration helper edges cover session f behavior."""
+
     class _BrokenRequest:
+        """Represent broken request."""
+
         @property
         def session(self):
             raise RuntimeError("session unavailable")
@@ -869,6 +956,7 @@ def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single
         )
 
     def original_marshal(image, key=None, request=None):
+        """Handle original marshal."""
         return "original"
 
     marshal_module = SimpleNamespace(
@@ -883,15 +971,19 @@ def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single
     from omeroweb.webgateway import views as webgateway_views
 
     class _SingleLevelRegularImage:
+        """Represent single level regular image."""
+
         def __init__(self):
             self._re = SimpleNamespace(getResolutionLevels=lambda: 1)
             self.level = "unset"
 
         @staticmethod
         def _prepareRenderingEngine():
+            """Handle prepare rendering engine."""
             return None
 
         def renderJpegRegion(self, *args, **kwargs):
+            """Build render jpeg region."""
             self.level = kwargs.get("level")
             return b"jpeg"
 

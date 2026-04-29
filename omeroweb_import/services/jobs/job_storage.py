@@ -1,6 +1,4 @@
-"""
-Job storage and management for import workflows.
-"""
+"""Job storage and management for import workflows."""
 
 import os
 import json
@@ -252,6 +250,7 @@ def append_job_error(job: dict, message: str):
 
 
 def _compatibility_pending_entries(job_dict):
+    """Handle compatibility pending entries."""
     return [
         entry
         for entry in job_dict.get("files", [])

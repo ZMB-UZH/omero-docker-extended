@@ -17,14 +17,19 @@ EXTERNAL_GRAFANA_URL = "https://grafana.example.org"
 
 
 class _Value:
+    """Represent value."""
+
     def __init__(self, value):
         self.val = value
 
     def getValue(self):
+        """Return get value."""
         return self.val
 
 
 class _User:
+    """Represent user."""
+
     def __init__(self, user_id, username, first_name="", last_name=""):
         self.id = _Value(user_id)
         self.omeName = _Value(username)
@@ -32,35 +37,46 @@ class _User:
         self.lastName = _Value(last_name)
 
     def getId(self):
+        """Return get identifier."""
         return self.id
 
     def getOmeName(self):
+        """Return get ome name."""
         return self.omeName
 
     def getFirstName(self):
+        """Return get first name."""
         return self.firstName
 
     def getLastName(self):
+        """Return get last name."""
         return self.lastName
 
 
 class _Group:
+    """Represent group."""
+
     def __init__(self, group_id, name, permissions):
         self.id = _Value(group_id)
         self.name = _Value(name)
         self.permissions = permissions
 
     def getId(self):
+        """Return get identifier."""
         return self.id
 
     def getName(self):
+        """Return get name."""
         return self.name
 
     def getDetails(self):
+        """Return get details."""
         return SimpleNamespace(getPermissions=lambda: self.permissions)
 
 
 class _Permissions:
+    """Represent permissions."""
+
     def __init__(
         self,
         label,
@@ -78,16 +94,21 @@ class _Permissions:
         return self._label
 
     def isGroupRead(self):
+        """Handle is group read."""
         return self._group_read
 
     def isGroupWrite(self):
+        """Handle is group write."""
         return self._group_write
 
     def isGroupAnnotate(self):
+        """Handle is group annotate."""
         return self._group_annotate
 
 
 class _AdminService:
+    """Represent admin service."""
+
     def __init__(self, users, groups, groups_by_user, users_by_group):
         self._users = users
         self._groups = groups
@@ -95,18 +116,22 @@ class _AdminService:
         self._users_by_group = users_by_group
 
     def lookupExperimenters(self):
+        """Handle lookup experimenters."""
         return list(self._users)
 
     def lookupGroups(self):
+        """Handle lookup groups."""
         return list(self._groups)
 
     def containedGroups(self, *args):
+        """Handle contained groups."""
         identifier = args[0] if args else None
         if identifier is None:
             return list(self._groups)
         return list(self._groups_by_user.get(int(identifier), []))
 
     def containedExperimenters(self, *args):
+        """Handle contained experimenters."""
         identifier = args[0] if args else None
         if identifier is None:
             return list(self._users)
@@ -114,6 +139,7 @@ class _AdminService:
 
 
 def test_proxy_path_and_redirect_safety_helpers():
+    """Verify test proxy path and redirect safety helpers."""
     assert index_view._normalize_proxy_prefix(" /grafana/ ") == "/grafana"
     assert index_view._safe_redirect_segment("../escape", "fallback") == "fallback"
     assert (
@@ -141,6 +167,7 @@ def test_proxy_path_and_redirect_safety_helpers():
 
 
 def test_normalize_proxy_request_target_rejects_path_traversal():
+    """Verify test normalize proxy request target rejects p behavior."""
     try:
         index_view._normalize_proxy_request_target("../../escape")
     except ValueError as exc:
@@ -150,6 +177,7 @@ def test_normalize_proxy_request_target_rejects_path_traversal():
 
 
 def test_build_proxied_response_rewrites_html_locations_and_cookies():
+    """Verify test build proxied response rewrites HTML loc behavior."""
     headers = HTTPMessage()
     headers.add_header("Content-Type", "text/html; charset=utf-8")
     headers.add_header("Location", f"{GRAFANA_URL}/login")
@@ -184,6 +212,7 @@ def test_build_proxied_response_rewrites_html_locations_and_cookies():
 
 
 def test_proxy_backend_helpers_build_expected_urls_and_fallbacks(monkeypatch):
+    """Verify test proxy backend helpers build expected URL behavior."""
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "infra")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-overview")
 
@@ -224,6 +253,7 @@ def test_proxy_backend_helpers_build_expected_urls_and_fallbacks(monkeypatch):
 
 
 def test_request_and_public_url_helpers_cover_reverse_proxy_cases():
+    """Verify test request and public URL helpers cover rev behavior."""
     factory = RequestFactory()
     proxied = factory.get(
         "/",
@@ -265,6 +295,7 @@ def test_request_and_public_url_helpers_cover_reverse_proxy_cases():
 def test_grafana_dashboard_urls_sanitize_configured_dashboard_segments(
     monkeypatch,
 ) -> None:
+    """Verify test grafana dashboard URLs sanitize configur behavior."""
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "https://evil.example")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "../escape")
 
@@ -283,6 +314,7 @@ def test_grafana_dashboard_urls_sanitize_configured_dashboard_segments(
 
 
 def test_validation_and_identity_helpers_cover_remaining_guard_paths(monkeypatch):
+    """Verify test validation and identity helpers cover re behavior."""
     with pytest.raises(ValueError):
         index_view._validated_http_url("grafana.example.test")
     with pytest.raises(ValueError):
@@ -337,6 +369,7 @@ def test_validation_and_identity_helpers_cover_remaining_guard_paths(monkeypatch
 
 
 def test_admin_listing_helpers_collect_users_groups_and_permissions():
+    """Verify test admin listing helpers collect users grou behavior."""
     users = [
         _User(1, "alice", "Alice", "Admin"),
         _User(2, "bob", "Bob", "Builder"),
@@ -375,6 +408,7 @@ def test_admin_listing_helpers_collect_users_groups_and_permissions():
 
 
 def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
+    """Verify test admin listing helpers skip incomplete me behavior."""
     missing_user = SimpleNamespace(
         getId=lambda: _Value(3),
         getOmeName=lambda: _Value(""),
@@ -394,16 +428,21 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
     )
 
     class _SparseAdminService:
+        """Represent sparse admin service."""
+
         @staticmethod
         def lookupExperimenters():
+            """Handle lookup experimenters."""
             return [missing_user]
 
         @staticmethod
         def lookupGroups():
+            """Handle lookup groups."""
             return [unnamed_group, valid_group]
 
         @staticmethod
         def containedGroups(*args):
+            """Handle contained groups."""
             identifier = args[0] if args else None
             if identifier == 3:
                 return [SimpleNamespace(getName=lambda: _Value(""))]
@@ -411,6 +450,7 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
 
         @staticmethod
         def containedExperimenters(*args):
+            """Handle contained experimenters."""
             identifier = args[0] if args else None
             if identifier == 23:
                 return [username_less_user]
@@ -468,34 +508,46 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
 
 
 def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypatch):
+    """Verify test admin helper fallbacks cover wrapped val behavior."""
+
     class _TextPermission:
+        """Represent text permission."""
+
         @staticmethod
         def isGroupRead():
+            """Handle is group read."""
             raise RuntimeError("bad read")
 
         @staticmethod
         def isGroupWrite():
+            """Handle is group write."""
             raise RuntimeError("bad write")
 
         @staticmethod
         def isGroupAnnotate():
+            """Handle is group annotate."""
             raise RuntimeError("bad annotate")
 
         def __str__(self):
             return "read-only"
 
     def _fallback_group_details():
+        """Handle fallback group details."""
         return SimpleNamespace(getPermissions=_TextPermission)
 
     fallback_group = SimpleNamespace(getDetails=_fallback_group_details)
 
     class _CallableListingService:
+        """Represent callable listing service."""
+
         @staticmethod
         def lookupGroups(*_args):
+            """Handle lookup groups."""
             return [_Group(12, "users_rw", _Permissions("rwrw--", group_write=True))]
 
         @staticmethod
         def containedGroups(*_args):
+            """Handle contained groups."""
             raise TypeError("wrong signature")
 
     monkeypatch.setattr(
@@ -541,6 +593,7 @@ def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypa
 def test_proxy_and_admin_post_views_cover_remaining_error_and_success_paths(
     monkeypatch,
 ):
+    """Verify test proxy and admin post views cover remaini behavior."""
     factory = RequestFactory()
     conn = object()
 
@@ -665,6 +718,8 @@ def test_proxy_and_admin_post_views_cover_remaining_error_and_success_paths(
     assert empty_script_id.status_code == 400
 
     class _RequestId:
+        """Represent request identifier."""
+
         def __str__(self):
             return "req-1"
 

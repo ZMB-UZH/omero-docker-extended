@@ -16,6 +16,7 @@ from omeroweb_import.services import ome_zarr_support as support
 
 
 def _write_json(path: Path, payload) -> None:
+    """Handle write JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -23,6 +24,7 @@ def _write_json(path: Path, payload) -> None:
 def test_ome_zarr_support_covers_additional_root_and_single_image_validation_paths(
     tmp_path: Path,
 ) -> None:
+    """Verify test ome Zarr support covers additional root behavior."""
     not_a_directory = tmp_path / "not-a-directory"
     not_a_directory.write_text("payload", encoding="utf-8")
     payload, inspection = support._load_root_ome_zarr_metadata(not_a_directory)
@@ -45,6 +47,7 @@ def test_ome_zarr_support_covers_additional_root_and_single_image_validation_pat
 def test_ome_zarr_support_tolerates_unparseable_array_shapes(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Verify test ome Zarr support tolerates unparseable a behavior."""
     metadata_payload = {
         "multiscales": [
             {
@@ -185,6 +188,7 @@ def test_inspect_bioformats2raw_layout_covers_empty_and_invalid_series_paths(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test inspect bioformats2raw layout covers emp behavior."""
     empty_store = tmp_path / "bf2raw-empty.ome.zarr"
     empty_store.mkdir()
     inspection = support._inspect_bioformats2raw_layout(empty_store)
@@ -227,6 +231,7 @@ def test_rewrite_problematic_native_image_arrays_covers_additional_failures(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test rewrite problematic native image arrays behavior."""
     inspection = support.OMEZarrImageInspection(
         recognized=True,
         kind=support.OME_ZARR_IMPORT_KIND_IMAGE,
@@ -278,6 +283,7 @@ def test_regenerate_xy_only_pyramid_covers_metadata_and_runtime_failures(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test regenerate xy only pyramid covers metada behavior."""
     store = tmp_path / "pyramid.ome.zarr"
     store.mkdir()
 
@@ -339,6 +345,7 @@ def test_normalize_native_ome_zarr_copy_propagates_support_and_transform_failure
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test normalize native ome Zarr copy propagate behavior."""
     store = tmp_path / "image.ome.zarr"
     unsupported = support.OMEZarrImageInspection(
         recognized=True,
@@ -383,6 +390,7 @@ def test_ome_zarr_support_additional_metadata_helpers_cover_edge_failures(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test ome Zarr support additional metadata hel behavior."""
     monkeypatch.setattr(
         support,
         "_load_root_ome_zarr_metadata",
@@ -417,6 +425,8 @@ def test_ome_zarr_support_additional_metadata_helpers_cover_edge_failures(
     ) == ("0",)
 
     class _BrokenDType:
+        """Represent broken dtype."""
+
         def __str__(self):
             return "custom-dtype"
 
@@ -432,6 +442,7 @@ def test_single_and_bioformats_inspection_cover_scale_array_and_series_errors(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test single and bioformats inspection cover s behavior."""
     assert "not numeric" in (
         support._inspect_single_ome_zarr_image(
             tmp_path,
@@ -504,6 +515,7 @@ def test_normalization_and_pyramid_helpers_cover_additional_runtime_failures(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test normalization and pyramid helpers cover behavior."""
     store = tmp_path / "normalized.ome.zarr"
     original_rewrite = support._rewrite_problematic_native_image_arrays
     supported = support.OMEZarrImageInspection(
@@ -591,6 +603,7 @@ def test_normalization_and_pyramid_helpers_cover_additional_runtime_failures(
     original_write_text = Path.write_text
 
     def _failing_write_text(self, text, encoding=None):
+        """Handle failing write text."""
         if self == failing_store / "0" / ".zarray":
             raise OSError("metadata write exploded")
         return original_write_text(self, text, encoding=encoding)
@@ -613,6 +626,7 @@ def test_pyramid_and_runtime_helpers_cover_more_regeneration_error_paths(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test pyramid and runtime helpers cover more r behavior."""
     metadata_store = tmp_path / "detect.ome.zarr"
     metadata_store.mkdir()
     monkeypatch.setattr(
@@ -687,6 +701,7 @@ def test_pyramid_and_runtime_helpers_cover_more_regeneration_error_paths(
     original_write_text = Path.write_text
 
     def _conditional_write_text(self, text, encoding=None):
+        """Handle conditional write text."""
         if self == pyramid_store / "s0" / ".zarray":
             raise OSError("s0 write exploded")
         if self == pyramid_store / ".zattrs":
@@ -743,6 +758,7 @@ def test_write_level_and_runtime_helpers_cover_additional_error_paths(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test write level and runtime helpers cover ad behavior."""
     output_dir = tmp_path / "level"
     data = np.arange(4, dtype=np.uint8).reshape(2, 2)
     original_write_text = Path.write_text
@@ -770,6 +786,7 @@ def test_write_level_and_runtime_helpers_cover_additional_error_paths(
     monkeypatch.setattr(Path, "write_text", original_write_text)
 
     def _failing_write_bytes(self, payload):
+        """Handle failing write bytes."""
         if self.name == "0":
             raise OSError("chunk write exploded")
         return original_write_bytes(self, payload)
@@ -792,6 +809,7 @@ def test_write_level_and_runtime_helpers_cover_additional_error_paths(
     original_import = builtins.__import__
 
     def _failing_import(name, *args, **kwargs):
+        """Handle failing import."""
         if name.startswith("ome_zarr"):
             raise ImportError("ome-zarr missing")
         return original_import(name, *args, **kwargs)
@@ -806,6 +824,7 @@ def test_ome_zarr_support_helper_guards_cover_remaining_metadata_and_axis_edges(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test ome Zarr support helper guards cover rem behavior."""
     support.ome_zarr_package_version.cache_clear()
     monkeypatch.setattr(
         support.importlib_metadata,
@@ -913,6 +932,7 @@ def test_ome_zarr_support_downscale_and_codec_edges_cover_remaining_branches(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test ome Zarr support downscale and codec edg behavior."""
     inspection = support.OMEZarrImageInspection(
         recognized=True,
         kind=support.OME_ZARR_IMPORT_KIND_IMAGE,
@@ -940,6 +960,7 @@ def test_ome_zarr_support_downscale_and_codec_edges_cover_remaining_branches(
     def _failing_numcodecs_import(
         name, global_vars=None, local_vars=None, fromlist=(), level=0
     ):
+        """Handle failing numcodecs import."""
         if name == "numcodecs":
             raise ImportError("numcodecs missing")
         return original_import(name, global_vars, local_vars, fromlist, level)
@@ -1051,6 +1072,7 @@ def test_ome_zarr_support_downscale_and_codec_edges_cover_remaining_branches(
 def test_ome_zarr_support_covers_invalid_shape_and_native_pyramid_guard_paths(
     tmp_path: Path,
 ) -> None:
+    """Verify test ome Zarr support covers invalid shape an behavior."""
     store = tmp_path / "invalid-shape.ome.zarr"
     metadata_payload = {
         "multiscales": [
@@ -1092,6 +1114,7 @@ def test_regenerate_xy_only_pyramid_handles_numpy_dependency_and_translation_edg
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Verify test regenerate xy only pyramid handles numpy behavior."""
     store = tmp_path / "translation.ome.zarr"
     store.mkdir()
     detection = {
@@ -1124,6 +1147,7 @@ def test_regenerate_xy_only_pyramid_handles_numpy_dependency_and_translation_edg
     def _failing_numpy_import(
         name, global_vars=None, local_vars=None, fromlist=(), level=0
     ):
+        """Handle failing numpy import."""
         if name == "numpy":
             raise ImportError("numpy missing")
         return original_import(name, global_vars, local_vars, fromlist, level)
@@ -1198,6 +1222,7 @@ def test_downscale_local_mean_falls_back_when_skimage_import_fails(
     real_import = builtins.__import__
 
     def blocked_import(name, *args, **kwargs):
+        """Handle blocked import."""
         if name in ("skimage.transform", "skimage"):
             raise ImportError("skimage blocked for test")
         return real_import(name, *args, **kwargs)

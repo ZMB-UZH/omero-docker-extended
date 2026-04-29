@@ -26,11 +26,13 @@ class TestConstantsAreLowercase:
 
     @staticmethod
     def test_filenames_all_lowercase():
+        """Verify test filenames all lowercase."""
         for name in _ALWAYS_SKIP_FILENAMES:
             assert name == name.lower(), f"{name!r} is not lowercase"
 
     @staticmethod
     def test_dirs_all_lowercase():
+        """Verify test dirs all lowercase."""
         for name in _ALWAYS_SKIP_DIRS:
             assert name == name.lower(), f"{name!r} is not lowercase"
 
@@ -39,6 +41,8 @@ class TestConstantsAreLowercase:
 
 
 class TestWindowsJunkFiles:
+    """Represent test windows junk files."""
+
     @pytest.mark.parametrize(
         "filename",
         [
@@ -56,6 +60,7 @@ class TestWindowsJunkFiles:
         ],
     )
     def test_windows_files_skipped(self, filename):
+        """Verify test windows files skipped."""
         assert _should_auto_skip_import(filename) is True
 
     @pytest.mark.parametrize(
@@ -66,6 +71,7 @@ class TestWindowsJunkFiles:
         ],
     )
     def test_windows_files_in_subdirectory_skipped(self, filename):
+        """Verify test windows files in subdirectory skipped."""
         assert _should_auto_skip_import(f"experiment/{filename}") is True
 
 
@@ -73,6 +79,8 @@ class TestWindowsJunkFiles:
 
 
 class TestMacOSJunkFiles:
+    """Represent test mac osjunk files."""
+
     @pytest.mark.parametrize(
         "filename",
         [
@@ -88,10 +96,12 @@ class TestMacOSJunkFiles:
         ],
     )
     def test_macos_files_skipped(self, filename):
+        """Verify test macos files skipped."""
         assert _should_auto_skip_import(filename) is True
 
     @staticmethod
     def test_macos_resource_fork_files():
+        """Verify test macos resource fork files."""
         assert _should_auto_skip_import("._image.tif") is True
         assert _should_auto_skip_import("folder/._data.xml") is True
         assert _should_auto_skip_import("a/b/._anything") is True
@@ -101,12 +111,16 @@ class TestMacOSJunkFiles:
 
 
 class TestLinuxJunkFiles:
+    """Represent test linux junk files."""
+
     @staticmethod
     def test_directory_file_skipped():
+        """Verify test directory file skipped."""
         assert _should_auto_skip_import(".directory") is True
 
     @staticmethod
     def test_trash_sentinel_skipped():
+        """Verify test trash sentinel skipped."""
         assert _should_auto_skip_import(".Trash-1000") is True
 
 
@@ -114,6 +128,8 @@ class TestLinuxJunkFiles:
 
 
 class TestApplicationJunkFiles:
+    """Represent test application junk files."""
+
     @pytest.mark.parametrize(
         "filename",
         [
@@ -130,6 +146,7 @@ class TestApplicationJunkFiles:
         ],
     )
     def test_app_metadata_skipped(self, filename):
+        """Verify test app metadata skipped."""
         assert _should_auto_skip_import(filename) is True
 
 
@@ -137,43 +154,54 @@ class TestApplicationJunkFiles:
 
 
 class TestJunkDirectories:
+    """Represent test junk directories."""
+
     @staticmethod
     def test_lost_and_found_contents_skipped():
+        """Verify test lost and found contents skipped."""
         assert _should_auto_skip_import("lost+found/file.tif") is True
         assert _should_auto_skip_import("lost+found/subdir/image.png") is True
 
     @staticmethod
     def test_lost_and_found_case_insensitive():
+        """Verify test lost and found case insensitive."""
         assert _should_auto_skip_import("Lost+Found/file.tif") is True
         assert _should_auto_skip_import("LOST+FOUND/file.tif") is True
 
     @staticmethod
     def test_recycle_bin_contents_skipped():
+        """Verify test recycle bin contents skipped."""
         assert _should_auto_skip_import("$RECYCLE.BIN/file.tif") is True
         assert _should_auto_skip_import("$Recycle.Bin/S-1-5/image.jpg") is True
 
     @staticmethod
     def test_system_volume_information_skipped():
+        """Verify test system volume information skipped."""
         assert _should_auto_skip_import("System Volume Information/file.tif") is True
 
     @staticmethod
     def test_spotlight_dir_contents_skipped():
+        """Verify test spotlight dir contents skipped."""
         assert _should_auto_skip_import(".Spotlight-V100/store.db") is True
 
     @staticmethod
     def test_fseventsd_dir_contents_skipped():
+        """Verify test fseventsd dir contents skipped."""
         assert _should_auto_skip_import(".fseventsd/000001") is True
 
     @staticmethod
     def test_trashes_dir_contents_skipped():
+        """Verify test trashes dir contents skipped."""
         assert _should_auto_skip_import(".Trashes/501/image.tif") is True
 
     @staticmethod
     def test_temporaryitems_dir_contents_skipped():
+        """Verify test temporaryitems dir contents skipped."""
         assert _should_auto_skip_import(".TemporaryItems/temp.tif") is True
 
     @staticmethod
     def test_junk_dir_nested_deep():
+        """Verify test junk dir nested deep."""
         assert _should_auto_skip_import("volume/lost+found/deep/file.tif") is True
 
 
@@ -185,43 +213,52 @@ class TestXMLFilesNeverSkipped:
 
     @staticmethod
     def test_plain_xml_not_skipped():
+        """Verify test plain XML not skipped."""
         assert _should_auto_skip_import("data.xml") is False
 
     @staticmethod
     def test_ome_xml_not_skipped():
+        """Verify test ome XML not skipped."""
         assert _should_auto_skip_import("image.ome.xml") is False
 
     @staticmethod
     def test_companion_ome_not_skipped():
+        """Verify test companion ome not skipped."""
         assert _should_auto_skip_import("image.companion.ome") is False
 
     @staticmethod
     def test_xml_in_root_not_skipped():
+        """Verify test XML in root not skipped."""
         assert _should_auto_skip_import("settings.xml") is False
 
     @staticmethod
     def test_xml_in_metadata_dir_not_skipped():
         """XML files inside metadata/ directories must NOT be auto-skipped.
-        OMERO should decide whether it can import them."""
+        OMERO should decide whether it can import them.
+        """
         assert _should_auto_skip_import("metadata/data.xml") is False
         assert _should_auto_skip_import("_metadata/info.xml") is False
         assert _should_auto_skip_import(".metadata/config.xml") is False
 
     @staticmethod
     def test_xml_in_arbitrary_dir_not_skipped():
+        """Verify test XML in arbitrary dir not skipped."""
         assert _should_auto_skip_import("experiment/data.xml") is False
         assert _should_auto_skip_import("project/subfolder/config.xml") is False
 
     @staticmethod
     def test_xml_in_deeply_nested_dir_not_skipped():
+        """Verify test XML in deeply nested dir not skipped."""
         assert _should_auto_skip_import("a/b/c/d/image.xml") is False
 
     @staticmethod
     def test_ome_xml_in_metadata_dir_not_skipped():
+        """Verify test ome XML in metadata dir not skipped."""
         assert _should_auto_skip_import("metadata/image.ome.xml") is False
 
     @staticmethod
     def test_xml_with_various_cases_not_skipped():
+        """Verify test XML with various cases not skipped."""
         assert _should_auto_skip_import("DATA.XML") is False
         assert _should_auto_skip_import("Image.Xml") is False
         assert _should_auto_skip_import("folder/FILE.XML") is False
@@ -262,10 +299,12 @@ class TestLegitimateFilesNotSkipped:
         ],
     )
     def test_image_and_data_files_not_skipped(self, path):
+        """Verify test image and data files not skipped."""
         assert _should_auto_skip_import(path) is False
 
     @staticmethod
     def test_files_in_subdirectories_not_skipped():
+        """Verify test files in subdirectories not skipped."""
         assert _should_auto_skip_import("experiment/image.tif") is False
         assert _should_auto_skip_import("project/data/image.czi") is False
         assert _should_auto_skip_import("a/b/c/scan.nd2") is False
@@ -273,7 +312,8 @@ class TestLegitimateFilesNotSkipped:
     @staticmethod
     def test_files_in_metadata_named_dir_not_skipped():
         """Files in directories called 'metadata' must NOT be auto-skipped
-        (only OS junk dirs trigger skipping)."""
+        (only OS junk dirs trigger skipping).
+        """
         assert _should_auto_skip_import("metadata/image.tif") is False
         assert _should_auto_skip_import("_metadata/scan.nd2") is False
 
@@ -282,17 +322,22 @@ class TestLegitimateFilesNotSkipped:
 
 
 class TestEdgeCases:
+    """Represent test edge cases."""
+
     @staticmethod
     def test_empty_string_not_skipped():
+        """Verify test empty string not skipped."""
         assert _should_auto_skip_import("") is False
 
     @staticmethod
     def test_none_like_empty_not_skipped():
         # The function checks `if not relative_path`
+        """Verify test none like empty not skipped."""
         assert _should_auto_skip_import("") is False
 
     @staticmethod
     def test_filename_only_no_directory():
+        """Verify test filename only no directory."""
         assert _should_auto_skip_import("Thumbs.db") is True
         assert _should_auto_skip_import("image.tif") is False
 
@@ -310,7 +355,8 @@ class TestEdgeCases:
     @staticmethod
     def test_directory_name_matching_skip_filename_does_not_skip_contents():
         """A directory named 'thumbs.db' should not cause its contents to be skipped
-        (only _ALWAYS_SKIP_DIRS entries trigger directory-level skipping)."""
+        (only _ALWAYS_SKIP_DIRS entries trigger directory-level skipping).
+        """
         assert _should_auto_skip_import("thumbs.db/image.tif") is False
 
     @staticmethod

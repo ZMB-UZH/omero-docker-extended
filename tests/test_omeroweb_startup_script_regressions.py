@@ -16,8 +16,11 @@ BASH_BIN = "/bin/bash"
 
 
 class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
+    """Test cases for OMERO web startup script regression tests."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Store set up class."""
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.config_script = cls.repo_root / "startup" / "50-config.py"
         cls.default_config_script = (
@@ -27,6 +30,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _make_fake_omero(workspace: Path) -> tuple[Path, Path]:
+        """Handle make fake OMERO."""
         calls_file = workspace / "omero-calls.log"
         fake_omero = workspace / "omero"
         fake_omero.write_text(
@@ -40,6 +44,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _make_fake_python_validator(workspace: Path) -> tuple[Path, Path]:
+        """Handle make fake python validator."""
         calls_file = workspace / "python-calls.log"
         fake_python = workspace / "python3"
         fake_python.write_text(
@@ -66,6 +71,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
         return fake_python, calls_file
 
     def test_50_config_applies_globbed_files_and_config_env_overrides(self) -> None:
+        """Verify test 50 config applies globbed files and conf behavior."""
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             fake_omero, calls_file = self._make_fake_omero(workspace)
@@ -99,6 +105,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             self.assertFalse(python_calls_file.exists())
 
     def test_50_config_sets_empty_values_from_file(self) -> None:
+        """Verify test 50 config sets empty values from file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             fake_omero, calls_file = self._make_fake_omero(workspace)
@@ -126,6 +133,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             self.assertFalse(python_calls_file.exists())
 
     def test_50_config_auto_detects_config_glob_from_omero_binary(self) -> None:
+        """Verify test 50 config auto detects config glob from behavior."""
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             fake_bin_dir = workspace / "runtime" / "venv" / "bin"
@@ -164,6 +172,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             self.assertIn(f"load --glob {config_dir}/*.omero", calls)
 
     def test_50_config_normalizes_legacy_plugin_aliases_before_apply(self) -> None:
+        """Verify test 50 config normalizes legacy plugin alias behavior."""
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             fake_omero, calls_file = self._make_fake_omero(workspace)
@@ -213,6 +222,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             self.assertNotIn("omeroweb_upload", top_links_call)
 
     def test_50_config_fails_fast_when_app_modules_are_missing(self) -> None:
+        """Verify test 50 config fails fast when app modules ar behavior."""
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             fake_omero, calls_file = self._make_fake_omero(workspace)
@@ -248,6 +258,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             self.assertFalse(calls_file.exists())
 
     def test_60_default_web_config_uses_dynamic_omero_binary(self) -> None:
+        """Verify test 60 default web config uses dynamic OMERO behavior."""
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             fake_omero, calls_file = self._make_fake_omero(workspace)
@@ -271,6 +282,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             )
 
     def test_98_cleanprevious_removes_stale_pid_file(self) -> None:
+        """Verify test 98 cleanprevious removes stale pid file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             pid_file = workspace / "django.pid"
@@ -290,6 +302,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
     def test_dockerfile_replaces_inherited_startup_scripts_with_repo_managed_versions(
         self,
     ) -> None:
+        """Verify test dockerfile replaces inherited startup sc behavior."""
         dockerfile_text = (
             self.repo_root / "docker" / "omero-web.Dockerfile"
         ).read_text(encoding="utf-8")

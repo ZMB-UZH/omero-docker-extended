@@ -24,6 +24,7 @@ _T = TypeVar("_T")
 
 
 def _env_reference(env_file: str, docs_url: str | None) -> str:
+    """Handle env reference."""
     reference = f"Set it in {env_file} (referenced by docker-compose.yml)."
     return f"{reference} See {docs_url}." if docs_url else reference
 
@@ -35,6 +36,7 @@ def _missing_env_message(
     hint: str | None = None,
     docs_url: str | None = None,
 ) -> str:
+    """Handle missing env message."""
     message = (
         f"Missing required environment variable: {name}. "
         f"{_env_reference(env_file, docs_url)}"
@@ -50,6 +52,7 @@ def _invalid_env_message(
     expected: str,
     docs_url: str | None = None,
 ) -> str:
+    """Handle invalid env message."""
     return (
         f"Invalid value for {name} in {env_file}: {value!r}. Expected {expected}. "
         f"{_env_reference(env_file, docs_url)}"
@@ -57,6 +60,7 @@ def _invalid_env_message(
 
 
 def _read_env(name: str, *, env_file: str, allow_empty: bool) -> str | None:
+    """Handle read env."""
     if not env_file:
         raise ValueError("env_file must identify the configuration contract.")
     value = os.environ.get(name)
@@ -72,6 +76,7 @@ def _coerce(
     parser: Callable[[str], _T],
     docs_url: str | None = None,
 ) -> _T:
+    """Handle coerce."""
     try:
         return parser(value)
     except (LookupError, TypeError, ValueError) as exc:

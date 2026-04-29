@@ -30,6 +30,7 @@ from omeroweb_admin_tools.services.log_query import (
 def test_ttl_cache_handles_loader_failures_inflight_results_and_pruning(
     monkeypatch,
 ) -> None:
+    """Verify test ttl cache handles loader failures inflig behavior."""
     current_time = [100.0]
     monkeypatch.setattr(log_query_module.time, "monotonic", lambda: current_time[0])
     cache = log_query_module._InMemoryTTLCache(
@@ -67,7 +68,10 @@ def test_ttl_cache_handles_loader_failures_inflight_results_and_pruning(
     assert cache._total_size_bytes == 4
 
     class _StalePopDict(dict):
+        """Represent stale pop dict."""
+
         def pop(self, key, default=None):
+            """Handle pop."""
             if key == "stale":
                 super().pop(key, None)
                 return None
@@ -92,6 +96,7 @@ def test_ttl_cache_handles_loader_failures_inflight_results_and_pruning(
 
 
 def test_log_query_helpers_cover_internal_containers_caps_and_serialization() -> None:
+    """Verify test log query helpers cover internal contain behavior."""
     entries = [
         LogEntry(
             timestamp="2026-03-30T07:00:00+00:00",
@@ -156,6 +161,7 @@ def test_log_query_level_and_filesystem_helpers_cover_remaining_edges(
     tmp_path,
     monkeypatch,
 ) -> None:
+    """Verify test log query level and filesystem helpers c behavior."""
     log_file = tmp_path / "master.err"
     log_file.write_text("payload", encoding="utf-8")
     non_file = tmp_path / "logs"
@@ -198,6 +204,7 @@ def test_log_query_level_and_filesystem_helpers_cover_remaining_edges(
 def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_empty_labels(
     monkeypatch,
 ) -> None:
+    """Verify test log query remaining runtime paths cover behavior."""
     config = log_query_module.LogConfig(
         loki_url="https://loki.example.test:3100",
         lookback_seconds=60,
@@ -277,6 +284,8 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
     ]
 
     class _FakeExecutor:
+        """Test double for fake executor."""
+
         def __init__(self, max_workers):
             self.max_workers = max_workers
 
@@ -288,6 +297,7 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
 
         @staticmethod
         def submit(fn, config, job, lookback_seconds, max_entries, since_ns):
+            """Handle submit."""
             future = concurrent.futures.Future()
             if job is docker_job:
                 future.set_exception(RuntimeError("docker failed"))
@@ -304,6 +314,7 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
     )
 
     def _as_completed(futures):
+        """Handle as completed."""
         return list(futures)
 
     monkeypatch.setattr(

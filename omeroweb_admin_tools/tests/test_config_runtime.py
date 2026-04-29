@@ -13,6 +13,7 @@ from omeroweb_admin_tools.services.system_diagnostics import (
 
 
 def test_build_log_config_validates_environment_values(monkeypatch):
+    """Verify test build log config validates environment v behavior."""
     monkeypatch.setattr(
         admin_config,
         "require_env",
@@ -71,6 +72,7 @@ def test_build_log_config_validates_environment_values(monkeypatch):
 
 
 def _result(check_id: str, status: str) -> DiagnosticCheckResult:
+    """Handle result."""
     return DiagnosticCheckResult(
         check_id=check_id,
         label=check_id,
@@ -82,6 +84,7 @@ def _result(check_id: str, status: str) -> DiagnosticCheckResult:
 
 
 def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
+    """Verify test system diagnostics edge branches cover r behavior."""
     monkeypatch.delenv("EMPTY_PRIMARY", raising=False)
     monkeypatch.setenv("EMPTY_PRIMARY", " ")
     assert (
@@ -100,6 +103,7 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
     calls = []
 
     def docker_api(path, timeout_seconds=4.0):
+        """Handle docker API."""
         calls.append(path)
         if path.startswith("/containers/json"):
             return True, [{}], ""
@@ -152,15 +156,23 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
     assert "inspect payload was invalid" in error
 
     class _Connection:
+        """Represent connection."""
+
         @staticmethod
         def cursor():
+            """Handle cursor."""
+
             class _Cursor:
+                """Represent cursor."""
+
                 @staticmethod
                 def execute(query):
+                    """Run execute."""
                     return None
 
                 @staticmethod
                 def fetchone():
+                    """Handle fetchone."""
                     return None
 
                 def __enter__(self):
@@ -173,9 +185,11 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
 
         @staticmethod
         def close():
+            """Handle close."""
             raise RuntimeError("close failed")
 
     def _psycopg2_connection():
+        """Handle psycopg2 connection."""
         return type(
             "Psycopg2",
             (),

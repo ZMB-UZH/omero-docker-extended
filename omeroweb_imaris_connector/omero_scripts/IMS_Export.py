@@ -35,6 +35,7 @@ subprocess = process_utils
 
 
 def _existing_regular_path(path):
+    """Handle existing regular path."""
     try:
         path_text = os.fspath(path)
     except TypeError:
@@ -143,6 +144,7 @@ def _ensure_bioformats_jar(install_dir):
 
 
 def _read_expected_sha256(path):
+    """Handle read expected sha256."""
     checksum_path = _existing_regular_path(path)
     if checksum_path is None:
         return None
@@ -158,6 +160,7 @@ def _read_expected_sha256(path):
 
 
 def _write_expected_sha256(path, sha256_value):
+    """Handle write expected sha256."""
     tmp_path = path + ".tmp"
     try:
         with open(tmp_path, "w", encoding="ascii") as handle:
@@ -178,6 +181,7 @@ def _write_expected_sha256(path, sha256_value):
 
 
 def _sha256_file(path):
+    """Handle sha256 file."""
     source_path = _existing_regular_path(path)
     if source_path is None:
         raise FileNotFoundError(path)
@@ -189,6 +193,7 @@ def _sha256_file(path):
 
 
 def _is_valid_bioformats_jar(path, expected_sha256=None):
+    """Handle is valid bioformats jar."""
     if not os.path.exists(path):
         return False
 
@@ -206,6 +211,7 @@ def _is_valid_bioformats_jar(path, expected_sha256=None):
 def _copy_bioformats_jar(
     source_path, destination_path, expected_sha256, file_mode, description
 ):
+    """Handle copy bioformats jar."""
     tmp_path = destination_path + ".tmp"
     try:
         os.makedirs(os.path.dirname(destination_path), exist_ok=True)
@@ -281,6 +287,7 @@ def _get_voxel_size_from_image(image):
 
 
 def _get_managed_repository_root(conn):
+    """Handle get managed repository root."""
     try:
         config_service = conn.c.sf.getConfigService()
     except Exception:
@@ -305,6 +312,7 @@ def _get_managed_repository_root(conn):
 
 
 def _managed_original_file_path(managed_root, file_path, file_name):
+    """Handle managed original file path."""
     relative_dir = str(file_path or "").strip().strip("/\\")
     relative_name = str(file_name or "").strip().strip("/\\")
     if not relative_name:
@@ -319,6 +327,7 @@ def _managed_original_file_path(managed_root, file_path, file_name):
 
 
 def get_original_file_path(conn, image):
+    """Return get original file path."""
     try:
         fileset = image.getFileset()
         if not fileset:
@@ -341,6 +350,7 @@ def get_original_file_path(conn, image):
 
 
 def convert_to_ims(image, input_file, output_file):
+    """Handle convert to IMS."""
     try:
         # Prefer the binary installed by startup/51-install-imarisconvert.sh
         converter = shutil.which("imarisconvert")
@@ -425,6 +435,7 @@ def convert_to_ims(image, input_file, output_file):
 
 
 def _build_export_path(export_root, image, image_id):
+    """Handle build export path."""
     safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     output_dir = os.path.join(export_root, f"image_{image_id}")
@@ -433,6 +444,7 @@ def _build_export_path(export_root, image, image_id):
 
 
 def run_conversion(conn, image_id, export_root):
+    """Run run conversion."""
     image = conn.getObject("Image", image_id)
     if not image:
         return (False, f"Image {image_id} not found", None)
@@ -461,6 +473,7 @@ def run_script():
     # NOT at module level, so the OMERO processor can parse parameters without
     # triggering filesystem side-effects that cause ValidationException:
     # 'Can't find params for <id>'.
+    """Run run script."""
     export_root = _get_export_root()
     os.makedirs(export_root, exist_ok=True)
 

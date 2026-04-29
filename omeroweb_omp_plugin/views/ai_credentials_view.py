@@ -86,6 +86,7 @@ _PROVIDER_TESTS = _MODEL_ENDPOINTS
 
 
 def _validated_provider_url(url):
+    """Handle validated provider URL."""
     parsed = urllib.parse.urlparse(str(url or "").strip())
     if parsed.scheme != "https" or not parsed.netloc:
         raise ValueError("Invalid provider URL")
@@ -102,12 +103,14 @@ def _validated_provider_url(url):
 
 
 def _with_xai_credit_guidance(provider, status, message):
+    """Handle with xai credit guidance."""
     if provider == "xai" and int(status or 0) == 403:
         return f"{message} xAI accounts need paid credits to access the API."
     return message
 
 
 def _perform_connection_test(provider, api_key):
+    """Handle perform connection test."""
     provider = (provider or "").strip().lower()
     api_key = (api_key or "").strip()
     if not provider or not api_key:
@@ -176,6 +179,7 @@ def _perform_connection_test(provider, api_key):
 
 
 def _select_default_model(provider, model_ids):
+    """Handle select default model."""
     preferences = _MODEL_PREFERENCES.get(provider, ())
     for preferred in preferences:
         if preferred in model_ids:
@@ -184,6 +188,7 @@ def _select_default_model(provider, model_ids):
 
 
 def _parse_openai_style_models(payload):
+    """Handle parse openai style models."""
     models = []
     for item in payload.get("data", []) or []:
         model_id = item.get("id")
@@ -199,6 +204,7 @@ def _parse_openai_style_models(payload):
 
 
 def _parse_anthropic_models(payload):
+    """Handle parse anthropic models."""
     models = []
     for item in payload.get("data", []) or []:
         model_id = item.get("id")
@@ -209,6 +215,7 @@ def _parse_anthropic_models(payload):
 
 
 def _parse_gemini_models(payload):
+    """Handle parse gemini models."""
     models = []
     for item in payload.get("models", []) or []:
         name = item.get("name")
@@ -227,6 +234,7 @@ def _parse_gemini_models(payload):
 
 
 def _parse_cohere_models(payload):
+    """Handle parse cohere models."""
     models = []
     for item in payload.get("models", []) or []:
         model_id = item.get("name") or item.get("id")
@@ -249,6 +257,7 @@ def _parse_cohere_models(payload):
 @login_required()
 @require_non_root_user
 def list_credentials(request, conn=None, _url=None, **kwargs):
+    """Return list credentials."""
     if request.method != "GET":
         return JsonResponse({"error": errors.method_get_required()}, status=405)
 
@@ -279,6 +288,7 @@ def list_credentials(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def test_credentials(request, conn=None, _url=None, **kwargs):
+    """Verify test credentials."""
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 
@@ -314,6 +324,7 @@ def test_credentials(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def save_credentials(request, conn=None, _url=None, **kwargs):
+    """Store save credentials."""
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 
@@ -352,6 +363,7 @@ def save_credentials(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def list_models(request, conn=None, _url=None, **kwargs):
+    """Return list models."""
     if request.method != "GET":
         return JsonResponse({"error": errors.method_get_required()}, status=405)
 
