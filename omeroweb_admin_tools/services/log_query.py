@@ -47,7 +47,7 @@ _LEVEL_MAP = {
     "PANIC": "fatal",
     "LOG": "info",  # Postgres uses "LOG"
 }
-_LEVEL_TOKEN_PATTERN = (
+_LOG_LEVEL_PATTERN = (
     r"(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|SEVERE|CRITICAL|FATAL|PANIC|LOG)"
 )
 
@@ -394,7 +394,7 @@ def _parse_level_from_message(message: str) -> Optional[str]:
     # We look for a standalone level token surrounded by whitespace, brackets,
     # or start/end of string.
     m = re.search(
-        rf"(?:^|[\s\[\(]){_LEVEL_TOKEN_PATTERN}(?:[\s\]\):]|$)",
+        rf"(?:^|[\s\[\(]){_LOG_LEVEL_PATTERN}(?:[\s\]\):]|$)",
         message[:500],  # limit search to first 500 chars for performance
     )
     if m:
@@ -1030,11 +1030,11 @@ def _strip_message_prefix(message: str) -> str:
     patterns = [
         re.compile(
             r"^\s*\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,6})?\s+"
-            rf"\[?{_LEVEL_TOKEN_PATTERN}\]?\s+",
+            rf"\[?{_LOG_LEVEL_PATTERN}\]?\s+",
             re.IGNORECASE,
         ),
         re.compile(
-            rf"^\s*\[?{_LEVEL_TOKEN_PATTERN}\]?\s+"
+            rf"^\s*\[?{_LOG_LEVEL_PATTERN}\]?\s+"
             r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,6})?\s+",
             re.IGNORECASE,
         ),
