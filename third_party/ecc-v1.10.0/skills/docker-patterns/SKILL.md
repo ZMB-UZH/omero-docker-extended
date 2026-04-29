@@ -33,11 +33,9 @@ services:
       - .:/app                        # Bind mount for hot reload
       - /app/node_modules             # Anonymous volume -- preserves container deps
     environment:
-      - DATABASE_URL_FILE=/run/secrets/database_url
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/app_dev
       - REDIS_URL=redis://redis:6379/0
       - NODE_ENV=development
-    secrets:
-      - database_url
     depends_on:
       db:
         condition: service_healthy
@@ -51,10 +49,8 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: app_dev
-    secrets:
-      - db_password
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
@@ -80,12 +76,6 @@ services:
 volumes:
   pgdata:
   redisdata:
-
-secrets:
-  database_url:
-    file: ./secrets/database_url.txt
-  db_password:
-    file: ./secrets/db_password.txt
 ```
 
 ### Development vs Production Dockerfile
@@ -166,7 +156,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 Services in the same Compose network resolve by service name:
 ```
 # From "app" container:
-postgres://postgres@db:5432/app_dev             # "db" resolves to the db container
+postgres://postgres:postgres@db:5432/app_dev    # "db" resolves to the db container
 redis://redis:6379/0                             # "redis" resolves to the redis container
 ```
 
