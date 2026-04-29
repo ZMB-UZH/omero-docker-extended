@@ -476,7 +476,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
                 "\n".join(
                     [
                         "# OPTIONAL='quoted'",
-                        "export ACTIVE=\"quoted\"",
+                        'export ACTIVE="quoted"',
                         "ACTIVE=duplicate",
                         "",
                     ]

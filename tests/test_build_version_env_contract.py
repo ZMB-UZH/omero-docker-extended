@@ -58,7 +58,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             compose_text,
         )
         self.assertIn(
-            '${OMERO_SERVER_HOST_PORT:?Set OMERO_SERVER_HOST_PORT in env/omeroserver.env}:${OMERO_CLI_PORT:?Set OMERO_CLI_PORT in env/omeroserver.env}',
+            "${OMERO_SERVER_HOST_PORT:?Set OMERO_SERVER_HOST_PORT in env/omeroserver.env}:${OMERO_CLI_PORT:?Set OMERO_CLI_PORT in env/omeroserver.env}",
             compose_text,
         )
 
