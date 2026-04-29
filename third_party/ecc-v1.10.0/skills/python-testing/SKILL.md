@@ -454,13 +454,13 @@ def mock_config():
     """Create a mock with a property."""
     config = Mock()
     type(config).debug = PropertyMock(return_value=True)
-    type(config).service_label = PropertyMock(return_value="example-service")
+    type(config).api_key = PropertyMock(return_value="test-key")
     return config
 
 def test_with_mock_config(mock_config):
     """Test with mocked config properties."""
     assert mock_config.debug is True
-    assert mock_config.api_key == "mock-api-key"
+    assert mock_config.api_key == "test-key"
 ```
 
 ## Testing Async Code

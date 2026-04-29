@@ -58,7 +58,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-django_signing_setting = env('DJANGO_' + 'SIGNING' + '_VALUE')
+SECRET_KEY = env('DJANGO_SECRET_KEY')
 DEBUG = False
 ALLOWED_HOSTS = []
 
@@ -350,32 +350,32 @@ class ProductCreateSerializer(serializers.ModelSerializer):
 class UserRegistrationSerializer(serializers.ModelSerializer):
     """Serializer for user registration."""
 
-    credential = serializers.CharField(
+    password = serializers.CharField(
         write_only=True,
         required=True,
         validators=[validate_password],
         style={'input_type': 'password'}
     )
-    credential_confirm = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    password_confirm = serializers.CharField(write_only=True, style={'input_type': 'password'})
 
     class Meta:
         model = User
-        fields = ['email', 'username', 'credential', 'credential_confirm']
+        fields = ['email', 'username', 'password', 'password_confirm']
 
     def validate(self, data):
-        """Validate credentials match."""
-        if data['credential'] != data['credential_confirm']:
+        """Validate passwords match."""
+        if data['password'] != data['password_confirm']:
             raise serializers.ValidationError({
-                "credential_confirm": "Credential fields did not match."
+                "password_confirm": "Password fields didn't match."
             })
         return data
 
     def create(self, validated_data):
-        """Create user with hashed credential."""
-        validated_data.pop('credential_confirm')
-        credential = validated_data.pop('credential')
+        """Create user with hashed password."""
+        validated_data.pop('password_confirm')
+        password = validated_data.pop('password')
         user = User.objects.create(**validated_data)
-        user.set_password(credential)
+        user.set_password(password)
         user.save()
         return user
 ```
@@ -510,7 +510,7 @@ class OrderService:
         # Integration with payment gateway
         payment = PaymentGateway.charge(
             amount=order.total_price,
-            payment_nonce=payment_data['payment_nonce']
+            token=payment_data['token']
         )
 
         if payment.success:
@@ -558,9 +558,9 @@ class ProductListView(generic.ListView):
 ```python
 from django.core.cache import cache
 
-def get_catalog_highlight_items():
-    """Get highlighted catalog items with caching."""
-    cache_key = ':'.join(('catalog', 'featured', 'items'))
+def get_featured_products():
+    """Get featured products with caching."""
+    cache_key = 'featured_products'
     products = cache.get(cache_key)
 
     if products is None:
@@ -575,8 +575,8 @@ def get_catalog_highlight_items():
 ```python
 from django.core.cache import cache
 
-def get_catalog_group_counts():
-    cache_key = ':'.join(('catalog', 'popular', 'groups'))
+def get_popular_categories():
+    cache_key = 'popular_categories'
     categories = cache.get(cache_key)
 
     if categories is None:
