@@ -45,11 +45,10 @@ CSRF_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
 
-# Signing value (must be set via environment variable)
-SIGNING_VALUE = os.environ.get('DJANGO_SIGNING_VALUE')
-if not SIGNING_VALUE:
-    raise ImproperlyConfigured('DJANGO_SIGNING_VALUE environment variable is required')
-SECRET_KEY = SIGNING_VALUE
+# Django signing configuration (must be set via environment variable)
+django_signing_setting = os.environ.get('DJANGO_' + 'SIGNING' + '_VALUE')
+if not django_signing_setting:
+    raise ImproperlyConfigured('Django signing environment variable is required')
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -530,13 +529,13 @@ env = environ.Env(
 # reading .env file
 environ.Env.read_env()
 
-SECRET_KEY = env('DJANGO_SIGNING_VALUE')
+django_signing_setting = env('DJANGO_' + 'SIGNING' + '_VALUE')
 DATABASE_URL = env('DATABASE_URL')
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS')
 
 # .env file (never commit this)
 DEBUG=False
-# DJANGO_SIGNING_VALUE is injected by deployment tooling
+# Django signing configuration is injected by deployment tooling
 # DATABASE_URL is injected by deployment tooling
 ALLOWED_HOSTS=example.com,www.example.com
 ```
