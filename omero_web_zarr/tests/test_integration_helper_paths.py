@@ -1103,7 +1103,8 @@ def test_marshal_regular_image_data_with_safe_tile_size_handles_engine_fallbacks
         _MarshalImage(prepare_exception=RuntimeError("renderer exploded")),
         request,
     )
-    assert error_payload["Exception"] == "renderer exploded"
+    assert error_payload["Exception"] == integration._REGULAR_IMAGE_RENDERING_ERROR
+    assert "renderer exploded" not in error_payload["Exception"]
 
     payload = integration._marshal_regular_image_data_with_safe_tile_size(
         _MarshalImage(),

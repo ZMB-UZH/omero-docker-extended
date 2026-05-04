@@ -19,6 +19,7 @@ from omeroweb.webclient.decorators import login_required
 from omeroweb.webgateway.marshal import channelMarshal
 
 from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_bool_env
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
 from .utils import encode_store_backed_pil_image
 from .utils import get_safe_image_tile_size
@@ -43,6 +44,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 _SAFE_RENDERING_ENV = "OMERO_WEB_ZARR_ALTERNATIVE_RENDERING"
+_REGULAR_IMAGE_RENDERING_ERROR = "Image rendering metadata is unavailable."
 
 
 def _safe_rendering_enabled():
@@ -406,8 +408,12 @@ def _regular_image_rendering_engine_or_payload(image, payload):
     except omero.ConcurrencyException as concurrency_error:
         return None, {"ConcurrencyException": {"backOff": concurrency_error.backOff}}
     except Exception as exc:
-        payload["Exception"] = getattr(exc, "message", str(exc))
-        LOGGER.error(traceback.format_exc())
+        payload["Exception"] = _REGULAR_IMAGE_RENDERING_ERROR
+        LOGGER.error(
+            "Failed to prepare regular image rendering engine for imageMarshal: %s",
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
         return None, payload
     return require_image_rendering_engine(image), None
 

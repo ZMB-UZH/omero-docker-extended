@@ -456,4 +456,4 @@ def get_rate_limit_status(request, conn=None):
             sanitize_log_value(exc),
             exc_info=sanitized_exc_info(exc),
         )
-        return {"error": str(exc)}
+        return {"error": errors.unexpected_error()}
