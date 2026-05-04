@@ -1352,9 +1352,7 @@ def render_store_backed_thumbnail_bytes(image, *, size=96, z=None, t=None):
 def _exception_text(exc):
     """Exception text.
 
-    Inputs: `exc`. Output: `'\n'.join` result.
-
-        '.join` result.
+    Inputs: `exc`. Output: joined exception-message text.
     """
     parts = [
         str(exc),

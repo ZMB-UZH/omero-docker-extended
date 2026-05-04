@@ -329,9 +329,7 @@ def _store_backed_metadata(image):
 def _exception_text(exc):
     """Exception text.
 
-    Inputs: `exc`. Output: `'\n'.join` result.
-
-        '.join` result.
+    Inputs: `exc`. Output: joined exception-message text.
     """
     parts = [
         str(exc),
