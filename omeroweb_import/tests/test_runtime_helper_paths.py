@@ -12,7 +12,7 @@ def test_directory_initialization_uses_parent_checks_and_caches_paths(
 ):
     """Verify directory initialization uses parent checks and caches paths.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in directory initialization uses parent checks and caches paths.
     """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
@@ -50,12 +50,32 @@ def test_directory_initialization_uses_parent_checks_and_caches_paths(
     assert ensure_dir_calls == []
 
 
+def test_upload_root_accessor_reports_failed_initialization(monkeypatch) -> None:
+    """Verify upload root accessor reports failed initialization.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in upload root accessor reports failed initialization.
+    """
+    original_upload_root = core_functions._DIRECTORY_CACHE.upload_root
+    original_initialized = core_functions._DIRECTORY_CACHE.initialized
+    try:
+        core_functions._DIRECTORY_CACHE.upload_root = None
+        core_functions._DIRECTORY_CACHE.initialized = False
+        monkeypatch.setattr(core_functions, "_initialize_directories", lambda: None)
+
+        with pytest.raises(RuntimeError, match="Upload root was not initialized"):
+            core_functions._get_upload_root()
+    finally:
+        core_functions._DIRECTORY_CACHE.upload_root = original_upload_root
+        core_functions._DIRECTORY_CACHE.initialized = original_initialized
+
+
 def test_directory_helpers_cover_failure_and_permission_fix_paths(
     tmp_path, monkeypatch
 ):
-    """Verify directory helpers cover failure and permission fix paths.
+    """Verify the directory helpers cover failure and permission fix paths safety boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: computed value or None.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `original_chmod` result.
     """
     target = tmp_path / "nested" / "child"
     target.parent.mkdir(parents=True)
@@ -98,9 +118,9 @@ def test_directory_helpers_cover_failure_and_permission_fix_paths(
     original_chmod = Path.chmod
 
     def chmod(self, path_mode):
-        """Chmod.
+        """Return the chmod.
 
-        Inputs: `path_mode`. Output: `original_chmod` result or None.
+        Inputs: `path_mode`. Output: `original_chmod` result.
         """
         if self == existing:
             chmod_calls.append(path_mode)
@@ -116,9 +136,9 @@ def test_directory_helpers_cover_failure_and_permission_fix_paths(
     original_access = core_functions.os.access
 
     def access(path, mode):
-        """Access.
+        """Return the access.
 
-        Inputs: `path`, `mode`. Output: computed value.
+        Inputs: `path` path, `mode`. Output: `original_access` result.
         """
         if Path(path) == inaccessible:
             return False
@@ -130,9 +150,9 @@ def test_directory_helpers_cover_failure_and_permission_fix_paths(
 
 
 def test_runtime_env_helpers_normalize_boolean_and_integer_values(monkeypatch):
-    """Verify runtime environment helpers normalize boolean and integer values.
+    """Check runtime env helpers normalize boolean and integer values parsing against the documented contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in runtime env helpers normalize boolean and integer values.
     """
     monkeypatch.setenv("IMPORT_BATCH", " 7 ")
     monkeypatch.setenv("FEATURE_FLAG", " yes ")

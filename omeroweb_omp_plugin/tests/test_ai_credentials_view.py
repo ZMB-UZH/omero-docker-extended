@@ -14,17 +14,17 @@ TEST_API_CREDENTIAL = "fixture-api-credential"
 
 
 def _json_payload(response):
-    """JSON payload.
+    """Return the JSON payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
 
 def _json_post(payload):
-    """JSON post.
+    """Return the JSON post.
 
-    Inputs: `payload`. Output: `RequestFactory().post` result.
+    Inputs: `payload` payload. Output: `post` result.
     """
     return RequestFactory().post(
         "/",
@@ -34,7 +34,7 @@ def _json_post(payload):
 
 
 class _Response:
-    """Represent response."""
+    """Test double for response behavior in this module."""
 
     def __init__(
         self,
@@ -44,7 +44,7 @@ class _Response:
         headers=None,
         url="https://api.example.test/models",
     ):
-        """Initialize the instance.
+        """Create `_Response` with `payload` and `status`.
 
         Inputs: `payload`, `status`, `headers`, `url`. Output: None.
         """
@@ -57,7 +57,7 @@ class _Response:
     def json(self):
         """Return the JSON payload.
 
-        Inputs: none. Output: `self._payload`. Raises on invalid or unavailable state.
+        Inputs: none. Output: `_payload`. Raises: ValueError for the exercised failure path.
         """
         if isinstance(self._payload, str):
             raise ValueError("not json")
@@ -65,9 +65,9 @@ class _Response:
 
 
 def _http_error(url="https://api.example.test/models", code=401, body="forbidden"):
-    """HTTP error.
+    """Return the HTTP error.
 
-    Inputs: `url`, `code`, `body`. Output: `exc`.
+    Inputs: `url` URL, `code`, `body`. Output: `exc`.
     """
     exc = ai_credentials_view.requests.HTTPError("failure")
     exc.response = _Response(body, status=code, url=url)
@@ -77,7 +77,7 @@ def _http_error(url="https://api.example.test/models", code=401, body="forbidden
 def test_list_credentials_and_test_save_paths(monkeypatch):
     """Verify list credentials and test save paths.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in list credentials and test save paths.
     """
     request = RequestFactory().get("/")
     request.user = SimpleNamespace(username="alice")
@@ -134,7 +134,7 @@ def test_list_credentials_and_test_save_paths(monkeypatch):
 def test_list_credentials_handles_method_user_and_store_failures(monkeypatch):
     """Verify list credentials handles method user and store failures.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in list credentials handles method user and store failures.
     """
     method_response = inspect.unwrap(ai_credentials_view.list_credentials)(
         RequestFactory().post("/"),
@@ -174,9 +174,10 @@ def test_list_credentials_handles_method_user_and_store_failures(monkeypatch):
 
 
 def test_test_credentials_reuses_saved_key_and_handles_failures(monkeypatch):
-    """Verify credential checks reuse saved keys and report failures.
+    """Verify AI credential checks reuse saved keys and report provider failures.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in saved-key
+    reuse or provider-error handling.
     """
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "alice")
     monkeypatch.setattr(
@@ -230,9 +231,9 @@ def test_test_credentials_reuses_saved_key_and_handles_failures(monkeypatch):
 def test_save_credentials_handles_missing_username_failed_validation_and_store_error(
     monkeypatch,
 ):
-    """Verify save credentials handles missing username failed validation and store error.
+    """Confirm save credentials handles missing username failed validation and store error exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when save credentials handles missing username failed validation and store error stops reporting the expected error.
     """
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "")
     missing_user = inspect.unwrap(ai_credentials_view.save_credentials)(
@@ -288,7 +289,7 @@ def test_list_models_supports_provider_specific_payloads_and_default_selection(
 ):
     """Verify list models supports provider specific payloads and default selection.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in list models supports provider specific payloads and default selection.
     """
     request = RequestFactory().get("/", data={"provider": "groq"})
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "alice")
@@ -384,7 +385,7 @@ def test_list_models_handles_missing_inputs_http_errors_and_unknown_providers(
 ):
     """Verify list models handles missing inputs HTTP errors and unknown providers.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in list models handles missing inputs HTTP errors and unknown providers.
     """
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "alice")
     monkeypatch.setattr(
@@ -500,9 +501,9 @@ def test_list_models_handles_missing_inputs_http_errors_and_unknown_providers(
 
 
 def test_perform_connection_test_covers_success_http_error_and_exception(monkeypatch):
-    """Verify perform connection test covers success HTTP error and exception.
+    """Confirm perform connection test covers success HTTP error and exception exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when perform connection test covers success HTTP error and exception stops reporting the expected error.
     """
     seen = {}
     monkeypatch.setattr(
@@ -574,9 +575,9 @@ def test_perform_connection_test_covers_success_http_error_and_exception(monkeyp
 def test_ai_credentials_helper_edges_cover_parser_and_transport_failures(
     monkeypatch,
 ):
-    """Verify AI credentials helper edges cover parser and transport failures.
+    """Check ai credentials helper edges cover parser and transport failures parsing against the documented contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in ai credentials helper edges cover parser and transport failures.
     """
     assert (
         ai_credentials_view._validated_provider_url("https://api.example.test/models#x")

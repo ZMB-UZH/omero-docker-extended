@@ -9,9 +9,9 @@ from omeroweb_admin_tools.views.index_view import _proxy_http_request
 
 
 def _make_headers(values: dict[str, str]) -> HTTPMessage:
-    """Headers.
+    """Create the headers.
 
-    Inputs: `values`. Output: `HTTPMessage`.
+    Inputs: `values` (dict[str, str]). Output: `HTTPMessage`.
     """
     message = HTTPMessage()
     for key, value in values.items():
@@ -28,9 +28,9 @@ class _DummyDjangoRequest:
 
 
 def _install_proxy_backend_stub(monkeypatch, handler) -> None:
-    """Install proxy backend stub.
+    """Install the proxy backend stub.
 
-    Inputs: `monkeypatch`, `handler`. Output: None.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `handler`. Output: None.
     """
 
     def fake_backend_request(
@@ -42,10 +42,10 @@ def _install_proxy_backend_stub(monkeypatch, handler) -> None:
         headers,
         timeout_seconds,
     ):
-        """Fake backend request.
+        """Simulate backend request so the surrounding test controls that dependency.
 
-        Inputs: `base_url`, `method`, `request_target`, `data`, `headers`,
-        `timeout_seconds`. Output: `handler` result.
+        Inputs: `base_url` base URL, `method`, `request_target`, `data` payload,
+        `headers`, `timeout_seconds`. Output: `handler` result.
         """
         return handler(
             method,
@@ -67,7 +67,8 @@ def test_proxy_http_request_suppresses_prometheus_live_notification_stream(
 ) -> None:
     """Verify proxy HTTP request suppresses prometheus live notification stream.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy HTTP request suppresses prometheus live notification stream.
+    AssertionError when validation or the called operation fails.
     """
     read_called = {"value": False}
 
@@ -81,16 +82,17 @@ def test_proxy_http_request_suppresses_prometheus_live_notification_stream(
         def content(self):
             """Return response content.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
+            external operations fail.
             """
             read_called["value"] = True
             raise AssertionError("streaming payload should not be fully read")
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `DummyResponse`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -116,18 +118,19 @@ def test_proxy_http_request_suppresses_prometheus_live_notification_stream(
 def test_proxy_http_request_returns_gateway_timeout_for_backend_timeout(
     monkeypatch,
 ) -> None:
-    """Verify proxy HTTP request returns gateway timeout for backend timeout.
+    """Verify proxy HTTP request returns gateway timeout for backend timeout result shape.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy HTTP request returns gateway timeout for backend timeout.
     """
 
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
-        """Fake request.
+        """Simulate request so the surrounding test controls that dependency.
 
-        Inputs: `method`, `url`, `data`, `headers`, `timeout`, `allow_redirects`.
-        Output: None. Raises on invalid or unavailable state.
+        Inputs: `method`, `url` URL, `data` payload, `headers`, `timeout` timeout
+        seconds, `allow_redirects`. Output: None. Raises: Timeout when validation or
+        external operations fail.
         """
         raise requests.Timeout("timed out")
 
@@ -149,18 +152,19 @@ def test_proxy_http_request_returns_gateway_timeout_for_backend_timeout(
 def test_proxy_http_request_returns_gateway_timeout_for_socket_timeout(
     monkeypatch,
 ) -> None:
-    """Verify proxy HTTP request returns gateway timeout for socket timeout.
+    """Verify proxy HTTP request returns gateway timeout for socket timeout result shape.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy HTTP request returns gateway timeout for socket timeout.
     """
 
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
-        """Fake request.
+        """Simulate request so the surrounding test controls that dependency.
 
-        Inputs: `method`, `url`, `data`, `headers`, `timeout`, `allow_redirects`.
-        Output: None. Raises on invalid or unavailable state.
+        Inputs: `method`, `url` URL, `data` payload, `headers`, `timeout` timeout
+        seconds, `allow_redirects`. Output: None. Raises: timeout when validation or
+        external operations fail.
         """
         raise socket.timeout("socket timed out")
 

@@ -38,7 +38,7 @@ class CalledProcessError(RuntimeError):
         stdout: str = "",
         stderr: str = "",
     ) -> None:
-        """Initialize the instance.
+        """Create `CalledProcessError` with `returncode` and `cmd`.
 
         Inputs: `returncode`, `cmd`, `stdout`, `stderr`. Output: None.
         """
@@ -60,7 +60,7 @@ class TimeoutExpired(TimeoutError):
         stdout: str = "",
         stderr: str = "",
     ) -> None:
-        """Initialize the instance.
+        """Create `TimeoutExpired` with `cmd` and `timeout`.
 
         Inputs: `cmd`, `timeout`, `stdout`, `stderr`. Output: None.
         """
@@ -72,9 +72,10 @@ class TimeoutExpired(TimeoutError):
 
 
 def _normalize_command(args: Sequence[CommandArg]) -> tuple[str, ...]:
-    """Normalize command.
+    """Normalize the command.
 
-    Inputs: `args`. Output: `tuple[str, ...]`. Raises on invalid or unavailable state.
+    Inputs: `args` (Sequence[CommandArg]) positional arguments. Output: `tuple[str,
+    ...]`. Raises: TypeError, ValueError when validation or the called operation fails.
     """
     if isinstance(args, (str, bytes, os.PathLike)):
         raise TypeError("Command arguments must be a sequence, not a single path.")
@@ -87,12 +88,10 @@ def _normalize_command(args: Sequence[CommandArg]) -> tuple[str, ...]:
 
 
 def _normalize_env(env: Mapping[str, str] | None) -> dict[str, str] | None:
-    """Normalize environment.
+    """Normalize the environment.
 
-    Inputs: `env`. Output: `dict[str, str] | None`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `env` (Mapping[str, str] | None) environment mapping. Output: `dict[str,
+    str] | None`. Raises: ValueError when validation or the called operation fails.
     """
     if env is None:
         return None
@@ -106,9 +105,10 @@ def _normalize_env(env: Mapping[str, str] | None) -> dict[str, str] | None:
 
 
 def _normalize_cwd(cwd: CommandArg | None) -> str | None:
-    """Normalize cwd.
+    """Normalize the cwd.
 
-    Inputs: `cwd`. Output: `str | None`. Raises on invalid or unavailable state.
+    Inputs: `cwd` (CommandArg | None) working directory. Output: `str | None`. Raises:
+    ValueError when validation or the called operation fails.
     """
     if cwd is None:
         return None
@@ -119,9 +119,10 @@ def _normalize_cwd(cwd: CommandArg | None) -> str | None:
 
 
 def _finite_seconds(value: float | int, label: str) -> float:
-    """Finite seconds.
+    """Return the finite seconds.
 
-    Inputs: `value`, `label`. Output: `float`. Raises on invalid or unavailable state.
+    Inputs: `value` (float | int) input value, `label` (str). Output: `float`. Raises:
+    ValueError when validation or the called operation fails.
     """
     try:
         seconds = float(value)
@@ -133,9 +134,10 @@ def _finite_seconds(value: float | int, label: str) -> float:
 
 
 def _normalize_timeout(timeout: float | int | None) -> float | None:
-    """Normalize timeout.
+    """Normalize the timeout.
 
-    Inputs: `timeout`. Output: `float | None`. Raises on invalid or unavailable state.
+    Inputs: `timeout` (float | int | None) timeout seconds. Output: `float | None`.
+    Raises: ValueError when validation or the called operation fails.
     """
     if timeout is None:
         return None
@@ -146,9 +148,10 @@ def _normalize_timeout(timeout: float | int | None) -> float | None:
 
 
 def _normalize_tick_interval(tick_interval: float | int) -> float:
-    """Normalize tick interval.
+    """Normalize the tick interval.
 
-    Inputs: `tick_interval`. Output: `float`. Raises on invalid or unavailable state.
+    Inputs: `tick_interval` (float | int). Output: `float`. Raises: ValueError when validation
+    or the called operation fails.
     """
     seconds = _finite_seconds(tick_interval, "tick_interval")
     if seconds <= 0:
@@ -157,9 +160,9 @@ def _normalize_tick_interval(tick_interval: float | int) -> float:
 
 
 def _decode_output(payload: bytes | None) -> str:
-    """Decode output.
+    """Decode the output.
 
-    Inputs: `payload`. Output: `str`.
+    Inputs: `payload` (bytes | None) payload. Output: `str`.
     """
     return "" if not payload else payload.decode("utf-8", errors="replace")
 
@@ -172,10 +175,11 @@ def _completed(
     *,
     check: bool,
 ) -> CompletedProcess:
-    """Completed.
+    """Return the completed.
 
-    Inputs: `command`, `returncode`, `stdout`, `stderr`, `check`. Output:
-    `CompletedProcess`. Raises on invalid or unavailable state.
+    Inputs: `command` (tuple[str, ...]), `returncode` (int | None), `stdout` (bytes |
+    None), `stderr` (bytes | None), `check` (bool). Output: `CompletedProcess`. Raises:
+    CalledProcessError when validation or the called operation fails.
     """
     completed = CompletedProcess(
         args=command,
@@ -199,9 +203,10 @@ def _popen(
     env: dict[str, str] | None,
     cwd: str | None,
 ) -> subprocess.Popen[bytes]:
-    """Popen.
+    """Return the popen.
 
-    Inputs: `command`, `env`, `cwd`. Output: `subprocess.Popen[bytes]`.
+    Inputs: `command` (tuple[str, ...]), `env` (dict[str, str] | None) environment
+    mapping, `cwd` (str | None) working directory. Output: `subprocess.Popen[bytes]`.
     """
     return subprocess.Popen(
         command,
@@ -214,9 +219,10 @@ def _popen(
 
 
 def _terminate(process: subprocess.Popen[bytes]) -> tuple[bytes | None, bytes | None]:
-    """Terminate.
+    """Return the terminate.
 
-    Inputs: `process`. Output: `tuple[bytes | None, bytes | None]`.
+    Inputs: `process` (subprocess.Popen[bytes]). Output: `tuple[bytes | None, bytes |
+    None]`.
     """
     if process.poll() is None:
         try:
@@ -234,12 +240,10 @@ def _notify_tick(
     on_tick: TickCallback | None,
     elapsed: float,
 ) -> None:
-    """Notify tick.
+    """Invoke the streaming progress callback for the current process tick.
 
-    Inputs: `process`, `on_tick`, `elapsed`. Output: None. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `process` (subprocess.Popen[bytes]), `on_tick` (TickCallback | None),
+    `elapsed` (float). Output: None.
     """
     if on_tick is None:
         return
@@ -260,8 +264,11 @@ def run(
 ) -> CompletedProcess:
     """A fixed argv command with captured text output and no shell.
 
-    Inputs: `args`, `check`, `timeout`, `env`, `cwd`. Output: `CompletedProcess`. Raises
-    on invalid or unavailable state.
+    Inputs: `args` (Sequence[CommandArg]) positional arguments, `check` (bool),
+    `timeout` (float | int | None) timeout seconds, `env` (Mapping[str, str] | None)
+    environment mapping, `cwd` (CommandArg | None) working directory. Output:
+    `CompletedProcess`. Raises: TimeoutExpired when validation or external operations
+    fail.
     """
     command = _normalize_command(args)
     timeout_seconds = _normalize_timeout(timeout)
@@ -291,8 +298,11 @@ def run_streaming(
 ) -> CompletedProcess:
     """A fixed argv command while polling state and capturing output.
 
-    Inputs: `args`, `timeout`, `env`, `cwd`, `check`, `tick_interval`, `on_tick`.
-    Output: `CompletedProcess`. Raises on invalid or unavailable state.
+    Inputs: `args` (Sequence[CommandArg]) positional arguments, `timeout` (float | int |
+    None) timeout seconds, `env` (Mapping[str, str] | None) environment mapping, `cwd`
+    (CommandArg | None) working directory, `check` (bool), `tick_interval` (float),
+    `on_tick` (TickCallback | None). Output: `CompletedProcess`. Raises: TimeoutExpired
+    when validation or the called operation fails.
     """
     command = _normalize_command(args)
     timeout_seconds = _normalize_timeout(timeout)

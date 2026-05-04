@@ -15,9 +15,9 @@ class DockerBuildxCompressedPushScriptTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `DockerBuildxCompressedPushScriptTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.script_path = (
@@ -26,9 +26,9 @@ class DockerBuildxCompressedPushScriptTests(unittest.TestCase):
 
     @staticmethod
     def _create_fake_docker(bin_dir: Path, log_path: Path) -> None:
-        """Create fake docker.
+        """Create the fake docker for `DockerBuildxCompressedPushScriptTests`.
 
-        Inputs: `bin_dir`, `log_path`. Output: None.
+        Inputs: `bin_dir` (Path), `log_path` (Path). Output: None.
         """
         fake_docker_path = bin_dir / "docker"
         fake_docker_path.write_text(
@@ -121,9 +121,9 @@ exit 0
         fake_docker_path.chmod(fake_docker_path.stat().st_mode | stat.S_IXUSR)
 
     def test_script_fails_when_registry_prefix_missing(self) -> None:
-        """Verify script fails when registry prefix missing.
+        """Confirm script fails when registry prefix missing exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in script fails when registry prefix missing integration.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -160,9 +160,9 @@ exit 0
             )
 
     def test_script_allows_local_build_without_registry_prefix(self) -> None:
-        """Verify script allows local build without registry prefix.
+        """Verify the script allows local build without registry prefix execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in script allows local build without registry prefix integration.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -203,9 +203,9 @@ exit 0
             self.assertIn("Flatten final image  : 0", result.stdout)
 
     def test_script_builds_expected_bake_arguments(self) -> None:
-        """Verify script builds expected bake arguments.
+        """Verify the script builds expected bake arguments execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in script builds expected bake arguments integration.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -265,9 +265,9 @@ exit 0
             )
 
     def test_script_runs_flatten_flow_with_metadata_restore(self) -> None:
-        """Verify script runs flatten flow with metadata restore.
+        """Verify the script runs flatten flow with metadata restore execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in script runs flatten flow with metadata restore integration.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -381,9 +381,9 @@ exit 0
             )
 
     def test_script_runs_flatten_only_flow_for_compose_built_images(self) -> None:
-        """Verify script runs flatten only flow for compose built images.
+        """Verify the script runs flatten only flow for compose built images execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in script runs flatten only flow for compose built images integration.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -464,9 +464,9 @@ exit 0
             self.assertIn("image import", joined_log)
 
     def test_script_fails_when_flatten_metadata_inspect_fails(self) -> None:
-        """Verify script fails when flatten metadata inspect fails.
+        """Confirm script fails when flatten metadata inspect fails exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in script fails when flatten metadata inspect fails integration.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -516,9 +516,9 @@ exit 0
             self.assertNotIn("image import", joined_log)
 
     def test_script_discovers_only_active_compose_build_targets(self) -> None:
-        """Verify script discovers only active compose build targets.
+        """Verify the script discovers only active compose build targets execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in script discovers only active compose build targets integration.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -592,9 +592,9 @@ exit 0
             self.assertNotIn("image inspect redis-sysctl-init:custom", joined_log)
 
     def test_script_removes_builder_volumes_when_cleanup_enabled(self) -> None:
-        """Verify script removes builder volumes when cleanup enabled.
+        """Verify the script removes builder volumes when cleanup enabled execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in script removes builder volumes when cleanup enabled integration.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -641,9 +641,9 @@ exit 0
             )
 
     def test_script_buildx_uses_compose_declared_local_image_name(self) -> None:
-        """Verify script buildx uses compose declared local image name.
+        """Verify the script buildx uses compose declared local image name execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in script buildx uses compose declared local image name integration.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

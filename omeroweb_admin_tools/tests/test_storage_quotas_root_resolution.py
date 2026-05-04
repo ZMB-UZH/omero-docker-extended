@@ -15,9 +15,9 @@ from omeroweb_admin_tools.services.storage_quotas import (
 
 @pytest.fixture(autouse=True)
 def _set_required_quota_env(monkeypatch) -> None:
-    """Set required quota environment.
+    """Set the required quota environment.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: `monkeypatch` pytest monkeypatch fixture. Output: None.
     """
     monkeypatch.setenv(MIN_GROUP_QUOTA_ENV, "0.10")
     monkeypatch.setenv(DEFAULT_GROUP_QUOTA_ENV, "0.10")
@@ -27,9 +27,9 @@ def _set_required_quota_env(monkeypatch) -> None:
 def test_resolve_managed_group_root_uses_fixed_path_when_present(
     tmp_path, monkeypatch
 ) -> None:
-    """Verify resolve managed group root uses fixed path when present.
+    """Verify the resolve managed group root uses fixed path when present safety boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions when resolve managed group root uses fixed path when present accepts unsafe input.
     """
     managed_root = tmp_path / "OMERO" / "ManagedRepository"
     managed_root.mkdir(parents=True)
@@ -45,9 +45,9 @@ def test_resolve_managed_group_root_uses_fixed_path_when_present(
 def test_resolve_managed_group_root_reports_missing_fixed_path(
     tmp_path, monkeypatch
 ) -> None:
-    """Verify resolve managed group root reports missing fixed path.
+    """Verify the resolve managed group root reports missing fixed path safety boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions when resolve managed group root reports missing fixed path accepts unsafe input.
     """
     missing_root = tmp_path / "OMERO" / "ManagedRepository"
 
@@ -64,7 +64,7 @@ def test_resolve_managed_group_root_uses_absolute_server_setting(
 ) -> None:
     """Verify resolve managed group root uses absolute server setting.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in resolve managed group root uses absolute server setting.
     """
     managed_root = tmp_path / "OMERO" / "ManagedRepository"
     managed_root.mkdir(parents=True)
@@ -80,9 +80,9 @@ def test_resolve_managed_group_root_uses_absolute_server_setting(
 
 
 def test_reconcile_blocks_enforcement_for_unsafe_root(tmp_path, monkeypatch) -> None:
-    """Verify reconcile blocks enforcement for unsafe root.
+    """Confirm reconcile blocks enforcement for unsafe root is rejected at the boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in reconcile blocks enforcement for unsafe root.
     """
     state_path = tmp_path / "quotas.json"
     unsafe_root = tmp_path / "not-omero"
@@ -107,9 +107,9 @@ def test_reconcile_blocks_enforcement_for_unsafe_root(tmp_path, monkeypatch) -> 
 
 
 def test_reconcile_includes_detection_reason_in_response(tmp_path, monkeypatch) -> None:
-    """Verify reconcile includes detection reason in response.
+    """Verify reconcile includes detection reason in response result shape.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in reconcile includes detection reason in response.
     """
     state_path = tmp_path / "quotas.json"
     safe_root = tmp_path / "safe" / "group-root"
@@ -134,9 +134,9 @@ def test_reconcile_includes_detection_reason_in_response(tmp_path, monkeypatch) 
 
 
 def test_reconcile_keeps_missing_group_directory_pending(tmp_path, monkeypatch) -> None:
-    """Reconcile never creates missing group directories; it reports pending status.
+    """Check that reconcile keeps missing group directory pending remains stable.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in reconcile keeps missing group directory pending.
     """
     state_path = tmp_path / "quotas.json"
     safe_root = tmp_path / "safe" / "group-root"
@@ -169,9 +169,9 @@ def test_reconcile_keeps_missing_group_directory_pending(tmp_path, monkeypatch) 
 
 
 def test_reconcile_keeps_pending_without_known_groups(tmp_path, monkeypatch) -> None:
-    """Reconcile keeps quotas pending when known_groups is empty and directory is absent.
+    """Check that reconcile keeps pending without known groups remains stable.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in reconcile keeps pending without known groups.
     """
     state_path = tmp_path / "quotas.json"
     safe_root = tmp_path / "safe" / "group-root"
@@ -202,9 +202,9 @@ def test_reconcile_keeps_pending_without_known_groups(tmp_path, monkeypatch) -> 
 def test_reconcile_skips_directory_creation_when_root_unsafe(
     tmp_path, monkeypatch
 ) -> None:
-    """Directory is never created when managed repository root is unsafe.
+    """Verify reconcile skips directory creation when root unsafe.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in reconcile skips directory creation when root unsafe.
     """
     state_path = tmp_path / "quotas.json"
     unsafe_root = tmp_path / "unsafe"
@@ -227,9 +227,9 @@ def test_reconcile_skips_directory_creation_when_root_unsafe(
 def test_reconcile_skips_directory_creation_when_template_incompatible(
     tmp_path, monkeypatch
 ) -> None:
-    """Directory is never created when repository template is incompatible.
+    """Check reconcile skips directory creation when template incompatible renders the expected surface.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in reconcile skips directory creation when template incompatible.
     """
     state_path = tmp_path / "quotas.json"
     safe_root = tmp_path / "safe" / "group-root"
@@ -256,9 +256,9 @@ def test_reconcile_skips_directory_creation_when_template_incompatible(
 def test_reconcile_reports_configured_when_directory_already_exists(
     tmp_path, monkeypatch
 ) -> None:
-    """Existing directory is reported as configured.
+    """Verify reconcile reports configured when directory already exists.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in reconcile reports configured when directory already exists.
     """
     state_path = tmp_path / "quotas.json"
     safe_root = tmp_path / "safe" / "group-root"
@@ -285,9 +285,9 @@ def test_reconcile_reports_configured_when_directory_already_exists(
 def test_reconcile_reports_configured_status_for_ready_groups(
     tmp_path, monkeypatch
 ) -> None:
-    """Groups with quota + existing directory are reported as configured (applied).
+    """Verify reconcile reports configured status for ready groups.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in reconcile reports configured status for ready groups.
     """
     state_path = tmp_path / "quotas.json"
     safe_root = tmp_path / "safe" / "group-root"
@@ -319,9 +319,9 @@ def test_reconcile_reports_configured_status_for_ready_groups(
 def test_is_quota_enforcement_available_returns_true_when_marker_exists(
     tmp_path, monkeypatch
 ) -> None:
-    """Enforcement is available when marker file exists.
+    """Verify is quota enforcement available returns true when marker exists result shape.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in is quota enforcement available returns true when marker exists.
     """
     marker = tmp_path / ".admin-tools" / "quota-enforcer-installed"
     marker.parent.mkdir(parents=True)
@@ -335,9 +335,9 @@ def test_is_quota_enforcement_available_returns_true_when_marker_exists(
 def test_is_quota_enforcement_available_returns_false_when_marker_missing(
     tmp_path, monkeypatch
 ) -> None:
-    """Enforcement is NOT available when marker file is absent.
+    """Verify is quota enforcement available returns false when marker missing result shape.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in is quota enforcement available returns false when marker missing.
     """
     missing_marker = tmp_path / ".admin-tools" / "quota-enforcer-installed"
 
@@ -349,9 +349,9 @@ def test_is_quota_enforcement_available_returns_false_when_marker_missing(
 def test_is_quota_enforcement_available_returns_false_when_marker_is_directory(
     tmp_path, monkeypatch
 ) -> None:
-    """Enforcement is NOT available when marker path is a directory (not a file).
+    """Verify is quota enforcement available returns false when marker is directory result shape.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in is quota enforcement available returns false when marker is directory.
     """
     marker_dir = tmp_path / ".admin-tools" / "quota-enforcer-installed"
     marker_dir.mkdir(parents=True)
@@ -362,9 +362,9 @@ def test_is_quota_enforcement_available_returns_false_when_marker_is_directory(
 
 
 def test_reconcile_includes_enforcement_available_flag(tmp_path, monkeypatch) -> None:
-    """Reconcile_quotas includes quota_enforcement_available in response.
+    """Verify reconcile includes enforcement available flag.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in reconcile includes enforcement available flag.
     """
     state_path = tmp_path / "quotas.json"
     safe_root = tmp_path / "safe" / "group-root"
@@ -393,9 +393,9 @@ def test_reconcile_includes_enforcement_available_flag(tmp_path, monkeypatch) ->
 def test_reconcile_reports_enforcement_unavailable_when_marker_missing(
     tmp_path, monkeypatch
 ) -> None:
-    """Reconcile_quotas reports enforcement unavailable when marker is missing.
+    """Verify reconcile reports enforcement unavailable when marker missing.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in reconcile reports enforcement unavailable when marker missing.
     """
     state_path = tmp_path / "quotas.json"
     safe_root = tmp_path / "safe" / "group-root"

@@ -21,7 +21,7 @@ SPEC.loader.exec_module(scanner_inventory)
 def test_parse_deepsource_repository_accepts_only_github_repository_ids() -> None:
     """Verify parse deepsource repository accepts only github repository IDs.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in parse deepsource repository accepts only github repository IDs.
     """
     assert scanner_inventory.parse_deepsource_repository(
         "gh/ZMB-UZH/omero-docker-extended"
@@ -37,9 +37,9 @@ def test_parse_deepsource_repository_accepts_only_github_repository_ids() -> Non
 
 
 def test_parse_github_repository_rejects_unsafe_api_path_components() -> None:
-    """Verify parse github repository rejects unsafe API path components.
+    """Confirm parse github repository rejects unsafe API path components is rejected at the boundary.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions when parse github repository rejects unsafe API path components accepts unsafe input.
     """
     assert scanner_inventory.parse_github_repository(
         "ZMB-UZH/omero-docker-extended"
@@ -56,9 +56,9 @@ def test_parse_github_repository_rejects_unsafe_api_path_components() -> None:
 
 
 def test_fetch_json_keeps_authorization_out_of_curl_argv(monkeypatch) -> None:
-    """Verify fetch JSON keeps authorization out of curl argv.
+    """Check that fetch JSON keeps authorization out of curl argv remains stable.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in fetch JSON keeps authorization out of curl argv.
     """
     calls = []
     monkeypatch.setattr(
@@ -66,9 +66,10 @@ def test_fetch_json_keeps_authorization_out_of_curl_argv(monkeypatch) -> None:
     )
 
     def fake_run(command: list[str], **kwargs):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `command`, `**kwargs`. Output: call result.
+        Inputs: `command` (list[str]), `**kwargs` keyword arguments. Output:
+        `CompletedProcess` result.
         """
         calls.append({"command": command, "kwargs": kwargs})
         return scanner_inventory.subprocess.CompletedProcess(
@@ -113,7 +114,7 @@ def test_summarize_github_code_scanning_paginates_and_counts_tools(
 ) -> None:
     """Verify summarize github code scanning paginates and counts tools.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in summarize github code scanning paginates and counts tools.
     """
     monkeypatch.setattr(scanner_inventory, "read_token", lambda *_args: "token")
     monkeypatch.setattr(
@@ -135,9 +136,10 @@ def test_summarize_github_code_scanning_paginates_and_counts_tools(
         service: str,
         timeout_seconds: int = scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
     ) -> Any:
-        """Fake fetch JSON.
+        """Simulate fetch JSON so the surrounding test controls that dependency.
 
-        Inputs: `url`, `headers`, `data`, `method`, `service`, `timeout_seconds`.
+        Inputs: `url` (str) URL, `headers` (dict[str, str]), `data` (bytes | None)
+        payload, `method` (str | None), `service` (str), `timeout_seconds` (int).
         Output: `Any`.
         """
         requested_urls.append(url)
@@ -179,7 +181,7 @@ def test_summarize_github_code_scanning_paginates_and_counts_tools(
 def test_summarize_deepsource_reports_group_and_occurrence_counts(monkeypatch) -> None:
     """Verify summarize deepsource reports group and occurrence counts.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in summarize deepsource reports group and occurrence counts.
     """
     monkeypatch.setattr(scanner_inventory, "read_token", lambda *_args: "token")
     requested_payloads: list[bytes | None] = []
@@ -193,9 +195,10 @@ def test_summarize_deepsource_reports_group_and_occurrence_counts(monkeypatch) -
         service: str,
         timeout_seconds: int = scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
     ) -> Any:
-        """Fake fetch JSON.
+        """Simulate fetch JSON so the surrounding test controls that dependency.
 
-        Inputs: `url`, `headers`, `data`, `method`, `service`, `timeout_seconds`.
+        Inputs: `url` (str) URL, `headers` (dict[str, str]), `data` (bytes | None)
+        payload, `method` (str | None), `service` (str), `timeout_seconds` (int).
         Output: `Any`.
         """
         requested_payloads.append(data)
@@ -243,7 +246,7 @@ def test_summarize_deepsource_issues_reports_grouped_issue_details(
 ) -> None:
     """Verify summarize deepsource issues reports grouped issue details.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in summarize deepsource issues reports grouped issue details.
     """
     monkeypatch.setattr(scanner_inventory, "read_token", lambda *_args: "token")
     requested_payloads: list[bytes | None] = []
@@ -257,9 +260,10 @@ def test_summarize_deepsource_issues_reports_grouped_issue_details(
         service: str,
         timeout_seconds: int = scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
     ) -> Any:
-        """Fake fetch JSON.
+        """Simulate fetch JSON so the surrounding test controls that dependency.
 
-        Inputs: `url`, `headers`, `data`, `method`, `service`, `timeout_seconds`.
+        Inputs: `url` (str) URL, `headers` (dict[str, str]), `data` (bytes | None)
+        payload, `method` (str | None), `service` (str), `timeout_seconds` (int).
         Output: `Any`.
         """
         requested_payloads.append(data)

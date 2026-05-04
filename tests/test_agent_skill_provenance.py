@@ -15,17 +15,17 @@ class AgentSkillProvenanceTests(TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `AgentSkillProvenanceTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.sources = agent_skill_provenance.load_upstream_sources(cls.repo_root)
 
     def test_badge_image_url_uses_stable_static_components(self) -> None:
-        """Verify badge image URL uses stable static components.
+        """Check that badge image URL uses stable static components remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in badge image URL uses stable static components.
         """
         parsed = urlsplit(self.sources.badge_image_url)
         self.assertEqual("https", parsed.scheme)
@@ -45,9 +45,9 @@ class AgentSkillProvenanceTests(TestCase):
         self.assertEqual("everything-claude-code", self.sources.badge_title)
 
     def test_repo_url_and_skills_tree_url_remain_stable(self) -> None:
-        """Verify repo URL and skills tree URL remain stable.
+        """Check that repo URL and skills tree URL remain stable remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in repo URL and skills tree URL remain stable.
         """
         self.assertEqual(
             "https://github.com/affaan-m/everything-claude-code",
@@ -59,9 +59,9 @@ class AgentSkillProvenanceTests(TestCase):
         )
 
     def test_fetch_text_rejects_unapproved_hosts_and_schemes(self) -> None:
-        """Verify fetch text rejects unapproved hosts and schemes.
+        """Confirm fetch text rejects unapproved hosts and schemes is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in fetch text rejects unapproved hosts and schemes.
         """
         with self.assertRaisesRegex(ValueError, "Unsupported fetch scheme"):
             agent_skill_provenance.fetch_text("ssh://raw.githubusercontent.com/x/y")
@@ -71,7 +71,7 @@ class AgentSkillProvenanceTests(TestCase):
     def test_fetch_text_uses_curl_for_allowed_upstream_raw_urls(self) -> None:
         """Verify fetch text uses curl for allowed upstream raw URLs.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in fetch text uses curl for allowed upstream raw URLs.
         """
         allowed_url = self.sources.raw_skill_url("search-first")
         with (
@@ -109,7 +109,7 @@ class AgentSkillProvenanceTests(TestCase):
     def test_fetch_text_surfaces_curl_failures(self) -> None:
         """Verify fetch text surfaces curl failures.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in fetch text surfaces curl failures.
         """
         allowed_url = self.sources.raw_skill_url("search-first")
         with (
@@ -130,7 +130,7 @@ class AgentSkillProvenanceTests(TestCase):
     def test_fetch_text_surfaces_transport_exceptions(self) -> None:
         """Verify fetch text surfaces transport exceptions.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in fetch text surfaces transport exceptions.
         """
         allowed_url = self.sources.raw_skill_url("search-first")
         with (
@@ -149,9 +149,9 @@ class AgentSkillProvenanceTests(TestCase):
             agent_skill_provenance.fetch_text(allowed_url)
 
     def test_resolve_required_executable_rejects_missing_command(self) -> None:
-        """Verify resolve required executable rejects missing command.
+        """Confirm resolve required executable rejects missing command is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in resolve required executable rejects missing command integration.
         """
         with (
             mock.patch(

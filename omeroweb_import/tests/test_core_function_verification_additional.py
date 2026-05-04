@@ -6,53 +6,53 @@ from omeroweb_import.views import core_functions
 
 
 class _Params:
-    """Represent params."""
+    """Test double for params behavior in this module."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_Params` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.values = {}
 
     def add(self, key, value):
-        """Add.
+        """Add the add for `_Params`.
 
-        Inputs: `key`, `value`. Output: None.
+        Inputs: `key` lookup key, `value` input value. Output: None.
         """
         self.values[key] = value
 
     def addId(self, value):
-        """Add ID.
+        """Add the ID for `_Params`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.values["id"] = value
 
 
 class _ServiceOpts:
-    """Represent service opts."""
+    """Test double for service opts behavior in this module."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_ServiceOpts` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.group = None
 
     def setOmeroGroup(self, value):
-        """Set OMERO Group.
+        """Set the OMERO Group for `_ServiceOpts`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.group = value
 
 
 class _ProjectionValue:
-    """Represent projection value."""
+    """Test double for projection value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_ProjectionValue` with `value`.
 
         Inputs: `value`. Output: None.
         """
@@ -60,7 +60,7 @@ class _ProjectionValue:
 
 
 class _RenderImage:
-    """Represent render image."""
+    """Test double for render image behavior in this module."""
 
     def __init__(
         self,
@@ -70,7 +70,7 @@ class _RenderImage:
         external_info=True,
         thumbnail_behavior="bytes",
     ):
-        """Initialize the instance.
+        """Create `_RenderImage` with `image_id`.
 
         Inputs: `image_id`, `sizes`, `external_info`, `thumbnail_behavior`. Output:
         None.
@@ -86,45 +86,45 @@ class _RenderImage:
         self._thumbnail_behavior = thumbnail_behavior
 
     def getSizeX(self):
-        """Return Size X.
+        """Return `_RenderImage`'s fake SizeX value.
 
         Inputs: none. Output: `self._sizes[0]`.
         """
         return self._sizes[0]
 
     def getSizeY(self):
-        """Return Size Y.
+        """Return `_RenderImage`'s fake SizeY value.
 
         Inputs: none. Output: `self._sizes[1]`.
         """
         return self._sizes[1]
 
     def getSizeZ(self):
-        """Return Size Z.
+        """Return `_RenderImage`'s fake SizeZ value.
 
         Inputs: none. Output: `self._sizes[2]`.
         """
         return self._sizes[2]
 
     def getSizeC(self):
-        """Return Size C.
+        """Return `_RenderImage`'s fake channel count.
 
         Inputs: none. Output: `self._sizes[3]`.
         """
         return self._sizes[3]
 
     def getSizeT(self):
-        """Return Size T.
+        """Return `_RenderImage`'s fake timepoint count.
 
         Inputs: none. Output: `self._sizes[4]`.
         """
         return self._sizes[4]
 
     def getThumbnail(self, size=None, direct=None):
-        """Return Thumbnail.
+        """Return the thumbnail for `_RenderImage`.
 
-        Inputs: `size`, `direct`. Output: computed value. Raises on invalid or
-        unavailable state.
+        Inputs: `size`, `direct`. Output: get thumbnail result. Raises: RuntimeError
+        when validation or the called operation fails.
         """
         if self._thumbnail_behavior == "raise":
             raise RuntimeError("thumbnail failed")
@@ -138,7 +138,7 @@ def test_verify_import_via_api_covers_missing_prerequisites_and_query_failures(
 ) -> None:
     """Verify verify import via API covers missing prerequisites and query failures.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in verify import via API covers missing prerequisites and query failures.
     """
     monkeypatch.setattr(
         core_functions,
@@ -253,9 +253,9 @@ def test_verify_import_via_api_covers_missing_prerequisites_and_query_failures(
 def test_verify_zarr_import_via_api_and_cleanup_imported_images_cover_edge_cases(
     monkeypatch,
 ) -> None:
-    """Verify verify Zarr import via API and cleanup imported images cover edge cases.
+    """Check verify Zarr import via API and cleanup imported images cover edge cases cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in verify Zarr import via API and cleanup imported images cover edge cases.
     """
     monkeypatch.setattr(
         core_functions.omero,
@@ -365,7 +365,7 @@ def test_verify_imported_zarr_images_renderable_reports_remaining_failures(
 ) -> None:
     """Verify verify imported Zarr images renderable reports remaining failures.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in verify imported Zarr images renderable reports remaining failures.
     """
     assert core_functions._verify_imported_zarr_images_renderable(
         "",
@@ -425,12 +425,10 @@ def test_verify_imported_zarr_images_renderable_reports_remaining_failures(
     state = {"conn_closed": False, "admin_closed": False}
 
     def _get_object(_kind, image_id):
-        """Return object.
+        """Return the object.
 
-        Inputs: `_kind`, `image_id`. Output: `payload`. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: `_kind`, `image_id` OMERO image ID. Output: get object result. Raises:
+        payload when validation or the called operation fails.
         """
         payload = failures[image_id]
         if isinstance(payload, Exception):
@@ -484,9 +482,9 @@ def test_run_zarr_managed_repo_script_and_cleanup_helpers_cover_error_paths(
     monkeypatch,
     tmp_path,
 ) -> None:
-    """Verify run Zarr managed repo script and cleanup helpers cover error paths.
+    """Confirm run Zarr managed repo script and cleanup helpers cover error paths exposes the expected failure.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when run Zarr managed repo script and cleanup helpers cover error paths stops reporting the expected error.
     """
     monkeypatch.setattr(
         core_functions, "_open_admin_connection", lambda host, port: None

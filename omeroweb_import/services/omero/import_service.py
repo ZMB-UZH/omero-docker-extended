@@ -85,9 +85,9 @@ def _import_file(
 
 
 def _connection_has_last_error(conn) -> bool:
-    """Connection has last error.
+    """Return the connection has last error.
 
-    Inputs: `conn`. Output: `bool`.
+    Inputs: `conn` OMERO gateway connection. Output: `bool`.
     """
     try:
         return bool(conn.getLastError())
@@ -98,8 +98,7 @@ def _connection_has_last_error(conn) -> bool:
 def _open_service_connection(host: str, port: int, group_id=None):
     """Login as the async service user without leaking credentials in logs.
 
-    Inputs: `host`, `port`, `group_id`. Output: `conn` or None. Raises on invalid or
-    unavailable state.
+    Inputs: `host` (str), `port` (int), `group_id`. Output: `conn`.
     """
     credentials = _normalize_job_service_credentials(_get_job_service_credentials())
 

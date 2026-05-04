@@ -18,9 +18,9 @@ class InstallationShellValidationContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `InstallationShellValidationContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.script_text = (
@@ -41,12 +41,10 @@ class InstallationShellValidationContractTests(unittest.TestCase):
     def _extract_script_block(
         start_marker: str, end_marker: str, source_text: str
     ) -> str:
-        """Extract script block.
+        """Extract the script block for `InstallationShellValidationContractTests`.
 
-        Inputs: `start_marker`, `end_marker`, `source_text`. Output: `str`. Raises on
-        invalid or unavailable state.
-
-        invalid or unavailable state.
+        Inputs: `start_marker` (str), `end_marker` (str), `source_text` (str). Output:
+        `str`. Raises: AssertionError when validation or the called operation fails.
         """
         start = source_text.find(start_marker)
         if start == -1:
@@ -60,17 +58,17 @@ class InstallationShellValidationContractTests(unittest.TestCase):
 
     @staticmethod
     def _write_executable(path: Path, content: str) -> None:
-        """Write executable.
+        """Write the executable for `InstallationShellValidationContractTests`.
 
-        Inputs: `path`, `content`. Output: None.
+        Inputs: `path` (Path) path, `content` (str). Output: None.
         """
         path.write_text(content, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
     def _run_harness(self, script_text: str) -> subprocess.CompletedProcess[str]:
-        """Harness.
+        """Run the harness for `InstallationShellValidationContractTests`.
 
-        Inputs: `script_text`. Output: `subprocess.CompletedProcess[str]`.
+        Inputs: `script_text` (str). Output: `subprocess.CompletedProcess[str]`.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -87,7 +85,7 @@ class InstallationShellValidationContractTests(unittest.TestCase):
     def test_installer_avoids_bash_regex_operator(self) -> None:
         """Verify installer avoids bash regex operator.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installer avoids bash regex operator.
         """
         self.assertNotRegex(self.script_text, r"\[\[\s+[^\n]*=~")
         self.assertIn("is_non_negative_integer()", self.script_text)
@@ -98,7 +96,7 @@ class InstallationShellValidationContractTests(unittest.TestCase):
     def test_shell_validation_helpers_accept_only_expected_values(self) -> None:
         """Verify shell validation helpers accept only expected values.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in shell validation helpers accept only expected values.
         """
         result = self._run_harness(
             textwrap.dedent(
@@ -170,7 +168,7 @@ class InstallationShellValidationContractTests(unittest.TestCase):
     def test_group_list_validator_uses_same_name_contract(self) -> None:
         """Verify group list validator uses same name contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in group list validator uses same name contract.
         """
         result = self._run_harness(
             textwrap.dedent(

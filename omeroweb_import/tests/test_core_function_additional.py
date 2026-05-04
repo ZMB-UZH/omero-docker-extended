@@ -11,10 +11,10 @@ from omeroweb_import.views import core_functions
 
 
 class _State:
-    """Represent state."""
+    """Test double for state behavior in this module."""
 
     def __init__(self, image_id, *, persist_on_refresh=True):
-        """Initialize the instance.
+        """Create `_State` with `image_id`.
 
         Inputs: `image_id`, `persist_on_refresh`. Output: None.
         """
@@ -24,7 +24,7 @@ class _State:
 
 
 class _PixelsWrapper:
-    """Represent pixels wrapper."""
+    """Test double for pixels wrapper behavior in this module."""
 
     def __init__(
         self,
@@ -34,7 +34,7 @@ class _PixelsWrapper:
         missing_axis: str | None = None,
         reload_error: str | None = None,
     ):
-        """Initialize the instance.
+        """Create `_PixelsWrapper` with `state`.
 
         Inputs: `state`, `with_obj`, `missing_axis`, `reload_error`. Output: None.
         """
@@ -55,12 +55,9 @@ class _PixelsWrapper:
             self._obj = None
 
     def _value(self, axis_name):
-        """Return value.
+        """Return the value for `_PixelsWrapper`.
 
-        Inputs: `axis_name`. Output: computed value. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: `axis_name`. Output: `get` result. Raises: RuntimeError when validation or the called operation fails.
         """
         if self._reload_error:
             raise RuntimeError(self._reload_error)
@@ -69,21 +66,21 @@ class _PixelsWrapper:
         return self._state.values.get(axis_name)
 
     def getPhysicalSizeX(self):
-        """Return Physical Size X.
+        """Return `_PixelsWrapper`'s fake physical X size.
 
         Inputs: none. Output: `self._value` result.
         """
         return self._value("x")
 
     def getPhysicalSizeY(self):
-        """Return Physical Size Y.
+        """Return `_PixelsWrapper`'s fake physical Y size.
 
         Inputs: none. Output: `self._value` result.
         """
         return self._value("y")
 
     def getPhysicalSizeZ(self):
-        """Return Physical Size Z.
+        """Return `_PixelsWrapper`'s fake physical Z size.
 
         Inputs: none. Output: `self._value` result.
         """
@@ -91,7 +88,7 @@ class _PixelsWrapper:
 
 
 class _ImageWrapper:
-    """Represent image wrapper."""
+    """Test double for image wrapper behavior in this module."""
 
     def __init__(
         self,
@@ -102,7 +99,7 @@ class _ImageWrapper:
         pixels_error: str | None = None,
         reload_error: str | None = None,
     ):
-        """Initialize the instance.
+        """Create `_ImageWrapper` with `state`.
 
         Inputs: `state`, `with_obj`, `missing_axis`, `pixels_error`, `reload_error`.
         Output: None.
@@ -114,10 +111,9 @@ class _ImageWrapper:
         self._reload_error = reload_error
 
     def getPrimaryPixels(self):
-        """Return Primary Pixels.
+        """Return the primary Pixels for `_ImageWrapper`.
 
-        Inputs: none. Output: `_PixelsWrapper` result. Raises on invalid or unavailable
-        state.
+        Inputs: none. Output: `_PixelsWrapper` result. Raises: RuntimeError when validation or the called operation fails.
         """
         if self._pixels_error:
             raise RuntimeError(self._pixels_error)
@@ -130,16 +126,16 @@ class _ImageWrapper:
 
 
 def _stateful_job_updates(monkeypatch, job):
-    """Stateful job updates.
+    """Return the stateful job updates.
 
-    Inputs: `monkeypatch`, `job`. Output: computed value.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `job`. Output: `state`.
     """
     state = {"job": job}
 
     def _update_job(job_id, mutator):
-        """Update job.
+        """Update the job.
 
-        Inputs: `job_id`, `mutator`. Output: `state['job']`.
+        Inputs: `job_id`, `mutator`. Output: update job result.
         """
         assert job_id == job["job_id"]
         state["job"] = mutator(state["job"])
@@ -154,10 +150,8 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
 ) -> None:
     """Verify finalize imported Zarr image metadata covers prerequisites and errors.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` (pytest.MonkeyPatch)
+    pytest monkeypatch fixture. Output: None. Raises: AssertionError, RuntimeError when validation or the called operation fails.
     """
     managed_zarr = tmp_path / "managed"
 
@@ -196,12 +190,12 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
     )
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_Conn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.SERVICE_OPTS = types.SimpleNamespace(
                 setOmeroGroup=lambda value: setattr(self, "group", value)
@@ -220,16 +214,16 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
 
         @staticmethod
         def getUpdateService():
-            """Return Update Service.
+            """Return `_Conn`'s fake update service.
 
-            Inputs: none. Output: computed value. Raises on invalid or unavailable
-            state.
+            Inputs: none. Output: `SimpleNamespace` result. Raises: RuntimeError when validation or the called operation fails.
             """
 
             def _save(obj):
-                """Save.
+                """Save the save for `_Conn`.
 
-                Inputs: `obj`. Output: `obj`. Raises on invalid or unavailable state.
+                Inputs: `obj`. Output: `obj`. Raises: RuntimeError when validation or
+                external operations fail.
                 """
                 if getattr(obj, "image_id", None) == 10:
                     raise RuntimeError("save exploded")
@@ -238,10 +232,10 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
             return types.SimpleNamespace(saveAndReturnObject=_save)
 
         def getObject(self, object_type, image_id):
-            """Return Object.
+            """Return the object for `_Conn`.
 
-            Inputs: `object_type`, `image_id`. Output: `_ImageWrapper` result or None.
-            Raises on invalid or unavailable state.
+            Inputs: `object_type`, `image_id` OMERO image ID. Output: `_ImageWrapper`
+            Raises: AssertionError, RuntimeError when validation or external
             """
             assert object_type == "Image"
             image_id = int(image_id)
@@ -280,9 +274,9 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
             raise AssertionError(f"Unexpected image id {image_id}")
 
         def close(self):
-            """Close the resource.
+            """Close `_Conn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
             raise RuntimeError("conn close exploded")
@@ -290,28 +284,28 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
     conn = _Conn()
 
     class _AdminConn:
-        """Represent admin conn."""
+        """Test double for admin conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_AdminConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.closed = False
 
         @staticmethod
         def suConn(username):
-            """Su conn.
+            """Return the su Conn for `_AdminConn`.
 
-            Inputs: `username`. Output: `conn`.
+            Inputs: `username` username. Output: `conn`.
             """
             assert username == "alice"
             return conn
 
         def close(self):
-            """Close the resource.
+            """Close `_AdminConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
             raise RuntimeError("admin close exploded")
@@ -428,9 +422,9 @@ def test_finalize_imported_zarr_image_metadata_covers_prerequisites_and_errors(
 def test_check_import_compatibility_covers_timeout_cli_errors_and_native_routes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Verify check import compatibility covers timeout cli errors and native routes.
+    """Verify the check import compatibility covers timeout CLI errors and native routes execution contract.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in check import compatibility covers timeout CLI errors and native routes.
     """
     missing = tmp_path / "missing.ome.tif"
     missing_response = core_functions._check_import_compatibility(
@@ -627,9 +621,9 @@ def test_check_import_compatibility_covers_timeout_cli_errors_and_native_routes(
 def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Verify import file covers fast path timeout and progress tracking edges.
+    """Verify the import file covers fast path timeout and progress tracking edges safety boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`, `caplog`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`, `caplog`. Output: fails on regressions when import file covers fast path timeout and progress tracking edges accepts unsafe input.
     """
     source = tmp_path / "image.ome.tif"
     source.write_text("payload", encoding="utf-8")
@@ -665,9 +659,9 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
     rchar_values = iter((5, 12))
 
     def _fake_read_proc_rchar(pid):
-        """Fake read proc rchar.
+        """Return the fake read proc rchar.
 
-        Inputs: `pid`. Output: computed value.
+        Inputs: `pid`. Output: `next` result.
         """
         assert pid == 999
         try:
@@ -688,9 +682,9 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
     time_values = iter((0.0, 0.0, 10.0, 10.0))
 
     def _fake_time():
-        """Fake time.
+        """Return the fake time.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: `next` result.
         """
         try:
             return next(time_values)
@@ -736,9 +730,9 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
 def test_import_file_progress_loop_covers_timeout_and_unexpected_cleanup_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Verify import file progress loop covers timeout and unexpected cleanup paths.
+    """Check import file progress loop covers timeout and unexpected cleanup paths cleanup behavior.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in import file progress loop covers timeout and unexpected cleanup paths.
     """
     source = tmp_path / "image.ome.tif"
     source.write_text("payload", encoding="utf-8")
@@ -796,7 +790,7 @@ def test_start_compatibility_check_thread_marks_job_and_skips_when_already_activ
 ) -> None:
     """Verify start compatibility check thread marks job and skips when already active.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start compatibility check thread marks job and skips when already active.
     """
     inactive_job = {
         "job_id": "a" * 32,
@@ -814,10 +808,10 @@ def test_start_compatibility_check_thread_marks_job_and_skips_when_already_activ
     monkeypatch.setattr(core_functions.time, "time", lambda: 1234.5)
 
     class _Thread:
-        """Represent thread."""
+        """Test double for thread behavior in this module."""
 
         def __init__(self, target, args=(), daemon=None):
-            """Initialize the instance.
+            """Create `_Thread` with `target`, `args`, and `daemon`.
 
             Inputs: `target`, `args`, `daemon`. Output: None.
             """
@@ -826,9 +820,9 @@ def test_start_compatibility_check_thread_marks_job_and_skips_when_already_activ
             self.daemon = daemon
 
         def start(self):
-            """Start the operation.
+            """Start `_Thread`'s fake operation.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             started.append(self._args)
 
@@ -861,7 +855,7 @@ def test_prepare_server_readable_zarr_source_cleans_failed_transfer_parent(
 ) -> None:
     """Verify prepare server readable Zarr source cleans failed transfer parent.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in prepare server readable Zarr source cleans failed transfer parent.
     """
     source = tmp_path / "source.ome.zarr"
     source.mkdir()

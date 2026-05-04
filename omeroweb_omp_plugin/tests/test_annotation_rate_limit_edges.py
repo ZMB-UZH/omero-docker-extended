@@ -8,17 +8,17 @@ from omeroweb_omp_plugin.services.omero import annotation_service
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self.val = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self.val`.
         """
@@ -26,10 +26,10 @@ class _Value:
 
 
 class _BadValue:
-    """Represent bad value."""
+    """Test double for bad value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_BadValue` with `value`.
 
         Inputs: `value`. Output: None.
         """
@@ -37,27 +37,27 @@ class _BadValue:
 
     @staticmethod
     def getValue():
-        """Return the fake OMERO value.
+        """Return `_BadValue`'s fake OMERO value.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("bad wrapped value")
 
 
 class _Params:
-    """Represent params."""
+    """Test double for params behavior in this module."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_Params` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.values = {}
 
     def add(self, key, value):
-        """Add.
+        """Add the add for `_Params`.
 
-        Inputs: `key`, `value`. Output: None.
+        Inputs: `key` lookup key, `value` input value. Output: None.
         """
         self.values[key] = value
 
@@ -65,7 +65,8 @@ class _Params:
 def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch):
     """Verify annotation service covers wrapped values and query failures.
 
-    Inputs: `monkeypatch`. Output: list. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in annotation service covers wrapped values and query failures.
+    AssertionError, RuntimeError when validation or the called operation fails.
     """
     monkeypatch.setattr(
         annotation_service,
@@ -83,10 +84,10 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     mapping[HASH_KEY] = annotation_service.compute_plugin_hash(mapping)
 
     class _NamedValue:
-        """Represent named value."""
+        """Test double for named value behavior in this module."""
 
         def __init__(self, name, value):
-            """Initialize the instance.
+            """Create `_NamedValue` with `name` and `value`.
 
             Inputs: `name`, `value`. Output: None.
             """
@@ -102,16 +103,14 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     assert annotation_service.is_plugin_annotation(wrapped_ann) is True
 
     class _LookupFailureQS:
-        """Represent lookup failure qs."""
+        """Test double for lookup failure qs behavior in this module."""
 
         @staticmethod
         def projection(hql, params, service_opts=None):
-            """Projection.
+            """Record the projection call on `_LookupFailureQS` for later assertions.
 
-            Inputs: `hql`, `params`, `service_opts`. Output: None. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `hql`, `params` SQL parameters, `service_opts`. Output: None.
+            Raises: RuntimeError when validation or the called operation fails.
             """
             raise RuntimeError("query failed")
 
@@ -129,20 +128,20 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     )
 
     class _UnreadableMapValue:
-        """Represent unreadable map value."""
+        """Test double for unreadable map value behavior in this module."""
 
         @staticmethod
         def getValue():
-            """Return the fake OMERO value.
+            """Return `_UnreadableMapValue`'s fake OMERO value.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("map wrapper unavailable")
 
         def __iter__(self):
             """Return an iterator for the instance.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("cannot iterate wrapped values")
 
@@ -150,16 +149,15 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     assert annotation_service.is_plugin_annotation(unreadable_ann) is False
 
     class _QueryService:
-        """Represent query service."""
+        """Test double for query service behavior in this module."""
 
         @staticmethod
         def projection(hql, params, service_opts=None):
-            """Projection.
+            """Return the projection for `_QueryService`.
 
-            Inputs: `hql`, `params`, `service_opts`. Output: list. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `hql`, `params` SQL parameters, `service_opts`. Output: `list`.
+            Raises: AssertionError, RuntimeError when validation or external operations
+            fail.
             """
             if "where l.parent.id = :iid and a.ns = :ns" in hql:
                 return [[_Value(1)], [_Value(2)]]
@@ -202,21 +200,20 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
 def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_failures(
     monkeypatch,
 ):
-    """Verify delete existing annotations handles sparse annotations and cleanup failures.
+    """Check delete existing annotations handles sparse annotations and cleanup failures cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in delete existing annotations handles sparse annotations and cleanup failures.
+    AssertionError, RuntimeError when validation or the called operation fails.
     """
     monkeypatch.setattr(annotation_service, "ParametersI", _Params)
     monkeypatch.setattr(annotation_service, "rlong", lambda value: value)
     monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "")
 
     def _get_id(obj):
-        """Return ID.
+        """Return the ID.
 
-        Inputs: `obj`. Output: `getattr` result. Raises on invalid or unavailable state.
+        Inputs: `obj`. Output: `getattr` result. Raises: RuntimeError when validation or
+        external operations fail.
         """
         if getattr(obj, "explode_id", False):
             raise RuntimeError("id lookup failed")
@@ -225,13 +222,13 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     monkeypatch.setattr(annotation_service, "get_id", _get_id)
 
     class _NsWrapper:
-        """Represent ns wrapper."""
+        """Test double for ns wrapper behavior in this module."""
 
         @staticmethod
         def getValue():
-            """Return the fake OMERO value.
+            """Return `_NsWrapper`'s fake OMERO value.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("namespace missing")
 
@@ -266,12 +263,10 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     delete_attempts = []
 
     def _find_link_ids(_conn, annotation_id):
-        """Find link IDs.
+        """Find the link IDs.
 
-        Inputs: `_conn`, `annotation_id`. Output: list. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: `_conn`, `annotation_id` OMERO annotation ID. Output: `list`. Raises:
+        RuntimeError when validation or the called operation fails.
         """
         if annotation_id == 13:
             raise RuntimeError("link query failed")
@@ -295,7 +290,7 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     )
 
     class _BrokenLenMapValue:
-        """Represent broken len map value."""
+        """Test double for broken len map value behavior in this module."""
 
         def __bool__(self):
             """Return the truth value for the instance.
@@ -307,21 +302,19 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
         def __len__(self):
             """Return the instance length.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("cannot measure pairs")
 
     class _AnnotationQueryService:
-        """Represent annotation query service."""
+        """Test double for annotation query service behavior in this module."""
 
         @staticmethod
         def projection(hql, params, service_opts=None):
-            """Projection.
+            """Return the projection for `_AnnotationQueryService`.
 
-            Inputs: `hql`, `params`, `service_opts`. Output: computed value. Raises on
-            invalid or unavailable state.
-
-            invalid or unavailable state.
+            Inputs: `hql`, `params` SQL parameters, `service_opts`. Output: projection
+            Raises: AssertionError, RuntimeError when validation or external
             """
             if "select a.id from MapAnnotation a where a.id = :aid" in hql:
                 aid = params.values["aid"]
@@ -339,13 +332,13 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     }
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         SERVICE_OPTS = object()
 
         @staticmethod
         def getQueryService():
-            """Return Query Service.
+            """Return the fake query service value used by this test double.
 
             Inputs: none. Output: `_AnnotationQueryService` result.
             """
@@ -353,10 +346,9 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
 
         @staticmethod
         def getObject(kind, obj_id):
-            """Return Object.
+            """Return the object for `_Conn`.
 
-            Inputs: `kind`, `obj_id`. Output: `annotations.get` result. Raises on
-            invalid or unavailable state.
+            Inputs: `kind`, `obj_id`. Output: `get` result. Raises: RuntimeError when validation or the called operation fails.
             """
             if kind == "ImageAnnotationLink":
                 raise RuntimeError("link lookup unavailable")
@@ -366,12 +358,10 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
 
         @staticmethod
         def deleteObjects(kind, object_ids, wait=True):
-            """Delete Objects.
+            """Delete the objects for `_Conn`.
 
-            Inputs: `kind`, `object_ids`, `wait`. Output: None. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `kind`, `object_ids`, `wait`. Output: None. Raises: RuntimeError
+            when validation or the called operation fails.
             """
             delete_attempts.extend((kind, object_id, wait) for object_id in object_ids)
             for object_id in object_ids:
@@ -409,12 +399,10 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
 
 
 def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
-    """Verify rate limit covers dummy cache cleanup and blocked state.
+    """Check rate limit covers dummy cache cleanup and blocked state cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in rate limit covers dummy cache cleanup and blocked state.
+    AssertionError when validation or the called operation fails.
     """
     current_time = [100.0]
     monkeypatch.setattr(rate_limit.time, "time", lambda: current_time[0])
@@ -430,9 +418,9 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
         """Test double for dummy cache."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_DummyCache` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.deleted = []
 
@@ -448,17 +436,18 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
         def set(key, value, timeout=None):
             """Store the provided value.
 
-            Inputs: `key`, `value`, `timeout`. Output: None. Raises on invalid or
-            unavailable state.
+            Inputs: `key` lookup key, `value` input value, `timeout` timeout seconds.
+            Output: None. Raises: AssertionError when validation or external operations
+            fail.
             """
             raise AssertionError(
                 "django dummy cache backend should not be used directly"
             )
 
         def delete(self, key):
-            """Delete.
+            """Delete the delete for `_DummyCache`.
 
-            Inputs: `key`. Output: None.
+            Inputs: `key` lookup key. Output: None.
             """
             self.deleted.append(key)
 
@@ -492,16 +481,17 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
     state = {}
 
     def _cache_get(_key):
-        """Cache get.
+        """Cache the get.
 
-        Inputs: `_key`. Output: dict.
+        Inputs: `_key`. Output: `dict`.
         """
         return {"actions": "bad", "blocked_until": 150.0}
 
     def _cache_set(key, value, timeout):
-        """Cache set.
+        """Cache the set.
 
-        Inputs: `key`, `value`, `timeout`. Output: bool.
+        Inputs: `key` lookup key, `value` input value, `timeout` timeout seconds.
+        Output: `bool`.
         """
         state["value"] = value
         state["timeout"] = timeout
@@ -522,9 +512,9 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
 
 
 def test_rate_limit_non_dummy_cache_and_delete_miss_paths(monkeypatch):
-    """Verify rate limit non dummy cache and delete miss paths.
+    """Check rate limit non dummy cache and delete miss paths cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: dict.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in rate limit non dummy cache and delete miss paths.
     """
     current_time = [10.0]
     monkeypatch.setattr(rate_limit.time, "time", lambda: current_time[0])
@@ -536,7 +526,7 @@ def test_rate_limit_non_dummy_cache_and_delete_miss_paths(monkeypatch):
     backend_calls = []
 
     class _CacheBackend:
-        """Represent cache backend."""
+        """Test double for cache backend behavior in this module."""
 
         @staticmethod
         def get(key):
@@ -557,9 +547,9 @@ def test_rate_limit_non_dummy_cache_and_delete_miss_paths(monkeypatch):
 
         @staticmethod
         def delete(key):
-            """Delete.
+            """Delete the delete for `_CacheBackend`.
 
-            Inputs: `key`. Output: None.
+            Inputs: `key` lookup key. Output: None.
             """
             backend_calls.append(("delete", key))
 

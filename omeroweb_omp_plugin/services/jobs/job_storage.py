@@ -18,12 +18,9 @@ _HELD_JOB_LOCKS = local()
 
 
 def _validate_job_id(job_id):
-    """Validate job ID.
+    """Validate the job ID.
 
-    Inputs: `job_id`. Output: `uuid.UUID(hex=job_id.lower()).hex`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `job_id`. Output: `hex`. Raises: ValueError for the exercised failure path.
     """
     if not isinstance(job_id, str) or not _JOB_ID_RE.fullmatch(job_id):
         raise ValueError("Invalid job id.")
@@ -31,7 +28,7 @@ def _validate_job_id(job_id):
 
 
 def _jobs_root() -> Path:
-    """Jobs root.
+    """Return the jobs root.
 
     Inputs: none. Output: `Path`.
     """
@@ -39,9 +36,9 @@ def _jobs_root() -> Path:
 
 
 def _validated_job_path(job_id, suffix: str) -> Path:
-    """Validated job path.
+    """Return the validated job path.
 
-    Inputs: `job_id`, `suffix`. Output: `Path`.
+    Inputs: `job_id`, `suffix` (str). Output: `Path`.
     """
     return _jobs_root() / f"{_validate_job_id(job_id)}{suffix}"
 
@@ -63,7 +60,7 @@ def get_job_lock_path(job_id):
 
 
 def _held_job_locks() -> Counter[str]:
-    """Held job locks.
+    """Return the held job locks.
 
     Inputs: none. Output: `Counter[str]`.
     """
@@ -96,9 +93,9 @@ def mark_job_lock_held(job_id):
 
 
 def load_job(job_id):
-    """Load job.
+    """Load the job.
 
-    Inputs: `job_id`. Output: `json.load` result or None.
+    Inputs: `job_id`. Output: `load` result.
     """
     try:
         path = _validated_job_path(job_id, ".json")
@@ -131,9 +128,9 @@ def save_job(job_dict):
 
 
 def _write_job_file(path, job_dict):
-    """Write job file.
+    """Write the job file.
 
-    Inputs: `path`, `job_dict`. Output: None.
+    Inputs: `path` path, `job_dict`. Output: None.
     """
     tmp_path = None
     try:

@@ -58,9 +58,9 @@ TARGETS: list[tuple[str, str]] = [
 
 
 def parse_env_file(env_file_path: str) -> dict[str, str]:
-    """Parse environment file.
+    """Parse and validate the env file input.
 
-    Inputs: `env_file_path`. Output: `dict[str, str]`.
+    Inputs: `env_file_path` (str). Output: `dict[str, str]`.
     """
     result: dict[str, str] = {}
     if not os.path.exists(env_file_path):
@@ -77,10 +77,10 @@ def parse_env_file(env_file_path: str) -> dict[str, str]:
 
 
 def host_path_for_df(path_value: str, host_root: str = HOST_ROOT) -> str:
-    """Translate a host path to the same location under the host-root mount.
+    """Return the host path for df.
 
-    Inputs: `path_value`, `host_root`. Output: `str`. Raises on invalid or unavailable
-    state.
+    Inputs: `path_value` (str), `host_root` (str). Output: `str`. Raises: ValueError
+    when validation or the called operation fails.
     """
     stripped_path = path_value.strip()
     if not stripped_path.startswith("/"):
@@ -138,9 +138,9 @@ def escape_label_value(value: str) -> str:
 
 
 def render_labels(labels: dict[str, str]) -> str:
-    """Render labels.
+    """Render the labels.
 
-    Inputs: `labels`. Output: `str`.
+    Inputs: `labels` (dict[str, str]). Output: `str`.
     """
     return ",".join(
         f'{name}="{escape_label_value(value)}"' for name, value in labels.items()
@@ -148,9 +148,9 @@ def render_labels(labels: dict[str, str]) -> str:
 
 
 def render_metrics(env_values: dict[str, str]) -> str:
-    """Render metrics.
+    """Render the metrics.
 
-    Inputs: `env_values`. Output: `str`.
+    Inputs: `env_values` (dict[str, str]). Output: `str`.
     """
     lines: list[str] = [
         "# HELP omero_path_used_ratio Filesystem used ratio for OMERO-related host paths",
@@ -195,9 +195,9 @@ def render_metrics(env_values: dict[str, str]) -> str:
 
 
 def write_metrics(content: str) -> None:
-    """Write metrics.
+    """Write the metrics.
 
-    Inputs: `content`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `content` (str). Output: None.
     """
     output_dir = os.path.dirname(OUT) or "."
     os.makedirs(output_dir, exist_ok=True)
@@ -226,9 +226,9 @@ def write_metrics(content: str) -> None:
 
 
 def main() -> None:
-    """Execute the command entrypoint.
+    """Run the `monitoring.path-usage-exporter.path_usage_exporter` command entrypoint.
 
-    Inputs: none. Output: None.
+    Inputs: process arguments and environment. Output: runs the command entrypoint.
     """
     while True:
         try:

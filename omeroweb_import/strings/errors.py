@@ -1,138 +1,136 @@
 def unexpected_server_error_start_upload():
-    """Unexpected server error start upload.
+    """Return the unexpected server error start upload.
 
-    Inputs: none. Output: 'Unexpected server error while starting upload.'.
+    Inputs: none. Output: `str`.
     """
     return "Unexpected server error while starting upload."
 
 
 def upload_start_post_required():
-    """Upload start post required.
+    """Upload the start post required.
 
-    Inputs: none. Output: 'Upload start expects POST.'.
+    Inputs: none. Output: `str`.
     """
     return "Upload start expects POST."
 
 
 def upload_folder_not_writable():
-    """Upload folder not writable.
+    """Upload the folder not writable.
 
-    Inputs: none. Output: 'Upload folder is not writable. Please check OMERO_TMP_PATH
-    configuration.'.
-
-    configuration.'.
+    Inputs: none. Output: `str`.
     """
     return "Upload folder is not writable. Please check OMERO_TMP_PATH configuration."
 
 
 def no_files_provided():
-    """No files provided.
+    """Return the no files provided.
 
-    Inputs: none. Output: 'No files provided.'.
+    Inputs: none. Output: `str`.
     """
     return "No files provided."
 
 
 def invalid_project_selection():
-    """Invalid project selection.
+    """Return the invalid project selection.
 
-    Inputs: none. Output: 'Invalid project selection.'.
+    Inputs: none. Output: `str`.
     """
     return "Invalid project selection."
 
 
 def unable_resolve_session():
-    """Unable resolve session.
+    """Return the unable resolve session.
 
-    Inputs: none. Output: 'Unable to resolve OMERO session.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to resolve OMERO session."
 
 
 def unable_resolve_host_port():
-    """Unable resolve host port.
+    """Return the unable resolve host port.
 
-    Inputs: none. Output: 'Unable to resolve OMERO host/port.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to resolve OMERO host/port."
 
 
 def invalid_file_paths(paths):
-    """Invalid file paths.
+    """Return the invalid file paths.
 
-    Inputs: `paths`. Output: computed value.
+    Inputs: `paths`. Output: `Path` or path text.
     """
     return f"Invalid file paths: {', '.join(paths)}."
 
 
 def invalid_dataset_name_override(detail):
-    """Invalid dataset name override.
+    """Return the invalid dataset name override.
 
-    Inputs: `detail`. Output: computed value.
+    Inputs: `detail`. Output: ID value.
     """
     return f"Invalid dataset name override: {detail}."
 
 
 def upload_endpoint_post_required():
-    """Upload endpoint post required.
+    """Upload the endpoint post required.
 
-    Inputs: none. Output: 'Upload endpoint expects POST.'.
+    Inputs: none. Output: `str`.
     """
     return "Upload endpoint expects POST."
 
 
 def upload_job_not_found():
-    """Upload job not found.
+    """Upload the job not found.
 
-    Inputs: none. Output: 'Upload job not found.'.
+    Inputs: none. Output: `str`.
     """
     return "Upload job not found."
 
 
 def upload_payload_mismatch():
-    """Upload payload mismatch.
+    """Upload the payload mismatch.
 
-    Inputs: none. Output: 'Upload payload mismatch. Please retry the upload.'.
+    Inputs: none. Output: `str`.
     """
     return "Upload payload mismatch. Please retry the upload."
 
 
 def upload_batch_too_large(max_gb):
-    """Upload batch too large.
+    """Upload the batch too large.
 
-    Inputs: `max_gb`. Output: computed value.
+    Inputs: `max_gb`. Output: upload batch too large result.
     """
     return f"Upload batch exceeds the limit of {max_gb} GB."
 
 
 def unable_initialize_upload_folder():
-    """Unable initialize upload folder.
+    """Return the unable initialize upload folder.
 
-    Inputs: none. Output: 'Unable to initialize upload folder.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to initialize upload folder."
 
 
 def upload_chunk_missing_file():
-    """Upload chunk missing file.
+    """Upload the chunk missing file.
 
-    Inputs: none. Output: 'Chunk upload request missing file payload.'.
+    Inputs: none. Output: `str`.
     """
     return "Chunk upload request missing file payload."
 
 
 def upload_chunk_metadata_invalid(detail):
-    """Upload chunk metadata invalid.
+    """Upload the chunk metadata invalid.
 
-    Inputs: `detail`. Output: computed value.
+    Inputs: `detail`. Output: ID value.
     """
     return f"Invalid chunk upload metadata: {detail}."
 
 
 def upload_chunk_offset_mismatch(path, expected_offset, actual_offset):
-    """Upload chunk offset mismatch.
+    """Upload the chunk offset mismatch.
 
-    Inputs: `path`, `expected_offset`, `actual_offset`. Output: computed value.
+    Inputs: `path` path, `expected_offset`, `actual_offset`. Output: chunk payload or
+    size.
     """
     return (
         f"Chunk upload offset mismatch for {path}: "
@@ -141,9 +139,9 @@ def upload_chunk_offset_mismatch(path, expected_offset, actual_offset):
 
 
 def upload_chunk_size_mismatch(path, expected_size, actual_size):
-    """Upload chunk size mismatch.
+    """Upload the chunk size mismatch.
 
-    Inputs: `path`, `expected_size`, `actual_size`. Output: computed value.
+    Inputs: `path` path, `expected_size`, `actual_size`. Output: `int` size.
     """
     return (
         f"Chunk upload size mismatch for {path}: "
@@ -152,9 +150,9 @@ def upload_chunk_size_mismatch(path, expected_size, actual_size):
 
 
 def upload_chunk_incomplete(path, expected_size, actual_size):
-    """Upload chunk incomplete.
+    """Upload the chunk incomplete.
 
-    Inputs: `path`, `expected_size`, `actual_size`. Output: computed value.
+    Inputs: `path` path, `expected_size`, `actual_size`. Output: chunk payload or size.
     """
     return (
         f"Chunk upload incomplete for {path}: "
@@ -163,145 +161,137 @@ def upload_chunk_incomplete(path, expected_size, actual_size):
 
 
 def invalid_filename(name):
-    """Invalid filename.
+    """Return the invalid filename.
 
-    Inputs: `name`. Output: computed value.
+    Inputs: `name` name. Output: ID value.
     """
     return f"Invalid filename: {name}"
 
 
 def filename_too_long(name, max_bytes):
-    """Filename too long.
+    """Return the filename too long.
 
-    Inputs: `name`, `max_bytes`. Output: computed value.
+    Inputs: `name` name, `max_bytes`. Output: name string.
     """
     return f"Filename is too long ({max_bytes} byte limit): {name}"
 
 
 def file_path_too_long(path, max_bytes):
-    """File path too long.
+    """Return the file path too long.
 
-    Inputs: `path`, `max_bytes`. Output: computed value.
+    Inputs: `path` path, `max_bytes`. Output: `Path` or path text.
     """
     return f"File path is too long ({max_bytes} byte limit): {path}"
 
 
 def unexpected_file(path):
-    """Unexpected file.
+    """Return the unexpected file.
 
-    Inputs: `path`. Output: computed value.
+    Inputs: `path` path. Output: unexpected file result.
     """
     return f"Unexpected file: {path}"
 
 
 def unable_update_upload_job_state():
-    """Unable update upload job state.
+    """Return the unable update upload job state.
 
-    Inputs: none. Output: 'Unable to update upload job state.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to update upload job state."
 
 
 def invalid_client_upload_id():
-    """Invalid client upload ID.
+    """Return the invalid client upload ID.
 
-    Inputs: none. Output: 'Invalid upload retry identifier.'.
+    Inputs: none. Output: `str`.
     """
     return "Invalid upload retry identifier."
 
 
 def upload_retry_id_conflict():
-    """Upload retry ID conflict.
+    """Upload the retry ID conflict.
 
-    Inputs: none. Output: 'Upload retry identifier already belongs to a different
-    upload.'.
-
-    upload.'.
+    Inputs: none. Output: `str`.
     """
     return "Upload retry identifier already belongs to a different upload."
 
 
 def unexpected_server_error_uploading_files():
-    """Unexpected server error uploading files.
+    """Return the unexpected server error uploading files.
 
-    Inputs: none. Output: 'Unexpected server error while uploading files.'.
+    Inputs: none. Output: `str`.
     """
     return "Unexpected server error while uploading files."
 
 
 def import_endpoint_post_required():
-    """Import endpoint post required.
+    """Import the endpoint post required.
 
-    Inputs: none. Output: 'Import endpoint expects POST.'.
+    Inputs: none. Output: `str`.
     """
     return "Import endpoint expects POST."
 
 
 def import_job_not_found():
-    """Import job not found.
+    """Import the job not found.
 
-    Inputs: none. Output: 'Import job not found.'.
+    Inputs: none. Output: `str`.
     """
     return "Import job not found."
 
 
 def unexpected_server_error_importing():
-    """Unexpected server error importing.
+    """Return the unexpected server error importing.
 
-    Inputs: none. Output: 'Unexpected server error while importing.'.
+    Inputs: none. Output: `str`.
     """
     return "Unexpected server error while importing."
 
 
 def missing_omero_connection_details():
-    """Missing OMERO connection details.
+    """Return the missing OMERO connection details.
 
-    Inputs: none. Output: 'Missing OMERO connection details for import.'.
+    Inputs: none. Output: `str`.
     """
     return "Missing OMERO connection details for import."
 
 
 def unable_prepare_import_destination():
-    """Unable prepare import destination.
+    """Return the unable prepare import destination.
 
-    Inputs: none. Output: 'OMERO could not prepare the destination for this import.'.
+    Inputs: none. Output: `str`.
     """
     return "OMERO could not prepare the destination for this import."
 
 
 def upload_folder_missing_on_server():
-    """Upload folder missing on server.
+    """Upload the folder missing on server.
 
-    Inputs: none. Output: 'Upload folder missing on server.'.
+    Inputs: none. Output: `str`.
     """
     return "Upload folder missing on server."
 
 
 def missing_staged_file(path):
-    """Missing staged file.
+    """Return the missing staged file.
 
-    Inputs: `path`. Output: computed value.
+    Inputs: `path` path. Output: missing staged file result.
     """
     return f"Missing staged file: {path}"
 
 
 def import_failed():
-    """Import failed.
+    """Import the failed.
 
-    Inputs: none. Output: 'Import failed.'.
+    Inputs: none. Output: `str`.
     """
     return "Import failed."
 
 
 def import_path_not_readable():
-    """Import path not readable.
+    """Import the path not readable.
 
-    Inputs: none. Output: 'Import failed because the OMERO CLI could not read a required
-    import path. Check filesystem permissions for the staged source and any managed-
-    repository bridge paths.'.
-
-    import path. Check filesystem permissions for the staged source and any managed-
-    repository bridge paths.'.
+    Inputs: none. Output: `str`.
     """
     return (
         "Import failed because the OMERO CLI could not read a required import "
@@ -311,12 +301,9 @@ def import_path_not_readable():
 
 
 def import_no_objects_created():
-    """Import no objects created.
+    """Import the no objects created.
 
-    Inputs: none. Output: 'Import command succeeded but no images were created in OMERO.
-    The file format may not be supported, or the data may be corrupt.'.
-
-    The file format may not be supported, or the data may be corrupt.'.
+    Inputs: none. Output: `str`.
     """
     return (
         "Import command succeeded but no images were created in OMERO. "
@@ -325,16 +312,9 @@ def import_no_objects_created():
 
 
 def import_zarr_not_recognized():
-    """Import Zarr not recognized.
+    """Import the Zarr not recognized.
 
-    Inputs: none. Output: 'This .zarr folder is not in a format that OMERO can import.
-    Automatic re-compression to zlib was attempted but the resulting zarr is still not
-    recognised by Bio-Formats.  The zarr may use an unsupported layout or contain no
-    importable image data.'.
-
-    Automatic re-compression to zlib was attempted but the resulting zarr is still not
-    recognised by Bio-Formats.  The zarr may use an unsupported layout or contain no
-    importable image data.'.
+    Inputs: none. Output: `str`.
     """
     return (
         "This .zarr folder is not in a format that OMERO can import. "
@@ -345,12 +325,9 @@ def import_zarr_not_recognized():
 
 
 def import_session_expired():
-    """Import session expired.
+    """Import the session expired.
 
-    Inputs: none. Output: 'Import failed because the OMERO session expired during a
-    long-running import.'.
-
-    long-running import.'.
+    Inputs: none. Output: `str`.
     """
     return (
         "Import failed because the OMERO session expired during a long-running import."
@@ -358,7 +335,7 @@ def import_session_expired():
 
 
 def import_parent_directory_not_writable(group_name=None, parent_id=None):
-    """Import parent directory not writable.
+    """Import the parent directory not writable.
 
     Inputs: `group_name`, `parent_id`. Output: `detail`.
     """
@@ -378,60 +355,57 @@ def import_parent_directory_not_writable(group_name=None, parent_id=None):
 
 
 def unexpected_import_failure(detail):
-    """Unexpected import failure.
+    """Return the unexpected import failure.
 
-    Inputs: `detail`. Output: computed value.
+    Inputs: `detail`. Output: unexpected import failure result.
     """
     return f"Unexpected import failure: {detail}"
 
 
 def method_post_required():
-    """Method post required.
+    """Return the method post required.
 
-    Inputs: none. Output: 'POST required'.
+    Inputs: none. Output: `str`.
     """
     return "POST required"
 
 
 def unable_to_determine_username():
-    """Unable to determine username.
+    """Return the unable to determine username.
 
-    Inputs: none. Output: 'Unable to determine username.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to determine username."
 
 
 def invalid_user_settings_payload():
-    """Invalid user settings payload.
+    """Return the invalid user settings payload.
 
-    Inputs: none. Output: 'Invalid user settings payload.'.
+    Inputs: none. Output: `str`.
     """
     return "Invalid user settings payload."
 
 
 def invalid_special_method_settings_payload():
-    """Invalid special method settings payload.
+    """Return the invalid special method settings payload.
 
-    Inputs: none. Output: 'Invalid special method settings payload.'.
+    Inputs: none. Output: `str`.
     """
     return "Invalid special method settings payload."
 
 
 def invalid_special_method_key():
-    """Invalid special method key.
+    """Return the invalid special method key.
 
-    Inputs: none. Output: 'Invalid special method key.'.
+    Inputs: none. Output: `str`.
     """
     return "Invalid special method key."
 
 
 def psycopg2_missing():
-    """Psycopg2 missing.
+    """Return the psycopg2 missing.
 
-    Inputs: none. Output: 'psycopg2 is not installed. Please install psycopg2-binary in
-    the OMERO.web environment.'.
-
-    the OMERO.web environment.'.
+    Inputs: none. Output: `str`.
     """
     return "psycopg2 is not installed. Please install psycopg2-binary in the OMERO.web environment."
 
@@ -459,56 +433,56 @@ def db_connection_failed():
 
 
 def user_settings_not_persisted():
-    """User settings not persisted.
+    """Return the user settings not persisted.
 
-    Inputs: none. Output: 'User settings were not persisted to the database.'.
+    Inputs: none. Output: `str`.
     """
     return "User settings were not persisted to the database."
 
 
 def special_method_settings_not_persisted():
-    """Special method settings not persisted.
+    """Return the special method settings not persisted.
 
-    Inputs: none. Output: 'Special method settings were not persisted to the database.'.
+    Inputs: none. Output: `str`.
     """
     return "Special method settings were not persisted to the database."
 
 
 def user_settings_save_failed():
-    """User settings save failed.
+    """Return the user settings save failed.
 
-    Inputs: none. Output: 'Could not save user settings.'.
+    Inputs: none. Output: `str`.
     """
     return "Could not save user settings."
 
 
 def special_method_settings_save_failed():
-    """Special method settings save failed.
+    """Return the special method settings save failed.
 
-    Inputs: none. Output: 'Could not save special method settings.'.
+    Inputs: none. Output: `str`.
     """
     return "Could not save special method settings."
 
 
 def special_method_settings_load_failed():
-    """Special method settings load failed.
+    """Return the special method settings load failed.
 
-    Inputs: none. Output: 'Could not load special method settings.'.
+    Inputs: none. Output: `str`.
     """
     return "Could not load special method settings."
 
 
 def upload_file_save_failed(path):
-    """Upload file save failed.
+    """Upload the file save failed.
 
-    Inputs: `path`. Output: computed value.
+    Inputs: `path` path. Output: upload file save failed result.
     """
     return f"Failed to save uploaded file: {path}."
 
 
 def unexpected_error():
-    """Unexpected error.
+    """Return the unexpected error.
 
-    Inputs: none. Output: 'Unexpected error.'.
+    Inputs: none. Output: `str`.
     """
     return "Unexpected error."

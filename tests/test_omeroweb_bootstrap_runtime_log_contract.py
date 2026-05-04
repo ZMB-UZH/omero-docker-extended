@@ -9,9 +9,9 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `OmeroWebBootstrapRuntimeLogContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.bootstrap_text = (
@@ -24,7 +24,7 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
     def test_supervisord_declares_expected_log_targets(self) -> None:
         """Verify supervisord declares expected log targets.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in supervisord declares expected log targets.
         """
         self.assertIn(
             "logfile=/opt/omero/web/logs/supervisord.log", self.supervisord_text
@@ -67,7 +67,7 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
     ) -> None:
         """Verify bootstrap prepares runtime log targets from supervisord config.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in bootstrap prepares runtime log targets from supervisord config.
         """
         self.assertIn(
             'supervisord_config_path="${OMERO_WEB_SUPERVISORD_CONFIG:-/etc/supervisord.conf}"',
@@ -89,7 +89,7 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
     def test_bootstrap_ensures_tmpdir_for_session_storage(self) -> None:
         """Verify bootstrap ensures tmpdir for session storage.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in bootstrap ensures tmpdir for session storage.
         """
         self.assertIn(
             'ensure_runtime_directory "${TMPDIR}" "OMERO.web TMPDIR (session storage)"',
@@ -101,9 +101,9 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
         )
 
     def test_bootstrap_repairs_plugin_tmp_subtrees_for_runtime_user(self) -> None:
-        """Verify bootstrap repairs plugin temporary subtrees for runtime user.
+        """Verify bootstrap repairs plugin tmp subtrees for runtime user.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in bootstrap repairs plugin tmp subtrees for runtime user.
         """
         self.assertIn("repair_plugin_tmp_layout()", self.bootstrap_text)
         self.assertIn('local tmp_root="${OMERO_TMP_PATH:-}"', self.bootstrap_text)
@@ -121,9 +121,9 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
     def test_bootstrap_verifies_runtime_user_write_path_instead_of_root_only(
         self,
     ) -> None:
-        """Verify bootstrap verifies runtime user write path instead of root only.
+        """Verify the bootstrap verifies runtime user write path instead of root only safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when bootstrap verifies runtime user write path instead of root only accepts unsafe input.
         """
         self.assertIn("ensure_runtime_identity()", self.bootstrap_text)
         self.assertIn(

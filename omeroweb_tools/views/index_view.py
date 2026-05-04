@@ -51,9 +51,9 @@ SAVED_QUERY_PAYLOAD_INVALID_ERROR = "Saved query payload is invalid."
 
 
 def _indexed_scope_storage_key(username: str) -> str:
-    """Indexed scope storage key.
+    """Return the indexed scope storage key.
 
-    Inputs: `username`. Output: `str`.
+    Inputs: `username` (str) username. Output: `str`.
     """
     digest = hashlib.sha256(str(username or "").strip().encode("utf-8")).hexdigest()
     return f"omeroweb_tools:enhanced_search:indexed_scope:{digest}"
@@ -68,17 +68,17 @@ def _is_root_user(request, conn) -> bool:
 
 
 def _normalize_saved_query_name(value: object) -> str:
-    """Normalize saved query name.
+    """Normalize the saved query name.
 
-    Inputs: `value`. Output: `str`.
+    Inputs: `value` (object) input value. Output: `str`.
     """
     return " ".join(str(value or "").split())
 
 
 def _normalize_saved_query_payload(value: object) -> tuple[dict[str, Any], str]:
-    """Normalize saved query payload.
+    """Normalize the saved query payload.
 
-    Inputs: `value`. Output: `tuple[dict[str, Any], str]`.
+    Inputs: `value` (object) input value. Output: `tuple[dict[str, Any], str]`.
     """
     if not isinstance(value, dict):
         return {}, SAVED_QUERY_PAYLOAD_REQUIRED_ERROR
@@ -89,9 +89,10 @@ def _normalize_saved_query_payload(value: object) -> tuple[dict[str, Any], str]:
 
 
 def _parse_saved_query_id(value: object) -> int:
-    """Parse saved query ID.
+    """Parse and validate the saved query ID input.
 
-    Inputs: `value`. Output: `int`. Raises on invalid or unavailable state.
+    Inputs: `value` (object) input value. Output: `int`. Raises: ValueError when validation or
+    the called operation fails.
     """
     if isinstance(value, bool) or not isinstance(value, (int, str)):
         raise ValueError
@@ -106,12 +107,10 @@ def _load_user_settings_context(
     *,
     blocked_for_root: bool,
 ) -> tuple[dict[str, Any], bool, str, str]:
-    """Load user settings context.
+    """Load the user settings context.
 
-    Inputs: `username`, `blocked_for_root`. Output: `tuple[dict[str, Any], bool, str,
-    str]`.
-
-    str]`.
+    Inputs: `username` (str) username, `blocked_for_root` (bool). Output:
+    `tuple[dict[str, Any], bool, str, str]`.
     """
     if blocked_for_root:
         payload = default_user_settings()
@@ -140,9 +139,10 @@ def _load_user_settings_context(
 
 @login_required()
 def index(request, conn=None, _url=None, **kwargs):
-    """Index.
+    """Return the index.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `render` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: rendered Django response.
     """
     return render(
         request,
@@ -153,9 +153,10 @@ def index(request, conn=None, _url=None, **kwargs):
 
 @login_required()
 def root_status(request, conn=None, _url=None, **kwargs):
-    """Root status.
+    """Return the root status.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     return JsonResponse({"is_root_user": _is_root_user(request, conn)})
 
@@ -163,9 +164,10 @@ def root_status(request, conn=None, _url=None, **kwargs):
 @login_required()
 @ensure_csrf_cookie
 def enhanced_search_view(request, conn=None, _url=None, **kwargs):
-    """Enhanced search view.
+    """Return the enhanced search view.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `render` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: rendered Django response.
     """
     username = str(current_username(request, conn) or "").strip()
     blocked_for_root = not username or username == "root"
@@ -252,9 +254,10 @@ def enhanced_search_view(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_scope_sync_view(request, conn=None, _url=None, **kwargs):
-    """Start scope sync view.
+    """Start the scope sync view.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
@@ -299,9 +302,10 @@ def start_scope_sync_view(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def sync_state_view(request, conn=None, _url=None, **kwargs):
-    """Sync state view.
+    """Synchronize the state view.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     username = str(current_username(request, conn) or "")
     try:
@@ -325,9 +329,10 @@ def sync_state_view(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def save_user_settings_view(request, conn=None, _url=None, **kwargs):
-    """Save user settings view.
+    """Save the user settings view.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
@@ -345,9 +350,10 @@ def save_user_settings_view(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def save_query_view(request, conn=None, _url=None, **kwargs):
-    """Save query view.
+    """Save the query view.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
@@ -378,9 +384,10 @@ def save_query_view(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def delete_query_view(request, conn=None, _url=None, **kwargs):
-    """Delete query view.
+    """Delete the query view.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed."}, status=405)
@@ -408,12 +415,10 @@ def delete_query_view(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def apply_saved_query_view(request, conn=None, _url=None, query_id=None, **kwargs):
-    """Apply saved query view.
+    """Apply the saved query view.
 
-    Inputs: `request`, `conn`, `_url`, `query_id`, `**kwargs`. Output: `redirect`
-    result.
-
-    result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `query_id`, `**kwargs` keyword arguments. Output: Django redirect response.
     """
     username = str(current_username(request, conn) or "")
     try:

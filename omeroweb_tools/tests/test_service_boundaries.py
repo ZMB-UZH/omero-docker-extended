@@ -11,17 +11,17 @@ from omeroweb_tools.services import enhanced_search_service as service
 
 
 class _DbConn:
-    """Represent database conn."""
+    """Test double for database conn behavior in this module."""
 
     def __enter__(self):
-        """Enter the context manager.
+        """Enter `_DbConn`'s context-managed fake resource.
 
         Inputs: none. Output: `self`.
         """
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        """Exit the context manager.
+        """Exit `_DbConn`'s context-managed fake resource.
 
         Inputs: `exc_type`, `exc`, `tb`. Output: bool.
         """
@@ -29,7 +29,7 @@ class _DbConn:
 
 
 def _db_connect():
-    """DB connect.
+    """Return the db connect.
 
     Inputs: none. Output: `_DbConn` result.
     """
@@ -39,7 +39,7 @@ def _db_connect():
 def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch):
     """Verify runtime wrappers query helpers and user settings boundaries.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in runtime wrappers query helpers and user settings boundaries.
     """
     runtime = SimpleNamespace(max_results=25, schema_version=4, sync_stale_seconds=600)
     celery = SimpleNamespace(enabled=True)
@@ -52,7 +52,7 @@ def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch
         return runtime
 
     def _celery_config():
-        """Celery config.
+        """Return the celery config.
 
         Inputs: none. Output: `celery`.
         """
@@ -159,9 +159,10 @@ def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch
     monkeypatch.setattr(service, "db_connect", _db_connect)
 
     def _load_user_settings_row(conn, username, defaults=None):
-        """Load user settings row.
+        """Load the user settings row.
 
-        Inputs: `conn`, `username`, `defaults`. Output: dict.
+        Inputs: `conn` OMERO gateway connection, `username` username, `defaults`.
+        Output: `dict`.
         """
         assert isinstance(conn, _DbConn)
         assert username == "alice"
@@ -178,7 +179,7 @@ def test_runtime_wrappers_query_helpers_and_user_settings_boundaries(monkeypatch
 def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
     """Verify scope state sync state lookup and current user resolution.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in scope state sync state lookup and current user resolution.
     """
     recorded = {}
     monkeypatch.setattr(service, "db_connect", _db_connect)
@@ -233,22 +234,22 @@ def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
     assert service.ensure_scope_state(()) == []
 
     class _WrappedId:
-        """Represent wrapped identifier."""
+        """Test double for wrapped identifier behavior in this module."""
 
         @staticmethod
         def getValue():
-            """Return the fake OMERO value.
+            """Return `_WrappedId`'s fake OMERO value.
 
             Inputs: none. Output: 21.
             """
             return 21
 
     class _User:
-        """Represent user."""
+        """Test double for user behavior in this module."""
 
         @staticmethod
         def getId():
-            """Return the fake OMERO identifier.
+            """Return `_User`'s fake OMERO identifier.
 
             Inputs: none. Output: `_WrappedId` result.
             """
@@ -276,7 +277,7 @@ def test_scope_state_sync_state_lookup_and_current_user_resolution(monkeypatch):
 def test_parse_search_query_sync_state_and_disabled_scope_guard_paths(monkeypatch):
     """Verify parse search query sync state and disabled scope guard paths.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in parse search query sync state and disabled scope guard paths.
     """
     assert service._parse_date(None) is None
     assert service._parse_date("   ") is None
@@ -330,7 +331,7 @@ def test_parse_search_query_sync_state_and_disabled_scope_guard_paths(monkeypatc
 def test_visible_group_ids_range_math_and_row_merging_boundaries(monkeypatch):
     """Verify visible group IDs range math and row merging boundaries.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in visible group IDs range math and row merging boundaries.
     """
     monkeypatch.setattr(service, "_current_user_id", lambda conn: 9)
     monkeypatch.setattr(service, "get_id", lambda obj: obj)
@@ -404,12 +405,10 @@ def test_visible_group_ids_range_math_and_row_merging_boundaries(monkeypatch):
 
 
 def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
-    """Verify builtin search helper paths and result row conversion.
+    """Verify builtin search helper paths and result row conversion result shape.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in builtin search helper paths and result row conversion.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     monkeypatch.setattr(
         service,
@@ -435,20 +434,20 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
     }
 
     class _BrokenDatasetHit:
-        """Represent broken dataset hit."""
+        """Test double for broken dataset hit behavior in this module."""
 
         OMERO_CLASS = "Dataset"
 
         @staticmethod
         def listChildren():
-            """Return list children.
+            """Return `_BrokenDatasetHit`'s fake child listing.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("boom")
 
     class _UnknownHit:
-        """Represent unknown hit."""
+        """Test double for unknown hit behavior in this module."""
 
         OMERO_CLASS = "Plate"
 
@@ -487,22 +486,21 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
     monkeypatch.setattr(service, "get_id", lambda obj: getattr(obj, "_id", obj))
 
     class _SearchConn:
-        """Represent search conn."""
+        """Test double for search conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_SearchConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.calls = 0
 
         def searchObjects(self, object_types, fulltext_query, **kwargs):
-            """Search objects.
+            """Return the search Objects for `_SearchConn`.
 
-            Inputs: `object_types`, `fulltext_query`, `**kwargs`. Output: list. Raises
-            on invalid or unavailable state.
-
-            on invalid or unavailable state.
+            Inputs: `object_types`, `fulltext_query`, `**kwargs` keyword arguments.
+            Output: `list`. Raises: RuntimeError when validation or external operations
+            fail.
             """
             search_calls.append(kwargs["searchGroup"])
             self.calls += 1
@@ -526,23 +524,22 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
     retry_calls = []
 
     class _AlwaysFailSearchConn:
-        """Represent always fail search conn."""
+        """Test double for always fail search conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_AlwaysFailSearchConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.calls = 0
 
         @staticmethod
         def searchObjects(object_types, fulltext_query, **kwargs):
-            """Search objects.
+            """Record the search objects call on `_AlwaysFailSearchConn` for later assertions.
 
-            Inputs: `object_types`, `fulltext_query`, `**kwargs`. Output: None. Raises
-            on invalid or unavailable state.
-
-            on invalid or unavailable state.
+            Inputs: `object_types`, `fulltext_query`, `**kwargs` keyword arguments.
+            Output: None. Raises: RuntimeError when validation or external operations
+            fail.
             """
             retry_calls.append(kwargs["searchGroup"])
             raise RuntimeError("still failing")
@@ -575,22 +572,20 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
     )
 
     class _PagedSearchConn:
-        """Represent paged search conn."""
+        """Test double for paged search conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_PagedSearchConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.calls = 0
 
         def searchObjects(self, object_types, fulltext_query, **kwargs):
-            """Search objects.
+            """Return the search Objects for `_PagedSearchConn`.
 
-            Inputs: `object_types`, `fulltext_query`, `**kwargs`. Output: computed
-            value.
-
-            value.
+            Inputs: `object_types`, `fulltext_query`, `**kwargs` keyword arguments.
+            Output: `list`.
             """
             paged_calls.append(kwargs["page"])
             self.calls += 1
@@ -611,50 +606,51 @@ def test_builtin_search_helper_paths_and_result_row_conversion(monkeypatch):
 def test_image_helpers_owner_context_and_document_conversion(monkeypatch):
     """Verify image helpers owner context and document conversion.
 
-    Inputs: `monkeypatch`. Output: list. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image helpers owner context and document conversion.
+    RuntimeError when validation or the called operation fails.
     """
 
     class _ImageHit:
-        """Represent image hit."""
+        """Test double for image hit behavior in this module."""
 
         OMERO_CLASS = "Image"
 
     class _DatasetHit:
-        """Represent dataset hit."""
+        """Test double for dataset hit behavior in this module."""
 
         OMERO_CLASS = "Dataset"
 
         @staticmethod
         def listChildren():
-            """Return list children.
+            """Return `_DatasetHit`'s fake child listing.
 
             Inputs: none. Output: list.
             """
             return ["image-a"]
 
     class _ProjectHit:
-        """Represent project hit."""
+        """Test double for project hit behavior in this module."""
 
         OMERO_CLASS = "Project"
 
         @staticmethod
         def listChildren():
-            """Return list children.
+            """Return `_ProjectHit`'s fake child listing.
 
             Inputs: none. Output: list.
             """
             return [SimpleNamespace(listChildren=lambda: ["image-b"])]
 
     class _BrokenProjectHit:
-        """Represent broken project hit."""
+        """Test double for broken project hit behavior in this module."""
 
         OMERO_CLASS = "Project"
 
         @staticmethod
         def listChildren():
-            """Return list children.
+            """Return `_BrokenProjectHit`'s fake child listing.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("boom")
 
@@ -856,7 +852,7 @@ def test_image_helpers_owner_context_and_document_conversion(monkeypatch):
 def test_search_skips_inaccessible_images_and_handles_current_name_errors(monkeypatch):
     """Verify search skips inaccessible images and handles current name errors.
 
-    Inputs: `monkeypatch`. Output: `SimpleNamespace` result.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in search skips inaccessible images and handles current name errors.
     """
 
     def _runtime_config():
@@ -917,9 +913,10 @@ def test_search_skips_inaccessible_images_and_handles_current_name_errors(monkey
 def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
     monkeypatch,
 ):
-    """Verify root connection covers missing password failed connect and cleanup.
+    """Check that root connection covers missing password failed connect and cleanup keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: bool. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in root connection covers missing password failed connect and cleanup.
+    RuntimeError when validation or the called operation fails.
     """
     monkeypatch.delenv("ROOTPASS", raising=False)
     with (
@@ -939,10 +936,10 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
     monkeypatch.setattr(service, "get_bool_env", lambda name, env_file=None: False)
 
     class _FailingGateway:
-        """Represent failing gateway."""
+        """Test double for failing gateway behavior in this module."""
 
         def __init__(self, *args, **kwargs):
-            """Initialize the instance.
+            """Create `_FailingGateway` with its default state.
 
             Inputs: `*args`, `**kwargs`. Output: None.
             """
@@ -950,7 +947,7 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
 
         @staticmethod
         def connect():
-            """Open the connection.
+            """Open the connection for `_FailingGateway`.
 
             Inputs: none. Output: bool.
             """
@@ -966,10 +963,10 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
     closed = []
 
     class _WorkingGateway:
-        """Represent working gateway."""
+        """Test double for working gateway behavior in this module."""
 
         def __init__(self, *args, **kwargs):
-            """Initialize the instance.
+            """Create `_WorkingGateway` with its default state.
 
             Inputs: `*args`, `**kwargs`. Output: None.
             """
@@ -979,7 +976,7 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
 
         @staticmethod
         def connect():
-            """Open the connection.
+            """Open the connection for `_WorkingGateway`.
 
             Inputs: none. Output: bool.
             """
@@ -987,9 +984,9 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_WorkingGateway`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             closed.append(True)
             raise RuntimeError("close boom")
@@ -1003,10 +1000,8 @@ def test_root_connection_covers_missing_password_failed_connect_and_cleanup(
 def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
     """Verify sync scope request dispatch and saved query wrappers.
 
-    Inputs: `monkeypatch`. Output: yielded values. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in sync scope request dispatch and saved query wrappers.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     scope = service.EnhancedSearchScope("user", 9, service.USER_SCOPE_LABEL)
     original_process_sync_batch = service._process_sync_batch
@@ -1025,9 +1020,9 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
 
     @contextmanager
     def _root_connection():
-        """Root connection.
+        """Return the root connection.
 
-        Inputs: none. Output: yielded values.
+        Inputs: none. Output: iterator of yielded items.
         """
         yield object()
 
@@ -1073,17 +1068,17 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
     error_calls = []
 
     class _FailingRootConnection:
-        """Represent failing root connection."""
+        """Test double for failing root connection behavior in this module."""
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_FailingRootConnection`'s context-managed fake resource.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             raise RuntimeError("boom")
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_FailingRootConnection`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -1112,9 +1107,9 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
 
     @contextmanager
     def _working_root_connection():
-        """Working root connection.
+        """Return the working root connection.
 
-        Inputs: none. Output: yielded values.
+        Inputs: none. Output: iterator of yielded items.
         """
         yield object()
 
@@ -1212,7 +1207,7 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
         """Test double for fake thread."""
 
         def __init__(self, target, args, daemon, name):
-            """Initialize the instance.
+            """Create `_FakeThread` with `target`, `args`, `daemon`, and `name`.
 
             Inputs: `target`, `args`, `daemon`, `name`. Output: None.
             """
@@ -1227,9 +1222,9 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
 
         @staticmethod
         def start():
-            """Start the operation.
+            """Start `_FakeThread`'s fake operation.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             started.append("started")
 

@@ -17,9 +17,9 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `InstallTranscriptRegressionTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.helper_path = cls.repo_root / "installation" / "install_transcript_utils.sh"
@@ -27,9 +27,9 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
     def test_transcript_helper_saves_preinstall_and_install_output_under_omero_data_path(
         self,
     ) -> None:
-        """Verify transcript helper saves preinstall and install output under OMERO data path.
+        """Verify the transcript helper saves preinstall and install output under OMERO data path safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when transcript helper saves preinstall and install output under OMERO data path accepts unsafe input.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = Path(tmpdir)
@@ -88,9 +88,9 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
     def test_interactive_transcript_path_does_not_trip_on_pipestatus_under_set_u(
         self,
     ) -> None:
-        """Verify interactive transcript path does not trip on pipestatus under set u.
+        """Verify the interactive transcript path does not trip on pipestatus under set u safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when interactive transcript path does not trip on pipestatus under set u accepts unsafe input.
         """
         if shutil.which("script") is None:
             self.skipTest("script command not available")
@@ -156,9 +156,9 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
     def test_transcript_helper_rejects_unsafe_env_assignments_without_executing_them(
         self,
     ) -> None:
-        """Verify transcript helper rejects unsafe environment assignments without executing them.
+        """Confirm transcript helper rejects unsafe env assignments without executing them is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in transcript helper rejects unsafe env assignments without executing them.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = Path(tmpdir)

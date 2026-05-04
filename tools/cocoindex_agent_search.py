@@ -84,7 +84,7 @@ class JsonRpcError(RuntimeError):
     """Raised for JSON-RPC request errors that should be reported to the client."""
 
     def __init__(self, code: int, message: str) -> None:
-        """Initialize the instance.
+        """Create `JsonRpcError` with `code` and `message`.
 
         Inputs: `code`, `message`. Output: None.
         """
@@ -108,7 +108,7 @@ class CocoIndexContext:
 
     @property
     def venv_dir(self) -> Path:
-        """Venv dir.
+        """Return the venv dir for `CocoIndexContext`.
 
         Inputs: none. Output: `Path`.
         """
@@ -116,7 +116,7 @@ class CocoIndexContext:
 
     @property
     def ccc_bin(self) -> Path:
-        """Ccc bin.
+        """Return the ccc bin for `CocoIndexContext`.
 
         Inputs: none. Output: `Path`.
         """
@@ -140,7 +140,7 @@ class CocoIndexContext:
 
     @property
     def db_root(self) -> Path:
-        """DB root.
+        """Return the db root for `CocoIndexContext`.
 
         Inputs: none. Output: `Path`.
         """
@@ -148,7 +148,7 @@ class CocoIndexContext:
 
     @property
     def db_dir(self) -> Path:
-        """DB dir.
+        """Return the db dir for `CocoIndexContext`.
 
         Inputs: none. Output: `Path`.
         """
@@ -156,7 +156,7 @@ class CocoIndexContext:
 
     @property
     def cache_dir(self) -> Path:
-        """Cache dir.
+        """Cache the dir for `CocoIndexContext`.
 
         Inputs: none. Output: `Path`.
         """
@@ -164,7 +164,7 @@ class CocoIndexContext:
 
     @property
     def hf_home(self) -> Path:
-        """Hf home.
+        """Return the hf home for `CocoIndexContext`.
 
         Inputs: none. Output: `Path`.
         """
@@ -172,7 +172,7 @@ class CocoIndexContext:
 
     @property
     def pip_cache(self) -> Path:
-        """Pip cache.
+        """Return the pip cache for `CocoIndexContext`.
 
         Inputs: none. Output: `Path`.
         """
@@ -244,9 +244,10 @@ class BenchmarkResult:
 
 
 def resolve_required_executable(name: str) -> str:
-    """Resolve required executable.
+    """Resolve the required executable.
 
-    Inputs: `name`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name. Output: `str`. Raises: RuntimeError when validation or
+    external operations fail.
     """
     resolved = shutil.which(name)
     if not resolved:
@@ -263,8 +264,10 @@ def run_command(
 ) -> subprocess.CompletedProcess[str]:
     """A subprocess and capture output for deterministic error reporting.
 
-    Inputs: `args`, `cwd`, `env`, `timeout`. Output: `subprocess.CompletedProcess[str]`.
-    Raises on invalid or unavailable state.
+    Inputs: `args` (list[str]) positional arguments, `cwd` (Path) working directory,
+    `env` (dict[str, str] | None) environment mapping, `timeout` (int | None) timeout
+    seconds. Output: `subprocess.CompletedProcess[str]`. Raises: RuntimeError when validation or
+    the called operation fails.
     """
     try:
         return subprocess.run(
@@ -291,8 +294,10 @@ def checked_command(
 ) -> subprocess.CompletedProcess[str]:
     """A subprocess and raise with stdout/stderr on failure.
 
-    Inputs: `args`, `cwd`, `env`, `timeout`. Output: `subprocess.CompletedProcess[str]`.
-    Raises on invalid or unavailable state.
+    Inputs: `args` (list[str]) positional arguments, `cwd` (Path) working directory,
+    `env` (dict[str, str] | None) environment mapping, `timeout` (int | None) timeout
+    seconds. Output: `subprocess.CompletedProcess[str]`. Raises: RuntimeError when validation or
+    the called operation fails.
     """
     completed = run_command(args, cwd=cwd, env=env, timeout=timeout)
     if completed.returncode != 0:
@@ -320,8 +325,10 @@ def run_command_with_input(
 ) -> subprocess.CompletedProcess[str]:
     """A subprocess with stdin and capture deterministic output.
 
-    Inputs: `args`, `cwd`, `input_text`, `env`, `timeout`. Output:
-    `subprocess.CompletedProcess[str]`. Raises on invalid or unavailable state.
+    Inputs: `args` (list[str]) positional arguments, `cwd` (Path) working directory,
+    `input_text` (str), `env` (dict[str, str] | None) environment mapping, `timeout`
+    (int | None) timeout seconds. Output: `subprocess.CompletedProcess[str]`. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     try:
         return subprocess.run(
@@ -383,7 +390,8 @@ def default_artifact_root() -> Path:
 def timeout_seconds(name: str) -> int:
     """Return a generous command timeout, optionally overridden by env.
 
-    Inputs: `name`. Output: `int`. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name. Output: `int`. Raises: RuntimeError when validation or
+    external operations fail.
     """
     if name not in DEFAULT_TIMEOUTS_SECONDS:
         raise RuntimeError(f"Unknown CocoIndex timeout name: {name}")
@@ -403,7 +411,8 @@ def timeout_seconds(name: str) -> int:
 def env_bytes(name: str, default: int) -> int:
     """Return a positive byte limit from the environment.
 
-    Inputs: `name`, `default`. Output: `int`. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name, `default` (int). Output: `int`. Raises: RuntimeError when
+    validation or the called operation fails.
     """
     raw_value = os.environ.get(f"{DISK_BYTES_ENV_PREFIX}{name}")
     if raw_value is None:
@@ -455,10 +464,10 @@ def default_min_free_bytes(total_bytes: int) -> int:
 
 
 def require_disk_budget(context: CocoIndexContext, operation: str) -> None:
-    """Fail closed before expensive disk-heavy CocoIndex operations.
+    """Reject indexing when the external cache disk budget is too small.
 
-    Inputs: `context`, `operation`. Output: None. Raises on invalid or unavailable
-    state.
+    Inputs: `context` (CocoIndexContext), `operation` (str). Output: None. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     disk_root = context.artifact_root
     while not disk_root.exists() and disk_root != disk_root.parent:
@@ -486,7 +495,8 @@ def require_disk_budget(context: CocoIndexContext, operation: str) -> None:
 def discover_git_root_candidate(start: Path) -> Path:
     """Return the nearest ancestor containing a Git worktree marker.
 
-    Inputs: `start`. Output: `Path`. Raises on invalid or unavailable state.
+    Inputs: `start` (Path). Output: `Path`. Raises: RuntimeError when validation or
+    external operations fail.
     """
     current = start.expanduser().resolve()
     if current.is_file():
@@ -498,9 +508,9 @@ def discover_git_root_candidate(start: Path) -> Path:
 
 
 def resolve_repo_root() -> Path:
-    """Resolve repo root.
+    """Resolve the repo root.
 
-    Inputs: none. Output: `Path`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `Path`. Raises: RuntimeError for the exercised failure path.
     """
     override = os.environ.get(REPO_ROOT_ENV)
     if override:
@@ -527,9 +537,10 @@ def resolve_repo_root() -> Path:
 
 
 def validate_repo_relative_path(raw_path: str) -> PurePosixPath:
-    """Validate repo relative path.
+    """Validate the repo relative path.
 
-    Inputs: `raw_path`. Output: `PurePosixPath`. Raises on invalid or unavailable state.
+    Inputs: `raw_path` (str). Output: `PurePosixPath`. Raises: RuntimeError when validation or
+    the called operation fails.
     """
     raw_parts = raw_path.split("/")
     path = PurePosixPath(raw_path)
@@ -575,8 +586,9 @@ def tracked_files(
 ) -> list[PurePosixPath]:
     """Return validated Git-visible, non-ignored files.
 
-    Inputs: `repo_root`, `excluded_paths`. Output: `list[PurePosixPath]`. Raises on
-    invalid or unavailable state.
+    Inputs: `repo_root` (Path), `excluded_paths` (frozenset[PurePosixPath]). Output:
+    `list[PurePosixPath]`. Raises: RuntimeError when validation or external operations
+    fail.
     """
     completed = checked_git_command(
         repo_root,
@@ -609,10 +621,10 @@ def repo_status_porcelain(repo_root: Path) -> str:
 
 
 def require_clean_index_target(repo_root: Path, *, allow_dirty: bool) -> None:
-    """Prevent accidental per-edit index churn unless the caller opts in.
+    """Reject unsafe index targets before touching external cache state.
 
-    Inputs: `repo_root`, `allow_dirty`. Output: None. Raises on invalid or unavailable
-    state.
+    Inputs: `repo_root` (Path), `allow_dirty` (bool). Output: None. Raises: RuntimeError
+    when validation or the called operation fails.
     """
     if allow_dirty:
         return
@@ -627,8 +639,8 @@ def require_clean_index_target(repo_root: Path, *, allow_dirty: bool) -> None:
 def verified_repo_source_path(repo_root: Path, relative_path: PurePosixPath) -> Path:
     """Return a repository file path that is safe to read or copy.
 
-    Inputs: `repo_root`, `relative_path`. Output: `Path`. Raises on invalid or
-    unavailable state.
+    Inputs: `repo_root` (Path), `relative_path` (PurePosixPath). Output: `Path`. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     path_text = relative_path.as_posix()
     source_path = repo_root / Path(relative_path)
@@ -710,10 +722,10 @@ def require_mirror_write_budget(
     context: CocoIndexContext,
     source_bytes: int,
 ) -> None:
-    """Fail before copying when the mirror cannot fit with free-space headroom.
+    """Reject mirror preparation when available disk space is insufficient.
 
-    Inputs: `context`, `source_bytes`. Output: None. Raises on invalid or unavailable
-    state.
+    Inputs: `context` (CocoIndexContext), `source_bytes` (int). Output: None. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     disk_root = context.artifact_root
     while not disk_root.exists() and disk_root != disk_root.parent:
@@ -776,7 +788,7 @@ class FileLock:
     """Process lock for install and mirror creation."""
 
     def __init__(self, path: Path) -> None:
-        """Initialize the instance.
+        """Create `FileLock` with `path`.
 
         Inputs: `path`. Output: None.
         """
@@ -784,7 +796,7 @@ class FileLock:
         self.handle: TextIO | None = None
 
     def __enter__(self) -> "FileLock":
-        """Enter the context manager.
+        """Enter `FileLock`'s context-managed fake resource.
 
         Inputs: none. Output: `'FileLock'`.
         """
@@ -793,7 +805,7 @@ class FileLock:
         return self
 
     def __exit__(self, *_exc: object) -> None:
-        """Exit the context manager.
+        """Exit `FileLock`'s context-managed fake resource.
 
         Inputs: `*_exc`. Output: None.
         """
@@ -867,9 +879,10 @@ def resolve_context(
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
     repo_root: Path | None = None,
 ) -> CocoIndexContext:
-    """Resolve context.
+    """Resolve the context.
 
-    Inputs: `excluded_paths`, `repo_root`. Output: `CocoIndexContext`.
+    Inputs: `excluded_paths` (frozenset[PurePosixPath]), `repo_root` (Path | None).
+    Output: `CocoIndexContext`.
     """
     repo_root = repo_root or resolve_repo_root()
     artifact_root = default_artifact_root()
@@ -884,7 +897,7 @@ def resolve_context(
 
 
 def resolve_mcp_handshake_context() -> CocoIndexContext:
-    """Resolve mcp handshake context.
+    """Resolve the mcp handshake context.
 
     Inputs: none. Output: `CocoIndexContext`.
     """
@@ -916,9 +929,10 @@ def active_index_path(artifact_root: Path, repo_root: Path) -> Path:
 
 
 def validate_mirror_digest(value: object) -> str:
-    """Validate mirror digest.
+    """Validate the mirror digest.
 
-    Inputs: `value`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `value` (object) input value. Output: `str`. Raises: RuntimeError when validation or
+    the called operation fails.
     """
     if (
         not isinstance(value, str)
@@ -930,9 +944,10 @@ def validate_mirror_digest(value: object) -> str:
 
 
 def resolve_active_index_context() -> CocoIndexContext:
-    """Resolve active index context.
+    """Resolve the active index context.
 
-    Inputs: none. Output: `CocoIndexContext`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `CocoIndexContext`. Raises: IndexRequiredError, RuntimeError
+    when validation or the called operation fails.
     """
     repo_root = resolve_repo_root()
     artifact_root = default_artifact_root()
@@ -1052,10 +1067,10 @@ def ensure_mirror(
     context: CocoIndexContext,
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
 ) -> None:
-    """Ensure mirror.
+    """Ensure the mirror.
 
-    Inputs: `context`, `excluded_paths`. Output: None. Raises on invalid or unavailable
-    state.
+    Inputs: `context` (CocoIndexContext), `excluded_paths` (frozenset[PurePosixPath]).
+    Output: None. Raises: RuntimeError when validation or the called operation fails.
     """
     require_disk_budget(context, "mirror")
     manifest_path = context.mirror_repo.parent / "manifest.json"
@@ -1216,7 +1231,8 @@ def run_ccc(
 def require_existing_search_artifacts(context: CocoIndexContext) -> None:
     """Every artifact needed for search without creating any of them.
 
-    Inputs: `context`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `context` (CocoIndexContext). Output: None. Raises: IndexRequiredError when
+    validation or the called operation fails.
     """
     missing: list[str] = []
     if not context.ccc_bin.exists():
@@ -1307,9 +1323,9 @@ def hit_rank(files: list[str], expected: list[str]) -> int | None:
 
 
 def parse_file_hits(pattern: str, text: str) -> list[str]:
-    """Parse file hits.
+    """Parse and validate the file hits input.
 
-    Inputs: `pattern`, `text`. Output: `list[str]`.
+    Inputs: `pattern` (str), `text` (str). Output: `list[str]`.
     """
     import re
 
@@ -1317,10 +1333,10 @@ def parse_file_hits(pattern: str, text: str) -> list[str]:
 
 
 def load_benchmark_cases(path: Path) -> list[BenchmarkCase]:
-    """Load benchmark cases.
+    """Load the benchmark cases.
 
-    Inputs: `path`. Output: `list[BenchmarkCase]`. Raises on invalid or unavailable
-    state.
+    Inputs: `path` (Path) path. Output: `list[BenchmarkCase]`. Raises: RuntimeError when
+    validation or the called operation fails.
     """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, list) or not payload:
@@ -1408,8 +1424,9 @@ def run_coco_search(
 ) -> tuple[subprocess.CompletedProcess[str], float, list[str]]:
     """CocoIndex semantic routing for one benchmark case.
 
-    Inputs: `context`, `case`. Output: `tuple[subprocess.CompletedProcess[str], float,
-    list[str]]`. Raises on invalid or unavailable state.
+    Inputs: `context` (CocoIndexContext), `case` (BenchmarkCase). Output:
+    `tuple[subprocess.CompletedProcess[str], float, list[str]]`. Raises: RuntimeError
+    when validation or the called operation fails.
     """
     start = time.perf_counter()
     result = run_command(
@@ -1598,9 +1615,9 @@ def run_benchmark(
 
 
 def command_install(_args: argparse.Namespace) -> None:
-    """Command install.
+    """Run the install CLI command workflow.
 
-    Inputs: `_args`. Output: None.
+    Inputs: `_args` (argparse.Namespace). Output: None.
     """
     context = resolve_mcp_handshake_context()
     ensure_installed(context)
@@ -1608,9 +1625,9 @@ def command_install(_args: argparse.Namespace) -> None:
 
 
 def command_prepare(args: argparse.Namespace) -> None:
-    """Command prepare.
+    """Run the prepare CLI command workflow.
 
-    Inputs: `args`. Output: None.
+    Inputs: `args` (argparse.Namespace) positional arguments. Output: None.
     """
     allow_dirty = getattr(args, "allow_dirty_mirror", False)
     repo_root = resolve_repo_root()
@@ -1626,9 +1643,9 @@ def command_prepare(args: argparse.Namespace) -> None:
 
 
 def command_index(args: argparse.Namespace) -> None:
-    """Command index.
+    """Run the index CLI command workflow.
 
-    Inputs: `args`. Output: None.
+    Inputs: `args` (argparse.Namespace) positional arguments. Output: None.
     """
     allow_dirty = getattr(args, "allow_dirty_index", False)
     repo_root = resolve_repo_root()
@@ -1639,9 +1656,9 @@ def command_index(args: argparse.Namespace) -> None:
 
 
 def command_search(args: argparse.Namespace) -> None:
-    """Command search.
+    """Run the search CLI command workflow.
 
-    Inputs: `args`. Output: None.
+    Inputs: `args` (argparse.Namespace) positional arguments. Output: None.
     """
     allow_dirty = getattr(args, "allow_dirty_index", False)
     if getattr(args, "refresh", False) or getattr(args, "index_if_missing", False):
@@ -1676,8 +1693,10 @@ def run_search(
 ) -> str:
     """A CocoIndex Code search and return the rendered search output.
 
-    Inputs: `context`, `query`, `limit`, `path`, `langs`, `refresh`, `allow_index`,
-    `allow_dirty`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `context` (CocoIndexContext), `query` (list[str]), `limit` (int), `path`
+    (str | None) path, `langs` (list[str]), `refresh` (bool), `allow_index` (bool),
+    `allow_dirty` (bool). Output: `str`. Raises: IndexRequiredError when validation or
+    external operations fail.
     """
     if refresh:
         run_index(context, allow_dirty=allow_dirty)
@@ -1696,9 +1715,9 @@ def run_search(
 
 
 def command_status(_args: argparse.Namespace) -> None:
-    """Command status.
+    """Run the status CLI command workflow.
 
-    Inputs: `_args`. Output: None.
+    Inputs: `_args` (argparse.Namespace). Output: None.
     """
     context = resolve_active_index_context()
     output = run_ccc_existing(context, ["status"], timeout=timeout_seconds("status"))
@@ -1763,10 +1782,10 @@ def mcp_initialize_result(params: object) -> dict[str, object]:
 
 
 def mcp_positive_int(value: object, field: str, default: int) -> int:
-    """A positive JSON integer parameter.
+    """Return the MCP positive int.
 
-    Inputs: `value`, `field`, `default`. Output: `int`. Raises on invalid or unavailable
-    state.
+    Inputs: `value` (object) input value, `field` (str), `default` (int). Output: `int`.
+    Raises: JsonRpcError when validation or the called operation fails.
     """
     if value is None:
         return default
@@ -1776,10 +1795,10 @@ def mcp_positive_int(value: object, field: str, default: int) -> int:
 
 
 def mcp_optional_string(value: object, field: str) -> str | None:
-    """An optional JSON string parameter.
+    """Return the MCP optional string.
 
-    Inputs: `value`, `field`. Output: `str | None`. Raises on invalid or unavailable
-    state.
+    Inputs: `value` (object) input value, `field` (str). Output: `str | None`. Raises:
+    JsonRpcError when validation or the called operation fails.
     """
     if value is None:
         return None
@@ -1789,10 +1808,10 @@ def mcp_optional_string(value: object, field: str) -> str | None:
 
 
 def mcp_string_list(value: object, field: str) -> list[str]:
-    """An optional JSON string-list parameter.
+    """Return the MCP string list.
 
-    Inputs: `value`, `field`. Output: `list[str]`. Raises on invalid or unavailable
-    state.
+    Inputs: `value` (object) input value, `field` (str). Output: `list[str]`. Raises:
+    JsonRpcError when validation or the called operation fails.
     """
     if value is None:
         return []
@@ -1804,10 +1823,10 @@ def mcp_string_list(value: object, field: str) -> list[str]:
 
 
 def mcp_search_arguments(arguments: object) -> dict[str, object]:
-    """MCP search tool arguments.
+    """Return the MCP search arguments.
 
-    Inputs: `arguments`. Output: `dict[str, object]`. Raises on invalid or unavailable
-    state.
+    Inputs: `arguments` (object). Output: `dict[str, object]`. Raises: JsonRpcError when
+    validation or the called operation fails.
     """
     if not isinstance(arguments, dict):
         raise JsonRpcError(-32602, "search arguments must be an object.")
@@ -1830,7 +1849,8 @@ def mcp_search_arguments(arguments: object) -> dict[str, object]:
 def run_mcp_search_tool(arguments: object) -> str:
     """The MCP search tool without building or refreshing an index.
 
-    Inputs: `arguments`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `arguments` (object). Output: `str`. Raises: RuntimeError when validation or
+    external operations fail.
     """
     parsed = mcp_search_arguments(arguments)
     context: CocoIndexContext | None = None
@@ -1860,9 +1880,9 @@ def sanitize_mcp_error_text(
     replacements: dict[str, str] = {}
 
     def add_path(path: Path, label: str) -> None:
-        """Add path.
+        """Add the path.
 
-        Inputs: `path`, `label`. Output: None.
+        Inputs: `path` (Path) path, `label` (str). Output: None.
         """
         try:
             paths = {str(path.expanduser()), str(path.expanduser().resolve())}
@@ -1896,9 +1916,10 @@ def sanitize_mcp_error_text(
 
 
 def write_jsonrpc_message(output_stream: TextIO, payload: dict[str, object]) -> None:
-    """Write jsonrpc message.
+    """Write the jsonrpc message.
 
-    Inputs: `output_stream`, `payload`. Output: None.
+    Inputs: `output_stream` (TextIO), `payload` (dict[str, object]) payload. Output:
+    None.
     """
     output_stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
     output_stream.flush()
@@ -1907,9 +1928,10 @@ def write_jsonrpc_message(output_stream: TextIO, payload: dict[str, object]) -> 
 def write_jsonrpc_result(
     output_stream: TextIO, request_id: object, result: dict[str, object]
 ) -> None:
-    """Write jsonrpc result.
+    """Write the jsonrpc result.
 
-    Inputs: `output_stream`, `request_id`, `result`. Output: None.
+    Inputs: `output_stream` (TextIO), `request_id` (object), `result` (dict[str,
+    object]). Output: None.
     """
     write_jsonrpc_message(
         output_stream,
@@ -1920,9 +1942,10 @@ def write_jsonrpc_result(
 def write_jsonrpc_error(
     output_stream: TextIO, request_id: object, code: int, message: str
 ) -> None:
-    """Write jsonrpc error.
+    """Write the jsonrpc error.
 
-    Inputs: `output_stream`, `request_id`, `code`, `message`. Output: None.
+    Inputs: `output_stream` (TextIO), `request_id` (object), `code` (int), `message`
+    (str). Output: None.
     """
     write_jsonrpc_message(
         output_stream,
@@ -1935,12 +1958,10 @@ def write_jsonrpc_error(
 
 
 def mcp_tool_call_result(params: object) -> dict[str, object]:
-    """Mcp tool call result.
+    """Return the MCP tool call result.
 
-    Inputs: `params`. Output: `dict[str, object]`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `params` (object). Output: `dict[str, object]`. Raises: JsonRpcError when validation
+    or the called operation fails.
     """
     if not isinstance(params, dict):
         raise JsonRpcError(-32602, "tools/call params must be an object.")
@@ -1962,8 +1983,8 @@ def mcp_tool_call_result(params: object) -> dict[str, object]:
 def handle_mcp_request(message: dict[str, object]) -> dict[str, object] | None:
     """Return an MCP result for a JSON-RPC request or None for notifications.
 
-    Inputs: `message`. Output: `dict[str, object] | None`. Raises on invalid or
-    unavailable state.
+    Inputs: `message` (dict[str, object]). Output: `dict[str, object] | None`. Raises:
+    JsonRpcError when validation or the called operation fails.
     """
     request_id = message.get("id")
     if request_id is None:
@@ -1986,8 +2007,8 @@ def run_lightweight_mcp_server(
 ) -> None:
     """A fast-start stdio MCP server without pre-indexing the repository.
 
-    Inputs: `input_stream`, `output_stream`. Output: None. Raises on invalid or
-    unavailable state.
+    Inputs: `input_stream` (TextIO), `output_stream` (TextIO). Output: None. Raises:
+    JsonRpcError when validation or the called operation fails.
     """
     for raw_line in input_stream:
         if not raw_line.strip():
@@ -2014,9 +2035,9 @@ def run_lightweight_mcp_server(
 
 
 def command_mcp(_args: argparse.Namespace) -> None:
-    """Command mcp.
+    """Run the mcp CLI command workflow.
 
-    Inputs: `_args`. Output: None.
+    Inputs: `_args` (argparse.Namespace). Output: None.
     """
     run_lightweight_mcp_server()
 
@@ -2024,7 +2045,8 @@ def command_mcp(_args: argparse.Namespace) -> None:
 def venv_site_package_paths(context: CocoIndexContext) -> list[Path]:
     """Return import paths for the pinned venv packages.
 
-    Inputs: `context`. Output: `list[Path]`. Raises on invalid or unavailable state.
+    Inputs: `context` (CocoIndexContext). Output: `list[Path]`. Raises: RuntimeError
+    when validation or the called operation fails.
     """
     site_packages = sorted((context.venv_dir / "lib").glob("python*/site-packages"))
     if not site_packages:
@@ -2097,10 +2119,10 @@ def daemon_handshake_succeeds(context: CocoIndexContext) -> bool:
 
 
 def start_daemon_process(context: CocoIndexContext) -> subprocess.Popen[bytes]:
-    """Start daemon process.
+    """Start the daemon process.
 
-    Inputs: `context`. Output: `subprocess.Popen[bytes]`. Raises on invalid or
-    unavailable state.
+    Inputs: `context` (CocoIndexContext). Output: `subprocess.Popen[bytes]`. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     context.runtime_dir.mkdir(parents=True, exist_ok=True)
     log_handle = daemon_log_path(context).open("w", encoding="utf-8")
@@ -2123,9 +2145,10 @@ def start_daemon_process(context: CocoIndexContext) -> subprocess.Popen[bytes]:
 def wait_for_daemon_handshake(
     context: CocoIndexContext, proc: subprocess.Popen[bytes]
 ) -> None:
-    """Wait for daemon handshake.
+    """Wait for the for daemon handshake.
 
-    Inputs: `context`, `proc`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `context` (CocoIndexContext), `proc` (subprocess.Popen[bytes]). Output:
+    None. Raises: RuntimeError when validation or the called operation fails.
     """
     deadline = time.monotonic() + timeout_seconds("mcp_smoke")
     while time.monotonic() < deadline:
@@ -2165,9 +2188,9 @@ def cleanup_stale_daemon_files(context: CocoIndexContext) -> None:
 
 
 def ensure_daemon_ready(context: CocoIndexContext) -> None:
-    """Ensure daemon ready.
+    """Ensure the daemon ready.
 
-    Inputs: `context`. Output: None.
+    Inputs: `context` (CocoIndexContext). Output: None.
     """
     with FileLock(lock_path(context.artifact_root, f"daemon-{context.mirror_digest}")):
         if daemon_handshake_succeeds(context):
@@ -2206,9 +2229,9 @@ def mcp_config_payload(
 
 
 def command_mcp_config(args: argparse.Namespace) -> None:
-    """Command mcp config.
+    """Run the mcp config CLI command workflow.
 
-    Inputs: `args`. Output: None.
+    Inputs: `args` (argparse.Namespace) positional arguments. Output: None.
     """
     context = resolve_mcp_handshake_context()
     print(json.dumps(mcp_config_payload(context, pin_repo=args.pin_repo), indent=2))
@@ -2239,9 +2262,10 @@ def expected_codex_mcp_server(context: CocoIndexContext) -> dict[str, object]:
 
 
 def load_codex_config(path: Path) -> dict[str, Any]:
-    """Load codex config.
+    """Load the codex config.
 
-    Inputs: `path`. Output: `dict[str, Any]`. Raises on invalid or unavailable state.
+    Inputs: `path` (Path) path. Output: `dict[str, Any]`. Raises: RuntimeError when validation
+    or the called operation fails.
     """
     if not path.exists():
         return {}
@@ -2353,7 +2377,8 @@ def matching_toml_key(line: str, keys: tuple[str, ...]) -> str | None:
 def update_toml_table_lines(
     lines: list[str], values: Mapping[str, int | float | bool | str]
 ) -> list[str]:
-    """Return TOML table body lines with scalar values upserted.
+    """Return the toml table body lines with scalar values upserted value exposed by this
+    OMERO-compatible object.
 
     Inputs: `lines`, `values`. Output: `list[str]`.
     """
@@ -2410,9 +2435,9 @@ def upsert_toml_table_scalars(
 
 
 def ensure_codex_mcp_timeouts(config_path: Path) -> None:
-    """Ensure codex mcp timeouts.
+    """Ensure the codex mcp timeouts.
 
-    Inputs: `config_path`. Output: None.
+    Inputs: `config_path` (Path). Output: None.
     """
     values = {
         "startup_timeout_sec": MCP_STARTUP_TIMEOUT_SECONDS,
@@ -2427,9 +2452,10 @@ def ensure_codex_mcp_timeouts(config_path: Path) -> None:
 
 
 def command_mcp_install(_args: argparse.Namespace) -> None:
-    """Command mcp install.
+    """Run the mcp install CLI command workflow.
 
-    Inputs: `_args`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `_args` (argparse.Namespace). Output: None. Raises: RuntimeError when validation or
+    the called operation fails.
     """
     context = resolve_mcp_handshake_context()
     codex = resolve_required_executable("codex")
@@ -2488,7 +2514,7 @@ def run_mcp_stdio_smoke(
     stdio_client = cast(Any, stdio_module).stdio_client
 
     async def probe() -> dict[str, object]:
-        """Probe.
+        """Probe the probe.
 
         Inputs: none. Output: `dict[str, object]`.
         """
@@ -2526,10 +2552,10 @@ def run_mcp_stdio_smoke(
 
 
 def parse_mcp_response_lines(stdout: str) -> dict[int, dict[str, Any]]:
-    """Parse mcp response lines.
+    """Parse and validate the mcp response lines input.
 
-    Inputs: `stdout`. Output: `dict[int, dict[str, Any]]`. Raises on invalid or
-    unavailable state.
+    Inputs: `stdout` (str). Output: `dict[int, dict[str, Any]]`. Raises: RuntimeError
+    when validation or the called operation fails.
     """
     responses: dict[int, dict[str, Any]] = {}
     for line in stdout.splitlines():
@@ -2550,8 +2576,8 @@ def run_mcp_jsonrpc_protocol_probe_once(
 ) -> dict[str, object]:
     """Probe newline-delimited MCP JSON-RPC without retries.
 
-    Inputs: `context`, `protocol_version`. Output: `dict[str, object]`. Raises on
-    invalid or unavailable state.
+    Inputs: `context` (CocoIndexContext), `protocol_version` (str). Output: `dict[str,
+    object]`. Raises: McpSearchToolUnavailable, RuntimeError when validation or external
     """
     messages = [
         {
@@ -2624,8 +2650,9 @@ def run_mcp_jsonrpc_protocol_probe(
 ) -> dict[str, object]:
     """Probe raw MCP JSON-RPC, retrying only transient empty tool lists.
 
-    Inputs: `context`, `protocol_version`. Output: `dict[str, object]`. Raises on
-    invalid or unavailable state.
+    Inputs: `context` (CocoIndexContext), `protocol_version` (str). Output: `dict[str,
+    object]`. Raises: RuntimeError, last_error when validation or external operations
+    fail.
     """
     last_error: McpSearchToolUnavailable | None = None
     for attempt in range(MCP_PROTOCOL_PROBE_ATTEMPTS):
@@ -2653,9 +2680,9 @@ def run_mcp_jsonrpc_smoke(context: CocoIndexContext) -> list[dict[str, object]]:
 
 
 def command_mcp_smoke(args: argparse.Namespace) -> None:
-    """Command mcp smoke.
+    """Run the mcp smoke CLI command workflow.
 
-    Inputs: `args`. Output: None.
+    Inputs: `args` (argparse.Namespace) positional arguments. Output: None.
     """
     payload: dict[str, object] = {}
     handshake_context = resolve_mcp_handshake_context()
@@ -2674,9 +2701,9 @@ def command_mcp_smoke(args: argparse.Namespace) -> None:
 
 
 def command_benchmark(args: argparse.Namespace) -> None:
-    """Command benchmark.
+    """Run the benchmark CLI command workflow.
 
-    Inputs: `args`. Output: None.
+    Inputs: `args` (argparse.Namespace) positional arguments. Output: None.
     """
     repo_root = resolve_repo_root()
     allow_dirty = args.allow_dirty_index
@@ -2812,7 +2839,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.cocoindex_agent_search` command entrypoint.
 
     Inputs: none. Output: `int`.
     """

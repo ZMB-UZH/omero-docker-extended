@@ -67,17 +67,21 @@ Do not replace the local overlays with the upstream files verbatim unless the re
 ## caveman reference snapshot
 
 - Repository: `JuliusBrussee/caveman`
-- Reviewed release notes: `v1.5.1` and `v1.6.0` for the upgrade path from the prior `v1.5.0` pin
-- caveman release tag: `v1.6.0`
-- caveman release commit: `c2ed24b3e5d412cd0c25197b2bc9af587621fd99`
-- caveman vendor path: `third_party/caveman-v1.6.0/`
-- License: MIT (`third_party/caveman-v1.6.0/LICENSE`)
+- Reviewed release notes: `v1.5.1`, `v1.6.0`, and `v1.7.0` for the upgrade path from the prior `v1.5.0` pin
+- Reviewed open issues on 2026-05-04: Gemini install/frontmatter failures (`#325`, `#328`, `#330`), update-command confusion (`#321`), Opencode edit refusal (`#304`), and mid-session prose drift (`#303`)
+- caveman release tag: `v1.7.0`
+- caveman release commit: `ef6050c5e1848b6880ff47c32ade1a608a64f85e`
+- caveman vendor path: `third_party/caveman-v1.7.0/`
+- License: MIT (`third_party/caveman-v1.7.0/LICENSE`)
 - Vendored files: `LICENSE` and `skills/caveman/SKILL.md` only. Upstream README/install docs stay upstream-only so repo docs remain standard prose.
-- Selected upstream reference: `third_party/caveman-v1.6.0/skills/caveman/SKILL.md`
+- Selected upstream reference: `third_party/caveman-v1.7.0/skills/caveman/SKILL.md`
 - Integration rule: the active repo surface is `.agents/skills/caveman/`; it
   is an all-agent, opt-in overlay for lower-token replies and internal AI
   prompting only. Upstream hooks, plugin auto-loading, `.codex` hook config,
   natural-language auto-activation, `CAVEMAN_DEFAULT_MODE`/config resolution,
-  `off`, `caveman-help`, and compression-tool context rewriting stay disabled,
-  and the local overlay starts at lite compression without changing routing,
-  tool choice, verification scope, or uncertainty handling.
+  `off`, `caveman-help`, compression-tool context rewriting, stats/statusline
+  scripts, `caveman-shrink`, `caveman-init`, cavecrew subagents, and smart
+  installer side effects stay disabled. The local overlay starts at lite
+  compression, preserves the upstream v1.7.0 code-symbol and ambiguity guards,
+  and never changes routing, tool choice, verification scope, or uncertainty
+  handling.

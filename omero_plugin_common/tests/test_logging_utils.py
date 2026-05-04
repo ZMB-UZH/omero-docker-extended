@@ -9,7 +9,7 @@ from omero_plugin_common import logging_utils
 def test_configure_omero_gateway_logging_sets_info_level() -> None:
     """Verify configure OMERO gateway logging sets info level.
 
-    Inputs: none. Output: None.
+    Inputs: helper fakes. Output: fails on regressions in configure OMERO gateway logging sets info level.
     """
     logger = logging.getLogger("omero.gateway.utils")
     previous_level = logger.level
@@ -31,7 +31,7 @@ def test_configure_omero_gateway_logging_sets_info_level() -> None:
 def test_configure_omero_gateway_logging_is_idempotent() -> None:
     """Verify configure OMERO gateway logging is idempotent.
 
-    Inputs: none. Output: None.
+    Inputs: helper fakes. Output: fails on regressions in configure OMERO gateway logging is idempotent.
     """
     logger = logging.getLogger("omero.gateway.utils")
     previous_level = logger.level
@@ -50,9 +50,9 @@ def test_configure_omero_gateway_logging_is_idempotent() -> None:
 
 
 def test_sanitize_log_value_escapes_newlines_and_carriage_returns() -> None:
-    """Verify sanitize log value escapes newlines and carriage returns.
+    """Check that sanitize log value escapes newlines and carriage returns keeps sensitive data out of output.
 
-    Inputs: none. Output: None.
+    Inputs: helper fakes. Output: fails on regressions in sanitize log value escapes newlines and carriage returns.
     """
     assert (
         logging_utils.sanitize_log_value("line1\nline2\rline3")
@@ -61,26 +61,26 @@ def test_sanitize_log_value_escapes_newlines_and_carriage_returns() -> None:
 
 
 def test_sanitize_log_value_handles_non_string_values() -> None:
-    """Verify sanitize log value handles non string values.
+    """Check that sanitize log value handles non string values keeps sensitive data out of output.
 
-    Inputs: none. Output: None.
+    Inputs: helper fakes. Output: fails on regressions in sanitize log value handles non string values.
     """
     assert logging_utils.sanitize_log_value(123) == "123"
 
 
 def test_sanitize_log_value_handles_unprintable_values() -> None:
-    """Verify sanitize log value handles unprintable values.
+    """Check that sanitize log value handles unprintable values keeps sensitive data out of output.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: helper fakes. Output: fails on regressions in sanitize log value handles unprintable values.
     """
 
     class Unprintable:
-        """Represent unprintable."""
+        """Test double for unprintable behavior in this module."""
 
         def __str__(self):
-            """Return the string representation.
+            """Return `Unprintable` as test-readable text.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("bad\nstring")
 
@@ -97,9 +97,9 @@ def test_sanitize_log_value_handles_unprintable_values() -> None:
 
 
 def test_sanitize_url_for_logging_redacts_sensitive_query_values() -> None:
-    """Verify sanitize URL for logging redacts sensitive query values.
+    """Check that sanitize URL for logging redacts sensitive query values keeps sensitive data out of output.
 
-    Inputs: none. Output: None.
+    Inputs: helper fakes. Output: fails on regressions in sanitize URL for logging redacts sensitive query values.
     """
     sanitized = logging_utils.sanitize_url_for_logging(
         "https://example.org/api?token=secret&ok=value&session_key=abc123&auth=key"
@@ -120,9 +120,9 @@ def test_sanitize_url_for_logging_redacts_sensitive_query_values() -> None:
 
 
 def test_sanitize_url_for_logging_redacts_userinfo() -> None:
-    """Verify sanitize URL for logging redacts userinfo.
+    """Check that sanitize URL for logging redacts userinfo keeps sensitive data out of output.
 
-    Inputs: none. Output: None.
+    Inputs: helper fakes. Output: fails on regressions in sanitize URL for logging redacts userinfo.
     """
     sanitized = logging_utils.sanitize_url_for_logging(
         "https://alice:supersecret@example.org/path"
@@ -132,9 +132,9 @@ def test_sanitize_url_for_logging_redacts_userinfo() -> None:
 
 
 def test_sanitize_url_for_logging_redacts_userinfo_with_invalid_port() -> None:
-    """Verify sanitize URL for logging redacts userinfo with invalid port.
+    """Check that sanitize URL for logging redacts userinfo with invalid port keeps sensitive data out of output.
 
-    Inputs: none. Output: None.
+    Inputs: helper fakes. Output: fails on regressions in sanitize URL for logging redacts userinfo with invalid port.
     """
     sanitized = logging_utils.sanitize_url_for_logging(
         "https://alice:supersecret@example.org:bad-port/path"
@@ -145,9 +145,9 @@ def test_sanitize_url_for_logging_redacts_userinfo_with_invalid_port() -> None:
 
 
 def test_sanitize_url_for_logging_redacts_userinfo_when_username_is_malformed() -> None:
-    """Verify sanitize URL for logging redacts userinfo when username is malformed.
+    """Check that sanitize URL for logging redacts userinfo when username is malformed keeps sensitive data out of output.
 
-    Inputs: none. Output: None.
+    Inputs: helper fakes. Output: fails on regressions in sanitize URL for logging redacts userinfo when username is malformed.
     """
     sanitized = logging_utils.sanitize_url_for_logging(
         "https://bad\ud800:supersecret@example.org/path?token=secret"
@@ -160,15 +160,15 @@ def test_sanitize_url_for_logging_redacts_userinfo_when_username_is_malformed() 
 
 
 def test_sanitized_exc_info_escapes_exception_message() -> None:
-    """Verify sanitized exc info escapes exception message.
+    """Confirm sanitized exc info escapes exception message exposes the expected failure.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: helper fakes. Output: fails on regressions when sanitized exc info escapes exception message stops reporting the expected error.
     """
 
     def sanitized_info_for_test_exception():
-        """Sanitized info for test exception.
+        """Return the sanitized info for test exception.
 
-        Inputs: none. Output: call result. Raises on invalid or unavailable state.
+        Inputs: none. Output: `sanitized_exc_info` result. Raises: RuntimeError when validation or the called operation fails.
         """
         try:
             raise RuntimeError("secret\nline")

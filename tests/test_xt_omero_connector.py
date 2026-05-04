@@ -20,7 +20,7 @@ _XT_SCRIPT = os.path.join(
 
 
 def _load_xt_module():
-    """Load XT module.
+    """Load the XT module.
 
     Inputs: none. Output: `module`.
     """
@@ -47,7 +47,7 @@ class _FakeHTTPResponse:
     """Test double for fake httpresponse."""
 
     def __init__(self, body=b"", headers=None, final_url="https://omero.example.org/"):
-        """Initialize the instance.
+        """Create `_FakeHTTPResponse` with `body`, `headers`, and `final_url`.
 
         Inputs: `body`, `headers`, `final_url`. Output: None.
         """
@@ -58,7 +58,7 @@ class _FakeHTTPResponse:
         self.status = 200
 
     def __enter__(self):
-        """Enter the context manager.
+        """Enter `_FakeHTTPResponse`'s context-managed fake resource.
 
         Inputs: none. Output: `self`.
         """
@@ -66,7 +66,7 @@ class _FakeHTTPResponse:
 
     @staticmethod
     def __exit__(*_args):
-        """Exit the context manager.
+        """Exit `_FakeHTTPResponse`'s context-managed fake resource.
 
         Inputs: `*_args`. Output: bool.
         """
@@ -97,7 +97,7 @@ class _FakeHTTPError(Exception):
     """Test double for fake httperror."""
 
     def __init__(self, body, code=400, msg="Bad Request"):
-        """Initialize the instance.
+        """Create `_FakeHTTPError` with `body`, `code`, and `msg`.
 
         Inputs: `body`, `code`, `msg`. Output: None.
         """
@@ -117,7 +117,7 @@ class _FakeListbox:
     """Test double for fake listbox."""
 
     def __init__(self, items=None, selection=None):
-        """Initialize the instance.
+        """Create `_FakeListbox` with `items` and `selection`.
 
         Inputs: `items`, `selection`. Output: None.
         """
@@ -128,7 +128,7 @@ class _FakeListbox:
         self.anchors = []
 
     def delete(self, start, end=None):
-        """Delete.
+        """Delete the delete for `_FakeListbox`.
 
         Inputs: `start`, `end`. Output: None.
         """
@@ -137,9 +137,9 @@ class _FakeListbox:
             self.selection.clear()
 
     def insert(self, index, value):
-        """Insert.
+        """Record the insert call on `_FakeListbox` for later assertions.
 
-        Inputs: `index`, `value`. Output: None.
+        Inputs: `index`, `value` input value. Output: None.
         """
         if index in {"end", "END"}:
             self.items.append(value)
@@ -147,21 +147,21 @@ class _FakeListbox:
             self.items.insert(int(index), value)
 
     def curselection(self):
-        """Curselection.
+        """Return the curselection for `_FakeListbox`.
 
-        Inputs: none. Output: `tuple` result.
+        Inputs: none. Output: `tuple`.
         """
         return tuple(sorted(self.selection))
 
     def selection_clear(self, *_args):
-        """Selection clear.
+        """Record the selection clear call on `_FakeListbox` for later assertions.
 
         Inputs: `*_args`. Output: None.
         """
         self.selection.clear()
 
     def selection_set(self, index):
-        """Selection set.
+        """Record the selection set call on `_FakeListbox` for later assertions.
 
         Inputs: `index`. Output: None.
         """
@@ -169,35 +169,35 @@ class _FakeListbox:
 
     @staticmethod
     def nearest(index):
-        """Nearest.
+        """Return the nearest for `_FakeListbox`.
 
-        Inputs: `index`. Output: `int` result.
+        Inputs: `index`. Output: `int`.
         """
         return int(index)
 
     def size(self):
-        """Size.
+        """Return the size for `_FakeListbox`.
 
-        Inputs: none. Output: `len` result.
+        Inputs: none. Output: `int` count.
         """
         return len(self.items)
 
     def activate(self, index):
-        """Activate.
+        """Record the activate call on `_FakeListbox` for later assertions.
 
         Inputs: `index`. Output: None.
         """
         self.activated.append(int(index))
 
     def selection_anchor(self, index):
-        """Selection anchor.
+        """Record the selection anchor call on `_FakeListbox` for later assertions.
 
         Inputs: `index`. Output: None.
         """
         self.anchors.append(int(index))
 
     def see(self, index):
-        """See.
+        """Record the see call on `_FakeListbox` for later assertions.
 
         Inputs: `index`. Output: None.
         """
@@ -208,9 +208,9 @@ class _FakeButton:
     """Test double for fake button."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeButton` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.configs = []
         self.state = None
@@ -229,7 +229,7 @@ class _FakeVar:
     """Test double for fake var."""
 
     def __init__(self, value=""):
-        """Initialize the instance.
+        """Create `_FakeVar` with `value`.
 
         Inputs: `value`. Output: None.
         """
@@ -251,9 +251,9 @@ class _FakeVar:
 
 
 def _make_refresh_dialog(module):
-    """Refresh dialog.
+    """Create the refresh dialog.
 
-    Inputs: `module`. Output: `dialog`.
+    Inputs: `module` module object. Output: `dialog`.
     """
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._connected = True
@@ -281,9 +281,9 @@ def _make_refresh_dialog(module):
 
 
 def test_xt_script_annotations_stay_python37_runtime_safe():
-    """Verify XT script annotations stay python37 runtime safe.
+    """Verify the XT script annotations stay python37 runtime safe execution contract.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in XT script annotations stay python37 runtime safe integration.
     """
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
     tree = ast.parse(source, filename=_XT_SCRIPT)
@@ -324,7 +324,7 @@ def test_xt_script_annotations_stay_python37_runtime_safe():
 def test_create_request_with_cookies_relies_on_cookie_jar_for_get():
     """Verify create request with cookies relies on cookie jar for get.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in create request with cookies relies on cookie jar for get.
     """
     module = _load_xt_module()
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
@@ -340,9 +340,9 @@ def test_create_request_with_cookies_relies_on_cookie_jar_for_get():
 
 
 def test_create_request_with_cookies_adds_csrf_headers_without_cookie_override():
-    """Verify create request with cookies adds CSRF headers without cookie override.
+    """Verify create request with cookies adds csrf headers without cookie override.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in create request with cookies adds csrf headers without cookie override.
     """
     module = _load_xt_module()
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
@@ -363,7 +363,7 @@ def test_create_request_with_cookies_adds_csrf_headers_without_cookie_override()
 def test_client_detects_omero_ims_export_capability():
     """Verify client detects OMERO IMS export capability.
 
-    Inputs: none. Output: `_FakeHTTPResponse` result.
+    Inputs: repository fixtures. Output: fails on regressions in client detects OMERO IMS export capability.
     """
     module = _load_xt_module()
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
@@ -375,9 +375,10 @@ def test_client_detects_omero_ims_export_capability():
 
         @staticmethod
         def open(request, timeout):
-            """Open.
+            """Open `_FakeOpener`'s captured target.
 
-            Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse` result.
+            Inputs: `request` Django request, `timeout` timeout seconds. Output:
+            `_FakeHTTPResponse` result.
             """
             opened_urls.append((request.full_url, timeout))
             return _FakeHTTPResponse(b'{"omero_ims_export": true}')
@@ -394,9 +395,9 @@ def test_client_detects_omero_ims_export_capability():
 
 
 def test_client_treats_non_object_capability_response_as_unavailable():
-    """Verify client treats non object capability response as unavailable.
+    """Verify client treats non object capability response as unavailable result shape.
 
-    Inputs: none. Output: `_FakeHTTPResponse` result.
+    Inputs: repository fixtures. Output: fails on regressions in client treats non object capability response as unavailable.
     """
     module = _load_xt_module()
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
@@ -407,7 +408,7 @@ def test_client_treats_non_object_capability_response_as_unavailable():
 
         @staticmethod
         def open(_request, _timeout):
-            """Open.
+            """Open `_FakeOpener`'s captured target.
 
             Inputs: `_request`, `_timeout`. Output: `_FakeHTTPResponse` result.
             """
@@ -421,9 +422,10 @@ def test_client_treats_non_object_capability_response_as_unavailable():
 def test_client_treats_legacy_missing_image_capability_response_as_available(
     monkeypatch,
 ):
-    """Verify client treats legacy missing image capability response as available.
+    """Verify client treats legacy missing image capability response as available result shape.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in client treats legacy missing image capability response as available.
+    _FakeHTTPError when validation or the called operation fails.
     """
     module = _load_xt_module()
     monkeypatch.setattr(module.urllib.error, "HTTPError", _FakeHTTPError)
@@ -435,12 +437,10 @@ def test_client_treats_legacy_missing_image_capability_response_as_available(
 
         @staticmethod
         def open(_request, timeout):
-            """Open.
+            """Open `_FakeOpener`'s captured target.
 
-            Inputs: `_request`, `timeout`. Output: None. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `_request`, `timeout` timeout seconds. Output: None. Raises:
+            _FakeHTTPError when validation or the called operation fails.
             """
             assert timeout == 30
             raise _FakeHTTPError(b"Missing image id")
@@ -451,9 +451,10 @@ def test_client_treats_legacy_missing_image_capability_response_as_available(
 
 
 def test_client_rejects_non_legacy_capability_http_errors(monkeypatch):
-    """Verify client rejects non legacy capability HTTP errors.
+    """Confirm client rejects non legacy capability HTTP errors is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in client rejects non legacy capability HTTP errors.
+    _FakeHTTPError when validation or the called operation fails.
     """
     module = _load_xt_module()
     monkeypatch.setattr(module.urllib.error, "HTTPError", _FakeHTTPError)
@@ -467,12 +468,10 @@ def test_client_rejects_non_legacy_capability_http_errors(monkeypatch):
 
         @staticmethod
         def open(_request, timeout):
-            """Open.
+            """Open `_FakeOpener`'s captured target.
 
-            Inputs: `_request`, `timeout`. Output: None. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `_request`, `timeout` timeout seconds. Output: None. Raises:
+            _FakeHTTPError when validation or the called operation fails.
             """
             assert timeout == 30
             raise _FakeHTTPError(b"Invalid base_url parameter.")
@@ -487,7 +486,7 @@ def test_client_rejects_non_legacy_capability_http_errors(monkeypatch):
 def test_client_detects_folder_import_capability_from_start_endpoint():
     """Verify client detects folder import capability from start endpoint.
 
-    Inputs: none. Output: `_FakeHTTPResponse` result.
+    Inputs: repository fixtures. Output: fails on regressions in client detects folder import capability from start endpoint.
     """
     module = _load_xt_module()
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
@@ -499,9 +498,10 @@ def test_client_detects_folder_import_capability_from_start_endpoint():
 
         @staticmethod
         def open(request, timeout):
-            """Open.
+            """Open `_FakeOpener`'s captured target.
 
-            Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse` result.
+            Inputs: `request` Django request, `timeout` timeout seconds. Output:
+            `_FakeHTTPResponse` result.
             """
             opened_urls.append((request.full_url, timeout, request.data))
             return _FakeHTTPResponse(b'{"ok": false, "error": "No files provided."}')
@@ -521,7 +521,7 @@ def test_client_detects_folder_import_capability_from_start_endpoint():
 def test_client_marks_root_folder_import_capability_as_unavailable():
     """Verify client marks root folder import capability as unavailable.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: repository fixtures. Output: fails on regressions in client marks root folder import capability as unavailable.
     """
     module = _load_xt_module()
     module.urllib.error.HTTPError = _FakeHTTPError
@@ -533,12 +533,10 @@ def test_client_marks_root_folder_import_capability_as_unavailable():
 
         @staticmethod
         def open(_request, timeout):
-            """Open.
+            """Open `_FakeOpener`'s captured target.
 
-            Inputs: `_request`, `timeout`. Output: None. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `_request`, `timeout` timeout seconds. Output: None. Raises:
+            _FakeHTTPError when validation or the called operation fails.
             """
             assert timeout == 30
             raise _FakeHTTPError(
@@ -556,9 +554,9 @@ def test_client_marks_root_folder_import_capability_as_unavailable():
 
 
 def test_client_start_folder_import_job_posts_dataset_override_and_normalizes_urls():
-    """Verify client start folder import job posts dataset override and normalizes URLs.
+    """Check client start folder import job posts dataset override and normalizes URLs parsing against the documented contract.
 
-    Inputs: none. Output: `_FakeHTTPResponse` result.
+    Inputs: repository fixtures. Output: fails on regressions in client start folder import job posts dataset override and normalizes URLs.
     """
     module = _load_xt_module()
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
@@ -570,9 +568,10 @@ def test_client_start_folder_import_job_posts_dataset_override_and_normalizes_ur
 
         @staticmethod
         def open(request, timeout):
-            """Open.
+            """Open `_FakeOpener`'s captured target.
 
-            Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse` result.
+            Inputs: `request` Django request, `timeout` timeout seconds. Output:
+            `_FakeHTTPResponse` result.
             """
             calls.append((request.full_url, timeout, request.data))
             return _FakeHTTPResponse(
@@ -614,9 +613,9 @@ def test_client_start_folder_import_job_posts_dataset_override_and_normalizes_ur
 
 
 def test_folder_import_error_message_does_not_echo_html():
-    """Verify folder import error message does not echo html.
+    """Confirm folder import error message does not echo html exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions when folder import error message does not echo html stops reporting the expected error.
     """
     module = _load_xt_module()
 
@@ -634,7 +633,7 @@ def test_client_download_original_file_uses_archived_files_endpoint_and_safe_nam
 ):
     """Verify client download original file uses archived files endpoint and safe name.
 
-    Inputs: `tmp_path`. Output: `_FakeHTTPResponse` result.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in client download original file uses archived files endpoint and safe name.
     """
     module = _load_xt_module()
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
@@ -646,9 +645,10 @@ def test_client_download_original_file_uses_archived_files_endpoint_and_safe_nam
 
         @staticmethod
         def open(request, timeout):
-            """Open.
+            """Open `_FakeOpener`'s captured target.
 
-            Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse` result.
+            Inputs: `request` Django request, `timeout` timeout seconds. Output:
+            `_FakeHTTPResponse` result.
             """
             opened_urls.append((request.full_url, timeout))
             return _FakeHTTPResponse(
@@ -676,7 +676,7 @@ def test_client_download_original_file_uses_archived_files_endpoint_and_safe_nam
 def test_resolve_imaris_application_uses_imarislib_factory(monkeypatch):
     """Verify resolve imaris application uses imarislib factory.
 
-    Inputs: `monkeypatch`. Output: `expected`.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve imaris application uses imarislib factory.
     """
     module = _load_xt_module()
     expected = object()
@@ -686,7 +686,7 @@ def test_resolve_imaris_application_uses_imarislib_factory(monkeypatch):
 
         @staticmethod
         def GetApplication(app_id):
-            """Return Application.
+            """Return the application for `_FakeImarisLibFactory`.
 
             Inputs: `app_id`. Output: `expected`.
             """
@@ -702,20 +702,20 @@ def test_resolve_imaris_application_uses_imarislib_factory(monkeypatch):
 def test_resolve_imaris_application_retries_until_handle_available(monkeypatch):
     """Verify resolve imaris application retries until handle available.
 
-    Inputs: `monkeypatch`. Output: `expected` or None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve imaris application retries until handle available.
     """
     module = _load_xt_module()
     expected = object()
     calls = {"count": 0}
 
     class _RetryingImarisLibFactory:
-        """Represent retrying imaris lib factory."""
+        """Test double for retrying imaris lib factory behavior in this module."""
 
         @staticmethod
         def GetApplication(app_id):
-            """Return Application.
+            """Return the application for `_RetryingImarisLibFactory`.
 
-            Inputs: `app_id`. Output: `expected` or None.
+            Inputs: `app_id`. Output: `expected`.
             """
             assert app_id == 17
             calls["count"] += 1
@@ -737,7 +737,7 @@ def test_resolve_imaris_application_retries_until_handle_available(monkeypatch):
 def test_resolve_imaris_application_accepts_numeric_string(monkeypatch):
     """Verify resolve imaris application accepts numeric string.
 
-    Inputs: `monkeypatch`. Output: `expected`.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve imaris application accepts numeric string.
     """
     module = _load_xt_module()
     expected = object()
@@ -747,7 +747,7 @@ def test_resolve_imaris_application_accepts_numeric_string(monkeypatch):
 
         @staticmethod
         def GetApplication(app_id):
-            """Return Application.
+            """Return the application for `_FakeImarisLibFactory`.
 
             Inputs: `app_id`. Output: `expected`.
             """
@@ -761,24 +761,20 @@ def test_resolve_imaris_application_accepts_numeric_string(monkeypatch):
 
 
 def test_resolve_imaris_application_returns_none_when_bridge_import_fails(monkeypatch):
-    """Verify resolve imaris application returns none when bridge import fails.
+    """Confirm resolve imaris application returns none when bridge import fails exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: `real_import` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve imaris application returns none when bridge import fails.
+    Raises: ImportError when validation or the called operation fails.
     """
     module = _load_xt_module()
 
     real_import = builtins.__import__
 
     def _raising_import(name, *args, **kwargs):
-        """Raising import.
+        """Return the raising import.
 
-        Inputs: `name`, `*args`, `**kwargs`. Output: `real_import` result. Raises on
-        invalid or unavailable state.
-
-        invalid or unavailable state.
+        Inputs: `name` name, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: `real_import` result. Raises: ImportError for the exercised failure path.
         """
         if name == "ImarisLib":
             raise ImportError("IcePy missing")
@@ -792,12 +788,10 @@ def test_resolve_imaris_application_returns_none_when_bridge_import_fails(monkey
 def test_resolve_imaris_application_bridge_failure_message_keeps_runner_path(
     monkeypatch,
 ):
-    """Verify resolve imaris application bridge failure message keeps runner path.
+    """Check that resolve imaris application bridge failure message keeps runner path remains stable.
 
-    Inputs: `monkeypatch`. Output: `real_import` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when resolve imaris application bridge failure message keeps runner path accepts unsafe input.
+    Raises: ImportError when validation or the called operation fails.
     """
     module = _load_xt_module()
     messages = []
@@ -805,12 +799,10 @@ def test_resolve_imaris_application_bridge_failure_message_keeps_runner_path(
     real_import = builtins.__import__
 
     def _raising_import(name, *args, **kwargs):
-        """Raising import.
+        """Return the raising import.
 
-        Inputs: `name`, `*args`, `**kwargs`. Output: `real_import` result. Raises on
-        invalid or unavailable state.
-
-        invalid or unavailable state.
+        Inputs: `name` name, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: `real_import` result. Raises: ImportError for the exercised failure path.
         """
         if name == "ImarisLib":
             raise ImportError("IcePy missing")
@@ -827,9 +819,9 @@ def test_resolve_imaris_application_bridge_failure_message_keeps_runner_path(
 def test_open_file_in_imaris_returns_false_without_handle(
     tmp_path, monkeypatch, capsys
 ):
-    """Verify open file in imaris returns false without handle.
+    """Verify open file in imaris returns false without handle result shape.
 
-    Inputs: `tmp_path`, `monkeypatch`, `capsys`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`, `capsys`. Output: fails on regressions in open file in imaris returns false without handle.
     """
     module = _load_xt_module()
     ims_path = tmp_path / "demo.ims"
@@ -848,7 +840,7 @@ def test_open_file_in_imaris_returns_false_without_handle(
 def test_open_file_in_imaris_uses_live_handle_for_valid_ims(tmp_path):
     """Verify open file in imaris uses live handle for valid IMS.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in open file in imaris uses live handle for valid IMS.
     """
     module = _load_xt_module()
     ims_path = tmp_path / "demo.ims"
@@ -860,9 +852,9 @@ def test_open_file_in_imaris_uses_live_handle_for_valid_ims(tmp_path):
 
         @staticmethod
         def FileOpen(path, *_args):
-            """File open.
+            """Record the file-open call on `_FakeImaris` for later assertions.
 
-            Inputs: `path`, `*_args`. Output: None.
+            Inputs: `path` path, `*_args`. Output: None.
             """
             opened.append(path)
 
@@ -871,9 +863,9 @@ def test_open_file_in_imaris_uses_live_handle_for_valid_ims(tmp_path):
 
 
 def test_open_file_in_imaris_rejects_unverified_current_file(tmp_path, monkeypatch):
-    """Verify open file in imaris rejects unverified current file.
+    """Confirm open file in imaris rejects unverified current file is rejected at the boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `str` result or None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in open file in imaris rejects unverified current file.
     """
     module = _load_xt_module()
     ims_path = tmp_path / "demo.ims"
@@ -890,7 +882,7 @@ def test_open_file_in_imaris_rejects_unverified_current_file(tmp_path, monkeypat
 
         @staticmethod
         def FileOpen(_path, *_args):
-            """File open.
+            """Record the file-open call on `_FakeImaris` for later assertions.
 
             Inputs: `_path`, `*_args`. Output: None.
             """
@@ -898,7 +890,7 @@ def test_open_file_in_imaris_rejects_unverified_current_file(tmp_path, monkeypat
 
         @staticmethod
         def GetCurrentFileName():
-            """Return Current File Name.
+            """Return the fake current file name value used by this test double.
 
             Inputs: none. Output: `str` result.
             """
@@ -915,9 +907,9 @@ def test_open_file_in_imaris_rejects_unverified_current_file(tmp_path, monkeypat
 
 
 def test_open_file_in_imaris_rejects_non_ims_before_live_handle(tmp_path):
-    """Verify open file in imaris rejects non IMS before live handle.
+    """Confirm open file in imaris rejects non IMS before live handle is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in open file in imaris rejects non IMS before live handle.
     """
     module = _load_xt_module()
     plain_path = tmp_path / "plain.txt"
@@ -929,9 +921,9 @@ def test_open_file_in_imaris_rejects_non_ims_before_live_handle(tmp_path):
 
         @staticmethod
         def FileOpen(path, *_args):
-            """File open.
+            """Record the file-open call on `_FakeImaris` for later assertions.
 
-            Inputs: `path`, `*_args`. Output: None.
+            Inputs: `path` path, `*_args`. Output: None.
             """
             opened.append(path)
 
@@ -942,7 +934,7 @@ def test_open_file_in_imaris_rejects_non_ims_before_live_handle(tmp_path):
 def test_open_file_in_imaris_allows_original_file_for_imaris_converter(tmp_path):
     """Verify open file in imaris allows original file for imaris converter.
 
-    Inputs: `tmp_path`. Output: `self.current`.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in open file in imaris allows original file for imaris converter.
     """
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
@@ -955,15 +947,15 @@ def test_open_file_in_imaris_allows_original_file_for_imaris_converter(tmp_path)
         current = ""
 
         def FileOpen(self, path, *_args):
-            """File open.
+            """Record the file-open call on `_FakeImaris` for later assertions.
 
-            Inputs: `path`, `*_args`. Output: None.
+            Inputs: `path` path, `*_args`. Output: None.
             """
             opened.append((path, _args))
             self.current = path
 
         def GetCurrentFileName(self):
-            """Return Current File Name.
+            """Return the fake current file name value used by this test double.
 
             Inputs: none. Output: `self.current`.
             """
@@ -982,7 +974,7 @@ def test_open_file_in_imaris_raw_file_uses_submission_only_verification(
 ):
     """Verify open file in imaris raw file uses submission only verification.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `self.current`.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in open file in imaris raw file uses submission only verification.
     """
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
@@ -1011,15 +1003,15 @@ def test_open_file_in_imaris_raw_file_uses_submission_only_verification(
         current = ""
 
         def FileOpen(self, path, *_args):
-            """File open.
+            """Record the file-open call on `_FakeImaris` for later assertions.
 
-            Inputs: `path`, `*_args`. Output: None.
+            Inputs: `path` path, `*_args`. Output: None.
             """
             opened.append((path, _args))
             self.current = path
 
         def GetCurrentFileName(self):
-            """Return Current File Name.
+            """Return the fake current file name value used by this test double.
 
             Inputs: none. Output: `self.current`.
             """
@@ -1042,7 +1034,8 @@ def test_open_file_in_imaris_raw_file_accepts_successful_submission(
 ):
     """Verify open file in imaris raw file accepts successful submission.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: computed value.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `str`.
     """
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
@@ -1070,15 +1063,15 @@ def test_open_file_in_imaris_raw_file_accepts_successful_submission(
 
         @staticmethod
         def FileOpen(path, *_args):
-            """File open.
+            """Record the file-open call on `_FakeImaris` for later assertions.
 
-            Inputs: `path`, `*_args`. Output: None.
+            Inputs: `path` path, `*_args`. Output: None.
             """
             opened.append((path, _args))
 
         @staticmethod
         def GetCurrentFileName():
-            """Return Current File Name.
+            """Return the fake current file name value used by this test double.
 
             Inputs: none. Output: ''.
             """
@@ -1086,7 +1079,7 @@ def test_open_file_in_imaris_raw_file_accepts_successful_submission(
 
         @staticmethod
         def GetNumberOfImages():
-            """Return Number Of Images.
+            """Return the fake number of images value used by this test double.
 
             Inputs: none. Output: 1.
             """
@@ -1106,7 +1099,7 @@ def test_open_file_in_imaris_raw_file_accepts_successful_submission(
 def test_open_file_in_imaris_raw_file_retries_with_options_after_typeerror(tmp_path):
     """Verify open file in imaris raw file retries with options after typeerror.
 
-    Inputs: `tmp_path`. Output: `self.current`. Raises on invalid or unavailable state.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in open file in imaris raw file retries with options after typeerror.
     """
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
@@ -1119,9 +1112,9 @@ def test_open_file_in_imaris_raw_file_retries_with_options_after_typeerror(tmp_p
         current = ""
 
         def FileOpen(self, *args):
-            """File open.
+            """Record the file-open call on `_FakeImaris` for later assertions.
 
-            Inputs: `*args`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `*args` positional arguments. Output: None. Raises: TypeError when validation or the called operation fails.
             """
             opened.append(args)
             if len(args) == 1:
@@ -1129,7 +1122,7 @@ def test_open_file_in_imaris_raw_file_retries_with_options_after_typeerror(tmp_p
             self.current = args[0]
 
         def GetCurrentFileName(self):
-            """Return Current File Name.
+            """Return the fake current file name value used by this test double.
 
             Inputs: none. Output: `self.current`.
             """
@@ -1152,7 +1145,7 @@ def test_open_file_in_imaris_raw_file_retries_with_options_after_typeerror(tmp_p
 def test_open_files_in_imaris_uses_image_slots_for_multiple_files(tmp_path):
     """Verify open files in imaris uses image slots for multiple files.
 
-    Inputs: `tmp_path`. Output: computed value.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in open files in imaris uses image slots for multiple files.
     """
     module = _load_xt_module()
     first_path = tmp_path / "first.ims"
@@ -1164,23 +1157,23 @@ def test_open_files_in_imaris_uses_image_slots_for_multiple_files(tmp_path):
         """Test double for fake data set."""
 
         def __init__(self, path):
-            """Initialize the instance.
+            """Create `_FakeDataSet` with `path`.
 
             Inputs: `path`. Output: None.
             """
             self.path = path
 
         def GetSizeX(self):
-            """Return Size X.
+            """Return `_FakeDataSet`'s fake SizeX value.
 
-            Inputs: none. Output: computed value.
+            Inputs: none. Output: `int` size.
             """
             return 1 if "first" in self.path else 2
 
         def Clone(self):
-            """Clone.
+            """Clone the clone for `_FakeDataSet`.
 
-            Inputs: none. Output: `f'clone:{self.path}'`.
+            Inputs: none. Output: clone result.
             """
             return f"clone:{self.path}"
 
@@ -1188,38 +1181,38 @@ def test_open_files_in_imaris_uses_image_slots_for_multiple_files(tmp_path):
         """Test double for fake imaris."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_FakeImaris` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.current = None
             self.opened = []
             self.images = {}
 
         def FileOpen(self, path, *_args):
-            """File open.
+            """Record the file-open call on `_FakeImaris` for later assertions.
 
-            Inputs: `path`, `*_args`. Output: None.
+            Inputs: `path` path, `*_args`. Output: None.
             """
             self.opened.append(path)
             self.current = _FakeDataSet(path)
 
         def GetDataSet(self):
-            """Return Data Set.
+            """Return the fake data set value used by this test double.
 
             Inputs: none. Output: `self.current`.
             """
             return self.current
 
         def SetImage(self, index, data_set):
-            """Set Image.
+            """Set the image for `_FakeImaris`.
 
             Inputs: `index`, `data_set`. Output: None.
             """
             self.images[index] = data_set
 
         def GetNumberOfImages(self):
-            """Return Number Of Images.
+            """Return the fake number of images value used by this test double.
 
             Inputs: none. Output: `len` result.
             """
@@ -1236,9 +1229,9 @@ def test_open_files_in_imaris_uses_image_slots_for_multiple_files(tmp_path):
 
 
 def test_collect_local_folder_entries_returns_sorted_relative_paths(tmp_path):
-    """Verify collect local folder entries returns sorted relative paths.
+    """Verify collect local folder entries returns sorted relative paths result shape.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in collect local folder entries returns sorted relative paths.
     """
     module = _load_xt_module()
     (tmp_path / "nested").mkdir()
@@ -1254,9 +1247,9 @@ def test_collect_local_folder_entries_returns_sorted_relative_paths(tmp_path):
 
 
 def test_collect_local_folder_entries_rejects_empty_folder(tmp_path):
-    """Verify collect local folder entries rejects empty folder.
+    """Confirm collect local folder entries rejects empty folder is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in collect local folder entries rejects empty folder.
     """
     module = _load_xt_module()
 
@@ -1267,7 +1260,7 @@ def test_collect_local_folder_entries_rejects_empty_folder(tmp_path):
 def test_is_filesystem_root_detects_windows_and_posix_roots():
     """Verify is filesystem root detects windows and posix roots.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in is filesystem root detects windows and posix roots.
     """
     module = _load_xt_module()
 
@@ -1284,7 +1277,7 @@ def test_import_into_omero_starts_folder_worker_after_confirmation(
 ):
     """Verify import into OMERO starts folder worker after confirmation.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in import into OMERO starts folder worker after confirmation.
     """
     module = _load_xt_module()
     selected_folder = tmp_path / "selected"
@@ -1322,7 +1315,7 @@ def test_import_into_omero_starts_folder_worker_after_confirmation(
         """Test double for fake thread."""
 
         def __init__(self, target, args, daemon):
-            """Initialize the instance.
+            """Create `_FakeThread` with `target`, `args`, and `daemon`.
 
             Inputs: `target`, `args`, `daemon`. Output: None.
             """
@@ -1333,9 +1326,9 @@ def test_import_into_omero_starts_folder_worker_after_confirmation(
 
         @staticmethod
         def start():
-            """Start the operation.
+            """Start `_FakeThread`'s fake operation.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -1355,9 +1348,9 @@ def test_import_into_omero_starts_folder_worker_after_confirmation(
 
 
 def test_import_into_omero_rejects_filesystem_root(monkeypatch):
-    """Verify import into OMERO rejects filesystem root.
+    """Confirm import into OMERO rejects filesystem root is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in import into OMERO rejects filesystem root.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -1401,7 +1394,7 @@ def test_import_into_omero_rejects_filesystem_root(monkeypatch):
 def test_import_folder_worker_uploads_folder_and_reports_success(tmp_path):
     """Verify import folder worker uploads folder and reports success.
 
-    Inputs: `tmp_path`. Output: `next` result.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in import folder worker uploads folder and reports success.
     """
     module = _load_xt_module()
     selected_folder = tmp_path / "batch"
@@ -1424,9 +1417,9 @@ def test_import_folder_worker_uploads_folder_and_reports_success(tmp_path):
     )
 
     def _next_status(url):
-        """Next status.
+        """Return the next status.
 
-        Inputs: `url`. Output: `next` result.
+        Inputs: `url` URL. Output: `next` result.
         """
         client_calls.append(("status", url))
         return next(status_sequence, {})
@@ -1512,7 +1505,7 @@ def test_import_folder_worker_uploads_folder_and_reports_success(tmp_path):
 def test_images_ctrl_shift_click_adds_range_without_clearing_existing_selection():
     """Verify images ctrl shift click adds range without clearing existing selection.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in images ctrl shift click adds range without clearing existing selection.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -1534,7 +1527,7 @@ def test_images_ctrl_shift_click_adds_range_without_clearing_existing_selection(
 def test_images_ctrl_click_toggles_single_selection_and_updates_anchor():
     """Verify images ctrl click toggles single selection and updates anchor.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in images ctrl click toggles single selection and updates anchor.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -1551,25 +1544,22 @@ def test_images_ctrl_click_toggles_single_selection_and_updates_anchor():
 
 
 def test_open_file_in_imaris_does_not_launch_fallback_when_live_handle_fails(tmp_path):
-    """Verify open file in imaris does not launch fallback when live handle fails.
+    """Confirm open file in imaris does not launch fallback when live handle fails exposes the expected failure.
 
-    Inputs: `tmp_path`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in open file in imaris does not launch fallback when live handle fails.
     """
     module = _load_xt_module()
     ims_path = tmp_path / "demo.ims"
     ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
 
     class _FailingImaris:
-        """Represent failing imaris."""
+        """Test double for failing imaris behavior in this module."""
 
         @staticmethod
         def FileOpen(_path, *_args):
-            """File open.
+            """Record the file-open call on `_FailingImaris` for later assertions.
 
-            Inputs: `_path`, `*_args`. Output: None. Raises on invalid or unavailable
-            state.
-
-            state.
+            Inputs: `_path`, `*_args`. Output: None. Raises: RuntimeError when validation or the called operation fails.
             """
             raise RuntimeError("bridge failed")
 
@@ -1579,7 +1569,7 @@ def test_open_file_in_imaris_does_not_launch_fallback_when_live_handle_fails(tmp
 def test_parse_python_launcher_paths_handles_windows_launcher_output():
     """Verify parse python launcher paths handles windows launcher output.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in parse python launcher paths handles windows launcher output.
     """
     module = _load_xt_module()
     output = """Installed Pythons found by C:\\Windows\\py.exe Launcher for Windows
@@ -1596,9 +1586,9 @@ def test_parse_python_launcher_paths_handles_windows_launcher_output():
 def test_iter_native_bridge_python_executables_uses_py_launcher_and_skips_current(
     monkeypatch,
 ):
-    """Verify iter native bridge python executables uses Python launcher and skips current.
+    """Verify iter native bridge python executables uses py launcher and skips current.
 
-    Inputs: `monkeypatch`. Output: `types.SimpleNamespace` result.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in iter native bridge python executables uses py launcher and skips current.
     """
     module = _load_xt_module()
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
@@ -1621,9 +1611,9 @@ def test_iter_native_bridge_python_executables_uses_py_launcher_and_skips_curren
     )
 
     def _fake_run(cmd, **kwargs):
-        """Fake run.
+        """Return `tests.test_xt_omero_connector`'s fake command result.
 
-        Inputs: `cmd`, `**kwargs`. Output: `types.SimpleNamespace` result.
+        Inputs: `cmd`, `**kwargs` keyword arguments. Output: `SimpleNamespace` result.
         """
         assert cmd == [r"C:\Windows\py.exe", "-0p"]
         assert kwargs["check"] is False
@@ -1647,9 +1637,9 @@ def test_iter_native_bridge_python_executables_uses_py_launcher_and_skips_curren
 def test_native_bridge_runner_uses_fixed_python_command_and_json_payload(
     tmp_path, monkeypatch
 ):
-    """Verify native bridge runner uses fixed python command and JSON payload.
+    """Verify the native bridge runner uses fixed python command and JSON payload execution contract.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `types.SimpleNamespace` result.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in native bridge runner uses fixed python command and JSON payload integration.
     """
     module = _load_xt_module()
     ims_path = tmp_path / "demo.ims"
@@ -1668,9 +1658,9 @@ def test_native_bridge_runner_uses_fixed_python_command_and_json_payload(
     calls = []
 
     def _fake_run(cmd, **kwargs):
-        """Fake run.
+        """Return `tests.test_xt_omero_connector`'s fake command result.
 
-        Inputs: `cmd`, `**kwargs`. Output: `types.SimpleNamespace` result.
+        Inputs: `cmd`, `**kwargs` keyword arguments. Output: `SimpleNamespace` result.
         """
         calls.append((cmd, kwargs))
         payload = json.loads(kwargs["input"])
@@ -1708,7 +1698,7 @@ def test_native_bridge_runner_allows_original_file_when_ims_not_required(
 ):
     """Verify native bridge runner allows original file when IMS not required.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `types.SimpleNamespace` result.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in native bridge runner allows original file when IMS not required.
     """
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
@@ -1727,9 +1717,9 @@ def test_native_bridge_runner_allows_original_file_when_ims_not_required(
     payloads = []
 
     def _fake_run(cmd, **kwargs):
-        """Fake run.
+        """Return `tests.test_xt_omero_connector`'s fake command result.
 
-        Inputs: `cmd`, `**kwargs`. Output: `types.SimpleNamespace` result.
+        Inputs: `cmd`, `**kwargs` keyword arguments. Output: `SimpleNamespace` result.
         """
         payloads.append(json.loads(kwargs["input"]))
         return types.SimpleNamespace(
@@ -1756,7 +1746,7 @@ def test_native_bridge_runner_allows_original_file_when_ims_not_required(
 def test_native_bridge_probe_helper_checks_bridge_without_file_open(monkeypatch):
     """Verify native bridge probe helper checks bridge without file open.
 
-    Inputs: `monkeypatch`. Output: `types.SimpleNamespace` result.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in native bridge probe helper checks bridge without file open.
     """
     module = _load_xt_module()
     python_exe = r"C:\ProgramData\anaconda3\python.exe"
@@ -1772,9 +1762,9 @@ def test_native_bridge_probe_helper_checks_bridge_without_file_open(monkeypatch)
     )
 
     def _fake_run(cmd, **kwargs):
-        """Fake run.
+        """Return `tests.test_xt_omero_connector`'s fake command result.
 
-        Inputs: `cmd`, `**kwargs`. Output: `types.SimpleNamespace` result.
+        Inputs: `cmd`, `**kwargs` keyword arguments. Output: `SimpleNamespace` result.
         """
         payload = json.loads(kwargs["input"])
         assert cmd[0] == python_exe
@@ -1802,7 +1792,7 @@ def test_native_bridge_probe_helper_checks_bridge_without_file_open(monkeypatch)
 def test_native_bridge_helper_reuses_imarislib_factory_across_retries(tmp_path):
     """Verify native bridge helper reuses imarislib factory across retries.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in native bridge helper reuses imarislib factory across retries.
     """
     module = _load_xt_module()
     counter_path = tmp_path / "factory_count.txt"
@@ -1857,7 +1847,7 @@ def test_native_bridge_helper_reuses_imarislib_factory_across_retries(tmp_path):
 def test_native_bridge_helper_prefers_one_argument_fileopen_for_originals(tmp_path):
     """Verify native bridge helper prefers one argument fileopen for originals.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in native bridge helper prefers one argument fileopen for originals.
     """
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
@@ -1925,7 +1915,7 @@ def test_native_bridge_helper_retries_with_options_after_typeerror_for_originals
 ):
     """Verify native bridge helper retries with options after typeerror for originals.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in native bridge helper retries with options after typeerror for originals.
     """
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
@@ -1994,7 +1984,7 @@ def test_native_bridge_helper_accepts_original_submission_without_dataset_change
 ):
     """Verify native bridge helper accepts original submission without dataset change.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in native bridge helper accepts original submission without dataset change.
     """
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
@@ -2060,7 +2050,7 @@ def test_native_bridge_runner_suppresses_plural_ice_shutdown_warning(
 ):
     """Verify native bridge runner suppresses plural ice shutdown warning.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `types.SimpleNamespace` result.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in native bridge runner suppresses plural ice shutdown warning.
     """
     module = _load_xt_module()
     python_exe = str(tmp_path / "python.exe")
@@ -2073,9 +2063,9 @@ def test_native_bridge_runner_suppresses_plural_ice_shutdown_warning(
     )
 
     def _fake_run(cmd, **kwargs):
-        """Fake run.
+        """Return `tests.test_xt_omero_connector`'s fake command result.
 
-        Inputs: `cmd`, `**kwargs`. Output: `types.SimpleNamespace` result.
+        Inputs: `cmd`, `**kwargs` keyword arguments. Output: `SimpleNamespace` result.
         """
         assert cmd[0] == python_exe
         assert len(cmd) == 2
@@ -2116,7 +2106,7 @@ def test_native_bridge_runner_reports_raw_fileopen_as_submitted_request(
 ):
     """Verify native bridge runner reports raw fileopen as submitted request.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `types.SimpleNamespace` result.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in native bridge runner reports raw fileopen as submitted request.
     """
     module = _load_xt_module()
     python_exe = str(tmp_path / "python.exe")
@@ -2129,9 +2119,9 @@ def test_native_bridge_runner_reports_raw_fileopen_as_submitted_request(
     )
 
     def _fake_run(cmd, **kwargs):
-        """Fake run.
+        """Return `tests.test_xt_omero_connector`'s fake command result.
 
-        Inputs: `cmd`, `**kwargs`. Output: `types.SimpleNamespace` result.
+        Inputs: `cmd`, `**kwargs` keyword arguments. Output: `SimpleNamespace` result.
         """
         assert cmd[0] == python_exe
         assert len(cmd) == 2
@@ -2166,10 +2156,11 @@ def test_native_bridge_runner_timeout_log_does_not_leak_helper_source(
     tmp_path,
     monkeypatch,
 ):
-    """Verify native bridge timeout logging never includes helper source code.
+    """Verify native bridge runner timeout log does not leak helper source.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
-    state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: None after assertions pass. Raises: TimeoutExpired when validation or
+    external operations fail.
     """
     module = _load_xt_module()
     python_exe = str(tmp_path / "python.exe")
@@ -2185,7 +2176,8 @@ def test_native_bridge_runner_timeout_log_does_not_leak_helper_source(
     def _fake_run(cmd, **kwargs):
         """Raise a timeout carrying the command object.
 
-        Inputs: `cmd`, `**kwargs`. Output: None. Raises on invalid or unavailable state.
+        Inputs: `cmd`, `**kwargs` keyword arguments. Output: None. Raises:
+        TimeoutExpired when validation or the called operation fails.
         """
         helper_paths.append(cmd[1])
         raise subprocess.TimeoutExpired(cmd=cmd, timeout=kwargs["timeout"])
@@ -2210,9 +2202,9 @@ def test_native_bridge_runner_timeout_log_does_not_leak_helper_source(
 
 
 def test_native_bridge_helper_exception_does_not_emit_traceback():
-    """Verify native bridge helper exceptions do not leak Python traceback text.
+    """Confirm native bridge helper exception does not emit traceback exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions when native bridge helper exception does not emit traceback stops reporting the expected error.
     """
     module = _load_xt_module()
 
@@ -2233,9 +2225,9 @@ def test_native_bridge_helper_exception_does_not_emit_traceback():
 
 
 def test_safe_download_filename_removes_paths_markers_and_reserved_names():
-    """Verify safe download filename removes paths markers and reserved names.
+    """Check safe download filename removes paths markers and reserved names cleanup behavior.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in safe download filename removes paths markers and reserved names.
     """
     module = _load_xt_module()
 
@@ -2254,9 +2246,9 @@ def test_safe_download_filename_removes_paths_markers_and_reserved_names():
 
 
 def test_xt_log_sanitizer_redacts_session_material_and_user_paths(monkeypatch):
-    """Verify XT log sanitizer redacts session material and user paths.
+    """Check that XT log sanitizer redacts session material and user paths keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in XT log sanitizer redacts session material and user paths.
     """
     module = _load_xt_module()
     session_label = "session" + "id"
@@ -2283,9 +2275,9 @@ def test_xt_log_sanitizer_redacts_session_material_and_user_paths(monkeypatch):
 
 
 def test_safe_url_for_log_redacts_host_ids_and_query_values():
-    """Verify safe URL for log redacts host IDs and query values.
+    """Check that safe URL for log redacts host IDs and query values keeps sensitive data out of output.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in safe URL for log redacts host IDs and query values.
     """
     module = _load_xt_module()
     scheme = "".join(("htt", "p"))
@@ -2305,7 +2297,7 @@ def test_safe_url_for_log_redacts_host_ids_and_query_values():
 def test_download_chunk_size_is_bounded_runtime_configuration(monkeypatch):
     """Verify download chunk size is bounded runtime configuration.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in download chunk size is bounded runtime configuration.
     """
     module = _load_xt_module()
     monkeypatch.delenv(module.DOWNLOAD_CHUNK_SIZE_ENV, raising=False)
@@ -2335,7 +2327,7 @@ def test_download_chunk_size_is_bounded_runtime_configuration(monkeypatch):
 def test_xt_connector_does_not_hardcode_selected_image_render_export():
     """Verify XT connector does not hardcode selected image render export.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in XT connector does not hardcode selected image render export.
     """
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
 
@@ -2344,9 +2336,9 @@ def test_xt_connector_does_not_hardcode_selected_image_render_export():
 
 
 def test_native_bridge_runner_rejects_non_ims_before_subprocess(tmp_path, monkeypatch):
-    """Verify native bridge runner rejects non IMS before subprocess.
+    """Confirm native bridge runner rejects non IMS before subprocess is rejected at the boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in native bridge runner rejects non IMS before subprocess.
     """
     module = _load_xt_module()
     plain_path = tmp_path / "plain.txt"
@@ -2368,7 +2360,7 @@ def test_native_bridge_runner_rejects_non_ims_before_subprocess(tmp_path, monkey
 def test_native_bridge_runner_requires_numeric_imaris_id(monkeypatch):
     """Verify native bridge runner requires numeric imaris ID.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in native bridge runner requires numeric imaris ID.
     """
     module = _load_xt_module()
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
@@ -2393,7 +2385,7 @@ def test_native_bridge_runner_requires_numeric_imaris_id(monkeypatch):
 def test_native_bridge_runner_tries_discovered_python_until_success(monkeypatch):
     """Verify native bridge runner tries discovered python until success.
 
-    Inputs: `monkeypatch`. Output: call result.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in native bridge runner tries discovered python until success.
     """
     module = _load_xt_module()
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
@@ -2413,12 +2405,10 @@ def test_native_bridge_runner_tries_discovered_python_until_success(monkeypatch)
     attempts = []
 
     def _fake_helper(python_executable, file_path, imaris_id, require_ims=True):
-        """Fake helper.
+        """Return the fake helper.
 
-        Inputs: `python_executable`, `file_path`, `imaris_id`, `require_ims`. Output:
-        call result.
-
-        call result.
+        Inputs: `python_executable`, `file_path` file path, `imaris_id`, `require_ims`.
+        Output: `endswith` result.
         """
         attempts.append((python_executable, file_path, imaris_id, require_ims))
         return python_executable.endswith(r"anaconda3\python.exe")
@@ -2438,9 +2428,9 @@ def test_native_bridge_runner_tries_discovered_python_until_success(monkeypatch)
 
 
 def test_dialog_native_bridge_probe_runs_before_export_and_blocks_when_unavailable():
-    """Verify dialog native bridge probe runs before export and blocks when unavailable.
+    """Confirm dialog native bridge probe runs before export and blocks when unavailable is rejected at the boundary.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in dialog native bridge probe runs before export and blocks when unavailable.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -2467,7 +2457,7 @@ def test_dialog_native_bridge_probe_runs_before_export_and_blocks_when_unavailab
 def test_dialog_native_bridge_probe_does_not_trust_non_opening_handle():
     """Verify dialog native bridge probe does not trust non opening handle.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in dialog native bridge probe does not trust non opening handle.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -2495,7 +2485,7 @@ def test_dialog_native_bridge_probe_revalidates_stale_cached_python(
 ):
     """Verify dialog native bridge probe revalidates stale cached python.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in dialog native bridge probe revalidates stale cached python.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -2536,9 +2526,9 @@ def test_dialog_native_bridge_probe_revalidates_stale_cached_python(
 def test_dialog_native_bridge_probe_blocks_after_failed_revalidation(
     tmp_path, monkeypatch
 ):
-    """Verify dialog native bridge probe blocks after failed revalidation.
+    """Confirm dialog native bridge probe blocks after failed revalidation is rejected at the boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in dialog native bridge probe blocks after failed revalidation.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -2574,7 +2564,7 @@ def test_dialog_native_bridge_probe_blocks_after_failed_revalidation(
 def test_dialog_native_bridge_probe_skips_recent_revalidation(tmp_path, monkeypatch):
     """Verify dialog native bridge probe skips recent revalidation.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in dialog native bridge probe skips recent revalidation.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -2603,7 +2593,7 @@ def test_dialog_native_bridge_probe_skips_recent_revalidation(tmp_path, monkeypa
 def test_dialog_native_bridge_probe_uses_cached_python_for_open(monkeypatch):
     """Verify dialog native bridge probe uses cached python for open.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in dialog native bridge probe uses cached python for open.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -2652,7 +2642,7 @@ def test_dialog_native_bridge_probe_uses_cached_python_for_open(monkeypatch):
 def test_detect_converter_options_defaults_omero_when_server_supports_it():
     """Verify detect converter options defaults OMERO when server supports it.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in detect converter options defaults OMERO when server supports it.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -2671,7 +2661,7 @@ def test_detect_converter_options_defaults_omero_when_server_supports_it():
 def test_detect_converter_options_hides_omero_without_server_capability():
     """Verify detect converter options hides OMERO without server capability.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in detect converter options hides OMERO without server capability.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -2690,7 +2680,7 @@ def test_detect_converter_options_hides_omero_without_server_capability():
 def test_detect_converter_options_hides_dropdown_when_native_open_unavailable():
     """Verify detect converter options hides dropdown when native open unavailable.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in detect converter options hides dropdown when native open unavailable.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -2713,7 +2703,7 @@ def test_detect_converter_options_hides_dropdown_when_native_open_unavailable():
 def test_set_converter_options_hides_dropdown_and_disables_load():
     """Verify set converter options hides dropdown and disables load.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: repository fixtures. Output: fails on regressions in set converter options hides dropdown and disables load.
     """
     module = _load_xt_module()
 
@@ -2721,14 +2711,14 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
         """Test double for dummy menu."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyMenu` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.deleted = False
 
         def delete(self, start, end):
-            """Delete.
+            """Delete the delete for `DummyMenu`.
 
             Inputs: `start`, `end`. Output: None.
             """
@@ -2736,12 +2726,9 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
 
         @staticmethod
         def add_command(label, command):
-            """Add command.
+            """Add the command for `DummyMenu`.
 
-            Inputs: `label`, `command`. Output: None. Raises on invalid or unavailable
-            state.
-
-            state.
+            Inputs: `label`, `command`. Output: None. Raises: AssertionError when validation or the called operation fails.
             """
             raise AssertionError("no command should be added without options")
 
@@ -2749,16 +2736,16 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
         """Test double for dummy frame."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyFrame` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.hidden = False
 
         def pack_forget(self):
             """Remove pack geometry management.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             self.hidden = True
 
@@ -2766,9 +2753,9 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
         """Test double for dummy button."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyButton` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.state = None
 
@@ -2783,9 +2770,9 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
         """Test double for dummy var."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyVar` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.value = "OMERO"
 
@@ -2816,7 +2803,7 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
 def test_set_converter_options_populates_menu_without_blank_entry():
     """Verify set converter options populates menu without blank entry.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in set converter options populates menu without blank entry.
     """
     module = _load_xt_module()
 
@@ -2824,24 +2811,24 @@ def test_set_converter_options_populates_menu_without_blank_entry():
         """Test double for dummy menu."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyMenu` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.deleted = None
             self.commands = []
 
         def delete(self, start, end):
-            """Delete.
+            """Delete the delete for `DummyMenu`.
 
             Inputs: `start`, `end`. Output: None.
             """
             self.deleted = (start, end)
 
         def add_command(self, label, command, **kwargs):
-            """Add command.
+            """Add the command for `DummyMenu`.
 
-            Inputs: `label`, `command`, `**kwargs`. Output: None.
+            Inputs: `label`, `command`, `**kwargs` keyword arguments. Output: None.
             """
             self.commands.append((label, command, kwargs))
 
@@ -2849,16 +2836,16 @@ def test_set_converter_options_populates_menu_without_blank_entry():
         """Test double for dummy frame."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyFrame` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.shown = False
 
         def grid(self):
             """Apply grid geometry management.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             self.shown = True
 
@@ -2866,9 +2853,9 @@ def test_set_converter_options_populates_menu_without_blank_entry():
         """Test double for dummy button."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyButton` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.state = None
 
@@ -2883,9 +2870,9 @@ def test_set_converter_options_populates_menu_without_blank_entry():
         """Test double for dummy var."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyVar` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.value = ""
 
@@ -2927,7 +2914,7 @@ def test_set_converter_options_populates_menu_without_blank_entry():
 def test_scrolled_listbox_disables_active_underline(monkeypatch):
     """Verify scrolled listbox disables active underline.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in scrolled listbox disables active underline.
     """
     module = _load_xt_module()
     created = {}
@@ -2936,7 +2923,7 @@ def test_scrolled_listbox_disables_active_underline(monkeypatch):
         """Test double for fake scrollbar."""
 
         def __init__(self, parent, orient):
-            """Initialize the instance.
+            """Create `_FakeScrollbar` with `parent` and `orient`.
 
             Inputs: `parent`, `orient`. Output: None.
             """
@@ -2971,7 +2958,7 @@ def test_scrolled_listbox_disables_active_underline(monkeypatch):
         """Test double for fake listbox."""
 
         def __init__(self, parent, **kwargs):
-            """Initialize the instance.
+            """Create `_FakeListbox` with `parent`.
 
             Inputs: `parent`, `**kwargs`. Output: None.
             """
@@ -2997,7 +2984,7 @@ def test_scrolled_listbox_disables_active_underline(monkeypatch):
 
         @staticmethod
         def yview(*_args):
-            """Yview.
+            """Record the yview call on `_FakeListbox` for later assertions.
 
             Inputs: `*_args`. Output: None.
             """
@@ -3005,7 +2992,7 @@ def test_scrolled_listbox_disables_active_underline(monkeypatch):
 
         @staticmethod
         def xview(*_args):
-            """Xview.
+            """Record the xview call on `_FakeListbox` for later assertions.
 
             Inputs: `*_args`. Output: None.
             """
@@ -3036,9 +3023,9 @@ def test_scrolled_listbox_disables_active_underline(monkeypatch):
 
 
 def test_selected_images_returns_all_valid_indexes():
-    """Verify selected images returns all valid indexes.
+    """Verify selected images returns all valid indexes result shape.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in selected images returns all valid indexes.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -3054,16 +3041,16 @@ def test_selected_images_returns_all_valid_indexes():
 
 
 def test_refresh_preserves_project_and_dataset_but_clears_image_selection():
-    """Verify refresh preserves project and dataset but clears image selection.
+    """Check that refresh preserves project and dataset but clears image selection remains stable.
 
-    Inputs: none. Output: list.
+    Inputs: repository fixtures. Output: fails on regressions in refresh preserves project and dataset but clears image selection.
     """
     module = _load_xt_module()
     dialog = _make_refresh_dialog(module)
     calls = []
 
     class _Client:
-        """Represent client."""
+        """Test double for client behavior in this module."""
 
         @staticmethod
         def list_projects(**_kwargs):
@@ -3141,16 +3128,16 @@ def test_refresh_preserves_project_and_dataset_but_clears_image_selection():
 
 
 def test_refresh_dataset_disappeared_keeps_project_and_clears_images():
-    """Verify refresh dataset disappeared keeps project and clears images.
+    """Check that refresh dataset disappeared keeps project and clears images remains stable.
 
-    Inputs: none. Output: list.
+    Inputs: repository fixtures. Output: fails on regressions in refresh dataset disappeared keeps project and clears images.
     """
     module = _load_xt_module()
     dialog = _make_refresh_dialog(module)
     calls = []
 
     class _Client:
-        """Represent client."""
+        """Test double for client behavior in this module."""
 
         @staticmethod
         def list_projects(**_kwargs):
@@ -3205,14 +3192,14 @@ def test_refresh_dataset_disappeared_keeps_project_and_clears_images():
 def test_refresh_project_disappeared_clears_dataset_and_images():
     """Verify refresh project disappeared clears dataset and images.
 
-    Inputs: none. Output: list.
+    Inputs: repository fixtures. Output: fails on regressions in refresh project disappeared clears dataset and images.
     """
     module = _load_xt_module()
     dialog = _make_refresh_dialog(module)
     calls = []
 
     class _Client:
-        """Represent client."""
+        """Test double for client behavior in this module."""
 
         @staticmethod
         def list_projects(**_kwargs):
@@ -3267,7 +3254,7 @@ def test_refresh_project_disappeared_clears_dataset_and_images():
 def test_refresh_ignores_stale_results_without_mutating_current_view():
     """Verify refresh ignores stale results without mutating current view.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in refresh ignores stale results without mutating current view.
     """
     module = _load_xt_module()
     dialog = _make_refresh_dialog(module)
@@ -3297,7 +3284,7 @@ def test_refresh_ignores_stale_results_without_mutating_current_view():
 def test_load_routes_single_selection_to_single_worker(monkeypatch):
     """Verify load routes single selection to single worker.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in load routes single selection to single worker.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -3327,7 +3314,7 @@ def test_load_routes_single_selection_to_single_worker(monkeypatch):
         """Test double for fake thread."""
 
         def __init__(self, target, args, daemon):
-            """Initialize the instance.
+            """Create `_FakeThread` with `target`, `args`, and `daemon`.
 
             Inputs: `target`, `args`, `daemon`. Output: None.
             """
@@ -3338,9 +3325,9 @@ def test_load_routes_single_selection_to_single_worker(monkeypatch):
 
         @staticmethod
         def start():
-            """Start the operation.
+            """Start `_FakeThread`'s fake operation.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -3361,7 +3348,7 @@ def test_load_routes_single_selection_to_single_worker(monkeypatch):
 def test_load_routes_multi_selection_to_multi_worker(monkeypatch):
     """Verify load routes multi selection to multi worker.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in load routes multi selection to multi worker.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -3392,7 +3379,7 @@ def test_load_routes_multi_selection_to_multi_worker(monkeypatch):
         """Test double for fake thread."""
 
         def __init__(self, target, args, daemon):
-            """Initialize the instance.
+            """Create `_FakeThread` with `target`, `args`, and `daemon`.
 
             Inputs: `target`, `args`, `daemon`. Output: None.
             """
@@ -3403,9 +3390,9 @@ def test_load_routes_multi_selection_to_multi_worker(monkeypatch):
 
         @staticmethod
         def start():
-            """Start the operation.
+            """Start `_FakeThread`'s fake operation.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -3428,7 +3415,7 @@ def test_load_worker_imaris_converter_submits_original_with_native_fileopen(
 ):
     """Verify load worker imaris converter submits original with native fileopen.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in load worker imaris converter submits original with native fileopen.
     """
     module = _load_xt_module()
     original_file = tmp_path / "sample.lif"
@@ -3486,7 +3473,7 @@ def test_load_worker_imaris_converter_submits_original_with_native_fileopen(
 def test_load_worker_omero_converter_downloads_ims_and_requires_ims(tmp_path):
     """Verify load worker OMERO converter downloads IMS and requires IMS.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in load worker OMERO converter downloads IMS and requires IMS.
     """
     module = _load_xt_module()
     ims_file = tmp_path / "sample.ims"
@@ -3532,7 +3519,7 @@ def test_load_worker_omero_converter_downloads_ims_and_requires_ims(tmp_path):
 def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path):
     """Verify load multiple worker OMERO waits for all downloads before open.
 
-    Inputs: `tmp_path`. Output: computed value.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in load multiple worker OMERO waits for all downloads before open.
     """
     module = _load_xt_module()
     first_ims = tmp_path / "first.ims"
@@ -3544,10 +3531,10 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path
     info_messages = []
 
     def _download_ims_export(image_id, download_dir, fallback_name):
-        """Download IMS export.
+        """Download the IMS export.
 
-        Inputs: `image_id`, `download_dir`, `fallback_name`. Output:
-        `files_by_id[image_id]`.
+        Inputs: `image_id` OMERO image ID, `download_dir`, `fallback_name`. Output:
+        download IMS export result.
         """
         assert not any(event[0] == "open" for event in events)
         events.append(("download", image_id, Path(download_dir).name, fallback_name))
@@ -3572,9 +3559,9 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path
     )
 
     def _open_downloaded_files(paths, require_ims=True):
-        """Open downloaded files.
+        """Open the downloaded files.
 
-        Inputs: `paths`, `require_ims`. Output: bool.
+        Inputs: `paths`, `require_ims`. Output: `bool`.
         """
         events.append(("open", tuple(paths), require_ims))
         assert [event[0] for event in events] == ["download", "download", "open"]
@@ -3602,7 +3589,7 @@ def test_load_multiple_worker_imaris_submits_originals_after_downloads(
 ):
     """Verify load multiple worker imaris submits originals after downloads.
 
-    Inputs: `tmp_path`. Output: `files_by_id[image_id]`.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in load multiple worker imaris submits originals after downloads.
     """
     module = _load_xt_module()
     first_original = tmp_path / "first.lif"
@@ -3616,10 +3603,10 @@ def test_load_multiple_worker_imaris_submits_originals_after_downloads(
     info_messages = []
 
     def _download_original_file(image_id, download_dir, fallback_name):
-        """Download original file.
+        """Download the original file.
 
-        Inputs: `image_id`, `download_dir`, `fallback_name`. Output:
-        `files_by_id[image_id]`.
+        Inputs: `image_id` OMERO image ID, `download_dir`, `fallback_name`. Output:
+        download original file result.
         """
         assert not opened
         events.append(("download", image_id, Path(download_dir).name, fallback_name))
@@ -3664,9 +3651,9 @@ def test_load_multiple_worker_imaris_submits_originals_after_downloads(
 
 
 def test_load_worker_blocks_before_download_when_native_open_unavailable(tmp_path):
-    """Verify load worker blocks before download when native open unavailable.
+    """Confirm load worker blocks before download when native open unavailable is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in load worker blocks before download when native open unavailable.
     """
     module = _load_xt_module()
     download_calls = []
@@ -3704,7 +3691,7 @@ def test_load_worker_blocks_before_download_when_native_open_unavailable(tmp_pat
 def test_load_worker_failure_logs_without_raw_traceback(tmp_path, monkeypatch, capsys):
     """Verify load worker failure logs without raw traceback.
 
-    Inputs: `tmp_path`, `monkeypatch`, `capsys`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`, `capsys`. Output: fails on regressions in load worker failure logs without raw traceback.
     """
     module = _load_xt_module()
     messages = []
@@ -3742,9 +3729,9 @@ def test_load_worker_failure_logs_without_raw_traceback(tmp_path, monkeypatch, c
 
 
 def test_load_worker_blocks_imaris_download_when_native_open_unavailable(tmp_path):
-    """Verify load worker blocks imaris download when native open unavailable.
+    """Confirm load worker blocks imaris download when native open unavailable is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in load worker blocks imaris download when native open unavailable.
     """
     module = _load_xt_module()
     download_calls = []
@@ -3781,7 +3768,7 @@ def test_load_worker_blocks_imaris_download_when_native_open_unavailable(tmp_pat
 def test_set_process_window_title_uses_windows_api_without_shell(monkeypatch):
     """Verify set process window title uses windows API without shell.
 
-    Inputs: `monkeypatch`. Output: 1.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in set process window title uses windows API without shell.
     """
     module = _load_xt_module()
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
@@ -3793,9 +3780,9 @@ def test_set_process_window_title_uses_windows_api_without_shell(monkeypatch):
 
         @classmethod
         def SetConsoleTitleW(cls, title):
-            """Set Console Title W.
+            """Set the console Title W for `_FakeKernel32`.
 
-            Inputs: `title`. Output: 1.
+            Inputs: `title`. Output: `int`.
             """
             cls.calls.append(title)
             return 1
@@ -3812,7 +3799,7 @@ def test_set_process_window_title_uses_windows_api_without_shell(monkeypatch):
 def test_is_ims_file_accepts_only_existing_regular_hdf5_files(tmp_path):
     """Verify is IMS file accepts only existing regular hdf5 files.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in is IMS file accepts only existing regular hdf5 files.
     """
     module = _load_xt_module()
     ims_path = tmp_path / "demo.ims"
@@ -3829,7 +3816,7 @@ def test_is_ims_file_accepts_only_existing_regular_hdf5_files(tmp_path):
 def test_xt_write_log_accepts_only_connector_logs_in_temp_root(tmp_path, monkeypatch):
     """Verify XT write log accepts only connector logs in temp root.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in XT write log accepts only connector logs in temp root.
     """
     module = _load_xt_module()
     monkeypatch.setattr(module.tempfile, "gettempdir", lambda: str(tmp_path))
@@ -3856,7 +3843,7 @@ def test_xt_write_log_accepts_only_connector_logs_in_temp_root(tmp_path, monkeyp
 def test_browser_dialog_reenable_load_button_uses_normal_state():
     """Verify browser dialog reenable load button uses normal state.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in browser dialog reenable load button uses normal state.
     """
     module = _load_xt_module()
     module.tk.NORMAL = "normal"
@@ -3875,7 +3862,7 @@ def test_browser_dialog_reenable_load_button_uses_normal_state():
 def test_browser_dialog_sets_initial_window_as_minimum_size():
     """Verify browser dialog sets initial window as minimum size.
 
-    Inputs: none. Output: computed value.
+    Inputs: repository fixtures. Output: fails on regressions in browser dialog sets initial window as minimum size.
     """
     module = _load_xt_module()
 
@@ -3883,9 +3870,9 @@ def test_browser_dialog_sets_initial_window_as_minimum_size():
         """Test double for dummy root."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyRoot` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.updated = False
             self.geometry_value = None
@@ -3893,60 +3880,60 @@ def test_browser_dialog_sets_initial_window_as_minimum_size():
             self.resizable_value = None
 
         def update_idletasks(self):
-            """Update idletasks.
+            """Update the idletasks for `DummyRoot`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             self.updated = True
 
         @staticmethod
         def winfo_width():
-            """Winfo width.
+            """Return the winfo width for `DummyRoot`.
 
-            Inputs: none. Output: 980.
+            Inputs: none. Output: `int`.
             """
             return 980
 
         @staticmethod
         def winfo_height():
-            """Winfo height.
+            """Return the winfo height for `DummyRoot`.
 
-            Inputs: none. Output: 680.
+            Inputs: none. Output: `int`.
             """
             return 680
 
         @staticmethod
         def winfo_reqwidth():
-            """Winfo reqwidth.
+            """Return the winfo reqwidth for `DummyRoot`.
 
-            Inputs: none. Output: 1010.
+            Inputs: none. Output: `int`.
             """
             return 1010
 
         @staticmethod
         def winfo_reqheight():
-            """Winfo reqheight.
+            """Return the winfo reqheight for `DummyRoot`.
 
-            Inputs: none. Output: 720.
+            Inputs: none. Output: `int`.
             """
             return 720
 
         def geometry(self, value):
-            """Geometry.
+            """Record the geometry call on `DummyRoot` for later assertions.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.geometry_value = value
 
         def minsize(self, width, height):
-            """Minsize.
+            """Record the minsize call on `DummyRoot` for later assertions.
 
             Inputs: `width`, `height`. Output: None.
             """
             self.minimum_size = (width, height)
 
         def resizable(self, width_enabled, height_enabled):
-            """Resizable.
+            """Record the resizable call on `DummyRoot` for later assertions.
 
             Inputs: `width_enabled`, `height_enabled`. Output: None.
             """
@@ -3964,18 +3951,18 @@ def test_browser_dialog_sets_initial_window_as_minimum_size():
 
 
 def test_browser_dialog_invoke_on_ui_thread_returns_callback_value():
-    """Verify browser dialog invoke on UI thread returns callback value.
+    """Verify browser dialog invoke on UI thread returns callback value result shape.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in browser dialog invoke on UI thread returns callback value.
     """
     module = _load_xt_module()
 
     class _Root:
-        """Represent root."""
+        """Test double for root behavior in this module."""
 
         @staticmethod
         def after(_delay, callback):
-            """After.
+            """Record the after call on `_Root` for later assertions.
 
             Inputs: `_delay`, `callback`. Output: None.
             """
@@ -3993,18 +3980,18 @@ def test_browser_dialog_invoke_on_ui_thread_returns_callback_value():
 
 
 def test_browser_dialog_invoke_on_ui_thread_reraises_callback_error():
-    """Verify browser dialog invoke on UI thread reraises callback error.
+    """Confirm browser dialog invoke on UI thread reraises callback error exposes the expected failure.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: repository fixtures. Output: fails on regressions when browser dialog invoke on UI thread reraises callback error stops reporting the expected error.
     """
     module = _load_xt_module()
 
     class _Root:
-        """Represent root."""
+        """Test double for root behavior in this module."""
 
         @staticmethod
         def after(_delay, callback):
-            """After.
+            """Record the after call on `_Root` for later assertions.
 
             Inputs: `_delay`, `callback`. Output: None.
             """
@@ -4024,9 +4011,9 @@ def test_browser_dialog_invoke_on_ui_thread_reraises_callback_error():
 
 
 def test_find_imaris_executable_prefers_env_override(monkeypatch):
-    """Verify find imaris executable prefers environment override.
+    """Verify find imaris executable prefers env override.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in find imaris executable prefers env override.
     """
     module = _load_xt_module()
     imaris_exe = r"C:\Apps\Imaris 11.0.0\Imaris.exe"
@@ -4038,9 +4025,9 @@ def test_find_imaris_executable_prefers_env_override(monkeypatch):
 
 
 def test_imaris_version_gate_allows_11_and_future_but_rejects_older_or_unknown():
-    """Verify imaris version gate allows 11 and future but rejects older or unknown.
+    """Confirm imaris version gate allows 11 and future but rejects older or unknown is rejected at the boundary.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in imaris version gate allows 11 and future but rejects older or unknown.
     """
     module = _load_xt_module()
 
@@ -4058,7 +4045,7 @@ def test_imaris_version_gate_allows_11_and_future_but_rejects_older_or_unknown()
 def test_prepare_imaris_xt_environment_adds_bundled_paths(monkeypatch):
     """Verify prepare imaris XT environment adds bundled paths.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in prepare imaris XT environment adds bundled paths.
     """
     module = _load_xt_module()
     original_sys_path = list(module.sys.path)
@@ -4118,10 +4105,8 @@ def test_prepare_imaris_xt_environment_adds_bundled_paths(monkeypatch):
 def test_collect_imaris_xt_diagnostics_reports_import_failures(monkeypatch):
     """Verify collect imaris XT diagnostics reports import failures.
 
-    Inputs: `monkeypatch`. Output: `original_import` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in collect imaris XT diagnostics reports import failures.
+    Raises: ImportError when validation or the called operation fails.
     """
     module = _load_xt_module()
     monkeypatch.setattr(module.os, "path", ntpath, raising=False)
@@ -4144,12 +4129,11 @@ def test_collect_imaris_xt_diagnostics_reports_import_failures(monkeypatch):
     original_import = builtins.__import__
 
     def _raising_import(name, *args, **kwargs):
-        """Raising import.
+        """Return the raising import.
 
-        Inputs: `name`, `*args`, `**kwargs`. Output: `original_import` result. Raises on
-        invalid or unavailable state.
-
-        invalid or unavailable state.
+        Inputs: `name` name, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: `original_import` result. Raises: ImportError when validation or
+        external operations fail.
         """
         if name == "ImarisLib":
             raise ImportError("ImarisLib missing")
@@ -4178,9 +4162,9 @@ def test_collect_imaris_xt_diagnostics_reports_import_failures(monkeypatch):
 
 
 def test_resolve_imaris_application_returns_direct_handle():
-    """Verify resolve imaris application returns direct handle.
+    """Verify resolve imaris application returns direct handle result shape.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in resolve imaris application returns direct handle.
     """
     module = _load_xt_module()
     direct_handle = types.SimpleNamespace(FileOpen=lambda *_args: None)

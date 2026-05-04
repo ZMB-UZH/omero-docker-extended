@@ -86,12 +86,10 @@ _PROVIDER_TESTS = _MODEL_ENDPOINTS
 
 
 def _validated_provider_url(url):
-    """Validated provider URL.
+    """Return the validated provider URL.
 
-    Inputs: `url`. Output: `urllib.parse.urlunparse` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `url` URL. Output: `urlunparse` result. Raises: ValueError when validation or the
+    called operation fails.
     """
     parsed = urllib.parse.urlparse(str(url or "").strip())
     if parsed.scheme != "https" or not parsed.netloc:
@@ -109,9 +107,9 @@ def _validated_provider_url(url):
 
 
 def _with_xai_credit_guidance(provider, status, message):
-    """With xai credit guidance.
+    """Return the with xai credit guidance.
 
-    Inputs: `provider`, `status`, `message`. Output: computed value.
+    Inputs: `provider`, `status` status, `message`. Output: `message`.
     """
     if provider == "xai" and int(status or 0) == 403:
         return f"{message} xAI accounts need paid credits to access the API."
@@ -119,9 +117,9 @@ def _with_xai_credit_guidance(provider, status, message):
 
 
 def _perform_connection_test(provider, api_key):
-    """Perform connection test.
+    """Return the perform connection test.
 
-    Inputs: `provider`, `api_key`. Output: tuple.
+    Inputs: `provider`, `api_key`. Output: `tuple`.
     """
     provider = (provider or "").strip().lower()
     api_key = (api_key or "").strip()
@@ -191,9 +189,9 @@ def _perform_connection_test(provider, api_key):
 
 
 def _select_default_model(provider, model_ids):
-    """Select default model.
+    """Select the default model.
 
-    Inputs: `provider`, `model_ids`. Output: computed value.
+    Inputs: `provider`, `model_ids`. Output: select default model result.
     """
     preferences = _MODEL_PREFERENCES.get(provider, ())
     for preferred in preferences:
@@ -203,9 +201,9 @@ def _select_default_model(provider, model_ids):
 
 
 def _parse_openai_style_models(payload):
-    """Parse openai style models.
+    """Parse and validate the openai style models input.
 
-    Inputs: `payload`. Output: `models`.
+    Inputs: `payload` payload. Output: `models`.
     """
     models = []
     for item in payload.get("data", []) or []:
@@ -222,9 +220,9 @@ def _parse_openai_style_models(payload):
 
 
 def _parse_anthropic_models(payload):
-    """Parse anthropic models.
+    """Parse and validate the anthropic models input.
 
-    Inputs: `payload`. Output: `models`.
+    Inputs: `payload` payload. Output: `models`.
     """
     models = []
     for item in payload.get("data", []) or []:
@@ -236,9 +234,9 @@ def _parse_anthropic_models(payload):
 
 
 def _parse_gemini_models(payload):
-    """Parse gemini models.
+    """Parse and validate the gemini models input.
 
-    Inputs: `payload`. Output: `models`.
+    Inputs: `payload` payload. Output: `models`.
     """
     models = []
     for item in payload.get("models", []) or []:
@@ -258,9 +256,9 @@ def _parse_gemini_models(payload):
 
 
 def _parse_cohere_models(payload):
-    """Parse cohere models.
+    """Parse and validate the cohere models input.
 
-    Inputs: `payload`. Output: `models`.
+    Inputs: `payload` payload. Output: `models`.
     """
     models = []
     for item in payload.get("models", []) or []:
@@ -318,9 +316,10 @@ def list_credentials(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def test_credentials(request, conn=None, _url=None, **kwargs):
-    """Verify credentials.
+    """Assert credentials.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
@@ -357,9 +356,10 @@ def test_credentials(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def save_credentials(request, conn=None, _url=None, **kwargs):
-    """Save credentials.
+    """Save the credentials.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)

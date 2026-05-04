@@ -23,10 +23,10 @@ JOB_LOCK_RETRY_SLEEP_MAX_SECONDS = 0.2
 
 
 def get_job_path(job_id: str, jobs_root: Path) -> Path:
-    """Return job path.
+    """Return the job path.
 
-    Inputs: `job_id`, `jobs_root`. Output: `Path`. Raises on invalid or unavailable
-    state.
+    Inputs: `job_id` (str), `jobs_root` (Path). Output: `Path`. Raises: ValueError when
+    validation or the called operation fails.
     """
     if not safe_job_id(job_id):
         raise ValueError("Invalid job id.")
@@ -48,9 +48,9 @@ def get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> i
 
 
 def normalize_job_batch_size(value, default: int) -> int:
-    """Normalize job batch size.
+    """Normalize the job batch size.
 
-    Inputs: `value`, `default`. Output: `int`.
+    Inputs: `value` input value, `default` (int). Output: `int`.
     """
     try:
         normalized = int(value)
@@ -60,7 +60,7 @@ def normalize_job_batch_size(value, default: int) -> int:
 
 
 def resolve_job_batch_size(job_dict) -> int:
-    """Resolve job batch size.
+    """Resolve the job batch size.
 
     Inputs: `job_dict`. Output: `int`.
     """
@@ -84,7 +84,7 @@ def has_pending_uploads(job_dict) -> bool:
 def get_compatibility_pending_entries(job_dict):
     """Return compatibility pending entries.
 
-    Inputs: `job_dict`. Output: computed value.
+    Inputs: `job_dict`. Output: get compatibility pending entries result.
     """
     return [
         entry
@@ -152,9 +152,9 @@ def refresh_job_status(job_dict):
 
 
 def load_job(job_id: str, jobs_root: Path):
-    """Load job.
+    """Load the job.
 
-    Inputs: `job_id`, `jobs_root`. Output: `json.load` result or None.
+    Inputs: `job_id` (str), `jobs_root` (Path). Output: `load` result.
     """
     try:
         path = get_job_path(job_id, jobs_root)
@@ -293,9 +293,9 @@ def append_job_error(job: dict, message: str):
 
 
 def _compatibility_pending_entries(job_dict):
-    """Compatibility pending entries.
+    """Return the compatibility pending entries.
 
-    Inputs: `job_dict`. Output: computed value.
+    Inputs: `job_dict`. Output: compatibility pending entries result.
     """
     return [
         entry

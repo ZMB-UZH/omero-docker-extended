@@ -15,9 +15,10 @@ logger = logging.getLogger(__name__)
 @login_required()
 @require_non_root_user
 def save_settings(request, conn=None, _url=None, **kwargs):
-    """Save settings.
+    """Save the settings.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)

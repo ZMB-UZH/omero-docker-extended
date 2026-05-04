@@ -278,7 +278,7 @@ JOB_SERVICE_SECURE_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_SECURE"
 
 
 class JobServiceCredentials(NamedTuple):
-    """Represent job service credentials."""
+    """Helper type for job service credentials behavior."""
 
     user: str
     password: str
@@ -370,7 +370,7 @@ NGFF_CONVERTER_SETTINGS_DEFAULTS = {
 
 @dataclass
 class _DirectoryCache:
-    """Represent directory cache."""
+    """Helper type for directory cache behavior."""
 
     upload_root: Optional[Path] = None
     jobs_root: Optional[Path] = None
@@ -386,7 +386,7 @@ _DIRECTORY_CACHE = _DirectoryCache()
 
 
 def _resolve_upload_root() -> Path:
-    """Resolve upload root.
+    """Resolve the upload root.
 
     Inputs: none. Output: `Path`.
     """
@@ -394,7 +394,7 @@ def _resolve_upload_root() -> Path:
 
 
 def _resolve_jobs_root() -> Path:
-    """Resolve jobs root.
+    """Resolve the jobs root.
 
     Inputs: none. Output: `Path`.
     """
@@ -421,7 +421,7 @@ def _ensure_parent_dir(path: Path) -> bool:
 def _initialize_directories():
     """Initialize upload directories once per application lifecycle.
 
-    Inputs: none. Output: None.
+    Inputs: no caller arguments. Output: performs the documented action and returns None.
 
     This function:
     - Ensures parent directories exist with 0o755 (accessible for traversal)
@@ -454,9 +454,7 @@ def _initialize_directories():
 def _get_upload_root() -> Path:
     """Return upload root.
 
-    Inputs: none. Output: `Path`. Raises on invalid or unavailable state.
-
-    Uses cached path after first initialization to avoid repeated filesystem checks.
+    Inputs: none. Output: `Path`. Raises: RuntimeError for the exercised failure path.
     """
     # Use cached path if available
     if _DIRECTORY_CACHE.upload_root is None:
@@ -470,9 +468,7 @@ def _get_upload_root() -> Path:
 def _get_jobs_root() -> Path:
     """Return jobs root.
 
-    Inputs: none. Output: `Path`. Raises on invalid or unavailable state.
-
-    Uses cached path after first initialization to avoid repeated filesystem checks.
+    Inputs: none. Output: `Path`. Raises: RuntimeError for the exercised failure path.
     """
     # Use cached path if available
     if _DIRECTORY_CACHE.jobs_root is None:
@@ -484,11 +480,9 @@ def _get_jobs_root() -> Path:
 
 
 def _ensure_dir(path: Path) -> bool:
-    """Ensure directory.
+    """Ensure the dir.
 
-    Inputs: `path`. Output: `bool`.
-
-    Does NOT set permissions (uses defaults).
+    Inputs: `path` (Path) path. Output: `bool`.
     """
     try:
         managed_path = _resolve_managed_directory_path(path)
@@ -601,9 +595,9 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
 
 
 def _job_path(job_id: str) -> Path:
-    """Job path.
+    """Return the job path.
 
-    Inputs: `job_id`. Output: `Path`.
+    Inputs: `job_id` (str). Output: `Path`.
     """
     return _resolve_managed_child_parts(
         _get_jobs_root(),
@@ -651,7 +645,7 @@ def _get_import_timeout_seconds() -> int:
 
 
 def _special_methods_enabled() -> bool:
-    """Special methods enabled.
+    """Return the special methods enabled.
 
     Inputs: none. Output: `bool`.
     """
@@ -659,7 +653,7 @@ def _special_methods_enabled() -> bool:
 
 
 def _native_zarr_import_enabled() -> bool:
-    """Native Zarr import enabled.
+    """Return the native Zarr import enabled.
 
     Inputs: none. Output: `bool`.
     """
@@ -667,9 +661,9 @@ def _native_zarr_import_enabled() -> bool:
 
 
 def _normalize_job_batch_size(value, default: int) -> int:
-    """Normalize job batch size.
+    """Normalize the job batch size.
 
-    Inputs: `value`, `default`. Output: `int`.
+    Inputs: `value` input value, `default` (int). Output: `int`.
     """
     try:
         normalized = int(value)
@@ -679,9 +673,9 @@ def _normalize_job_batch_size(value, default: int) -> int:
 
 
 def _normalize_sem_edx_settings(raw_settings):
-    """Normalize sem edx settings.
+    """Normalize SEM-EDX parser settings from request payload data.
 
-    Inputs: `raw_settings`. Output: computed value.
+    Inputs: `raw_settings`. Output: `normalized`.
     """
     if not isinstance(raw_settings, dict):
         return dict(SEM_EDX_SETTINGS_DEFAULTS)
@@ -696,7 +690,7 @@ def _normalize_sem_edx_settings(raw_settings):
 def _normalize_ngff_converter_settings(raw_settings):
     """Normalize NGFF converter settings.
 
-    Inputs: `raw_settings`. Output: computed value.
+    Inputs: `raw_settings`. Output: `normalized`.
     """
     if not isinstance(raw_settings, dict):
         return dict(NGFF_CONVERTER_SETTINGS_DEFAULTS)
@@ -773,8 +767,9 @@ def _build_bioformats2raw_command(
 ) -> list[str]:
     """The bioformats2raw CLI command from normalized settings.
 
-    Inputs: `input_path`, `output_path`, `converter_settings`, `**legacy_options`.
-    Output: `list[str]`. Raises on invalid or unavailable state.
+    Inputs: `input_path` (str), `output_path` (str), `converter_settings` (dict | None),
+    `**legacy_options`. Output: `list[str]`. Raises: TypeError when validation or
+    external operations fail.
     """
     if converter_settings is None and "settings" in legacy_options:
         converter_settings = legacy_options.pop("settings")
@@ -834,7 +829,7 @@ def _build_bioformats2raw_command(
 
 
 def _resolve_job_batch_size(job_dict) -> int:
-    """Resolve job batch size.
+    """Resolve the job batch size.
 
     Inputs: `job_dict`. Output: `int`.
     """
@@ -853,9 +848,9 @@ def _has_pending_uploads(job_dict) -> bool:
 
 
 def _compatibility_pending_entries(job_dict):
-    """Compatibility pending entries.
+    """Return the compatibility pending entries.
 
-    Inputs: `job_dict`. Output: computed value.
+    Inputs: `job_dict`. Output: compatibility pending entries result.
     """
     if not job_dict.get("compatibility_enabled", True):
         return []
@@ -911,7 +906,7 @@ def _should_start_import_plan_build(job_dict) -> bool:
 
 
 def _refresh_job_status(job_dict):
-    """Refresh job status.
+    """Refresh the job status.
 
     Inputs: `job_dict`. Output: `job_dict`.
     """
@@ -954,9 +949,9 @@ def _refresh_job_status(job_dict):
 
 
 def _load_job(job_id: str):
-    """Load job.
+    """Load the job.
 
-    Inputs: `job_id`. Output: `_read_job_file` result or None.
+    Inputs: `job_id` (str). Output: `_read_job_file` result.
     """
     if not _safe_job_id(job_id):
         logger.warning(
@@ -1021,9 +1016,10 @@ def _load_job(job_id: str):
 def _save_job(
     job_dict, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS
 ):
-    """Save job.
+    """Save the job.
 
-    Inputs: `job_dict`, `retries`, `timeout`. Output: bool.
+    Inputs: `job_dict`, `retries` (int), `timeout` (float) timeout seconds. Output:
+    `bool`.
     """
     job_id = job_dict.get("job_id")
     if not _safe_job_id(job_id):
@@ -1069,9 +1065,10 @@ def _robust_update_job(
     retries: int = JOB_LOCK_RETRIES,
     timeout: float = JOB_LOCK_TIMEOUT_SECONDS,
 ):
-    """Robust update job.
+    """Return the robust update job.
 
-    Inputs: `job_id`, `update_fn`, `retries`, `timeout`. Output: `job_dict` or None.
+    Inputs: `job_id` (str), `update_fn`, `retries` (int), `timeout` (float) timeout
+    seconds. Output: `job_dict`.
     """
     if not _safe_job_id(job_id):
         logger.warning(
@@ -1124,9 +1121,9 @@ def _robust_update_job(
 
 
 def _resolve_job_storage_paths(job_id: str) -> tuple[Optional[Path], Optional[Path]]:
-    """Resolve job storage paths.
+    """Resolve the job storage paths.
 
-    Inputs: `job_id`. Output: `tuple[Optional[Path], Optional[Path]]`.
+    Inputs: `job_id` (str). Output: `tuple[Optional[Path], Optional[Path]]`.
     """
     try:
         return _job_path(job_id), _job_lock_path(job_id)
@@ -1161,9 +1158,9 @@ def _safe_relative_path(raw_name: str):
 
 
 def _validate_relative_path_lengths(rel_path: str):
-    """Validate relative path lengths.
+    """Validate the relative path lengths.
 
-    Inputs: `rel_path`. Output: computed value or None.
+    Inputs: `rel_path` (str). Output: `file_path_too_long` result.
     """
     if len(os.fsencode(rel_path)) > MAX_UPLOAD_RELATIVE_PATH_BYTES:
         return errors.file_path_too_long(rel_path, MAX_UPLOAD_RELATIVE_PATH_BYTES)
@@ -1174,9 +1171,9 @@ def _validate_relative_path_lengths(rel_path: str):
 
 
 def _normalize_upload_relative_path(raw_name: str):
-    """Normalize upload relative path.
+    """Normalize the upload relative path.
 
-    Inputs: `raw_name`. Output: tuple.
+    Inputs: `raw_name` (str). Output: `tuple`.
     """
     rel_path = _safe_relative_path(raw_name)
     if rel_path is None:
@@ -1188,9 +1185,9 @@ def _normalize_upload_relative_path(raw_name: str):
 
 
 def _normalize_dataset_name_override(raw_name):
-    """Normalize dataset name override.
+    """Normalize the dataset name override.
 
-    Inputs: `raw_name`. Output: tuple.
+    Inputs: `raw_name`. Output: `tuple`.
     """
     if raw_name is None:
         return None, None
@@ -1216,15 +1213,15 @@ def _normalize_dataset_name_override(raw_name):
 
 @dataclass(frozen=True)
 class _ManagedUploadInternalError:
-    """Represent managed upload internal error."""
+    """Helper type for managed upload internal error behavior."""
 
     public_message: str
 
 
 def _managed_upload_internal_error(public_message: str) -> _ManagedUploadInternalError:
-    """Managed upload internal error.
+    """Return the managed upload internal error.
 
-    Inputs: `public_message`. Output: `_ManagedUploadInternalError`.
+    Inputs: `public_message` (str). Output: `_ManagedUploadInternalError`.
     """
     return _ManagedUploadInternalError(public_message)
 
@@ -1238,7 +1235,7 @@ def _is_managed_upload_internal_error(error) -> bool:
 
 
 def _managed_upload_error_message(error) -> str:
-    """Managed upload error message.
+    """Return the managed upload error message.
 
     Inputs: `error`. Output: `str`.
     """
@@ -1250,9 +1247,10 @@ def _managed_upload_error_message(error) -> str:
 def _resolve_root_relative_path(
     root: Path, relative_path: str, *, max_bytes: int | None = None
 ):
-    """Resolve root relative path.
+    """Resolve the root relative path.
 
-    Inputs: `root`, `relative_path`, `max_bytes`. Output: tuple.
+    Inputs: `root` (Path), `relative_path` (str), `max_bytes` (int | None). Output:
+    `tuple`.
     """
     normalized_path, normalize_error = _normalize_upload_relative_path(relative_path)
     if normalize_error:
@@ -1271,9 +1269,10 @@ def _resolve_root_relative_path(
 
 
 def _resolve_staged_target_path(upload_root: Path, staged_path: str):
-    """Resolve staged target path.
+    """Resolve the staged target path.
 
-    Inputs: `upload_root`, `staged_path`. Output: call result.
+    Inputs: `upload_root` (Path), `staged_path` (str). Output:
+    `_resolve_root_relative_path` result.
     """
     return _resolve_root_relative_path(
         upload_root,
@@ -1283,18 +1282,18 @@ def _resolve_staged_target_path(upload_root: Path, staged_path: str):
 
 
 def _validate_staged_target_path(upload_root: Path, staged_path: str):
-    """Validate staged target path.
+    """Validate the staged target path.
 
-    Inputs: `upload_root`, `staged_path`. Output: `error`.
+    Inputs: `upload_root` (Path), `staged_path` (str). Output: `error`.
     """
     _, error = _resolve_staged_target_path(upload_root, staged_path)
     return error
 
 
 def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, upload):
-    """Append upload chunks to staged path.
+    """Append the upload chunks to staged path.
 
-    Inputs: `upload_root`, `staged_path`, `upload`. Output: tuple.
+    Inputs: `upload_root` (Path), `staged_path` (str), `upload`. Output: `tuple`.
     """
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
@@ -1356,9 +1355,9 @@ def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, up
 
 
 def _reset_staged_upload_file(upload_root: Path, staged_path: str):
-    """Reset staged upload file.
+    """Reset the staged upload file.
 
-    Inputs: `upload_root`, `staged_path`. Output: computed value or None.
+    Inputs: `upload_root` (Path), `staged_path` (str). Output: `normalize_error`.
     """
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
@@ -1408,9 +1407,9 @@ def _reset_staged_upload_file(upload_root: Path, staged_path: str):
 
 
 def _staged_upload_size(upload_root: Path, staged_path: str):
-    """Staged upload size.
+    """Return the staged upload size.
 
-    Inputs: `upload_root`, `staged_path`. Output: tuple.
+    Inputs: `upload_root` (Path), `staged_path` (str). Output: `tuple`.
     """
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
@@ -1533,9 +1532,9 @@ def _staged_upload_chunk_matches(
 
 
 def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
-    """Replace staged upload file.
+    """Replace the staged upload file.
 
-    Inputs: `upload_root`, `staged_path`, `upload`. Output: tuple.
+    Inputs: `upload_root` (Path), `staged_path` (str), `upload`. Output: `tuple`.
     """
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
@@ -1637,9 +1636,9 @@ def _should_auto_skip_import(relative_path: str) -> bool:
 
 
 def _normalize_sem_edx_associations(raw_associations, normalized_entries):
-    """Normalize sem edx associations.
+    """Normalize SEM-EDX file associations against uploaded entries.
 
-    Inputs: `raw_associations`, `normalized_entries`. Output: computed value.
+    Inputs: `raw_associations`, `normalized_entries`. Output: `normalized`.
     """
     if not isinstance(raw_associations, dict):
         return {}
@@ -1691,17 +1690,7 @@ def _normalize_sem_edx_associations(raw_associations, normalized_entries):
 def _build_sem_edx_associations_from_entries(entries):
     """Server-side fallback to derive SEM-EDX TXT->image associations.
 
-    Inputs: `entries`. Output: computed value.
-
-    The UI normally submits sem_edx_associations, but if that payload is missing/empty
-    (e.g. browser/localStorage issues, UI state bugs), we can deterministically derive
-    associations from the uploaded file list:
-
-    - Group by directory (based on relative_path)
-    - Choose ONE non-.txt file per directory as the target image (lexicographically)
-    - Attach ALL .txt files in that directory to that image
-
-    This keeps behaviour predictable and ensures TXT attachment is at least attempted.
+    Inputs: `entries`. Output: `associations`.
     """
     if not isinstance(entries, list) or not entries:
         return {}
@@ -1738,9 +1727,9 @@ def _build_sem_edx_associations_from_entries(entries):
 
 
 def _get_text(value_obj):
-    """Return text.
+    """Return the text.
 
-    Inputs: `value_obj`. Output: computed value.
+    Inputs: `value_obj`. Output: `str`.
     """
     if value_obj is None:
         return ""
@@ -1764,9 +1753,9 @@ def _get_text(value_obj):
 
 
 def _external_info_text(external_info, attribute_name: str, getter_name: str) -> str:
-    """External info text.
+    """Return the external info text.
 
-    Inputs: `external_info`, `attribute_name`, `getter_name`. Output: `str`.
+    Inputs: `external_info`, `attribute_name` (str), `getter_name` (str). Output: `str`.
     """
     if external_info is None:
         return ""
@@ -1785,9 +1774,10 @@ def _external_info_text(external_info, attribute_name: str, getter_name: str) ->
 
 
 def _query_image_external_info(conn, image_id: int) -> tuple[str, str]:
-    """Query image external info.
+    """Query the image external info.
 
-    Inputs: `conn`, `image_id`. Output: `tuple[str, str]`.
+    Inputs: `conn` OMERO gateway connection, `image_id` (int) OMERO image ID. Output:
+    `tuple[str, str]`.
     """
     if conn is None:
         return "", ""
@@ -1816,9 +1806,9 @@ def _query_image_external_info(conn, image_id: int) -> tuple[str, str]:
 
 @lru_cache(maxsize=None)
 def _units_length_for_name(unit_name: str):
-    """Units length for name.
+    """Return the units length for name.
 
-    Inputs: `unit_name`. Output: computed value.
+    Inputs: `unit_name` (str). Output: `get` result.
     """
     from omero.model.enums import UnitsLength
 
@@ -1835,9 +1825,9 @@ def _units_length_for_name(unit_name: str):
 
 
 def _normalize_units_length_name(unit_name: str) -> str:
-    """Normalize units length name.
+    """Normalize the units length name.
 
-    Inputs: `unit_name`. Output: `str`.
+    Inputs: `unit_name` (str). Output: `str`.
     """
     normalized_name = str(unit_name or "").strip().replace("μ", "µ").lower()
     normalized_name = normalized_name.replace("-", "").replace("_", "").replace(" ", "")
@@ -1851,9 +1841,9 @@ def _normalize_units_length_name(unit_name: str) -> str:
 
 @lru_cache(maxsize=1)
 def _units_length_by_normalized_name():
-    """Units length by normalized name.
+    """Return the units length by normalized name.
 
-    Inputs: none. Output: computed value.
+    Inputs: none. Output: name string.
     """
     from omero.model.enums import UnitsLength
 
@@ -1864,7 +1854,7 @@ def _units_length_by_normalized_name():
 
 
 def _unit_sort_key(enum_value):
-    """Unit sort key.
+    """Return the unit sort key.
 
     Inputs: `enum_value`. Output: `getattr` result.
     """
@@ -1874,7 +1864,7 @@ def _unit_sort_key(enum_value):
 def _iter_units_length_values(units_length_class):
     """Units length values.
 
-    Inputs: `units_length_class`. Output: computed value.
+    Inputs: `units_length_class`. Output: `list`.
     """
     values_by_name = {}
     for attribute_name in dir(units_length_class):
@@ -1896,7 +1886,7 @@ def _iter_units_length_values(units_length_class):
 
 @lru_cache(maxsize=1)
 def _units_length_symbol_aliases():
-    """Units length symbol aliases.
+    """Return the units length symbol aliases.
 
     Inputs: none. Output: `alias_map`.
     """
@@ -1957,9 +1947,9 @@ def _units_length_symbol_aliases():
 
 
 def _native_zarr_length_from_value_unit(value_unit):
-    """Native Zarr length from value unit.
+    """Return the native Zarr length from value unit.
 
-    Inputs: `value_unit`. Output: `LengthI` result or None.
+    Inputs: `value_unit`. Output: `LengthI` result.
     """
     if not isinstance(value_unit, (list, tuple)) or not value_unit:
         return None
@@ -1978,7 +1968,7 @@ def _native_zarr_length_from_value_unit(value_unit):
 
 
 def _native_zarr_length_signature(length) -> Optional[tuple[float, str]]:
-    """Native Zarr length signature.
+    """Return the native Zarr length signature.
 
     Inputs: `length`. Output: `Optional[tuple[float, str]]`.
     """
@@ -2009,12 +1999,10 @@ def _native_zarr_length_signature(length) -> Optional[tuple[float, str]]:
 def _native_zarr_image_relative_path_from_lsid(
     managed_zarr: Path, lsid: str
 ) -> Optional[str]:
-    """Native Zarr image relative path from lsid.
+    """Return the native Zarr image relative path from lsid.
 
-    Inputs: `managed_zarr`, `lsid`. Output: `Optional[str]`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `managed_zarr` (Path), `lsid` (str). Output: `Optional[str]`. Raises:
+    ValueError when validation or the called operation fails.
     """
     root_path = Path(managed_zarr).resolve(strict=False)
     lsid_text = str(lsid or "").strip()
@@ -2272,9 +2260,9 @@ def _finalize_imported_zarr_image_metadata(
 
 
 def _get_id(obj):
-    """Return ID.
+    """Return the ID.
 
-    Inputs: `obj`. Output: computed value or None.
+    Inputs: `obj`. Output: ID value.
     """
     try:
         model_obj = getattr(obj, "_obj", None)
@@ -2292,7 +2280,7 @@ def _get_id(obj):
 def _get_owner_id(obj):
     """Return owner ID.
 
-    Inputs: `obj`. Output: computed value or None.
+    Inputs: `obj`. Output: ID value.
     """
     if obj is None:
         return None
@@ -2319,7 +2307,7 @@ def _get_owner_id(obj):
 def _current_user_id(conn):
     """Return current user ID.
 
-    Inputs: `conn`. Output: computed value or None.
+    Inputs: `conn` OMERO gateway connection. Output: ID value.
     """
     try:
         user = conn.getUser()
@@ -2350,7 +2338,7 @@ def _is_owned_by_user(obj, user_id):
 def _get_owner_username(obj):
     """Return owner username.
 
-    Inputs: `obj`. Output: computed value.
+    Inputs: `obj`. Output: name string.
     """
     if obj is None:
         return ""
@@ -2383,7 +2371,7 @@ def _get_owner_username(obj):
 def _has_read_write_permissions(obj):
     """Return whether read write permissions.
 
-    Inputs: `obj`. Output: computed value.
+    Inputs: `obj`. Output: `bool`.
     """
     if obj is None:
         return False
@@ -2407,9 +2395,9 @@ def _has_read_write_permissions(obj):
 
 
 def _iter_accessible_projects(conn):
-    """Accessible projects.
+    """Iterate over the accessible projects.
 
-    Inputs: `conn`. Output: yielded values.
+    Inputs: `conn` OMERO gateway connection. Output: iterator of yielded items.
     """
     if conn is None:
         return
@@ -2473,9 +2461,9 @@ def _iter_accessible_projects(conn):
 
 
 def _collect_project_payload(conn, user_id):
-    """Collect project payload.
+    """Collect the project payload.
 
-    Inputs: `conn`, `user_id`. Output: dict.
+    Inputs: `conn` OMERO gateway connection, `user_id`. Output: `dict`.
     """
     owned_projects = []
     collab_projects = []
@@ -2497,9 +2485,9 @@ def _collect_project_payload(conn, user_id):
 
 
 def _dataset_name_for_path(relative_path: str, orphan_dataset_name: str | None = None):
-    """Dataset name for path.
+    """Return the dataset name for path.
 
-    Inputs: `relative_path`, `orphan_dataset_name`. Output: computed value.
+    Inputs: `relative_path` (str), `orphan_dataset_name` (str | None). Output: `join`
     """
     parts = PurePosixPath(relative_path).parts
     if len(parts) <= 1:
@@ -2511,9 +2499,9 @@ DIRECTORY_PACKAGE_EXTENSIONS = (".zarr",)
 
 
 def _directory_package_root_for_relative_path(relative_path: str) -> Optional[str]:
-    """Directory package root for relative path.
+    """Return the directory package root for relative path.
 
-    Inputs: `relative_path`. Output: `Optional[str]`.
+    Inputs: `relative_path` (str). Output: `Optional[str]`.
     """
     parts = PurePosixPath(relative_path).parts
     if not parts:
@@ -2531,9 +2519,10 @@ def _directory_package_root_for_relative_path(relative_path: str) -> Optional[st
 def _dataset_name_for_upload_relative_path(
     relative_path: str, orphan_dataset_name: str | None = None
 ):
-    """Dataset name for upload relative path.
+    """Return the dataset name for upload relative path.
 
-    Inputs: `relative_path`, `orphan_dataset_name`. Output: computed value.
+    Inputs: `relative_path` (str), `orphan_dataset_name` (str | None). Output:
+    `_dataset_name_for_path` result.
     """
     package_root = _directory_package_root_for_relative_path(relative_path)
     if package_root:
@@ -2542,9 +2531,9 @@ def _dataset_name_for_upload_relative_path(
 
 
 def _logical_unit_is_directory_package_root(entry: dict) -> bool:
-    """Logical unit is directory package root.
+    """Return the logical unit is directory package root.
 
-    Inputs: `entry`. Output: `bool`.
+    Inputs: `entry` (dict). Output: `bool`.
     """
     dataset_relative_path = (
         entry.get("dataset_relative_path") or entry.get("relative_path") or ""
@@ -2570,9 +2559,10 @@ def _logical_unit_is_directory_package_root(entry: dict) -> bool:
 
 
 def _dataset_name_for_import_entry(entry: dict, orphan_dataset_name: str | None = None):
-    """Dataset name for import entry.
+    """Return the dataset name for import entry.
 
-    Inputs: `entry`, `orphan_dataset_name`. Output: computed value.
+    Inputs: `entry` (dict), `orphan_dataset_name` (str | None). Output:
+    `_dataset_name_for_path` result.
     """
     dataset_relative_path = (
         entry.get("dataset_relative_path") or entry.get("relative_path") or ""
@@ -2585,9 +2575,9 @@ def _dataset_name_for_import_entry(entry: dict, orphan_dataset_name: str | None 
 
 
 def _job_dataset_name_override(job_dict: dict):
-    """Job dataset name override.
+    """Return the job dataset name override.
 
-    Inputs: `job_dict`. Output: bool or None.
+    Inputs: `job_dict` (dict). Output: `bool`.
     """
     dataset_name = job_dict.get("dataset_name_override")
     if dataset_name is None:
@@ -2601,9 +2591,10 @@ def _dataset_name_for_job_entry(
     entry: dict,
     orphan_dataset_name: str | None = None,
 ):
-    """Dataset name for job entry.
+    """Return the dataset name for job entry.
 
-    Inputs: `job_dict`, `entry`, `orphan_dataset_name`. Output: computed value.
+    Inputs: `job_dict` (dict), `entry` (dict), `orphan_dataset_name` (str | None).
+    Output: `_dataset_name_for_import_entry` result.
     """
     dataset_name_override = _job_dataset_name_override(job_dict)
     if dataset_name_override:
@@ -2618,7 +2609,8 @@ def _dataset_name_for_job_relative_path(
 ):
     """Dataset name for job relative path with.
 
-    Inputs: `job_dict`, `relative_path`, `orphan_dataset_name`. Output: computed value.
+    Inputs: `job_dict` (dict), `relative_path` (str), `orphan_dataset_name` (str |
+    None). Output: `_dataset_name_for_upload_relative_path` result.
     """
     dataset_name_override = _job_dataset_name_override(job_dict)
     if dataset_name_override:
@@ -2627,9 +2619,9 @@ def _dataset_name_for_job_relative_path(
 
 
 def _generate_orphan_dataset_name():
-    """Generate orphan dataset name.
+    """Generate the orphan dataset name.
 
-    Inputs: none. Output: computed value.
+    Inputs: none. Output: name string.
     """
     suffix = "".join(
         secrets.choice(ORPHAN_SUFFIX_ALPHANUM) for _ in range(ORPHAN_SUFFIX_LENGTH)
@@ -2638,9 +2630,10 @@ def _generate_orphan_dataset_name():
 
 
 def _find_project_dataset(conn, project_id: int, name: str):
-    """Find project dataset.
+    """Find the project dataset.
 
-    Inputs: `conn`, `project_id`, `name`. Output: `_get_id` result or None.
+    Inputs: `conn` OMERO gateway connection, `project_id` (int) OMERO project ID, `name`
+    (str) name. Output: `_get_id` result.
     """
     if not project_id or not name:
         return None
@@ -2660,9 +2653,10 @@ def _find_project_dataset(conn, project_id: int, name: str):
 
 
 def _link_dataset_to_project(conn, dataset_id: int, project_id: int):
-    """Link dataset to project.
+    """Return the link dataset to project.
 
-    Inputs: `conn`, `dataset_id`, `project_id`. Output: bool.
+    Inputs: `conn` OMERO gateway connection, `dataset_id` (int) OMERO dataset ID,
+    `project_id` (int) OMERO project ID. Output: `bool`.
     """
     if not dataset_id or not project_id:
         return False
@@ -2685,9 +2679,9 @@ def _link_dataset_to_project(conn, dataset_id: int, project_id: int):
 
 
 def _resolve_omero_host_port(conn):
-    """Resolve OMERO host port.
+    """Resolve the OMERO host port.
 
-    Inputs: `conn`. Output: tuple.
+    Inputs: `conn` OMERO gateway connection. Output: `tuple`.
     """
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
     port = getattr(conn, "port", None) or getattr(conn, "_port", None)
@@ -2709,7 +2703,7 @@ def _resolve_omero_host_port(conn):
 def _get_session_key(conn):
     """Return session key.
 
-    Inputs: `conn`. Output: computed value or None.
+    Inputs: `conn` OMERO gateway connection. Output: `getSessionId` result.
     """
     if callable(getattr(conn, "getSessionId", None)):
         try:
@@ -2724,9 +2718,9 @@ def _get_session_key(conn):
 
 
 def _optional_int(value) -> int | None:
-    """Optional int.
+    """Return the optional int.
 
-    Inputs: `value`. Output: `int | None`.
+    Inputs: `value` input value. Output: `int | None`.
     """
     if value is None or value == "":
         return None
@@ -2741,7 +2735,8 @@ def _get_or_create_dataset(
 ):
     """Return or create dataset.
 
-    Inputs: `conn`, `name`, `dataset_map`, `project_id`. Output: computed value or None.
+    Inputs: `conn` OMERO gateway connection, `name` (str) name, `dataset_map` (dict),
+    `project_id` (int | None) OMERO project ID. Output: `dataset_id`.
     """
     if not name:
         return None
@@ -2785,9 +2780,9 @@ def _get_or_create_dataset(
 
 
 def _plan_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
-    """Plan job dataset targets.
+    """Return the plan job dataset targets.
 
-    Inputs: `job_dict`, `entries_to_import`. Output: tuple.
+    Inputs: `job_dict` (dict), `entries_to_import` (list[dict]). Output: `tuple`.
     """
     dataset_name_override = _job_dataset_name_override(job_dict)
     if dataset_name_override:
@@ -2818,9 +2813,9 @@ def _plan_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
 
 
 def _serialize_import_unit_plan(unit: dict):
-    """Serialize import unit plan.
+    """Return the serialize import unit plan.
 
-    Inputs: `unit`. Output: `serialized` or None.
+    Inputs: `unit` (dict). Output: `serialized`.
     """
     covered_relative_paths = [
         relative_path
@@ -2844,9 +2839,9 @@ def _serialize_import_unit_plan(unit: dict):
 
 
 def _planned_import_units_for_request(job_dict: dict):
-    """Planned import units for request.
+    """Return the planned import units for request.
 
-    Inputs: `job_dict`. Output: computed value.
+    Inputs: `job_dict` (dict). Output: `planned_units`.
     """
     raw_units = job_dict.get("planned_import_units") or []
     if not isinstance(raw_units, list):
@@ -2891,9 +2886,9 @@ def _planned_import_units_for_request(job_dict: dict):
 
 
 def _plan_request_job_dataset_targets(job_dict: dict):
-    """Plan request job dataset targets.
+    """Return the plan request job dataset targets.
 
-    Inputs: `job_dict`. Output: tuple.
+    Inputs: `job_dict` (dict). Output: `tuple`.
     """
     dataset_name_override = _job_dataset_name_override(job_dict)
     if dataset_name_override:
@@ -2972,9 +2967,10 @@ def _plan_request_job_dataset_targets(job_dict: dict):
 def _prepare_request_job_import_datasets(
     job_id: str, job_dict: dict, conn: Optional[BlitzGateway] = None
 ):
-    """Prepare request job import datasets.
+    """Prepare the request job import datasets.
 
-    Inputs: `job_id`, `job_dict`, `conn`. Output: tuple.
+    Inputs: `job_id` (str), `job_dict` (dict), `conn` (Optional[BlitzGateway]) OMERO
+    gateway connection. Output: `tuple`.
     """
     generic_error = errors.unable_prepare_import_destination()
     if conn is None:
@@ -3034,9 +3030,10 @@ def _prepare_uploaded_job_for_request_path_import(
     job_dict: dict,
     conn: Optional[BlitzGateway] = None,
 ):
-    """Prepare uploaded job for request path import.
+    """Prepare the uploaded job for request path import.
 
-    Inputs: `job_id`, `job_dict`, `conn`. Output: tuple.
+    Inputs: `job_id` (str), `job_dict` (dict), `conn` (Optional[BlitzGateway]) OMERO
+    gateway connection. Output: `tuple`.
     """
     if conn is None or _has_pending_uploads(job_dict):
         return job_dict, None
@@ -3079,9 +3076,10 @@ def _prepare_uploaded_job_for_request_path_import(
 def _ensure_job_dataset_targets(
     job_dict: dict, entries_to_import: list[dict], conn: Optional[BlitzGateway] = None
 ):
-    """Ensure job dataset targets.
+    """Ensure the job dataset targets.
 
-    Inputs: `job_dict`, `entries_to_import`, `conn`. Output: tuple.
+    Inputs: `job_dict` (dict), `entries_to_import` (list[dict]), `conn`
+    (Optional[BlitzGateway]) OMERO gateway connection. Output: `tuple`.
     """
     orphan_dataset_name, dataset_names = _plan_job_dataset_targets(
         job_dict, entries_to_import
@@ -3181,16 +3179,17 @@ def _ensure_job_dataset_targets(
 def _prepare_job_import_datasets(
     job_id: str, job_dict: dict, conn: Optional[BlitzGateway] = None
 ):
-    """Prepare job import datasets.
+    """Prepare the job import datasets.
 
-    Inputs: `job_id`, `job_dict`, `conn`. Output: computed value.
+    Inputs: `job_id` (str), `job_dict` (dict), `conn` (Optional[BlitzGateway]) OMERO
+    gateway connection. Output: `tuple`.
     """
     upload_root = _get_upload_root() / job_id
     if not upload_root.exists():
         error_message = errors.upload_folder_missing_on_server()
 
         def mark_upload_root_missing(current_job):
-            """Mark upload root missing.
+            """Return the mark upload root missing.
 
             Inputs: `current_job`. Output: `current_job`.
             """
@@ -3210,7 +3209,7 @@ def _prepare_job_import_datasets(
         error_message = dataset_error or errors.unable_prepare_import_destination()
 
         def mark_dataset_target_error(current_job):
-            """Mark dataset target error.
+            """Return the mark dataset target error.
 
             Inputs: `current_job`. Output: `current_job`.
             """
@@ -3342,9 +3341,9 @@ def _get_failed_import_retention_seconds() -> int:
 
 
 def _sanitize_cli_output_for_logging(text: str) -> str:
-    """Sanitize cli output for logging.
+    """Sanitize the cli output for logging.
 
-    Inputs: `text`. Output: `str`.
+    Inputs: `text` (str). Output: `str`.
     """
     sanitized = sanitize_log_value(text)
     return re.sub(
@@ -3362,9 +3361,10 @@ def _summarize_cli_error_text(
     max_lines: int = 10,
     max_chars: int = 500,
 ) -> str:
-    """Summarize cli error text.
+    """Return the summarize cli error text.
 
-    Inputs: `stdout`, `stderr`, `max_lines`, `max_chars`. Output: `str`.
+    Inputs: `stdout` (str), `stderr` (str), `max_lines` (int), `max_chars` (int).
+    Output: `str`.
     """
     raw_text = stderr or stdout or ""
     if not raw_text:
@@ -3377,9 +3377,9 @@ def _summarize_cli_error_text(
 
 
 def _extract_imported_object_ids(output: str) -> list[str]:
-    """Extract imported object IDs.
+    """Extract the imported object IDs.
 
-    Inputs: `output`. Output: `list[str]`.
+    Inputs: `output` (str). Output: `list[str]`.
     """
     if not output:
         return []
@@ -3399,9 +3399,9 @@ def _extract_imported_image_ids_for_normalization(
     output: str,
     fallback_image_ids=None,
 ) -> list[int]:
-    """Extract imported image IDs for normalization.
+    """Extract the imported image IDs for normalization.
 
-    Inputs: `output`, `fallback_image_ids`. Output: `list[int]`.
+    Inputs: `output` (str), `fallback_image_ids`. Output: `list[int]`.
     """
     image_ids = _extract_imported_image_ids(output)
     if image_ids:
@@ -3422,9 +3422,9 @@ def _extract_imported_image_ids_for_normalization(
 
 
 def _reports_no_processor_available(stdout: str, stderr: str) -> bool:
-    """Reports no processor available.
+    """Return the reports no processor available.
 
-    Inputs: `stdout`, `stderr`. Output: `bool`.
+    Inputs: `stdout` (str), `stderr` (str). Output: `bool`.
     """
     combined = "\n".join(part for part in (stdout, stderr) if part)
     lowered = combined.lower()
@@ -3464,7 +3464,7 @@ def _get_root_password() -> str:
 
 
 def _normalize_job_service_credentials(credentials) -> JobServiceCredentials:
-    """Normalize job service credentials.
+    """Normalize the job service credentials.
 
     Inputs: `credentials`. Output: `JobServiceCredentials`.
     """
@@ -3474,9 +3474,9 @@ def _normalize_job_service_credentials(credentials) -> JobServiceCredentials:
 
 
 def _open_admin_connection(host: str, port: int) -> Optional[BlitzGateway]:
-    """Open admin connection.
+    """Open the admin connection.
 
-    Inputs: `host`, `port`. Output: `Optional[BlitzGateway]`.
+    Inputs: `host` (str), `port` (int). Output: `Optional[BlitzGateway]`.
     """
     root_pass = _get_root_password()
     if not root_pass:
@@ -3530,9 +3530,10 @@ def _resolve_group_name(
     group_id: Optional[int],
     group_name: Optional[str] = None,
 ) -> Optional[str]:
-    """Resolve group name.
+    """Resolve the group name.
 
-    Inputs: `conn`, `group_id`, `group_name`. Output: `Optional[str]`.
+    Inputs: `conn` (Optional[BlitzGateway]) OMERO gateway connection, `group_id`
+    (Optional[int]), `group_name` (Optional[str]). Output: `Optional[str]`.
     """
     cached_name = (group_name or "").strip()
     if cached_name:
@@ -3566,10 +3567,11 @@ def _background_import_session(
     group_name: Optional[str] = None,
     timeout_hint_seconds: Optional[int] = None,
 ):
-    """Background import session.
+    """Return the background import session.
 
-    Inputs: `username`, `host`, `port`, `group_id`, `group_name`,
-    `timeout_hint_seconds`. Output: yielded values.
+    Inputs: `username` (str) username, `host` (str), `port` (int), `group_id`
+    (Optional[int]), `group_name` (Optional[str]), `timeout_hint_seconds`
+    (Optional[int]). Output: iterator of yielded items.
     """
     admin_conn = _open_admin_connection(host, port)
     if admin_conn is None:
@@ -3649,9 +3651,10 @@ def _background_user_connection(
         return
 
     def _open_from_session(active_session_key: str):
-        """Open from session.
+        """Open the from session.
 
-        Inputs: `active_session_key`. Output: call result or None.
+        Inputs: `active_session_key` (str). Output:
+        `_open_group_scoped_session_connection` result.
         """
         if not active_session_key:
             return None
@@ -3714,10 +3717,10 @@ def _background_user_connection(
 def _write_cli_ice_config(
     cli_home: Path, keepalive_seconds: int, base_config_path: str = ""
 ) -> Optional[Path]:
-    """Write cli ice config.
+    """Write the cli ice config.
 
-    Inputs: `cli_home`, `keepalive_seconds`, `base_config_path`. Output:
-    `Optional[Path]`.
+    Inputs: `cli_home` (Path), `keepalive_seconds` (int), `base_config_path` (str).
+    Output: `Optional[Path]`.
     """
     if keepalive_seconds <= 0:
         return None
@@ -3757,9 +3760,9 @@ def _write_cli_ice_config(
 
 
 def _classify_import_failure(stdout: str, stderr: str) -> str:
-    """Classify import failure.
+    """Return the classify import failure.
 
-    Inputs: `stdout`, `stderr`. Output: `str`.
+    Inputs: `stdout` (str), `stderr` (str). Output: `str`.
     """
     combined = "\n".join(part for part in (stdout, stderr) if part).lower()
     if (
@@ -3791,9 +3794,9 @@ def _classify_import_failure(stdout: str, stderr: str) -> str:
 
 
 def _run_omero_cli(cmd, timeout=None):
-    """OMERO cli.
+    """Run the OMERO cli.
 
-    Inputs: `cmd`, `timeout`. Output: `process_utils.run` result.
+    Inputs: `cmd`, `timeout` timeout seconds. Output: `run` result.
     """
     return process_utils.run(
         cmd,
@@ -3848,7 +3851,8 @@ def _run_local_import_scan(path: Path, timeout: Optional[int] = None):
 def _run_omero_cli_streaming(cmd, *, env, timeout, on_tick=None):
     """OMERO cli streaming.
 
-    Inputs: `cmd`, `env`, `timeout`, `on_tick`. Output: call result.
+    Inputs: `cmd`, `env` environment mapping, `timeout` timeout seconds, `on_tick`.
+    Output: `run_streaming` result.
     """
     return process_utils.run_streaming(
         cmd,
@@ -3860,9 +3864,9 @@ def _run_omero_cli_streaming(cmd, *, env, timeout, on_tick=None):
 
 
 def _parse_cli_id(output: str, expected_type: str):
-    """Parse cli ID.
+    """Parse and validate the cli ID input.
 
-    Inputs: `output`, `expected_type`. Output: `int` result or None.
+    Inputs: `output` (str), `expected_type` (str). Output: `int`.
     """
     for line in (output or "").splitlines():
         match = _CLI_ID_PATTERN.search(line.strip())
@@ -3872,12 +3876,9 @@ def _parse_cli_id(output: str, expected_type: str):
 
 
 def _read_proc_rchar(pid):
-    """Read proc rchar.
+    """Read the proc rchar.
 
-    Inputs: `pid`. Output: `int` result or None.
-
-    Returns ``None`` when the file cannot be read (process exited, permissions,
-    non-Linux OS, etc.).
+    Inputs: `pid`. Output: `int`.
     """
     try:
         normalized_pid = int(str(pid).strip())
@@ -4032,9 +4033,9 @@ def _import_file(
     last_save = 0.0
 
     def _update_progress(pid: int, _elapsed: float) -> None:
-        """Update progress.
+        """Update the progress.
 
-        Inputs: `pid`, `_elapsed`. Output: None.
+        Inputs: `pid` (int), `_elapsed` (float). Output: None.
         """
         nonlocal baseline_rchar, last_save
         if file_size <= 0:
@@ -4103,12 +4104,9 @@ def _import_file(
 
 
 def _validate_session(conn):
-    """Validate session.
+    """Validate the session.
 
-    Inputs: `conn`. Output: bool.
-
-    Returns:
-        bool: True if session is valid, False otherwise
+    Inputs: `conn` OMERO gateway connection. Output: `bool`.
     """
     try:
         # Try to get the current event context - this will fail if session expired
@@ -4165,17 +4163,9 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
 
 
 def _open_session_connection(session_key: str, host: str, port: int):
-    """Open session connection.
+    """Open the session connection.
 
-    Inputs: `session_key`, `host`, `port`. Output: `conn`.
-
-    Args:
-        session_key: OMERO session key
-        host: OMERO server host
-        port: OMERO server port
-
-    Returns:
-        BlitzGateway connection
+    Inputs: `session_key` (str), `host` (str), `port` (int). Output: `conn`.
     """
     client = omero.client(host=host, port=port)
     _join_detached_session(client, session_key)
@@ -4197,13 +4187,10 @@ def _join_detached_session(client, session_key: str):
 
 
 def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=30):
-    """Find image by name.
+    """Find the image by name.
 
-    Inputs: `conn`, `file_name`, `dataset_id`, `timeout_seconds`. Output:
-    `conn.getObject` result or None.
-
-    FIXED: This version uses database queries instead of iterating all images.
-    Prevents hangs on large datasets (100-1000x faster).
+    Inputs: `conn` OMERO gateway connection, `file_name` (str), `dataset_id` OMERO
+    dataset ID, `timeout_seconds`. Output: `getObject` result.
     """
     if not file_name:
         return None
@@ -4280,12 +4267,10 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
 
 
 def _params_add_string(params, key, value):
-    """Params add string.
+    """Append a string parameter to the OMERO script request payload.
 
-    Inputs: `params`, `key`, `value`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `params` SQL parameters, `key` lookup key, `value` input value. Output:
+    None. Raises: AttributeError when validation or the called operation fails.
     """
     add_string = getattr(params, "addString", None)
     if callable(add_string):
@@ -4307,12 +4292,10 @@ def _params_add_string(params, key, value):
 
 
 def _params_add_long(params, key, value):
-    """Params add long.
+    """Append an integer parameter to the OMERO script request payload.
 
-    Inputs: `params`, `key`, `value`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `params` SQL parameters, `key` lookup key, `value` input value. Output:
+    None. Raises: AttributeError when validation or the called operation fails.
     """
     add_long = getattr(params, "addLong", None)
     if callable(add_long):
@@ -4333,12 +4316,10 @@ def _params_add_long(params, key, value):
 
 
 def _params_add_string_list(params, key, values):
-    """Params add string list.
+    """Append a string-list parameter to the OMERO script request payload.
 
-    Inputs: `params`, `key`, `values`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `params` SQL parameters, `key` lookup key, `values`. Output: None. Raises:
+    AttributeError when validation or the called operation fails.
     """
     normalized_values = [str(value) for value in values]
 
@@ -4363,9 +4344,9 @@ def _params_add_string_list(params, key, values):
 
 
 def _params_page(params, offset, size):
-    """Params page.
+    """Append paging parameters to the OMERO script request payload.
 
-    Inputs: `params`, `offset`, `size`. Output: None.
+    Inputs: `params` SQL parameters, `offset`, `size`. Output: None.
     """
     page = getattr(params, "page", None)
     if callable(page):
@@ -4373,9 +4354,9 @@ def _params_page(params, offset, size):
 
 
 def _timeout_expired(start_time: float, timeout_seconds) -> bool:
-    """Timeout expired.
+    """Return the timeout expired.
 
-    Inputs: `start_time`, `timeout_seconds`. Output: `bool`.
+    Inputs: `start_time` (float), `timeout_seconds`. Output: `bool`.
     """
     try:
         timeout = float(timeout_seconds)
@@ -4457,7 +4438,7 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
 
 
 def _first_non_empty_env(*names: str) -> str:
-    """First non empty env.
+    """Return the first non-empty environment value from candidate names.
 
     Inputs: `*names`. Output: `str`.
     """
@@ -4469,7 +4450,7 @@ def _first_non_empty_env(*names: str) -> str:
 
 
 def _job_service_secure_from_env(raw_value: str) -> bool:
-    """Job service secure from env.
+    """Interpret the job-service secure flag from environment text.
 
     Inputs: `raw_value`. Output: `bool`.
     """
@@ -4516,10 +4497,11 @@ def _create_dataset_via_admin_connection(
     group_name: Optional[str] = None,
     project_id: Optional[int] = None,
 ) -> Optional[int]:
-    """Create dataset via admin connection.
+    """Create the dataset via admin connection.
 
-    Inputs: `username`, `host`, `port`, `name`, `group_id`, `group_name`, `project_id`.
-    Output: `Optional[int]`.
+    Inputs: `username` (str) username, `host` (str), `port` (int), `name` (str) name,
+    `group_id` (Optional[int]), `group_name` (Optional[str]), `project_id`
+    (Optional[int]) OMERO project ID. Output: `Optional[int]`.
     """
     admin_conn = _open_admin_connection(host, port)
     if admin_conn is None:
@@ -4579,8 +4561,8 @@ def _open_service_connection(
 ) -> Optional[BlitzGateway]:
     """Login as service user for async background work (safe for user sessions).
 
-    Inputs: `host`, `port`, `group_id`. Output: `Optional[BlitzGateway]`. Raises on
-    invalid or unavailable state.
+    Inputs: `host` (str), `port` (int), `group_id` (Optional[int]). Output:
+    `Optional[BlitzGateway]`.
     """
     credentials = _normalize_job_service_credentials(_get_job_service_credentials())
 
@@ -4675,9 +4657,9 @@ def _open_service_connection(
 
 
 def _connection_has_last_error(conn) -> bool:
-    """Connection has last error.
+    """Return the connection has last error.
 
-    Inputs: `conn`. Output: `bool`.
+    Inputs: `conn` OMERO gateway connection. Output: `bool`.
     """
     try:
         return bool(conn.getLastError())
@@ -4691,9 +4673,10 @@ def _open_group_scoped_session_connection(
     port: int,
     group_id: Optional[int] = None,
 ):
-    """Open group scoped session connection.
+    """Open the group scoped session connection.
 
-    Inputs: `session_key`, `host`, `port`, `group_id`. Output: `conn` or None.
+    Inputs: `session_key` (str), `host` (str), `port` (int), `group_id` (Optional[int]).
+    Output: `conn`.
     """
     if not session_key:
         return None
@@ -4723,10 +4706,12 @@ def _open_user_owned_background_connection(
     _service_conn: Optional[BlitzGateway] = None,
     purpose: str = "background OMERO work",
 ):
-    """Open user owned background connection.
+    """Open the user owned background connection.
 
-    Inputs: `_username`, `session_key`, `host`, `port`, `group_id`, `_service_conn`,
-    `purpose`. Output: call result or None.
+    Inputs: `_username` (str), `session_key` (str), `host` (str), `port`
+    (Optional[int]), `group_id` (Optional[int]), `_service_conn`
+    (Optional[BlitzGateway]), `purpose` (str). Output:
+    `_open_group_scoped_session_connection` result.
     """
     if not session_key or not host or port is None:
         logger.warning(
@@ -4744,9 +4729,9 @@ def _open_user_owned_background_connection(
 
 
 def _logical_import_entry_display_name(entry: dict) -> str:
-    """Logical import entry display name.
+    """Return the logical import entry display name.
 
-    Inputs: `entry`. Output: `str`.
+    Inputs: `entry` (dict). Output: `str`.
     """
     rel_path = (entry.get("relative_path") or "").strip()
     if not rel_path:
@@ -4755,9 +4740,9 @@ def _logical_import_entry_display_name(entry: dict) -> str:
 
 
 def _logical_import_entry_source_display_name(entry: dict) -> str:
-    """Logical import entry source display name.
+    """Return the logical import entry source display name.
 
-    Inputs: `entry`. Output: `str`.
+    Inputs: `entry` (dict). Output: `str`.
     """
     source_rel_path = (entry.get("source_relative_path") or "").strip()
     if source_rel_path:
@@ -4766,9 +4751,9 @@ def _logical_import_entry_source_display_name(entry: dict) -> str:
 
 
 def _logical_import_entry_group_header_name(entry: dict) -> str:
-    """Logical import entry group header name.
+    """Return the logical import entry group header name.
 
-    Inputs: `entry`. Output: `str`.
+    Inputs: `entry` (dict). Output: `str`.
     """
     explicit_group_header_name = (entry.get("group_header_name") or "").strip()
     if explicit_group_header_name:
@@ -4780,9 +4765,10 @@ def _logical_import_entry_group_header_name(entry: dict) -> str:
 
 
 def _entry_requires_name_normalization(entry: dict, dataset_id: Optional[int]) -> bool:
-    """Entry requires name normalization.
+    """Return the entry requires name normalization.
 
-    Inputs: `entry`, `dataset_id`. Output: `bool`.
+    Inputs: `entry` (dict), `dataset_id` (Optional[int]) OMERO dataset ID. Output:
+    `bool`.
     """
     if not dataset_id:
         return False
@@ -4800,7 +4786,7 @@ def _entry_requires_name_normalization(entry: dict, dataset_id: Optional[int]) -
 
 @dataclass(frozen=True)
 class _ImportNameNormalizationContext:
-    """Represent import name normalization context."""
+    """Helper type for import name normalization context behavior."""
 
     cli_import_name: Optional[str] = None
     group_header_name: str = ""
@@ -4829,7 +4815,7 @@ def _build_source_aware_image_name(
 def _coerce_import_name_normalization_context(
     context,
 ) -> Optional[_ImportNameNormalizationContext]:
-    """Coerce import name normalization context.
+    """Coerce the import name normalization context.
 
     Inputs: `context`. Output: `Optional[_ImportNameNormalizationContext]`.
     """
@@ -4906,7 +4892,8 @@ def _build_import_name_normalization_context(
 ):
     """Import name normalization context.
 
-    Inputs: `entry`, `dataset_id`, `file_path`. Output: computed value or None.
+    Inputs: `entry` (dict), `dataset_id` (Optional[int]) OMERO dataset ID, `file_path`
+    (Optional[Path]) file path. Output: `_ImportNameNormalizationContext` result.
     """
     if file_path is not None:
         zarr_context = _build_ome_zarr_import_name_normalization_context(
@@ -4931,9 +4918,9 @@ def _build_import_name_normalization_context(
 
 
 def _extract_imported_image_ids(import_stdout: str) -> list[int]:
-    """Extract imported image IDs.
+    """Extract the imported image IDs.
 
-    Inputs: `import_stdout`. Output: `list[int]`.
+    Inputs: `import_stdout` (str). Output: `list[int]`.
     """
     if not import_stdout:
         return []
@@ -4959,9 +4946,9 @@ def _extract_imported_image_ids(import_stdout: str) -> list[int]:
 def _image_name_requires_normalization(
     current_name: str, group_header_name: str
 ) -> bool:
-    """Image name requires normalization.
+    """Return the image name requires normalization.
 
-    Inputs: `current_name`, `group_header_name`. Output: `bool`.
+    Inputs: `current_name` (str), `group_header_name` (str). Output: `bool`.
     """
     normalized_current = (current_name or "").strip()
     if not normalized_current:
@@ -4975,9 +4962,10 @@ def _open_import_name_normalization_connection(
     port: int,
     group_id: Optional[int],
 ):
-    """Open import name normalization connection.
+    """Open the import name normalization connection.
 
-    Inputs: `session_key`, `host`, `port`, `group_id`. Output: call result or None.
+    Inputs: `session_key` (str), `host` (str), `port` (int), `group_id` (Optional[int]).
+    Output: `_open_group_scoped_session_connection` result.
     """
     try:
         return _open_group_scoped_session_connection(
@@ -5003,10 +4991,11 @@ def _apply_import_name_normalization_context(
     port: int,
     group_id: Optional[int],
 ) -> list[int]:
-    """Apply import name normalization context.
+    """Apply the import name normalization context.
 
-    Inputs: `entry`, `context`, `imported_image_ids`, `session_key`, `host`, `port`,
-    `group_id`. Output: `list[int]`.
+    Inputs: `entry` (dict), `context` (Optional[_ImportNameNormalizationContext]),
+    `imported_image_ids` (list[int]), `session_key` (str), `host` (str), `port` (int),
+    `group_id` (Optional[int]). Output: `list[int]`.
     """
     context = _coerce_import_name_normalization_context(context)
     if not context or not session_key:
@@ -5130,20 +5119,11 @@ def _attach_txt_to_image_service(
 ):
     """Attach a TXT file to an Image using OMERO API (no CLI).
 
-    Inputs: `conn`, `image_id`, `txt_path`, `username`, `create_tables`, `plot_path`,
-    `session_key`, `host`, `port`, `group_id`. Output: None. Raises on invalid or
-    unavailable state.
-
-    Creates:
-      - OriginalFile
-      - FileAnnotation (ns=SEM_EDX_FILEANNOTATION_NS)
-      - ImageAnnotationLink
-      - OMERO Table with spectrum data
-      - Optional PNG plot attachment (if plot_path provided)
-
-    This is safe to run in background threads and does NOT touch the user's session.
-    Prefer a detached end-user session when available so user-owned objects do
-    not depend on job-service administrator privileges.
+    Inputs: `conn` (BlitzGateway) OMERO gateway connection, `image_id` (int) OMERO image
+    ID, `txt_path` (Path), `username` (str) username, `create_tables` (bool),
+    `plot_path` (Optional[Path]), `session_key` (str), `host` (str), `port`
+    (Optional[int]), `group_id` (Optional[int]). Output: None. Raises: RuntimeError when
+    validation or the called operation fails.
     """
     _ = conn
     from omero.model import FileAnnotationI, OriginalFileI
@@ -5156,10 +5136,11 @@ def _attach_txt_to_image_service(
         file_path: Path,
         mimetype: str,
     ):
-        """Attach file.
+        """Attach a staged file to the target import job or OMERO object.
 
-        Inputs: `user_connection`, `image_obj`, `file_path`, `mimetype`. Output: None.
-        Raises on invalid or unavailable state.
+        Inputs: `user_connection`, `image_obj`, `file_path` (Path) file path, `mimetype`
+        (str). Output: None. Raises: RuntimeError when validation or external operations
+        fail.
         """
         try:
             binary_data = file_path.read_bytes()
@@ -5253,9 +5234,9 @@ def _attach_txt_to_image_service(
 
 
 def _append_job_message(job: dict, message: str):
-    """Append job message.
+    """Append the job message.
 
-    Inputs: `job`, `message`. Output: None.
+    Inputs: `job` (dict), `message` (str). Output: None.
     """
     if not message:
         return
@@ -5266,9 +5247,9 @@ def _append_job_message(job: dict, message: str):
 
 
 def _append_job_error(job: dict, message: str):
-    """Append job error.
+    """Append the job error.
 
-    Inputs: `job`, `message`. Output: None.
+    Inputs: `job` (dict), `message` (str). Output: None.
     """
     if not message:
         return
@@ -5281,18 +5262,20 @@ def _append_job_error(job: dict, message: str):
 def _append_txt_attachment_message(
     job: dict, txt_name: str, image_name: str, success: bool
 ):
-    """Append txt attachment message.
+    """Append the txt attachment message.
 
-    Inputs: `job`, `txt_name`, `image_name`, `success`. Output: None.
+    Inputs: `job` (dict), `txt_name` (str), `image_name` (str), `success` (bool).
+    Output: None.
     """
     label = "Txt attachment success" if success else "Txt attachment failure"
     _append_job_message(job, f"{label}: {txt_name} into {image_name}")
 
 
 def _verify_import(conn, file_name: str, dataset_id=None):
-    """Verify import.
+    """Verify the import.
 
-    Inputs: `conn`, `file_name`, `dataset_id`. Output: bool.
+    Inputs: `conn` OMERO gateway connection, `file_name` (str), `dataset_id` OMERO
+    dataset ID. Output: `bool`.
     """
     if dataset_id:
         try:
@@ -5338,9 +5321,10 @@ def _safe_job_id(value: str) -> bool:
 
 
 def _validated_job_id(value: str) -> str:
-    """Validated job ID.
+    """Return the validated job ID.
 
-    Inputs: `value`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `value` (str) input value. Output: `str`. Raises: ValueError when validation or the
+    called operation fails.
     """
     if not _safe_job_id(value):
         raise ValueError("Invalid job id.")
@@ -5348,9 +5332,9 @@ def _validated_job_id(value: str) -> str:
 
 
 def _job_lock_path(job_id: str) -> Path:
-    """Job lock path.
+    """Return the job lock path.
 
-    Inputs: `job_id`. Output: `Path`.
+    Inputs: `job_id` (str). Output: `Path`.
     """
     return _resolve_managed_child_parts(
         _get_jobs_root(),
@@ -5366,13 +5350,13 @@ _MANAGED_COMPONENT_RE = re.compile(r"(?!\.{1,2}$)[^/\\\x00]+")
 
 
 class _ManagedPathValidationError(ValueError):
-    """Represent managed path validation error."""
+    """Helper type for managed path validation error behavior."""
 
 
 def _invalid_managed_path(display_path: str) -> _ManagedPathValidationError:
-    """Invalid managed path.
+    """Return the invalid managed path.
 
-    Inputs: `display_path`. Output: `_ManagedPathValidationError`.
+    Inputs: `display_path` (str). Output: `_ManagedPathValidationError`.
     """
     return _ManagedPathValidationError(errors.invalid_filename(display_path))
 
@@ -5380,9 +5364,10 @@ def _invalid_managed_path(display_path: str) -> _ManagedPathValidationError:
 def _managed_relative_path_validation_error(
     root: Path, relative_parts: tuple[str, ...], *, max_bytes: int | None = None
 ) -> str | None:
-    """Managed relative path validation error.
+    """Return the managed relative path validation error.
 
-    Inputs: `root`, `relative_parts`, `max_bytes`. Output: `str | None`.
+    Inputs: `root` (Path), `relative_parts` (tuple[str, ...]), `max_bytes` (int | None).
+    Output: `str | None`.
     """
     if not relative_parts:
         return errors.invalid_filename("")
@@ -5408,12 +5393,11 @@ def _managed_relative_path_validation_error(
 def _validate_managed_relative_parts(
     root: Path, relative_parts: tuple[str, ...], *, max_bytes: int | None = None
 ) -> tuple[Path, tuple[str, ...]]:
-    """Validate managed relative parts.
+    """Validate the managed relative parts.
 
-    Inputs: `root`, `relative_parts`, `max_bytes`. Output: `tuple[Path, tuple[str,
-    ...]]`. Raises on invalid or unavailable state.
-
-    ...]]`. Raises on invalid or unavailable state.
+    Inputs: `root` (Path), `relative_parts` (tuple[str, ...]), `max_bytes` (int | None).
+    Output: `tuple[Path, tuple[str, ...]]`. Raises: _ManagedPathValidationError when validation
+    or the called operation fails.
     """
     validation_error = _managed_relative_path_validation_error(
         root,
@@ -5426,12 +5410,10 @@ def _validate_managed_relative_parts(
 
 
 def _managed_root_relative_parts(path: Path) -> tuple[Path, tuple[str, ...]]:
-    """Managed root relative parts.
+    """Return the managed root relative parts.
 
-    Inputs: `path`. Output: `tuple[Path, tuple[str, ...]]`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `path` (Path) path. Output: `tuple[Path, tuple[str, ...]]`. Raises:
+    _ManagedPathValidationError when validation or the called operation fails.
     """
     candidate = Path(path)
     for root in (_get_upload_root(), _get_jobs_root()):
@@ -5450,12 +5432,10 @@ def _managed_root_relative_parts(path: Path) -> tuple[Path, tuple[str, ...]]:
 
 
 def _validated_managed_component(component: str, display_path: str) -> str:
-    """Validated managed component.
+    """Return the validated managed component.
 
-    Inputs: `component`, `display_path`. Output: `str`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `component` (str), `display_path` (str). Output: `str`. Raises:
+    _invalid_managed_path when validation or the called operation fails.
     """
     component_text = str(component or "")
     if not _MANAGED_COMPONENT_RE.fullmatch(component_text):
@@ -5464,17 +5444,18 @@ def _validated_managed_component(component: str, display_path: str) -> str:
 
 
 def _managed_safe_component_name(component: str, display_path: str) -> str:
-    """Managed safe component name.
+    """Return the managed safe component name.
 
-    Inputs: `component`, `display_path`. Output: `str`.
+    Inputs: `component` (str), `display_path` (str). Output: `str`.
     """
     return _validated_managed_component(component, display_path)
 
 
 def _open_trusted_managed_root_fd(root_path: Path) -> int:
-    """Open trusted managed root fd.
+    """Open the trusted managed root fd.
 
-    Inputs: `root_path`. Output: `int`. Raises on invalid or unavailable state.
+    Inputs: `root_path` (Path). Output: `int`. Raises: FileNotFoundError,
+    _invalid_managed_path when validation or the called operation fails.
     """
     try:
         return os.open(
@@ -5492,9 +5473,10 @@ def _open_trusted_managed_root_fd(root_path: Path) -> int:
 def _open_managed_subdirectory_fd(
     parent_fd: int, directory_name: str, display_path: str
 ) -> int:
-    """Open managed subdirectory fd.
+    """Open the managed subdirectory fd.
 
-    Inputs: `parent_fd`, `directory_name`, `display_path`. Output: `int`.
+    Inputs: `parent_fd` (int), `directory_name` (str), `display_path` (str). Output:
+    `int`.
     """
     safe_name = _managed_safe_component_name(directory_name, display_path)
     return os.open(
@@ -5505,10 +5487,11 @@ def _open_managed_subdirectory_fd(
 
 
 def _managed_child_lstat(parent_fd: int, child_name: str, display_path: str):
-    """Managed child lstat.
+    """Return the managed child lstat.
 
-    Inputs: `parent_fd`, `child_name`, `display_path`. Output: `stat_result` or None.
-    Raises on invalid or unavailable state.
+    Inputs: `parent_fd` (int), `child_name` (str), `display_path` (str). Output:
+    `stat_result`. Raises: _invalid_managed_path when validation or external operations
+    fail.
     """
     safe_name = _managed_safe_component_name(child_name, display_path)
     try:
@@ -5525,9 +5508,10 @@ def _managed_child_lstat(parent_fd: int, child_name: str, display_path: str):
 def _create_managed_subdirectory(
     parent_fd: int, directory_name: str, display_path: str
 ) -> int:
-    """Create managed subdirectory.
+    """Create the managed subdirectory.
 
-    Inputs: `parent_fd`, `directory_name`, `display_path`. Output: `int`.
+    Inputs: `parent_fd` (int), `directory_name` (str), `display_path` (str). Output:
+    `int`.
     """
     safe_name = _managed_safe_component_name(directory_name, display_path)
     os.mkdir(safe_name, _MANAGED_DIRECTORY_CREATE_MODE, dir_fd=parent_fd)
@@ -5537,12 +5521,11 @@ def _create_managed_subdirectory(
 def _open_managed_upload_file_fd(
     parent_fd: int, child_name: str, flags: int, display_path: str
 ) -> int:
-    """Open managed upload file fd.
+    """Open the managed upload file fd.
 
-    Inputs: `parent_fd`, `child_name`, `flags`, `display_path`. Output: `int`. Raises on
-    invalid or unavailable state.
-
-    invalid or unavailable state.
+    Inputs: `parent_fd` (int), `child_name` (str), `flags` (int), `display_path` (str).
+    Output: `int`. Raises: _invalid_managed_path when validation or external operations
+    fail.
     """
     safe_name = _managed_safe_component_name(child_name, display_path)
     _managed_child_lstat(parent_fd, safe_name, display_path)
@@ -5560,9 +5543,9 @@ def _open_managed_upload_file_fd(
 
 
 def _open_managed_directory_fd(path: Path) -> int:
-    """Open managed directory fd.
+    """Open the managed directory fd.
 
-    Inputs: `path`. Output: `int`.
+    Inputs: `path` (Path) path. Output: `int`.
     """
     return _open_trusted_managed_root_fd(Path(path))
 
@@ -5570,12 +5553,10 @@ def _open_managed_directory_fd(path: Path) -> int:
 def _validate_existing_managed_path_segments(
     root_path: Path, normalized_parts: tuple[str, ...]
 ) -> None:
-    """Validate existing managed path segments.
+    """Validate the existing managed path segments.
 
-    Inputs: `root_path`, `normalized_parts`. Output: None. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `root_path` (Path), `normalized_parts` (tuple[str, ...]). Output: None.
+    Raises: _invalid_managed_path when validation or the called operation fails.
     """
     try:
         dir_fd = _open_managed_directory_fd(root_path)
@@ -5609,12 +5590,11 @@ def _managed_parent_directory_fd(
     max_bytes: int | None = None,
     create_parents: bool = False,
 ) -> tuple[int, str]:
-    """Managed parent directory fd.
+    """Return the managed parent directory fd.
 
-    Inputs: `root`, `relative_parts`, `max_bytes`, `create_parents`. Output: `tuple[int,
-    str]`. Raises on invalid or unavailable state.
-
-    str]`. Raises on invalid or unavailable state.
+    Inputs: `root` (Path), `relative_parts` (tuple[str, ...]), `max_bytes` (int | None),
+    `create_parents` (bool). Output: `tuple[int, str]`. Raises: _invalid_managed_path
+    when validation or the called operation fails.
     """
     root_path, normalized_parts = _validate_managed_relative_parts(
         root,
@@ -5652,9 +5632,9 @@ def _managed_parent_directory_fd(
 
 
 def _managed_child_path(root_path: Path, normalized_parts: tuple[str, ...]) -> Path:
-    """Managed child path.
+    """Return the managed child path.
 
-    Inputs: `root_path`, `normalized_parts`. Output: `Path`.
+    Inputs: `root_path` (Path), `normalized_parts` (tuple[str, ...]). Output: `Path`.
     """
     return Path(root_path).joinpath(*normalized_parts)
 
@@ -5662,9 +5642,10 @@ def _managed_child_path(root_path: Path, normalized_parts: tuple[str, ...]) -> P
 def _managed_runtime_validation_error(
     root: Path, relative_parts: tuple[str, ...], *, max_bytes: int | None = None
 ) -> str | None:
-    """Managed runtime validation error.
+    """Return the managed runtime validation error.
 
-    Inputs: `root`, `relative_parts`, `max_bytes`. Output: `str | None`.
+    Inputs: `root` (Path), `relative_parts` (tuple[str, ...]), `max_bytes` (int | None).
+    Output: `str | None`.
     """
     validation_error = _managed_relative_path_validation_error(
         root,
@@ -5689,12 +5670,10 @@ def _managed_parent_runtime_error(
     max_bytes: int | None = None,
     create_parents: bool = False,
 ) -> str | None:
-    """Managed parent runtime error.
+    """Return the managed parent runtime error.
 
-    Inputs: `root`, `relative_parts`, `max_bytes`, `create_parents`. Output: `str |
-    None`.
-
-    None`.
+    Inputs: `root` (Path), `relative_parts` (tuple[str, ...]), `max_bytes` (int | None),
+    `create_parents` (bool). Output: `str | None`.
     """
     validation_error = _managed_relative_path_validation_error(
         root,
@@ -5722,9 +5701,10 @@ def _managed_parent_runtime_error(
 def _resolve_managed_child_parts(
     root: Path, relative_parts: tuple[str, ...], *, max_bytes: int | None = None
 ) -> Path:
-    """Resolve managed child parts.
+    """Resolve the managed child parts.
 
-    Inputs: `root`, `relative_parts`, `max_bytes`. Output: `Path`.
+    Inputs: `root` (Path), `relative_parts` (tuple[str, ...]), `max_bytes` (int | None).
+    Output: `Path`.
     """
     root_path, normalized_parts = _validate_managed_relative_parts(
         root,
@@ -5738,12 +5718,11 @@ def _resolve_managed_child_parts(
 def _resolve_managed_child_path(
     root: Path, relative_path: str, *, max_bytes: int | None = None
 ) -> Path:
-    """Resolve managed child path.
+    """Resolve the managed child path.
 
-    Inputs: `root`, `relative_path`, `max_bytes`. Output: `Path`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `root` (Path), `relative_path` (str), `max_bytes` (int | None). Output:
+    `Path`. Raises: _ManagedPathValidationError when validation or external operations
+    fail.
     """
     normalized_path, normalize_error = _normalize_upload_relative_path(relative_path)
     if normalize_error:
@@ -5756,9 +5735,10 @@ def _resolve_managed_child_path(
 
 
 def _resolve_managed_directory_path(path: Path) -> Path:
-    """Resolve managed directory path.
+    """Resolve the managed directory path.
 
-    Inputs: `path`. Output: `Path`. Raises on invalid or unavailable state.
+    Inputs: `path` (Path) path. Output: `Path`. Raises: _ManagedPathValidationError when
+    validation or the called operation fails.
     """
     root_path, relative = _managed_root_relative_parts(Path(path))
     if not relative:
@@ -5769,9 +5749,9 @@ def _resolve_managed_directory_path(path: Path) -> Path:
 
 
 def _fsync_directory(path: Path):
-    """Fsync directory.
+    """Flush directory metadata after atomic filesystem updates.
 
-    Inputs: `path`. Output: None.
+    Inputs: `path` (Path) path. Output: None.
     """
     try:
         dir_fd = os.open(path, os.O_DIRECTORY)
@@ -5784,17 +5764,17 @@ def _fsync_directory(path: Path):
 
 
 def _fsync_jobs_directory():
-    """Fsync jobs directory.
+    """Flush the import jobs directory after atomic job-file updates.
 
-    Inputs: none. Output: None.
+    Inputs: no caller arguments. Output: performs the documented action and returns None.
     """
     _fsync_directory(_get_jobs_root())
 
 
 def _read_job_file(job_id: str):
-    """Read job file.
+    """Read the job file.
 
-    Inputs: `job_id`. Output: `json.load` result.
+    Inputs: `job_id` (str). Output: `load` result.
     """
     path = _job_path(job_id)
     with path.open("r", encoding="utf-8") as handle:
@@ -5802,9 +5782,9 @@ def _read_job_file(job_id: str):
 
 
 def _write_job_file(job_id: str, job_dict):
-    """Write job file.
+    """Write the job file.
 
-    Inputs: `job_id`, `job_dict`. Output: bool.
+    Inputs: `job_id` (str), `job_dict`. Output: `bool`.
     """
     path = _job_path(job_id)
     tmp_path = None
@@ -5839,12 +5819,11 @@ def _apply_upload_updates(
     upload_errors: list | None = None,
     **legacy_options,
 ):
-    """Apply upload updates.
+    """Apply the upload updates.
 
-    Inputs: `job_id`, `updates`, `upload_errors`, `**legacy_options`. Output: computed
-    value. Raises on invalid or unavailable state.
-
-    value. Raises on invalid or unavailable state.
+    Inputs: `job_id` (str), `updates` (list), `upload_errors` (list | None),
+    `**legacy_options`. Output: `_robust_update_job` result. Raises: TypeError when validation
+    or the called operation fails.
     """
     if upload_errors is None and "errors" in legacy_options:
         upload_errors = legacy_options.pop("errors")
@@ -5853,7 +5832,7 @@ def _apply_upload_updates(
         raise TypeError(f"Unexpected upload update keyword(s): {unexpected}")
 
     def apply_updates(job_dict):
-        """Apply updates.
+        """Apply the updates.
 
         Inputs: `job_dict`. Output: `job_dict`.
         """
@@ -5889,9 +5868,9 @@ def _apply_upload_updates(
 
 
 def _update_job(job_id: str, update_fn):
-    """Update job.
+    """Update the job.
 
-    Inputs: `job_id`, `update_fn`. Output: `_robust_update_job` result.
+    Inputs: `job_id` (str), `update_fn`. Output: `_robust_update_job` result.
     """
     return _robust_update_job(job_id, update_fn)
 
@@ -6035,12 +6014,9 @@ def _has_import_candidates_in_output(
 
 
 def _extract_import_candidates(output: str):
-    """Extract import candidates.
+    """Extract the import candidates.
 
-    Inputs: `output`. Output: computed value.
-
-    Returns a list of file paths that would be imported.
-    This is used for additional validation after compatibility check.
+    Inputs: `output` (str). Output: `candidates`.
     """
     if not output or not output.strip():
         return []
@@ -6081,11 +6057,9 @@ def _extract_import_candidates(output: str):
 
 
 def _parse_candidate_path_line(line: str) -> Optional[Path]:
-    """Parse candidate path line.
+    """Parse and validate the candidate path line input.
 
-    Inputs: `line`. Output: `Optional[Path]`.
-
-    Returns ``None`` when the input does not look like a standalone path line.
+    Inputs: `line` (str). Output: `Optional[Path]`.
     """
     raw = (line or "").strip()
     if not raw:
@@ -6107,9 +6081,9 @@ def _parse_candidate_path_line(line: str) -> Optional[Path]:
 
 
 def _parse_import_groups(output: str):
-    """Parse import groups.
+    """Parse and validate the import groups input.
 
-    Inputs: `output`. Output: `groups`.
+    Inputs: `output` (str). Output: `groups`.
     """
     groups: list[dict[str, Any]] = []
     current_group: dict[str, Any] | None = None
@@ -6140,9 +6114,9 @@ def _parse_import_groups(output: str):
 
 
 def _relative_path_within_root(relative_path: str, root_relative_path: str) -> bool:
-    """Relative path within root.
+    """Return the relative path within root.
 
-    Inputs: `relative_path`, `root_relative_path`. Output: `bool`.
+    Inputs: `relative_path` (str), `root_relative_path` (str). Output: `bool`.
     """
     if not root_relative_path:
         return False
@@ -6152,9 +6126,9 @@ def _relative_path_within_root(relative_path: str, root_relative_path: str) -> b
 
 
 def _common_relative_prefix(relative_paths: list[str]) -> str:
-    """Common relative prefix.
+    """Return the common relative prefix.
 
-    Inputs: `relative_paths`. Output: `str`.
+    Inputs: `relative_paths` (list[str]). Output: `str`.
     """
     if not relative_paths:
         return ""
@@ -6205,10 +6179,10 @@ def _looks_like_directory_package_root(
     group_path_relative: str,
     covered_relative_paths: list[str],
 ) -> bool:
-    """Looks like directory package root.
+    """Return the looks like directory package root.
 
-    Inputs: `active_relative_paths`, `root_relative_path`, `group_path_relative`,
-    `covered_relative_paths`. Output: `bool`.
+    Inputs: `active_relative_paths` (list[str]), `root_relative_path` (str),
+    `group_path_relative` (str), `covered_relative_paths` (list[str]). Output: `bool`.
     """
     if not root_relative_path or not covered_relative_paths:
         return False
@@ -6258,9 +6232,9 @@ def _looks_like_directory_package_root(
 
 
 def _collect_import_entries(job_dict, *, for_compatibility: bool = False):
-    """Collect import entries.
+    """Collect the import entries.
 
-    Inputs: `job_dict`, `for_compatibility`. Output: `entries`.
+    Inputs: `job_dict`, `for_compatibility` (bool). Output: collect import entries
     """
     entries = []
     for index, entry in enumerate(job_dict.get("files", [])):
@@ -6292,9 +6266,9 @@ def _collect_import_entries(job_dict, *, for_compatibility: bool = False):
 
 
 def _single_entry_import_unit(entry: dict):
-    """Single entry import unit.
+    """Return the single entry import unit.
 
-    Inputs: `entry`. Output: dict.
+    Inputs: `entry` (dict). Output: `dict`.
     """
     rel_path = entry["relative_path"]
     return {
@@ -6314,9 +6288,10 @@ def _probe_import_path(
     active_relative_paths: list[str],
     cache: dict[str, dict],
 ):
-    """Probe import path.
+    """Probe the import path.
 
-    Inputs: `path`, `staged_root`, `active_relative_paths`, `cache`. Output: `cached`.
+    Inputs: `path` (Path) path, `staged_root` (Path), `active_relative_paths`
+    (list[str]), `cache` (dict[str, dict]). Output: `cached`.
     """
     cache_key = str(path)
     cached = cache.get(cache_key)
@@ -6413,9 +6388,10 @@ def _probe_import_path(
 def _build_import_units(
     job_dict, upload_root: Path, *, for_compatibility: bool = False
 ):
-    """Import units.
+    """Build the import units.
 
-    Inputs: `job_dict`, `upload_root`, `for_compatibility`. Output: computed value.
+    Inputs: `job_dict`, `upload_root` (Path), `for_compatibility` (bool). Output:
+    `units`.
     """
     active_entries = _collect_import_entries(
         job_dict, for_compatibility=for_compatibility
@@ -6602,18 +6578,11 @@ def _check_import_compatibility(
     dataset_id: Optional[int],
     relative_path: str,
 ):
-    """Check import compatibility.
+    """Verify import compatibility.
 
-    Inputs: `session_key`, `host`, `port`, `file_path`, `dataset_id`, `relative_path`.
-    Output: computed value.
-
-    CRITICAL FIXES:
-    1. The -f flag ALWAYS returns exit code 0, regardless of compatibility
-    2. Compatibility is determined by parsing stdout for import candidates
-    3. Proper distinction between errors and incompatibility
-
-    Uses 'omero import -f' which performs local file format analysis
-    without requiring server connection or authentication.
+    Inputs: `session_key` (str), `host` (str), `port` (int), `file_path` (Path) file
+    path, `dataset_id` (Optional[int]) OMERO dataset ID, `relative_path` (str). Output:
+    check import compatibility result.
     """
     _ = (session_key, host, port, dataset_id)
     if not file_path.exists():
@@ -6746,9 +6715,9 @@ def _check_import_compatibility(
 
 
 def _run_compatibility_check(job_id: str):
-    """Compatibility check.
+    """Run the compatibility check.
 
-    Inputs: `job_id`. Output: `job_dict`.
+    Inputs: `job_id` (str). Output: `job_dict`.
     """
     try:
         _run_compatibility_check_inner(job_id)
@@ -6761,7 +6730,7 @@ def _run_compatibility_check(job_id: str):
         )
 
         def reset_thread(job_dict):
-            """Reset thread.
+            """Reset the thread.
 
             Inputs: `job_dict`. Output: `job_dict`.
             """
@@ -6791,7 +6760,7 @@ def _run_compatibility_check_inner(job_id: str):
     if not planned_units:
 
         def mark_idle(job_dict):
-            """Mark idle.
+            """Return the mark idle.
 
             Inputs: `job_dict`. Output: `job_dict`.
             """
@@ -6832,7 +6801,7 @@ def _run_compatibility_check_inner(job_id: str):
     ]
 
     def persist_plans(job_dict):
-        """Persist plans.
+        """Return the persist plans.
 
         Inputs: `job_dict`. Output: `job_dict`.
         """
@@ -6845,7 +6814,7 @@ def _run_compatibility_check_inner(job_id: str):
     if not job.get("compatibility_enabled", True):
 
         def mark_planning_ready(job_dict):
-            """Mark planning ready.
+            """Return the mark planning ready.
 
             Inputs: `job_dict`. Output: `job_dict`.
             """
@@ -6953,7 +6922,7 @@ def _run_compatibility_check_inner(job_id: str):
     ]
 
     def apply_results(job_dict):
-        """Apply results.
+        """Apply the results.
 
         Inputs: `job_dict`. Output: `job_dict`.
         """
@@ -7017,14 +6986,14 @@ def _run_compatibility_check_inner(job_id: str):
 
 
 def _start_compatibility_check_thread(job_id: str):
-    """Start compatibility check thread.
+    """Start the compatibility check thread.
 
-    Inputs: `job_id`. Output: `job_dict` or None.
+    Inputs: `job_id` (str). Output: `job_dict`.
     """
     started = {"value": False}
 
     def mark_started(job_dict):
-        """Mark started.
+        """Return the mark started.
 
         Inputs: `job_dict`. Output: `job_dict`.
         """
@@ -7049,7 +7018,7 @@ def _start_compatibility_check_thread(job_id: str):
 
 @dataclass(frozen=True)
 class _NativeZarrImportPlan:
-    """Represent native Zarr import plan."""
+    """Data container for native Zarr import plan."""
 
     kind: Optional[str] = None
     recognized_zarr: bool = False
@@ -7070,9 +7039,9 @@ _IMPORT_ROUTING_ENTRY_FIELDS = (
 
 
 def _native_zarr_import_plan(zarr_path: Path) -> _NativeZarrImportPlan:
-    """Native Zarr import plan.
+    """Return the native Zarr import plan.
 
-    Inputs: `zarr_path`. Output: `_NativeZarrImportPlan`.
+    Inputs: `zarr_path` (Path). Output: `_NativeZarrImportPlan`.
     """
     inspection = inspect_ome_zarr_image(zarr_path)
     recognized_zarr = bool(getattr(inspection, "recognized", False))
@@ -7094,9 +7063,9 @@ def _native_zarr_import_plan(zarr_path: Path) -> _NativeZarrImportPlan:
 def _serialize_native_zarr_plan(
     plan: Optional[_NativeZarrImportPlan],
 ) -> Optional[dict]:
-    """Serialize native Zarr plan.
+    """Return the serialize native Zarr plan.
 
-    Inputs: `plan`. Output: `Optional[dict]`.
+    Inputs: `plan` (Optional[_NativeZarrImportPlan]). Output: `Optional[dict]`.
     """
     if not isinstance(plan, _NativeZarrImportPlan):
         return None
@@ -7118,9 +7087,9 @@ def _serialize_native_zarr_plan(
 
 
 def _deserialize_native_zarr_plan(payload) -> _NativeZarrImportPlan:
-    """Deserialize native Zarr plan.
+    """Return the deserialize native Zarr plan.
 
-    Inputs: `payload`. Output: `_NativeZarrImportPlan`.
+    Inputs: `payload` payload. Output: `_NativeZarrImportPlan`.
     """
     if isinstance(payload, _NativeZarrImportPlan):
         return payload
@@ -7136,9 +7105,9 @@ def _deserialize_native_zarr_plan(payload) -> _NativeZarrImportPlan:
 
 
 def _attach_import_routing_fields(unit: dict, covered_entries: list[dict]) -> None:
-    """Attach import routing fields.
+    """Add import-routing fields to the job response payload.
 
-    Inputs: `unit`, `covered_entries`. Output: None.
+    Inputs: `unit` (dict), `covered_entries` (list[dict]). Output: None.
     """
     if not covered_entries:
         return
@@ -7166,9 +7135,9 @@ _SCRIPT_OUTPUT_PATTERN = re.compile(r"^\s*\*?\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$")
 
 
 def _extract_script_outputs(text: str) -> dict[str, str]:
-    """Extract script outputs.
+    """Extract the script outputs.
 
-    Inputs: `text`. Output: `dict[str, str]`.
+    Inputs: `text` (str). Output: `dict[str, str]`.
     """
     outputs = {}
     for line in (text or "").splitlines():
@@ -7183,7 +7152,7 @@ def _extract_script_outputs(text: str) -> dict[str, str]:
 
 
 def _shared_zarr_transfer_root() -> Path:
-    """Shared Zarr transfer root.
+    """Return the shared Zarr transfer root.
 
     Inputs: none. Output: `Path`.
     """
@@ -7193,9 +7162,9 @@ def _shared_zarr_transfer_root() -> Path:
 
 
 def _normalize_shared_zarr_permissions(path: Path) -> None:
-    """Normalize shared Zarr permissions.
+    """Normalize the shared Zarr permissions.
 
-    Inputs: `path`. Output: None.
+    Inputs: `path` (Path) path. Output: None.
     """
     path = Path(path)
     if not path.exists():
@@ -7220,10 +7189,10 @@ def _normalize_shared_zarr_permissions(path: Path) -> None:
 def _prepare_server_readable_zarr_source(
     file_path: Path,
 ) -> tuple[Optional[Path], Optional[Path], Optional[str]]:
-    """Prepare server readable Zarr source.
+    """Prepare the server readable Zarr source.
 
-    Inputs: `file_path`. Output: `tuple[Optional[Path], Optional[Path], Optional[str]]`.
-    Raises on invalid or unavailable state.
+    Inputs: `file_path` (Path) file path. Output: `tuple[Optional[Path], Optional[Path],
+    Optional[str]]`. Raises: RuntimeError when validation or the called operation fails.
     """
     try:
         source = Path(file_path).resolve(strict=True)
@@ -7290,25 +7259,25 @@ def _cleanup_shared_zarr_transfer(path: Optional[Path]) -> None:
 
 
 def _iter_script_services(conn):
-    """Script services.
+    """Iterate over the script services.
 
-    Inputs: `conn`. Output: yielded values.
+    Inputs: `conn` OMERO gateway connection. Output: iterator of yielded items.
     """
     if conn is None:
         return
     seen = set()
 
     def _connection_script_service():
-        """Connection script service.
+        """Return the connection script service.
 
-        Inputs: none. Output: `conn.getScriptService` result.
+        Inputs: none. Output: `getScriptService` result.
         """
         return conn.getScriptService()
 
     def _session_factory_script_service():
-        """Session factory script service.
+        """Return the session factory script service.
 
-        Inputs: none. Output: call result.
+        Inputs: none. Output: `getScriptService` result.
         """
         return conn.c.sf.getScriptService()
 
@@ -7327,9 +7296,10 @@ def _iter_script_services(conn):
 def _find_script_id_by_name(
     conn, script_name: str, *, preferred_path_fragment: Optional[str] = None
 ) -> Optional[int]:
-    """Find script ID by name.
+    """Find the script ID by name.
 
-    Inputs: `conn`, `script_name`, `preferred_path_fragment`. Output: `Optional[int]`.
+    Inputs: `conn` OMERO gateway connection, `script_name` (str),
+    `preferred_path_fragment` (Optional[str]). Output: `Optional[int]`.
     """
     if conn is None or not script_name:
         return None
@@ -7905,15 +7875,9 @@ def _validate_native_ome_ngff_zarr(zarr_path: Path) -> Optional[str]:
 
 
 def _prepare_native_zarr_copy(zarr_path: Path) -> Optional[str]:
-    """Prepare native Zarr copy.
+    """Prepare the native Zarr copy.
 
-    Inputs: `zarr_path`. Output: `Optional[str]`.
-
-    The copy is safe to mutate because it is discarded after the managed
-    repository handoff, but supported OME-NGFF layouts must remain faithful to
-    the source contract. The current OMERO stack renders staged raw
-    multiscale NGFF correctly; mutating those stores before native import can
-    break thumbnail generation.
+    Inputs: `zarr_path` (Path). Output: `Optional[str]`.
     """
     plan = _native_zarr_import_plan(zarr_path)
     if not plan.kind:
@@ -8269,11 +8233,11 @@ def _import_job_entry(
     username=None,
     group_name=None,
 ):
-    """Import job entry.
+    """Import the job entry.
 
     Inputs: `entry`, `upload_root`, `session_key`, `host`, `port`, `dataset_map`,
     `orphan_dataset_name`, `dataset_name_override`, `group_id`, `progress_job`,
-    `username`, `group_name`. Output: computed value.
+    `username` username, `group_name`. Output: `dict`.
     """
     _ = session_key
     rel_path = entry.get("relative_path")
@@ -8692,9 +8656,9 @@ def _import_job_entry(
 
 
 def _mark_failed_job_for_deferred_cleanup(job_id: str) -> bool:
-    """Mark failed job for deferred cleanup.
+    """Return the mark failed job for deferred cleanup.
 
-    Inputs: `job_id`. Output: `bool`.
+    Inputs: `job_id` (str). Output: `bool`.
     """
     retention_seconds = _get_failed_import_retention_seconds()
     upload_root = _get_upload_root()
@@ -8726,9 +8690,9 @@ def _mark_failed_job_for_deferred_cleanup(job_id: str) -> bool:
 
 
 def _process_import_job(job_id: str):
-    """Process import job.
+    """Process the import job.
 
-    Inputs: `job_id`. Output: None.
+    Inputs: `job_id` (str). Output: None.
     """
     safe_job_id_for_log = sanitize_log_value(job_id)
     logger.info("Import thread started for job %s", safe_job_id_for_log)
@@ -9778,9 +9742,9 @@ def _process_import_job(job_id: str):
 
 
 def _start_import_thread(job_id: str):
-    """Start import thread.
+    """Start the import thread.
 
-    Inputs: `job_id`. Output: None.
+    Inputs: `job_id` (str). Output: None.
     """
     job = _load_job(job_id)
     if not job:

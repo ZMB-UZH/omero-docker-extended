@@ -31,9 +31,9 @@ def _test_tmp_path(*parts: str) -> Path:
 
 
 def _install_import_stubs():
-    """Install import stubs.
+    """Install the import stubs.
 
-    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    Inputs: none. Output: `self`. Raises: LockException for the exercised failure path.
     """
     if "django.http" not in sys.modules:
         django_module = types.ModuleType("django")
@@ -151,13 +151,13 @@ def _install_import_stubs():
         lock_registry_guard = threading.Lock()
 
         class LockException(Exception):
-            """Represent lock exception."""
+            """Test double for lock exception behavior in this module."""
 
         class Lock:
-            """Represent lock."""
+            """Test double for lock behavior in this module."""
 
             def __init__(self, path, mode="a+", timeout=1):
-                """Initialize the instance.
+                """Create `Lock` with `path`, `mode`, and `timeout`.
 
                 Inputs: `path`, `mode`, `timeout`. Output: None.
                 """
@@ -166,9 +166,10 @@ def _install_import_stubs():
                 self._lock = None
 
             def __enter__(self):
-                """Enter the context manager.
+                """Enter `Lock`'s context-managed fake resource.
 
-                Inputs: none. Output: `self`. Raises on invalid or unavailable state.
+                Inputs: none. Output: `self`. Raises: LockException when validation or
+                external operations fail.
                 """
                 with lock_registry_guard:
                     self._lock = lock_registry.setdefault(self.path, threading.Lock())
@@ -178,7 +179,7 @@ def _install_import_stubs():
                 return self
 
             def __exit__(self, exc_type, exc, tb):
-                """Exit the context manager.
+                """Exit `Lock`'s context-managed fake resource.
 
                 Inputs: `exc_type`, `exc`, `tb`. Output: bool.
                 """
@@ -231,7 +232,7 @@ def _install_import_stubs():
         data_store = types.ModuleType("omeroweb_import.services.data_store")
 
         class UserSettingsStoreError(Exception):
-            """Represent user settings store error."""
+            """Test double for user settings store error behavior in this module."""
 
         data_store.UserSettingsStoreError = UserSettingsStoreError
         data_store.save_user_settings = lambda username, settings: None
@@ -247,7 +248,7 @@ from omeroweb_import.views import index_view
 
 
 def _load_manage_zarr_script_module():
-    """Load manage Zarr script module.
+    """Load the manage Zarr script module.
 
     Inputs: none. Output: `module`.
     """
@@ -272,9 +273,9 @@ class ImportPluginRegressionTests(TestCase):
 
     @staticmethod
     def _json_status_and_payload(response):
-        """JSON status and payload.
+        """Return the JSON status and payload for `ImportPluginRegressionTests`.
 
-        Inputs: `response`. Output: tuple.
+        Inputs: `response` response object. Output: `tuple`.
         """
         if isinstance(response, dict):
             return response["status"], response["payload"]
@@ -283,9 +284,9 @@ class ImportPluginRegressionTests(TestCase):
     def test_normalize_upload_relative_path_rejects_overlong_component_by_utf8_bytes(
         self,
     ):
-        """Verify normalize upload relative path rejects overlong component by utf8 bytes.
+        """Confirm normalize upload relative path rejects overlong component by utf8 bytes is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when normalize upload relative path rejects overlong component by utf8 bytes accepts unsafe input.
         """
         raw_name = f"{'ä' * 130}.tif"
 
@@ -297,7 +298,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_get_text_falls_back_to_private_rstring_value(self):
         """Verify get text falls back to private rstring value.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in get text falls back to private rstring value.
         """
         value_obj = types.SimpleNamespace(
             val=None, _val="/managed/path/sample.ome.zarr"
@@ -310,7 +311,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_external_info_text_uses_getter_when_attribute_is_unloaded(self):
         """Verify external info text uses getter when attribute is unloaded.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in external info text uses getter when attribute is unloaded.
         """
         external_info = types.SimpleNamespace(
             lsid=types.SimpleNamespace(val=None, _val=None),
@@ -326,7 +327,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_query_image_external_info_reads_projection_values(self):
         """Verify query image external info reads projection values.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in query image external info reads projection values.
         """
         params_seen = {}
         fake_query = mock.Mock()
@@ -361,9 +362,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("com.glencoesoftware.ngff:multiscales", entity_type)
 
     def test_native_zarr_image_relative_path_from_lsid_handles_root_and_series(self):
-        """Verify native Zarr image relative path from lsid handles root and series.
+        """Verify the native Zarr image relative path from lsid handles root and series safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when native Zarr image relative path from lsid handles root and series accepts unsafe input.
         """
         managed_root = Path("/OMERO/ManagedRepository/user/test/sample.ome.zarr")
 
@@ -382,14 +383,14 @@ class ImportPluginRegressionTests(TestCase):
     def test_finalize_imported_zarr_image_metadata_persists_source_pixel_sizes(self):
         """Verify finalize imported Zarr image metadata persists source pixel sizes.
 
-        Inputs: none. Output: computed value.
+        Inputs: repository fixtures. Output: fails on regressions in finalize imported Zarr image metadata persists source pixel sizes.
         """
 
         class _FakeUnit:
             """Test double for fake unit."""
 
             def __init__(self, name):
-                """Initialize the instance.
+                """Create `_FakeUnit` with `name`.
 
                 Inputs: `name`. Output: None.
                 """
@@ -399,7 +400,7 @@ class ImportPluginRegressionTests(TestCase):
             """Test double for fake length."""
 
             def __init__(self, value, unit_name):
-                """Initialize the instance.
+                """Create `_FakeLength` with `value` and `unit_name`.
 
                 Inputs: `value`, `unit_name`. Output: None.
                 """
@@ -407,16 +408,16 @@ class ImportPluginRegressionTests(TestCase):
                 self._unit = _FakeUnit(unit_name)
 
             def getValue(self):
-                """Return the fake OMERO value.
+                """Return `_FakeLength`'s fake OMERO value.
 
                 Inputs: none. Output: `self._value`.
                 """
                 return self._value
 
             def getUnit(self):
-                """Return Unit.
+                """Return the unit for `_FakeLength`.
 
-                Inputs: none. Output: `self._unit`.
+                Inputs: none. Output: `_unit`.
                 """
                 return self._unit
 
@@ -424,32 +425,32 @@ class ImportPluginRegressionTests(TestCase):
             """Test double for fake pixels model."""
 
             def __init__(self):
-                """Initialize the instance.
+                """Create `_FakePixelsModel` with its default state.
 
-                Inputs: none. Output: None.
+                Inputs: constructor receives no public arguments. Output: initializes fake state.
                 """
                 self._x = None
                 self._y = None
                 self._z = None
 
             def setPhysicalSizeX(self, value):
-                """Set Physical Size X.
+                """Set the physical Size X for `_FakePixelsModel`.
 
-                Inputs: `value`. Output: None.
+                Inputs: `value` input value. Output: None.
                 """
                 self._x = value
 
             def setPhysicalSizeY(self, value):
-                """Set Physical Size Y.
+                """Set the physical Size Y for `_FakePixelsModel`.
 
-                Inputs: `value`. Output: None.
+                Inputs: `value` input value. Output: None.
                 """
                 self._y = value
 
             def setPhysicalSizeZ(self, value):
-                """Set Physical Size Z.
+                """Set the physical Size Z for `_FakePixelsModel`.
 
-                Inputs: `value`. Output: None.
+                Inputs: `value` input value. Output: None.
                 """
                 self._z = value
 
@@ -457,28 +458,28 @@ class ImportPluginRegressionTests(TestCase):
             """Test double for fake pixels wrapper."""
 
             def __init__(self, model):
-                """Initialize the instance.
+                """Create `_FakePixelsWrapper` with `model`.
 
                 Inputs: `model`. Output: None.
                 """
                 self._obj = model
 
             def getPhysicalSizeX(self):
-                """Return Physical Size X.
+                """Return `_FakePixelsWrapper`'s fake physical X size.
 
                 Inputs: none. Output: `self._obj._x`.
                 """
                 return self._obj._x
 
             def getPhysicalSizeY(self):
-                """Return Physical Size Y.
+                """Return `_FakePixelsWrapper`'s fake physical Y size.
 
                 Inputs: none. Output: `self._obj._y`.
                 """
                 return self._obj._y
 
             def getPhysicalSizeZ(self):
-                """Return Physical Size Z.
+                """Return `_FakePixelsWrapper`'s fake physical Z size.
 
                 Inputs: none. Output: `self._obj._z`.
                 """
@@ -488,7 +489,7 @@ class ImportPluginRegressionTests(TestCase):
             """Test double for fake image."""
 
             def __init__(self, image_id, pixels_wrapper):
-                """Initialize the instance.
+                """Create `_FakeImage` with `image_id` and `pixels_wrapper`.
 
                 Inputs: `image_id`, `pixels_wrapper`. Output: None.
                 """
@@ -496,14 +497,14 @@ class ImportPluginRegressionTests(TestCase):
                 self._pixels_wrapper = pixels_wrapper
 
             def getId(self):
-                """Return the fake OMERO identifier.
+                """Return `_FakeImage`'s fake OMERO identifier.
 
                 Inputs: none. Output: `self._image_id`.
                 """
                 return self._image_id
 
             def getPrimaryPixels(self):
-                """Return Primary Pixels.
+                """Return the fake primary pixels value used by this test double.
 
                 Inputs: none. Output: `self._pixels_wrapper`.
                 """
@@ -513,14 +514,14 @@ class ImportPluginRegressionTests(TestCase):
             """Test double for fake update service."""
 
             def __init__(self):
-                """Initialize the instance.
+                """Create `_FakeUpdateService` with its default state.
 
-                Inputs: none. Output: None.
+                Inputs: constructor receives no public arguments. Output: initializes fake state.
                 """
                 self.saved = []
 
             def saveAndReturnObject(self, obj):
-                """Save and return object.
+                """Return the fake saved OMERO object from import regression tests.
 
                 Inputs: `obj`. Output: `obj`.
                 """
@@ -531,7 +532,7 @@ class ImportPluginRegressionTests(TestCase):
             """Test double for fake conn."""
 
             def __init__(self, image):
-                """Initialize the instance.
+                """Create `_FakeConn` with `image`.
 
                 Inputs: `image`. Output: None.
                 """
@@ -543,24 +544,24 @@ class ImportPluginRegressionTests(TestCase):
                 self.closed = False
 
             def getObject(self, obj_type, image_id):
-                """Return Object.
+                """Return the object for `_FakeConn`.
 
-                Inputs: `obj_type`, `image_id`. Output: `self._image`.
+                Inputs: `obj_type`, `image_id` OMERO image ID. Output: `_image`.
                 """
                 self._last_lookup = (obj_type, image_id)
                 return self._image
 
             def getUpdateService(self):
-                """Return Update Service.
+                """Return `_FakeConn`'s fake update service.
 
                 Inputs: none. Output: `self._update_service`.
                 """
                 return self._update_service
 
             def close(self):
-                """Close the resource.
+                """Close `_FakeConn`'s fake resource handle.
 
-                Inputs: none. Output: None.
+                Inputs: caller provides no extra arguments. Output: records the fake side effect.
                 """
                 self.closed = True
 
@@ -568,7 +569,7 @@ class ImportPluginRegressionTests(TestCase):
             """Test double for fake admin conn."""
 
             def __init__(self, conn):
-                """Initialize the instance.
+                """Create `_FakeAdminConn` with `conn`.
 
                 Inputs: `conn`. Output: None.
                 """
@@ -576,17 +577,17 @@ class ImportPluginRegressionTests(TestCase):
                 self.closed = False
 
             def suConn(self, username):
-                """Su conn.
+                """Return the su Conn for `_FakeAdminConn`.
 
-                Inputs: `username`. Output: `self._conn`.
+                Inputs: `username` username. Output: `_conn`.
                 """
                 self._username = username
                 return self._conn
 
             def close(self):
-                """Close the resource.
+                """Close `_FakeAdminConn`'s fake resource handle.
 
-                Inputs: none. Output: None.
+                Inputs: caller provides no extra arguments. Output: records the fake side effect.
                 """
                 self.closed = True
 
@@ -655,16 +656,16 @@ class ImportPluginRegressionTests(TestCase):
         self.assertTrue(fake_admin_conn.closed)
 
     def test_runtime_native_zarr_physical_sizes_normalizes_ngff_unit_symbols(self):
-        """Verify runtime native Zarr physical sizes normalizes NGFF unit symbols.
+        """Check runtime native Zarr physical sizes normalizes NGFF unit symbols parsing against the documented contract.
 
-        Inputs: none. Output: computed value.
+        Inputs: repository fixtures. Output: fails on regressions in runtime native Zarr physical sizes normalizes NGFF unit symbols.
         """
 
         class _FakeUnit:
             """Test double for fake unit."""
 
             def __init__(self, name):
-                """Initialize the instance.
+                """Create `_FakeUnit` with `name`.
 
                 Inputs: `name`. Output: None.
                 """
@@ -674,7 +675,7 @@ class ImportPluginRegressionTests(TestCase):
             """Test double for fake length."""
 
             def __init__(self, value, unit):
-                """Initialize the instance.
+                """Create `_FakeLength` with `value` and `unit`.
 
                 Inputs: `value`, `unit`. Output: None.
                 """
@@ -682,16 +683,16 @@ class ImportPluginRegressionTests(TestCase):
                 self._unit = unit
 
             def getValue(self):
-                """Return the fake OMERO value.
+                """Return `_FakeLength`'s fake OMERO value.
 
                 Inputs: none. Output: `self._value`.
                 """
                 return self._value
 
             def getUnit(self):
-                """Return Unit.
+                """Return the unit for `_FakeLength`.
 
-                Inputs: none. Output: `self._unit`.
+                Inputs: none. Output: `_unit`.
                 """
                 return self._unit
 
@@ -768,9 +769,9 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_validate_staged_target_path_rejects_excessive_target_length(self):
-        """Verify validate staged target path rejects excessive target length.
+        """Confirm validate staged target path rejects excessive target length is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when validate staged target path rejects excessive target length accepts unsafe input.
         """
         upload_root = _test_tmp_path("upload-root")
         staged_path = "_staged/job/" + ("a" * 5000) + ".tif"
@@ -780,9 +781,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("File path is too long", error)
 
     def test_resolve_staged_target_path_rejects_traversal(self):
-        """Verify resolve staged target path rejects traversal.
+        """Confirm resolve staged target path rejects traversal is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when resolve staged target path rejects traversal accepts unsafe input.
         """
         upload_root = _test_tmp_path("upload-root")
 
@@ -794,9 +795,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("Invalid", error)
 
     def test_load_job_rejects_invalid_job_id_without_touching_jobs_root(self):
-        """Verify load job rejects invalid job ID without touching jobs root.
+        """Confirm load job rejects invalid job ID without touching jobs root is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in load job rejects invalid job ID without touching jobs root.
         """
         with mock.patch.object(
             core_functions,
@@ -808,9 +809,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIsNone(loaded)
 
     def test_save_job_rejects_invalid_job_id_without_touching_jobs_root(self):
-        """Verify save job rejects invalid job ID without touching jobs root.
+        """Confirm save job rejects invalid job ID without touching jobs root is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in save job rejects invalid job ID without touching jobs root.
         """
         with mock.patch.object(
             core_functions,
@@ -824,7 +825,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_job_updates_remain_atomic_under_concurrency(self):
         """Verify job updates remain atomic under concurrency.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in job updates remain atomic under concurrency.
         """
         job_id = "a" * 32
         job = {"job_id": job_id, "counter": 0, "files": []}
@@ -837,9 +838,9 @@ class ImportPluginRegressionTests(TestCase):
                 self.assertTrue(core_functions._save_job(dict(job)))
 
                 def increment_job():
-                    """Increment job.
+                    """Record the increment job call on the test double for later assertions.
 
-                    Inputs: none. Output: None.
+                    Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
                     """
                     for _ in range(25):
                         updated = core_functions._robust_update_job(
@@ -865,7 +866,7 @@ class ImportPluginRegressionTests(TestCase):
     ):
         """Verify open session connection detaches joined session before wrapper teardown.
 
-        Inputs: none. Output: `FakeSession` result.
+        Inputs: repository fixtures. Output: fails on regressions in open session connection detaches joined session before wrapper teardown.
         """
         detach_calls = []
         group_calls = []
@@ -876,9 +877,9 @@ class ImportPluginRegressionTests(TestCase):
 
             @staticmethod
             def detachOnDestroy():
-                """Detach on destroy.
+                """Record the fake cleanup call for an original-file object.
 
-                Inputs: none. Output: None.
+                Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
                 """
                 detach_calls.append("detached")
 
@@ -886,7 +887,7 @@ class ImportPluginRegressionTests(TestCase):
             """Test double for fake client."""
 
             def __init__(self, *, host, port):
-                """Initialize the instance.
+                """Create `FakeClient` with its default state.
 
                 Inputs: `host`, `port`. Output: None.
                 """
@@ -895,7 +896,7 @@ class ImportPluginRegressionTests(TestCase):
 
             @staticmethod
             def joinSession(session_key):
-                """Join session.
+                """Join the session for `FakeClient`.
 
                 Inputs: `session_key`. Output: `FakeSession` result.
                 """
@@ -907,9 +908,9 @@ class ImportPluginRegressionTests(TestCase):
 
             @staticmethod
             def setOmeroGroup(value):
-                """Set OMERO Group.
+                """Set the OMERO Group for `FakeServiceOpts`.
 
-                Inputs: `value`. Output: None.
+                Inputs: `value` input value. Output: None.
                 """
                 group_calls.append(value)
 
@@ -917,7 +918,7 @@ class ImportPluginRegressionTests(TestCase):
             """Test double for fake gateway."""
 
             def __init__(self, client_obj=None):
-                """Initialize the instance.
+                """Create `FakeGateway` with `client_obj`.
 
                 Inputs: `client_obj`. Output: None.
                 """
@@ -946,9 +947,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual(["-1"], group_calls)
 
     def test_build_omero_cli_command_places_connection_flags_before_subcommand(self):
-        """Verify build OMERO cli command places connection flags before subcommand.
+        """Verify the build OMERO CLI command places connection flags before subcommand execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in build OMERO CLI command places connection flags before subcommand integration.
         """
         command = core_functions._build_omero_cli_command(
             ["import", "--depth", "15"],
@@ -976,7 +977,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_extract_imported_object_ids_supports_created_image_output(self):
         """Verify extract imported object IDs supports created image output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in extract imported object IDs supports created image output.
         """
         output = "\n".join(
             [
@@ -992,9 +993,9 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_sanitize_cli_output_for_logging_redacts_uuid_tokens(self):
-        """Verify sanitize cli output for logging redacts uuid tokens.
+        """Check that sanitize CLI output for logging redacts uuid tokens keeps sensitive data out of output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in sanitize CLI output for logging redacts uuid tokens.
         """
         raw = "Bad session key. Cannot join 12345678-1234-1234-1234-123456789abc on omeroserver:4064."
 
@@ -1004,9 +1005,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertNotIn("12345678-1234-1234-1234-123456789abc", sanitized)
 
     def test_extract_script_outputs_parses_named_lines(self):
-        """Verify extract script outputs parses named lines.
+        """Check extract script outputs parses named lines parsing against the documented contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in extract script outputs parses named lines integration.
         """
         outputs = core_functions._extract_script_outputs(
             "\n".join(
@@ -1027,15 +1028,15 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_find_script_id_by_name_prefers_import_scripts_path(self):
-        """Verify find script ID by name prefers import scripts path.
+        """Verify the find script ID by name prefers import scripts path execution contract.
 
-        Inputs: none. Output: `types.SimpleNamespace` result.
+        Inputs: repository fixtures. Output: fails on regressions when find script ID by name prefers import scripts path accepts unsafe input.
         """
 
         def script(name, path, sid):
-            """Script.
+            """Return the script for `ImportPluginRegressionTests`.
 
-            Inputs: `name`, `path`, `sid`. Output: `types.SimpleNamespace` result.
+            Inputs: `name` name, `path` path, `sid`. Output: `SimpleNamespace` result.
             """
             return types.SimpleNamespace(
                 name=types.SimpleNamespace(val=name),
@@ -1076,9 +1077,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual(37, script_id)
 
     def test_run_zarr_managed_repo_script_launches_expected_cli_command(self):
-        """Verify run Zarr managed repo script launches expected cli command.
+        """Verify the run Zarr managed repo script launches expected CLI command execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in run Zarr managed repo script launches expected CLI command integration.
         """
         completed = subprocess.CompletedProcess(
             args=["omero"],
@@ -1171,9 +1172,9 @@ class ImportPluginRegressionTests(TestCase):
     def test_run_zarr_managed_repo_script_retries_when_no_processor_is_temporarily_unavailable(
         self,
     ):
-        """Verify run Zarr managed repo script retries when no processor is temporarily unavailable.
+        """Verify the run Zarr managed repo script retries when no processor is temporarily unavailable execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in run Zarr managed repo script retries when no processor is temporarily unavailable integration.
         """
         admin_conn = types.SimpleNamespace(close=lambda: None)
         results = [
@@ -1257,9 +1258,9 @@ class ImportPluginRegressionTests(TestCase):
         sleep_mock.assert_called_once_with(1)
 
     def test_import_zarr_via_cli_cleans_managed_path_when_no_objects_are_created(self):
-        """Verify import Zarr via cli cleans managed path when no objects are created.
+        """Verify the import Zarr via CLI cleans managed path when no objects are created execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when import Zarr via CLI cleans managed path when no objects are created accepts unsafe input.
         """
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
@@ -1346,9 +1347,9 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_import_zarr_via_cli_rolls_back_when_render_verification_fails(self):
-        """Verify import Zarr via cli rolls back when render verification fails.
+        """Confirm import Zarr via CLI rolls back when render verification fails exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in import Zarr via CLI rolls back when render verification fails.
         """
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
@@ -1449,9 +1450,9 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_import_zarr_via_cli_rolls_back_when_metadata_finalization_fails(self):
-        """Verify import Zarr via cli rolls back when metadata finalization fails.
+        """Confirm import Zarr via CLI rolls back when metadata finalization fails exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in import Zarr via CLI rolls back when metadata finalization fails.
         """
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
@@ -1552,9 +1553,9 @@ class ImportPluginRegressionTests(TestCase):
         render_verify_mock.assert_not_called()
 
     def test_import_zarr_via_cli_accepts_only_renderable_images(self):
-        """Verify import Zarr via cli accepts only renderable images.
+        """Verify the import Zarr via CLI accepts only renderable images execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in import Zarr via CLI accepts only renderable images.
         """
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
@@ -1651,7 +1652,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_prepare_server_readable_zarr_source_copies_into_shared_transfer_root(self):
         """Verify prepare server readable Zarr source copies into shared transfer root.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in prepare server readable Zarr source copies into shared transfer root.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_root = Path(tmpdir)
@@ -1723,9 +1724,9 @@ class ImportPluginRegressionTests(TestCase):
             )
 
     def test_prepare_server_readable_zarr_source_preserves_multiscale_copy(self):
-        """Verify prepare server readable Zarr source preserves multiscale copy.
+        """Check that prepare server readable Zarr source preserves multiscale copy remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in prepare server readable Zarr source preserves multiscale copy.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_root = Path(tmpdir)
@@ -1813,7 +1814,7 @@ class ImportPluginRegressionTests(TestCase):
     ):
         """Verify check import compatibility accepts incompatible ome Zarr via ome Zarr support.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in check import compatibility accepts incompatible ome Zarr via ome Zarr support.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "image.ome.zarr"
@@ -1886,7 +1887,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_check_import_compatibility_uses_bioformats_when_scan_finds_groups(self):
         """Verify check import compatibility uses bioformats when scan finds groups.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in check import compatibility uses bioformats when scan finds groups.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "bf2raw.ome.zarr"
@@ -1961,9 +1962,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("File format supported by OMERO", result["details"])
 
     def test_check_import_compatibility_rejects_invalid_native_zarr_layout(self):
-        """Verify check import compatibility rejects invalid native Zarr layout.
+        """Confirm check import compatibility rejects invalid native Zarr layout is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in check import compatibility rejects invalid native Zarr layout.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "broken.ome.zarr"
@@ -2026,9 +2027,9 @@ class ImportPluginRegressionTests(TestCase):
     def test_check_import_compatibility_rejects_native_zarr_missing_scale_transform(
         self,
     ):
-        """Verify check import compatibility rejects native Zarr missing scale transform.
+        """Confirm check import compatibility rejects native Zarr missing scale transform is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in check import compatibility rejects native Zarr missing scale transform.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "broken-scale.ome.zarr"
@@ -2091,9 +2092,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("coordinate transformations", result["details"].lower())
 
     def test_check_import_compatibility_rejects_native_zarr_string_axes(self):
-        """Verify check import compatibility rejects native Zarr string axes.
+        """Confirm check import compatibility rejects native Zarr string axes is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in check import compatibility rejects native Zarr string axes.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "string-axes.ome.zarr"
@@ -2163,9 +2164,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("readable multiscale image node", result["details"].lower())
 
     def test_check_import_compatibility_rejects_sparse_bioformats2raw_series(self):
-        """Verify check import compatibility rejects sparse bioformats2raw series.
+        """Confirm check import compatibility rejects sparse bioformats2raw series is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in check import compatibility rejects sparse bioformats2raw series.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "bf2raw-gap.ome.zarr"
@@ -2245,7 +2246,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_background_import_session_closes_created_session_object(self):
         """Verify background import session closes created session object.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in background import session closes created session object.
         """
         fake_session = types.SimpleNamespace(
             getUuid=lambda: types.SimpleNamespace(getValue=lambda: "session-key")
@@ -2287,16 +2288,16 @@ class ImportPluginRegressionTests(TestCase):
     def test_load_job_falls_back_to_unlocked_read_after_lock_contention(self):
         """Verify load job falls back to unlocked read after lock contention.
 
-        Inputs: none. Output: bool. Raises on invalid or unavailable state.
+        Inputs: repository fixtures. Output: fails on regressions in load job falls back to unlocked read after lock contention.
         """
         job_id = "b" * 32
         job = {"job_id": job_id, "status": "uploading"}
 
         class FailingLock:
-            """Represent failing lock."""
+            """Test double for failing lock behavior in this module."""
 
             def __init__(self, *_args, **_kwargs):
-                """Initialize the instance.
+                """Create `FailingLock` with its default state.
 
                 Inputs: `*_args`, `**_kwargs`. Output: None.
                 """
@@ -2304,14 +2305,15 @@ class ImportPluginRegressionTests(TestCase):
                 self.kwargs = _kwargs
 
             def __enter__(self):
-                """Enter the context manager.
+                """Enter `FailingLock`'s context-managed fake resource.
 
-                Inputs: none. Output: None. Raises on invalid or unavailable state.
+                Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
+                external operations fail.
                 """
                 raise core_functions.portalocker.exceptions.LockException("busy")
 
             def __exit__(self, exc_type, exc, tb):
-                """Exit the context manager.
+                """Exit `FailingLock`'s context-managed fake resource.
 
                 Inputs: `exc_type`, `exc`, `tb`. Output: bool.
                 """
@@ -2331,9 +2333,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("updated", loaded)
 
     def test_mark_failed_job_for_deferred_cleanup_marks_upload_data_and_job_file(self):
-        """Verify mark failed job for deferred cleanup marks upload data and job file.
+        """Check mark failed job for deferred cleanup marks upload data and job file cleanup behavior.
 
-        Inputs: none. Output: bool.
+        Inputs: repository fixtures. Output: fails on regressions in mark failed job for deferred cleanup marks upload data and job file.
         """
         job_id = "c" * 32
         upload_root = _test_tmp_path("upload-root")
@@ -2341,9 +2343,9 @@ class ImportPluginRegressionTests(TestCase):
         calls = []
 
         def capture_marker(path, root, *, ttl_seconds, now=None):
-            """Capture marker.
+            """Return the capture marker for `ImportPluginRegressionTests`.
 
-            Inputs: `path`, `root`, `ttl_seconds`, `now`. Output: bool.
+            Inputs: `path` path, `root`, `ttl_seconds`, `now`. Output: `bool`.
             """
             calls.append((path, root, ttl_seconds, now))
             return True
@@ -2379,7 +2381,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_build_import_units_uses_package_root_for_grouped_directory_imports(self):
         """Verify build import units uses package root for grouped directory imports.
 
-        Inputs: none. Output: call result.
+        Inputs: repository fixtures. Output: fails on regressions in build import units uses package root for grouped directory imports.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             upload_root = Path(tmpdir) / "job-root"
@@ -2421,9 +2423,10 @@ class ImportPluginRegressionTests(TestCase):
             )
 
             def fake_scan(path, timeout=45):
-                """Fake scan.
+                """Simulate scan so the surrounding test controls that dependency.
 
-                Inputs: `path`, `timeout`. Output: call result.
+                Inputs: `path` path, `timeout` timeout seconds. Output:
+                `CompletedProcess` result.
                 """
                 if path == package_root:
                     return subprocess.CompletedProcess(
@@ -2454,9 +2457,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("METADATA.ome.xml", units[0]["group_header_name"])
 
     def test_upload_template_keeps_compatibility_polling_without_browser_timeout(self):
-        """Verify upload template keeps compatibility polling without browser timeout.
+        """Check that upload template keeps compatibility polling without browser timeout remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in upload template keeps compatibility polling without browser timeout.
         """
         template = (
             REPO_ROOT
@@ -2476,9 +2479,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertNotIn("const maxTimeMs = 5 * 60 * 1000", template)
 
     def test_upload_template_uses_short_loading_label_for_dropped_files(self):
-        """Verify upload template uses short loading label for dropped files.
+        """Check upload template uses short loading label for dropped files renders the expected surface.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in upload template uses short loading label for dropped files.
         """
         template = (
             REPO_ROOT
@@ -2492,9 +2495,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertNotIn("LOADING DROPPED FILES", template)
 
     def test_resolve_managed_child_path_rejects_path_traversal(self):
-        """Verify resolve managed child path rejects path traversal.
+        """Confirm resolve managed child path rejects path traversal is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when resolve managed child path rejects path traversal accepts unsafe input.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -2503,9 +2506,9 @@ class ImportPluginRegressionTests(TestCase):
                 core_functions._resolve_managed_child_path(root, "../escape.txt")
 
     def test_load_owned_job_rejects_invalid_job_id_before_disk_access(self):
-        """Verify load owned job rejects invalid job ID before disk access.
+        """Confirm load owned job rejects invalid job ID before disk access is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in load owned job rejects invalid job ID before disk access.
         """
         request = types.SimpleNamespace(user=types.SimpleNamespace(username="alice"))
 
@@ -2525,9 +2528,9 @@ class ImportPluginRegressionTests(TestCase):
         load_job_mock.assert_not_called()
 
     def test_load_owned_job_rejects_cross_user_job_access(self):
-        """Verify load owned job rejects cross user job access.
+        """Confirm load owned job rejects cross user job access is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in load owned job rejects cross user job access.
         """
         request = types.SimpleNamespace(user=types.SimpleNamespace(username="alice"))
         job_payload = {"job_id": "a" * 32, "username": "bob"}
@@ -2552,7 +2555,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_load_owned_job_allows_matching_owner(self):
         """Verify load owned job allows matching owner.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in load owned job allows matching owner.
         """
         request = types.SimpleNamespace(user=types.SimpleNamespace(username="alice"))
         job_payload = {"job_id": "a" * 32, "username": "alice"}
@@ -2574,7 +2577,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_confirm_import_defers_dataset_preparation_to_background_thread(self):
         """Verify confirm import defers dataset preparation to background thread.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in confirm import defers dataset preparation to background thread.
         """
         job_id = "d" * 32
         request = types.SimpleNamespace(
@@ -2617,7 +2620,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_ensure_job_dataset_targets_uses_request_connection_when_available(self):
         """Verify ensure job dataset targets uses request connection when available.
 
-        Inputs: none. Output: 11. Raises on invalid or unavailable state.
+        Inputs: repository fixtures. Output: fails on regressions in ensure job dataset targets uses request connection when available.
         """
         request_conn = types.SimpleNamespace(
             SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda group: None)
@@ -2625,21 +2628,20 @@ class ImportPluginRegressionTests(TestCase):
         created = []
 
         def fail_open_service_connection(*args, **kwargs):
-            """Fail open service connection.
+            """Fail immediately when an unexpected branch invokes this helper.
 
-            Inputs: `*args`, `**kwargs`. Output: None. Raises on invalid or unavailable
-            state.
-
-            state.
+            Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+            None. Raises: AssertionError when validation or the called operation fails.
             """
             raise AssertionError(
                 "service connection should not be used when request connection is available"
             )
 
         def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
-            """Fake get or create dataset.
+            """Simulate get or create dataset so the surrounding test controls that dependency.
 
-            Inputs: `conn`, `name`, `dataset_map`, `project_id`. Output: 11.
+            Inputs: `conn` OMERO gateway connection, `name` name, `dataset_map`,
+            `project_id` OMERO project ID. Output: `int`.
             """
             created.append((conn, name, project_id))
             dataset_map[name] = 11
@@ -2689,31 +2691,32 @@ class ImportPluginRegressionTests(TestCase):
     ):
         """Verify prepare request job import datasets uses Zarr package root without import scan.
 
-        Inputs: none. Output: 21.
+        Inputs: repository fixtures. Output: fails on regressions in prepare request job import datasets uses Zarr package root without import scan.
         """
         created = []
         group_calls = []
 
         class _RequestConn:
-            """Represent request conn."""
+            """Test double for request conn behavior in this module."""
 
             class _Opts:
-                """Represent opts."""
+                """Test double for opts behavior in this module."""
 
                 @staticmethod
                 def setOmeroGroup(value):
-                    """Set OMERO Group.
+                    """Set the OMERO Group for `_Opts`.
 
-                    Inputs: `value`. Output: None.
+                    Inputs: `value` input value. Output: None.
                     """
                     group_calls.append(value)
 
             SERVICE_OPTS = _Opts()
 
         def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
-            """Fake get or create dataset.
+            """Simulate get or create dataset so the surrounding test controls that dependency.
 
-            Inputs: `conn`, `name`, `dataset_map`, `project_id`. Output: 21.
+            Inputs: `conn` OMERO gateway connection, `name` name, `dataset_map`,
+            `project_id` OMERO project ID. Output: `int`.
             """
             created.append((conn, name, project_id))
             dataset_map[name] = 21
@@ -2761,7 +2764,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_prepare_uploaded_job_dataset_targets_runs_when_job_is_ready(self):
         """Verify prepare uploaded job dataset targets runs when job is ready.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in prepare uploaded job dataset targets runs when job is ready.
         """
         request_conn = object()
         job = {
@@ -2788,9 +2791,9 @@ class ImportPluginRegressionTests(TestCase):
     def test_prepare_uploaded_job_for_request_path_import_waits_for_planned_units_during_compatibility(
         self,
     ):
-        """Verify prepare uploaded job for request path import waits for planned units during compatibility.
+        """Verify the prepare uploaded job for request path import waits for planned units during compatibility safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when prepare uploaded job for request path import waits for planned units during compatibility accepts unsafe input.
         """
         job = {
             "job_id": "e" * 32,
@@ -2822,9 +2825,9 @@ class ImportPluginRegressionTests(TestCase):
     def test_prepare_uploaded_job_for_request_path_import_waits_for_background_import_plan(
         self,
     ):
-        """Verify prepare uploaded job for request path import waits for background import plan.
+        """Verify the prepare uploaded job for request path import waits for background import plan safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when prepare uploaded job for request path import waits for background import plan accepts unsafe input.
         """
         job = {
             "job_id": "f" * 32,
@@ -2856,7 +2859,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_run_compatibility_check_skips_scan_when_compatibility_is_disabled(self):
         """Verify run compatibility check skips scan when compatibility is disabled.
 
-        Inputs: none. Output: `job_state`.
+        Inputs: repository fixtures. Output: fails on regressions in run compatibility check skips scan when compatibility is disabled.
         """
         job_id = "1" * 32
         job_state = {
@@ -2877,7 +2880,7 @@ class ImportPluginRegressionTests(TestCase):
         }
 
         def fake_load_job(current_job_id):
-            """Fake load job.
+            """Simulate load job so the surrounding test controls that dependency.
 
             Inputs: `current_job_id`. Output: `job_state`.
             """
@@ -2885,7 +2888,7 @@ class ImportPluginRegressionTests(TestCase):
             return job_state
 
         def fake_update_job(current_job_id, updater):
-            """Fake update job.
+            """Simulate update job so the surrounding test controls that dependency.
 
             Inputs: `current_job_id`, `updater`. Output: `job_state`.
             """
@@ -2930,9 +2933,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("ready", job_state["status"])
 
     def test_job_status_starts_ready_job_after_request_path_preparation(self):
-        """Verify job status starts ready job after request path preparation.
+        """Verify the job status starts ready job after request path preparation safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when job status starts ready job after request path preparation accepts unsafe input.
         """
         request = types.SimpleNamespace(method="GET")
         job_id = "f" * 32
@@ -2981,7 +2984,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_vizarr_openwith_uses_browser_origin_for_source_url(self):
         """Verify vizarr openwith uses browser origin for source URL.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in vizarr openwith uses browser origin for source URL.
         """
         script = (
             REPO_ROOT / "omero_web_zarr/static/omero_web_zarr/openwith.js"
@@ -2995,7 +2998,7 @@ class ImportPluginRegressionTests(TestCase):
     ):
         """Verify open user owned background connection requires independent session key.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in open user owned background connection requires independent session key.
         """
         with mock.patch.object(
             core_functions,
@@ -3014,7 +3017,7 @@ class ImportPluginRegressionTests(TestCase):
     ):
         """Verify import plugin source forbids job service impersonation for background user work.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in import plugin source forbids job service impersonation for background user work.
         """
         source = (REPO_ROOT / "omeroweb_import/views/core_functions.py").read_text(
             encoding="utf-8"
@@ -3027,7 +3030,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_ensure_job_dataset_targets_hides_background_session_details(self):
         """Verify ensure job dataset targets hides background session details.
 
-        Inputs: none. Output: yielded values.
+        Inputs: repository fixtures. Output: fails on regressions in ensure job dataset targets hides background session details.
         """
         job = {
             "job_id": "b" * 32,
@@ -3049,9 +3052,10 @@ class ImportPluginRegressionTests(TestCase):
 
         @contextmanager
         def _background_user_connection(*args, **kwargs):
-            """Background user connection.
+            """Return the background user connection for `ImportPluginRegressionTests`.
 
-            Inputs: `*args`, `**kwargs`. Output: yielded values.
+            Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+            iterator of yielded items.
             """
             yield None
 
@@ -3072,9 +3076,9 @@ class ImportPluginRegressionTests(TestCase):
 
     @staticmethod
     def test_start_import_thread_does_not_spawn_when_save_fails():
-        """Verify start import thread does not spawn when save fails.
+        """Confirm start import thread does not spawn when save fails exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in start import thread does not spawn when save fails.
         """
         job = {"job_id": "b" * 32, "status": "ready", "import_thread_started": False}
 
@@ -3089,9 +3093,9 @@ class ImportPluginRegressionTests(TestCase):
         thread_cls.assert_not_called()
 
     def test_upload_user_settings_view_hides_store_exception_details(self):
-        """Verify upload user settings view hides store exception details.
+        """Confirm upload user settings view hides store exception details exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when upload user settings view hides store exception details stops reporting the expected error.
         """
         from omeroweb_import.views import user_settings_view
         from omeroweb_import.services import data_store
@@ -3119,9 +3123,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertNotIn("secret", payload["error"])
 
     def test_upload_special_method_load_hides_store_exception_details(self):
-        """Verify upload special method load hides store exception details.
+        """Confirm upload special method load hides store exception details exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when upload special method load hides store exception details stops reporting the expected error.
         """
         from omeroweb_import.views import special_method_settings_view
         from omeroweb_import.services import data_store
@@ -3153,9 +3157,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertNotIn("secret", payload["error"])
 
     def test_upload_template_keeps_completed_bytes_and_aborts_parallel_failures(self):
-        """Verify upload template keeps completed bytes and aborts parallel failures.
+        """Check that upload template keeps completed bytes and aborts parallel failures remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in upload template keeps completed bytes and aborts parallel failures.
         """
         template = (
             REPO_ROOT / "omeroweb_import/templates/omeroweb_import/index.html"
@@ -3173,7 +3177,7 @@ class ImportPluginRegressionTests(TestCase):
     def test_upload_styles_keep_long_names_inside_tree_column(self):
         """Verify upload styles keep long names inside tree column.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in upload styles keep long names inside tree column.
         """
         styles = (
             REPO_ROOT / "omeroweb_import/static/omeroweb_import/styles.css"
@@ -3187,9 +3191,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("padding-left: 0;", styles)
 
     def test_upload_preload_script_scopes_persisted_selection_restore(self):
-        """Verify upload preload script scopes persisted selection restore.
+        """Verify the upload preload script scopes persisted selection restore execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in upload preload script scopes persisted selection restore integration.
         """
         script = (
             REPO_ROOT / "omeroweb_import/static/omeroweb_import/upload.js"
@@ -3211,9 +3215,10 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
 
     @staticmethod
     def _server_config(tmpdir: str, tmp_root: Path) -> dict[str, str]:
-        """Server config.
+        """Return the server config for `ManageZarrManagedRepositoryScriptTests`.
 
-        Inputs: `tmpdir`, `tmp_root`. Output: `dict[str, str]`.
+        Inputs: `tmpdir` (str) temporary directory fixture, `tmp_root` (Path). Output:
+        `dict[str, str]`.
         """
         return {
             "omero.data.dir": str(Path(tmpdir) / "data"),
@@ -3224,16 +3229,16 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
 
     @staticmethod
     def _managed_repo_conn(managed_root: Path):
-        """Managed repo conn.
+        """Return the managed repo conn for `ManageZarrManagedRepositoryScriptTests`.
 
-        Inputs: `managed_root`. Output: computed value.
+        Inputs: `managed_root` (Path). Output: `bool`.
         """
 
         class _RepoProxy:
-            """Represent repo proxy."""
+            """Test double for repo proxy behavior in this module."""
 
             def __init__(self, root: Path):
-                """Initialize the instance.
+                """Create `_RepoProxy` with `root`.
 
                 Inputs: `root`. Output: None.
                 """
@@ -3243,9 +3248,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 self.registered_paths = set()
 
             def makeDir(self, path, parents):
-                """Make dir.
+                """Create the dir for `_RepoProxy`.
 
-                Inputs: `path`, `parents`. Output: None.
+                Inputs: `path` path, `parents`. Output: None.
                 """
                 self.make_dir_calls.append((path, parents))
                 target = self.root / path.strip("/")
@@ -3256,17 +3261,17 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                     self.registered_paths.add(current.resolve(strict=False))
 
             def fileExists(self, path):
-                """File exists.
+                """Return the file Exists for `_RepoProxy`.
 
-                Inputs: `path`. Output: bool.
+                Inputs: `path` path. Output: `bool`.
                 """
                 target = (self.root / path.strip("/")).resolve(strict=False)
                 return target in self.registered_paths
 
             def deletePaths(self, paths, recursively, force):
-                """Delete Paths.
+                """Delete the paths for `_RepoProxy`.
 
-                Inputs: `paths`, `recursively`, `force`. Output: 'delete-handle'.
+                Inputs: `paths`, `recursively`, `force`. Output: `str`.
                 """
                 self.delete_calls.append((list(paths), recursively, force))
                 for raw_path in paths:
@@ -3308,9 +3313,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
 
     @staticmethod
     def _register_repo_path(repo_proxy, managed_root: Path, target: Path) -> None:
-        """Register repo path.
+        """Record the register repo path call on `ManageZarrManagedRepositoryScriptTests` for later assertions.
 
-        Inputs: `repo_proxy`, `managed_root`, `target`. Output: None.
+        Inputs: `repo_proxy`, `managed_root` (Path), `target` (Path). Output: None.
         """
         current = managed_root.resolve(strict=False)
         for part in target.resolve(strict=False).relative_to(managed_root).parts:
@@ -3318,9 +3323,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             repo_proxy.registered_paths.add(current)
 
     def test_stage_zarr_uses_existing_user_prefix_and_template_suffix(self):
-        """Verify stage Zarr uses existing user prefix and template suffix.
+        """Check stage Zarr uses existing user prefix and template suffix renders the expected surface.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in stage Zarr uses existing user prefix and template suffix.
         """
         manage_script = _load_manage_zarr_script_module()
         fixed_now = real_datetime(2026, 3, 22, 9, 51, 15)
@@ -3372,18 +3377,18 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             self.assertEqual(0o644, (destination / "0" / "0").stat().st_mode & 0o777)
 
     def test_shared_tmp_root_requires_persisted_server_config(self):
-        """Verify shared temporary root requires persisted server config.
+        """Verify shared tmp root requires persisted server config.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in shared tmp root requires persisted server config.
         """
         manage_script = _load_manage_zarr_script_module()
         with self.assertRaisesRegex(RuntimeError, "omero.web.import.shared_tmp_path"):
             manage_script._shared_tmp_root({})
 
     def test_managed_repository_root_rejects_relative_managed_dir(self):
-        """Verify managed repository root rejects relative managed directory.
+        """Confirm managed repository root rejects relative managed dir is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in managed repository root rejects relative managed dir.
         """
         manage_script = _load_manage_zarr_script_module()
 
@@ -3394,9 +3399,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 manage_script._managed_repository_root(config)
 
     def test_managed_repository_root_rejects_root_outside_data_dir(self):
-        """Verify managed repository root rejects root outside data directory.
+        """Confirm managed repository root rejects root outside data dir is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in managed repository root rejects root outside data dir.
         """
         manage_script = _load_manage_zarr_script_module()
 
@@ -3409,9 +3414,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 manage_script._managed_repository_root(config)
 
     def test_stage_zarr_registers_missing_template_container_via_repository_api(self):
-        """Verify stage Zarr registers missing template container via repository API.
+        """Check stage Zarr registers missing template container via repository API renders the expected surface.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in stage Zarr registers missing template container via repository API.
         """
         manage_script = _load_manage_zarr_script_module()
         fixed_now = real_datetime(2026, 3, 22, 9, 51, 15)
@@ -3454,9 +3459,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             )
 
     def test_stage_zarr_rejects_existing_unregistered_suffix_dirs(self):
-        """Verify stage Zarr rejects existing unregistered suffix directories.
+        """Confirm stage Zarr rejects existing unregistered suffix dirs is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in stage Zarr rejects existing unregistered suffix dirs.
         """
         manage_script = _load_manage_zarr_script_module()
         fixed_now = real_datetime(2026, 3, 22, 9, 51, 15)
@@ -3493,7 +3498,7 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
     def test_load_server_config_reads_runtime_state_file(self):
         """Verify load server config reads runtime state file.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in load server config reads runtime state file.
         """
         manage_script = _load_manage_zarr_script_module()
 
@@ -3531,7 +3536,7 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
     def test_load_runtime_state_value_requires_existing_state_file_and_key(self):
         """Verify load runtime state value requires existing state file and key.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in load runtime state value requires existing state file and key.
         """
         manage_script = _load_manage_zarr_script_module()
 
@@ -3564,9 +3569,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 )
 
     def test_render_repo_template_and_validate_source_path_enforce_safe_inputs(self):
-        """Verify render repo template and validate source path enforce safe inputs.
+        """Check render repo template and validate source path enforce safe inputs renders the expected surface.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when render repo template and validate source path enforce safe inputs accepts unsafe input.
         """
         manage_script = _load_manage_zarr_script_module()
 
@@ -3625,9 +3630,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 manage_script._validate_source_path(config, str(not_zarr))
 
     def test_allocate_destination_dir_cleanup_and_symlink_guards(self):
-        """Verify allocate destination directory cleanup and symlink guards.
+        """Check allocate destination dir cleanup and symlink guards cleanup behavior.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when allocate destination dir cleanup and symlink guards accepts unsafe input.
         """
         manage_script = _load_manage_zarr_script_module()
 
@@ -3694,9 +3699,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 manage_script._reject_symlinks(symlink_source)
 
     def test_cleanup_zarr_rejects_path_outside_template(self):
-        """Verify cleanup Zarr rejects path outside template.
+        """Confirm cleanup Zarr rejects path outside template is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when cleanup Zarr rejects path outside template accepts unsafe input.
         """
         manage_script = _load_manage_zarr_script_module()
 
@@ -3726,9 +3731,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 )
 
     def test_cleanup_zarr_matches_template_prefix_without_current_time_assumption(self):
-        """Verify cleanup Zarr matches template prefix without current time assumption.
+        """Check cleanup Zarr matches template prefix without current time assumption renders the expected surface.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in cleanup Zarr matches template prefix without current time assumption.
         """
         manage_script = _load_manage_zarr_script_module()
 
@@ -3766,9 +3771,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             self.assertEqual([("delete-handle", True)], wait_calls)
 
     def test_run_script_sets_outputs_and_closes_session(self):
-        """Verify run script sets outputs and closes session.
+        """Verify the run script sets outputs and closes session execution contract.
 
-        Inputs: none. Output: `dict` result.
+        Inputs: repository fixtures. Output: fails on regressions in run script sets outputs and closes session integration.
         """
         manage_script = _load_manage_zarr_script_module()
 
@@ -3776,7 +3781,7 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             """Test double for fake client."""
 
             def __init__(self, params):
-                """Initialize the instance.
+                """Create `_FakeClient` with `params`.
 
                 Inputs: `params`. Output: None.
                 """
@@ -3785,23 +3790,23 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 self.closed = False
 
             def getInputs(self, unwrap=True):
-                """Return Inputs.
+                """Return the inputs for `_FakeClient`.
 
-                Inputs: `unwrap`. Output: `dict` result.
+                Inputs: `unwrap`. Output: `dict`.
                 """
                 return dict(self._params)
 
             def setOutput(self, key, value):
-                """Set Output.
+                """Set the output for `_FakeClient`.
 
-                Inputs: `key`, `value`. Output: None.
+                Inputs: `key` lookup key, `value` input value. Output: None.
                 """
                 self.outputs[key] = value
 
             def closeSession(self):
-                """Close session.
+                """Close the session for `_FakeClient`.
 
-                Inputs: none. Output: None.
+                Inputs: caller provides no extra arguments. Output: records the fake side effect.
                 """
                 self.closed = True
 
@@ -3871,9 +3876,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
         self.assertGreaterEqual(print_mock.call_count, 4)
 
     def test_run_script_reports_invalid_actions_without_leaking_session(self):
-        """Verify run script reports invalid actions without leaking session.
+        """Verify the run script reports invalid actions without leaking session execution contract.
 
-        Inputs: none. Output: dict.
+        Inputs: repository fixtures. Output: fails on regressions in run script reports invalid actions without leaking session integration.
         """
         manage_script = _load_manage_zarr_script_module()
 
@@ -3881,18 +3886,18 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             """Test double for fake client."""
 
             def __init__(self):
-                """Initialize the instance.
+                """Create `_FakeClient` with its default state.
 
-                Inputs: none. Output: None.
+                Inputs: constructor receives no public arguments. Output: initializes fake state.
                 """
                 self.outputs = {}
                 self.closed = False
 
             @staticmethod
             def getInputs(unwrap=True):
-                """Return Inputs.
+                """Return the inputs for `_FakeClient`.
 
-                Inputs: `unwrap`. Output: dict.
+                Inputs: `unwrap`. Output: `dict`.
                 """
                 return {
                     "Action": "invalid",
@@ -3901,16 +3906,16 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 }
 
             def setOutput(self, key, value):
-                """Set Output.
+                """Set the output for `_FakeClient`.
 
-                Inputs: `key`, `value`. Output: None.
+                Inputs: `key` lookup key, `value` input value. Output: None.
                 """
                 self.outputs[key] = value
 
             def closeSession(self):
-                """Close session.
+                """Close the session for `_FakeClient`.
 
-                Inputs: none. Output: None.
+                Inputs: caller provides no extra arguments. Output: records the fake side effect.
                 """
                 self.closed = True
 

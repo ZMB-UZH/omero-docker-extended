@@ -7,9 +7,10 @@ _T = TypeVar("_T")
 
 
 def next_or_fail(iterator: Iterator[_T], label: str = "test iterator") -> _T:
-    """Next or fail.
+    """Return the next iterator item, failing the caller when none exists.
 
-    Inputs: `iterator`, `label`. Output: `_T`. Raises on invalid or unavailable state.
+    Inputs: `iterator` (Iterator[_T]), `label` (str). Output: `_T`. Raises:
+    AssertionError when validation or the called operation fails.
     """
     try:
         return next(iterator)

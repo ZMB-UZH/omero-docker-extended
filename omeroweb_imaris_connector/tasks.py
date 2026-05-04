@@ -88,9 +88,9 @@ def _build_failure_meta(exc: Exception) -> dict[str, Any]:
 
 
 def _resolve_omero_cli() -> str:
-    """Resolve OMERO cli.
+    """Resolve the OMERO cli.
 
-    Inputs: none. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `str`. Raises: RuntimeError for the exercised failure path.
     """
     candidates = [
         "/opt/omero/web/venv-3.12/bin/omero",
@@ -160,8 +160,9 @@ def _run_script_via_omero_cli(
 ) -> dict[str, str]:
     """Launch IMS export with OMERO CLI inside the OMERO.web container.
 
-    Inputs: `script_id`, `image_id`, `host`, `port`, `session_key`. Output: `dict[str,
-    str]`. Raises on invalid or unavailable state.
+    Inputs: `script_id` (int), `image_id` (int) OMERO image ID, `host` (str), `port`
+    (int), `session_key` (str | None). Output: `dict[str, str]`. Raises:
+    IMSExportTaskError, RuntimeError when validation or the called operation fails.
     """
     omero_cli = _resolve_omero_cli()
 
@@ -246,14 +247,10 @@ def _run_script_via_omero_cli(
 
 
 def _open_session_connection(session_key, host, port, secure=None):
-    """Open session connection.
+    """Open the session connection.
 
-    Inputs: `session_key`, `host`, `port`, `secure`. Output: `conn`. Raises on invalid
-    or unavailable state.
-
-    This creates a new BlitzGateway connection by joining an existing
-    OMERO session, allowing background tasks to work with the user's
-    data access permissions.
+    Inputs: `session_key`, `host`, `port`, `secure`. Output: `conn`. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     logger.debug("Opening OMERO session host=%s port=%s secure=%s", host, port, secure)
 
@@ -306,10 +303,10 @@ def _open_session_connection(session_key, host, port, secure=None):
 
 
 def _open_job_service_connection(host, port, secure=None):
-    """Open job service connection.
+    """Open the job service connection.
 
-    Inputs: `host`, `port`, `secure`. Output: `conn`. Raises on invalid or unavailable
-    state.
+    Inputs: `host`, `port`, `secure`. Output: `conn`. Raises: RuntimeError when validation or
+    the called operation fails.
     """
     logger.debug(
         "Opening OMERO job-service session host=%s port=%s secure=%s",
@@ -357,11 +354,8 @@ def _open_job_service_connection(host, port, secure=None):
 def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
     """An IMS export task.
 
-    Inputs: `image_id`, `session_key`, `host`, `port`, `secure`. Output: dict. Raises on
-    invalid or unavailable state.
-
-    This task runs in the Celery worker and performs the actual OMERO
-    script execution for IMS conversion.
+    Inputs: `image_id` OMERO image ID, `session_key`, `host`, `port`, `secure`. Output:
+    `dict`. Raises: RuntimeError when validation or the called operation fails.
     """
     conn = None
     script_id = None
@@ -370,9 +364,10 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
     def _update_task_state(
         status: str, extra_meta: dict[str, Any] | None = None
     ) -> None:
-        """Update task state.
+        """Update the task state.
 
-        Inputs: `status`, `extra_meta`. Output: None.
+        Inputs: `status` (str) status, `extra_meta` (dict[str, Any] | None). Output:
+        None.
         """
         meta = {
             "image_id": image_id,

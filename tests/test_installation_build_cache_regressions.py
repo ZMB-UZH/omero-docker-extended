@@ -18,9 +18,9 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `InstallationBuildCacheRegressionTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.script_path = cls.repo_root / "installation" / "installation_script.sh"
@@ -36,12 +36,10 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
 
     @classmethod
     def _extract_script_block(cls, start_marker: str, end_marker: str) -> str:
-        """Extract script block.
+        """Extract the script block for `InstallationBuildCacheRegressionTests`.
 
-        Inputs: `start_marker`, `end_marker`. Output: `str`. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `start_marker` (str), `end_marker` (str). Output: `str`. Raises:
+        AssertionError when validation or the called operation fails.
         """
         start = cls.script_text.find(start_marker)
         if start == -1:
@@ -55,9 +53,9 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _write_executable(path: Path, content: str) -> None:
-        """Write executable.
+        """Write the executable for `InstallationBuildCacheRegressionTests`.
 
-        Inputs: `path`, `content`. Output: None.
+        Inputs: `path` (Path) path, `content` (str). Output: None.
         """
         path.write_text(content, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
@@ -65,7 +63,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
     def test_compose_mode_disables_cache_and_uses_no_cache_build(self) -> None:
         """Verify compose mode disables cache and uses no cache build.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in compose mode disables cache and uses no cache build.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -121,7 +119,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
     ) -> None:
         """Verify dockerignore excludes live runtime data from build context.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in dockerignore excludes live runtime data from build context.
         """
         dockerignore_text = (self.repo_root / ".dockerignore").read_text(
             encoding="utf-8"
@@ -142,7 +140,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
     def test_buildx_mode_disables_all_cache_knobs_for_no_cache_run(self) -> None:
         """Verify buildx mode disables all cache knobs for no cache run.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in buildx mode disables all cache knobs for no cache run.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -211,9 +209,9 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
     def test_cleanup_prunes_docker_builder_and_buildx_cache_in_buildx_mode(
         self,
     ) -> None:
-        """Verify cleanup prunes docker builder and buildx cache in buildx mode.
+        """Check cleanup prunes docker builder and buildx cache in buildx mode cleanup behavior.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in cleanup prunes docker builder and buildx cache in buildx mode.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -277,9 +275,9 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
             self.assertIn("builder prune -a -f", docker_log)
 
     def test_cleanup_skips_buildx_cache_directory_in_compose_mode(self) -> None:
-        """Verify cleanup skips buildx cache directory in compose mode.
+        """Check cleanup skips buildx cache directory in compose mode cleanup behavior.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in cleanup skips buildx cache directory in compose mode.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

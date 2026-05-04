@@ -19,9 +19,9 @@ class PathUsageExporterContractTests(TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `PathUsageExporterContractTests` checks.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks. Raises: RuntimeError for the exercised failure path.
         """
         spec = importlib.util.spec_from_file_location(
             "path_usage_exporter", EXPORTER_PATH
@@ -40,7 +40,7 @@ class PathUsageExporterContractTests(TestCase):
     def test_exporter_image_runs_as_dedicated_non_root_user(self) -> None:
         """Verify exporter image runs as dedicated non root user.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in exporter image runs as dedicated non root user.
         """
         self.assertIn("addgroup -S omero-path-exporter", self.dockerfile_text)
         self.assertIn(
@@ -52,7 +52,7 @@ class PathUsageExporterContractTests(TestCase):
     def test_installation_assigns_textfile_directory_to_exporter_uid_gid(self) -> None:
         """Verify installation assigns textfile directory to exporter uid gid.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation assigns textfile directory to exporter uid gid.
         """
         self.assertIn(
             'PATH_USAGE_EXPORTER_IMAGE="${PATH_USAGE_EXPORTER_IMAGE:-path-usage-exporter:custom}"',
@@ -72,9 +72,9 @@ class PathUsageExporterContractTests(TestCase):
         )
 
     def test_path_translation_requires_absolute_host_paths(self) -> None:
-        """Verify path translation requires absolute host paths.
+        """Verify the path translation requires absolute host paths safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when path translation requires absolute host paths accepts unsafe input.
         """
         self.assertEqual(
             self.exporter.host_path_for_df("/srv/omero/../data", "/host"),
@@ -90,7 +90,7 @@ class PathUsageExporterContractTests(TestCase):
     def test_prometheus_labels_are_escaped_in_rendered_metrics(self) -> None:
         """Verify prometheus labels are escaped in rendered metrics.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in prometheus labels are escaped in rendered metrics.
         """
         path_value = '/data/"quoted\\line\nnext'
         mountpoint = '/host/data/"quoted\\mount\nnext'
@@ -108,9 +108,9 @@ class PathUsageExporterContractTests(TestCase):
         self.assertIn('omero_path_used_ratio{kind="omero_data"', metrics)
 
     def test_df_usage_times_out_and_rejects_malformed_numbers(self) -> None:
-        """Verify df usage times out and rejects malformed numbers.
+        """Confirm df usage times out and rejects malformed numbers is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in df usage times out and rejects malformed numbers.
         """
         with mock.patch.object(
             self.exporter.subprocess,
@@ -136,7 +136,7 @@ class PathUsageExporterContractTests(TestCase):
     def test_write_metrics_uses_atomic_temp_file_in_output_directory(self) -> None:
         """Verify write metrics uses atomic temp file in output directory.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in write metrics uses atomic temp file in output directory.
         """
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_path = Path(tmp_dir) / "omero_paths.prom"

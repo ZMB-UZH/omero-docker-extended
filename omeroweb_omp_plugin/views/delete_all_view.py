@@ -31,12 +31,10 @@ OMERO = OMERO_CLI
 @login_required()
 @require_non_root_user
 def delete_all_keyvaluepairs(request, conn=None, _url=None, **kwargs):
-    """Delete all keyvaluepairs.
+    """Delete the all keyvaluepairs.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
-
-    - Logs in once with the current OMERO.web user + provided password
-    - Deletes in batches for speed
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     try:
         if request.method != "POST":

@@ -17,17 +17,17 @@ EXTERNAL_GRAFANA_URL = "https://grafana.example.org"
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self.val = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self.val`.
         """
@@ -35,10 +35,10 @@ class _Value:
 
 
 class _User:
-    """Represent user."""
+    """Test double for user behavior in this module."""
 
     def __init__(self, user_id, username, first_name="", last_name=""):
-        """Initialize the instance.
+        """Create `_User` with `user_id`, `username`, `first_name`, and `last_name`.
 
         Inputs: `user_id`, `username`, `first_name`, `last_name`. Output: None.
         """
@@ -48,7 +48,7 @@ class _User:
         self.lastName = _Value(last_name)
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_User`'s fake OMERO identifier.
 
         Inputs: none. Output: `self.id`.
         """
@@ -69,7 +69,7 @@ class _User:
         return self.firstName
 
     def getLastName(self):
-        """Return Last Name.
+        """Return the fake last name value used by this test double.
 
         Inputs: none. Output: `self.lastName`.
         """
@@ -77,10 +77,10 @@ class _User:
 
 
 class _Group:
-    """Represent group."""
+    """Test double for group behavior in this module."""
 
     def __init__(self, group_id, name, permissions):
-        """Initialize the instance.
+        """Create `_Group` with `group_id`, `name`, and `permissions`.
 
         Inputs: `group_id`, `name`, `permissions`. Output: None.
         """
@@ -89,21 +89,21 @@ class _Group:
         self.permissions = permissions
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_Group`'s fake OMERO identifier.
 
         Inputs: none. Output: `self.id`.
         """
         return self.id
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_Group`'s fake object name.
 
         Inputs: none. Output: `self.name`.
         """
         return self.name
 
     def getDetails(self):
-        """Return Details.
+        """Return the details for `_Group`.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -111,7 +111,7 @@ class _Group:
 
 
 class _Permissions:
-    """Represent permissions."""
+    """Test double for permissions behavior in this module."""
 
     def __init__(
         self,
@@ -121,7 +121,7 @@ class _Permissions:
         group_write=False,
         group_annotate=False,
     ):
-        """Initialize the instance.
+        """Create `_Permissions` with `label`.
 
         Inputs: `label`, `group_read`, `group_write`, `group_annotate`. Output: None.
         """
@@ -131,28 +131,28 @@ class _Permissions:
         self._group_annotate = group_annotate
 
     def __str__(self):
-        """Return the string representation.
+        """Return `_Permissions` as test-readable text.
 
         Inputs: none. Output: `self._label`.
         """
         return self._label
 
     def isGroupRead(self):
-        """Return whether Group Read.
+        """Return whether `_Permissions` grants group-read access.
 
         Inputs: none. Output: `self._group_read`.
         """
         return self._group_read
 
     def isGroupWrite(self):
-        """Return whether Group Write.
+        """Return whether `_Permissions` grants group-write access.
 
         Inputs: none. Output: `self._group_write`.
         """
         return self._group_write
 
     def isGroupAnnotate(self):
-        """Return whether Group Annotate.
+        """Return whether `_Permissions` grants group-annotate access.
 
         Inputs: none. Output: `self._group_annotate`.
         """
@@ -160,10 +160,10 @@ class _Permissions:
 
 
 class _AdminService:
-    """Represent admin service."""
+    """Test double for admin service behavior in this module."""
 
     def __init__(self, users, groups, groups_by_user, users_by_group):
-        """Initialize the instance.
+        """Create `_AdminService` with `users`, `groups`, `groups_by_user`, and `users_by_group`.
 
         Inputs: `users`, `groups`, `groups_by_user`, `users_by_group`. Output: None.
         """
@@ -173,23 +173,23 @@ class _AdminService:
         self._users_by_group = users_by_group
 
     def lookupExperimenters(self):
-        """Lookup experimenters.
+        """Return the lookup Experimenters for `_AdminService`.
 
-        Inputs: none. Output: `list` result.
+        Inputs: none. Output: `list`.
         """
         return list(self._users)
 
     def lookupGroups(self):
-        """Lookup groups.
+        """Return the lookup Groups for `_AdminService`.
 
-        Inputs: none. Output: `list` result.
+        Inputs: none. Output: `list`.
         """
         return list(self._groups)
 
     def containedGroups(self, *args):
-        """Contained groups.
+        """Return the contained Groups for `_AdminService`.
 
-        Inputs: `*args`. Output: `list` result.
+        Inputs: `*args` positional arguments. Output: `list`.
         """
         identifier = args[0] if args else None
         if identifier is None:
@@ -197,9 +197,9 @@ class _AdminService:
         return list(self._groups_by_user.get(int(identifier), []))
 
     def containedExperimenters(self, *args):
-        """Contained experimenters.
+        """Return the contained Experimenters for `_AdminService`.
 
-        Inputs: `*args`. Output: `list` result.
+        Inputs: `*args` positional arguments. Output: `list`.
         """
         identifier = args[0] if args else None
         if identifier is None:
@@ -208,9 +208,9 @@ class _AdminService:
 
 
 def test_proxy_path_and_redirect_safety_helpers():
-    """Verify proxy path and redirect safety helpers.
+    """Verify the proxy path and redirect safety helpers safety boundary.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: admin-tool fixtures. Output: fails on regressions when proxy path and redirect safety helpers accepts unsafe input.
     """
     assert index_view._normalize_proxy_prefix(" /grafana/ ") == "/grafana"
     assert index_view._safe_redirect_segment("../escape", "fallback") == "fallback"
@@ -239,9 +239,9 @@ def test_proxy_path_and_redirect_safety_helpers():
 
 
 def test_normalize_proxy_request_target_rejects_path_traversal():
-    """Verify normalize proxy request target rejects path traversal.
+    """Confirm normalize proxy request target rejects path traversal is rejected at the boundary.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: admin-tool fixtures. Output: fails on regressions when normalize proxy request target rejects path traversal accepts unsafe input.
     """
     try:
         index_view._normalize_proxy_request_target("../../escape")
@@ -252,9 +252,9 @@ def test_normalize_proxy_request_target_rejects_path_traversal():
 
 
 def test_build_proxied_response_rewrites_html_locations_and_cookies():
-    """Verify build proxied response rewrites html locations and cookies.
+    """Check build proxied response rewrites html locations and cookies renders the expected surface.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build proxied response rewrites html locations and cookies.
     """
     headers = HTTPMessage()
     headers.add_header("Content-Type", "text/html; charset=utf-8")
@@ -292,7 +292,7 @@ def test_build_proxied_response_rewrites_html_locations_and_cookies():
 def test_proxy_backend_helpers_build_expected_urls_and_fallbacks(monkeypatch):
     """Verify proxy backend helpers build expected URLs and fallbacks.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy backend helpers build expected URLs and fallbacks.
     """
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "infra")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-overview")
@@ -336,7 +336,7 @@ def test_proxy_backend_helpers_build_expected_urls_and_fallbacks(monkeypatch):
 def test_request_and_public_url_helpers_cover_reverse_proxy_cases():
     """Verify request and public URL helpers cover reverse proxy cases.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in request and public URL helpers cover reverse proxy cases.
     """
     factory = RequestFactory()
     proxied = factory.get(
@@ -379,9 +379,9 @@ def test_request_and_public_url_helpers_cover_reverse_proxy_cases():
 def test_grafana_dashboard_urls_sanitize_configured_dashboard_segments(
     monkeypatch,
 ) -> None:
-    """Verify grafana dashboard URLs sanitize configured dashboard segments.
+    """Check that grafana dashboard URLs sanitize configured dashboard segments keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in grafana dashboard URLs sanitize configured dashboard segments.
     """
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "https://evil.example")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "../escape")
@@ -403,7 +403,7 @@ def test_grafana_dashboard_urls_sanitize_configured_dashboard_segments(
 def test_validation_and_identity_helpers_cover_remaining_guard_paths(monkeypatch):
     """Verify validation and identity helpers cover remaining guard paths.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in validation and identity helpers cover remaining guard paths.
     """
     with pytest.raises(ValueError):
         index_view._validated_http_url("grafana.example.test")
@@ -461,7 +461,7 @@ def test_validation_and_identity_helpers_cover_remaining_guard_paths(monkeypatch
 def test_admin_listing_helpers_collect_users_groups_and_permissions():
     """Verify admin listing helpers collect users groups and permissions.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in admin listing helpers collect users groups and permissions.
     """
     users = [
         _User(1, "alice", "Alice", "Admin"),
@@ -503,7 +503,7 @@ def test_admin_listing_helpers_collect_users_groups_and_permissions():
 def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
     """Verify admin listing helpers skip incomplete memberships and runtime state.
 
-    Inputs: none. Output: list.
+    Inputs: admin-tool fixtures. Output: fails on regressions in admin listing helpers skip incomplete memberships and runtime state.
     """
     missing_user = SimpleNamespace(
         getId=lambda: _Value(3),
@@ -524,29 +524,29 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
     )
 
     class _SparseAdminService:
-        """Represent sparse admin service."""
+        """Test double for sparse admin service behavior in this module."""
 
         @staticmethod
         def lookupExperimenters():
-            """Lookup experimenters.
+            """Return the lookup Experimenters for `_SparseAdminService`.
 
-            Inputs: none. Output: list.
+            Inputs: none. Output: `list`.
             """
             return [missing_user]
 
         @staticmethod
         def lookupGroups():
-            """Lookup groups.
+            """Return the lookup Groups for `_SparseAdminService`.
 
-            Inputs: none. Output: list.
+            Inputs: none. Output: `list`.
             """
             return [unnamed_group, valid_group]
 
         @staticmethod
         def containedGroups(*args):
-            """Contained groups.
+            """Return the contained Groups for `_SparseAdminService`.
 
-            Inputs: `*args`. Output: list.
+            Inputs: `*args` positional arguments. Output: `list`.
             """
             identifier = args[0] if args else None
             if identifier == 3:
@@ -555,9 +555,9 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
 
         @staticmethod
         def containedExperimenters(*args):
-            """Contained experimenters.
+            """Return the contained Experimenters for `_SparseAdminService`.
 
-            Inputs: `*args`. Output: list.
+            Inputs: `*args` positional arguments. Output: `list`.
             """
             identifier = args[0] if args else None
             if identifier == 23:
@@ -618,48 +618,46 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
 def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypatch):
     """Verify admin helper fallbacks cover wrapped values and compose health.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in admin helper fallbacks cover wrapped values and compose health.
+    Raises: RuntimeError, TypeError when validation or the called operation fails.
     """
 
     class _TextPermission:
-        """Represent text permission."""
+        """Test double for text permission behavior in this module."""
 
         @staticmethod
         def isGroupRead():
-            """Return whether Group Read.
+            """Return whether `_TextPermission` grants group-read access.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("bad read")
 
         @staticmethod
         def isGroupWrite():
-            """Return whether Group Write.
+            """Return whether `_TextPermission` grants group-write access.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("bad write")
 
         @staticmethod
         def isGroupAnnotate():
-            """Return whether Group Annotate.
+            """Return whether `_TextPermission` grants group-annotate access.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("bad annotate")
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_TextPermission` as test-readable text.
 
             Inputs: none. Output: 'read-only'.
             """
             return "read-only"
 
     def _fallback_group_details():
-        """Fallback group details.
+        """Return the fallback group details.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -668,21 +666,22 @@ def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypa
     fallback_group = SimpleNamespace(getDetails=_fallback_group_details)
 
     class _CallableListingService:
-        """Represent callable listing service."""
+        """Test double for callable listing service behavior in this module."""
 
         @staticmethod
         def lookupGroups(*_args):
-            """Lookup groups.
+            """Return the lookup Groups for `_CallableListingService`.
 
-            Inputs: `*_args`. Output: list.
+            Inputs: `*_args`. Output: `list`.
             """
             return [_Group(12, "users_rw", _Permissions("rwrw--", group_write=True))]
 
         @staticmethod
         def containedGroups(*_args):
-            """Contained groups.
+            """Record the contained groups call on `_CallableListingService` for later assertions.
 
-            Inputs: `*_args`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `*_args`. Output: None. Raises: TypeError when validation or
+            external operations fail.
             """
             raise TypeError("wrong signature")
 
@@ -729,9 +728,9 @@ def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypa
 def test_proxy_and_admin_post_views_cover_remaining_error_and_success_paths(
     monkeypatch,
 ):
-    """Verify proxy and admin post views cover remaining error and success paths.
+    """Confirm proxy and admin post views cover remaining error and success paths exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: 'req-1'.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when proxy and admin post views cover remaining error and success paths stops reporting the expected error.
     """
     factory = RequestFactory()
     conn = object()
@@ -857,10 +856,10 @@ def test_proxy_and_admin_post_views_cover_remaining_error_and_success_paths(
     assert empty_script_id.status_code == 400
 
     class _RequestId:
-        """Represent request identifier."""
+        """Test double for request identifier behavior in this module."""
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_RequestId` as test-readable text.
 
             Inputs: none. Output: 'req-1'.
             """

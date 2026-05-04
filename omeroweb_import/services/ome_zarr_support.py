@@ -43,7 +43,7 @@ class OMEZarrImageInspection:
 
     @property
     def supported(self) -> bool:
-        """Supported.
+        """Return the supported for `OMEZarrImageInspection`.
 
         Inputs: none. Output: `bool`.
         """
@@ -87,24 +87,9 @@ def inspect_ome_zarr_image(store_root: Path) -> OMEZarrImageInspection:
 
 
 def normalize_native_ome_zarr_copy(store_root: Path) -> Optional[str]:
-    """Normalize native OME Zarr copy.
+    """Normalize the native OME Zarr copy.
 
-    Inputs: `store_root`. Output: `Optional[str]`.
-
-    The installed OMERO render stack can import some valid OME-Zarr stores but
-    later fail to render thumbnails when image arrays are backed by large
-    Blosc-compressed chunks.  Additionally, 3D stores whose pyramids
-    downsample the z-axis produce blurry slices in 2D viewers like Vizarr
-    that select resolution level based on XY viewport zoom.
-
-    This function:
-
-    1. Rewrites Blosc-compressed chunks to gzip so the OMERO render stack
-       can read them.
-    2. Regenerates pyramid levels that downsample all three spatial axes
-       (z, y, x) so that only y and x are downsampled — matching the
-       approach used by ``ome-zarr-py``'s ``Scaler.local_mean`` and
-       napari's dimension-aware multiscale level selection.
+    Inputs: `store_root` (Path). Output: `Optional[str]`.
     """
     inspection = inspect_ome_zarr_image(store_root)
     if not inspection.supported:
@@ -131,11 +116,9 @@ def normalize_native_ome_zarr_copy(store_root: Path) -> Optional[str]:
 def _load_root_ome_zarr_metadata(
     store_root: Path,
 ) -> tuple[Optional[dict[str, Any]], Optional[OMEZarrImageInspection]]:
-    """Load root OME Zarr metadata.
+    """Load the root OME Zarr metadata.
 
-    Inputs: `store_root`. Output: `tuple[Optional[dict[str, Any]],
-    Optional[OMEZarrImageInspection]]`.
-
+    Inputs: `store_root` (Path). Output: `tuple[Optional[dict[str, Any]],
     Optional[OMEZarrImageInspection]]`.
     """
     if not store_root.is_dir():
@@ -323,9 +306,9 @@ def _inspect_single_ome_zarr_image(
 
 
 def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
-    """Inspect bioformats2raw layout.
+    """Return the inspect bioformats2raw layout.
 
-    Inputs: `store_root`. Output: `OMEZarrImageInspection`.
+    Inputs: `store_root` (Path). Output: `OMEZarrImageInspection`.
     """
     series_dirs = sorted(
         child
@@ -423,9 +406,9 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
 def _read_store_metadata_payload(
     store_root: Path,
 ) -> tuple[object | None, Optional[str]]:
-    """Read store metadata payload.
+    """Read the store metadata payload.
 
-    Inputs: `store_root`. Output: `tuple[object | None, Optional[str]]`.
+    Inputs: `store_root` (Path). Output: `tuple[object | None, Optional[str]]`.
     """
     metadata_path = None
     for candidate_name in (".zattrs", "zarr.json"):
@@ -450,9 +433,9 @@ def _read_store_metadata_payload(
 def _read_zarr_format_metadata(
     store_root: Path, metadata_payload: dict
 ) -> Optional[int]:
-    """Read Zarr format metadata.
+    """Read the Zarr format metadata.
 
-    Inputs: `store_root`, `metadata_payload`. Output: `Optional[int]`.
+    Inputs: `store_root` (Path), `metadata_payload` (dict). Output: `Optional[int]`.
     """
     raw_value = metadata_payload.get("zarr_format")
     if isinstance(raw_value, int):
@@ -475,11 +458,9 @@ def _read_zarr_format_metadata(
 def _read_array_metadata_payload(
     store_root: Path, relative_path: str
 ) -> tuple[Optional[dict], Optional[str]]:
-    """Read array metadata payload.
+    """Read the array metadata payload.
 
-    Inputs: `store_root`, `relative_path`. Output: `tuple[Optional[dict],
-    Optional[str]]`.
-
+    Inputs: `store_root` (Path), `relative_path` (str). Output: `tuple[Optional[dict],
     Optional[str]]`.
     """
     array_root = store_root / relative_path
@@ -514,7 +495,7 @@ def _read_array_metadata_payload(
 
 
 def _extract_axes(axes_payload) -> tuple[list[str], dict[str, str], Optional[str]]:
-    """Extract axes.
+    """Extract the axes.
 
     Inputs: `axes_payload`. Output: `tuple[list[str], dict[str, str], Optional[str]]`.
     """
@@ -537,9 +518,9 @@ def _extract_axes(axes_payload) -> tuple[list[str], dict[str, str], Optional[str
 
 
 def _extract_dataset_relative_paths(metadata_payload: dict) -> tuple[str, ...]:
-    """Extract dataset relative paths.
+    """Extract the dataset relative paths.
 
-    Inputs: `metadata_payload`. Output: `tuple[str, ...]`.
+    Inputs: `metadata_payload` (dict). Output: `tuple[str, ...]`.
     """
     paths = []
     for multiscale_entry in metadata_payload.get("multiscales") or []:
@@ -559,12 +540,10 @@ def _extract_physical_sizes(
     axis_units: dict[str, str],
     transforms_payload,
 ) -> tuple[dict[str, tuple[float, str]], Optional[str]]:
-    """Extract physical sizes.
+    """Extract the physical sizes.
 
-    Inputs: `axis_names`, `axis_units`, `transforms_payload`. Output: `tuple[dict[str,
-    tuple[float, str]], Optional[str]]`.
-
-    tuple[float, str]], Optional[str]]`.
+    Inputs: `axis_names` (list[str]), `axis_units` (dict[str, str]),
+    `transforms_payload`. Output: `tuple[dict[str, tuple[float, str]], Optional[str]]`.
     """
     if not isinstance(transforms_payload, list) or not transforms_payload:
         return (
@@ -606,7 +585,7 @@ def _extract_physical_sizes(
 
 
 def _normalize_dtype_name(raw_dtype) -> str:
-    """Normalize dtype name.
+    """Normalize the dtype name.
 
     Inputs: `raw_dtype`. Output: `str`.
     """
@@ -639,9 +618,10 @@ def _rewrite_problematic_native_image_arrays(
     store_root: Path,
     inspection: OMEZarrImageInspection,
 ) -> Optional[str]:
-    """Rewrite problematic native image arrays.
+    """Return the rewrite problematic native image arrays.
 
-    Inputs: `store_root`, `inspection`. Output: `Optional[str]`.
+    Inputs: `store_root` (Path), `inspection` (OMEZarrImageInspection). Output:
+    `Optional[str]`.
     """
     if not inspection.image_relative_paths:
         return None
@@ -786,9 +766,10 @@ def _has_3d_pyramid_downsampling(store_root: Path) -> Optional[dict]:
 
 
 def _downscale_local_mean_fallback(data, factors):
-    """Downscale local mean fallback.
+    """Return the downscale local mean fallback.
 
-    Inputs: `data`, `factors`. Output: `result`. Raises on invalid or unavailable state.
+    Inputs: `data` payload, `factors`. Output: downscale local mean fallback result.
+    Raises: ValueError when validation or the called operation fails.
     """
     import numpy as np
 
@@ -820,9 +801,9 @@ def _downscale_local_mean_fallback(data, factors):
 
 
 def _downscale_local_mean(data, factors):
-    """Downscale local mean.
+    """Return the downscale local mean.
 
-    Inputs: `data`, `factors`. Output: call result.
+    Inputs: `data` payload, `factors`. Output: `_skimage_downscale_local_mean` result.
     """
     try:
         from skimage.transform import (
@@ -834,12 +815,10 @@ def _downscale_local_mean(data, factors):
 
 
 def _read_zarr_v2_array(array_dir: Path, metadata: dict):
-    """Read Zarr v2 array.
+    """Read the Zarr v2 array.
 
-    Inputs: `array_dir`, `metadata`. Output: `data`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `array_dir` (Path), `metadata` (dict). Output: read Zarr v2 array result.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     import numpy as np
 
@@ -1042,10 +1021,10 @@ def _write_zarr_v2_level(
     filters_spec,
     codec,
 ) -> Optional[str]:
-    """Write Zarr v2 level.
+    """Write the Zarr v2 level.
 
-    Inputs: `output_dir`, `data`, `chunks`, `compressor_spec`, `filters_spec`, `codec`.
-    Output: `Optional[str]`.
+    Inputs: `output_dir` (Path), `data` payload, `chunks` (list), `compressor_spec`
+    (Optional[dict]), `filters_spec`, `codec`. Output: `Optional[str]`.
     """
     import numpy as np
 

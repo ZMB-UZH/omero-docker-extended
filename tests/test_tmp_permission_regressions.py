@@ -16,9 +16,9 @@ class TmpPermissionRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `TmpPermissionRegressionTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.installation_script = (
@@ -31,9 +31,9 @@ class TmpPermissionRegressionTests(unittest.TestCase):
     def test_installation_layout_keeps_server_namespace_owned_by_server_uid(
         self,
     ) -> None:
-        """Verify installation layout keeps server namespace owned by server uid.
+        """Check that installation layout keeps server namespace owned by server uid remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation layout keeps server namespace owned by server uid.
         """
         function_text = self._slice_function(
             self.installation_script,
@@ -89,9 +89,9 @@ class TmpPermissionRegressionTests(unittest.TestCase):
             )
 
     def test_installation_layout_creates_web_tmp_directory(self) -> None:
-        """Ensure_omero_tmp_layout must create omero-web/tmp owned by web uid.
+        """Verify installation layout creates web tmp directory.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation layout creates web tmp directory.
         """
         function_text = self._slice_function(
             self.installation_script,
@@ -127,9 +127,9 @@ class TmpPermissionRegressionTests(unittest.TestCase):
             )
 
     def test_server_bootstrap_removes_exact_legacy_lock_namespace(self) -> None:
-        """Verify server bootstrap removes exact legacy lock namespace.
+        """Check server bootstrap removes exact legacy lock namespace cleanup behavior.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server bootstrap removes exact legacy lock namespace.
         """
         function_text = self._slice_function(
             self.server_bootstrap_script,
@@ -164,9 +164,9 @@ class TmpPermissionRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _run_bash(script: str) -> None:
-        """Bash.
+        """Run the bash for `TmpPermissionRegressionTests`.
 
-        Inputs: `script`. Output: None.
+        Inputs: `script` (str). Output: None.
         """
         subprocess.run(
             [BASH_BIN, "-lc", script],
@@ -178,18 +178,19 @@ class TmpPermissionRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _ownership(path: Path) -> tuple[int, int]:
-        """Ownership.
+        """Return the ownership for `TmpPermissionRegressionTests`.
 
-        Inputs: `path`. Output: `tuple[int, int]`.
+        Inputs: `path` (Path) path. Output: `tuple[int, int]`.
         """
         stat_result = path.stat()
         return stat_result.st_uid, stat_result.st_gid
 
     @staticmethod
     def _slice_function(content: str, start_marker: str, end_marker: str) -> str:
-        """Slice function.
+        """Return the slice function for `TmpPermissionRegressionTests`.
 
-        Inputs: `content`, `start_marker`, `end_marker`. Output: `str`.
+        Inputs: `content` (str), `start_marker` (str), `end_marker` (str). Output:
+        `str`.
         """
         start = content.index(start_marker)
         end = content.index(end_marker, start)

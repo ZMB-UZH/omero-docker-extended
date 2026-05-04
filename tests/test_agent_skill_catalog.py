@@ -473,9 +473,9 @@ class AgentSkillCatalogTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `AgentSkillCatalogTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.catalog_text = (
@@ -504,9 +504,9 @@ class AgentSkillCatalogTests(unittest.TestCase):
         }
 
     def parse_frontmatter(self, skill_markdown: str) -> dict[str, object]:
-        """Parse frontmatter.
+        """Parse and validate the frontmatter input.
 
-        Inputs: `skill_markdown`. Output: `dict[str, object]`.
+        Inputs: `skill_markdown` (str). Output: `dict[str, object]`.
         """
         self.assertTrue(
             skill_markdown.startswith("---\n"), "Skill file is missing frontmatter"
@@ -533,14 +533,14 @@ class AgentSkillCatalogTests(unittest.TestCase):
 
     @staticmethod
     def normalize_text(value: str) -> str:
-        """Normalize text.
+        """Normalize the text for `AgentSkillCatalogTests`.
 
-        Inputs: `value`. Output: `str`.
+        Inputs: `value` (str) input value. Output: `str`.
         """
         return re.sub(r"\s+", " ", value.lower().replace("`", "")).strip()
 
     def assertNonEmptyString(self, value: object, msg: str) -> str:
-        """Assert non empty string.
+        """Assert that a catalog value is a non-empty string.
 
         Inputs: `value`, `msg`. Output: `str`.
         """
@@ -551,7 +551,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
     def assertContainsAll(
         self, haystack: str, phrases: tuple[Concept, ...], msg: str
     ) -> None:
-        """Assert contains all.
+        """Assert that all required phrases occur in a text value.
 
         Inputs: `haystack`, `phrases`, `msg`. Output: None.
         """
@@ -573,7 +573,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
     def test_catalog_doc_is_linked_from_all_supported_agent_entrypoints(self) -> None:
         """Verify catalog doc is linked from all supported agent entrypoints.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in catalog doc is linked from all supported agent entrypoints.
         """
         self.assertIn("docs/reference/ai-agent-skills.md", self.agents_text)
         self.assertIn("docs/reference/ai-agent-skills.md", self.claude_text)
@@ -588,7 +588,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
     def test_supported_agent_entrypoints_keep_the_same_core_contract(self) -> None:
         """Verify supported agent entrypoints keep the same core contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in supported agent entrypoints keep the same core contract.
         """
         entrypoints = {
             "CLAUDE.md": self.claude_text,
@@ -614,9 +614,9 @@ class AgentSkillCatalogTests(unittest.TestCase):
                 )
 
     def test_ai_commit_identity_is_fixed_on_all_agent_entrypoints(self) -> None:
-        """Verify AI commit identity is fixed on all agent entrypoints.
+        """Verify ai commit identity is fixed on all agent entrypoints.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in ai commit identity is fixed on all agent entrypoints.
         """
         entrypoints = {
             "AGENTS.md": self.agents_text,
@@ -645,7 +645,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
     def test_agent_entrypoints_do_not_allow_subagent_escape_hatches(self) -> None:
         """Verify agent entrypoints do not allow subagent escape hatches.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in agent entrypoints do not allow subagent escape hatches.
         """
         forbidden_phrases = (
             "Never use background agents or subagents unless the user explicitly asks for them.",
@@ -669,7 +669,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
     ) -> None:
         """Verify all skill directories are present and match expected inventory.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in all skill directories are present and match expected inventory.
         """
         self.assertEqual(set(ALL_SKILLS), set(self.skill_dirs))
         self.assertEqual(len(ALL_SKILLS), len(self.skill_dirs))
@@ -678,7 +678,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
     def test_every_skill_has_frontmatter_adapter_and_catalog_entry(self) -> None:
         """Verify every skill has frontmatter adapter and catalog entry.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in every skill has frontmatter adapter and catalog entry.
         """
         for skill_name in ALL_SKILLS:
             with self.subTest(skill_name=skill_name):
@@ -753,7 +753,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
     def test_repo_native_skills_and_overlays_follow_expected_structure(self) -> None:
         """Verify repo native skills and overlays follow expected structure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in repo native skills and overlays follow expected structure.
         """
         for skill_name in ALL_SKILLS:
             frontmatter, skill_text, _ = self.load_skill(skill_name)
@@ -770,7 +770,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
     def test_each_skill_supports_a_realistic_repo_scenario(self) -> None:
         """Verify each skill supports a realistic repo scenario.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in each skill supports a realistic repo scenario.
         """
         for skill_name, scenario in SKILL_SCENARIOS.items():
             with self.subTest(skill_name=skill_name, scenario=scenario.scenario):
@@ -796,9 +796,9 @@ class AgentSkillCatalogTests(unittest.TestCase):
                 )
 
     def test_security_and_verification_skills_point_to_repo_contracts(self) -> None:
-        """Verify security and verification skills point to repo contracts.
+        """Verify the security and verification skills point to repo contracts safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when security and verification skills point to repo contracts accepts unsafe input.
         """
         security_text = (
             self.skill_dirs["security-finding-triager"] / "SKILL.md"
@@ -821,7 +821,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
     def test_catalog_contains_exactly_the_expected_skill_paths(self) -> None:
         """Verify catalog contains exactly the expected skill paths.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in catalog contains exactly the expected skill paths.
         """
         listed_paths = {
             match.group(1)

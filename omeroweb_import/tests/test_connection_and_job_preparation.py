@@ -17,7 +17,7 @@ class _FakeGatewayConnection:
         last_error="last-error",
         group_calls=None,
     ):
-        """Initialize the instance.
+        """Create `_FakeGatewayConnection` with its default state.
 
         Inputs: `connect_result`, `connect_exception`, `last_error`, `group_calls`.
         Output: None.
@@ -30,28 +30,25 @@ class _FakeGatewayConnection:
         self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=self.group_calls.append)
 
     def connect(self):
-        """Open the connection.
+        """Return the connect for `_FakeGatewayConnection`.
 
-        Inputs: none. Output: `self._connect_result`. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: none. Output: connect result. Raises: _connect_exception when validation or the called operation fails.
         """
         if self._connect_exception is not None:
             raise self._connect_exception
         return self._connect_result
 
     def getLastError(self):
-        """Return Last Error.
+        """Return `_FakeGatewayConnection`'s fake last-error text.
 
         Inputs: none. Output: `self._last_error`.
         """
         return self._last_error
 
     def close(self):
-        """Close the resource.
+        """Close `_FakeGatewayConnection`'s fake resource handle.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.closed = True
 
@@ -61,7 +58,7 @@ def test_prepare_job_import_datasets_marks_missing_roots_and_dataset_failures(
 ):
     """Verify prepare job import datasets marks missing roots and dataset failures.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `updated_jobs[job_id]`.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in prepare job import datasets marks missing roots and dataset failures.
     """
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
@@ -70,9 +67,9 @@ def test_prepare_job_import_datasets_marks_missing_roots_and_dataset_failures(
     updated_jobs = {}
 
     def update_job(job_id, mutator):
-        """Update job.
+        """Update the job.
 
-        Inputs: `job_id`, `mutator`. Output: `updated_jobs[job_id]`.
+        Inputs: `job_id`, `mutator`. Output: update job result.
         """
         current = dict(updated_jobs.get(job_id, {"job_id": job_id}))
         updated_jobs[job_id] = mutator(current)
@@ -114,7 +111,7 @@ def test_prepare_job_import_datasets_marks_missing_roots_and_dataset_failures(
 def test_prepare_job_import_datasets_reports_save_failures(tmp_path, monkeypatch):
     """Verify prepare job import datasets reports save failures.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in prepare job import datasets reports save failures.
     """
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
@@ -146,7 +143,7 @@ def test_open_admin_connection_and_group_name_cover_failure_and_success_paths(
 ):
     """Verify open admin connection and group name cover failure and success paths.
 
-    Inputs: `monkeypatch`. Output: `conn`.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in open admin connection and group name cover failure and success paths.
     """
     monkeypatch.delenv("ROOTPASS", raising=False)
     assert core_functions._open_admin_connection("omeroserver", 4064) is None
@@ -166,9 +163,10 @@ def test_open_admin_connection_and_group_name_cover_failure_and_success_paths(
     created = []
 
     def gateway(*args, **kwargs):
-        """Gateway.
+        """Return the gateway.
 
-        Inputs: `*args`, `**kwargs`. Output: `conn`.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `conn`.
         """
         conn = connections.pop(0)
         created.append((args, kwargs, conn))
@@ -233,9 +231,9 @@ def test_open_admin_connection_and_group_name_cover_failure_and_success_paths(
 
 
 def test_job_service_credentials_and_session_helpers_cover_env_and_cleanup(monkeypatch):
-    """Verify job service credentials and session helpers cover environment and cleanup.
+    """Check job service credentials and session helpers cover env and cleanup cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in job service credentials and session helpers cover env and cleanup.
     """
     monkeypatch.delenv(core_functions.JOB_SERVICE_USER_ENV, raising=False)
     monkeypatch.delenv(core_functions.JOB_SERVICE_AUTH_ENV, raising=False)
@@ -300,7 +298,7 @@ def test_job_service_credentials_and_session_helpers_cover_env_and_cleanup(monke
 def test_background_connection_helpers_require_independent_session_keys(monkeypatch):
     """Verify background connection helpers require independent session keys.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in background connection helpers require independent session keys.
     """
     assert (
         core_functions._open_user_owned_background_connection(

@@ -24,9 +24,9 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `InstallationInteractivePromptRegressionTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.script_path = cls.repo_root / "installation" / "installation_script.sh"
@@ -50,12 +50,10 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
 
     @classmethod
     def _extract_script_block(cls, start_marker: str, end_marker: str) -> str:
-        """Extract script block.
+        """Extract the script block for `InstallationInteractivePromptRegressionTests`.
 
-        Inputs: `start_marker`, `end_marker`. Output: `str`. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `start_marker` (str), `end_marker` (str). Output: `str`. Raises:
+        AssertionError when validation or the called operation fails.
         """
         start = cls.script_text.find(start_marker)
         if start == -1:
@@ -69,18 +67,18 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _write_executable(path: Path, content: str) -> None:
-        """Write executable.
+        """Write the executable for `InstallationInteractivePromptRegressionTests`.
 
-        Inputs: `path`, `content`. Output: None.
+        Inputs: `path` (Path) path, `content` (str). Output: None.
         """
         path.write_text(content, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
     @staticmethod
     def _build_harness(*blocks: str, body: str) -> str:
-        """Harness.
+        """Build the harness for `InstallationInteractivePromptRegressionTests`.
 
-        Inputs: `body`, `*blocks`. Output: `str`.
+        Inputs: `*blocks` (str), `body` (str). Output: `str`.
         """
         joined_blocks = "\n".join(
             [InstallationInteractivePromptRegressionTests.validation_helpers, *blocks]
@@ -111,8 +109,9 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
     ) -> tuple[int, str]:
         """Harness with pty.
 
-        Inputs: `harness_path`, `user_input`, `wait_for`, `timeout_seconds`. Output:
-        `tuple[int, str]`. Raises on invalid or unavailable state.
+        Inputs: `harness_path` (Path), `user_input` (str), `wait_for` (str),
+        `timeout_seconds` (float). Output: `tuple[int, str]`. Raises: AssertionError
+        when validation or the called operation fails.
         """
         pid, fd = pty.fork()
         if pid == 0:
@@ -172,9 +171,9 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
         return exit_status, output.decode("utf-8", errors="replace")
 
     def test_delete_images_prompt_honors_yes_input(self) -> None:
-        """Verify delete images prompt honors yes input.
+        """Check delete images prompt honors yes input cleanup behavior.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in delete images prompt honors yes input.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -202,7 +201,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
     def test_cache_prompt_honors_negative_input(self) -> None:
         """Verify cache prompt honors negative input.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in cache prompt honors negative input.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -228,9 +227,9 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
             self.assertIn("USE_CACHE_BUILD=0", output)
 
     def test_default_path_prompt_accepts_custom_path_after_negative_input(self) -> None:
-        """Verify default path prompt accepts custom path after negative input.
+        """Verify the default path prompt accepts custom path after negative input safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when default path prompt accepts custom path after negative input accepts unsafe input.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -261,7 +260,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
     ) -> None:
         """Verify interactive no cache choice prunes and uses no cache compose build.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in interactive no cache choice prunes and uses no cache compose build.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -343,7 +342,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
     ) -> None:
         """Verify interactive no cache choice prunes buildx cache and disables buildx cache knobs.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in interactive no cache choice prunes buildx cache and disables buildx cache knobs.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

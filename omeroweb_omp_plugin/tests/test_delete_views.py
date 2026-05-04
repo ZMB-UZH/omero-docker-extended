@@ -15,28 +15,28 @@ AUTH_VALUE = "".join(["fixture", "-", "credential"])
 
 
 def _payload(response):
-    """Payload.
+    """Return the payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
 
 def _delete_request_payload(project_id, password_value):
-    """Delete request payload.
+    """Delete the request payload.
 
-    Inputs: `project_id`, `password_value`. Output: dict.
+    Inputs: `project_id` OMERO project ID, `password_value`. Output: `dict`.
     """
     return {"project_id": project_id, "password": password_value}
 
 
 class _Conn:
-    """Represent conn."""
+    """Test double for conn behavior in this module."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_Conn` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.getObject = lambda kind, object_id: None
 
@@ -52,9 +52,9 @@ class _Conn:
 def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
     monkeypatch,
 ):
-    """Verify delete all view covers validation chunk failures and top level errors.
+    """Check delete all view covers validation chunk failures and top level errors cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: `cli_results[cmd[4]]`.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in delete all view covers validation chunk failures and top level errors.
     """
     conn = _Conn()
     factory = RequestFactory()
@@ -253,9 +253,9 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
 
 
 def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatch):
-    """Verify delete plugin view covers validation and empty project paths.
+    """Check delete plugin view covers validation and empty project paths cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in delete plugin view covers validation and empty project paths.
     """
     with pytest.raises(ValueError, match="Invalid annotation id"):
         delete_plugin_view._validated_delete_object_id(0, "annotation id")
@@ -395,12 +395,10 @@ def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatc
 
 
 def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeypatch):
-    """Verify delete plugin view covers cli failures link residue and success.
+    """Verify the delete plugin view covers CLI failures link residue and success execution contract.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in delete plugin view covers CLI failures link residue and success.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     conn = _Conn()
     factory = RequestFactory()
@@ -435,12 +433,10 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
     )
 
     def _plugin_annotation_ids(_conn, image_id):
-        """Plugin annotation ids.
+        """Return fake OMP plugin annotation IDs for delete-view tests.
 
-        Inputs: `_conn`, `image_id`. Output: computed value. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `_conn`, `image_id` OMERO image ID. Output: ID value. Raises:
+        RuntimeError when validation or the called operation fails.
         """
         if image_id == 1:
             raise RuntimeError("lookup failed")
@@ -462,12 +458,10 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
     }
 
     def _find_link_ids(_conn, annotation_id):
-        """Find link IDs.
+        """Find the link IDs.
 
-        Inputs: `_conn`, `annotation_id`. Output: `list` result. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `_conn`, `annotation_id` OMERO annotation ID. Output: `list`. Raises:
+        RuntimeError when validation or the called operation fails.
         """
         state = link_lookup[annotation_id]
         if state == "boom":

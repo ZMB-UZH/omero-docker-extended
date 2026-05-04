@@ -12,10 +12,10 @@ from omeroweb_tools.services import enhanced_search_store as store
 
 
 class _RecordingCursor:
-    """Represent recording cursor."""
+    """Test double for recording cursor behavior in this module."""
 
     def __init__(self, *, fetchone_rows=None, fetchall_rows=None):
-        """Initialize the instance.
+        """Create `_RecordingCursor` with its default state.
 
         Inputs: `fetchone_rows`, `fetchall_rows`. Output: None.
         """
@@ -25,35 +25,35 @@ class _RecordingCursor:
         self.rowcount = 0
 
     def execute(self, sql, params=None):
-        """Execute the query or command.
+        """Execute `_RecordingCursor`'s captured query or command.
 
         Inputs: `sql`, `params`. Output: None.
         """
         self.executed.append({"raw_sql": sql, "sql_text": str(sql), "params": params})
 
     def fetchone(self):
-        """Return one result row.
+        """Return one result row from `_RecordingCursor`.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: fetchone result.
         """
         return self._fetchone_rows.pop(0) if self._fetchone_rows else None
 
     def fetchall(self):
         """Return all result rows.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: fetchall result.
         """
         return self._fetchall_rows.pop(0) if self._fetchall_rows else []
 
     def __enter__(self):
-        """Enter the context manager.
+        """Enter `_RecordingCursor`'s context-managed fake resource.
 
         Inputs: none. Output: `self`.
         """
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        """Exit the context manager.
+        """Exit `_RecordingCursor`'s context-managed fake resource.
 
         Inputs: `exc_type`, `exc`, `tb`. Output: bool.
         """
@@ -61,10 +61,10 @@ class _RecordingCursor:
 
 
 class _RecordingConn:
-    """Represent recording conn."""
+    """Test double for recording conn behavior in this module."""
 
     def __init__(self, cursor):
-        """Initialize the instance.
+        """Create `_RecordingConn` with `cursor`.
 
         Inputs: `cursor`. Output: None.
         """
@@ -80,16 +80,16 @@ class _RecordingConn:
         return self.cursor_obj
 
     def commit(self):
-        """Commit the transaction.
+        """Commit `_RecordingConn`'s fake transaction.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.commits += 1
 
     def close(self):
-        """Close the resource.
+        """Close `_RecordingConn`'s fake resource handle.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.closed += 1
 
@@ -97,17 +97,15 @@ class _RecordingConn:
 def test_psycopg_loaders_cover_success_cache_and_missing_driver(monkeypatch):
     """Verify psycopg loaders cover success cache and missing driver.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in psycopg loaders cover success cache and missing driver.
+    Raises: ImportError when validation or the called operation fails.
     """
 
     class _FakeSQLTemplate:
         """Test double for fake sqltemplate."""
 
         def __init__(self, template):
-            """Initialize the instance.
+            """Create `_FakeSQLTemplate` with `template`.
 
             Inputs: `template`. Output: None.
             """
@@ -151,10 +149,10 @@ def test_psycopg_loaders_cover_success_cache_and_missing_driver(monkeypatch):
     original_import = builtins.__import__
 
     def _missing_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):
-        """Missing import.
+        """Return the missing import.
 
-        Inputs: `name`, `global_vars`, `local_vars`, `fromlist`, `level`. Output:
-        `original_import` result. Raises on invalid or unavailable state.
+        Inputs: `name` name, `global_vars`, `local_vars`, `fromlist`, `level`. Output:
+        `original_import` result. Raises: ImportError for the exercised failure path.
         """
         if name == "psycopg2":
             raise ImportError("missing driver")
@@ -172,19 +170,17 @@ def test_psycopg_loaders_cover_success_cache_and_missing_driver(monkeypatch):
 def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
     monkeypatch,
 ):
-    """Verify database params and connect cover wrapped failures and close suppression.
+    """Verify db params and connect cover wrapped failures and close suppression.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in db params and connect cover wrapped failures and close suppression.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     db_auth_value = "plugin-auth-value"
 
     def _env_value(name, env_file=None):
-        """Env value.
+        """Return the environment value.
 
-        Inputs: `name`, `env_file`. Output: computed value.
+        Inputs: `name` name, `env_file` environment file path. Output: environment value
         """
         assert env_file == store.ENV_FILE_OMEROWEB
         return {
@@ -209,13 +205,14 @@ def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
     }
 
     class _FailingPsycopg:
-        """Represent failing psycopg."""
+        """Test double for failing psycopg behavior in this module."""
 
         @staticmethod
         def connect(**kwargs):
-            """Open the connection.
+            """Open the connection for `_FailingPsycopg`.
 
-            Inputs: `**kwargs`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `**kwargs` keyword arguments. Output: None. Raises: RuntimeError
+            when validation or the called operation fails.
             """
             raise RuntimeError("db boom")
 
@@ -248,22 +245,22 @@ def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
         pass
 
     class _BadCloseConn:
-        """Represent bad close conn."""
+        """Test double for bad close conn behavior in this module."""
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_BadCloseConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close boom")
 
     class _OkPsycopg:
-        """Represent ok psycopg."""
+        """Test double for ok psycopg behavior in this module."""
 
         @staticmethod
         def connect(**kwargs):
-            """Open the connection.
+            """Open the connection for `_OkPsycopg`.
 
             Inputs: `**kwargs`. Output: `_BadCloseConn` result.
             """
@@ -278,13 +275,13 @@ def test_db_params_and_connect_cover_wrapped_failures_and_close_suppression(
 def test_ensure_schema_bootstraps_tables_indexes_and_commit(monkeypatch):
     """Verify ensure schema bootstraps tables indexes and commit.
 
-    Inputs: `monkeypatch`. Output: `object` result.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in ensure schema bootstraps tables indexes and commit.
     """
     cursor = _RecordingCursor()
     conn = _RecordingConn(cursor)
 
     def _load_sql_module():
-        """Load sql module.
+        """Load the SQL helper module for enhanced-search store tests.
 
         Inputs: none. Output: `object` result.
         """
@@ -322,7 +319,7 @@ def test_ensure_schema_bootstraps_tables_indexes_and_commit(monkeypatch):
 def test_schema_ready_cache_handles_non_weakrefable_connections():
     """Verify schema ready cache handles non weakrefable connections.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in schema ready cache handles non weakrefable connections.
     """
     conn = ()
 
@@ -339,7 +336,7 @@ def test_schema_ready_cache_handles_non_weakrefable_connections():
 def test_list_sync_states_and_saved_queries_map_store_rows(monkeypatch):
     """Verify list sync states and saved queries map store rows.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in list sync states and saved queries map store rows.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     run_marker = "sync-run-id"
@@ -415,7 +412,7 @@ def test_prune_helpers_search_rows_without_filters_and_non_dict_settings_row(
 ):
     """Verify prune helpers search rows without filters and non dict settings row.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in prune helpers search rows without filters and non dict settings row.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _RecordingCursor(
@@ -424,9 +421,9 @@ def test_prune_helpers_search_rows_without_filters_and_non_dict_settings_row(
     conn = _RecordingConn(cursor)
 
     def _execute(sql, params=None):
-        """Execute.
+        """Execute the execute.
 
-        Inputs: `sql`, `params`. Output: None.
+        Inputs: `sql` SQL text, `params` SQL parameters. Output: None.
         """
         cursor.executed.append({"raw_sql": sql, "sql_text": str(sql), "params": params})
         if "DELETE FROM" in str(sql):
@@ -460,7 +457,7 @@ def test_prune_helpers_search_rows_without_filters_and_non_dict_settings_row(
 def test_sync_markers_and_document_upsert_cover_write_paths(monkeypatch):
     """Verify sync markers and document upsert cover write paths.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in sync markers and document upsert cover write paths.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _RecordingCursor()
@@ -564,19 +561,19 @@ def test_sync_markers_and_document_upsert_cover_write_paths(monkeypatch):
 def test_user_settings_and_saved_query_writes_use_json_payloads(monkeypatch):
     """Verify user settings and saved query writes use JSON payloads.
 
-    Inputs: `monkeypatch`. Output: dict.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in user settings and saved query writes use JSON payloads.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     wrapped = []
 
     class _Extras:
-        """Represent extras."""
+        """Test double for extras behavior in this module."""
 
         @staticmethod
         def Json(payload):
-            """JSON.
+            """Return the JSON for `_Extras`.
 
-            Inputs: `payload`. Output: dict.
+            Inputs: `payload` payload. Output: `dict`.
             """
             wrapped.append(payload)
             return {"wrapped": payload}
@@ -602,9 +599,9 @@ def test_user_settings_and_saved_query_writes_use_json_payloads(monkeypatch):
     store.save_saved_query(conn, "alice", "My query", {"query_text": "lsm"})
 
     def _delete_execute(sql, params=None):
-        """Delete execute.
+        """Delete the execute.
 
-        Inputs: `sql`, `params`. Output: None.
+        Inputs: `sql` SQL text, `params` SQL parameters. Output: None.
         """
         cursor.executed.append({"raw_sql": sql, "sql_text": str(sql), "params": params})
         cursor.rowcount = 1

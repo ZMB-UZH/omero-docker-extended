@@ -25,7 +25,7 @@ class FakeRValue:
     """Test double for fake rvalue."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `FakeRValue` with `value`.
 
         Inputs: `value`. Output: None.
         """
@@ -36,7 +36,7 @@ class FakeExperimenterI:
     """Test double for fake experimenter i."""
 
     def __init__(self, id_value=None, loaded=True):
-        """Initialize the instance.
+        """Create `FakeExperimenterI` with `id_value` and `loaded`.
 
         Inputs: `id_value`, `loaded`. Output: None.
         """
@@ -52,7 +52,7 @@ class FakeGroup:
     """Test double for fake group."""
 
     def __init__(self, id_value: int, name: str):
-        """Initialize the instance.
+        """Create `FakeGroup` with `id_value` and `name`.
 
         Inputs: `id_value`, `name`. Output: None.
         """
@@ -70,7 +70,7 @@ class FakeAdmin:
         existing_user: bool = True,
         create_exception: Exception | None = None,
     ):
-        """Initialize the instance.
+        """Create `FakeAdmin` with `groups`, `member_group_ids`, `existing_user`, and `create_exception`.
 
         Inputs: `groups`, `member_group_ids`, `existing_user`, `create_exception`.
         Output: None.
@@ -84,9 +84,10 @@ class FakeAdmin:
         self.lookup_calls = 0
 
     def lookupExperimenter(self, name: str):
-        """Lookup experimenter.
+        """Return the lookup Experimenter for `FakeAdmin`.
 
-        Inputs: `name`. Output: `experimenter`. Raises on invalid or unavailable state.
+        Inputs: `name` (str) name. Output: `experimenter`. Raises: FakeApiUsageException
+        when validation or the called operation fails.
         """
         self.lookup_calls += 1
         if not self.existing_user and not self.created_users:
@@ -97,9 +98,9 @@ class FakeAdmin:
 
     @staticmethod
     def lookupGroup(name: str):
-        """Lookup group.
+        """Return the lookup Group for `FakeAdmin`.
 
-        Inputs: `name`. Output: `FakeGroup` result.
+        Inputs: `name` (str) name. Output: `FakeGroup` result.
         """
         return FakeGroup(2, name)
 
@@ -110,10 +111,11 @@ class FakeAdmin:
         default_group: FakeGroup,
         groups: list[object],
     ):
-        """Create Experimenter With Password.
+        """Create the experimenter With Password for `FakeAdmin`.
 
-        Inputs: `experimenter`, `password`, `default_group`, `groups`. Output: 42.
-        Raises on invalid or unavailable state.
+        Inputs: `experimenter` (FakeExperimenterI), `password` (FakeRValue) password,
+        `default_group` (FakeGroup), `groups` (list[object]). Output: `int`. Raises:
+        create_exception when validation or the called operation fails.
         """
         if self.create_exception is not None:
             if isinstance(self.create_exception, FakeValidationException):
@@ -125,23 +127,24 @@ class FakeAdmin:
         return 42
 
     def getMemberOfGroupIds(self, experimenter: FakeExperimenterI):
-        """Return Member Of Group IDs.
+        """Return the fake member of group IDs value used by this test double.
 
         Inputs: `experimenter`. Output: `list` result.
         """
         return list(self.member_group_ids)
 
     def lookupGroups(self):
-        """Lookup groups.
+        """Return the lookup Groups for `FakeAdmin`.
 
-        Inputs: none. Output: `list` result.
+        Inputs: none. Output: `list`.
         """
         return list(self.groups)
 
     def addGroups(self, experimenter: FakeExperimenterI, groups: list[FakeGroup]):
-        """Add groups.
+        """Add the groups for `FakeAdmin`.
 
-        Inputs: `experimenter`, `groups`. Output: None.
+        Inputs: `experimenter` (FakeExperimenterI), `groups` (list[FakeGroup]). Output:
+        None.
         """
         self.added_groups.append((experimenter, list(groups)))
 
@@ -150,7 +153,7 @@ class FakeConnection:
     """Test double for fake connection."""
 
     def __init__(self, admin: FakeAdmin, connect_result: bool = True):
-        """Initialize the instance.
+        """Create `FakeConnection` with `admin` and `connect_result`.
 
         Inputs: `admin`, `connect_result`. Output: None.
         """
@@ -170,32 +173,32 @@ class FakeConnection:
         return self
 
     def connect(self):
-        """Open the connection.
+        """Open the connection for `FakeConnection`.
 
         Inputs: none. Output: `self.connect_result`.
         """
         return self.connect_result
 
     def getAdminService(self):
-        """Return Admin Service.
+        """Return the fake admin service value used by this test double.
 
         Inputs: none. Output: `self.admin`.
         """
         return self.admin
 
     def close(self):
-        """Close the resource.
+        """Close `FakeConnection`'s fake resource handle.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.closed = True
 
 
 @pytest.fixture()
 def helper_module(monkeypatch):
-    """Helper module.
+    """Return the helper module.
 
-    Inputs: `monkeypatch`. Output: `module`.
+    Inputs: `monkeypatch` pytest monkeypatch fixture. Output: `module`.
     """
     fake_omero = types.ModuleType("omero")
     fake_omero.ApiUsageException = FakeApiUsageException
@@ -226,7 +229,7 @@ def helper_module(monkeypatch):
 def test_parse_bool_accepts_only_explicit_boolean_values(helper_module):
     """Verify parse bool accepts only explicit boolean values.
 
-    Inputs: `helper_module`. Output: None.
+    Inputs: pytest provides `helper_module`. Output: fails on regressions in parse bool accepts only explicit boolean values.
     """
     module = helper_module
 
@@ -239,9 +242,9 @@ def test_parse_bool_accepts_only_explicit_boolean_values(helper_module):
 
 
 def test_required_env_rejects_missing_values(helper_module, monkeypatch):
-    """Verify required environment rejects missing values.
+    """Confirm required env rejects missing values is rejected at the boundary.
 
-    Inputs: `helper_module`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `helper_module`, `monkeypatch`. Output: fails on regressions in required env rejects missing values.
     """
     module = helper_module
     monkeypatch.delenv("ROOTPASS", raising=False)
@@ -253,7 +256,7 @@ def test_required_env_rejects_missing_values(helper_module, monkeypatch):
 def test_eligible_groups_excludes_builtin_groups(helper_module):
     """Verify eligible groups excludes builtin groups.
 
-    Inputs: `helper_module`. Output: None.
+    Inputs: pytest provides `helper_module`. Output: fails on regressions in eligible groups excludes builtin groups.
     """
     module = helper_module
 
@@ -272,7 +275,7 @@ def test_sync_memberships_uses_one_connection_and_batches_missing_groups(
 ):
     """Verify sync memberships uses one connection and batches missing groups.
 
-    Inputs: `helper_module`, `monkeypatch`, `capsys`. Output: None.
+    Inputs: pytest provides `helper_module`, `monkeypatch`, `capsys`. Output: fails on regressions in sync memberships uses one connection and batches missing groups.
     """
     module = helper_module
     admin = FakeAdmin(
@@ -325,7 +328,7 @@ def test_sync_memberships_uses_one_connection_and_batches_missing_groups(
 def test_sync_memberships_creates_missing_job_user(helper_module, monkeypatch):
     """Verify sync memberships creates missing job user.
 
-    Inputs: `helper_module`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `helper_module`, `monkeypatch`. Output: fails on regressions in sync memberships creates missing job user.
     """
     module = helper_module
     admin = FakeAdmin(
@@ -360,7 +363,7 @@ def test_sync_memberships_skips_batch_call_when_memberships_are_current(
 ):
     """Verify sync memberships skips batch call when memberships are current.
 
-    Inputs: `helper_module`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `helper_module`, `monkeypatch`. Output: fails on regressions in sync memberships skips batch call when memberships are current.
     """
     module = helper_module
     admin = FakeAdmin(
@@ -390,7 +393,7 @@ def test_sync_memberships_skips_batch_call_when_memberships_are_current(
 def test_ensure_job_user_handles_create_race(helper_module):
     """Verify ensure job user handles create race.
 
-    Inputs: `helper_module`. Output: None.
+    Inputs: pytest provides `helper_module`. Output: fails on regressions in ensure job user handles create race.
     """
     module = helper_module
     admin = FakeAdmin(
@@ -409,7 +412,7 @@ def test_ensure_job_user_handles_create_race(helper_module):
 def test_ensure_job_user_retries_and_reports_last_failure(helper_module, monkeypatch):
     """Verify ensure job user retries and reports last failure.
 
-    Inputs: `helper_module`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `helper_module`, `monkeypatch`. Output: fails on regressions in ensure job user retries and reports last failure.
     """
     module = helper_module
     admin = FakeAdmin(
@@ -430,7 +433,7 @@ def test_ensure_job_user_retries_and_reports_last_failure(helper_module, monkeyp
 def test_ensure_job_user_does_not_retry_keyboard_interrupt(helper_module, monkeypatch):
     """Verify ensure job user does not retry keyboard interrupt.
 
-    Inputs: `helper_module`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `helper_module`, `monkeypatch`. Output: fails on regressions in ensure job user does not retry keyboard interrupt.
     """
     module = helper_module
     admin = FakeAdmin(
@@ -451,7 +454,7 @@ def test_ensure_job_user_does_not_retry_keyboard_interrupt(helper_module, monkey
 def test_main_does_not_convert_keyboard_interrupt(helper_module, monkeypatch):
     """Verify main does not convert keyboard interrupt.
 
-    Inputs: `helper_module`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `helper_module`, `monkeypatch`. Output: fails on regressions in main does not convert keyboard interrupt.
     """
     module = helper_module
     monkeypatch.setattr(
@@ -467,7 +470,7 @@ def test_main_does_not_convert_keyboard_interrupt(helper_module, monkeypatch):
 def test_main_reports_failed_connection(helper_module, monkeypatch, capsys):
     """Verify main reports failed connection.
 
-    Inputs: `helper_module`, `monkeypatch`, `capsys`. Output: None.
+    Inputs: pytest provides `helper_module`, `monkeypatch`, `capsys`. Output: fails on regressions in main reports failed connection.
     """
     module = helper_module
     module.BlitzGateway = FakeConnection(FakeAdmin([], []), connect_result=False)
@@ -481,9 +484,9 @@ def test_main_reports_failed_connection(helper_module, monkeypatch, capsys):
 
 
 def test_main_rejects_invalid_positive_counts(helper_module):
-    """Verify main rejects invalid positive counts.
+    """Confirm main rejects invalid positive counts is rejected at the boundary.
 
-    Inputs: `helper_module`. Output: None.
+    Inputs: pytest provides `helper_module`. Output: fails on regressions in main rejects invalid positive counts.
     """
     module = helper_module
 
@@ -506,9 +509,9 @@ def test_main_rejects_invalid_positive_counts(helper_module):
 
 
 def test_script_entrypoint_exits_through_main(helper_module, monkeypatch):
-    """Verify script entrypoint exits through main.
+    """Verify the script entrypoint exits through main execution contract.
 
-    Inputs: `helper_module`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `helper_module`, `monkeypatch`. Output: fails on regressions in script entrypoint exits through main integration.
     """
     monkeypatch.setattr(
         sys,

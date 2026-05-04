@@ -35,9 +35,9 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_none_returns_defaults():
-        """Verify none returns defaults.
+        """Verify none returns defaults result shape.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in none returns defaults.
         """
         assert (
             _normalize_ngff_converter_settings(None) == NGFF_CONVERTER_SETTINGS_DEFAULTS
@@ -45,9 +45,9 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_string_returns_defaults():
-        """Verify string returns defaults.
+        """Verify string returns defaults result shape.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in string returns defaults.
         """
         assert (
             _normalize_ngff_converter_settings("garbage")
@@ -56,9 +56,9 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_list_returns_defaults():
-        """Verify list returns defaults.
+        """Verify list returns defaults result shape.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in list returns defaults.
         """
         assert (
             _normalize_ngff_converter_settings([1, 2, 3])
@@ -67,9 +67,9 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_empty_dict_returns_defaults():
-        """Verify empty dict returns defaults.
+        """Verify empty dict returns defaults result shape.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in empty dict returns defaults.
         """
         assert (
             _normalize_ngff_converter_settings({}) == NGFF_CONVERTER_SETTINGS_DEFAULTS
@@ -81,7 +81,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_compression_blosc():
         """Verify compression blosc.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in compression blosc.
         """
         assert (
             _normalize_ngff_converter_settings({"compression": "blosc"})["compression"]
@@ -92,7 +92,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_compression_zlib():
         """Verify compression zlib.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in compression zlib.
         """
         assert (
             _normalize_ngff_converter_settings({"compression": "zlib"})["compression"]
@@ -103,7 +103,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_compression_null():
         """Verify compression null.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in compression null.
         """
         assert (
             _normalize_ngff_converter_settings({"compression": "null"})["compression"]
@@ -114,7 +114,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_compression_case_insensitive():
         """Verify compression case insensitive.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in compression case insensitive.
         """
         assert (
             _normalize_ngff_converter_settings({"compression": "BLOSC"})["compression"]
@@ -129,7 +129,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_compression_invalid_defaults_to_blosc():
         """Verify compression invalid defaults to blosc.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in compression invalid defaults to blosc.
         """
         assert (
             _normalize_ngff_converter_settings({"compression": "lz4"})["compression"]
@@ -150,7 +150,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_downsampling_all_valid_values():
         """Verify downsampling all valid values.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in downsampling all valid values.
         """
         for ds in ("SIMPLE", "GAUSSIAN", "AREA", "LINEAR", "CUBIC", "LANCZOS"):
             result = _normalize_ngff_converter_settings({"downsampling": ds})
@@ -160,7 +160,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_downsampling_case_insensitive():
         """Verify downsampling case insensitive.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in downsampling case insensitive.
         """
         assert (
             _normalize_ngff_converter_settings({"downsampling": "gaussian"})[
@@ -173,7 +173,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_downsampling_invalid_defaults_to_simple():
         """Verify downsampling invalid defaults to simple.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in downsampling invalid defaults to simple.
         """
         assert (
             _normalize_ngff_converter_settings({"downsampling": "BICUBIC"})[
@@ -192,7 +192,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_tile_width_clamped_low():
         """Verify tile width clamped low.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in tile width clamped low.
         """
         assert _normalize_ngff_converter_settings({"tile_width": 1})["tile_width"] == 64
 
@@ -200,7 +200,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_tile_width_clamped_high():
         """Verify tile width clamped high.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in tile width clamped high.
         """
         assert (
             _normalize_ngff_converter_settings({"tile_width": 99999})["tile_width"]
@@ -211,7 +211,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_tile_width_valid():
         """Verify tile width valid.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in tile width valid.
         """
         assert (
             _normalize_ngff_converter_settings({"tile_width": 512})["tile_width"] == 512
@@ -221,7 +221,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_tile_height_bounds():
         """Verify tile height bounds.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in tile height bounds.
         """
         assert (
             _normalize_ngff_converter_settings({"tile_height": 0})["tile_height"] == 64
@@ -235,7 +235,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_resolutions_bounds():
         """Verify resolutions bounds.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in resolutions bounds.
         """
         assert (
             _normalize_ngff_converter_settings({"resolutions": -1})["resolutions"] == 0
@@ -251,7 +251,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_max_workers_bounds():
         """Verify max workers bounds.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in max workers bounds.
         """
         assert (
             _normalize_ngff_converter_settings({"max_workers": 0})["max_workers"] == 1
@@ -265,7 +265,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_chunk_depth_bounds():
         """Verify chunk depth bounds.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in chunk depth bounds.
         """
         assert (
             _normalize_ngff_converter_settings({"chunk_depth": 0})["chunk_depth"] == 1
@@ -279,7 +279,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_fill_value_bounds():
         """Verify fill value bounds.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in fill value bounds.
         """
         assert _normalize_ngff_converter_settings({"fill_value": -1})["fill_value"] == 0
         assert (
@@ -290,7 +290,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_max_cached_tiles_bounds():
         """Verify max cached tiles bounds.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in max cached tiles bounds.
         """
         assert (
             _normalize_ngff_converter_settings({"max_cached_tiles": 0})[
@@ -309,7 +309,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_target_min_size_bounds():
         """Verify target min size bounds.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in target min size bounds.
         """
         assert (
             _normalize_ngff_converter_settings({"target_min_size": 0})[
@@ -328,7 +328,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_integer_field_with_non_numeric_value_uses_default():
         """Verify integer field with non numeric value uses default.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in integer field with non numeric value uses default.
         """
         result = _normalize_ngff_converter_settings({"tile_width": "abc"})
         assert result["tile_width"] == 1024
@@ -337,7 +337,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_integer_field_with_none_uses_default():
         """Verify integer field with none uses default.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in integer field with none uses default.
         """
         result = _normalize_ngff_converter_settings({"tile_width": None})
         assert result["tile_width"] == 1024
@@ -348,7 +348,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_boolean_fields_true():
         """Verify boolean fields true.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in boolean fields true.
         """
         for field in ("min_max", "nested", "hcs", "overwrite", "progress"):
             result = _normalize_ngff_converter_settings({field: True})
@@ -358,7 +358,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_boolean_fields_false():
         """Verify boolean fields false.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in boolean fields false.
         """
         for field in ("min_max", "nested", "hcs", "overwrite", "progress"):
             result = _normalize_ngff_converter_settings({field: False})
@@ -368,7 +368,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_boolean_fields_truthy_coercion():
         """Verify boolean fields truthy coercion.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in boolean fields truthy coercion.
         """
         result = _normalize_ngff_converter_settings({"min_max": 1})
         assert result["min_max"] is True
@@ -381,7 +381,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_series_valid():
         """Verify series valid.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in series valid.
         """
         assert (
             _normalize_ngff_converter_settings({"series": "0,1,3"})["series"] == "0,1,3"
@@ -391,7 +391,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_series_empty():
         """Verify series empty.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in series empty.
         """
         assert _normalize_ngff_converter_settings({"series": ""})["series"] == ""
 
@@ -399,7 +399,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_series_strips_non_digits():
         """Verify series strips non digits.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in series strips non digits.
         """
         assert (
             _normalize_ngff_converter_settings({"series": "0,abc,2"})["series"] == "0,2"
@@ -407,9 +407,9 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_series_injection_attack():
-        """Semicolons, pipes, backticks etc. must be stripped.
+        """Verify series injection attack.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in series injection attack.
         """
         assert (
             _normalize_ngff_converter_settings({"series": "; rm -rf /"})["series"] == ""
@@ -431,7 +431,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_series_with_spaces():
         """Verify series with spaces.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in series with spaces.
         """
         assert (
             _normalize_ngff_converter_settings({"series": " 0 , 1 , 2 "})["series"]
@@ -442,7 +442,7 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
     def test_series_none():
         """Verify series none.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in series none.
         """
         assert _normalize_ngff_converter_settings({"series": None})["series"] == ""
 
@@ -452,7 +452,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
 
     @staticmethod
     def _defaults(**overrides):
-        """Defaults.
+        """Return the defaults for `TestBuildBioformats2rawCommand`.
 
         Inputs: `**overrides`. Output: `s`.
         """
@@ -461,9 +461,9 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
         return s
 
     def test_binary_path_is_first(self):
-        """Verify binary path is first.
+        """Verify the binary path is first safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions when binary path is first accepts unsafe input.
         """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults())
         assert cmd[0] == BIOFORMATS2RAW_CLI
@@ -471,7 +471,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_input_output_paths_are_last(self):
         """Verify input output paths are last.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in input output paths are last.
         """
         cmd = _build_bioformats2raw_command(
             "/in/f.czi", "/out/f.zarr", self._defaults()
@@ -482,7 +482,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_compression_blosc(self):
         """Verify compression blosc.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in compression blosc.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(compression="blosc")
@@ -493,7 +493,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_compression_null(self):
         """Verify compression null.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in compression null.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(compression="null")
@@ -504,7 +504,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_tile_dimensions(self):
         """Verify tile dimensions.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in tile dimensions.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(tile_width=512, tile_height=256)
@@ -515,7 +515,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_resolutions_zero_omitted(self):
         """Verify resolutions zero omitted.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in resolutions zero omitted.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(resolutions=0)
@@ -525,7 +525,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_invalid_resolutions_are_omitted(self):
         """Verify invalid resolutions are omitted.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in invalid resolutions are omitted.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(resolutions="not-an-int")
@@ -535,7 +535,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_resolutions_nonzero_included(self):
         """Verify resolutions nonzero included.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in resolutions nonzero included.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(resolutions=5)
@@ -545,7 +545,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_max_workers(self):
         """Verify max workers.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in max workers.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(max_workers=8)
@@ -555,7 +555,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_chunk_depth(self):
         """Verify chunk depth.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in chunk depth.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(chunk_depth=16)
@@ -565,7 +565,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_downsample_type(self):
         """Verify downsample type.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in downsample type.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(downsampling="LANCZOS")
@@ -575,7 +575,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_fill_value(self):
         """Verify fill value.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in fill value.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(fill_value=128)
@@ -585,7 +585,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_max_cached_tiles(self):
         """Verify max cached tiles.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in max cached tiles.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(max_cached_tiles=32)
@@ -595,7 +595,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_target_min_size(self):
         """Verify target min size.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in target min size.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(target_min_size=512)
@@ -605,7 +605,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_no_minmax_when_disabled(self):
         """Verify no minmax when disabled.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in no minmax when disabled.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(min_max=False)
@@ -615,7 +615,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_no_minmax_absent_when_enabled(self):
         """Verify no minmax absent when enabled.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in no minmax absent when enabled.
         """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(min_max=True))
         assert "--no-minmax" not in cmd
@@ -623,7 +623,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_no_nested_when_disabled(self):
         """Verify no nested when disabled.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in no nested when disabled.
         """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(nested=False))
         assert "--no-nested" in cmd
@@ -631,7 +631,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_no_nested_absent_when_enabled(self):
         """Verify no nested absent when enabled.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in no nested absent when enabled.
         """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(nested=True))
         assert "--no-nested" not in cmd
@@ -639,7 +639,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_no_hcs_when_disabled(self):
         """Verify no hcs when disabled.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in no hcs when disabled.
         """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(hcs=False))
         assert "--no-hcs" in cmd
@@ -647,7 +647,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_no_hcs_absent_when_enabled(self):
         """Verify no hcs absent when enabled.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in no hcs absent when enabled.
         """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(hcs=True))
         assert "--no-hcs" not in cmd
@@ -655,7 +655,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_overwrite_present_when_true(self):
         """Verify overwrite present when true.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in overwrite present when true.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(overwrite=True)
@@ -665,7 +665,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_overwrite_absent_when_false(self):
         """Verify overwrite absent when false.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in overwrite absent when false.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(overwrite=False)
@@ -675,7 +675,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_progress_present_when_true(self):
         """Verify progress present when true.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in progress present when true.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(progress=True)
@@ -685,7 +685,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_progress_absent_when_false(self):
         """Verify progress absent when false.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in progress absent when false.
         """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(progress=False)
@@ -695,7 +695,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_series_included_when_nonempty(self):
         """Verify series included when nonempty.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in series included when nonempty.
         """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(series="0,1"))
         assert cmd[cmd.index("--series") + 1] == "0,1"
@@ -703,7 +703,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_series_omitted_when_empty(self):
         """Verify series omitted when empty.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in series omitted when empty.
         """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(series=""))
         assert "--series" not in cmd
@@ -712,7 +712,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_none_settings_uses_defaults():
         """Verify none settings uses defaults.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in none settings uses defaults.
         """
         cmd = _build_bioformats2raw_command("/in", "/out", None)
         assert cmd[0] == BIOFORMATS2RAW_CLI
@@ -722,7 +722,7 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
     def test_legacy_settings_keyword_uses_converter_settings(self):
         """Verify legacy settings keyword uses converter settings.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in legacy settings keyword uses converter settings.
         """
         cmd = _build_bioformats2raw_command(
             "/in",
@@ -732,9 +732,9 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
         assert "--overwrite" not in cmd
 
     def test_all_flags_combined(self):
-        """A single run with all non-default options to verify no clashes.
+        """Verify all flags combined.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in all flags combined.
         """
         s = self._defaults(
             compression="zlib",
@@ -780,23 +780,23 @@ class TestSemEdxSettingsUnchanged(unittest.TestCase):
     def test_defaults():
         """Verify defaults.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in defaults.
         """
         assert _normalize_sem_edx_settings({}) == SEM_EDX_SETTINGS_DEFAULTS
 
     @staticmethod
     def test_none_returns_defaults():
-        """Verify none returns defaults.
+        """Verify none returns defaults result shape.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in none returns defaults.
         """
         assert _normalize_sem_edx_settings(None) == SEM_EDX_SETTINGS_DEFAULTS
 
     @staticmethod
     def test_string_returns_defaults():
-        """Verify string returns defaults.
+        """Verify string returns defaults result shape.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in string returns defaults.
         """
         assert _normalize_sem_edx_settings("x") == SEM_EDX_SETTINGS_DEFAULTS
 
@@ -804,7 +804,7 @@ class TestSemEdxSettingsUnchanged(unittest.TestCase):
     def test_partial_override():
         """Verify partial override.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in partial override.
         """
         result = _normalize_sem_edx_settings({"create_tables": False})
         assert result["create_tables"] is False
@@ -815,7 +815,7 @@ class TestSemEdxSettingsUnchanged(unittest.TestCase):
     def test_all_false():
         """Verify all false.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in all false.
         """
         result = _normalize_sem_edx_settings(
             {
@@ -830,7 +830,7 @@ class TestSemEdxSettingsUnchanged(unittest.TestCase):
     def test_truthy_coercion():
         """Verify truthy coercion.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in truthy coercion.
         """
         result = _normalize_sem_edx_settings(
             {"create_tables": 1, "create_figures_attachments": ""}
@@ -842,7 +842,7 @@ class TestSemEdxSettingsUnchanged(unittest.TestCase):
     def test_unknown_keys_ignored():
         """Verify unknown keys ignored.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in unknown keys ignored.
         """
         result = _normalize_sem_edx_settings(
             {"unknown_key": True, "create_tables": False}
@@ -856,9 +856,9 @@ class TestSpecialMethodSettingsViewNormalization(unittest.TestCase):
 
     @staticmethod
     def test_preserves_string_int_bool():
-        """Verify preserves string int bool.
+        """Check that preserves string int bool remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in preserves string int bool.
         """
         from omeroweb_import.views.special_method_settings_view import (
             _normalize_special_method_settings,
@@ -878,9 +878,9 @@ class TestSpecialMethodSettingsViewNormalization(unittest.TestCase):
 
     @staticmethod
     def test_non_dict_returns_empty():
-        """Verify non dict returns empty.
+        """Verify non dict returns empty result shape.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in non dict returns empty.
         """
         from omeroweb_import.views.special_method_settings_view import (
             _normalize_special_method_settings,
@@ -894,7 +894,7 @@ class TestSpecialMethodSettingsViewNormalization(unittest.TestCase):
     def test_unknown_types_coerced_to_bool():
         """Verify unknown types coerced to bool.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in unknown types coerced to bool.
         """
         from omeroweb_import.views.special_method_settings_view import (
             _normalize_special_method_settings,
@@ -907,7 +907,7 @@ class TestSpecialMethodSettingsViewNormalization(unittest.TestCase):
     def test_float_preserved():
         """Verify float preserved.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in float preserved.
         """
         from omeroweb_import.views.special_method_settings_view import (
             _normalize_special_method_settings,
@@ -924,7 +924,7 @@ class TestNgffConverterInStartUpload(unittest.TestCase):
     def test_ngff_settings_stored_in_job_when_ngff_selected():
         """Verify NGFF settings stored in job when NGFF selected.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in NGFF settings stored in job when NGFF selected.
         """
         raw = {"compression": "zlib", "tile_width": 2048, "series": "0,1"}
         normalized = _normalize_ngff_converter_settings(raw)
@@ -940,9 +940,9 @@ class TestNgffConverterInStartUpload(unittest.TestCase):
 
     @staticmethod
     def test_ngff_settings_empty_when_sem_selected():
-        """Verify NGFF settings empty when sem selected.
+        """Verify NGFF settings empty when SEM selected.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in NGFF settings empty when SEM selected.
         """
         raw = {"compression": "zlib"}
         # When special_upload != ngff_converter, settings should be empty

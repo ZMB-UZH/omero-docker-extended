@@ -11,9 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_images_by_ids(conn, image_ids):
-    """Fetch images by IDs.
+    """Fetch the images by IDs.
 
-    Inputs: `conn`, `image_ids`. Output: computed value.
+    Inputs: `conn` OMERO gateway connection, `image_ids` OMERO image IDs. Output:
+    `image_map`.
     """
     if not image_ids:
         return {}
@@ -52,13 +53,10 @@ def fetch_images_by_ids(conn, image_ids):
 
 
 def collect_images_by_dataset_sorted(conn, project_id, limit=None, owner_id=None):
-    """Collect images by dataset sorted.
+    """Collect the images by dataset sorted.
 
-    Inputs: `conn`, `project_id`, `limit`, `owner_id`. Output: `out`.
-
-        [(dataset_obj, [image_obj_sorted_by_ID]), ...]
-    Dataset ordering is preserved as OMERO returns it.
-    Image ordering is strictly numeric ascending by image ID.
+    Inputs: `conn` OMERO gateway connection, `project_id` OMERO project ID, `limit`,
+    `owner_id`. Output: `out`.
     """
     out: list[tuple[Any, list[Any]]] = []
     total = 0
@@ -96,12 +94,10 @@ def collect_images_by_dataset_sorted(conn, project_id, limit=None, owner_id=None
 def collect_images_by_selected_datasets(
     conn, project_id, dataset_ids, limit=None, owner_id=None
 ):
-    """Collect images by selected datasets.
+    """Collect the images by selected datasets.
 
-    Inputs: `conn`, `project_id`, `dataset_ids`, `limit`, `owner_id`. Output: `out`.
-
-        [(dataset_obj, [image_obj_sorted_by_ID]), ...]
-    Only includes datasets from dataset_ids, preserving project dataset order.
+    Inputs: `conn` OMERO gateway connection, `project_id` OMERO project ID,
+    `dataset_ids`, `limit`, `owner_id`. Output: `out`.
     """
     out: list[tuple[Any, list[Any]]] = []
     total = 0
@@ -164,18 +160,15 @@ def collect_images_by_selected_datasets(
 def collect_dataset_summaries(conn, project_id, owner_id=None):
     """Returns list of dataset summaries for a project.
 
-    Inputs: `conn`, `project_id`, `owner_id`. Output: computed value.
-
-    Each summary includes the Bio-Formats reader name.
+    Inputs: `conn` OMERO gateway connection, `project_id` OMERO project ID, `owner_id`.
+    Output: `summaries`.
     """
     summaries: list[dict[str, Any]] = []
 
     def _get_bioformat_from_image(img):
         """Return bioformat from image.
 
-        Inputs: `img`. Output: computed value.
-
-        Returns names like: "OME-TIFF", "Zeiss CZI", "Leica LIF", "PNG", etc.
+        Inputs: `img`. Output: `str`.
         """
         # METHOD 1: Get format from original file Format object
         if hasattr(img, "getFileset"):

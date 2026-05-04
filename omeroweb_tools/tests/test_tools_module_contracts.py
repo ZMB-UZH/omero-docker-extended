@@ -14,7 +14,7 @@ from omeroweb_tools.views import help_view
 def test_tools_app_ready_invokes_logging_setup(monkeypatch):
     """Verify tools app ready invokes logging setup.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in tools app ready invokes logging setup.
     """
     configured = []
     monkeypatch.setattr(
@@ -30,7 +30,7 @@ def test_tools_app_ready_invokes_logging_setup(monkeypatch):
 def test_tools_urls_expose_expected_routes():
     """Verify tools URLs expose expected routes.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in tools URLs expose expected routes.
     """
     route_map = {pattern.name: str(pattern.pattern) for pattern in urls.urlpatterns}
 
@@ -49,9 +49,9 @@ def test_tools_urls_expose_expected_routes():
 
 
 def test_tools_help_page_renders_html_template(monkeypatch):
-    """Verify tools help page renders html template.
+    """Check tools help page renders html template renders the expected surface.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in tools help page renders html template.
     """
     captured = {}
     monkeypatch.setattr(
@@ -69,9 +69,9 @@ def test_tools_help_page_renders_html_template(monkeypatch):
 
 
 def test_tools_help_template_is_registered_html_user_help():
-    """Verify tools help template is registered html user help.
+    """Check tools help template is registered html user help renders the expected surface.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in tools help template is registered html user help.
     """
     template_path = (
         Path(__file__).resolve().parents[1]
@@ -113,9 +113,9 @@ def test_tools_help_template_is_registered_html_user_help():
 
 
 def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
-    """Verify enhanced search template removes filter heading and shows loading UI.
+    """Check enhanced search template removes filter heading and shows loading UI renders the expected surface.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in enhanced search template removes filter heading and shows loading UI.
     """
     template_path = (
         Path(__file__).resolve().parents[1]
@@ -395,7 +395,7 @@ def test_enhanced_search_template_removes_filter_heading_and_shows_loading_ui():
 def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
     """Verify enhanced search styles use compact saved query grid and actions.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in enhanced search styles use compact saved query grid and actions.
     """
     styles_path = (
         Path(__file__).resolve().parents[1] / "static" / "omeroweb_tools" / "styles.css"
@@ -608,9 +608,9 @@ def test_enhanced_search_styles_use_compact_saved_query_grid_and_actions():
 
 
 def test_indexed_scope_browser_persistence_script_is_data_agnostic():
-    """Verify indexed scope browser persistence script is data agnostic.
+    """Verify the indexed scope browser persistence script is data agnostic execution contract.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in indexed scope browser persistence script is data agnostic integration.
     """
     script_path = (
         Path(__file__).resolve().parents[1]
@@ -632,9 +632,9 @@ def test_indexed_scope_browser_persistence_script_is_data_agnostic():
 
 
 def test_tools_landing_template_has_single_enhanced_search_entry_without_descriptive_copy():
-    """Verify tools landing template has single enhanced search entry without descriptive copy.
+    """Check tools landing template has single enhanced search entry without descriptive copy renders the expected surface.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in tools landing template has single enhanced search entry without descriptive copy.
     """
     template_path = (
         Path(__file__).resolve().parents[1]
@@ -651,7 +651,7 @@ def test_tools_landing_template_has_single_enhanced_search_entry_without_descrip
 def test_tools_task_wiring_avoids_service_task_import_cycle():
     """Verify tools task wiring avoids service task import cycle.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in tools task wiring avoids service task import cycle.
     """
     task_path = Path(__file__).resolve().parents[1] / "tasks.py"
     task_names_path = Path(__file__).resolve().parents[1] / "task_names.py"

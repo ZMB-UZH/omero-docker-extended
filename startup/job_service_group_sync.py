@@ -17,9 +17,10 @@ EXCLUDED_GROUP_NAMES = frozenset({"root", "system", "user"})
 
 
 def _required_env(name: str) -> str:
-    """Required env.
+    """Return the required environment.
 
-    Inputs: `name`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name. Output: `str`. Raises: ValueError when validation or
+    external operations fail.
     """
     value = os.environ.get(name, "")
     if not value:
@@ -28,9 +29,10 @@ def _required_env(name: str) -> str:
 
 
 def _parse_bool(value: str) -> bool:
-    """Parse bool.
+    """Parse an explicit boolean string for startup configuration.
 
-    Inputs: `value`. Output: `bool`. Raises on invalid or unavailable state.
+    Inputs: `value` (str) input value. Output: `bool`. Raises: ValueError when validation or the
+    called operation fails.
     """
     normalized = value.strip().lower()
     if normalized in {"1", "true", "yes", "on"}:
@@ -41,7 +43,7 @@ def _parse_bool(value: str) -> bool:
 
 
 def _value(obj) -> object:
-    """Return value.
+    """Return the value.
 
     Inputs: `obj`. Output: `object`.
     """
@@ -49,7 +51,7 @@ def _value(obj) -> object:
 
 
 def _group_name(group) -> str:
-    """Group name.
+    """Return the group name.
 
     Inputs: `group`. Output: `str`.
     """
@@ -57,7 +59,7 @@ def _group_name(group) -> str:
 
 
 def _group_id(group) -> int:
-    """Group ID.
+    """Return the group ID.
 
     Inputs: `group`. Output: `int`.
     """
@@ -65,17 +67,17 @@ def _group_id(group) -> int:
 
 
 def _eligible_groups(groups: Iterable) -> list:
-    """Eligible groups.
+    """Return the eligible groups.
 
-    Inputs: `groups`. Output: `list`.
+    Inputs: `groups` (Iterable). Output: `list`.
     """
     return [group for group in groups if _group_name(group) not in EXCLUDED_GROUP_NAMES]
 
 
 def _new_job_experimenter(job_user: str):
-    """New job experimenter.
+    """Return the new job experimenter.
 
-    Inputs: `job_user`. Output: `experimenter`.
+    Inputs: `job_user` (str). Output: `experimenter`.
     """
     experimenter = ExperimenterI()
     experimenter.omeName = rstring(job_user)
@@ -86,10 +88,10 @@ def _new_job_experimenter(job_user: str):
 
 
 def ensure_job_user(admin, job_user: str, job_pass: str, retries: int):
-    """Ensure job user.
+    """Ensure the job user.
 
-    Inputs: `admin`, `job_user`, `job_pass`, `retries`. Output:
-    `admin.lookupExperimenter` result. Raises on invalid or unavailable state.
+    Inputs: `admin`, `job_user` (str), `job_pass` (str), `retries` (int). Output:
+    `lookupExperimenter` result. Raises: RuntimeError for the exercised failure path.
     """
     last_error: Exception | None = None
     for attempt in range(1, retries + 1):
@@ -119,9 +121,10 @@ def ensure_job_user(admin, job_user: str, job_pass: str, retries: int):
 
 
 def sync_memberships(args: argparse.Namespace) -> int:
-    """Sync memberships.
+    """Synchronize the memberships.
 
-    Inputs: `args`. Output: `int`. Raises on invalid or unavailable state.
+    Inputs: `args` (argparse.Namespace) positional arguments. Output: `int`. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     root_pass = _required_env("ROOTPASS")
     job_pass = _required_env("OMERO_JOB_SERVICE_PASS")
@@ -184,7 +187,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str]) -> int:
-    """Execute the command entrypoint.
+    """Run the `startup.job_service_group_sync` command entrypoint.
 
     Inputs: `argv`. Output: `int`.
     """

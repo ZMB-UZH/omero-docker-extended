@@ -28,9 +28,10 @@ _psycopg2_sql: Any | None = None
 
 
 def _load_psycopg2():
-    """Load psycopg2.
+    """Load the psycopg2.
 
-    Inputs: none. Output: tuple. Raises on invalid or unavailable state.
+    Inputs: none. Output: `tuple`. Raises: UserSettingsStoreError when validation or
+    external operations fail.
     """
     if _psycopg2_mod is not None and _psycopg2_extras is not None:
         return _psycopg2_mod, _psycopg2_extras
@@ -45,9 +46,10 @@ def _load_psycopg2():
 
 
 def _load_psycopg2_sql():
-    """Load psycopg2 sql.
+    """Load psycopg2 SQL helpers or raise the plugin store error.
 
-    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    Inputs: none. Output: `sql`. Raises: UserSettingsStoreError when validation or
+    external operations fail.
     """
     if _psycopg2_sql is not None:
         return _psycopg2_sql
@@ -63,16 +65,17 @@ def _load_psycopg2_sql():
 def _safe_query(template, *identifiers):
     """Compose a parameterized SQL query with safe psycopg2.sql identifiers.
 
-    Inputs: `template`, `*identifiers`. Output: call result.
+    Inputs: `template`, `*identifiers`. Output: `format` result.
     """
     sql_mod = _load_psycopg2_sql()
     return sql_mod.SQL(template).format(*[sql_mod.Identifier(i) for i in identifiers])
 
 
 def _db_params():
-    """DB params.
+    """Return the db params.
 
-    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    Inputs: none. Output: db params result. Raises: UserSettingsStoreError when validation or
+    the called operation fails.
     """
     user = os.environ.get(ENV_USER)
     password = os.environ.get(ENV_AUTH)
@@ -119,9 +122,10 @@ def _db_params():
 
 @contextmanager
 def _connect():
-    """Open the connection.
+    """Open the connection for `omeroweb_import.services.data_store`.
 
-    Inputs: none. Output: yielded values. Raises on invalid or unavailable state.
+    Inputs: none. Output: iterator of yielded items. Raises: UserSettingsStoreError when
+    validation or the called operation fails.
     """
     psycopg2, _ = _load_psycopg2()
     param_options = _db_params()
@@ -167,9 +171,9 @@ def _connect():
 
 
 def _ensure_user_settings_schema(conn):
-    """Ensure user settings schema.
+    """Ensure the user settings schema.
 
-    Inputs: `conn`. Output: None.
+    Inputs: `conn` OMERO gateway connection. Output: None.
     """
     _load_psycopg2_sql()
     with conn.cursor() as cur:
@@ -198,9 +202,9 @@ def _ensure_user_settings_schema(conn):
 
 
 def _ensure_special_method_settings_schema(conn):
-    """Ensure special method settings schema.
+    """Ensure the special method settings schema.
 
-    Inputs: `conn`. Output: None.
+    Inputs: `conn` OMERO gateway connection. Output: None.
     """
     _load_psycopg2_sql()
     with conn.cursor() as cur:
@@ -239,10 +243,10 @@ def _ensure_special_method_settings_schema(conn):
 
 
 def save_user_settings(username, settings_payload):
-    """Save user settings.
+    """Save the user settings.
 
-    Inputs: `username`, `settings_payload`. Output: None. Raises on invalid or
-    unavailable state.
+    Inputs: `username` username, `settings_payload`. Output: None. Raises:
+    UserSettingsStoreError when validation or the called operation fails.
     """
     try:
         _, extras = _load_psycopg2()
@@ -289,10 +293,10 @@ def save_user_settings(username, settings_payload):
 
 
 def save_special_method_settings(username, method_key, settings_payload):
-    """Save special method settings.
+    """Save the special method settings.
 
-    Inputs: `username`, `method_key`, `settings_payload`. Output: None. Raises on
-    invalid or unavailable state.
+    Inputs: `username` username, `method_key`, `settings_payload`. Output: None. Raises:
+    UserSettingsStoreError when validation or the called operation fails.
     """
     try:
         _, extras = _load_psycopg2()
@@ -343,8 +347,8 @@ def save_special_method_settings(username, method_key, settings_payload):
 def load_special_method_settings(username, method_key):
     """Return load special method settings.
 
-    Inputs: `username`, `method_key`. Output: `row[0]` or None. Raises on invalid or
-    unavailable state.
+    Inputs: `username` username, `method_key`. Output: settings mapping. Raises:
+    UserSettingsStoreError when validation or the called operation fails.
     """
     try:
         _load_psycopg2_sql()

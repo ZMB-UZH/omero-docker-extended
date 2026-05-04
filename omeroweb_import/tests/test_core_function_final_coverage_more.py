@@ -13,17 +13,17 @@ from omeroweb_import.views import core_functions
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self.val = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self.val`.
         """
@@ -35,7 +35,7 @@ def test_core_function_misc_final_edges_cover_remaining_helper_branches(
 ):
     """Verify core function misc final edges cover remaining helper branches.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in core function misc final edges cover remaining helper branches.
     """
     monkeypatch.setattr(
         core_functions,
@@ -173,12 +173,11 @@ def test_core_function_misc_final_edges_cover_remaining_helper_branches(
 def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
     monkeypatch, tmp_path: Path
 ):
-    """Verify managed path and import candidate helpers cover remaining lines.
+    """Verify the managed path and import candidate helpers cover remaining lines safety boundary.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: `self.should_match`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` (Path) temporary path
+    fixture. Output: `should_match`. Raises: OSError, ValueError when validation or
+    external operations fail.
     """
     real_os_open = os.open
     real_os_stat = os.stat
@@ -316,12 +315,12 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
     original_parse_import_groups = core_functions._parse_import_groups
 
     class _CandidatePath:
-        """Represent candidate path."""
+        """Test double for candidate path behavior in this module."""
 
         __hash__ = None
 
         def __init__(self, should_match=False):
-            """Initialize the instance.
+            """Create `_CandidatePath` with `should_match`.
 
             Inputs: `should_match`. Output: None.
             """
@@ -331,22 +330,23 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
         def resolve():
             """Resolve and return the path.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             raise OSError("resolve failed")
 
         def __eq__(self, other):
-            """Eq.
+            """Return the eq.
 
-            Inputs: `other`. Output: `self.should_match`.
+            Inputs: `other`. Output: `should_match`.
             """
             return self.should_match
 
         @staticmethod
         def relative_to(other):
-            """Relative to.
+            """Record the relative to call on `_CandidatePath` for later assertions.
 
-            Inputs: `other`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `other`. Output: None. Raises: ValueError when validation or
+            external operations fail.
             """
             raise ValueError("outside")
 
@@ -435,14 +435,14 @@ def test_core_function_routing_and_native_zarr_helpers_cover_remaining_lines(
 ):
     """Verify core function routing and native Zarr helpers cover remaining lines.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: `state['job']`.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in core function routing and native Zarr helpers cover remaining lines.
     """
     state = {"job": {"compatibility_status": "pending"}}
 
     def _update_job(job_id, mutator):
-        """Update job.
+        """Update the job.
 
-        Inputs: `job_id`, `mutator`. Output: `state['job']`.
+        Inputs: `job_id`, `mutator`. Output: update job result.
         """
         state["job"] = mutator(state["job"])
         return state["job"]
@@ -450,10 +450,10 @@ def test_core_function_routing_and_native_zarr_helpers_cover_remaining_lines(
     thread_starts = []
 
     class _Thread:
-        """Represent thread."""
+        """Test double for thread behavior in this module."""
 
         def __init__(self, *, target, args, daemon):
-            """Initialize the instance.
+            """Create `_Thread` with its default state.
 
             Inputs: `target`, `args`, `daemon`. Output: None.
             """
@@ -461,9 +461,9 @@ def test_core_function_routing_and_native_zarr_helpers_cover_remaining_lines(
 
         @staticmethod
         def start():
-            """Start the operation.
+            """Start `_Thread`'s fake operation.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             thread_starts.append("started")
 
@@ -547,7 +547,7 @@ def test_import_job_entry_covers_remaining_zarr_routing_paths(
 ):
     """Verify import job entry covers remaining Zarr routing paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in import job entry covers remaining Zarr routing paths.
     """
     zarr_path = tmp_path / "plate.ome.zarr"
     zarr_path.mkdir()
@@ -660,10 +660,9 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
 ):
     """Verify core function import name and compatibility edges cover remaining guards.
 
-    Inputs: `monkeypatch`, `tmp_path`, `caplog`. Output: computed value. Raises on
-    invalid or unavailable state.
-
-    invalid or unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` (Path) temporary path
+    fixture, `caplog` (pytest.LogCaptureFixture) pytest log capture fixture. Output:
+    `str`. Raises: OSError when validation or the called operation fails.
     """
     managed_dir = tmp_path / "managed"
     original_directory_is_usable = core_functions._directory_is_usable
@@ -679,18 +678,18 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
     assert original_directory_is_usable(not_a_directory) is False
 
     class _BrokenPath:
-        """Represent broken path."""
+        """Test double for broken path behavior in this module."""
 
         @staticmethod
         def is_dir():
             """Return whether directory.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise OSError("stat failed")
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_BrokenPath` as test-readable text.
 
             Inputs: none. Output: '/broken'.
             """
@@ -753,7 +752,7 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
     core_functions._logical_import_entry_source_display_name = lambda entry: ""
 
     class _NamelessDir:
-        """Represent nameless dir."""
+        """Test double for nameless dir behavior in this module."""
 
         name = ""
 
@@ -792,10 +791,10 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
     ) == [10, 11]
 
     class _Image:
-        """Represent image."""
+        """Test double for image behavior in this module."""
 
         def __init__(self, image_id: int, name: str):
-            """Initialize the instance.
+            """Create `_Image` with `image_id` and `name`.
 
             Inputs: `image_id`, `name`. Output: None.
             """
@@ -804,23 +803,23 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
             self.saved = 0
 
         def getName(self):
-            """Return the fake object name.
+            """Return `_Image`'s fake object name.
 
             Inputs: none. Output: `self._name`.
             """
             return self._name
 
         def setName(self, name):
-            """Set Name.
+            """Set the name for `_Image`.
 
-            Inputs: `name`. Output: None.
+            Inputs: `name` name. Output: None.
             """
             self._name = name
 
         def save(self):
-            """Persist the object state.
+            """Persist `_Image`'s fake object state.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             self.saved += 1
 

@@ -19,9 +19,9 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `OmeroWebLogoBootstrapRegressionTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.web_bootstrap_text = (
@@ -31,7 +31,7 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
     def test_pull_scripts_preserve_site_local_logo_png(self) -> None:
         """Verify pull scripts preserve site local logo png.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in pull scripts preserve site local logo png.
         """
         scripts = [self.repo_root / "github_pull_project_bash_example"]
 
@@ -44,17 +44,17 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
             self.assertIn("clone_move_find_args+=( ! -name 'logo' )", script_text)
 
     def test_gitignore_keeps_real_logo_local_only(self) -> None:
-        """Verify gitignore keeps real logo local only.
+        """Check that gitignore keeps real logo local only remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in gitignore keeps real logo local only.
         """
         gitignore_text = (self.repo_root / ".gitignore").read_text(encoding="utf-8")
         self.assertIn("/logo/logo.png", gitignore_text)
 
     def test_web_bootstrap_preserves_logo_and_does_not_fail_when_missing(self) -> None:
-        """Verify web bootstrap preserves logo and does not fail when missing.
+        """Confirm web bootstrap preserves logo and does not fail when missing exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when web bootstrap preserves logo and does not fail when missing stops reporting the expected error.
         """
         self.assertIn("repair_branding_logo_permissions()", self.web_bootstrap_text)
         self.assertIn("branding_logo_fallback_enabled()", self.web_bootstrap_text)
@@ -106,7 +106,7 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
     def test_web_bootstrap_repairs_branding_logo_permissions(self) -> None:
         """Verify web bootstrap repairs branding logo permissions.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in web bootstrap repairs branding logo permissions.
         """
         self.assertIn('chmod 0444 "${logo_path}"', self.web_bootstrap_text)
         self.assertIn(
@@ -117,7 +117,7 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
     def test_web_bootstrap_uses_deterministic_fallback_writer(self) -> None:
         """Verify web bootstrap uses deterministic fallback writer.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in web bootstrap uses deterministic fallback writer.
         """
         self.assertIn(
             "/opt/omero/tools/write_branding_logo_fallback.py", self.web_bootstrap_text
@@ -144,7 +144,7 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
     def test_web_bootstrap_skips_zarr_jar_scan_until_cache_exists(self) -> None:
         """Verify web bootstrap skips Zarr jar scan until cache exists.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in web bootstrap skips Zarr jar scan until cache exists.
         """
         self.assertIn('local cache_root="${var_dir}/.cache"', self.web_bootstrap_text)
         self.assertIn('if [[ ! -d "${cache_root}" ]]; then', self.web_bootstrap_text)

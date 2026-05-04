@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_manage_script_module():
-    """Load manage script module.
+    """Load the manage script module.
 
     Inputs: none. Output: `module`.
     """
@@ -58,9 +58,9 @@ def _load_manage_script_module():
 
 
 def _server_config(tmp_path: Path) -> dict[str, str]:
-    """Server config.
+    """Return the server config.
 
-    Inputs: `tmp_path`. Output: `dict[str, str]`.
+    Inputs: `tmp_path` (Path) temporary path fixture. Output: `dict[str, str]`.
     """
     return {
         "omero.data.dir": str(tmp_path / "data"),
@@ -71,19 +71,17 @@ def _server_config(tmp_path: Path) -> dict[str, str]:
 
 
 def _managed_repo_conn(managed_root: Path, *, proxies_shape: str = "mapping"):
-    """Managed repo conn.
+    """Return the managed repo conn.
 
-    Inputs: `managed_root`, `proxies_shape`. Output: computed value. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `managed_root` (Path), `proxies_shape` (str). Output: `bool`. Raises:
+    ValueError when validation or the called operation fails.
     """
 
     class _RepoProxy:
-        """Represent repo proxy."""
+        """Test double for repo proxy behavior in this module."""
 
         def __init__(self, root: Path):
-            """Initialize the instance.
+            """Create `_RepoProxy` with `root`.
 
             Inputs: `root`. Output: None.
             """
@@ -93,9 +91,9 @@ def _managed_repo_conn(managed_root: Path, *, proxies_shape: str = "mapping"):
             self.registered_paths = set()
 
         def makeDir(self, path, parents):
-            """Make dir.
+            """Create the dir for `_RepoProxy`.
 
-            Inputs: `path`, `parents`. Output: None.
+            Inputs: `path` path, `parents`. Output: None.
             """
             self.make_dir_calls.append((path, parents))
             target = self.root / path.strip("/")
@@ -106,17 +104,17 @@ def _managed_repo_conn(managed_root: Path, *, proxies_shape: str = "mapping"):
                 self.registered_paths.add(current.resolve(strict=False))
 
         def fileExists(self, path):
-            """File exists.
+            """Return the file Exists for `_RepoProxy`.
 
-            Inputs: `path`. Output: bool.
+            Inputs: `path` path. Output: `bool`.
             """
             target = (self.root / path.strip("/")).resolve(strict=False)
             return target in self.registered_paths
 
         def deletePaths(self, paths, recursively, force):
-            """Delete Paths.
+            """Delete the paths for `_RepoProxy`.
 
-            Inputs: `paths`, `recursively`, `force`. Output: 'delete-handle'.
+            Inputs: `paths`, `recursively`, `force`. Output: `str`.
             """
             self.delete_calls.append((list(paths), recursively, force))
             for raw_path in paths:
@@ -177,9 +175,9 @@ def _managed_repo_conn(managed_root: Path, *, proxies_shape: str = "mapping"):
 
 
 def _register_repo_path(repo_proxy, managed_root: Path, target: Path) -> None:
-    """Register repo path.
+    """Record the register repo path call on the test double for later assertions.
 
-    Inputs: `repo_proxy`, `managed_root`, `target`. Output: None.
+    Inputs: `repo_proxy`, `managed_root` (Path), `target` (Path). Output: None.
     """
     current = managed_root.resolve(strict=False)
     for part in target.resolve(strict=False).relative_to(managed_root).parts:
@@ -191,9 +189,9 @@ def test_manage_script_config_and_runtime_helpers_cover_remaining_guards(
     monkeypatch,
     tmp_path: Path,
 ):
-    """Verify manage script config and runtime helpers cover remaining guards.
+    """Verify the manage script config and runtime helpers cover remaining guards execution contract.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in manage script config and runtime helpers cover remaining guards integration.
     """
     module = _load_manage_script_module()
 
@@ -250,9 +248,9 @@ def test_manage_script_config_and_runtime_helpers_cover_remaining_guards(
 def test_manage_script_path_validation_and_template_guards_cover_remaining_edges(
     tmp_path: Path,
 ):
-    """Verify manage script path validation and template guards cover remaining edges.
+    """Check manage script path validation and template guards cover remaining edges renders the expected surface.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when manage script path validation and template guards cover remaining edges accepts unsafe input.
     """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
@@ -305,9 +303,9 @@ def test_manage_script_prefix_suffix_cleanup_and_symlink_guards_cover_remaining_
     monkeypatch,
     tmp_path: Path,
 ):
-    """Verify manage script prefix suffix cleanup and symlink guards cover remaining paths.
+    """Verify the manage script prefix suffix cleanup and symlink guards cover remaining paths execution contract.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when manage script prefix suffix cleanup and symlink guards cover remaining paths accepts unsafe input.
     """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
@@ -371,9 +369,9 @@ def test_manage_script_prefix_suffix_cleanup_and_symlink_guards_cover_remaining_
 
 
 def test_manage_script_stage_permissions_allow_service_read_access(tmp_path: Path):
-    """Verify manage script stage permissions allow service read access.
+    """Verify the manage script stage permissions allow service read access execution contract.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in manage script stage permissions allow service read access integration.
     """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
@@ -418,9 +416,9 @@ def test_manage_script_stage_permissions_allow_service_read_access(tmp_path: Pat
 
 
 def test_manage_script_resolves_sequence_style_repository_maps(tmp_path: Path):
-    """Verify manage script resolves sequence style repository maps.
+    """Verify the manage script resolves sequence style repository maps execution contract.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in manage script resolves sequence style repository maps integration.
     """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
@@ -437,9 +435,9 @@ def test_manage_script_resolves_sequence_style_repository_maps(tmp_path: Path):
 
 
 def test_manage_script_rejects_unregistered_existing_suffix_dirs(tmp_path: Path):
-    """Verify manage script rejects unregistered existing suffix directories.
+    """Confirm manage script rejects unregistered existing suffix dirs is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: `fixed_now`.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in manage script rejects unregistered existing suffix dirs integration.
     """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
@@ -458,11 +456,11 @@ def test_manage_script_rejects_unregistered_existing_suffix_dirs(tmp_path: Path)
     _register_repo_path(repo_proxy, managed_root, prefix_dir)
 
     class _FixedDatetime:
-        """Represent fixed datetime."""
+        """Test double for fixed datetime behavior in this module."""
 
         @staticmethod
         def now():
-            """Now.
+            """Return `_FixedDatetime`'s fixed timestamp.
 
             Inputs: none. Output: `fixed_now`.
             """
@@ -488,9 +486,9 @@ def test_manage_script_rejects_unregistered_existing_suffix_dirs(tmp_path: Path)
 def test_manage_script_stages_from_generic_template_without_user_anchor(
     tmp_path: Path,
 ):
-    """Verify manage script stages from generic template without user anchor.
+    """Check manage script stages from generic template without user anchor renders the expected surface.
 
-    Inputs: `tmp_path`. Output: `fixed_now`.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in manage script stages from generic template without user anchor integration.
     """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
@@ -506,11 +504,11 @@ def test_manage_script_stages_from_generic_template_without_user_anchor(
     fixed_now = datetime(2026, 3, 22, 9, 51, 15)
 
     class _FixedDatetime:
-        """Represent fixed datetime."""
+        """Test double for fixed datetime behavior in this module."""
 
         @staticmethod
         def now():
-            """Now.
+            """Return `_FixedDatetime`'s fixed timestamp.
 
             Inputs: none. Output: `fixed_now`.
             """
@@ -541,9 +539,9 @@ def test_manage_script_stages_from_generic_template_without_user_anchor(
 def test_manage_script_cleanup_restricts_deletion_to_staged_leaf(
     tmp_path: Path,
 ):
-    """Verify manage script cleanup restricts deletion to staged leaf.
+    """Verify the manage script cleanup restricts deletion to staged leaf execution contract.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in manage script cleanup restricts deletion to staged leaf integration.
     """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
@@ -588,9 +586,9 @@ def test_manage_script_handles_prefix_not_directory_and_main_entrypoint(
     monkeypatch,
     tmp_path: Path,
 ):
-    """Verify manage script handles prefix not directory and main entrypoint.
+    """Verify the manage script handles prefix not directory and main entrypoint execution contract.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: dict.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in manage script handles prefix not directory and main entrypoint integration.
     """
     module = _load_manage_script_module()
     managed_root = tmp_path / "data" / "ManagedRepository"
@@ -608,29 +606,29 @@ def test_manage_script_handles_prefix_not_directory_and_main_entrypoint(
     output_calls = []
 
     class _Client:
-        """Represent client."""
+        """Test double for client behavior in this module."""
 
         @staticmethod
         def getInputs(unwrap=True):
-            """Return Inputs.
+            """Return the inputs for `_Client`.
 
-            Inputs: `unwrap`. Output: dict.
+            Inputs: `unwrap`. Output: `dict`.
             """
             return {}
 
         @staticmethod
         def setOutput(key, value):
-            """Set Output.
+            """Set the output for `_Client`.
 
-            Inputs: `key`, `value`. Output: None.
+            Inputs: `key` lookup key, `value` input value. Output: None.
             """
             output_calls.append((key, value))
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `_Client`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             output_calls.append(("closed", True))
 
@@ -675,9 +673,9 @@ def test_manage_script_handles_prefix_not_directory_and_main_entrypoint(
 def test_manage_script_repository_helper_edges_cover_proxy_and_cleanup_failures(
     tmp_path: Path,
 ):
-    """Verify manage script repository helper edges cover proxy and cleanup failures.
+    """Verify the manage script repository helper edges cover proxy and cleanup failures execution contract.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in manage script repository helper edges cover proxy and cleanup failures integration.
     """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
@@ -866,9 +864,9 @@ def test_manage_script_repository_helper_edges_cover_proxy_and_cleanup_failures(
 def test_manage_script_relative_path_and_cleanup_root_guards_cover_remaining_edges(
     tmp_path: Path,
 ):
-    """Verify manage script relative path and cleanup root guards cover remaining edges.
+    """Verify the manage script relative path and cleanup root guards cover remaining edges execution contract.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when manage script relative path and cleanup root guards cover remaining edges accepts unsafe input.
     """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
@@ -915,9 +913,9 @@ def test_manage_script_relative_path_and_cleanup_root_guards_cover_remaining_edg
 def test_manage_script_stage_and_cleanup_cover_remaining_registered_path_guards(
     tmp_path: Path,
 ):
-    """Verify manage script stage and cleanup cover remaining registered path guards.
+    """Verify the manage script stage and cleanup cover remaining registered path guards execution contract.
 
-    Inputs: `tmp_path`. Output: `fixed_now`.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when manage script stage and cleanup cover remaining registered path guards accepts unsafe input.
     """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
@@ -931,11 +929,11 @@ def test_manage_script_stage_and_cleanup_cover_remaining_registered_path_guards(
     fixed_now = datetime(2026, 3, 22, 9, 51, 15)
 
     class _FixedDatetime:
-        """Represent fixed datetime."""
+        """Test double for fixed datetime behavior in this module."""
 
         @staticmethod
         def now():
-            """Now.
+            """Return `_FixedDatetime`'s fixed timestamp.
 
             Inputs: none. Output: `fixed_now`.
             """

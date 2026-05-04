@@ -20,7 +20,7 @@ def test_use_celery_reads_boolean_flag(
 ) -> None:
     """Verify use celery reads boolean flag.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in use celery reads boolean flag.
     """
     monkeypatch.setenv("OMERO_IMS_USE_CELERY", "true")
     assert config.use_celery() is True
@@ -31,7 +31,7 @@ def test_use_job_service_session_requires_explicit_value(
 ) -> None:
     """Verify use job service session requires explicit value.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in use job service session requires explicit value.
     """
     monkeypatch.delenv("OMERO_IMS_USE_JOB_SERVICE_SESSION", raising=False)
     with pytest.raises(RuntimeError):
@@ -56,7 +56,7 @@ def test_use_job_service_session_parsing(
 ) -> None:
     """Verify use job service session parsing.
 
-    Inputs: `monkeypatch`, `value`, `expected`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `value`, `expected`. Output: fails on regressions in use job service session parsing.
     """
     monkeypatch.setenv("OMERO_IMS_USE_JOB_SERVICE_SESSION", value)
     assert config.use_job_service_session() is expected
@@ -65,9 +65,9 @@ def test_use_job_service_session_parsing(
 def test_use_job_service_session_rejects_invalid_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify use job service session rejects invalid value.
+    """Confirm use job service session rejects invalid value is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in use job service session rejects invalid value.
     """
     monkeypatch.setenv("OMERO_IMS_USE_JOB_SERVICE_SESSION", "unexpected")
     with pytest.raises(ValueError):
@@ -77,9 +77,9 @@ def test_use_job_service_session_rejects_invalid_value(
 def test_get_job_service_credentials_prefers_web_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify get job service credentials prefers web environment.
+    """Verify get job service credentials prefers web env.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in get job service credentials prefers web env.
     """
     monkeypatch.setenv("OMERO_WEB_JOB_SERVICE_USERNAME", "web-user")
     monkeypatch.setenv("OMERO_WEB_JOB_SERVICE_PASS", TEST_AUTH_WEB)
@@ -95,9 +95,9 @@ def test_get_job_service_credentials_prefers_web_env(
 def test_get_job_service_credentials_falls_back_to_server_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify get job service credentials falls back to server environment.
+    """Verify get job service credentials falls back to server env.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in get job service credentials falls back to server env.
     """
     monkeypatch.delenv("OMERO_WEB_JOB_SERVICE_USERNAME", raising=False)
     monkeypatch.delenv("OMERO_WEB_JOB_SERVICE_PASS", raising=False)
@@ -113,9 +113,9 @@ def test_get_job_service_credentials_falls_back_to_server_env(
 def test_get_job_service_credentials_missing_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify get job service credentials missing returns none.
+    """Verify get job service credentials missing returns none result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in get job service credentials missing returns none.
     """
     monkeypatch.delenv("OMERO_WEB_JOB_SERVICE_USERNAME", raising=False)
     monkeypatch.delenv("OMERO_WEB_JOB_SERVICE_PASS", raising=False)

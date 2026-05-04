@@ -37,9 +37,9 @@ class _PyplotCompat:
 
     @staticmethod
     def subplots(*, figsize=(6.4, 4.8), dpi=None):
-        """Subplots.
+        """Return the subplots for `_PyplotCompat`.
 
-        Inputs: `figsize`, `dpi`. Output: tuple.
+        Inputs: `figsize`, `dpi`. Output: `tuple`.
         """
         fig = Figure(figsize=figsize, dpi=dpi)
         FigureCanvasAgg(fig)
@@ -48,7 +48,7 @@ class _PyplotCompat:
 
     @staticmethod
     def close(fig=None):
-        """Close the resource.
+        """Close `_PyplotCompat`'s fake resource handle.
 
         Inputs: `fig`. Output: None.
         """
@@ -61,19 +61,9 @@ plt = _PyplotCompat()
 
 
 def parse_emsa_file(txt_path: Path) -> Dict[str, Any]:
-    """Parse emsa file.
+    """Parse and validate the emsa file input.
 
-    Inputs: `txt_path`. Output: `Dict[str, Any]`.
-
-    Args:
-        txt_path: Path to the .txt file
-
-    Returns:
-        Dictionary containing:
-        - title: str - The spectrum title from #TITLE
-        - metadata: dict - All #KEY: value pairs
-        - elements: list - Parsed ##OXINSTLABEL entries
-        - spectrum: list - (x, y) coordinate pairs
+    Inputs: `txt_path` (Path). Output: `Dict[str, Any]`.
     """
     try:
         content = txt_path.read_text(encoding="utf-8", errors="ignore")
@@ -183,9 +173,10 @@ def _nearest_spectrum_point(
     spectrum: List[Tuple[float, float]],
     energy_kev: float,
 ) -> Optional[Tuple[float, float]]:
-    """Nearest spectrum point.
+    """Return the nearest spectrum point.
 
-    Inputs: `spectrum`, `energy_kev`. Output: `Optional[Tuple[float, float]]`.
+    Inputs: `spectrum` (List[Tuple[float, float]]), `energy_kev` (float). Output:
+    `Optional[Tuple[float, float]]`.
     """
     if not spectrum:
         return None
@@ -206,7 +197,7 @@ class BBox:
     """Bounding box for collision detection"""
 
     def __init__(self, x0, y0, x1, y1):
-        """Initialize the instance.
+        """Create `BBox` with `x0`, `y0`, `x1`, and `y1`.
 
         Inputs: `x0`, `y0`, `x1`, `y1`. Output: None.
         """
@@ -230,7 +221,7 @@ class BBox:
     def overlap_area(self, other):
         """Calculate overlap area with another bbox.
 
-        Inputs: `other`. Output: computed value.
+        Inputs: `other`. Output: overlap area result.
         """
         if not self.overlaps(other):
             return 0.0
@@ -247,9 +238,9 @@ def lines_cross(x1, y1, x2, y2, x3, y3, x4, y4):
     """
 
     def ccw(ax, ay, bx, by, cx, cy):
-        """Ccw.
+        """Return the ccw.
 
-        Inputs: `ax`, `ay`, `bx`, `by`, `cx`, `cy`. Output: bool.
+        Inputs: `ax`, `ay`, `bx`, `by`, `cx`, `cy`. Output: `bool`.
         """
         return (cy - ay) * (bx - ax) > (by - ay) * (cx - ax)
 
@@ -262,7 +253,7 @@ class LabelGene:
     """Single label placement gene"""
 
     def __init__(self, label_id: int, x: float, y: float):
-        """Initialize the instance.
+        """Create `LabelGene` with `label_id`, `x`, and `y`.
 
         Inputs: `label_id`, `x`, `y`. Output: None.
         """
@@ -273,7 +264,7 @@ class LabelGene:
     def __repr__(self):
         """Return the debug representation.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: repr result.
         """
         return f"Gene(id={self.label_id}, x={self.x:.1f}, y={self.y:.1f})"
 
@@ -286,7 +277,7 @@ class Chromosome:
     """
 
     def __init__(self, genes: List[LabelGene]):
-        """Initialize the instance.
+        """Create `Chromosome` with `genes`.
 
         Inputs: `genes`. Output: None.
         """
@@ -303,7 +294,7 @@ class Chromosome:
     def __repr__(self):
         """Return the debug representation.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: repr result.
         """
         return f"Chromosome(genes={len(self.genes)}, fitness={self.fitness:.2f})"
 
@@ -321,7 +312,8 @@ class GeneticLabelPlacer:
         mutation_rate: float = 0.15,
         elite_size: int = 10,
     ):
-        """Initialize the instance.
+        """Create `GeneticLabelPlacer` with `label_specs`, `axes_bbox`, `ax`, `population_size`,
+        `generations`, `mutation_rate`, and `elite_size`.
 
         Inputs: `label_specs`, `axes_bbox`, `ax`, `population_size`, `generations`,
         `mutation_rate`, `elite_size`. Output: None.
@@ -501,9 +493,10 @@ class GeneticLabelPlacer:
     def crossover(
         parent1: Chromosome, parent2: Chromosome
     ) -> Tuple[Chromosome, Chromosome]:
-        """Ordered crossover.
+        """Return the crossover for `GeneticLabelPlacer`.
 
-        Inputs: `parent1`, `parent2`. Output: `Tuple[Chromosome, Chromosome]`.
+        Inputs: `parent1` (Chromosome), `parent2` (Chromosome). Output:
+        `Tuple[Chromosome, Chromosome]`.
         """
         n = len(parent1.genes)
         split = random.randint(1, n - 1)  # nosec B311
@@ -759,7 +752,7 @@ def create_edx_spectrum_plot(
     txt_path: Path,
     output_path: Optional[Path] = None,
 ) -> Optional[Path]:
-    """Create edx spectrum plot.
+    """Create a PNG spectrum plot from parsed SEM-EDX text data.
 
     Inputs: `txt_path`, `output_path`. Output: `Optional[Path]`.
     """
@@ -910,9 +903,10 @@ def build_spectrum_columns(
     image_id: int,
     spectrum: List[Tuple[float, float]],
 ) -> List[Any]:
-    """Spectrum columns.
+    """Build the spectrum columns.
 
-    Inputs: `image_id`, `spectrum`. Output: `List[Any]`.
+    Inputs: `image_id` (int) OMERO image ID, `spectrum` (List[Tuple[float, float]]).
+    Output: `List[Any]`.
     """
     from omero.grid import DoubleColumn, LongColumn
 
@@ -937,19 +931,11 @@ def create_spectrum_table(
     txt_filename: str,
     columns: Optional[List[Any]] = None,
 ) -> Optional[int]:
-    """Create spectrum table.
+    """Create the spectrum table.
 
-    Inputs: `conn`, `image_id`, `spectrum`, `txt_filename`, `columns`. Output:
-    `Optional[int]`.
-
-    Args:
-        conn: OMERO BlitzGateway connection
-        image_id: ID of the image to use for dataset lookup
-        spectrum: List of (x, y) tuples
-        txt_filename: Name of the source txt file (for table name)
-
-    Returns:
-        Table file annotation ID if successful, None otherwise
+    Inputs: `conn` OMERO gateway connection, `image_id` (int) OMERO image ID, `spectrum`
+    (List[Tuple[float, float]]), `txt_filename` (str), `columns` (Optional[List[Any]]).
+    Output: `Optional[int]`.
     """
     if not spectrum:
         logger.info("No spectrum data to create table for image %d", image_id)

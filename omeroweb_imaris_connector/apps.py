@@ -4,7 +4,7 @@ from omero_plugin_common.logging_utils import configure_omero_gateway_logging
 
 
 class ImarisConnectorConfig(AppConfig):
-    """Represent imaris connector config."""
+    """Django application configuration for imaris connector config."""
 
     name = "omeroweb_imaris_connector"
     label = "omeroweb_imaris_connector"
@@ -13,6 +13,6 @@ class ImarisConnectorConfig(AppConfig):
     def ready() -> None:
         """Apply plugin-wide runtime configuration.
 
-        Inputs: none. Output: None.
+        Inputs: Django calls it after app loading. Output: registers startup hooks.
         """
         configure_omero_gateway_logging()

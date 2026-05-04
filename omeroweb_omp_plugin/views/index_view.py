@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 def _get_owner_id(obj):
     """Return owner ID.
 
-    Inputs: `obj`. Output: computed value or None.
+    Inputs: `obj`. Output: ID value.
     """
     if obj is None:
         return None
@@ -70,7 +70,7 @@ def _get_owner_id(obj):
 def _current_user_id(conn):
     """Return current user ID.
 
-    Inputs: `conn`. Output: computed value or None.
+    Inputs: `conn` OMERO gateway connection. Output: ID value.
     """
     try:
         user = conn.getUser()
@@ -101,7 +101,7 @@ def _is_owned_by_user(obj, user_id):
 def _get_owner_username(obj):
     """Return owner username.
 
-    Inputs: `obj`. Output: computed value.
+    Inputs: `obj`. Output: `str`.
     """
     if obj is None:
         return ""
@@ -139,9 +139,9 @@ def _get_owner_username(obj):
 
 
 def _get_permissions(obj):
-    """Return permissions.
+    """Return the permissions.
 
-    Inputs: `obj`. Output: `permissions` or None.
+    Inputs: `obj`. Output: `permissions`.
     """
     try:
         details = obj.getDetails()
@@ -163,9 +163,9 @@ def _get_permissions(obj):
 
 
 def _permissions_flag(permissions, attr):
-    """Permissions flag.
+    """Return the permissions flag.
 
-    Inputs: `permissions`, `attr`. Output: computed value.
+    Inputs: `permissions`, `attr`. Output: `bool`.
     """
     try:
         flag = getattr(permissions, attr)
@@ -209,9 +209,9 @@ def _has_read_annotate_permissions(obj):
 
 
 def _iter_accessible_projects(conn):
-    """Accessible projects.
+    """Iterate over the accessible projects.
 
-    Inputs: `conn`. Output: yielded values.
+    Inputs: `conn` OMERO gateway connection. Output: iterator of yielded items.
     """
     if conn is None:
         return
@@ -265,9 +265,9 @@ def _iter_accessible_projects(conn):
 
 
 def _iter_member_groups(conn):
-    """Member groups.
+    """Iterate over the member groups.
 
-    Inputs: `conn`. Output: computed value.
+    Inputs: `conn` OMERO gateway connection. Output: `list`.
     """
     if conn is None:
         return []
@@ -289,9 +289,9 @@ def _iter_member_groups(conn):
 
 
 def _group_member_count(conn, group):
-    """Group member count.
+    """Return the group member count.
 
-    Inputs: `conn`, `group`. Output: computed value.
+    Inputs: `conn` OMERO gateway connection, `group`. Output: `int`.
     """
     for attr in (
         "getMemberCount",
@@ -332,9 +332,9 @@ def _group_member_count(conn, group):
 
 
 def _group_has_other_members(conn, group):
-    """Group has other members.
+    """Return the group has other members.
 
-    Inputs: `conn`, `group`. Output: bool.
+    Inputs: `conn` OMERO gateway connection, `group`. Output: `bool`.
     """
     count = _group_member_count(conn, group)
     return count > 1
@@ -435,9 +435,9 @@ def _is_user_in_group(conn, group_id, user_id):
 
 
 def _collect_project_payload(conn, user_id):
-    """Collect project payload.
+    """Collect the project payload.
 
-    Inputs: `conn`, `user_id`. Output: dict.
+    Inputs: `conn` OMERO gateway connection, `user_id`. Output: `dict`.
     """
     owned_projects = []
     collab_projects = []
@@ -528,7 +528,7 @@ def _get_accessible_project(conn, project_id, user_id):
 
 
 def _suggest_separator_regex(filenames):
-    """Suggest separator regex.
+    """Return the suggest separator regex.
 
     Inputs: `filenames`. Output: `suggest_separator_regex` result.
     """
@@ -538,7 +538,7 @@ def _suggest_separator_regex(filenames):
 def _safe_index_messages_json():
     """Return safe index messages JSON.
 
-    Inputs: none. Output: computed value.
+    Inputs: none. Output: `dumps` result.
     """
     try:
         return json.dumps(messages.index_messages())
@@ -557,7 +557,8 @@ def _safe_index_messages_json():
 def index(request, conn=None, _url=None, **kwargs):
     """OMP filename+metadata harverster UI.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: `context`.
     """
     projects: dict[str, list[Any]] = {
         "owned": [],
@@ -567,7 +568,7 @@ def index(request, conn=None, _url=None, **kwargs):
     user_id = None
 
     def build_index_context(extra=None):
-        """Index context.
+        """Build the index context.
 
         Inputs: `extra`. Output: `context`.
         """
@@ -1206,9 +1207,10 @@ def list_projects(request, conn=None, _url=None, **kwargs):
 
 @login_required()
 def root_status(request, conn=None, _url=None, **kwargs):
-    """Root status.
+    """Return the root status.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})

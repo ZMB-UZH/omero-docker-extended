@@ -45,9 +45,9 @@ _VOLATILE_TEMPLATE_PATTERNS = {
 def _set_prefix_directory_mode(path: Path | str) -> None:
     # Allow a separate OMERO.web service account to traverse the known
     # managed-repository prefix without exposing sibling directory listings.
-    """Set prefix directory mode.
+    """Set the prefix directory mode.
 
-    Inputs: `path`. Output: None.
+    Inputs: `path` (Path | str) path. Output: None.
     """
     os.chmod(path, _PREFIX_DIR_MODE)
 
@@ -55,25 +55,26 @@ def _set_prefix_directory_mode(path: Path | str) -> None:
 def _set_staged_directory_mode(path: Path | str) -> None:
     # Native ``omero zarr import`` runs from OMERO.web, so the staged tree
     # must be readable across service-user boundaries on shared host mounts.
-    """Set staged directory mode.
+    """Set the staged directory mode.
 
-    Inputs: `path`. Output: None.
+    Inputs: `path` (Path | str) path. Output: None.
     """
     os.chmod(path, _STAGED_DIR_MODE)
 
 
 def _set_staged_file_mode(path: Path | str) -> None:
-    """Set staged file mode.
+    """Set the staged file mode.
 
-    Inputs: `path`. Output: None.
+    Inputs: `path` (Path | str) path. Output: None.
     """
     os.chmod(path, _STAGED_FILE_MODE)
 
 
 def _require_config_value(config: dict[str, str], key: str) -> str:
-    """Config value.
+    """Require the config value.
 
-    Inputs: `config`, `key`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `config` (dict[str, str]) configuration, `key` (str) lookup key. Output:
+    `str`. Raises: RuntimeError when validation or the called operation fails.
     """
     value = str(config.get(key) or "").strip()
     if not value:
@@ -85,9 +86,10 @@ def _require_config_value(config: dict[str, str], key: str) -> str:
 
 
 def _load_server_config(conn: BlitzGateway) -> dict[str, str]:
-    """Load server config.
+    """Load the server config.
 
-    Inputs: `conn`. Output: `dict[str, str]`. Raises on invalid or unavailable state.
+    Inputs: `conn` (BlitzGateway) OMERO gateway connection. Output: `dict[str, str]`.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     if conn is None:
         raise RuntimeError("Missing OMERO connection for managed-repository staging.")
@@ -120,7 +122,7 @@ def _load_server_config(conn: BlitzGateway) -> dict[str, str]:
 def _runtime_state_path() -> Path:
     """Return the runtime state file path.
 
-    Inputs: none. Output: `Path`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `Path`. Raises: RuntimeError for the exercised failure path.
     """
     omerodir = str(os.environ.get("OMERODIR") or "").strip()
     if not omerodir:
@@ -131,9 +133,10 @@ def _runtime_state_path() -> Path:
 
 
 def _load_runtime_state_value(key: str) -> str:
-    """Load runtime state value.
+    """Load the runtime state value.
 
-    Inputs: `key`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `key` (str) lookup key. Output: `str`. Raises: RuntimeError when validation or the
+    called operation fails.
     """
     state_path = _runtime_state_path()
     if not state_path.is_file():
@@ -160,9 +163,10 @@ def _load_runtime_state_value(key: str) -> str:
 
 
 def _validate_path_component(value: str, label: str) -> str:
-    """Validate path component.
+    """Validate the path component.
 
-    Inputs: `value`, `label`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `value` (str) input value, `label` (str). Output: `str`. Raises: ValueError
+    when validation or the called operation fails.
     """
     component = str(value or "").strip()
     if (
@@ -177,9 +181,9 @@ def _validate_path_component(value: str, label: str) -> str:
 
 
 def _repo_model_attr(model_obj, attr_name: str):
-    """Repo model attr.
+    """Return the repo model attr.
 
-    Inputs: `model_obj`, `attr_name`. Output: `value`.
+    Inputs: `model_obj`, `attr_name` (str). Output: repo model attr result.
     """
     value = getattr(model_obj, attr_name, None)
     if value is None:
@@ -188,9 +192,9 @@ def _repo_model_attr(model_obj, attr_name: str):
 
 
 def _repo_text(value) -> str:
-    """Repo text.
+    """Return the repo text.
 
-    Inputs: `value`. Output: `str`.
+    Inputs: `value` input value. Output: `str`.
     """
     if value is None:
         return ""
@@ -203,7 +207,7 @@ def _repo_text(value) -> str:
 
 
 def _repo_description_root(description) -> str:
-    """Repo description root.
+    """Return the repo description root.
 
     Inputs: `description`. Output: `str`.
     """
@@ -217,9 +221,10 @@ def _repo_description_root(description) -> str:
 
 
 def _repo_template_parts(config: dict[str, str]) -> list[str]:
-    """Repo template parts.
+    """Return the repo template parts.
 
-    Inputs: `config`. Output: `list[str]`. Raises on invalid or unavailable state.
+    Inputs: `config` (dict[str, str]) configuration. Output: `list[str]`. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     template = _require_config_value(config, _CONFIG_REPO_PATH)
     raw_parts = [part for part in template.split("/") if part]
@@ -229,9 +234,10 @@ def _repo_template_parts(config: dict[str, str]) -> list[str]:
 
 
 def _assert_supported_template_tokens(raw_part: str) -> None:
-    """Assert supported template tokens.
+    """Assert the supported template tokens.
 
-    Inputs: `raw_part`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `raw_part` (str). Output: None. Raises: RuntimeError when validation or
+    external operations fail.
     """
     tokens = set(_TOKEN_PATTERN.findall(raw_part))
     unknown_tokens = tokens - _KNOWN_TEMPLATE_TOKENS
@@ -251,9 +257,10 @@ def _assert_supported_template_tokens(raw_part: str) -> None:
 def _render_repo_template(
     config: dict[str, str], group_name: str, username: str, when: datetime
 ) -> list[str]:
-    """Render repo template.
+    """Render the repo template.
 
-    Inputs: `config`, `group_name`, `username`, `when`. Output: `list[str]`.
+    Inputs: `config` (dict[str, str]) configuration, `group_name` (str), `username`
+    (str) username, `when` (datetime). Output: `list[str]`.
     """
     raw_parts = _repo_template_parts(config)
 
@@ -286,10 +293,11 @@ def _match_repo_template(
     username: str,
     actual_parts: tuple[str, ...],
 ) -> tuple[list[str], tuple[str, ...]]:
-    """Match repo template.
+    """Return the match repo template.
 
-    Inputs: `config`, `group_name`, `username`, `actual_parts`. Output:
-    `tuple[list[str], tuple[str, ...]]`. Raises on invalid or unavailable state.
+    Inputs: `config` (dict[str, str]) configuration, `group_name` (str), `username`
+    (str) username, `actual_parts` (tuple[str, ...]). Output: `tuple[list[str],
+    tuple[str, ...]]`. Raises: RuntimeError when validation or the called operation fails.
     """
     raw_parts = _repo_template_parts(config)
     if len(actual_parts) < len(raw_parts):
@@ -334,9 +342,10 @@ def _match_repo_template(
 
 
 def _managed_repository_root(config: dict[str, str]) -> Path:
-    """Managed repository root.
+    """Return the managed repository root.
 
-    Inputs: `config`. Output: `Path`. Raises on invalid or unavailable state.
+    Inputs: `config` (dict[str, str]) configuration. Output: `Path`. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     data_dir = Path(_require_config_value(config, _CONFIG_DATA_DIR)).resolve(
         strict=False
@@ -361,9 +370,10 @@ def _managed_repository_root(config: dict[str, str]) -> Path:
 
 
 def _shared_tmp_root(config: dict[str, str]) -> Path:
-    """Shared tmp root.
+    """Resolve the configured shared temporary root for managed Zarr work.
 
-    Inputs: `config`. Output: `Path`. Raises on invalid or unavailable state.
+    Inputs: `config` (dict[str, str]) configuration. Output: `Path`. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     root = Path(_require_config_value(config, _CONFIG_SHARED_TMP_PATH)).resolve(
         strict=False
@@ -374,12 +384,10 @@ def _shared_tmp_root(config: dict[str, str]) -> Path:
 
 
 def _validate_source_path(config: dict[str, str], source_path: str) -> Path:
-    """Validate source path.
+    """Validate the source path.
 
-    Inputs: `config`, `source_path`. Output: `Path`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `config` (dict[str, str]) configuration, `source_path` (str). Output:
+    `Path`. Raises: RuntimeError when validation or the called operation fails.
     """
     shared_tmp_root = _shared_tmp_root(config)
     source = Path(str(source_path or "")).resolve(strict=True)
@@ -397,9 +405,10 @@ def _validate_source_path(config: dict[str, str], source_path: str) -> Path:
 
 
 def _reject_symlinks(path: Path) -> None:
-    """Reject symlinks.
+    """Reject symlinked managed-repository paths before moving data.
 
-    Inputs: `path`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `path` (Path) path. Output: None. Raises: RuntimeError when validation or
+    external operations fail.
     """
     for dirpath, dirnames, filenames in os.walk(path):
         current_dir = Path(dirpath)
@@ -419,12 +428,11 @@ def _template_container_dir(
     username: str,
     when: datetime,
 ) -> Path:
-    """Template container dir.
+    """Return the template container dir.
 
-    Inputs: `config`, `group_name`, `username`, `when`. Output: `Path`. Raises on
-    invalid or unavailable state.
-
-    invalid or unavailable state.
+    Inputs: `config` (dict[str, str]) configuration, `group_name` (str), `username`
+    (str) username, `when` (datetime). Output: `Path`. Raises: RuntimeError when validation or
+    the called operation fails.
     """
     managed_root = _managed_repository_root(config)
     rendered_parts = _render_repo_template(config, group_name, username, when)
@@ -441,12 +449,11 @@ def _template_container_dir(
 
 
 def _managed_repository_proxy(conn: BlitzGateway, config: dict[str, str]):
-    """Managed repository proxy.
+    """Return the managed repository proxy.
 
-    Inputs: `conn`, `config`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `conn` (BlitzGateway) OMERO gateway connection, `config` (dict[str, str])
+    configuration. Output: managed repository proxy result. Raises: RuntimeError when validation
+    or the called operation fails.
     """
     if conn is None:
         raise RuntimeError("Missing OMERO connection for managed-repository access.")
@@ -493,12 +500,11 @@ def _managed_repository_proxy(conn: BlitzGateway, config: dict[str, str]):
 def _repo_relative_path(
     managed_root: Path, path: Path, *, directory: bool, leading_slash: bool = False
 ) -> str:
-    """Repo relative path.
+    """Return the repo relative path.
 
-    Inputs: `managed_root`, `path`, `directory`, `leading_slash`. Output: `str`. Raises
-    on invalid or unavailable state.
-
-    on invalid or unavailable state.
+    Inputs: `managed_root` (Path), `path` (Path) path, `directory` (bool),
+    `leading_slash` (bool). Output: `str`. Raises: RuntimeError when validation or
+    external operations fail.
     """
     target = path.resolve(strict=False)
     try:
@@ -521,12 +527,10 @@ def _repo_relative_path(
 def _register_managed_directory(
     repo_proxy, managed_root: Path, target_dir: Path
 ) -> None:
-    """Register managed directory.
+    """Register the managed-directory handoff after path validation.
 
-    Inputs: `repo_proxy`, `managed_root`, `target_dir`. Output: None. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `repo_proxy`, `managed_root` (Path), `target_dir` (Path). Output: None.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     repo_relative_dir = _repo_relative_path(managed_root, target_dir, directory=True)
     try:
@@ -542,12 +546,10 @@ def _repository_directory_registered(
     managed_root: Path,
     directory: Path,
 ) -> bool:
-    """Repository directory registered.
+    """Return the repository directory registered.
 
-    Inputs: `repo_proxy`, `managed_root`, `directory`. Output: `bool`. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `repo_proxy`, `managed_root` (Path), `directory` (Path). Output: `bool`.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     repo_relative_dir = _repo_relative_path(managed_root, directory, directory=True)
     try:
@@ -563,12 +565,10 @@ def _assert_no_unregistered_existing_dirs(
     managed_root: Path,
     target_dir: Path,
 ) -> None:
-    """Assert no unregistered existing dirs.
+    """Assert the no unregistered existing dirs.
 
-    Inputs: `repo_proxy`, `managed_root`, `target_dir`. Output: None. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `repo_proxy`, `managed_root` (Path), `target_dir` (Path). Output: None.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     current = managed_root.resolve(strict=False)
     for part in target_dir.relative_to(managed_root).parts:
@@ -588,9 +588,9 @@ def _assert_no_unregistered_existing_dirs(
 
 
 def _registered_delete_path(managed_root: Path, target: Path) -> str:
-    """Registered delete path.
+    """Return the registered delete path.
 
-    Inputs: `managed_root`, `target`. Output: `str`.
+    Inputs: `managed_root` (Path), `target` (Path). Output: `str`.
     """
     return _repo_relative_path(
         managed_root,
@@ -603,12 +603,11 @@ def _registered_delete_path(managed_root: Path, target: Path) -> str:
 def _delete_registered_managed_path(
     conn: BlitzGateway, repo_proxy, managed_root: Path, target: Path
 ) -> None:
-    """Delete registered managed path.
+    """Delete the registered managed path.
 
-    Inputs: `conn`, `repo_proxy`, `managed_root`, `target`. Output: None. Raises on
-    invalid or unavailable state.
-
-    invalid or unavailable state.
+    Inputs: `conn` (BlitzGateway) OMERO gateway connection, `repo_proxy`, `managed_root`
+    (Path), `target` (Path). Output: None. Raises: RuntimeError when validation or
+    external operations fail.
     """
     delete_path = _registered_delete_path(managed_root, target)
     try:
@@ -621,9 +620,9 @@ def _delete_registered_managed_path(
 
 
 def _prefix_directories(managed_root: Path, leaf_parent: Path) -> list[Path]:
-    """Prefix directories.
+    """Return the prefix directories.
 
-    Inputs: `managed_root`, `leaf_parent`. Output: `list[Path]`.
+    Inputs: `managed_root` (Path), `leaf_parent` (Path). Output: `list[Path]`.
     """
     prefix_dirs: list[Path] = []
     current = managed_root
@@ -634,9 +633,9 @@ def _prefix_directories(managed_root: Path, leaf_parent: Path) -> list[Path]:
 
 
 def _allocate_destination_dir(target_dir: Path, source_name: str) -> Path:
-    """Allocate destination dir.
+    """Return the allocate destination dir.
 
-    Inputs: `target_dir`, `source_name`. Output: `Path`.
+    Inputs: `target_dir` (Path), `source_name` (str). Output: `Path`.
     """
     candidate = target_dir / source_name
     if not candidate.exists():
@@ -660,9 +659,9 @@ def _allocate_destination_dir(target_dir: Path, source_name: str) -> Path:
 
 
 def _normalize_tree_permissions(root: Path) -> None:
-    """Normalize tree permissions.
+    """Normalize the tree permissions.
 
-    Inputs: `root`. Output: None.
+    Inputs: `root` (Path). Output: None.
     """
     for dirpath, dirnames, filenames in os.walk(root):
         _set_staged_directory_mode(dirpath)
@@ -679,10 +678,11 @@ def _stage_zarr(
     group_name: str,
     username: str,
 ) -> Path:
-    """Stage Zarr.
+    """Return the stage Zarr.
 
-    Inputs: `conn`, `config`, `source_path`, `group_name`, `username`. Output: `Path`.
-    Raises on invalid or unavailable state.
+    Inputs: `conn` (BlitzGateway) OMERO gateway connection, `config` (dict[str, str])
+    configuration, `source_path` (str), `group_name` (str), `username` (str) username.
+    Output: `Path`. Raises: RuntimeError when validation or the called operation fails.
     """
     when = datetime.now()
     source = _validate_source_path(config, source_path)
@@ -715,8 +715,9 @@ def _cleanup_zarr(
 ) -> Path:
     """Clean up Zarr.
 
-    Inputs: `conn`, `config`, `managed_path`, `group_name`, `username`. Output: `Path`.
-    Raises on invalid or unavailable state.
+    Inputs: `conn` (BlitzGateway) OMERO gateway connection, `config` (dict[str, str])
+    configuration, `managed_path` (str), `group_name` (str), `username` (str) username.
+    Output: `Path`. Raises: RuntimeError when validation or the called operation fails.
     """
     managed_root = _managed_repository_root(config)
     target = Path(str(managed_path or "")).resolve(strict=False)
@@ -762,7 +763,8 @@ def _cleanup_zarr(
 def run_script():
     """The script entrypoint.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: no caller arguments. Output: performs the documented action and returns None.
+    Raises: RuntimeError for the exercised failure path.
     """
     client = scripts.client(
         "Manage_Zarr_ManagedRepository.py",

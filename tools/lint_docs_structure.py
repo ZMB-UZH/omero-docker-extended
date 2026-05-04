@@ -64,9 +64,9 @@ REQUIRED_INDEX_LINKS: tuple[str, ...] = (
 
 
 def validate_required_paths(repo_root: Path) -> list[ValidationError]:
-    """Validate required paths.
+    """Validate the required paths.
 
-    Inputs: `repo_root`. Output: `list[ValidationError]`.
+    Inputs: `repo_root` (Path). Output: `list[ValidationError]`.
     """
     errors: list[ValidationError] = []
     for rel_path in REQUIRED_PATHS:
@@ -77,9 +77,9 @@ def validate_required_paths(repo_root: Path) -> list[ValidationError]:
 
 
 def validate_index_links(repo_root: Path) -> list[ValidationError]:
-    """Validate index links.
+    """Validate the index links.
 
-    Inputs: `repo_root`. Output: `list[ValidationError]`.
+    Inputs: `repo_root` (Path). Output: `list[ValidationError]`.
     """
     index_path: Path = repo_root / "docs/index.md"
     if not index_path.exists():
@@ -98,9 +98,9 @@ def validate_index_links(repo_root: Path) -> list[ValidationError]:
 
 
 def validate_context_surfaces(repo_root: Path) -> list[ValidationError]:
-    """Validate context surfaces.
+    """Validate the context surfaces.
 
-    Inputs: `repo_root`. Output: `list[ValidationError]`.
+    Inputs: `repo_root` (Path). Output: `list[ValidationError]`.
     """
     errors: list[ValidationError] = []
     for rel_path, contract in CONTEXT_SURFACE_CONTRACTS.items():
@@ -145,9 +145,10 @@ def run_validations(repo_root: Path) -> Sequence[ValidationError]:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse args.
+    """Parse command-line arguments for `tools.lint_docs_structure`.
 
-    Inputs: `argv`. Output: `argparse.Namespace`.
+    Inputs: `argv` (Sequence[str] | None) command-line arguments. Output:
+    `argparse.Namespace`.
     """
     parser = argparse.ArgumentParser(
         description="Validate repository documentation structure and agent surfaces."
@@ -162,7 +163,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.lint_docs_structure` command entrypoint.
 
     Inputs: `argv`. Output: `int`.
     """

@@ -15,11 +15,11 @@ from omeroweb_import.views import core_functions
 
 
 class _Lock:
-    """Represent lock."""
+    """Test double for lock behavior in this module."""
 
     @staticmethod
     def acquire(timeout=None):
-        """Acquire the lock.
+        """Acquire `_Lock`'s fake lock.
 
         Inputs: `timeout`. Output: bool.
         """
@@ -27,18 +27,18 @@ class _Lock:
 
     @staticmethod
     def release():
-        """Release the lock.
+        """Release `_Lock`'s fake lock.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         return None
 
 
 class _ImportedImage:
-    """Represent imported image."""
+    """Test double for imported image behavior in this module."""
 
     def __init__(self, image_id: int, name: str):
-        """Initialize the instance.
+        """Create `_ImportedImage` with `image_id` and `name`.
 
         Inputs: `image_id`, `name`. Output: None.
         """
@@ -47,29 +47,29 @@ class _ImportedImage:
         self.saved = 0
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_ImportedImage`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
         return self._name
 
     def setName(self, name):
-        """Set Name.
+        """Set the name for `_ImportedImage`.
 
-        Inputs: `name`. Output: None.
+        Inputs: `name` name. Output: None.
         """
         self._name = name
 
     def save(self):
-        """Persist the object state.
+        """Persist `_ImportedImage`'s fake object state.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
         """
         self.saved += 1
 
     @staticmethod
     def listParents():
-        """Return list parents.
+        """Return `_ImportedImage`'s fake parent listing.
 
         Inputs: none. Output: list.
         """
@@ -77,9 +77,9 @@ class _ImportedImage:
 
 
 def _base_job(job_id: str) -> dict:
-    """Base job.
+    """Return the base job.
 
-    Inputs: `job_id`. Output: `dict`.
+    Inputs: `job_id` (str). Output: `dict`.
     """
     return {
         "job_id": job_id,
@@ -98,9 +98,10 @@ def _install_process_job_defaults(
     job: dict,
     upload_root: Path,
 ):
-    """Install process job defaults.
+    """Install the process job defaults.
 
-    Inputs: `monkeypatch`, `job`, `upload_root`. Output: computed value.
+    Inputs: `monkeypatch` (pytest.MonkeyPatch) pytest monkeypatch fixture, `job` (dict),
+    `upload_root` (Path). Output: `tuple`.
     """
     saved_jobs: list[dict] = []
     job_state = {"job": job}
@@ -190,9 +191,9 @@ def _install_process_job_defaults(
     )
 
     def _save_job(payload):
-        """Save job.
+        """Save the job.
 
-        Inputs: `payload`. Output: bool.
+        Inputs: `payload` payload. Output: `bool`.
         """
         saved_jobs.append(copy.deepcopy(payload))
         job_state["job"] = payload
@@ -208,7 +209,7 @@ def test_core_function_remaining_helper_paths_cover_last_direct_branches(
 ):
     """Verify core function remaining helper paths cover last direct branches.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: `job_state['job']`.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in core function remaining helper paths cover last direct branches.
     """
     assert (
         core_functions._has_read_write_permissions(
@@ -387,9 +388,9 @@ def test_core_function_remaining_helper_paths_cover_last_direct_branches(
     monkeypatch.setattr(core_functions, "_resolve_job_batch_size", lambda job_dict: 1)
 
     def _update_job(job_id, mutator):
-        """Update job.
+        """Update the job.
 
-        Inputs: `job_id`, `mutator`. Output: `job_state['job']`.
+        Inputs: `job_id`, `mutator`. Output: update job result.
         """
         job_state["job"] = mutator(job_state["job"])
         return job_state["job"]
@@ -418,9 +419,9 @@ def test_core_function_remaining_helper_paths_cover_last_direct_branches(
 def test_process_import_job_returns_early_when_jobs_disappear_or_are_terminal(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """Verify process import job returns early when jobs disappear or are terminal.
+    """Verify process import job returns early when jobs disappear or are terminal result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in process import job returns early when jobs disappear or are terminal.
     """
     monkeypatch.setattr(core_functions, "_load_job", lambda job_id: None)
     core_functions._process_import_job("m" * 32)
@@ -448,7 +449,7 @@ def test_process_import_job_handles_group_lookup_close_warning_and_missing_uploa
 ):
     """Verify process import job handles group lookup close warning and missing upload root.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in process import job handles group lookup close warning and missing upload root.
     """
     job = _base_job("p" * 32)
     job["group_id"] = 17
@@ -477,9 +478,9 @@ def test_process_import_job_marks_jobs_error_when_dataset_preparation_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    """Verify process import job marks jobs error when dataset preparation fails.
+    """Confirm process import job marks jobs error when dataset preparation fails exposes the expected failure.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when process import job marks jobs error when dataset preparation fails stops reporting the expected error.
     """
     job = _base_job("q" * 32)
     upload_root = tmp_path / "uploads" / job["job_id"]
@@ -508,7 +509,7 @@ def test_process_import_job_cleans_up_import_payloads_and_unlinks_files(
 ):
     """Verify process import job cleans up import payloads and unlinks files.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in process import job cleans up import payloads and unlinks files.
     """
     job = _base_job("r" * 32)
     job["files"] = [{"relative_path": "demo.ome.tif", "size": 3, "status": "uploaded"}]
@@ -561,9 +562,9 @@ def test_process_import_job_reports_sem_edx_service_connection_failures(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    """Verify process import job reports sem edx service connection failures.
+    """Verify process import job reports SEM EDX service connection failures.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in process import job reports SEM EDX service connection failures.
     """
     job = _base_job("s" * 32)
     job["special_upload"] = "sem_edx_spectra"
@@ -587,10 +588,8 @@ def test_process_import_job_reuses_plot_cache_and_handles_reconnect_failures(
 ):
     """Verify process import job reuses plot cache and handles reconnect failures.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: `_Conn` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `monkeypatch` (pytest.MonkeyPatch) pytest monkeypatch fixture, `tmp_path`
+    (Path) temporary path fixture. Output: `_Conn` result. Raises: RuntimeError when validation or the called operation fails.
     """
     job = _base_job("t" * 32)
     job["special_upload"] = "sem_edx_spectra"
@@ -625,23 +624,22 @@ def test_process_import_job_reuses_plot_cache_and_handles_reconnect_failures(
     open_calls = {"count": 0}
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_Conn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("expired connection")
 
     def _open_service_connection(*args, **kwargs):
-        """Open service connection.
+        """Open the service connection.
 
-        Inputs: `*args`, `**kwargs`. Output: `_Conn` result. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `_Conn` result. Raises: RuntimeError when validation or external operations
+        fail.
         """
         open_calls["count"] += 1
         if open_calls["count"] == 1:
@@ -676,9 +674,9 @@ def test_process_import_job_logs_sem_edx_outer_exceptions(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ):
-    """Verify process import job logs sem edx outer exceptions.
+    """Verify process import job logs SEM EDX outer exceptions.
 
-    Inputs: `monkeypatch`, `tmp_path`, `caplog`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`, `caplog`. Output: fails on regressions in process import job logs SEM EDX outer exceptions.
     """
     job = _base_job("u" * 32)
     job["special_upload"] = "sem_edx_spectra"
@@ -724,7 +722,8 @@ def test_start_import_thread_covers_missing_job_and_thread_start_failures(
 ):
     """Verify start import thread covers missing job and thread start failures.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start import thread covers missing job and thread start failures.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     monkeypatch.setattr(core_functions, "_load_job", lambda job_id: None)
     core_functions._start_import_thread("v" * 32)
@@ -739,10 +738,10 @@ def test_start_import_thread_covers_missing_job_and_thread_start_failures(
     )
 
     class _BrokenThread:
-        """Represent broken thread."""
+        """Test double for broken thread behavior in this module."""
 
         def __init__(self, *args, **kwargs):
-            """Initialize the instance.
+            """Create `_BrokenThread` with its default state.
 
             Inputs: `*args`, `**kwargs`. Output: None.
             """
@@ -751,9 +750,9 @@ def test_start_import_thread_covers_missing_job_and_thread_start_failures(
 
         @staticmethod
         def start():
-            """Start the operation.
+            """Start `_BrokenThread`'s fake operation.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("thread start failed")
 
@@ -768,10 +767,10 @@ def test_process_import_job_handles_ngff_converter_mixed_outcomes_and_synthetic_
 ):
     """Verify process import job handles NGFF converter mixed outcomes and synthetic entries.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: `SimpleNamespace` result. Raises on
-    invalid or unavailable state.
-
-    invalid or unavailable state.
+    Inputs: `monkeypatch` (pytest.MonkeyPatch) pytest monkeypatch fixture, `tmp_path`
+    (Path) temporary path fixture. Output: `SimpleNamespace` result. Raises:
+    AssertionError, RuntimeError, TimeoutExpired when validation or external operations
+    fail.
     """
     job = _base_job("x" * 32)
     job["special_upload"] = "ngff_converter"
@@ -852,10 +851,8 @@ def test_process_import_job_handles_ngff_converter_mixed_outcomes_and_synthetic_
     def _run(cmd, timeout):
         """Return a fake conversion result for cmd and timeout.
 
-        Inputs: `cmd`, `timeout`. Output: `SimpleNamespace` result. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `cmd`, `timeout` timeout seconds. Output: `SimpleNamespace` result.
+        Raises: AssertionError, RuntimeError, TimeoutExpired when validation or external
         """
         source_name = Path(cmd[0]).name
         zarr_output = Path(cmd[1])
@@ -929,9 +926,9 @@ def test_process_import_job_marks_ngff_converter_jobs_error_when_every_conversio
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    """Verify process import job marks NGFF converter jobs error when every conversion fails.
+    """Confirm process import job marks NGFF converter jobs error when every conversion fails exposes the expected failure.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when process import job marks NGFF converter jobs error when every conversion fails stops reporting the expected error.
     """
     job = _base_job("y" * 32)
     job["special_upload"] = "ngff_converter"

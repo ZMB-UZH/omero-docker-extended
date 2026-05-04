@@ -39,18 +39,18 @@ from omeroweb_import.views.core_functions import (  # noqa: E402
 
 
 def _write_text(path: Path, payload: dict) -> None:
-    """Write text.
+    """Write the text.
 
-    Inputs: `path`, `payload`. Output: None.
+    Inputs: `path` (Path) path, `payload` (dict) payload. Output: None.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _write_chunk(path: Path, payload: bytes = b"\x00") -> None:
-    """Write chunk.
+    """Write the chunk.
 
-    Inputs: `path`, `payload`. Output: None.
+    Inputs: `path` (Path) path, `payload` (bytes) payload. Output: None.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(payload)
@@ -59,9 +59,9 @@ def _write_chunk(path: Path, payload: bytes = b"\x00") -> None:
 def _write_blosc_chunk(
     path: Path, shape: tuple[int, ...], dtype: str = "uint16"
 ) -> None:
-    """Write blosc chunk.
+    """Write the blosc chunk.
 
-    Inputs: `path`, `shape`, `dtype`. Output: None.
+    Inputs: `path` (Path) path, `shape` (tuple[int, ...]), `dtype` (str). Output: None.
     """
     raw = np.zeros(shape, dtype=np.dtype(dtype)).tobytes(order="C")
     codec = Blosc(cname="lz4", clevel=5, shuffle=1)
@@ -116,9 +116,9 @@ def _make_multiscale_ome_zarr(zarr_dir: Path, dataset_paths: list[str]) -> Path:
 
 
 def _make_bioformats2raw_layout(zarr_dir: Path, series_names: list[str]) -> Path:
-    """Bioformats2raw layout.
+    """Create the bioformats2raw layout.
 
-    Inputs: `zarr_dir`, `series_names`. Output: `Path`.
+    Inputs: `zarr_dir` (Path), `series_names` (list[str]). Output: `Path`.
     """
     _write_text(zarr_dir / ".zattrs", {"bioformats2raw.layout": 3})
     _write_text(zarr_dir / ".zgroup", {"zarr_format": 2})
@@ -205,7 +205,7 @@ def _make_large_blosc_image_store(zarr_dir: Path) -> Path:
 
 
 class TestNativeZarrNormalization:
-    """Represent test native Zarr normalization."""
+    """Test double for test native Zarr normalization behavior in this module."""
 
     @staticmethod
     def test_prepare_native_zarr_copy_accepts_multiscale_ome_zarr_without_rewriting(
@@ -213,7 +213,7 @@ class TestNativeZarrNormalization:
     ):
         """Verify prepare native Zarr copy accepts multiscale ome Zarr without rewriting.
 
-        Inputs: `tmp_path`. Output: None.
+        Inputs: pytest provides `tmp_path`. Output: fails on regressions in prepare native Zarr copy accepts multiscale ome Zarr without rewriting.
         """
         zarr_dir = _make_multiscale_ome_zarr(
             tmp_path / "image.ome.zarr", ["s0", "s1", "s2"]
@@ -238,7 +238,7 @@ class TestNativeZarrNormalization:
     ):
         """Verify prepare native Zarr copy rewrites large blosc image arrays to gzip.
 
-        Inputs: `tmp_path`. Output: None.
+        Inputs: pytest provides `tmp_path`. Output: fails on regressions in prepare native Zarr copy rewrites large blosc image arrays to gzip.
         """
         zarr_dir = _make_large_blosc_image_store(tmp_path / "image.ome.zarr")
 
@@ -254,7 +254,7 @@ class TestNativeZarrNormalization:
     def test_prepare_native_zarr_copy_rewrites_only_referenced_image_arrays(tmp_path):
         """Verify prepare native Zarr copy rewrites only referenced image arrays.
 
-        Inputs: `tmp_path`. Output: None.
+        Inputs: pytest provides `tmp_path`. Output: fails on regressions in prepare native Zarr copy rewrites only referenced image arrays.
         """
         zarr_dir = _make_large_blosc_image_store(tmp_path / "image.ome.zarr")
         _write_text(
@@ -298,7 +298,7 @@ class TestNativeZarrNormalization:
     ):
         """Verify prepare native Zarr copy rewrites supported bioformats2raw series arrays.
 
-        Inputs: `tmp_path`. Output: None.
+        Inputs: pytest provides `tmp_path`. Output: fails on regressions in prepare native Zarr copy rewrites supported bioformats2raw series arrays.
         """
         zarr_dir = _make_bioformats2raw_layout(tmp_path / "bf2raw.ome.zarr", ["0", "1"])
         for series_name in ("0", "1"):
@@ -335,9 +335,9 @@ class TestNativeZarrNormalization:
 
     @staticmethod
     def test_prepare_native_zarr_copy_rejects_sparse_bioformats2raw_layout(tmp_path):
-        """Verify prepare native Zarr copy rejects sparse bioformats2raw layout.
+        """Confirm prepare native Zarr copy rejects sparse bioformats2raw layout is rejected at the boundary.
 
-        Inputs: `tmp_path`. Output: None.
+        Inputs: pytest provides `tmp_path`. Output: fails on regressions in prepare native Zarr copy rejects sparse bioformats2raw layout.
         """
         zarr_dir = _make_bioformats2raw_layout(
             tmp_path / "bf2raw-gap.ome.zarr", ["0", "2"]
@@ -350,9 +350,9 @@ class TestNativeZarrNormalization:
 
     @staticmethod
     def test_validate_native_ome_ngff_zarr_rejects_plate_layout(tmp_path):
-        """Verify validate native ome NGFF Zarr rejects plate layout.
+        """Confirm validate native ome NGFF Zarr rejects plate layout is rejected at the boundary.
 
-        Inputs: `tmp_path`. Output: None.
+        Inputs: pytest provides `tmp_path`. Output: fails on regressions in validate native ome NGFF Zarr rejects plate layout.
         """
         zarr_dir = tmp_path / "plate.ome.zarr"
         _write_text(

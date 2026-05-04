@@ -27,7 +27,7 @@ NODE_ARCHIVE_RE = re.compile(
 
 
 def load_manifest() -> dict[str, object]:
-    """Load manifest.
+    """Load the manifest.
 
     Inputs: none. Output: `dict[str, object]`.
     """
@@ -69,7 +69,7 @@ def default_node_dir(version: str, arch: str) -> Path:
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse args.
+    """Parse command-line arguments for `tools.frontend_preview_tooling`.
 
     Inputs: none. Output: `argparse.Namespace`.
     """
@@ -140,7 +140,8 @@ def parse_args() -> argparse.Namespace:
 def ensure_command_available(command: str) -> str:
     """Return the absolute path for a required host command.
 
-    Inputs: `command`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `command` (str). Output: `str`. Raises: RuntimeError when validation or
+    external operations fail.
     """
     command_path = shutil.which(command)
     if not command_path:
@@ -151,7 +152,8 @@ def ensure_command_available(command: str) -> str:
 def ensure_node_version(manifest: dict[str, object]) -> None:
     """Verify that host Node.js exactly matches the pinned LTS version.
 
-    Inputs: `manifest`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `manifest` (dict[str, object]). Output: None. Raises: RuntimeError when validation
+    or the called operation fails.
     """
     node_bin = ensure_command_available("node")
     ensure_command_available("npm")
@@ -188,9 +190,9 @@ def build_package_json(manifest: dict[str, object]) -> dict[str, object]:
 
 
 def write_package_json(tool_dir: Path, manifest: dict[str, object]) -> bool:
-    """Write package JSON.
+    """Write the package JSON.
 
-    Inputs: `tool_dir`, `manifest`. Output: `bool`.
+    Inputs: `tool_dir` (Path), `manifest` (dict[str, object]). Output: `bool`.
     """
     package_json_path = tool_dir / "package.json"
     desired = build_package_json(manifest)
@@ -232,7 +234,7 @@ def ensure_tooling(tool_dir: Path, manifest: dict[str, object]) -> Path:
 def node_linux_arch() -> str:
     """Return the official Node.js Linux binary arch for this host.
 
-    Inputs: none. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `str`. Raises: RuntimeError for the exercised failure path.
     """
     if sys.platform != "linux":
         raise RuntimeError(
@@ -250,10 +252,10 @@ def node_linux_arch() -> str:
 
 
 def node_release_path(version: str, filename: str) -> str:
-    """Return a validated Node.js release download path.
+    """Return the node release path.
 
-    Inputs: `version`, `filename`. Output: `str`. Raises on invalid or unavailable
-    state.
+    Inputs: `version` (str), `filename` (str). Output: `str`. Raises: RuntimeError when
+    validation or the called operation fails.
     """
     if not NODE_VERSION_RE.fullmatch(version):
         raise RuntimeError(f"Invalid Node.js version in manifest: {version}.")
@@ -269,8 +271,8 @@ def node_release_path(version: str, filename: str) -> str:
 def download_node_release_file(version: str, filename: str, destination: Path) -> None:
     """Download a validated Node.js release artifact from the official host.
 
-    Inputs: `version`, `filename`, `destination`. Output: None. Raises on invalid or
-    unavailable state.
+    Inputs: `version` (str), `filename` (str), `destination` (Path). Output: None.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     path = node_release_path(version, filename)
     curl_bin = ensure_command_available("curl")
@@ -318,10 +320,10 @@ def sha256_hex(path: Path) -> str:
 
 
 def expected_sha256(shasums_path: Path, filename: str) -> str:
-    """Return the expected digest for a Node.js release artifact.
+    """Return the expected sha256.
 
-    Inputs: `shasums_path`, `filename`. Output: `str`. Raises on invalid or unavailable
-    state.
+    Inputs: `shasums_path` (Path), `filename` (str). Output: `str`. Raises: RuntimeError
+    when validation or the called operation fails.
     """
     for line in shasums_path.read_text(encoding="utf-8").splitlines():
         digest, separator, artifact_name = line.partition("  ")
@@ -333,8 +335,8 @@ def expected_sha256(shasums_path: Path, filename: str) -> str:
 def verify_sha256(archive_path: Path, shasums_path: Path, filename: str) -> None:
     """Verify the downloaded Node.js archive against official SHA-256 data.
 
-    Inputs: `archive_path`, `shasums_path`, `filename`. Output: None. Raises on invalid
-    or unavailable state.
+    Inputs: `archive_path` (Path), `shasums_path` (Path), `filename` (str). Output:
+    None. Raises: RuntimeError when validation or the called operation fails.
     """
     expected = expected_sha256(shasums_path, filename)
     actual = sha256_hex(archive_path)
@@ -359,7 +361,8 @@ def is_relative_to(path: Path, parent: Path) -> bool:
 def tar_member_kind(member: tarfile.TarInfo) -> str:
     """Return the supported archive member kind or reject it.
 
-    Inputs: `member`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `member` (tarfile.TarInfo). Output: `str`. Raises: RuntimeError when validation or
+    the called operation fails.
     """
     if member.isfile():
         return "file"
@@ -377,8 +380,8 @@ def checked_member_path(
 ) -> Path:
     """Return the destination path for a tar member after containment checks.
 
-    Inputs: `member`, `destination`, `destination_root`. Output: `Path`. Raises on
-    invalid or unavailable state.
+    Inputs: `member` (tarfile.TarInfo), `destination` (Path), `destination_root` (Path).
+    Output: `Path`. Raises: RuntimeError when validation or the called operation fails.
     """
     member_path = (destination / member.name).resolve()
     if not is_relative_to(member_path, destination_root):
@@ -394,8 +397,9 @@ def checked_link_target(
 ) -> None:
     """That a symlink or hard link remains inside the extraction root.
 
-    Inputs: `member`, `member_path`, `destination`, `destination_root`. Output: None.
-    Raises on invalid or unavailable state.
+    Inputs: `member` (tarfile.TarInfo), `member_path` (Path), `destination` (Path),
+    `destination_root` (Path). Output: None. Raises: RuntimeError when validation or
+    external operations fail.
     """
     link_target = Path(member.linkname)
     if link_target.is_absolute():
@@ -407,9 +411,9 @@ def checked_link_target(
 
 
 def extract_directory_member(member: tarfile.TarInfo, member_path: Path) -> None:
-    """Extract directory member.
+    """Extract the directory member.
 
-    Inputs: `member`, `member_path`. Output: None.
+    Inputs: `member` (tarfile.TarInfo), `member_path` (Path). Output: None.
     """
     member_path.mkdir(parents=True, exist_ok=True)
     os.chmod(member_path, member.mode & 0o777)
@@ -420,8 +424,9 @@ def extract_file_member(
 ) -> None:
     """Extract one regular file member after overwrite checks.
 
-    Inputs: `archive`, `member`, `member_path`. Output: None. Raises on invalid or
-    unavailable state.
+    Inputs: `archive` (tarfile.TarFile), `member` (tarfile.TarInfo), `member_path`
+    (Path). Output: None. Raises: RuntimeError when validation or external operations
+    fail.
     """
     if member_path.exists() or member_path.is_symlink():
         raise RuntimeError(f"Refusing to overwrite archive member: {member.name}")
@@ -437,10 +442,10 @@ def extract_file_member(
 def create_link_member(
     member: tarfile.TarInfo, member_path: Path, destination: Path
 ) -> None:
-    """Create link member.
+    """Create the link member.
 
-    Inputs: `member`, `member_path`, `destination`. Output: None. Raises on invalid or
-    unavailable state.
+    Inputs: `member` (tarfile.TarInfo), `member_path` (Path), `destination` (Path).
+    Output: None. Raises: RuntimeError when validation or the called operation fails.
     """
     if member_path.exists() or member_path.is_symlink():
         raise RuntimeError(f"Refusing to overwrite archive link: {member.name}")
@@ -496,10 +501,10 @@ def installed_node_version(node_dir: Path) -> str | None:
 
 
 def install_pinned_node(node_dir: Path, version: str) -> Path:
-    """Install the manifest-pinned Linux Node.js binary under node_dir.
+    """Return the install pinned node.
 
-    Inputs: `node_dir`, `version`. Output: `Path`. Raises on invalid or unavailable
-    state.
+    Inputs: `node_dir` (Path), `version` (str). Output: `Path`. Raises: RuntimeError
+    when validation or the called operation fails.
     """
     arch = node_linux_arch()
     required_version = f"v{version}"
@@ -557,10 +562,10 @@ def print_node_install_status(
 
 
 def wrapped_binary(tool_dir: Path, command_name: str) -> Path:
-    """Return the bin path for the wrapped frontend command.
+    """Resolve an installed package command from the pinned Node tool tree.
 
-    Inputs: `tool_dir`, `command_name`. Output: `Path`. Raises on invalid or unavailable
-    state.
+    Inputs: `tool_dir` (Path), `command_name` (str). Output: executable `Path`.
+    Raises: RuntimeError when the npm wrapper was not installed.
     """
     suffix = ".cmd" if os.name == "nt" else ""
     binary = tool_dir / "node_modules" / ".bin" / f"{command_name}{suffix}"
@@ -576,8 +581,8 @@ def print_bootstrap_status(
 ) -> None:
     """Emit the resolved tooling status after bootstrap.
 
-    Inputs: `tool_dir`, `manifest`, `as_json`. Output: None. Raises on invalid or
-    unavailable state.
+    Inputs: `tool_dir` (Path), `manifest` (dict[str, object]), `as_json` (bool). Output:
+    None. Raises: RuntimeError when validation or the called operation fails.
     """
     dependencies = manifest.get("dependencies", {})
     if not isinstance(dependencies, dict):
@@ -614,7 +619,7 @@ def run_wrapped_command(
 
 
 def main() -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.frontend_preview_tooling` command entrypoint.
 
     Inputs: none. Output: `int`.
     """

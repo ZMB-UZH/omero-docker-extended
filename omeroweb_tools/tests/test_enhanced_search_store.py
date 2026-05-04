@@ -8,25 +8,25 @@ from omeroweb_tools.services import enhanced_search_store as store
 
 
 class _SearchCursor:
-    """Represent search cursor."""
+    """Test double for search cursor behavior in this module."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_SearchCursor` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.executed = []
         self._fetchone_calls = 0
 
     def execute(self, sql, params=None):
-        """Execute the query or command.
+        """Execute `_SearchCursor`'s captured query or command.
 
         Inputs: `sql`, `params`. Output: None.
         """
         self.executed.append({"raw_sql": sql, "sql_text": str(sql), "params": params})
 
     def fetchone(self):
-        """Return one result row.
+        """Return one result row from `_SearchCursor`.
 
         Inputs: none. Output: tuple or None.
         """
@@ -71,14 +71,14 @@ class _SearchCursor:
         ]
 
     def __enter__(self):
-        """Enter the context manager.
+        """Enter `_SearchCursor`'s context-managed fake resource.
 
         Inputs: none. Output: `self`.
         """
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        """Exit the context manager.
+        """Exit `_SearchCursor`'s context-managed fake resource.
 
         Inputs: `exc_type`, `exc`, `tb`. Output: bool.
         """
@@ -86,12 +86,12 @@ class _SearchCursor:
 
 
 class _SearchConn:
-    """Represent search conn."""
+    """Test double for search conn behavior in this module."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_SearchConn` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.cursor_obj = _SearchCursor()
 
@@ -104,10 +104,10 @@ class _SearchConn:
 
 
 class _SettingsCursor:
-    """Represent settings cursor."""
+    """Test double for settings cursor behavior in this module."""
 
     def __init__(self, rows):
-        """Initialize the instance.
+        """Create `_SettingsCursor` with `rows`.
 
         Inputs: `rows`. Output: None.
         """
@@ -116,7 +116,7 @@ class _SettingsCursor:
         self.rowcount = 0
 
     def execute(self, sql, params=None):
-        """Execute the query or command.
+        """Execute `_SettingsCursor`'s captured query or command.
 
         Inputs: `sql`, `params`. Output: None.
         """
@@ -124,9 +124,9 @@ class _SettingsCursor:
         self.rowcount = 0
 
     def fetchone(self):
-        """Return one result row.
+        """Return one result row from `_SettingsCursor`.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: fetchone result.
         """
         return self.rows.pop(0) if self.rows else None
 
@@ -139,14 +139,14 @@ class _SettingsCursor:
         return []
 
     def __enter__(self):
-        """Enter the context manager.
+        """Enter `_SettingsCursor`'s context-managed fake resource.
 
         Inputs: none. Output: `self`.
         """
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        """Exit the context manager.
+        """Exit `_SettingsCursor`'s context-managed fake resource.
 
         Inputs: `exc_type`, `exc`, `tb`. Output: bool.
         """
@@ -154,10 +154,10 @@ class _SettingsCursor:
 
 
 class _SettingsConn:
-    """Represent settings conn."""
+    """Test double for settings conn behavior in this module."""
 
     def __init__(self, cursor):
-        """Initialize the instance.
+        """Create `_SettingsConn` with `cursor`.
 
         Inputs: `cursor`. Output: None.
         """
@@ -172,20 +172,21 @@ class _SettingsConn:
         return self.cursor_obj
 
     def commit(self):
-        """Commit the transaction.
+        """Commit `_SettingsConn`'s fake transaction.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.commits += 1
 
 
 class _PlaceholderCheckingCursor(_SettingsCursor):
-    """Represent placeholder checking cursor."""
+    """Test double for placeholder checking cursor behavior in this module."""
 
     def execute(self, sql, params=None):
-        """Execute the query or command.
+        """Execute `_PlaceholderCheckingCursor`'s captured query or command.
 
-        Inputs: `sql`, `params`. Output: None. Raises on invalid or unavailable state.
+        Inputs: `sql` SQL text, `params` SQL parameters. Output: None. Raises: TypeError
+        when validation or the called operation fails.
         """
         sql_text = str(sql)
         placeholder_count = sql_text.count("%s")
@@ -200,10 +201,8 @@ class _PlaceholderCheckingCursor(_SettingsCursor):
 def test_connect_does_not_wrap_exceptions_raised_inside_with_block(monkeypatch):
     """Verify connect does not wrap exceptions raised inside with block.
 
-    Inputs: `monkeypatch`. Output: `_FakeConn` result. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in connect does not wrap exceptions raised inside with block.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     closed = []
     credential_value = "-".join(("db", "credential", "placeholder"))
@@ -213,9 +212,9 @@ def test_connect_does_not_wrap_exceptions_raised_inside_with_block(monkeypatch):
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_FakeConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             closed.append(True)
 
@@ -224,7 +223,7 @@ def test_connect_does_not_wrap_exceptions_raised_inside_with_block(monkeypatch):
 
         @staticmethod
         def connect(**kwargs):
-            """Open the connection.
+            """Open the connection for `_FakePsycopg`.
 
             Inputs: `**kwargs`. Output: `_FakeConn` result.
             """
@@ -258,7 +257,7 @@ def test_connect_does_not_wrap_exceptions_raised_inside_with_block(monkeypatch):
 def test_search_index_rows_short_circuits_for_no_visible_groups(monkeypatch):
     """Verify search index rows short circuits for no visible groups.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in search index rows short circuits for no visible groups.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
 
@@ -277,9 +276,9 @@ def test_search_index_rows_short_circuits_for_no_visible_groups(monkeypatch):
 
 
 def test_search_index_rows_returns_no_rows_for_non_compilable_text(monkeypatch):
-    """Verify search index rows returns no rows for non compilable text.
+    """Verify search index rows returns no rows for non compilable text result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in search index rows returns no rows for non compilable text.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
 
@@ -298,9 +297,9 @@ def test_search_index_rows_returns_no_rows_for_non_compilable_text(monkeypatch):
 
 
 def test_search_index_rows_builds_permission_and_date_aware_sql(monkeypatch):
-    """Verify search index rows builds permission and date aware sql.
+    """Verify the search index rows builds permission and date aware SQL safety boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when search index rows builds permission and date aware SQL accepts unsafe input.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     conn = _SearchConn()
@@ -363,7 +362,7 @@ def test_search_index_rows_builds_permission_and_date_aware_sql(monkeypatch):
 def test_load_user_settings_merges_defaults(monkeypatch):
     """Verify load user settings merges defaults.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in load user settings merges defaults.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _SettingsCursor([({"acquisition_metadata_enabled": True},)])
@@ -380,20 +379,20 @@ def test_load_user_settings_merges_defaults(monkeypatch):
 
 
 def test_save_user_settings_raises_when_persistence_cannot_be_verified(monkeypatch):
-    """Verify save user settings raises when persistence cannot be verified.
+    """Confirm save user settings raises when persistence cannot be verified exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: dict.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when save user settings raises when persistence cannot be verified stops reporting the expected error.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
 
     class _Extras:
-        """Represent extras."""
+        """Test double for extras behavior in this module."""
 
         @staticmethod
         def Json(payload):
-            """JSON.
+            """Return the JSON for `_Extras`.
 
-            Inputs: `payload`. Output: dict.
+            Inputs: `payload` payload. Output: `dict`.
             """
             return {"wrapped": payload}
 
@@ -413,9 +412,9 @@ def test_save_user_settings_raises_when_persistence_cannot_be_verified(monkeypat
 
 
 def test_clear_scope_index_deletes_only_selected_scope_and_prunes_orphans(monkeypatch):
-    """Verify clear scope index deletes only selected scope and prunes orphans.
+    """Check clear scope index deletes only selected scope and prunes orphans cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in clear scope index deletes only selected scope and prunes orphans.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _SettingsCursor([])
@@ -424,9 +423,9 @@ def test_clear_scope_index_deletes_only_selected_scope_and_prunes_orphans(monkey
     pruned = []
 
     def _execute(sql, params=None):
-        """Execute.
+        """Execute the execute.
 
-        Inputs: `sql`, `params`. Output: None.
+        Inputs: `sql` SQL text, `params` SQL parameters. Output: None.
         """
         cursor.executed.append({"raw_sql": sql, "sql_text": str(sql), "params": params})
         cursor.rowcount = 4 if "DELETE FROM" in str(sql) else 1
@@ -453,9 +452,9 @@ def test_clear_scope_index_deletes_only_selected_scope_and_prunes_orphans(monkey
 
 
 def test_sync_run_is_active_checks_running_state_with_matching_token(monkeypatch):
-    """Verify sync run is active checks running state with matching token.
+    """Check that sync run is active checks running state with matching token keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in sync run is active checks running state with matching token.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _SettingsCursor([(1,), None])
@@ -470,7 +469,7 @@ def test_ensure_sync_state_rows_does_not_refresh_updated_at_for_existing_rows(
 ):
     """Verify ensure sync state rows does not refresh updated at for existing rows.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in ensure sync state rows does not refresh updated at for existing rows.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _SettingsCursor([])
@@ -505,7 +504,7 @@ def test_ensure_sync_state_rows_does_not_refresh_updated_at_for_existing_rows(
 def test_try_start_scope_sync_placeholder_count_matches_params(monkeypatch):
     """Verify try start scope sync placeholder count matches params.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in try start scope sync placeholder count matches params.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
     cursor = _PlaceholderCheckingCursor([("running", "run-token")])

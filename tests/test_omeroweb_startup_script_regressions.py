@@ -20,9 +20,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `OmeroWebStartupScriptRegressionTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.config_script = cls.repo_root / "startup" / "50-config.py"
@@ -33,9 +33,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _make_fake_omero(workspace: Path) -> tuple[Path, Path]:
-        """Fake OMERO.
+        """Create the fake OMERO for `OmeroWebStartupScriptRegressionTests`.
 
-        Inputs: `workspace`. Output: `tuple[Path, Path]`.
+        Inputs: `workspace` (Path). Output: `tuple[Path, Path]`.
         """
         calls_file = workspace / "omero-calls.log"
         fake_omero = workspace / "omero"
@@ -80,9 +80,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
         return fake_python, calls_file
 
     def test_50_config_applies_globbed_files_and_config_env_overrides(self) -> None:
-        """Verify 50 config applies globbed files and config environment overrides.
+        """Verify 50 config applies globbed files and config env overrides.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in 50 config applies globbed files and config env overrides.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -119,7 +119,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
     def test_50_config_sets_empty_values_from_file(self) -> None:
         """Verify 50 config sets empty values from file.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in 50 config sets empty values from file.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -150,7 +150,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
     def test_50_config_auto_detects_config_glob_from_omero_binary(self) -> None:
         """Verify 50 config auto detects config glob from OMERO binary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in 50 config auto detects config glob from OMERO binary.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -190,9 +190,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             self.assertIn(f"load --glob {config_dir}/*.omero", calls)
 
     def test_50_config_normalizes_legacy_plugin_aliases_before_apply(self) -> None:
-        """Verify 50 config normalizes legacy plugin aliases before apply.
+        """Check 50 config normalizes legacy plugin aliases before apply parsing against the documented contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in 50 config normalizes legacy plugin aliases before apply.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -243,9 +243,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             self.assertNotIn("omeroweb_upload", top_links_call)
 
     def test_50_config_fails_fast_when_app_modules_are_missing(self) -> None:
-        """Verify 50 config fails fast when app modules are missing.
+        """Confirm 50 config fails fast when app modules are missing exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in 50 config fails fast when app modules are missing.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -284,7 +284,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
     def test_60_default_web_config_uses_dynamic_omero_binary(self) -> None:
         """Verify 60 default web config uses dynamic OMERO binary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in 60 default web config uses dynamic OMERO binary.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -309,9 +309,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             )
 
     def test_98_cleanprevious_removes_stale_pid_file(self) -> None:
-        """Verify 98 cleanprevious removes stale project ID file.
+        """Check 98 cleanprevious removes stale pid file cleanup behavior.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in 98 cleanprevious removes stale pid file.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -334,7 +334,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
     ) -> None:
         """Verify dockerfile replaces inherited startup scripts with repo managed versions.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in dockerfile replaces inherited startup scripts with repo managed versions.
         """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-web.Dockerfile"

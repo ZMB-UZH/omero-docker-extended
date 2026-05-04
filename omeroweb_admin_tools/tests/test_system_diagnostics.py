@@ -8,9 +8,10 @@ from omeroweb_admin_tools.services.system_diagnostics import serialize_scripts
 
 
 def _result(check_id: str, label: str, status: str) -> DiagnosticCheckResult:
-    """Return result.
+    """Return the result.
 
-    Inputs: `check_id`, `label`, `status`. Output: `DiagnosticCheckResult`.
+    Inputs: `check_id` (str), `label` (str), `status` (str) status. Output:
+    `DiagnosticCheckResult`.
     """
     return DiagnosticCheckResult(
         check_id=check_id,
@@ -25,7 +26,7 @@ def _result(check_id: str, label: str, status: str) -> DiagnosticCheckResult:
 def test_serialize_scripts_exposes_operator_metadata() -> None:
     """Verify serialize scripts exposes operator metadata.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in serialize scripts exposes operator metadata.
     """
     payload = serialize_scripts()
 
@@ -35,9 +36,9 @@ def test_serialize_scripts_exposes_operator_metadata() -> None:
 
 
 def test_run_diagnostic_script_unknown_id() -> None:
-    """Verify run diagnostic script unknown ID.
+    """Verify the run diagnostic script unknown ID execution contract.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in run diagnostic script unknown ID integration.
     """
     payload = run_diagnostic_script("not_a_script")
 
@@ -47,9 +48,9 @@ def test_run_diagnostic_script_unknown_id() -> None:
 
 
 def test_run_diagnostic_script_end_to_end_contains_checks(monkeypatch) -> None:
-    """Verify run diagnostic script end to end contains checks.
+    """Verify the run diagnostic script end to end contains checks execution contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in run diagnostic script end to end contains checks integration.
     """
     monkeypatch.setattr(
         system_diagnostics,
@@ -71,9 +72,9 @@ def test_run_diagnostic_script_end_to_end_contains_checks(monkeypatch) -> None:
 
 
 def test_compose_check_reports_docker_runtime_error(monkeypatch) -> None:
-    """Verify compose check reports docker runtime error.
+    """Confirm compose check reports docker runtime error exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when compose check reports docker runtime error stops reporting the expected error.
     """
     monkeypatch.setattr(
         system_diagnostics,
@@ -96,7 +97,7 @@ def test_compose_check_reports_docker_runtime_error(monkeypatch) -> None:
 def test_compose_check_passes_with_running_healthy_container(monkeypatch) -> None:
     """Verify compose check passes with running healthy container.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in compose check passes with running healthy container.
     """
     monkeypatch.setattr(
         system_diagnostics,
@@ -124,7 +125,7 @@ def test_compose_check_passes_with_running_healthy_container(monkeypatch) -> Non
 def test_direct_pg_test_passes_with_select_one(monkeypatch) -> None:
     """Verify direct pg test passes with select one.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in direct pg test passes with select one.
     """
     profile = DatabaseRuntimeProfile(
         host="database",
@@ -149,9 +150,9 @@ def test_direct_pg_test_passes_with_select_one(monkeypatch) -> None:
 
 
 def test_direct_pg_test_fails_when_password_missing() -> None:
-    """Verify direct pg test fails when password missing.
+    """Confirm direct pg test fails when password missing exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in direct pg test fails when password missing.
     """
     profile = DatabaseRuntimeProfile(
         host="database",
@@ -171,9 +172,9 @@ def test_direct_pg_test_fails_when_password_missing() -> None:
 
 
 def test_run_diagnostic_script_includes_script_metadata(monkeypatch) -> None:
-    """Verify run diagnostic script includes script metadata.
+    """Verify the run diagnostic script includes script metadata execution contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in run diagnostic script includes script metadata integration.
     """
     monkeypatch.setattr(
         system_diagnostics,
@@ -190,9 +191,9 @@ def test_run_diagnostic_script_includes_script_metadata(monkeypatch) -> None:
 
 
 def test_run_diagnostic_script_hides_internal_exception_text(monkeypatch) -> None:
-    """Verify run diagnostic script hides internal exception text.
+    """Confirm run diagnostic script hides internal exception text exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when run diagnostic script hides internal exception text stops reporting the expected error.
     """
     monkeypatch.setattr(
         system_diagnostics,

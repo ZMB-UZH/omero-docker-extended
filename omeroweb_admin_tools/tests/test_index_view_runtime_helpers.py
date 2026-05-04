@@ -20,10 +20,10 @@ LOKI_URL = "https://loki.example.test:3100"
 
 
 class _HttpResponseStub:
-    """Represent HTTP response stub."""
+    """Test double for HTTP response stub behavior in this module."""
 
     def __init__(self, status: int, payload: bytes):
-        """Initialize the instance.
+        """Create `_HttpResponseStub` with `status` and `payload`.
 
         Inputs: `status`, `payload`. Output: None.
         """
@@ -31,14 +31,14 @@ class _HttpResponseStub:
         self._payload = payload
 
     def __enter__(self):
-        """Enter the context manager.
+        """Enter `_HttpResponseStub`'s context-managed fake resource.
 
         Inputs: none. Output: `self`.
         """
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        """Exit the context manager.
+        """Exit `_HttpResponseStub`'s context-managed fake resource.
 
         Inputs: `exc_type`, `exc`, `tb`. Output: bool.
         """
@@ -53,7 +53,7 @@ class _HttpResponseStub:
 
 
 class _RequestsResponseStub:
-    """Represent requests response stub."""
+    """Test double for requests response stub behavior in this module."""
 
     def __init__(
         self,
@@ -62,7 +62,7 @@ class _RequestsResponseStub:
         payload: bytes = b"",
         headers: dict[str, str] | None = None,
     ):
-        """Initialize the instance.
+        """Create `_RequestsResponseStub` with `status_code`.
 
         Inputs: `status_code`, `payload`, `headers`. Output: None.
         """
@@ -83,10 +83,10 @@ class _RequestsResponseStub:
 
 
 class _DockerConnection:
-    """Represent docker connection."""
+    """Test double for docker connection behavior in this module."""
 
     def __init__(self, response=None, request_error: Exception | None = None):
-        """Initialize the instance.
+        """Create `_DockerConnection` with `response` and `request_error`.
 
         Inputs: `response`, `request_error`. Output: None.
         """
@@ -96,9 +96,9 @@ class _DockerConnection:
         self.closed = False
 
     def request(self, method, path):
-        """Request.
+        """Request the request for `_DockerConnection`.
 
-        Inputs: `method`, `path`. Output: None. Raises on invalid or unavailable state.
+        Inputs: `method`, `path` path. Output: None. Raises: _request_error when validation or the called operation fails.
         """
         if self._request_error is not None:
             raise self._request_error
@@ -112,25 +112,26 @@ class _DockerConnection:
         return self._response
 
     def close(self):
-        """Close the resource.
+        """Close `_DockerConnection`'s fake resource handle.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.closed = True
 
 
 def _payload(response):
-    """Payload.
+    """Return the payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) -> None:
-    """Verify environment probe and prometheus helpers cover runtime failures.
+    """Verify env probe and prometheus helpers cover runtime failures.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in env probe and prometheus helpers cover runtime failures.
+    when validation or the called operation fails.
     """
     monkeypatch.setenv("ADMIN_TOOLS_SAMPLE_INT", "12")
     assert index_view._to_int_env("ADMIN_TOOLS_SAMPLE_INT", 5) == 12
@@ -194,12 +195,9 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
     seen = []
 
     def _query_metric(_base_url, expr):
-        """Query metric.
+        """Query the metric.
 
-        Inputs: `_base_url`, `expr`. Output: 7.0. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: `_base_url`, `expr`. Output: `float`. Raises: RuntimeError when validation or the called operation fails.
         """
         seen.append(expr)
         if "network_receive" in expr:
@@ -217,7 +215,7 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
 def test_internal_service_base_url_builds_valid_defaults(monkeypatch) -> None:
     """Verify internal service base URL builds valid defaults.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in internal service base URL builds valid defaults.
     """
     monkeypatch.delenv("ADMIN_TOOLS_GRAFANA_URL", raising=False)
     monkeypatch.delenv("ADMIN_TOOLS_PROMETHEUS_URL", raising=False)
@@ -255,7 +253,7 @@ def test_internal_service_base_url_builds_valid_defaults(monkeypatch) -> None:
 def test_collect_recently_seen_services_and_parse_since_ns() -> None:
     """Verify collect recently seen services and parse since ns.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in collect recently seen services and parse since ns.
     """
     response = _RequestsResponseStub(
         200,
@@ -300,7 +298,7 @@ def test_logs_view_and_internal_log_labels_cover_configuration_paths(
 ) -> None:
     """Verify logs view and internal log labels cover configuration paths.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in logs view and internal log labels cover configuration paths.
     """
     request = RequestFactory().get("/admin_tools/logs/")
     monkeypatch.setattr(
@@ -383,7 +381,7 @@ def test_docker_compose_and_api_helpers_cover_json_and_socket_errors(
 ) -> None:
     """Verify docker compose and API helpers cover JSON and socket errors.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in docker compose and API helpers cover JSON and socket errors.
     """
     monkeypatch.setattr(
         index_view.subprocess,
@@ -449,7 +447,8 @@ def test_docker_diagnostics_and_compose_health_helpers_cover_inspection_paths(
 ) -> None:
     """Verify docker diagnostics and compose health helpers cover inspection paths.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in docker diagnostics and compose health helpers cover inspection paths.
+    AssertionError when validation or the called operation fails.
     """
     monkeypatch.setenv("ADMIN_TOOLS_DOCKER_SOCKET", "/var/run/docker.sock")
     monkeypatch.setattr(index_view.os.path, "exists", lambda path: True)
@@ -463,12 +462,10 @@ def test_docker_diagnostics_and_compose_health_helpers_cover_inspection_paths(
     )
 
     def _docker_api(path, timeout_seconds=3.0):
-        """Docker API.
+        """Return the docker API.
 
-        Inputs: `path`, `timeout_seconds`. Output: computed value. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `path` path, `timeout_seconds`. Output: `list`. Raises: AssertionError
+        when validation or the called operation fails.
         """
         if path == "/containers/json?all=1":
             return [
@@ -529,19 +526,17 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
 ) -> None:
     """Verify unix socket connection and docker runtime helpers cover remaining edges.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` temporary path fixture.
+    Output: None. Raises: AssertionError when validation or the called operation fails.
     """
     events = {}
     socket_path = tmp_path / "docker.sock"
 
     class _SocketStub:
-        """Represent socket stub."""
+        """Test double for socket stub behavior in this module."""
 
         def __init__(self, family, sock_type):
-            """Initialize the instance.
+            """Create `_SocketStub` with `family` and `sock_type`.
 
             Inputs: `family`, `sock_type`. Output: None.
             """
@@ -557,7 +552,7 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
 
         @staticmethod
         def connect(path):
-            """Open the connection.
+            """Open the connection for `_SocketStub`.
 
             Inputs: `path`. Output: None.
             """
@@ -607,12 +602,10 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
     assert diagnostics["api_error"] == "Docker API request failed"
 
     def docker_api(path, timeout_seconds=3.0):
-        """Docker API.
+        """Return the docker API.
 
-        Inputs: `path`, `timeout_seconds`. Output: list. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `path` path, `timeout_seconds`. Output: `list`. Raises: AssertionError
+        when validation or the called operation fails.
         """
         if path == "/containers/json?all=1":
             return [
@@ -673,7 +666,7 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
 ) -> None:
     """Verify index helper functions cover render permissions and time parsing.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index helper functions cover render permissions and time parsing.
     """
     monkeypatch.setattr(
         index_view,
@@ -698,11 +691,11 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
     )
 
     class _Permissions:
-        """Represent permissions."""
+        """Test double for permissions behavior in this module."""
 
         @staticmethod
         def isGroupRead():
-            """Return whether Group Read.
+            """Return whether `_Permissions` grants group-read access.
 
             Inputs: none. Output: bool.
             """
@@ -710,7 +703,7 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
 
         @staticmethod
         def isGroupWrite():
-            """Return whether Group Write.
+            """Return whether `_Permissions` grants group-write access.
 
             Inputs: none. Output: bool.
             """
@@ -718,14 +711,14 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
 
         @staticmethod
         def isGroupAnnotate():
-            """Return whether Group Annotate.
+            """Return whether `_Permissions` grants group-annotate access.
 
             Inputs: none. Output: bool.
             """
             return False
 
     def _read_write_group_details():
-        """Read write group details.
+        """Read the write group details.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -749,7 +742,7 @@ def test_refactored_monitoring_helpers_preserve_guard_branch_contracts(
 ) -> None:
     """Verify refactored monitoring helpers preserve guard branch contracts.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in refactored monitoring helpers preserve guard branch contracts.
     """
     headers = {"Origin": "https://omero.example.org"}
     index_view._rewrite_origin_headers(headers, "not-a-url")
@@ -784,9 +777,9 @@ def test_refactored_monitoring_helpers_preserve_guard_branch_contracts(
     calls = []
 
     def _docker_api(path, timeout_seconds=3.0):
-        """Docker API.
+        """Return the docker API.
 
-        Inputs: `path`, `timeout_seconds`. Output: dict.
+        Inputs: `path` path, `timeout_seconds`. Output: `dict`.
         """
         calls.append((path, timeout_seconds))
         return {"Config": {}, "State": {"Health": {"Status": "healthy"}}}
@@ -823,7 +816,7 @@ def test_logs_compose_prometheus_and_proxy_helpers_cover_remaining_runtime_guard
 ) -> None:
     """Verify logs compose prometheus and proxy helpers cover remaining runtime guards.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in logs compose prometheus and proxy helpers cover remaining runtime guards.
     """
     root_error = HttpResponse("root-only", status=403)
     monkeypatch.setattr(
@@ -955,9 +948,9 @@ def test_logs_compose_prometheus_and_proxy_helpers_cover_remaining_runtime_guard
 def test_docker_api_json_returns_none_when_socket_missing(
     monkeypatch, tmp_path
 ) -> None:
-    """_docker_api_json returns None when the Docker socket does not exist.
+    """Verify docker API JSON returns none when socket missing result shape.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in docker API JSON returns none when socket missing.
     """
     monkeypatch.setenv("ADMIN_TOOLS_DOCKER_SOCKET", str(tmp_path / "missing.sock"))
     result = index_view._docker_api_json("/containers/json")
@@ -965,9 +958,9 @@ def test_docker_api_json_returns_none_when_socket_missing(
 
 
 def test_diagnose_docker_health_reports_api_none(monkeypatch) -> None:
-    """_diagnose_docker_health sets api_error when _docker_api_json returns None.
+    """Verify diagnose docker health reports API none.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in diagnose docker health reports API none.
     """
     monkeypatch.setattr(index_view, "_docker_api_json", lambda *a, **kw: None)
     diag = index_view._diagnose_docker_health()
@@ -975,9 +968,9 @@ def test_diagnose_docker_health_reports_api_none(monkeypatch) -> None:
 
 
 def test_diagnose_docker_health_handles_unknown_uid(monkeypatch) -> None:
-    """_diagnose_docker_health reports uid when pwd.getpwuid raises KeyError.
+    """Verify diagnose docker health handles unknown uid.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in diagnose docker health handles unknown uid.
     """
     import pwd
 
@@ -987,3 +980,23 @@ def test_diagnose_docker_health_handles_unknown_uid(monkeypatch) -> None:
     monkeypatch.setattr(index_view, "_docker_api_json", lambda *a, **kw: [])
     diag = index_view._diagnose_docker_health()
     assert diag["current_user"].startswith("uid=")
+
+
+def test_parse_log_limits_rejects_non_positive_values() -> None:
+    """Confirm parse log limits rejects non positive values is rejected at the boundary.
+
+    Inputs: admin-tool fixtures. Output: fails on regressions in parse log limits rejects non positive values.
+    """
+    request = RequestFactory().get("/admin/logs/?lookback=0&limit=10")
+    log_config = LogConfig(
+        loki_url="https://loki:3100",
+        lookback_seconds=900,
+        max_entries=100,
+        timeout_seconds=3.0,
+        cache_max_bytes=1024,
+        internal_file_batch_size=12,
+        max_parallel_queries=4,
+    )
+
+    with pytest.raises(ValueError, match="positive"):
+        index_view._parse_log_limits(request, log_config)

@@ -1,7 +1,7 @@
 from typing import Any
 
 class ParametersI:
-    # Initialize the instance. Inputs: *args, **kwargs. Output: None.
+    # Create the typed stub object. Inputs: *args, **kwargs. Output: None.
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
     # Add. Inputs: *args, **kwargs. Output: ParametersI.
     def add(self, *args: Any, **kwargs: Any) -> ParametersI: ...
@@ -13,7 +13,7 @@ class ParametersI:
     def __getattr__(self, name: str) -> Any: ...
 
 class Principal:
-    # Initialize the instance. Inputs: *args, **kwargs. Output: None.
+    # Create the typed stub object. Inputs: *args, **kwargs. Output: None.
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
     # Return a dynamic attribute. Inputs: name. Output: Any.
     def __getattr__(self, name: str) -> Any: ...

@@ -59,7 +59,7 @@ class RepoMetadata:
 
     @property
     def github_path(self) -> str:
-        """Github path.
+        """Return the github path for `RepoMetadata`.
 
         Inputs: none. Output: `str`.
         """
@@ -67,7 +67,7 @@ class RepoMetadata:
 
     @property
     def branch_query_value(self) -> str:
-        """Branch query value.
+        """Return the branch query value for `RepoMetadata`.
 
         Inputs: none. Output: `str`.
         """
@@ -75,12 +75,10 @@ class RepoMetadata:
 
 
 def _load_canonical_repo_metadata(repo_root: Path) -> RepoMetadata | None:
-    """Load canonical repo metadata.
+    """Load the canonical repo metadata.
 
-    Inputs: `repo_root`. Output: `RepoMetadata | None`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `repo_root` (Path). Output: `RepoMetadata | None`. Raises: RuntimeError when
+    validation or the called operation fails.
     """
     metadata_path = repo_root / CANONICAL_METADATA_PATH
     if not metadata_path.exists():
@@ -108,9 +106,9 @@ def _load_canonical_repo_metadata(repo_root: Path) -> RepoMetadata | None:
 
 
 def _run_git(repo_root: Path, *args: str) -> str:
-    """Git.
+    """Run the git.
 
-    Inputs: `repo_root`, `*args`. Output: `str`.
+    Inputs: `repo_root` (Path), `*args` (str) positional arguments. Output: `str`.
     """
     safe_repo_root = str(repo_root.resolve())
     completed = subprocess.run(
@@ -129,9 +127,10 @@ def _run_git(repo_root: Path, *args: str) -> str:
 
 
 def _resolve_remote_name(repo_root: Path) -> str:
-    """Resolve remote name.
+    """Resolve the remote name.
 
-    Inputs: `repo_root`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `repo_root` (Path). Output: `str`. Raises: RuntimeError when validation or
+    external operations fail.
     """
     try:
         upstream = _run_git(
@@ -171,9 +170,9 @@ def _resolve_remote_name(repo_root: Path) -> str:
 
 
 def _resolve_branch_name(repo_root: Path, remote_name: str) -> str:
-    """Resolve branch name.
+    """Resolve the branch name.
 
-    Inputs: `repo_root`, `remote_name`. Output: `str`.
+    Inputs: `repo_root` (Path), `remote_name` (str). Output: `str`.
     """
     head_ref = f"refs/remotes/{remote_name}/HEAD"
     try:
@@ -193,12 +192,10 @@ def _resolve_branch_name(repo_root: Path, remote_name: str) -> str:
 
 
 def _parse_remote_url(remote_url: str) -> tuple[str, str, str]:
-    """Parse remote URL.
+    """Parse and validate the remote url input.
 
-    Inputs: `remote_url`. Output: `tuple[str, str, str]`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `remote_url` (str). Output: `tuple[str, str, str]`. Raises: RuntimeError
+    when validation or the called operation fails.
     """
     normalized_url = remote_url.strip()
     if "://" in normalized_url:
@@ -251,9 +248,10 @@ def render_badge_block(
     metadata: RepoMetadata,
     upstream_sources: agent_skill_provenance.AgentSkillUpstreamSources,
 ) -> str:
-    """Render badge block.
+    """Render the badge block.
 
-    Inputs: `metadata`, `upstream_sources`. Output: `str`.
+    Inputs: `metadata` (RepoMetadata), `upstream_sources`
+    (agent_skill_provenance.AgentSkillUpstreamSources). Output: `str`.
     """
     github_path = metadata.github_path
     branch = metadata.branch_query_value
@@ -321,7 +319,8 @@ def render_badge_block(
 def extract_badge_block(readme_text: str) -> str:
     """Return extract badge block.
 
-    Inputs: `readme_text`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `readme_text` (str). Output: `str`. Raises: RuntimeError when validation or
+    external operations fail.
     """
     start = readme_text.find(BADGE_BLOCK_BEGIN)
     end = readme_text.find(BADGE_BLOCK_END)
@@ -335,18 +334,18 @@ def extract_badge_block(readme_text: str) -> str:
 
 
 def update_readme_text(readme_text: str, badge_block: str) -> str:
-    """Update readme text.
+    """Update the readme text.
 
-    Inputs: `readme_text`, `badge_block`. Output: `str`.
+    Inputs: `readme_text` (str), `badge_block` (str). Output: `str`.
     """
     current_block = extract_badge_block(readme_text)
     return readme_text.replace(current_block, badge_block)
 
 
 def update_readme(repo_root: Path, write: bool) -> int:
-    """Update readme.
+    """Update the readme.
 
-    Inputs: `repo_root`, `write`. Output: `int`.
+    Inputs: `repo_root` (Path), `write` (bool). Output: `int`.
     """
     readme_path = repo_root / README_PATH
     original_text = readme_path.read_text(encoding="utf-8")
@@ -400,7 +399,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.update_readme_badges` command entrypoint.
 
     Inputs: `argv`. Output: `int`.
     """

@@ -1,143 +1,143 @@
 def method_post_required():
-    """Method post required.
+    """Return the method post required.
 
-    Inputs: none. Output: 'POST required'.
+    Inputs: none. Output: `str`.
     """
     return "POST required"
 
 
 def method_get_required():
-    """Method get required.
+    """Return the method get required.
 
-    Inputs: none. Output: 'GET required'.
+    Inputs: none. Output: `str`.
     """
     return "GET required"
 
 
 def invalid_json_body():
-    """Invalid JSON body.
+    """Return the invalid JSON body.
 
-    Inputs: none. Output: 'Invalid JSON body'.
+    Inputs: none. Output: `str`.
     """
     return "Invalid JSON body"
 
 
 def missing_project_id():
-    """Missing project ID.
+    """Return the missing project ID.
 
-    Inputs: none. Output: 'Missing project_id'.
+    Inputs: none. Output: `str`.
     """
     return "Missing project_id"
 
 
 def missing_project_id_lower():
-    """Missing project ID lower.
+    """Return the missing project ID lower.
 
-    Inputs: none. Output: 'missing project_id'.
+    Inputs: none. Output: `str`.
     """
     return "missing project_id"
 
 
 def missing_password():
-    """Missing password.
+    """Return the missing password.
 
-    Inputs: none. Output: 'Missing password'.
+    Inputs: none. Output: `str`.
     """
     return "Missing password"
 
 
 def missing_set_name():
-    """Missing set name.
+    """Return the missing set name.
 
-    Inputs: none. Output: 'Missing set_name'.
+    Inputs: none. Output: `str`.
     """
     return "Missing set_name"
 
 
 def omero_web_login_failed():
-    """OMERO web login failed.
+    """Return the OMERO web login failed.
 
-    Inputs: none. Output: 'OMERO.web login failed'.
+    Inputs: none. Output: `str`.
     """
     return "OMERO.web login failed"
 
 
 def no_images_found():
-    """No images found.
+    """Return the no images found.
 
-    Inputs: none. Output: 'No images found'.
+    Inputs: none. Output: `str`.
     """
     return "No images found"
 
 
 def map_annotations_still_present():
-    """Map annotations still present.
+    """Map the annotations still present.
 
-    Inputs: none. Output: 'Map annotations still present after delete.'.
+    Inputs: none. Output: `str`.
     """
     return "Map annotations still present after delete."
 
 
 def annotation_links_still_exist():
-    """Annotation links still exist.
+    """Return the annotation links still exist.
 
-    Inputs: none. Output: 'Annotation links still exist; skipping delete.'.
+    Inputs: none. Output: `str`.
     """
     return "Annotation links still exist; skipping delete."
 
 
 def annotation_still_exists():
-    """Annotation still exists.
+    """Return the annotation still exists.
 
-    Inputs: none. Output: 'Annotation still exists after delete.'.
+    Inputs: none. Output: `str`.
     """
     return "Annotation still exists after delete."
 
 
 def select_project_first():
-    """Select project first.
+    """Select the project first.
 
-    Inputs: none. Output: 'Select a project first.'.
+    Inputs: none. Output: `str`.
     """
     return "Select a project first."
 
 
 def datasets_required():
-    """Datasets required.
+    """Return the datasets required.
 
-    Inputs: none. Output: 'Please select one or more datasets.'.
+    Inputs: none. Output: `str`.
     """
     return "Please select one or more datasets."
 
 
 def no_filenames_available():
-    """No filenames available.
+    """Return the no filenames available.
 
-    Inputs: none. Output: 'No filenames available in the selected datasets.'.
+    Inputs: none. Output: `str`.
     """
     return "No filenames available in the selected datasets."
 
 
 def no_filenames_provided():
-    """No filenames provided.
+    """Return the no filenames provided.
 
-    Inputs: none. Output: 'No filenames were provided.'.
+    Inputs: none. Output: `str`.
     """
     return "No filenames were provided."
 
 
 def no_data_to_process():
-    """No data to process.
+    """Return the no data to process.
 
-    Inputs: none. Output: 'No data to process is available in the selected dataset(s).'.
+    Inputs: none. Output: `str`.
     """
     return "No data to process is available in the selected dataset(s)."
 
 
 def unable_to_determine_username():
-    """Unable to determine username.
+    """Return the unable to determine username.
 
-    Inputs: none. Output: 'Unable to determine username.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to determine username."
 
@@ -151,12 +151,9 @@ def ai_api_key_required():
 
 
 def unable_to_process_filenames():
-    """Unable to process filenames.
+    """Return the unable to process filenames.
 
-    Inputs: none. Output: 'Unable to process filenames. Try again or change your
-    selections in this menu.'.
-
-    selections in this menu.'.
+    Inputs: none. Output: `str`.
     """
     return (
         "Unable to process filenames. Try again or change your selections in this menu."
@@ -164,44 +161,41 @@ def unable_to_process_filenames():
 
 
 def filename_input_empty():
-    """Filename input empty.
+    """Return the filename input empty.
 
-    Inputs: none. Output: 'The input field for filename parsing cannot be empty.'.
+    Inputs: none. Output: `str`.
     """
     return "The input field for filename parsing cannot be empty."
 
 
 def invalid_variable_payload():
-    """Invalid variable payload.
+    """Return the invalid variable payload.
 
-    Inputs: none. Output: 'Invalid variable payload.'.
+    Inputs: none. Output: `str`.
     """
     return "Invalid variable payload."
 
 
 def variable_names_empty():
-    """Variable names empty.
+    """Return the variable names empty.
 
-    Inputs: none. Output: 'Variable names cannot be empty.'.
+    Inputs: none. Output: `str`.
     """
     return "Variable names cannot be empty."
 
 
 def variable_set_name_required():
-    """Variable set name required.
+    """Return the variable set name required.
 
-    Inputs: none. Output: 'Please provide a name for this set.'.
+    Inputs: none. Output: `str`.
     """
     return "Please provide a name for this set."
 
 
 def variable_set_already_exists():
-    """Variable set already exists.
+    """Return the variable set already exists.
 
-    Inputs: none. Output: 'A variable set with the same name already exists in database.
-    Please rename or delete the existing set first.'.
-
-    Please rename or delete the existing set first.'.
+    Inputs: none. Output: `str`.
     """
     return (
         "A variable set with the same name already exists in database. "
@@ -210,9 +204,9 @@ def variable_set_already_exists():
 
 
 def variable_set_max_entries(max_sets):
-    """Variable set max entries.
+    """Return the variable set max entries.
 
-    Inputs: `max_sets`. Output: computed value.
+    Inputs: `max_sets`. Output: variable set max entries result.
     """
     return (
         f"The maximum number of entries in the database is {max_sets}. "
@@ -221,12 +215,9 @@ def variable_set_max_entries(max_sets):
 
 
 def variable_set_dropdown_required():
-    """Variable set dropdown required.
+    """Return the variable set dropdown required.
 
-    Inputs: none. Output: 'Please select a set of variables from the dropdown menu
-    first.'.
-
-    first.'.
+    Inputs: none. Output: `str`.
     """
     return "Please select a set of variables from the dropdown menu first."
 
@@ -243,33 +234,33 @@ def variable_set_empty_db():
 
 
 def variable_set_not_found():
-    """Variable set not found.
+    """Return the variable set not found.
 
-    Inputs: none. Output: 'Requested variable set was not found.'.
+    Inputs: none. Output: `str`.
     """
     return "Requested variable set was not found."
 
 
 def invalid_user_settings_payload():
-    """Invalid user settings payload.
+    """Return the invalid user settings payload.
 
-    Inputs: none. Output: 'Invalid user settings payload.'.
+    Inputs: none. Output: `str`.
     """
     return "Invalid user settings payload."
 
 
 def unknown_job():
-    """Unknown job.
+    """Return the unknown job.
 
-    Inputs: none. Output: 'unknown job'.
+    Inputs: none. Output: `str`.
     """
     return "unknown job"
 
 
 def invalid_regex_pattern(_detail=None):
-    """Invalid regex pattern.
+    """Return the invalid regex pattern.
 
-    Inputs: `_detail`. Output: 'Invalid regex pattern.'.
+    Inputs: `_detail`. Output: `str`.
     """
     return "Invalid regex pattern."
 
@@ -294,28 +285,25 @@ def ai_parsing_data_missing():
 
 
 def invalid_regex_pattern_title():
-    """Invalid regex pattern title.
+    """Return the invalid regex pattern title.
 
-    Inputs: none. Output: 'Invalid regex pattern.'.
+    Inputs: none. Output: `str`.
     """
     return "Invalid regex pattern."
 
 
 def wrong_password():
-    """Wrong password.
+    """Return the wrong password.
 
-    Inputs: none. Output: 'Wrong password.'.
+    Inputs: none. Output: `str`.
     """
     return "Wrong password."
 
 
 def validation_unavailable():
-    """Validation unavailable.
+    """Return the validation unavailable.
 
-    Inputs: none. Output: 'Unable to validate credentials. Please try again later or
-    contact the server administrator.'.
-
-    contact the server administrator.'.
+    Inputs: none. Output: `str`.
     """
     return (
         "Unable to validate credentials. Please try again later or contact the "
@@ -324,121 +312,121 @@ def validation_unavailable():
 
 
 def provider_and_key_required():
-    """Provider and key required.
+    """Return the provider and key required.
 
-    Inputs: none. Output: 'Provider and API key are required.'.
+    Inputs: none. Output: `str`.
     """
     return "Provider and API key are required."
 
 
 def api_key_empty():
-    """API key empty.
+    """Return the API key empty.
 
-    Inputs: none. Output: 'API key cannot be empty.'.
+    Inputs: none. Output: `str`.
     """
     return "API key cannot be empty."
 
 
 def connection_test_passed():
-    """Connection test passed.
+    """Return the connection test passed.
 
-    Inputs: none. Output: 'Connection test passed.'.
+    Inputs: none. Output: `str`.
     """
     return "Connection test passed."
 
 
 def connection_test_failed_status(status):
-    """Connection test failed status.
+    """Return the connection test failed status.
 
-    Inputs: `status`. Output: computed value.
+    Inputs: `status` status. Output: status value.
     """
     return f"Connection test failed with status {status}."
 
 
 def connection_test_failed():
-    """Connection test failed.
+    """Return the connection test failed.
 
-    Inputs: none. Output: 'Connection test failed. Please verify the API key.'.
+    Inputs: none. Output: `str`.
     """
     return "Connection test failed. Please verify the API key."
 
 
 def connection_test_not_supported(provider):
-    """Connection test not supported.
+    """Return the connection test not supported.
 
-    Inputs: `provider`. Output: computed value.
+    Inputs: `provider`. Output: connection test not supported result.
     """
     return f"Connection testing is not supported for provider '{provider}'."
 
 
 def provider_http_status(code):
-    """Provider HTTP status.
+    """Return the provider HTTP status.
 
-    Inputs: `code`. Output: computed value.
+    Inputs: `code`. Output: ID value.
     """
     return f"Provider returned status {code}."
 
 
 def provider_http_status_with_detail(code, detail):
-    """Provider HTTP status with detail.
+    """Return the provider HTTP status with detail.
 
-    Inputs: `code`, `detail`. Output: computed value.
+    Inputs: `code`, `detail`. Output: ID value.
     """
     return f"Provider returned status {code}. {detail}"
 
 
 def provider_http_retry_after(message, retry_after):
-    """Provider HTTP retry after.
+    """Return the provider HTTP retry after.
 
-    Inputs: `message`, `retry_after`. Output: computed value.
+    Inputs: `message`, `retry_after`. Output: ID value.
     """
     return f"{message} Retry after {retry_after} seconds."
 
 
 def provider_unreachable():
-    """Provider unreachable.
+    """Return the provider unreachable.
 
-    Inputs: none. Output: 'Unable to reach the AI provider.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to reach the AI provider."
 
 
 def provider_not_supported(provider):
-    """Provider not supported.
+    """Return the provider not supported.
 
-    Inputs: `provider`. Output: computed value.
+    Inputs: `provider`. Output: ID value.
     """
     return f"Provider '{provider}' is not supported."
 
 
 def provider_response_missing_regex():
-    """Provider response missing regex.
+    """Return the provider response missing regex.
 
-    Inputs: none. Output: 'Provider response was missing the regex suggestion.'.
+    Inputs: none. Output: `str`.
     """
     return "Provider response was missing the regex suggestion."
 
 
 def provider_response_no_regex():
-    """Provider response no regex.
+    """Return the provider response no regex.
 
-    Inputs: none. Output: 'Provider response did not include a regex suggestion.'.
+    Inputs: none. Output: `str`.
     """
     return "Provider response did not include a regex suggestion."
 
 
 def provider_response_empty():
-    """Provider response empty.
+    """Return the provider response empty.
 
-    Inputs: none. Output: 'Provider response was empty.'.
+    Inputs: none. Output: `str`.
     """
     return "Provider response was empty."
 
 
 def provider_response_row_mismatch(received, expected):
-    """Provider response row mismatch.
+    """Return the provider response row mismatch.
 
-    Inputs: `received`, `expected`. Output: computed value.
+    Inputs: `received`, `expected`. Output: ID value.
     """
     return (
         "Provider response row count did not match the number of filenames "
@@ -447,28 +435,25 @@ def provider_response_row_mismatch(received, expected):
 
 
 def provider_response_invalid_format():
-    """Provider response invalid format.
+    """Return the provider response invalid format.
 
-    Inputs: none. Output: 'Provider response format was invalid.'.
+    Inputs: none. Output: `str`.
     """
     return "Provider response format was invalid."
 
 
 def provider_required():
-    """Provider required.
+    """Return the provider required.
 
-    Inputs: none. Output: 'Provider is required.'.
+    Inputs: none. Output: `str`.
     """
     return "Provider is required."
 
 
 def psycopg2_missing():
-    """Psycopg2 missing.
+    """Return the psycopg2 missing.
 
-    Inputs: none. Output: 'psycopg2 is not installed. Please install psycopg2-binary in
-    the OMERO.web environment.'.
-
-    the OMERO.web environment.'.
+    Inputs: none. Output: `str`.
     """
     return "psycopg2 is not installed. Please install psycopg2-binary in the OMERO.web environment."
 
@@ -496,73 +481,73 @@ def db_connection_failed():
 
 
 def variable_sets_fetch_failed():
-    """Variable sets fetch failed.
+    """Return the variable sets fetch failed.
 
-    Inputs: none. Output: 'Unable to fetch saved variable sets.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to fetch saved variable sets."
 
 
 def variable_set_not_persisted():
-    """Variable set not persisted.
+    """Return the variable set not persisted.
 
-    Inputs: none. Output: 'Variable set was not persisted to the database.'.
+    Inputs: none. Output: `str`.
     """
     return "Variable set was not persisted to the database."
 
 
 def variable_set_save_failed():
-    """Variable set save failed.
+    """Return the variable set save failed.
 
-    Inputs: none. Output: 'Could not save variable set.'.
+    Inputs: none. Output: `str`.
     """
     return "Could not save variable set."
 
 
 def variable_set_load_failed():
-    """Variable set load failed.
+    """Return the variable set load failed.
 
-    Inputs: none. Output: 'Unable to load variable set.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to load variable set."
 
 
 def variable_set_missing(set_name):
-    """Variable set missing.
+    """Return the variable set missing.
 
-    Inputs: `set_name`. Output: computed value.
+    Inputs: `set_name`. Output: variable set missing result.
     """
     return f"Variable set '{set_name}' does not exist."
 
 
 def variable_set_delete_unconfirmed():
-    """Variable set delete unconfirmed.
+    """Return the variable set delete unconfirmed.
 
-    Inputs: none. Output: 'Variable set deletion could not be confirmed.'.
+    Inputs: none. Output: `str`.
     """
     return "Variable set deletion could not be confirmed."
 
 
 def variable_set_delete_failed():
-    """Variable set delete failed.
+    """Return the variable set delete failed.
 
-    Inputs: none. Output: 'Unable to delete variable set.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to delete variable set."
 
 
 def unable_delete_plugin_annotations():
-    """Unable delete plugin annotations.
+    """Return the unable delete plugin annotations.
 
-    Inputs: none. Output: 'Unable to delete plugin annotations.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to delete plugin annotations."
 
 
 def unable_delete_annotations():
-    """Unable delete annotations.
+    """Return the unable delete annotations.
 
-    Inputs: none. Output: 'Unable to delete annotations.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to delete annotations."
 
@@ -584,33 +569,33 @@ def ai_credentials_save_failed():
 
 
 def user_settings_not_persisted():
-    """User settings not persisted.
+    """Return the user settings not persisted.
 
-    Inputs: none. Output: 'User settings were not persisted to the database.'.
+    Inputs: none. Output: `str`.
     """
     return "User settings were not persisted to the database."
 
 
 def user_settings_save_failed():
-    """User settings save failed.
+    """Return the user settings save failed.
 
-    Inputs: none. Output: 'Could not save user settings.'.
+    Inputs: none. Output: `str`.
     """
     return "Could not save user settings."
 
 
 def user_settings_delete_failed():
-    """User settings delete failed.
+    """Return the user settings delete failed.
 
-    Inputs: none. Output: 'Unable to delete user settings.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to delete user settings."
 
 
 def variable_sets_delete_failed():
-    """Variable sets delete failed.
+    """Return the variable sets delete failed.
 
-    Inputs: none. Output: 'Unable to delete variable sets.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to delete variable sets."
 
@@ -624,25 +609,25 @@ def ai_credentials_delete_failed():
 
 
 def user_data_delete_failed():
-    """User data delete failed.
+    """Return the user data delete failed.
 
-    Inputs: none. Output: 'Unable to delete user data.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to delete user data."
 
 
 def unexpected_error():
-    """Unexpected error.
+    """Return the unexpected error.
 
-    Inputs: none. Output: 'Unexpected error.'.
+    Inputs: none. Output: `str`.
     """
     return "Unexpected error."
 
 
 def rate_limit_exceeded(limit, window_seconds, time_str):
-    """Rate limit exceeded.
+    """Return the rate limit exceeded.
 
-    Inputs: `limit`, `window_seconds`, `time_str`. Output: computed value.
+    Inputs: `limit`, `window_seconds`, `time_str`. Output: rate limit exceeded result.
     """
     return (
         f"Rate limit exceeded: You have performed more than {limit} major actions in the last "
@@ -651,8 +636,8 @@ def rate_limit_exceeded(limit, window_seconds, time_str):
 
 
 def help_file_not_found(path):
-    """Help file not found.
+    """Return the help file not found.
 
-    Inputs: `path`. Output: computed value.
+    Inputs: `path` path. Output: help file not found result.
     """
     return f"Help file not found: {path}"

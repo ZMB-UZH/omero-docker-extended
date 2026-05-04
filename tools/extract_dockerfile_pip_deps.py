@@ -30,9 +30,9 @@ _VERSION_SEPARATOR = re.compile(r"\[|===|~=|==|!=|<=|>=|<|>")
 
 
 def extract(dockerfile: Path) -> list[str]:
-    """Extract.
+    """Extract the extract.
 
-    Inputs: `dockerfile`. Output: `list[str]`.
+    Inputs: `dockerfile` (Path). Output: `list[str]`.
     """
     text = dockerfile.read_text(encoding="utf-8")
     # Join backslash-continued lines
@@ -58,9 +58,10 @@ def extract(dockerfile: Path) -> list[str]:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse args.
+    """Parse command-line arguments for `tools.extract_dockerfile_pip_deps`.
 
-    Inputs: `argv`. Output: `argparse.Namespace`.
+    Inputs: `argv` (list[str] | None) command-line arguments. Output:
+    `argparse.Namespace`.
     """
     parser = argparse.ArgumentParser(
         description="Extract direct pip package specifiers from a Dockerfile."
@@ -70,7 +71,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.extract_dockerfile_pip_deps` command entrypoint.
 
     Inputs: `argv`. Output: `int`.
     """

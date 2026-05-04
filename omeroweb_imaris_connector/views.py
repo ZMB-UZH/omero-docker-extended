@@ -33,12 +33,10 @@ TEXT_PLAIN_CONTENT_TYPE = "text/plain; charset=utf-8"
 
 
 def _parse_base_url(value):
-    """Parse base URL.
+    """Parse and validate the base url input.
 
-    Inputs: `value`. Output: computed value or None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `value` input value. Output: URL string. Raises: ValueError when validation or the
+    called operation fails.
     """
     if not value:
         return None
@@ -59,9 +57,10 @@ def _parse_base_url(value):
 
 
 def _build_absolute_url(request, path, base_url_override=None):
-    """Absolute URL.
+    """Build the absolute URL.
 
-    Inputs: `request`, `path`, `base_url_override`. Output: computed value.
+    Inputs: `request` Django request, `path` path, `base_url_override` base URL
+    override. Output: `build_absolute_uri` result.
     """
     if base_url_override:
         base = base_url_override.rstrip("/") + "/"
@@ -72,7 +71,7 @@ def _build_absolute_url(request, path, base_url_override=None):
 def _get_client_ip(request):
     """Extract client IP for logging purposes.
 
-    Inputs: `request`. Output: computed value.
+    Inputs: `request` Django request. Output: `get` result.
     """
     x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if x_forwarded_for:
@@ -83,7 +82,7 @@ def _get_client_ip(request):
 def _job_error_message(meta):
     """Return the public error message for a polled job result.
 
-    Inputs: `meta`. Output: computed value.
+    Inputs: `meta`. Output: `IMS_EXPORT_JOB_FAILED_MESSAGE`.
     """
     if meta and meta.get("public_error") and meta.get("error"):
         return str(meta.get("error"))
@@ -102,9 +101,10 @@ def _text_response(message, status):
 
 @login_required()
 def imaris_export(request, conn=None, **kwargs):
-    """Imaris export.
+    """Return the Imaris export.
 
-    Inputs: `request`, `conn`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `**kwargs`
+    keyword arguments. Output: Django `JsonResponse`.
     """
     client_ip = _get_client_ip(request)
     safe_client_ip = sanitize_log_value(client_ip)
@@ -365,10 +365,10 @@ def _start_celery_job(
     conn,
     image_id,
 ):
-    """Start celery job.
+    """Start the celery job.
 
-    Inputs: `conn`, `image_id`. Output: computed value. Raises on invalid or unavailable
-    state.
+    Inputs: `conn` OMERO gateway connection, `image_id` OMERO image ID. Output: start
+    celery job result. Raises: RuntimeError when validation or the called operation fails.
     """
     session_key = _get_session_key(conn)
     host, port = _resolve_omero_host_port(conn)
@@ -417,9 +417,10 @@ def _start_celery_job(
 
 
 def _parse_port_param(value):
-    """Parse port param.
+    """Parse and validate the port param input.
 
-    Inputs: `value`. Output: `port` or None. Raises on invalid or unavailable state.
+    Inputs: `value` input value. Output: `port`. Raises: ValueError when validation or
+    external operations fail.
     """
     try:
         port_text = str(value).strip()
@@ -438,7 +439,7 @@ def _parse_port_param(value):
 def _get_session_key(conn):
     """Return session key.
 
-    Inputs: `conn`. Output: computed value or None.
+    Inputs: `conn` OMERO gateway connection. Output: `val`.
     """
     if conn is None:
         return None
@@ -471,9 +472,9 @@ def _get_session_key(conn):
 
 
 def _resolve_omero_host_port(conn):
-    """Resolve OMERO host port.
+    """Resolve the OMERO host port.
 
-    Inputs: `conn`. Output: tuple.
+    Inputs: `conn` OMERO gateway connection. Output: `tuple`.
     """
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
     port = getattr(conn, "port", None) or getattr(conn, "_port", None)
@@ -496,9 +497,9 @@ def _resolve_omero_host_port(conn):
 
 
 def _resolve_omero_secure(conn):
-    """Resolve OMERO secure.
+    """Resolve the OMERO secure.
 
-    Inputs: `conn`. Output: `secure`.
+    Inputs: `conn` OMERO gateway connection. Output: `secure`.
     """
     secure = getattr(conn, "secure", None)
     if secure is None:

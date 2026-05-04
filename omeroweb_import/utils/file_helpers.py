@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class _DirectoryCache:
-    """Represent directory cache."""
+    """Helper type for directory cache behavior."""
 
     upload_root: Path | None = None
     jobs_root: Path | None = None
@@ -59,7 +59,7 @@ def ensure_parent_dir(path: Path) -> bool:
 def initialize_directories() -> None:
     """Initialize upload and jobs directories.
 
-    Inputs: none. Output: None.
+    Inputs: no caller arguments. Output: performs the documented action and returns None.
     """
     if (
         _DIRECTORY_CACHE.upload_root is not None
@@ -96,7 +96,7 @@ def initialize_directories() -> None:
 def get_upload_root() -> Path:
     """Return upload root.
 
-    Inputs: none. Output: `Path`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `Path`. Raises: RuntimeError for the exercised failure path.
     """
     if _DIRECTORY_CACHE.upload_root is None:
         initialize_directories()
@@ -108,7 +108,7 @@ def get_upload_root() -> Path:
 def get_jobs_root() -> Path:
     """Return jobs root.
 
-    Inputs: none. Output: `Path`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `Path`. Raises: RuntimeError for the exercised failure path.
     """
     if _DIRECTORY_CACHE.jobs_root is None:
         initialize_directories()
@@ -118,9 +118,9 @@ def get_jobs_root() -> Path:
 
 
 def ensure_dir(path: Path) -> bool:
-    """Ensure directory.
+    """Ensure the dir.
 
-    Inputs: `path`. Output: `bool`.
+    Inputs: `path` (Path) path. Output: `bool`.
     """
     try:
         if not path.exists():
@@ -164,7 +164,7 @@ def ensure_dir_with_permissions(path: Path, mode: int) -> bool:
 def safe_relative_path(raw_name: str):
     """Sanitize filename to safe relative path.
 
-    Inputs: `raw_name`. Output: computed value.
+    Inputs: `raw_name` (str). Output: `Path` or path text.
     """
     import re
 

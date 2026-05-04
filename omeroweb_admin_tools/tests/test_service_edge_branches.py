@@ -16,7 +16,7 @@ class _FakeDockerResponse:
     """Test double for fake docker response."""
 
     def __init__(self, status: int, payload: bytes):
-        """Initialize the instance.
+        """Create `_FakeDockerResponse` with `status` and `payload`.
 
         Inputs: `status`, `payload`. Output: None.
         """
@@ -38,7 +38,7 @@ class _FakeDockerConnection:
     """Test double for fake docker connection."""
 
     def __init__(self, response=None, *, request_error=None):
-        """Initialize the instance.
+        """Create `_FakeDockerConnection` with `response`.
 
         Inputs: `response`, `request_error`. Output: None.
         """
@@ -47,9 +47,9 @@ class _FakeDockerConnection:
         self.closed = False
 
     def request(self, method, path):
-        """Request.
+        """Request the request for `_FakeDockerConnection`.
 
-        Inputs: `method`, `path`. Output: None. Raises on invalid or unavailable state.
+        Inputs: `method`, `path` path. Output: None. Raises: _request_error when validation or the called operation fails.
         """
         if self._request_error is not None:
             raise self._request_error
@@ -62,17 +62,17 @@ class _FakeDockerConnection:
         return self._response
 
     def close(self):
-        """Close the resource.
+        """Close `_FakeDockerConnection`'s fake resource handle.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.closed = True
 
 
 def _log_config(url: str = "https://loki:3100") -> LogConfig:
-    """Log config.
+    """Log the config.
 
-    Inputs: `url`. Output: `LogConfig`.
+    Inputs: `url` (str) URL. Output: `LogConfig`.
     """
     return LogConfig(
         loki_url=url,
@@ -90,10 +90,8 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
 ):
     """Verify system diagnostics helpers cover cached runtime and socket edges.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: `real_import` result. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` temporary path fixture.
+    Output: `real_import` result. Raises: ImportError for the exercised failure path.
     """
     monkeypatch.setenv("FLOAT_ENV", "not-a-number")
     assert system_diagnostics._to_float_env("FLOAT_ENV", 2.5) == 2.5
@@ -119,12 +117,10 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
         real_import = builtins.__import__
 
         def _fake_import(name, *args, **kwargs):
-            """Fake import.
+            """Return the fake import.
 
-            Inputs: `name`, `*args`, `**kwargs`. Output: `real_import` result. Raises on
-            invalid or unavailable state.
-
-            invalid or unavailable state.
+            Inputs: `name` name, `*args` positional arguments, `**kwargs` keyword
+            arguments. Output: `real_import` result. Raises: ImportError when validation or the called operation fails.
             """
             if name == "psycopg2":
                 raise ImportError("missing psycopg2")
@@ -155,9 +151,9 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
         """Test double for fake socket."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_FakeSocket` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.timeout = None
             self.connected_path = None
@@ -170,7 +166,7 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
             self.timeout = timeout
 
         def connect(self, path):
-            """Open the connection.
+            """Open the connection for `_FakeSocket`.
 
             Inputs: `path`. Output: None.
             """
@@ -285,7 +281,7 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
 def test_log_query_helpers_cover_validation_inference_and_job_execution(monkeypatch):
     """Verify log query helpers cover validation inference and job execution.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in log query helpers cover validation inference and job execution.
     """
     assert log_query_module._estimate_log_entries_size("invalid") == 0
     assert log_query_module._estimate_log_entries_size((object(),)) == 0

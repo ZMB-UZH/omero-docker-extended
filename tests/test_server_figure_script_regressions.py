@@ -13,17 +13,17 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """Set Up Class.
+        """Prepare shared fixtures for `ServerFigureScriptRegressionTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.dockerfile = SERVER_DOCKERFILE.read_text(encoding="utf-8")
         cls.bootstrap = SERVER_BOOTSTRAP.read_text(encoding="utf-8")
 
     def test_server_image_bundles_figure_to_pdf_script(self):
-        """Verify server image bundles figure to pdf script.
+        """Verify the server image bundles figure to pdf script execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server image bundles figure to pdf script integration.
         """
         self.assertIn(
             'ARG OME_OMERO_FIGURE_REPO="https://github.com/ome/omero-figure.git"',
@@ -36,9 +36,9 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
         )
 
     def test_bootstrap_register_script_sync_skips_package_markers(self):
-        """Verify bootstrap register script sync skips package markers.
+        """Verify the bootstrap register script sync skips package markers execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in bootstrap register script sync skips package markers integration.
         """
         self.assertIn(
             "if not file.endswith('.py') or file == '__init__.py':",
@@ -46,9 +46,9 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
         )
 
     def test_bootstrap_requires_figure_version_env_var(self):
-        """Verify bootstrap requires figure version environment var.
+        """Verify bootstrap requires figure version env var.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in bootstrap requires figure version env var.
         """
         self.assertIn(
             'echo "ERROR: OMERO_FIGURE_VERSION must be set in env/omeroserver.env and must not be empty." >&2',
@@ -57,9 +57,9 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
         self.assertNotIn('figure_version="7.3.0"', self.bootstrap)
 
     def test_bootstrap_installs_figure_script_before_registration(self):
-        """Verify bootstrap installs figure script before registration.
+        """Verify the bootstrap installs figure script before registration execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in bootstrap installs figure script before registration integration.
         """
         self.assertRegex(
             self.bootstrap,

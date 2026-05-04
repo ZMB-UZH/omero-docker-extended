@@ -92,7 +92,13 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 - `caveman` is opt-in and available through the shared `.agents/skills/` catalog like every other skill. Use it only when the user asks for terseness or lower token usage, and drop it immediately if clarity or safety would suffer.
 - `caveman` is limited to internal AI communication and prompting. Keep repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text in normal prose.
 - `caveman` changes reply style only. It never changes routing, tool use, verification scope, or the need to surface uncertainty clearly.
-- The repo-local overlay intentionally stays narrower than upstream `v1.6.0`: no hooks, no plugin auto-loading, no `.codex` hook config, no natural-language auto-activation, no `CAVEMAN_DEFAULT_MODE` or `off` handling, no `caveman-help`, and no `/compress` context rewriting.
+- The repo-local overlay intentionally stays narrower than upstream `v1.7.0`:
+  no hooks, no plugin auto-loading, no `.codex` hook config, no natural-language
+  auto-activation, no `CAVEMAN_DEFAULT_MODE` or `off` handling, no
+  `caveman-help`, no smart installer, no cavecrew subagents, no
+  `caveman-shrink`, no stats/statusline scripts, no `caveman-init`, and no
+  `/compress` context rewriting. Keep the useful v1.7.0 style guards: do not
+  abbreviate code symbols, and drop compression when it creates ambiguity.
 
 ## Maintenance rules
 

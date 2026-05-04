@@ -10,17 +10,17 @@ DASHBOARD_DIR = REPO_ROOT / "monitoring" / "grafana" / "dashboards"
 
 
 def _dashboard(name: str) -> dict[str, Any]:
-    """Dashboard.
+    """Return the dashboard.
 
-    Inputs: `name`. Output: `dict[str, Any]`.
+    Inputs: `name` (str) name. Output: `dict[str, Any]`.
     """
     return json.loads((DASHBOARD_DIR / name).read_text(encoding="utf-8"))
 
 
 def _expressions(value: Any) -> list[str]:
-    """Expressions.
+    """Return the expressions.
 
-    Inputs: `value`. Output: `list[str]`.
+    Inputs: `value` (Any) input value. Output: `list[str]`.
     """
     if isinstance(value, dict):
         expressions = []
@@ -40,7 +40,7 @@ def _expressions(value: Any) -> list[str]:
 def test_grafana_dashboards_are_valid_json() -> None:
     """Verify grafana dashboards are valid JSON.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in grafana dashboards are valid JSON.
     """
     for dashboard_path in sorted(DASHBOARD_DIR.glob("*.json")):
         json.loads(dashboard_path.read_text(encoding="utf-8"))
@@ -49,7 +49,7 @@ def test_grafana_dashboards_are_valid_json() -> None:
 def test_database_cache_hit_ratio_queries_guard_zero_denominators() -> None:
     """Verify database cache hit ratio queries guard zero denominators.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in database cache hit ratio queries guard zero denominators.
     """
     expressions = _expressions(_dashboard("database-metrics.json"))
 
@@ -68,7 +68,7 @@ def test_database_cache_hit_ratio_queries_guard_zero_denominators() -> None:
 def test_plugin_database_cache_hit_ratio_queries_guard_zero_denominators() -> None:
     """Verify plugin database cache hit ratio queries guard zero denominators.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in plugin database cache hit ratio queries guard zero denominators.
     """
     expressions = _expressions(_dashboard("plugin-database-metrics.json"))
 
@@ -87,7 +87,7 @@ def test_plugin_database_cache_hit_ratio_queries_guard_zero_denominators() -> No
 def test_redis_dashboard_queries_do_not_emit_infinite_ratios() -> None:
     """Verify redis dashboard queries do not emit infinite ratios.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in redis dashboard queries do not emit infinite ratios.
     """
     expressions = _expressions(_dashboard("redis-metrics.json"))
 

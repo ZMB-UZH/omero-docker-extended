@@ -24,7 +24,7 @@ from omeroweb_admin_tools.services.log_query import (
 def test_build_loki_query_requires_containers() -> None:
     """Verify build loki query requires containers.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build loki query requires containers.
     """
     with pytest.raises(ValueError):
         build_loki_query([])
@@ -33,16 +33,16 @@ def test_build_loki_query_requires_containers() -> None:
 def test_build_loki_query_builds_regex() -> None:
     """Verify build loki query builds regex.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build loki query builds regex.
     """
     query = build_loki_query(["omeroserver", "omeroweb"])
     assert query == '{compose_service=~"^(omeroserver|omeroweb)$"}'
 
 
 def test_log_query_rejects_unsafe_service_and_filename_values() -> None:
-    """Verify log query rejects unsafe service and filename values.
+    """Confirm log query rejects unsafe service and filename values is rejected at the boundary.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in log query rejects unsafe service and filename values.
     """
     with pytest.raises(ValueError):
         build_loki_query(['omeroserver"} |~ ".+'])
@@ -53,18 +53,18 @@ def test_log_query_rejects_unsafe_service_and_filename_values() -> None:
 
 
 def test_strip_message_prefix_removes_timestamp_and_level() -> None:
-    """Verify strip message prefix removes timestamp and level.
+    """Check strip message prefix removes timestamp and level cleanup behavior.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in strip message prefix removes timestamp and level.
     """
     message = "2026-02-02 14:52:58,266 INFO [omero.util] Started server"
     assert _strip_message_prefix(message) == "[omero.util] Started server"
 
 
 def test_cap_entries_per_container_keeps_most_recent() -> None:
-    """Verify cap entries per container keeps most recent.
+    """Check that cap entries per container keeps most recent remains stable.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in cap entries per container keeps most recent.
     """
     entries = [
         LogEntry(
@@ -94,7 +94,7 @@ def test_cap_entries_per_container_keeps_most_recent() -> None:
 def test_build_internal_file_query_uses_filepath_label() -> None:
     """Verify build internal file query uses filepath label.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build internal file query uses filepath label.
     """
     query = _build_internal_file_query("omeroserver_internal", "Blitz-0.log")
     assert (
@@ -106,7 +106,7 @@ def test_build_internal_file_query_uses_filepath_label() -> None:
 def test_build_internal_file_query_handles_filename_label() -> None:
     """Verify build internal file query handles filename label.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build internal file query handles filename label.
     """
     query = _build_internal_file_query(
         "omeroserver_internal", "Blitz-0.log", "filename"
@@ -120,7 +120,7 @@ def test_build_internal_file_query_handles_filename_label() -> None:
 def test_build_internal_files_query_combines_multiple_files() -> None:
     """Verify build internal files query combines multiple files.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build internal files query combines multiple files.
     """
     query = _build_internal_files_query(
         "omeroserver_internal",
@@ -135,7 +135,7 @@ def test_build_internal_files_query_combines_multiple_files() -> None:
 def test_cap_entries_per_container_does_not_apply_global_cap() -> None:
     """Verify cap entries per container does not apply global cap.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in cap entries per container does not apply global cap.
     """
     entries = [
         LogEntry(
@@ -162,33 +162,33 @@ def test_cap_entries_per_container_does_not_apply_global_cap() -> None:
 
 
 def test_normalize_level_maps_unknown_to_info() -> None:
-    """Verify normalize level maps unknown to info.
+    """Check normalize level maps unknown to info parsing against the documented contract.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in normalize level maps unknown to info.
     """
     assert _normalize_level("unknown", "job-service sync loop starting") == "info"
 
 
 def test_normalize_level_uses_error_keywords() -> None:
-    """Verify normalize level uses error keywords.
+    """Confirm normalize level uses error keywords exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions when normalize level uses error keywords stops reporting the expected error.
     """
     assert _normalize_level("unknown", "Failed to ensure job-service exists") == "error"
 
 
 def test_normalize_level_uses_error_traceback_detection() -> None:
-    """Verify normalize level uses error traceback detection.
+    """Confirm normalize level uses error traceback detection exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions when normalize level uses error traceback detection stops reporting the expected error.
     """
     assert _normalize_level("", "Traceback (most recent call last):") == "error"
 
 
 def test_normalize_level_traceback_continuation_line_is_debug() -> None:
-    """Verify normalize level traceback continuation line is debug.
+    """Check normalize level traceback continuation line is debug parsing against the documented contract.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in normalize level traceback continuation line is debug.
     """
     assert (
         _normalize_level(
@@ -199,9 +199,9 @@ def test_normalize_level_traceback_continuation_line_is_debug() -> None:
 
 
 def test_normalize_level_redis_bloom_error_rate_is_info() -> None:
-    """Verify normalize level redis bloom error rate is info.
+    """Confirm normalize level redis bloom error rate is info exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions when normalize level redis bloom error rate is info stops reporting the expected error.
     """
     message = (
         "1:M 04 Mar 2026 12:16:02.311 * <bf> \t{ bf-error-rate       :      0.01 }"
@@ -210,9 +210,9 @@ def test_normalize_level_redis_bloom_error_rate_is_info() -> None:
 
 
 def test_normalize_level_traceback_file_line_is_debug() -> None:
-    """Verify normalize level traceback file line is debug.
+    """Check normalize level traceback file line is debug parsing against the documented contract.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in normalize level traceback file line is debug.
     """
     message = (
         '  File "/opt/omero/web/site-packages/django/core/handlers/exception.py", '
@@ -222,9 +222,9 @@ def test_normalize_level_traceback_file_line_is_debug() -> None:
 
 
 def test_normalize_level_exception_line_is_error() -> None:
-    """Verify normalize level exception line is error.
+    """Confirm normalize level exception line is error exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions when normalize level exception line is error stops reporting the expected error.
     """
     assert _normalize_level("", "KeyError: 'public_enabled'") == "error"
     assert (
@@ -237,9 +237,9 @@ def test_normalize_level_exception_line_is_error() -> None:
 
 
 def test_normalize_level_django_template_lookup_is_debug() -> None:
-    """Verify normalize level django template lookup is debug.
+    """Check normalize level django template lookup is debug parsing against the documented contract.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in normalize level django template lookup is debug.
     """
     message = (
         "django.template.base.VariableDoesNotExist: Failed lookup for key [name] "
@@ -251,7 +251,7 @@ def test_normalize_level_django_template_lookup_is_debug() -> None:
 def test_prepare_query_jobs_batches_internal_files() -> None:
     """Verify prepare query jobs batches internal files.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in prepare query jobs batches internal files.
     """
     jobs = _prepare_query_jobs(
         ["omeroserver_internal"],
@@ -266,12 +266,21 @@ def test_prepare_query_jobs_batches_internal_files() -> None:
     assert sum(len(job.selected_files) for job in jobs) == 13
 
 
+def test_prepare_query_jobs_rejects_non_positive_internal_batch_size() -> None:
+    """Confirm prepare query jobs rejects non positive internal batch size is rejected at the boundary.
+
+    Inputs: admin-tool fixtures. Output: fails on regressions in prepare query jobs rejects non positive internal batch size.
+    """
+    with pytest.raises(ValueError, match="internal_file_batch_size"):
+        _prepare_query_jobs(["omeroserver_internal"], internal_file_batch_size=0)
+
+
 def test_prepare_query_jobs_applies_text_filter_to_docker_and_internal_queries() -> (
     None
 ):
     """Verify prepare query jobs applies text filter to docker and internal queries.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in prepare query jobs applies text filter to docker and internal queries.
     """
     jobs = _prepare_query_jobs(
         ["omeroserver", "omeroweb_internal"],
@@ -287,7 +296,7 @@ def test_prepare_query_jobs_applies_text_filter_to_docker_and_internal_queries()
 def test_fetch_loki_logs_uses_process_local_cache(monkeypatch) -> None:
     """Verify fetch loki logs uses process local cache.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in fetch loki logs uses process local cache.
     """
     config = LogConfig(
         loki_url="https://loki:3100",
@@ -311,9 +320,10 @@ def test_fetch_loki_logs_uses_process_local_cache(monkeypatch) -> None:
     )
 
     def fake_fetch(*args, **kwargs):
-        """Fake fetch.
+        """Simulate fetch so the surrounding test controls that dependency.
 
-        Inputs: `*args`, `**kwargs`. Output: list.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `list`.
         """
         calls["count"] += 1
         return [
@@ -338,7 +348,7 @@ def test_fetch_loki_logs_uses_process_local_cache(monkeypatch) -> None:
 def test_fetch_loki_logs_cache_key_varies_by_text_query(monkeypatch) -> None:
     """Verify fetch loki logs cache key varies by text query.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in fetch loki logs cache key varies by text query.
     """
     config = LogConfig(
         loki_url="https://loki:3100",
@@ -362,9 +372,10 @@ def test_fetch_loki_logs_cache_key_varies_by_text_query(monkeypatch) -> None:
     )
 
     def fake_fetch(*args, **kwargs):
-        """Fake fetch.
+        """Simulate fetch so the surrounding test controls that dependency.
 
-        Inputs: `*args`, `**kwargs`. Output: list.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `list`.
         """
         calls["count"] += 1
         return [
@@ -391,7 +402,7 @@ def test_fetch_loki_logs_cache_key_varies_by_text_query(monkeypatch) -> None:
 def test_fetch_internal_log_labels_reads_filesystem_and_caches(monkeypatch) -> None:
     """Verify fetch internal log labels reads filesystem and caches.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in fetch internal log labels reads filesystem and caches.
     """
     config = LogConfig(
         loki_url="https://loki:3100",
@@ -415,9 +426,9 @@ def test_fetch_internal_log_labels_reads_filesystem_and_caches(monkeypatch) -> N
     )
 
     def fake_glob(pattern):
-        """Fake glob.
+        """Simulate glob so the surrounding test controls that dependency.
 
-        Inputs: `pattern`. Output: list.
+        Inputs: `pattern`. Output: `list`.
         """
         seen_patterns.append(pattern)
         if pattern.endswith("*.log"):

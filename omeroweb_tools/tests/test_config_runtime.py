@@ -6,7 +6,7 @@ from omeroweb_tools import config as tools_config
 def test_build_enhanced_search_config_bounds_runtime_values(monkeypatch):
     """Verify build enhanced search config bounds runtime values.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in build enhanced search config bounds runtime values.
     """
     monkeypatch.setattr(
         tools_config,
@@ -30,7 +30,7 @@ def test_build_enhanced_search_config_bounds_runtime_values(monkeypatch):
 def test_build_enhanced_search_celery_config_uses_defaults(monkeypatch):
     """Verify build enhanced search celery config uses defaults.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in build enhanced search celery config uses defaults.
     """
     monkeypatch.setattr(
         tools_config,

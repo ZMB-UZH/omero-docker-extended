@@ -15,9 +15,9 @@ TOOL_PATH = REPO_ROOT / "tools" / "run_local_workflow_gates.py"
 
 
 def _load_tool():
-    """Load tool.
+    """Load the tool.
 
-    Inputs: none. Output: `module`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `module`. Raises: RuntimeError for the exercised failure path.
     """
     spec = importlib.util.spec_from_file_location("run_local_workflow_gates", TOOL_PATH)
     if spec is None or spec.loader is None:
@@ -32,16 +32,16 @@ class LocalWorkflowGateTests(unittest.TestCase):
     """Test cases for local workflow gate tests."""
 
     def setUp(self) -> None:
-        """Set Up.
+        """Set the up for `LocalWorkflowGateTests`.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the instance. Output: prepares isolated fixtures for one check.
         """
         self.tool = _load_tool()
 
     def test_bandit_discovery_matches_workflow_package_convention(self) -> None:
-        """Verify bandit discovery matches workflow package convention.
+        """Verify the bandit discovery matches workflow package convention execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in bandit discovery matches workflow package convention integration.
         """
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
@@ -75,9 +75,9 @@ class LocalWorkflowGateTests(unittest.TestCase):
         self.assertEqual("omero_alpha/tests,omeroweb_beta/test", targets.exclude_csv)
 
     def test_bandit_gate_uses_same_skip_policy_as_security_workflow(self) -> None:
-        """Verify bandit gate uses same skip policy as security workflow.
+        """Verify the bandit gate uses same skip policy as security workflow execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when bandit gate uses same skip policy as security workflow accepts unsafe input.
         """
         workflow_text = (
             REPO_ROOT / ".github" / "workflows" / "security-code-scanning.yml"
@@ -90,9 +90,9 @@ class LocalWorkflowGateTests(unittest.TestCase):
         self.assertIn('"B101,B106,B603,B404"', tool_text)
 
     def test_bandit_gate_fails_when_scanner_reports_results(self) -> None:
-        """Verify bandit gate fails when scanner reports results.
+        """Confirm bandit gate fails when scanner reports results exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in bandit gate fails when scanner reports results.
         """
         context = self.tool.GateContext(
             repo_root=REPO_ROOT,
@@ -120,9 +120,9 @@ class LocalWorkflowGateTests(unittest.TestCase):
             self.tool.run_bandit(context)
 
     def test_ci_profile_matches_locally_reproducible_workflow_set(self) -> None:
-        """Verify ci profile matches locally reproducible workflow set.
+        """Verify the ci profile matches locally reproducible workflow set execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in ci profile matches locally reproducible workflow set integration.
         """
         self.assertEqual(
             (
@@ -142,9 +142,10 @@ class LocalWorkflowGateTests(unittest.TestCase):
         )
 
     def test_test_gate_uses_clean_explicit_coverage_files(self) -> None:
-        """Verify workflow gates use clean explicit coverage files.
+        """Verify the local pytest gate writes explicit fresh coverage files.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in coverage file
+        isolation for local workflow gates.
         """
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
@@ -174,10 +175,11 @@ class LocalWorkflowGateTests(unittest.TestCase):
                 label: str,
                 check: bool = True,
             ) -> subprocess.CompletedProcess[str]:
-                """Record run.
+                """Record the run for `LocalWorkflowGateTests`.
 
-                Inputs: `command`, `cwd`, `env`, `label`, `check`. Output:
-                `subprocess.CompletedProcess[str]`.
+                Inputs: `command` (tuple[str, ...]), `cwd` (Path) working directory,
+                `env` (dict[str, str] | None) environment mapping, `label` (str),
+                `check` (bool). Output: `subprocess.CompletedProcess[str]`.
                 """
                 _ = (cwd, env, check)
                 calls.append((label, tuple(command)))
@@ -202,9 +204,9 @@ class LocalWorkflowGateTests(unittest.TestCase):
         self.assertNotIn(".coverage.unrelated", combine_command)
 
     def test_super_linter_image_matches_workflow_pin(self) -> None:
-        """Verify super linter image matches workflow pin.
+        """Verify the super linter image matches workflow pin execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in super linter image matches workflow pin integration.
         """
         workflow_text = (
             REPO_ROOT / ".github" / "workflows" / "super-linter.yml"
@@ -222,7 +224,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
     def test_setup_reads_ruff_version_from_repo_config(self) -> None:
         """Verify setup reads ruff version from repo config.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in setup reads ruff version from repo config.
         """
         self.assertEqual("0.15.12", self.tool._read_required_ruff_version(REPO_ROOT))
 
@@ -231,7 +233,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
     ) -> None:
         """Verify default branch prefers remote head metadata over stale symbolic ref.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in default branch prefers remote head metadata over stale symbolic ref.
         """
         commands: list[tuple[str, ...]] = []
 
@@ -243,9 +245,10 @@ class LocalWorkflowGateTests(unittest.TestCase):
             text: bool,
             capture_output: bool,
         ) -> subprocess.CompletedProcess[str]:
-            """Fake run.
+            """Simulate run so the surrounding test controls that dependency.
 
-            Inputs: `command`, `cwd`, `check`, `text`, `capture_output`. Output:
+            Inputs: `command` (tuple[str, ...]), `cwd` (Path) working directory, `check`
+            (bool), `text` (bool), `capture_output` (bool). Output:
             `subprocess.CompletedProcess[str]`.
             """
             _ = (cwd, check, text, capture_output)
@@ -292,7 +295,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
     ) -> None:
         """Verify agent and runbook document local gate without claiming full parity.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in agent and runbook document local gate without claiming full parity.
         """
         agents_text = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
         runbook_text = (

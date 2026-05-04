@@ -6,17 +6,17 @@ from omeroweb_omp_plugin.views import index_view
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self.val = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self.val`.
         """
@@ -24,12 +24,10 @@ class _Value:
 
 
 def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatch):
-    """Verify owner permission and group helpers cover remaining fallbacks.
+    """Verify the owner permission and group helpers cover remaining fallbacks safety boundary.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when owner permission and group helpers cover remaining fallbacks accepts unsafe input.
+    Raises: AttributeError, RuntimeError when validation or the called operation fails.
     """
     plain_owner = SimpleNamespace(getId=lambda: 17)
     details_obj = SimpleNamespace(
@@ -115,23 +113,24 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
     )
 
     class _MissingAttrPermissions:
-        """Represent missing attr permissions."""
+        """Test double for missing attr permissions behavior in this module."""
 
         def __getattr__(self, name):
             """Return a dynamic attribute value by name.
 
-            Inputs: `name`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `name` name. Output: None. Raises: AttributeError when validation or
+            external operations fail.
             """
             raise AttributeError(name)
 
     class _FailingPermissions:
-        """Represent failing permissions."""
+        """Test double for failing permissions behavior in this module."""
 
         @staticmethod
         def failing():
-            """Failing.
+            """Record the failing call on `_FailingPermissions` for later assertions.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             raise RuntimeError("flag failed")
 
@@ -181,11 +180,11 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
     )
 
     class _BadCountGroup:
-        """Represent bad count group."""
+        """Test double for bad count group behavior in this module."""
 
         @staticmethod
         def getMemberCount():
-            """Return Member Count.
+            """Return the fake member count value used by this test double.
 
             Inputs: none. Output: `SimpleNamespace` result.
             """
@@ -193,7 +192,7 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
 
         @staticmethod
         def getMembers():
-            """Return Members.
+            """Return the members for `_BadCountGroup`.
 
             Inputs: none. Output: `object` result.
             """
@@ -201,7 +200,7 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
 
         @staticmethod
         def getExperimenters():
-            """Return Experimenters.
+            """Return the experimenters for `_BadCountGroup`.
 
             Inputs: none. Output: `object` result.
             """
@@ -209,7 +208,7 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
 
         @staticmethod
         def getExperimenterIds():
-            """Return Experimenter IDs.
+            """Return the fake experimenter IDs value used by this test double.
 
             Inputs: none. Output: `object` result.
             """
@@ -248,39 +247,37 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
 def test_project_iteration_payload_and_wrapper_helpers_cover_remaining_paths(
     monkeypatch,
 ):
-    """Verify project iteration payload and wrapper helpers cover remaining paths.
+    """Verify project iteration payload and wrapper helpers cover remaining paths result shape.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in project iteration payload and wrapper helpers cover remaining paths.
+    RuntimeError when validation or the called operation fails.
     """
     assert list(index_view._iter_accessible_projects(None)) == []
 
     all_groups_project = SimpleNamespace(name="all-groups")
 
     class _ServiceOpts:
-        """Represent service opts."""
+        """Test double for service opts behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_ServiceOpts` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.current_group = "4"
             self.restore_failed = False
 
         def getOmeroGroup(self):
-            """Return OMERO Group.
+            """Return the fake omero group value used by this test double.
 
             Inputs: none. Output: `self.current_group`.
             """
             return self.current_group
 
         def setOmeroGroup(self, value):
-            """Set OMERO Group.
+            """Set the OMERO Group for `_ServiceOpts`.
 
-            Inputs: `value`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `value` input value. Output: None. Raises: RuntimeError when validation or the called operation fails.
             """
             if value == "4" and self.restore_failed:
                 raise RuntimeError("restore failed")
@@ -299,16 +296,15 @@ def test_project_iteration_payload_and_wrapper_helpers_cover_remaining_paths(
     failing_opts.restore_failed = True
 
     class _FailingConn:
-        """Represent failing conn."""
+        """Test double for failing conn behavior in this module."""
 
         SERVICE_OPTS = failing_opts
 
         @staticmethod
         def getObjects(object_type, opts=None):
-            """Return Objects.
+            """Return the objects for `_FailingConn`.
 
-            Inputs: `object_type`, `opts`. Output: None. Raises on invalid or
-            unavailable state.
+            Inputs: `object_type`, `opts`. Output: None. Raises: RuntimeError when validation or the called operation fails.
             """
             raise RuntimeError("query failed")
 

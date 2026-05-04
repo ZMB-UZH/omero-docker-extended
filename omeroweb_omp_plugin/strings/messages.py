@@ -1,15 +1,15 @@
 def confirm_irreversible_action():
-    """Confirm irreversible action.
+    """Confirm the irreversible action.
 
-    Inputs: none. Output: 'Are you absolutely sure? This action is irreversible.'.
+    Inputs: none. Output: `str`.
     """
     return "Are you absolutely sure? This action is irreversible."
 
 
 def formatting_errors():
-    """Formatting errors.
+    """Return the formatting errors.
 
-    Inputs: none. Output: 'Formatting error(s). Please try again.'.
+    Inputs: none. Output: `str`.
     """
     return "Formatting error(s). Please try again."
 
@@ -23,25 +23,25 @@ def user_settings_saved_db():
 
 
 def user_settings_save_error():
-    """User settings save error.
+    """Return the user settings save error.
 
-    Inputs: none. Output: 'Error saving user settings: {error}'.
+    Inputs: none. Output: `str`.
     """
     return "Error saving user settings: {error}"
 
 
 def user_settings_saved():
-    """User settings saved.
+    """Return the user settings saved.
 
-    Inputs: none. Output: 'Saved user settings.'.
+    Inputs: none. Output: `str`.
     """
     return "Saved user settings."
 
 
 def unable_load_credentials():
-    """Unable load credentials.
+    """Return the unable load credentials.
 
-    Inputs: none. Output: 'Unable to load saved credentials.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to load saved credentials."
 
@@ -63,44 +63,41 @@ def ai_key_missing():
 
 
 def select_project():
-    """Select project.
+    """Select the project.
 
-    Inputs: none. Output: 'Please select a project.'.
+    Inputs: none. Output: `str`.
     """
     return "Please select a project."
 
 
 def select_datasets():
-    """Select datasets.
+    """Select the datasets.
 
-    Inputs: none. Output: 'Please select one or more datasets.'.
+    Inputs: none. Output: `str`.
     """
     return "Please select one or more datasets."
 
 
 def no_data_to_process():
-    """No data to process.
+    """Return the no data to process.
 
-    Inputs: none. Output: 'No data to process is available in the selected datasets.'.
+    Inputs: none. Output: `str`.
     """
     return "No data to process is available in the selected datasets."
 
 
 def filename_input_empty():
-    """Filename input empty.
+    """Return the filename input empty.
 
-    Inputs: none. Output: 'The input field for filename parsing cannot be empty.'.
+    Inputs: none. Output: `str`.
     """
     return "The input field for filename parsing cannot be empty."
 
 
 def filename_input_duplicate():
-    """Filename input duplicate.
+    """Return the filename input duplicate.
 
-    Inputs: none. Output: 'The input field for filename parsing cannot contain duplicate
-    characters.'.
-
-    characters.'.
+    Inputs: none. Output: `str`.
     """
     return "The input field for filename parsing cannot contain duplicate characters."
 
@@ -128,92 +125,89 @@ def ai_parse_use_first():
 
 
 def delete_data_failed():
-    """Delete data failed.
+    """Delete the data failed.
 
-    Inputs: none. Output: 'Unable to delete data.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to delete data."
 
 
 def error_with_details():
-    """Error with details.
+    """Return the error with details.
 
-    Inputs: none. Output: 'ERROR: {error}'.
+    Inputs: none. Output: `str`.
     """
     return "ERROR: {error}"
 
 
 def local_provider_ready():
-    """Local provider ready.
+    """Return the local provider ready.
 
-    Inputs: none. Output: 'Local provider selected. Ready to process.'.
+    Inputs: none. Output: `str`.
     """
     return "Local provider selected. Ready to process."
 
 
 def provider_key_ready():
-    """Provider key ready.
+    """Return the provider key ready.
 
-    Inputs: none. Output: 'API key exists in database for the selected provider. Ready
-    to process.'.
-
-    to process.'.
+    Inputs: none. Output: `str`.
     """
     return "API key exists in database for the selected provider. Ready to process."
 
 
 def add_api_key_settings():
-    """Add API key settings.
+    """Add the API key settings.
 
-    Inputs: none. Output: 'Please add an API key for this provider in settings.'.
+    Inputs: none. Output: `str`.
     """
     return "Please add an API key for this provider in settings."
 
 
 def choose_provider():
-    """Choose provider.
+    """Return the choose provider.
 
-    Inputs: none. Output: 'Please choose a provider.'.
+    Inputs: none. Output: `str`.
     """
     return "Please choose a provider."
 
 
 def api_key_empty():
-    """API key empty.
+    """Return the API key empty.
 
-    Inputs: none. Output: 'API key cannot be empty.'.
+    Inputs: none. Output: `str`.
     """
     return "API key cannot be empty."
 
 
 def testing_connection():
-    """Testing connection.
+    """Return the testing connection.
 
-    Inputs: none. Output: 'Testing connection...'.
+    Inputs: none. Output: `str`.
     """
     return "Testing connection..."
 
 
 def connection_test_passed():
-    """Connection test passed.
+    """Return the connection test passed.
 
-    Inputs: none. Output: 'Connection test passed.'.
+    Inputs: none. Output: `str`.
     """
     return "Connection test passed."
 
 
 def unable_test_api_key():
-    """Unable test API key.
+    """Return the unable test API key.
 
-    Inputs: none. Output: 'Unable to test API key.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to test API key."
 
 
 def choose_provider_and_key():
-    """Choose provider and key.
+    """Return the choose provider and key.
 
-    Inputs: none. Output: 'Please choose a provider and enter an API key.'.
+    Inputs: none. Output: `str`.
     """
     return "Please choose a provider and enter an API key."
 
@@ -227,17 +221,17 @@ def run_connection_test_first():
 
 
 def saving_key():
-    """Saving key.
+    """Return the saving key.
 
-    Inputs: none. Output: 'Saving key...'.
+    Inputs: none. Output: `str`.
     """
     return "Saving key..."
 
 
 def api_key_saved_status():
-    """API key saved status.
+    """Return the API key saved status.
 
-    Inputs: none. Output: 'API key saved.'.
+    Inputs: none. Output: `str`.
     """
     return "API key saved."
 
@@ -251,9 +245,9 @@ def api_key_saved_db():
 
 
 def unable_save_api_key():
-    """Unable save API key.
+    """Return the unable save API key.
 
-    Inputs: none. Output: 'Unable to save API key.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to save API key."
 
@@ -297,12 +291,9 @@ def ai_suggestion_fallback():
 
 
 def heuristic_regex_ready():
-    """Heuristic regex ready.
+    """Return the heuristic regex ready.
 
-    Inputs: none. Output: 'Heuristic regex suggestion ready. Please repeat processing if
-    unsatisfactory.'.
-
-    unsatisfactory.'.
+    Inputs: none. Output: `str`.
     """
     return (
         "Heuristic regex suggestion ready. Please repeat processing if unsatisfactory."
@@ -310,12 +301,9 @@ def heuristic_regex_ready():
 
 
 def regex_suggestion_ready():
-    """Regex suggestion ready.
+    """Return the regex suggestion ready.
 
-    Inputs: none. Output: 'Regex suggestion ready. Please repeat processing if
-    unsatisfactory.'.
-
-    unsatisfactory.'.
+    Inputs: none. Output: `str`.
     """
     return "Regex suggestion ready. Please repeat processing if unsatisfactory."
 
@@ -340,25 +328,25 @@ def ai_process_failed():
 
 
 def generate_regex_first():
-    """Generate regex first.
+    """Generate the regex first.
 
-    Inputs: none. Output: 'Generate a regex before transferring.'.
+    Inputs: none. Output: `str`.
     """
     return "Generate a regex before transferring."
 
 
 def no_datasets_found():
-    """No datasets found.
+    """Return the no datasets found.
 
-    Inputs: none. Output: 'No datasets found in project "{projectName}"'.
+    Inputs: none. Output: `str`.
     """
     return 'No datasets found in project "{projectName}"'
 
 
 def unable_load_datasets():
-    """Unable load datasets.
+    """Return the unable load datasets.
 
-    Inputs: none. Output: 'Unable to load datasets. Refresh browser and try again.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to load datasets. Refresh browser and try again."
 
@@ -380,16 +368,9 @@ def ai_models_load_failed():
 
 
 def variable_parsing_capped():
-    """Variable parsing capped.
+    """Return the variable parsing capped.
 
-    Inputs: none. Output: 'Variable parsing is capped at {maxParsedVariables}. Only the
-    first {maxParsedVariables} variables will be parsed. Your filenames produced
-    {maxVarsUncapped} variables. Consider checking your parsing method, filenames and
-    user settings.'.
-
-    first {maxParsedVariables} variables will be parsed. Your filenames produced
-    {maxVarsUncapped} variables. Consider checking your parsing method, filenames and
-    user settings.'.
+    Inputs: none. Output: `str`.
     """
     return (
         "Variable parsing is capped at {maxParsedVariables}. "
@@ -400,57 +381,57 @@ def variable_parsing_capped():
 
 
 def exit_edit_mode_first():
-    """Exit edit mode first.
+    """Return the exit edit mode first.
 
-    Inputs: none. Output: 'Please exit edit mode first.'.
+    Inputs: none. Output: `str`.
     """
     return "Please exit edit mode first."
 
 
 def default_var_name():
-    """Default var name.
+    """Return the default var name.
 
-    Inputs: none. Output: 'rename'.
+    Inputs: none. Output: `str`.
     """
     return "rename"
 
 
 def variable_names_spaces():
-    """Variable names spaces.
+    """Return the variable names spaces.
 
-    Inputs: none. Output: 'Variable names cannot contain just empty spaces.'.
+    Inputs: none. Output: `str`.
     """
     return "Variable names cannot contain just empty spaces."
 
 
 def variable_names_empty():
-    """Variable names empty.
+    """Return the variable names empty.
 
-    Inputs: none. Output: 'Variable names cannot be empty.'.
+    Inputs: none. Output: `str`.
     """
     return "Variable names cannot be empty."
 
 
 def variable_set_name_required():
-    """Variable set name required.
+    """Return the variable set name required.
 
-    Inputs: none. Output: 'Please provide a name for this variable set.'.
+    Inputs: none. Output: `str`.
     """
     return "Please provide a name for this variable set."
 
 
 def variable_set_saved():
-    """Variable set saved.
+    """Return the variable set saved.
 
-    Inputs: none. Output: 'Saved variable set "{setName}" to database.'.
+    Inputs: none. Output: `str`.
     """
     return 'Saved variable set "{setName}" to database.'
 
 
 def variable_set_save_error():
-    """Variable set save error.
+    """Return the variable set save error.
 
-    Inputs: none. Output: 'Error saving variable set: {error}'.
+    Inputs: none. Output: `str`.
     """
     return "Error saving variable set: {error}"
 
@@ -467,222 +448,201 @@ def variable_set_empty_db():
 
 
 def variable_set_select_required():
-    """Variable set select required.
+    """Return the variable set select required.
 
-    Inputs: none. Output: 'Please select a variable set from the dropdown menu.'.
+    Inputs: none. Output: `str`.
     """
     return "Please select a variable set from the dropdown menu."
 
 
 def variable_set_loaded():
-    """Variable set loaded.
+    """Return the variable set loaded.
 
-    Inputs: none. Output: 'Loaded variable set "{setName}" from database.'.
+    Inputs: none. Output: `str`.
     """
     return 'Loaded variable set "{setName}" from database.'
 
 
 def variable_set_load_error():
-    """Variable set load error.
+    """Return the variable set load error.
 
-    Inputs: none. Output: 'Error loading variable set: {error}'.
+    Inputs: none. Output: `str`.
     """
     return "Error loading variable set: {error}"
 
 
 def variable_set_deleted():
-    """Variable set deleted.
+    """Return the variable set deleted.
 
-    Inputs: none. Output: 'Deleted variable set "{setName}" from database.'.
+    Inputs: none. Output: `str`.
     """
     return 'Deleted variable set "{setName}" from database.'
 
 
 def variable_set_delete_error():
-    """Variable set delete error.
+    """Return the variable set delete error.
 
-    Inputs: none. Output: 'Error deleting variable set: {error}'.
+    Inputs: none. Output: `str`.
     """
     return "Error deleting variable set: {error}"
 
 
 def job_already_running():
-    """Job already running.
+    """Return the job already running.
 
-    Inputs: none. Output: 'Another job is already running. Please be patient.'.
+    Inputs: none. Output: `str`.
     """
     return "Another job is already running. Please be patient."
 
 
 def select_image_required():
-    """Select image required.
+    """Select the image required.
 
-    Inputs: none. Output: 'Select at least one image to apply changes.'.
+    Inputs: none. Output: `str`.
     """
     return "Select at least one image to apply changes."
 
 
 def password_empty():
-    """Password empty.
+    """Return the password empty.
 
-    Inputs: none. Output: 'Password cannot be empty.'.
+    Inputs: none. Output: `str`.
     """
     return "Password cannot be empty."
 
 
 def min_variables_required():
-    """Min variables required.
+    """Return the min variables required.
 
-    Inputs: none. Output: 'Please populate at least {count} variables and try again.'.
+    Inputs: none. Output: `str`.
     """
     return "Please populate at least {count} variables and try again."
 
 
 def variable_names_spaces_first():
-    """Variable names spaces first.
+    """Return the variable names spaces first.
 
-    Inputs: none. Output: 'Variable names for any of the first {count} variables cannot
-    contain just empty spaces.'.
-
-    contain just empty spaces.'.
+    Inputs: none. Output: `str`.
     """
     return "Variable names for any of the first {count} variables cannot contain just empty spaces."
 
 
 def variable_names_empty_first():
-    """Variable names empty first.
+    """Return the variable names empty first.
 
-    Inputs: none. Output: 'Variable names for the first {count} variables cannot be
-    empty.'.
-
-    empty.'.
+    Inputs: none. Output: `str`.
     """
     return "Variable names for the first {count} variables cannot be empty."
 
 
 def progress_start_save_job():
-    """Progress start save job.
+    """Return the progress start save job.
 
-    Inputs: none. Output: 'Starting "Save filename metadata into key-value pairs" job…'.
+    Inputs: none. Output: `str`.
     """
     return 'Starting "Save filename metadata into key-value pairs" job…'
 
 
 def progress_start_acq_job():
-    """Progress start acq job.
+    """Return the progress start acq job.
 
-    Inputs: none. Output: 'Starting "copy acquisition metadata into key-value pairs"
-    job…'.
-
-    job…'.
+    Inputs: none. Output: `str`.
     """
     return 'Starting "copy acquisition metadata into key-value pairs" job…'
 
 
 def job_started_save():
-    """Job started save.
+    """Return the job started save.
 
-    Inputs: none. Output: 'Save filename metadata into key-value pairs job started for
-    {totalImages} images...'.
-
-    {totalImages} images...'.
+    Inputs: none. Output: `str`.
     """
     return "Save filename metadata into key-value pairs job started for {totalImages} images..."
 
 
 def job_started_acq():
-    """Job started acq.
+    """Return the job started acq.
 
-    Inputs: none. Output: 'Copy acquisition metadata into key-value pairs job started
-    for {totalImages} images...'.
-
-    for {totalImages} images...'.
+    Inputs: none. Output: `str`.
     """
     return "Copy acquisition metadata into key-value pairs job started for {totalImages} images..."
 
 
 def progress_processed():
-    """Progress processed.
+    """Return the progress processed.
 
-    Inputs: none. Output: 'Processed {done} of {total} images (unique IDs).'.
+    Inputs: none. Output: `str`.
     """
     return "Processed {done} of {total} images (unique IDs)."
 
 
 def progress_completed():
-    """Progress completed.
+    """Return the progress completed.
 
-    Inputs: none. Output: 'Completed. Processed {done} images (unique IDs).'.
+    Inputs: none. Output: `str`.
     """
     return "Completed. Processed {done} images (unique IDs)."
 
 
 def delete_all_password_prompt():
-    """Delete all password prompt.
+    """Delete the all password prompt.
 
-    Inputs: none. Output: 'Enter your OMERO password to delete ALL key-value pairs:'.
+    Inputs: none. Output: `str`.
     """
     return "Enter your OMERO password to delete ALL key-value pairs:"
 
 
 def delete_all_progress():
-    """Delete all progress.
+    """Delete the all progress.
 
-    Inputs: none. Output: 'Deleting ALL key-value pairs…'.
+    Inputs: none. Output: `str`.
     """
     return "Deleting ALL key-value pairs…"
 
 
 def delete_all_job_label():
-    """Delete all job label.
+    """Delete the all job label.
 
-    Inputs: none. Output: 'Delete ALL key-value pairs'.
+    Inputs: none. Output: `str`.
     """
     return "Delete ALL key-value pairs"
 
 
 def delete_plugin_password_prompt():
-    """Delete plugin password prompt.
+    """Delete the plugin password prompt.
 
-    Inputs: none. Output: 'Enter your OMERO password to delete ONLY plugin key-value
-    pairs:'.
-
-    pairs:'.
+    Inputs: none. Output: `str`.
     """
     return "Enter your OMERO password to delete ONLY plugin key-value pairs:"
 
 
 def delete_plugin_progress():
-    """Delete plugin progress.
+    """Delete the plugin progress.
 
-    Inputs: none. Output: 'Deleting ONLY plugin key-value pairs…'.
+    Inputs: none. Output: `str`.
     """
     return "Deleting ONLY plugin key-value pairs…"
 
 
 def delete_plugin_job_label():
-    """Delete plugin job label.
+    """Delete the plugin job label.
 
-    Inputs: none. Output: 'Delete ONLY plugin key-value pairs'.
+    Inputs: none. Output: `str`.
     """
     return "Delete ONLY plugin key-value pairs"
 
 
 def job_started_for_images():
-    """Job started for images.
+    """Return the job started for images.
 
-    Inputs: none. Output: '{jobLabel} job started for {totalImages} images...'.
+    Inputs: none. Output: `str`.
     """
     return "{jobLabel} job started for {totalImages} images..."
 
 
 def max_variables_reached():
-    """Max variables reached.
+    """Return the max variables reached.
 
-    Inputs: none. Output: 'Maximum of {maxParsedVariables} variables allowed. Cannot add
-    more variable name fields.'.
-
-    more variable name fields.'.
+    Inputs: none. Output: `str`.
     """
     return (
         "Maximum of {maxParsedVariables} variables allowed. Cannot add more "
@@ -691,31 +651,31 @@ def max_variables_reached():
 
 
 def unable_load_variable_sets():
-    """Unable load variable sets.
+    """Return the unable load variable sets.
 
-    Inputs: none. Output: 'Unable to load variable sets.'.
+    Inputs: none. Output: `str`.
     """
     return "Unable to load variable sets."
 
 
 def error_loading_variable_sets():
-    """Error loading variable sets.
+    """Return the error loading variable sets.
 
-    Inputs: none. Output: 'Error loading variable sets'.
+    Inputs: none. Output: `str`.
     """
     return "Error loading variable sets"
 
 
 def variable_set_saved_response():
-    """Variable set saved response.
+    """Return the variable set saved response.
 
-    Inputs: none. Output: 'Saved variable set.'.
+    Inputs: none. Output: `str`.
     """
     return "Saved variable set."
 
 
 def build_message_payload(names):
-    """Message payload.
+    """Build the message payload.
 
     Inputs: `names`. Output: `_build_payload` result.
     """
@@ -814,7 +774,7 @@ PREVIEW_MESSAGE_NAMES = (
 
 
 def index_messages():
-    """Index messages.
+    """Return the index messages.
 
     Inputs: none. Output: `build_message_payload` result.
     """

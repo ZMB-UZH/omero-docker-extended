@@ -79,6 +79,30 @@ The tests workflow pins the Codecov CLI version instead of using Codecov's
 `latest` default; update that pin only after verifying the replacement
 version's published signature.
 
+## Codecov Coverage Scope
+
+Codecov receives the `coverage.xml` generated from `.coveragerc`. Its statement
+denominator is therefore the executable Python inside these runtime package
+roots only:
+
+- `omero_plugin_common/`
+- `omero_web_zarr/`
+- `omeroweb_admin_tools/`
+- `omeroweb_imaris_connector/`
+- `omeroweb_import/`
+- `omeroweb_omp_plugin/`
+- `omeroweb_tools/`
+
+The root `tests/` suite still runs under coverage because it exercises scripts,
+startup helpers, workflow contracts, docs checks, and other repository
+boundaries, but those files are not counted in the Codecov denominator unless
+they import one of the package roots above. `codecov.yml` intentionally ignores
+`tools/`, `startup/`, `monitoring/`, `docker/`, `docs/`, `scripts/`, `env/`,
+templates, static assets, `conftest.py`, and test files. That is why Codecov's
+line total is smaller than the repository's full Python footprint. Broaden the
+denominator only as a deliberate policy change, with matching `.coveragerc`,
+`codecov.yml`, component-status, and test updates.
+
 ## Active scanners
 
 | Scanner        | Type                                 | Scope                                                 | Free |

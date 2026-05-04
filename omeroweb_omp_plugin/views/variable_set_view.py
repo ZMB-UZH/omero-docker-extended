@@ -56,9 +56,10 @@ def list_sets(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def save_set(request, conn=None, _url=None, **kwargs):
-    """Save set.
+    """Save the set.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
@@ -182,9 +183,10 @@ def load_set(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def delete_set(request, conn=None, _url=None, **kwargs):
-    """Delete set.
+    """Delete the set.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)

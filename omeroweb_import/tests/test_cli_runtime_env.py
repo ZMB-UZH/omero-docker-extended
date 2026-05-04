@@ -13,9 +13,10 @@ from omeroweb_import.views import core_functions
 
 
 def test_run_omero_cli_sets_writable_home_and_cache(tmp_path: Path, monkeypatch):
-    """CLI calls should run with HOME/XDG_CACHE_HOME under upload root.
+    """Verify the run OMERO CLI sets writable home and cache execution contract.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: call result.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: `CompletedProcess` result.
     """
     upload_root = tmp_path / "upload-root"
     upload_root.mkdir()
@@ -25,9 +26,10 @@ def test_run_omero_cli_sets_writable_home_and_cache(tmp_path: Path, monkeypatch)
     captured = {}
 
     def fake_run(*args, **kwargs):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `*args`, `**kwargs`. Output: call result.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `CompletedProcess` result.
         """
         captured["args"] = args
         captured["kwargs"] = kwargs
@@ -56,9 +58,10 @@ def test_run_omero_cli_sets_writable_home_and_cache(tmp_path: Path, monkeypatch)
 
 
 def test_run_omero_cli_merges_existing_ice_config(tmp_path: Path, monkeypatch):
-    """Verify run OMERO cli merges existing ice config.
+    """Verify the run OMERO CLI merges existing ice config execution contract.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: call result.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: `CompletedProcess` result.
     """
     upload_root = tmp_path / "upload-root"
     upload_root.mkdir()
@@ -71,9 +74,10 @@ def test_run_omero_cli_merges_existing_ice_config(tmp_path: Path, monkeypatch):
     captured = {}
 
     def fake_run(*args, **kwargs):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `*args`, `**kwargs`. Output: call result.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `CompletedProcess` result.
         """
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(
@@ -93,7 +97,7 @@ def test_run_omero_cli_merges_existing_ice_config(tmp_path: Path, monkeypatch):
 def test_get_import_timeout_seconds_defaults_to_24_hours(monkeypatch):
     """Verify get import timeout seconds defaults to 24 hours.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in get import timeout seconds defaults to 24 hours.
     """
     monkeypatch.delenv(core_functions.IMPORT_TIMEOUT_SECONDS_ENV, raising=False)
 
@@ -103,7 +107,7 @@ def test_get_import_timeout_seconds_defaults_to_24_hours(monkeypatch):
 def test_get_local_import_scan_timeout_seconds_defaults_to_2_hours(monkeypatch):
     """Verify get local import scan timeout seconds defaults to 2 hours.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in get local import scan timeout seconds defaults to 2 hours.
     """
     monkeypatch.delenv(
         core_functions.LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_ENV, raising=False
@@ -113,17 +117,17 @@ def test_get_local_import_scan_timeout_seconds_defaults_to_2_hours(monkeypatch):
 
 
 def test_import_file_adds_scan_depth_to_cli_command(monkeypatch):
-    """Verify import file adds scan depth to cli command.
+    """Verify the import file adds scan depth to CLI command execution contract.
 
-    Inputs: `monkeypatch`. Output: call result.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in import file adds scan depth to CLI command integration.
     """
     captured = {}
     sample_path = Path(tempfile.gettempdir()) / "sample.czi"
 
     def fake_run(cmd, timeout=None):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `cmd`, `timeout`. Output: call result.
+        Inputs: `cmd`, `timeout` timeout seconds. Output: `CompletedProcess` result.
         """
         captured["cmd"] = cmd
         captured["timeout"] = timeout
@@ -153,9 +157,10 @@ def test_import_file_adds_scan_depth_to_cli_command(monkeypatch):
 def test_compatibility_check_adds_scan_depth_to_cli_command(
     tmp_path: Path, monkeypatch
 ):
-    """Verify compatibility check adds scan depth to cli command.
+    """Verify the compatibility check adds scan depth to CLI command execution contract.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: call result.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: `CompletedProcess` result.
     """
     upload_root = tmp_path / "upload-root"
     upload_root.mkdir()
@@ -168,9 +173,9 @@ def test_compatibility_check_adds_scan_depth_to_cli_command(
     captured = {}
 
     def fake_run(cmd, **kwargs):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `cmd`, `**kwargs`. Output: call result.
+        Inputs: `cmd`, `**kwargs` keyword arguments. Output: `CompletedProcess` result.
         """
         captured["cmd"] = cmd
         return subprocess.CompletedProcess(
@@ -203,9 +208,10 @@ def test_compatibility_check_adds_scan_depth_to_cli_command(
 def test_run_local_import_scan_uses_depth_10_and_writable_runtime_dirs(
     tmp_path: Path, monkeypatch
 ):
-    """Verify run local import scan uses depth 10 and writable runtime directories.
+    """Verify run local import scan uses depth 10 and writable runtime dirs.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: call result.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: `CompletedProcess` result.
     """
     upload_root = tmp_path / "upload-root"
     upload_root.mkdir()
@@ -218,9 +224,9 @@ def test_run_local_import_scan_uses_depth_10_and_writable_runtime_dirs(
     captured = {}
 
     def fake_run(cmd, **kwargs):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `cmd`, `**kwargs`. Output: call result.
+        Inputs: `cmd`, `**kwargs` keyword arguments. Output: `CompletedProcess` result.
         """
         captured["cmd"] = cmd
         captured["kwargs"] = kwargs
@@ -251,18 +257,19 @@ def test_run_local_import_scan_uses_depth_10_and_writable_runtime_dirs(
 
 
 def test_service_import_file_adds_scan_depth_to_cli_command(monkeypatch):
-    """Verify service import file adds scan depth to cli command.
+    """Verify the service import file adds scan depth to CLI command execution contract.
 
-    Inputs: `monkeypatch`. Output: call result.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in service import file adds scan depth to CLI command integration.
     """
     sample_path = Path(tempfile.gettempdir()) / "sample.czi"
     for module in (connection_service, import_service):
         captured = {}
 
         def fake_run(cmd, *args, _captured=captured, **kwargs):
-            """Fake run.
+            """Simulate run so the surrounding test controls that dependency.
 
-            Inputs: `cmd`, `_captured`, `*args`, `**kwargs`. Output: call result.
+            Inputs: `cmd`, `*args` positional arguments, `_captured`, `**kwargs` keyword
+            arguments. Output: `CompletedProcess` result.
             """
             _captured["cmd"] = cmd
             return subprocess.CompletedProcess(
@@ -291,9 +298,10 @@ def test_service_import_file_adds_scan_depth_to_cli_command(monkeypatch):
 def test_service_compatibility_check_adds_scan_depth_to_cli_command(
     tmp_path: Path, monkeypatch
 ):
-    """Verify service compatibility check adds scan depth to cli command.
+    """Verify the service compatibility check adds scan depth to CLI command execution contract.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: call result.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: `CompletedProcess` result.
     """
     file_path = tmp_path / "nested" / "sample.czi"
     file_path.parent.mkdir()
@@ -302,9 +310,9 @@ def test_service_compatibility_check_adds_scan_depth_to_cli_command(
     captured = {}
 
     def fake_run(cmd, **kwargs):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `cmd`, `**kwargs`. Output: call result.
+        Inputs: `cmd`, `**kwargs` keyword arguments. Output: `CompletedProcess` result.
         """
         captured["cmd"] = cmd
         return subprocess.CompletedProcess(
@@ -342,7 +350,7 @@ def test_service_compatibility_check_adds_scan_depth_to_cli_command(
 def test_classify_import_failure_detects_session_expiry():
     """Verify classify import failure detects session expiry.
 
-    Inputs: none. Output: None.
+    Inputs: import-job fakes. Output: fails on regressions in classify import failure detects session expiry.
     """
     stderr = """
     Proxy keep alive failed.
@@ -357,9 +365,9 @@ def test_classify_import_failure_detects_session_expiry():
 
 
 def test_classify_import_failure_defaults_to_generic_error():
-    """Verify classify import failure defaults to generic error.
+    """Confirm classify import failure defaults to generic error exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: import-job fakes. Output: fails on regressions when classify import failure defaults to generic error stops reporting the expected error.
     """
     assert (
         core_functions._classify_import_failure("", "plain failure")
@@ -370,7 +378,7 @@ def test_classify_import_failure_defaults_to_generic_error():
 def test_classify_import_failure_detects_parent_directory_write_denial():
     """Verify classify import failure detects parent directory write denial.
 
-    Inputs: none. Output: None.
+    Inputs: import-job fakes. Output: fails on regressions in classify import failure detects parent directory write denial.
     """
     stderr = """
     Joined session for e.mitridis@omeroserver:4064. Idle timeout: 10 min. Current group: users_ldap
@@ -389,7 +397,7 @@ def test_classify_import_failure_detects_parent_directory_write_denial():
 def test_classify_import_failure_detects_parent_directory_write_denial_without_metadata():
     """Verify classify import failure detects parent directory write denial without metadata.
 
-    Inputs: none. Output: None.
+    Inputs: import-job fakes. Output: fails on regressions in classify import failure detects parent directory write denial without metadata.
     """
     stderr = "No annotate access for parent directory: 227"
 
@@ -401,9 +409,9 @@ def test_classify_import_failure_detects_parent_directory_write_denial_without_m
 
 
 def test_classify_import_failure_detects_path_permission_denial():
-    """Verify classify import failure detects path permission denial.
+    """Verify the classify import failure detects path permission denial safety boundary.
 
-    Inputs: none. Output: None.
+    Inputs: import-job fakes. Output: fails on regressions when classify import failure detects path permission denial accepts unsafe input.
     """
     stderr = """
     Traceback (most recent call last):
@@ -420,7 +428,7 @@ def test_classify_import_failure_detects_path_permission_denial():
 def test_classify_import_failure_does_not_treat_generic_object_not_exist_as_session_expiry():
     """Verify classify import failure does not treat generic object not exist as session expiry.
 
-    Inputs: none. Output: None.
+    Inputs: import-job fakes. Output: fails on regressions in classify import failure does not treat generic object not exist as session expiry.
     """
     stderr = """
     java.lang.RuntimeException: Failure response on import!

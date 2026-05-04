@@ -25,7 +25,7 @@ _ATTRIBUTE_KEY_CAP = 120
 
 @dataclass(frozen=True)
 class SearchChannel:
-    """Represent search channel."""
+    """Helper type for search channel behavior."""
 
     channel_index: int
     label: str = ""
@@ -35,7 +35,7 @@ class SearchChannel:
 
 @dataclass(frozen=True)
 class SearchAttribute:
-    """Represent search attribute."""
+    """Helper type for search attribute behavior."""
 
     attribute_key: str
     attribute_text: str = ""
@@ -44,7 +44,7 @@ class SearchAttribute:
 
 @dataclass(frozen=True)
 class SearchDocument:
-    """Represent search document."""
+    """Helper type for search document behavior."""
 
     acquisition_date: datetime | None = None
     instrument_manufacturer: str = ""
@@ -66,9 +66,9 @@ class SearchDocument:
 
 
 def _normalized_key(raw_key: str) -> str:
-    """Normalized key.
+    """Return the normalized key.
 
-    Inputs: `raw_key`. Output: `str`.
+    Inputs: `raw_key` (str). Output: `str`.
     """
     lowered = str(raw_key or "").strip().lower()
     if lowered.startswith("bf_"):
@@ -77,17 +77,17 @@ def _normalized_key(raw_key: str) -> str:
 
 
 def _metadata_key_is_indexable(raw_key: str) -> bool:
-    """Metadata key is indexable.
+    """Return the metadata key is indexable.
 
-    Inputs: `raw_key`. Output: `bool`.
+    Inputs: `raw_key` (str). Output: `bool`.
     """
     return bool(_normalized_key(raw_key))
 
 
 def _normalized_text(value) -> str:
-    """Normalized text.
+    """Return the normalized text.
 
-    Inputs: `value`. Output: `str`.
+    Inputs: `value` input value. Output: `str`.
     """
     if value is None:
         return ""
@@ -103,9 +103,9 @@ def _is_scalar_index_value(value) -> bool:
 
 
 def _scalar_text(value) -> str:
-    """Scalar text.
+    """Return the scalar text.
 
-    Inputs: `value`. Output: `str`.
+    Inputs: `value` input value. Output: `str`.
     """
     if value is None:
         return ""
@@ -137,9 +137,9 @@ def _scalar_text(value) -> str:
 
 
 def _parse_datetime(value) -> datetime | None:
-    """Parse datetime.
+    """Parse and validate the datetime input.
 
-    Inputs: `value`. Output: `datetime | None`.
+    Inputs: `value` input value. Output: `datetime | None`.
     """
     raw = _normalized_text(value)
     if not raw:
@@ -151,9 +151,9 @@ def _parse_datetime(value) -> datetime | None:
 
 
 def _parse_float(value) -> float | None:
-    """Parse float.
+    """Parse and validate the float input.
 
-    Inputs: `value`. Output: `float | None`.
+    Inputs: `value` input value. Output: `float | None`.
     """
     raw = _normalized_text(value)
     if not raw:
@@ -168,9 +168,9 @@ def _parse_float(value) -> float | None:
 
 
 def _unit_factor_to_um(unit: str | None) -> float | None:
-    """Unit factor to um.
+    """Return the unit factor to um.
 
-    Inputs: `unit`. Output: `float | None`.
+    Inputs: `unit` (str | None). Output: `float | None`.
     """
     normalized = str(unit or "").strip().lower()
     if normalized in {"", "um", "µm", "micrometer", "micrometers", "micron", "microns"}:
@@ -183,9 +183,9 @@ def _unit_factor_to_um(unit: str | None) -> float | None:
 
 
 def _parse_length_to_um(value) -> float | None:
-    """Parse length to um.
+    """Parse and validate the length to um input.
 
-    Inputs: `value`. Output: `float | None`.
+    Inputs: `value` input value. Output: `float | None`.
     """
     if value is None:
         return None
@@ -224,9 +224,10 @@ def _canonical_field_candidate(
     include_groups: tuple[tuple[str, ...], ...],
     exclude_terms: tuple[str, ...] = (),
 ) -> str:
-    """Canonical field candidate.
+    """Return the canonical field candidate.
 
-    Inputs: `metadata_pairs`, `include_groups`, `exclude_terms`. Output: `str`.
+    Inputs: `metadata_pairs` (Iterable[tuple[str, str]]), `include_groups`
+    (tuple[tuple[str, ...], ...]), `exclude_terms` (tuple[str, ...]). Output: `str`.
     """
     for raw_key, raw_value in metadata_pairs:
         normalized_key = _normalized_key(raw_key)
@@ -248,10 +249,11 @@ def _canonical_numeric_candidate(
     convert_um: bool = False,
     exclude_terms: tuple[str, ...] = (),
 ) -> float | None:
-    """Canonical numeric candidate.
+    """Return the canonical numeric candidate.
 
-    Inputs: `metadata_pairs`, `include_groups`, `convert_um`, `exclude_terms`. Output:
-    `float | None`.
+    Inputs: `metadata_pairs` (Iterable[tuple[str, str]]), `include_groups`
+    (tuple[tuple[str, ...], ...]), `convert_um` (bool), `exclude_terms` (tuple[str,
+    ...]). Output: `float | None`.
     """
     raw_text = _canonical_field_candidate(
         metadata_pairs,
@@ -296,7 +298,7 @@ def _safe_details_value(obj, attr_name: str):
 
 
 def _collect_original_metadata(image) -> dict[str, str]:
-    """Collect original metadata.
+    """Collect the original metadata.
 
     Inputs: `image`. Output: `dict[str, str]`.
     """
@@ -342,7 +344,7 @@ def _collect_original_metadata(image) -> dict[str, str]:
 
 
 def _collect_channels(image) -> tuple[SearchChannel, ...]:
-    """Collect channels.
+    """Collect the channels.
 
     Inputs: `image`. Output: `tuple[SearchChannel, ...]`.
     """
@@ -375,9 +377,9 @@ def _collect_channels(image) -> tuple[SearchChannel, ...]:
 
 
 def _channel_summary(channels: Iterable[SearchChannel]) -> str:
-    """Channel summary.
+    """Return the channel summary.
 
-    Inputs: `channels`. Output: `str`.
+    Inputs: `channels` (Iterable[SearchChannel]). Output: `str`.
     """
     parts = []
     for channel in channels:
@@ -394,7 +396,7 @@ def _channel_summary(channels: Iterable[SearchChannel]) -> str:
 
 
 def _extract_dataset_project_context(image) -> tuple[int | None, str, int | None, str]:
-    """Extract dataset project context.
+    """Extract the dataset project context.
 
     Inputs: `image`. Output: `tuple[int | None, str, int | None, str]`.
     """
@@ -435,18 +437,18 @@ def _extract_dataset_project_context(image) -> tuple[int | None, str, int | None
 
 
 def _attribute_key(raw_key: str) -> str:
-    """Attribute key.
+    """Return the attribute key.
 
-    Inputs: `raw_key`. Output: `str`.
+    Inputs: `raw_key` (str). Output: `str`.
     """
     normalized = _normalized_key(raw_key).replace(" ", "_").strip("_")
     return normalized[:_ATTRIBUTE_KEY_CAP]
 
 
 def _merge_index_text(existing: str, incoming: str) -> str:
-    """Merge index text.
+    """Merge the index text.
 
-    Inputs: `existing`, `incoming`. Output: `str`.
+    Inputs: `existing` (str), `incoming` (str). Output: `str`.
     """
     existing_text = _normalized_text(existing)
     incoming_text = _normalized_text(incoming)
@@ -461,9 +463,10 @@ def _append_attribute(
     bucket: dict[str, SearchAttribute],
     attribute: SearchAttribute,
 ) -> None:
-    """Append attribute.
+    """Append the attribute.
 
-    Inputs: `bucket`, `attribute`. Output: None.
+    Inputs: `bucket` (dict[str, SearchAttribute]), `attribute` (SearchAttribute).
+    Output: None.
     """
     if not attribute.attribute_key:
         return
@@ -488,9 +491,9 @@ def _append_attribute(
 def _metadata_attributes(
     original_metadata: dict[str, str],
 ) -> tuple[SearchAttribute, ...]:
-    """Metadata attributes.
+    """Return the metadata attributes.
 
-    Inputs: `original_metadata`. Output: `tuple[SearchAttribute, ...]`.
+    Inputs: `original_metadata` (dict[str, str]). Output: `tuple[SearchAttribute, ...]`.
     """
     attributes: list[SearchAttribute] = []
     seen: set[str] = set()
@@ -515,9 +518,9 @@ def _metadata_attributes(
 
 
 def _quantity_to_float(value) -> float | None:
-    """Quantity to float.
+    """Return the quantity to float.
 
-    Inputs: `value`. Output: `float | None`.
+    Inputs: `value` input value. Output: `float | None`.
     """
     if value is None:
         return None
@@ -531,9 +534,10 @@ def _quantity_to_float(value) -> float | None:
 def _plane_quantity(
     plane_info, getter_name: str, *, units: str | None = None
 ) -> float | None:
-    """Plane quantity.
+    """Return the plane quantity.
 
-    Inputs: `plane_info`, `getter_name`, `units`. Output: `float | None`.
+    Inputs: `plane_info`, `getter_name` (str), `units` (str | None). Output: `float |
+    None`.
     """
     getter = getattr(plane_info, getter_name, None)
     if not callable(getter):
@@ -554,18 +558,18 @@ def _plane_quantity(
 
 
 def _plane_time_index(plane_info, sequence_index: int) -> int:
-    """Plane time index.
+    """Return the plane time index.
 
-    Inputs: `plane_info`, `sequence_index`. Output: `int`.
+    Inputs: `plane_info`, `sequence_index` (int). Output: `int`.
     """
     value = _plane_axis_index(plane_info, "theT")
     return sequence_index if value is None else value
 
 
 def _plane_axis_index(plane_info, attr_name: str) -> int | None:
-    """Plane axis index.
+    """Return the plane axis index.
 
-    Inputs: `plane_info`, `attr_name`. Output: `int | None`.
+    Inputs: `plane_info`, `attr_name` (str). Output: `int | None`.
     """
     raw_value = getattr(plane_info, attr_name, None)
     if raw_value is None:
@@ -586,7 +590,7 @@ def _plane_axis_index(plane_info, attr_name: str) -> int | None:
 
 
 def _callable_accepts_no_args(func) -> bool:
-    """Callable accepts no args.
+    """Return the callable accepts no args.
 
     Inputs: `func`. Output: `bool`.
     """
@@ -600,17 +604,18 @@ def _callable_accepts_no_args(func) -> bool:
 
 
 def _seconds_text(value: float) -> str:
-    """Seconds text.
+    """Return the seconds text.
 
-    Inputs: `value`. Output: `str`.
+    Inputs: `value` (float) input value. Output: `str`.
     """
     return f"{value} seconds"
 
 
 def _attribute_from_text(key: str, value: str) -> SearchAttribute | None:
-    """Attribute from text.
+    """Return the attribute from text.
 
-    Inputs: `key`, `value`. Output: `SearchAttribute | None`.
+    Inputs: `key` (str) lookup key, `value` (str) input value. Output: `SearchAttribute
+    | None`.
     """
     attribute_key = _attribute_key(key)
     attribute_text = _normalized_text(value)
@@ -630,9 +635,10 @@ def _append_text_attribute(
     *,
     trust_generated_key: bool = True,
 ) -> None:
-    """Append text attribute.
+    """Append the text attribute.
 
-    Inputs: `bucket`, `key`, `value`, `trust_generated_key`. Output: None.
+    Inputs: `bucket` (dict[str, SearchAttribute]), `key` (str) lookup key, `value` input
+    value, `trust_generated_key` (bool). Output: None.
     """
     if not trust_generated_key and not _metadata_key_is_indexable(key):
         return
@@ -645,7 +651,7 @@ def _append_text_attribute(
 
 
 def _annotation_value_pairs(annotation) -> Iterable[tuple[str, str]]:
-    """Annotation value pairs.
+    """Return the annotation value pairs.
 
     Inputs: `annotation`. Output: `Iterable[tuple[str, str]]`.
     """
@@ -712,7 +718,7 @@ def _annotation_value_pairs(annotation) -> Iterable[tuple[str, str]]:
 
 
 def _collect_annotation_attributes(image) -> tuple[SearchAttribute, ...]:
-    """Collect annotation attributes.
+    """Collect the annotation attributes.
 
     Inputs: `image`. Output: `tuple[SearchAttribute, ...]`.
     """
@@ -772,9 +778,10 @@ def _append_named_fields(
     obj,
     field_names: tuple[str, ...],
 ) -> None:
-    """Append named fields.
+    """Append the named fields.
 
-    Inputs: `bucket`, `prefix`, `obj`, `field_names`. Output: None.
+    Inputs: `bucket` (dict[str, SearchAttribute]), `prefix` (str), `obj`, `field_names`
+    (tuple[str, ...]). Output: None.
     """
     for field_name in field_names:
         value = None
@@ -794,9 +801,10 @@ def _append_getter_fields(
     obj,
     getters: tuple[tuple[str, str], ...],
 ) -> None:
-    """Append getter fields.
+    """Append the getter fields.
 
-    Inputs: `bucket`, `prefix`, `obj`, `getters`. Output: None.
+    Inputs: `bucket` (dict[str, SearchAttribute]), `prefix` (str), `obj`, `getters`
+    (tuple[tuple[str, str], ...]). Output: None.
     """
     for getter_name, label in getters:
         value = _safe_call(obj, getter_name)
@@ -807,9 +815,9 @@ def _append_fileset_attributes(
     bucket: dict[str, SearchAttribute],
     image,
 ) -> None:
-    """Append fileset attributes.
+    """Append the fileset attributes.
 
-    Inputs: `bucket`, `image`. Output: None.
+    Inputs: `bucket` (dict[str, SearchAttribute]), `image`. Output: None.
     """
     fileset = _safe_call(image, "getFileset")
     if fileset is None:
@@ -830,9 +838,9 @@ def _append_fileset_attributes(
 
 
 def _pixel_axis_size(pixels, getter_name: str, default_size: int) -> int:
-    """Pixel axis size.
+    """Return the pixel axis size.
 
-    Inputs: `pixels`, `getter_name`, `default_size`. Output: `int`.
+    Inputs: `pixels`, `getter_name` (str), `default_size` (int). Output: `int`.
     """
     value = _safe_call(pixels, getter_name)
     try:
@@ -846,9 +854,10 @@ def _collect_universal_metadata_attributes(
     channels: tuple[SearchChannel, ...],
     context: dict[str, int | str | None],
 ) -> tuple[SearchAttribute, ...]:
-    """Collect universal metadata attributes.
+    """Collect the universal metadata attributes.
 
-    Inputs: `image`, `channels`, `context`. Output: `tuple[SearchAttribute, ...]`.
+    Inputs: `image`, `channels` (tuple[SearchChannel, ...]), `context` (dict[str, int |
+    str | None]). Output: `tuple[SearchAttribute, ...]`.
     """
     bucket: dict[str, SearchAttribute] = {}
     _append_text_attribute(bucket, "image_name", _safe_details_value(image, "getName"))
@@ -1115,9 +1124,10 @@ def _collect_all_plane_info_attributes(
     image,
     channels: tuple[SearchChannel, ...],
 ) -> tuple[SearchAttribute, ...]:
-    """Collect all plane info attributes.
+    """Collect the all plane info attributes.
 
-    Inputs: `image`, `channels`. Output: `tuple[SearchAttribute, ...]`.
+    Inputs: `image`, `channels` (tuple[SearchChannel, ...]). Output:
+    `tuple[SearchAttribute, ...]`.
     """
     try:
         pixels = image.getPrimaryPixels()
@@ -1183,10 +1193,10 @@ def _collect_plane_info_attributes_by_plane(
     channel_indices: dict[int, int],
     size_z: int,
 ) -> tuple[SearchAttribute, ...]:
-    """Collect plane info attributes by plane.
+    """Collect the plane info attributes by plane.
 
-    Inputs: `copy_plane_info`, `channel_indices`, `size_z`. Output:
-    `tuple[SearchAttribute, ...]`.
+    Inputs: `copy_plane_info`, `channel_indices` (dict[int, int]), `size_z` (int).
+    Output: `tuple[SearchAttribute, ...]`.
     """
     attributes: list[SearchAttribute] = []
     for channel_position, channel_index in channel_indices.items():
@@ -1213,9 +1223,9 @@ def _plane_group_attributes(
     prefix: str,
     plane_infos: Iterable,
 ) -> list[SearchAttribute]:
-    """Plane group attributes.
+    """Return the plane group attributes.
 
-    Inputs: `prefix`, `plane_infos`. Output: `list[SearchAttribute]`.
+    Inputs: `prefix` (str), `plane_infos` (Iterable). Output: `list[SearchAttribute]`.
     """
     values_by_suffix: dict[str, list[str]] = {}
     for sequence_t, plane_info in enumerate(plane_infos or ()):
@@ -1259,9 +1269,9 @@ def _plane_group_attributes(
 
 
 def _build_search_text(parts: Iterable[str]) -> str:
-    """Search text.
+    """Build the search text.
 
-    Inputs: `parts`. Output: `str`.
+    Inputs: `parts` (Iterable[str]). Output: `str`.
     """
     text = " ".join(part for part in parts if part).strip()
     if len(text) <= _SEARCH_TEXT_CAP:

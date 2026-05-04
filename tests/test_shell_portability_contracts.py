@@ -21,16 +21,16 @@ class ShellPortabilityContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `ShellPortabilityContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def test_tracked_shell_scripts_avoid_bash_regex_operator(self) -> None:
         """Verify tracked shell scripts avoid bash regex operator.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in tracked shell scripts avoid bash regex operator.
         """
         git_path = shutil.which("git")
         self.assertIsNotNone(git_path)
@@ -72,7 +72,7 @@ class ShellPortabilityContractTests(unittest.TestCase):
     def test_ext4_quota_enforcer_matches_group_names_literally(self) -> None:
         """Verify ext4 quota enforcer matches group names literally.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in ext4 quota enforcer matches group names literally.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -133,9 +133,9 @@ class ShellPortabilityContractTests(unittest.TestCase):
 
     @staticmethod
     def _write_fake_command(path: Path) -> None:
-        """Write fake command.
+        """Write the fake command for `ShellPortabilityContractTests`.
 
-        Inputs: `path`. Output: None.
+        Inputs: `path` (Path) path. Output: None.
         """
         path.write_text(
             textwrap.dedent(

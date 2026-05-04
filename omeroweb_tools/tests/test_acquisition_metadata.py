@@ -7,17 +7,17 @@ from omeroweb_tools.services.acquisition_metadata import extract_search_document
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._raw_value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self._raw_value`.
         """
@@ -25,10 +25,10 @@ class _Value:
 
 
 class _UnitValue(_Value):
-    """Represent unit value."""
+    """Test double for unit value behavior in this module."""
 
     def __init__(self, value, symbol):
-        """Initialize the instance.
+        """Create `_UnitValue` with `value` and `symbol`.
 
         Inputs: `value`, `symbol`. Output: None.
         """
@@ -36,15 +36,15 @@ class _UnitValue(_Value):
         self._symbol = symbol
 
     def getSymbol(self):
-        """Return Symbol.
+        """Return the symbol for `_UnitValue`.
 
-        Inputs: none. Output: `self._symbol`.
+        Inputs: none. Output: `_symbol`.
         """
         return self._symbol
 
 
 class _PlaneInfo:
-    """Represent plane info."""
+    """Test double for plane info behavior in this module."""
 
     def __init__(
         self,
@@ -57,7 +57,7 @@ class _PlaneInfo:
         position_y=None,
         position_z=None,
     ):
-        """Initialize the instance.
+        """Create `_PlaneInfo` with `the_c`, `the_z`, `the_t`, `delta_t`, `exposure_time`, `position_x`, `position_y`, and `position_z`.
 
         Inputs: `the_c`, `the_z`, `the_t`, `delta_t`, `exposure_time`, `position_x`,
         `position_y`, `position_z`. Output: None.
@@ -72,50 +72,50 @@ class _PlaneInfo:
         self._position_z = position_z
 
     def getDeltaT(self, units="SECOND"):
-        """Return Delta T.
+        """Return the fake delta t value used by this test double.
 
-        Inputs: `units`. Output: computed value.
+        Inputs: `units`. Output: get delta t result.
         """
         assert units == "SECOND"
         return None if self._delta_t is None else _Value(self._delta_t)
 
     def getExposureTime(self, units="SECOND"):
-        """Return Exposure Time.
+        """Return the fake exposure time value used by this test double.
 
-        Inputs: `units`. Output: computed value.
+        Inputs: `units`. Output: get exposure time result.
         """
         assert units == "SECOND"
         return None if self._exposure_time is None else _Value(self._exposure_time)
 
     def getPositionX(self):
-        """Return Position X.
+        """Return the fake position x value used by this test double.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: get position x result.
         """
         return None if self._position_x is None else _Value(self._position_x)
 
     def getPositionY(self):
-        """Return Position Y.
+        """Return the fake position y value used by this test double.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: get position y result.
         """
         return None if self._position_y is None else _Value(self._position_y)
 
     def getPositionZ(self):
-        """Return Position Z.
+        """Return the fake position z value used by this test double.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: get position z result.
         """
         return None if self._position_z is None else _Value(self._position_z)
 
 
 class _Pixels:
-    """Represent pixels."""
+    """Test double for pixels behavior in this module."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_Pixels` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.copy_plane_info_calls = []
         self._plane_infos = {
@@ -137,7 +137,7 @@ class _Pixels:
 
     @staticmethod
     def getSizeX():
-        """Return Size X.
+        """Return `_Pixels`'s fake SizeX value.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -145,7 +145,7 @@ class _Pixels:
 
     @staticmethod
     def getSizeY():
-        """Return Size Y.
+        """Return `_Pixels`'s fake SizeY value.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -153,7 +153,7 @@ class _Pixels:
 
     @staticmethod
     def getSizeZ():
-        """Return Size Z.
+        """Return `_Pixels`'s fake SizeZ value.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -161,7 +161,7 @@ class _Pixels:
 
     @staticmethod
     def getSizeC():
-        """Return Size C.
+        """Return `_Pixels`'s fake channel count.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -169,7 +169,7 @@ class _Pixels:
 
     @staticmethod
     def getSizeT():
-        """Return Size T.
+        """Return `_Pixels`'s fake timepoint count.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -177,7 +177,7 @@ class _Pixels:
 
     @staticmethod
     def getPhysicalSizeX():
-        """Return Physical Size X.
+        """Return `_Pixels`'s fake physical X size.
 
         Inputs: none. Output: `_UnitValue` result.
         """
@@ -185,7 +185,7 @@ class _Pixels:
 
     @staticmethod
     def getPhysicalSizeY():
-        """Return Physical Size Y.
+        """Return `_Pixels`'s fake physical Y size.
 
         Inputs: none. Output: `_UnitValue` result.
         """
@@ -193,16 +193,16 @@ class _Pixels:
 
     @staticmethod
     def getPhysicalSizeZ():
-        """Return Physical Size Z.
+        """Return `_Pixels`'s fake physical Z size.
 
         Inputs: none. Output: `_UnitValue` result.
         """
         return _UnitValue("0.400", "µm")
 
     def copyPlaneInfo(self, theC=None, theZ=None):
-        """Copy Plane Info.
+        """Copy the plane Info for `_Pixels`.
 
-        Inputs: `theC`, `theZ`. Output: computed value.
+        Inputs: `theC`, `theZ`. Output: `get` result.
         """
         self.copy_plane_info_calls.append((theC, theZ))
         if theC is None and theZ is None:
@@ -215,22 +215,22 @@ class _Pixels:
 
 
 class _DetectorSettings:
-    """Represent detector settings."""
+    """Test double for detector settings behavior in this module."""
 
     gain = _Value("1.5")
     offsetValue = _Value("2")
 
     @staticmethod
     def getBinning():
-        """Return Binning.
+        """Return the binning for `_DetectorSettings`.
 
-        Inputs: none. Output: '2x2'.
+        Inputs: none. Output: `str`.
         """
         return "2x2"
 
     @staticmethod
     def getGain():
-        """Return Gain.
+        """Return the gain for `_DetectorSettings`.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -238,7 +238,7 @@ class _DetectorSettings:
 
     @staticmethod
     def getDetector():
-        """Return Detector.
+        """Return the detector for `_DetectorSettings`.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -246,14 +246,14 @@ class _DetectorSettings:
 
 
 class _LightSourceSettings:
-    """Represent light source settings."""
+    """Test double for light source settings behavior in this module."""
 
     attenuation = _Value("0.5")
     wavelength = _Value("488")
 
     @staticmethod
     def getLightSource():
-        """Return Light Source.
+        """Return the fake light source value used by this test double.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -261,11 +261,11 @@ class _LightSourceSettings:
 
 
 class _LightPath:
-    """Represent light path."""
+    """Test double for light path behavior in this module."""
 
     @staticmethod
     def getDichroic():
-        """Return Dichroic.
+        """Return the dichroic for `_LightPath`.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -273,7 +273,7 @@ class _LightPath:
 
     @staticmethod
     def getEmissionFilters():
-        """Return Emission Filters.
+        """Return the fake emission filters value used by this test double.
 
         Inputs: none. Output: list.
         """
@@ -281,7 +281,7 @@ class _LightPath:
 
     @staticmethod
     def getExcitationFilters():
-        """Return Excitation Filters.
+        """Return the fake excitation filters value used by this test double.
 
         Inputs: none. Output: list.
         """
@@ -289,7 +289,7 @@ class _LightPath:
 
 
 class _LogicalChannel:
-    """Represent logical channel."""
+    """Test double for logical channel behavior in this module."""
 
     name = "GFP logical"
     fluor = "EGFP"
@@ -297,7 +297,7 @@ class _LogicalChannel:
 
     @staticmethod
     def getDetectorSettings():
-        """Return Detector Settings.
+        """Return `_LogicalChannel`'s fake detector settings.
 
         Inputs: none. Output: `_DetectorSettings` result.
         """
@@ -305,7 +305,7 @@ class _LogicalChannel:
 
     @staticmethod
     def getLightSourceSettings():
-        """Return Light Source Settings.
+        """Return the fake light source settings value used by this test double.
 
         Inputs: none. Output: `_LightSourceSettings` result.
         """
@@ -313,7 +313,7 @@ class _LogicalChannel:
 
     @staticmethod
     def getLightPath():
-        """Return Light Path.
+        """Return the fake light path value used by this test double.
 
         Inputs: none. Output: `_LightPath` result.
         """
@@ -321,10 +321,10 @@ class _LogicalChannel:
 
 
 class _Channel:
-    """Represent channel."""
+    """Test double for channel behavior in this module."""
 
     def __init__(self, index, label, excitation, emission, logical_channel=None):
-        """Initialize the instance.
+        """Create `_Channel` with `index`, `label`, `excitation`, `emission`, and `logical_channel`.
 
         Inputs: `index`, `label`, `excitation`, `emission`, `logical_channel`. Output:
         None.
@@ -338,35 +338,35 @@ class _Channel:
         self._logical_channel = logical_channel
 
     def getIndex(self):
-        """Return Index.
+        """Return the index for `_Channel`.
 
-        Inputs: none. Output: `self._index`.
+        Inputs: none. Output: `_index`.
         """
         return self._index
 
     def getLabel(self):
-        """Return Label.
+        """Return the label for `_Channel`.
 
-        Inputs: none. Output: `self._label`.
+        Inputs: none. Output: `_label`.
         """
         return self._label
 
     def getExcitationWave(self):
-        """Return Excitation Wave.
+        """Return the fake excitation wave value used by this test double.
 
         Inputs: none. Output: `self._excitation`.
         """
         return self._excitation
 
     def getEmissionWave(self):
-        """Return Emission Wave.
+        """Return the fake emission wave value used by this test double.
 
         Inputs: none. Output: `self._emission`.
         """
         return self._emission
 
     def getLogicalChannel(self):
-        """Return Logical Channel.
+        """Return the fake logical channel value used by this test double.
 
         Inputs: none. Output: `self._logical_channel`.
         """
@@ -374,10 +374,10 @@ class _Channel:
 
 
 class _NamedObject:
-    """Represent named object."""
+    """Test double for named object behavior in this module."""
 
     def __init__(self, object_id, name, parents=None):
-        """Initialize the instance.
+        """Create `_NamedObject` with `object_id`, `name`, and `parents`.
 
         Inputs: `object_id`, `name`, `parents`. Output: None.
         """
@@ -386,21 +386,21 @@ class _NamedObject:
         self._parents = list(parents or [])
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_NamedObject`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
         return _Value(self._id)
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_NamedObject`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
         return self._name
 
     def listParents(self):
-        """Return list parents.
+        """Return `_NamedObject`'s fake parent listing.
 
         Inputs: none. Output: `list` result.
         """
@@ -408,11 +408,11 @@ class _NamedObject:
 
 
 class _ObjectiveSettings:
-    """Represent objective settings."""
+    """Test double for objective settings behavior in this module."""
 
     @staticmethod
     def getCorrectionCollar():
-        """Return Correction Collar.
+        """Return the fake correction collar value used by this test double.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -420,7 +420,7 @@ class _ObjectiveSettings:
 
     @staticmethod
     def getID():
-        """Return ID.
+        """Return the ID for `_ObjectiveSettings`.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -428,7 +428,7 @@ class _ObjectiveSettings:
 
     @staticmethod
     def getObjective():
-        """Return Objective.
+        """Return the objective for `_ObjectiveSettings`.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -442,7 +442,7 @@ class _ObjectiveSettings:
 
 
 class _Microscope:
-    """Represent microscope."""
+    """Test double for microscope behavior in this module."""
 
     manufacturer = "Zeiss"
     model = "LSM 980"
@@ -450,7 +450,7 @@ class _Microscope:
 
     @staticmethod
     def getMicroscopeType():
-        """Return Microscope Type.
+        """Return the fake microscope type value used by this test double.
 
         Inputs: none. Output: 'inverted'.
         """
@@ -458,11 +458,11 @@ class _Microscope:
 
 
 class _Instrument:
-    """Represent instrument."""
+    """Test double for instrument behavior in this module."""
 
     @staticmethod
     def getMicroscope():
-        """Return Microscope.
+        """Return the microscope for `_Instrument`.
 
         Inputs: none. Output: `_Microscope` result.
         """
@@ -470,9 +470,9 @@ class _Instrument:
 
     @staticmethod
     def getObjectives():
-        """Return Objectives.
+        """Return the objectives for `_Instrument`.
 
-        Inputs: none. Output: list.
+        Inputs: none. Output: `list`.
         """
         return [
             SimpleNamespace(
@@ -485,31 +485,31 @@ class _Instrument:
 
     @staticmethod
     def getFilters():
-        """Return Filters.
+        """Return the filters for `_Instrument`.
 
-        Inputs: none. Output: list.
+        Inputs: none. Output: `list`.
         """
         return [SimpleNamespace(manufacturer="Chroma", model="ET525/50m")]
 
     @staticmethod
     def getDichroics():
-        """Return Dichroics.
+        """Return the dichroics for `_Instrument`.
 
-        Inputs: none. Output: list.
+        Inputs: none. Output: `list`.
         """
         return [SimpleNamespace(manufacturer="Chroma", model="T495lpxr")]
 
     @staticmethod
     def getDetectors():
-        """Return Detectors.
+        """Return the detectors for `_Instrument`.
 
-        Inputs: none. Output: list.
+        Inputs: none. Output: `list`.
         """
         return [SimpleNamespace(manufacturer="Hamamatsu", model="Orca Flash")]
 
     @staticmethod
     def getLightSources():
-        """Return Light Sources.
+        """Return the fake light sources value used by this test double.
 
         Inputs: none. Output: list.
         """
@@ -517,11 +517,11 @@ class _Instrument:
 
 
 class _OriginalFile:
-    """Represent original file."""
+    """Test double for original file behavior in this module."""
 
     @staticmethod
     def getName():
-        """Return the fake object name.
+        """Return `_OriginalFile`'s fake object name.
 
         Inputs: none. Output: 'synthetic-generated.dv'.
         """
@@ -529,15 +529,15 @@ class _OriginalFile:
 
     @staticmethod
     def getMimetype():
-        """Return Mimetype.
+        """Return the mimetype for `_OriginalFile`.
 
-        Inputs: none. Output: 'application/octet-stream'.
+        Inputs: none. Output: `str`.
         """
         return "application/octet-stream"
 
     @staticmethod
     def getSize():
-        """Return Size.
+        """Return the size for `_OriginalFile`.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -545,19 +545,19 @@ class _OriginalFile:
 
     @staticmethod
     def getPath():
-        """Return Path.
+        """Return the path for `_OriginalFile`.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise AssertionError("private file paths must not be indexed")
 
 
 class _UsedFile:
-    """Represent used file."""
+    """Test double for used file behavior in this module."""
 
     @staticmethod
     def getOriginalFile():
-        """Return Original File.
+        """Return `_UsedFile`'s fake original file.
 
         Inputs: none. Output: `_OriginalFile` result.
         """
@@ -565,25 +565,25 @@ class _UsedFile:
 
 
 class _Fileset:
-    """Represent fileset."""
+    """Test double for fileset behavior in this module."""
 
     @staticmethod
     def copyUsedFiles():
-        """Copy Used Files.
+        """Copy the used Files for `_Fileset`.
 
-        Inputs: none. Output: list.
+        Inputs: none. Output: `list`.
         """
         return [_UsedFile()]
 
 
 class _MapAnnotation:
-    """Represent map annotation."""
+    """Test double for map annotation behavior in this module."""
 
     OMERO_CLASS = "MapAnnotation"
 
     @staticmethod
     def getValue():
-        """Return the fake OMERO value.
+        """Return `_MapAnnotation`'s fake OMERO value.
 
         Inputs: none. Output: list.
         """
@@ -591,13 +591,13 @@ class _MapAnnotation:
 
 
 class _TextAnnotation:
-    """Represent text annotation."""
+    """Test double for text annotation behavior in this module."""
 
     OMERO_CLASS = "TextAnnotation"
 
     @staticmethod
     def getTextValue():
-        """Return Text Value.
+        """Return the fake text payload used by this test double.
 
         Inputs: none. Output: 'QC passed'.
         """
@@ -605,12 +605,12 @@ class _TextAnnotation:
 
 
 class _Image:
-    """Represent image."""
+    """Test double for image behavior in this module."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_Image` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         project = _NamedObject(200, "Cell Cycle")
         self._dataset = _NamedObject(100, "Mitotic Entry", parents=[project])
@@ -618,7 +618,7 @@ class _Image:
 
     @staticmethod
     def getName():
-        """Return the fake object name.
+        """Return `_Image`'s fake object name.
 
         Inputs: none. Output: 'img-001'.
         """
@@ -626,15 +626,15 @@ class _Image:
 
     @staticmethod
     def getDescription():
-        """Return Description.
+        """Return the description for `_Image`.
 
-        Inputs: none. Output: 'Synthetic search fixture'.
+        Inputs: none. Output: `str`.
         """
         return "Synthetic search fixture"
 
     @staticmethod
     def getAcquisitionDate():
-        """Return Acquisition Date.
+        """Return `_Image`'s fake acquisition date.
 
         Inputs: none. Output: `datetime` result.
         """
@@ -642,9 +642,9 @@ class _Image:
 
     @staticmethod
     def getChannels():
-        """Return Channels.
+        """Return the channels for `_Image`.
 
-        Inputs: none. Output: list.
+        Inputs: none. Output: `list`.
         """
         return [
             _Channel(0, "DAPI", _Value("405"), _Value("450")),
@@ -653,7 +653,7 @@ class _Image:
 
     @staticmethod
     def getObjectiveSettings():
-        """Return Objective Settings.
+        """Return `_Image`'s fake objective settings.
 
         Inputs: none. Output: `_ObjectiveSettings` result.
         """
@@ -661,7 +661,7 @@ class _Image:
 
     @staticmethod
     def getDetectorSettings():
-        """Return Detector Settings.
+        """Return `_Image`'s fake detector settings.
 
         Inputs: none. Output: list.
         """
@@ -669,7 +669,7 @@ class _Image:
 
     @staticmethod
     def getPixelSizeX(units=True):
-        """Return Pixel Size X.
+        """Return `_Image`'s fake physical X size.
 
         Inputs: `units`. Output: `_UnitValue` result.
         """
@@ -677,7 +677,7 @@ class _Image:
 
     @staticmethod
     def getPixelSizeY(units=True):
-        """Return Pixel Size Y.
+        """Return `_Image`'s fake physical Y size.
 
         Inputs: `units`. Output: `_UnitValue` result.
         """
@@ -685,14 +685,14 @@ class _Image:
 
     @staticmethod
     def getPixelSizeZ(units=True):
-        """Return Pixel Size Z.
+        """Return `_Image`'s fake physical Z size.
 
         Inputs: `units`. Output: `_UnitValue` result.
         """
         return _UnitValue("0.400", "µm")
 
     def getPrimaryPixels(self):
-        """Return Primary Pixels.
+        """Return the fake primary pixels value used by this test double.
 
         Inputs: none. Output: `self._pixels`.
         """
@@ -700,7 +700,7 @@ class _Image:
 
     @staticmethod
     def getInstrument():
-        """Return Instrument.
+        """Return the instrument for `_Image`.
 
         Inputs: none. Output: `_Instrument` result.
         """
@@ -708,7 +708,7 @@ class _Image:
 
     @staticmethod
     def getImagingEnvironment():
-        """Return Imaging Environment.
+        """Return the fake imaging environment value used by this test double.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -716,7 +716,7 @@ class _Image:
 
     @staticmethod
     def getStageLabel():
-        """Return Stage Label.
+        """Return the fake stage label value used by this test double.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -729,7 +729,7 @@ class _Image:
 
     @staticmethod
     def getFileset():
-        """Return Fileset.
+        """Return the fileset for `_Image`.
 
         Inputs: none. Output: `_Fileset` result.
         """
@@ -745,7 +745,7 @@ class _Image:
 
     @staticmethod
     def loadOriginalMetadata():
-        """Return load original metadata.
+        """Return `_Image`'s fake original-metadata payload.
 
         Inputs: none. Output: tuple.
         """
@@ -764,7 +764,7 @@ class _Image:
         )
 
     def listParents(self):
-        """Return list parents.
+        """Return `_Image`'s fake parent listing.
 
         Inputs: none. Output: list.
         """
@@ -774,7 +774,7 @@ class _Image:
 def test_extract_search_document_builds_canonical_fields_and_metadata_attributes():
     """Verify extract search document builds canonical fields and metadata attributes.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in extract search document builds canonical fields and metadata attributes.
     """
     image = _Image()
     document, context = extract_search_document(image)

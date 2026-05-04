@@ -28,18 +28,18 @@ from omeroweb_import.strings import messages as import_messages
 
 
 def _payload(response):
-    """Payload.
+    """Return the payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
 
 @pytest.fixture(autouse=True)
 def _regular_wrapper_user(monkeypatch):
-    """Regular wrapper user.
+    """Record the regular wrapper user call on the test double for later assertions.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: `monkeypatch` pytest monkeypatch fixture. Output: None.
     """
     monkeypatch.setattr(
         import_view_utils,
@@ -51,9 +51,9 @@ def _regular_wrapper_user(monkeypatch):
 def test_user_settings_view_saves_payload_and_returns_normalized_response(
     monkeypatch,
 ) -> None:
-    """Verify user settings view saves payload and returns normalized response.
+    """Verify user settings view saves payload and returns normalized response result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in user settings view saves payload and returns normalized response.
     """
     request = RequestFactory().post(
         "/omeroweb_import/settings/save/",
@@ -95,9 +95,9 @@ def test_user_settings_view_saves_payload_and_returns_normalized_response(
 def test_user_settings_view_rejects_invalid_method_username_and_payload(
     monkeypatch,
 ) -> None:
-    """Verify user settings view rejects invalid method username and payload.
+    """Confirm user settings view rejects invalid method username and payload is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in user settings view rejects invalid method username and payload.
     """
     request = RequestFactory().get("/omeroweb_import/settings/save/")
 
@@ -131,9 +131,9 @@ def test_user_settings_view_rejects_invalid_method_username_and_payload(
 
 
 def test_user_settings_view_hides_store_exception(monkeypatch) -> None:
-    """Verify user settings view hides store exception.
+    """Confirm user settings view hides store exception exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when user settings view hides store exception stops reporting the expected error.
     """
     request = RequestFactory().post(
         "/omeroweb_import/settings/save/",
@@ -166,9 +166,9 @@ def test_user_settings_view_hides_store_exception(monkeypatch) -> None:
 
 
 def test_special_method_save_hides_store_exception(monkeypatch) -> None:
-    """Verify special method save hides store exception.
+    """Confirm special method save hides store exception exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when special method save hides store exception stops reporting the expected error.
     """
     request = RequestFactory().post(
         "/omeroweb_import/settings/special/save/",
@@ -201,9 +201,9 @@ def test_special_method_save_hides_store_exception(monkeypatch) -> None:
 
 
 def test_special_method_load_hides_store_exception(monkeypatch) -> None:
-    """Verify special method load hides store exception.
+    """Confirm special method load hides store exception exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when special method load hides store exception stops reporting the expected error.
     """
     request = RequestFactory().post(
         "/omeroweb_import/settings/special/load/",
@@ -238,9 +238,9 @@ def test_special_method_load_hides_store_exception(monkeypatch) -> None:
 def test_special_method_settings_views_normalize_and_load_payloads(
     monkeypatch,
 ) -> None:
-    """Verify special method settings views normalize and load payloads.
+    """Check special method settings views normalize and load payloads parsing against the documented contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in special method settings views normalize and load payloads.
     """
     save_request = RequestFactory().post(
         "/omeroweb_import/settings/special/save/",
@@ -324,9 +324,9 @@ def test_special_method_settings_views_normalize_and_load_payloads(
 
 
 def test_special_method_settings_views_reject_invalid_requests(monkeypatch) -> None:
-    """Verify special method settings views reject invalid requests.
+    """Confirm special method settings views reject invalid requests is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when special method settings views reject invalid requests stops reporting the expected error.
     """
     get_request = RequestFactory().get("/omeroweb_import/settings/special/save/")
     response = special_method_settings_view.save_settings(get_request, conn=None)

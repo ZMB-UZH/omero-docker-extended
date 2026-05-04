@@ -6,9 +6,9 @@ from omero_plugin_common import tmp_utils
 
 
 def test_get_plugin_tmp_dir_is_non_mutating_by_default(tmp_path, monkeypatch):
-    """Verify get plugin temporary directory is non mutating by default.
+    """Verify get plugin tmp dir is non mutating by default.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in get plugin tmp dir is non mutating by default.
     """
     monkeypatch.setenv(tmp_utils.TMP_PATH_ENV, str(tmp_path))
     monkeypatch.setattr(tmp_utils, "_detect_caller_plugin", lambda: "omeroweb-import")
@@ -20,9 +20,9 @@ def test_get_plugin_tmp_dir_is_non_mutating_by_default(tmp_path, monkeypatch):
 
 
 def test_get_plugin_tmp_dir_creates_tree_only_when_requested(tmp_path, monkeypatch):
-    """Verify get plugin temporary directory creates tree only when requested.
+    """Verify get plugin tmp dir creates tree only when requested.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in get plugin tmp dir creates tree only when requested.
     """
     monkeypatch.setenv(tmp_utils.TMP_PATH_ENV, str(tmp_path))
     monkeypatch.setattr(tmp_utils, "_detect_caller_plugin", lambda: "omeroweb-tools")
@@ -34,9 +34,9 @@ def test_get_plugin_tmp_dir_creates_tree_only_when_requested(tmp_path, monkeypat
 
 
 def test_get_plugin_tmp_dir_rejects_unsafe_components(tmp_path, monkeypatch):
-    """Verify get plugin temporary directory rejects unsafe components.
+    """Confirm get plugin tmp dir rejects unsafe components is rejected at the boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in get plugin tmp dir rejects unsafe components.
     """
     monkeypatch.setenv(tmp_utils.TMP_PATH_ENV, str(tmp_path))
     monkeypatch.setattr(tmp_utils, "_detect_caller_plugin", lambda: "../escape")

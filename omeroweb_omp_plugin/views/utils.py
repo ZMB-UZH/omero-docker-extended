@@ -48,9 +48,9 @@ def load_json_body(request):
 
 
 def resolve_omero_host_port(conn):
-    """Resolve OMERO host port.
+    """Resolve the OMERO host port.
 
-    Inputs: `conn`. Output: tuple.
+    Inputs: `conn` OMERO gateway connection. Output: `tuple`.
     """
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
     port = getattr(conn, "port", None) or getattr(conn, "_port", None)
@@ -117,7 +117,7 @@ def validate_user_password(conn, password):
 def get_session_key(conn):
     """Return the active OMERO session key for CLI reuse.
 
-    Inputs: `conn`. Output: computed value or None.
+    Inputs: `conn` OMERO gateway connection. Output: get session key result.
     """
     if conn is None:
         return None
@@ -149,7 +149,8 @@ def get_session_key(conn):
 def build_omero_cli_base_command(conn):
     """A session-key-based OMERO CLI prefix for authenticated commands.
 
-    Inputs: `conn`. Output: list. Raises on invalid or unavailable state.
+    Inputs: `conn` OMERO gateway connection. Output: `list`. Raises: ValueError when validation
+    or the called operation fails.
     """
     session_key = get_session_key(conn)
     host, port = resolve_omero_host_port(conn)
@@ -161,14 +162,15 @@ def build_omero_cli_base_command(conn):
 def require_non_root_user(view_func):
     """Non root user.
 
-    Inputs: `view_func`. Output: computed value.
+    Inputs: `view_func`. Output: `_wrapped`.
     """
 
     @wraps(view_func)
     def _wrapped(request, *args, conn=None, url=None, **kwargs):
-        """Wrapped.
+        """Call the wrapped view after resolving user and connector context.
 
-        Inputs: `request`, `conn`, `url`, `*args`, `**kwargs`. Output: computed value.
+        Inputs: `request` Django request, `*args` positional arguments, `conn` OMERO
+        gateway connection, `url` URL, `**kwargs` keyword arguments. Output: `view_func`
         """
         remaining_args = args
         if remaining_args and conn is None:

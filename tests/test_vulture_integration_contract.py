@@ -17,23 +17,23 @@ class VultureIntegrationContractTests(TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `VultureIntegrationContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def read_text(self, relative_path: str) -> str:
-        """Return read text.
+        """Return `VultureIntegrationContractTests`'s configured text fixture.
 
         Inputs: `relative_path`. Output: `str`.
         """
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
 
     def test_python_style_doc_covers_vulture_workflow_and_local_runner(self) -> None:
-        """Verify python style doc covers vulture workflow and local runner.
+        """Verify the python style doc covers vulture workflow and local runner execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in python style doc covers vulture workflow and local runner integration.
         """
         doc_text = self.read_text("docs/reference/python-style-and-linting.md")
         self.assertIn(".github/workflows/vulture.yml", doc_text)
@@ -44,7 +44,7 @@ class VultureIntegrationContractTests(TestCase):
     def test_vulture_requirements_are_hash_pinned(self) -> None:
         """Verify vulture requirements are hash pinned.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in vulture requirements are hash pinned.
         """
         compiled = self.read_text(".github/requirements/vulture-ci.txt")
         self.assertIn("pip-compile", compiled)
@@ -53,9 +53,9 @@ class VultureIntegrationContractTests(TestCase):
         self.assertIn("--hash=sha256:", compiled)
 
     def test_vulture_workflow_is_pinned_and_uses_repo_runner(self) -> None:
-        """Verify vulture workflow is pinned and uses repo runner.
+        """Verify the vulture workflow is pinned and uses repo runner execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in vulture workflow is pinned and uses repo runner integration.
         """
         workflow = yaml.safe_load(self.read_text(".github/workflows/vulture.yml"))
         triggers = workflow[True]
@@ -103,9 +103,9 @@ class VultureIntegrationContractTests(TestCase):
         )
 
     def test_scope_keeps_only_tracked_production_python_files(self) -> None:
-        """Verify scope keeps only tracked production python files.
+        """Check that scope keeps only tracked production python files remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in scope keeps only tracked production python files.
         """
         include = (
             "tools/vulture_check.py",
@@ -117,7 +117,7 @@ class VultureIntegrationContractTests(TestCase):
             "tests/test_vulture_integration_contract.py",
             "omeroweb_import/tests/test_core_function_helpers.py",
             "docs/conf.py",
-            "third_party/caveman-v1.6.0/tools/helper.py",
+            "third_party/caveman-v1.7.0/tools/helper.py",
             ".agents/skills/caveman/SKILL.md",
             ".github/scripts/helper.py",
             "omeroweb_import/conftest.py",
@@ -140,7 +140,7 @@ class VultureIntegrationContractTests(TestCase):
     def test_list_vulture_targets_uses_git_ls_files_and_safe_directory(self) -> None:
         """Verify list vulture targets uses git ls files and safe directory.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in list vulture targets uses git ls files and safe directory.
         """
         repo_root = self.repo_root
         tracked_files = "\n".join(
@@ -186,9 +186,9 @@ class VultureIntegrationContractTests(TestCase):
         )
 
     def test_build_vulture_command_uses_current_python_and_threshold(self) -> None:
-        """Verify build vulture command uses current python and threshold.
+        """Verify the build vulture command uses current python and threshold execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in build vulture command uses current python and threshold integration.
         """
         self.assertEqual(
             [

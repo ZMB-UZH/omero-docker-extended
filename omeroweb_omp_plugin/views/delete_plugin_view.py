@@ -34,9 +34,10 @@ _DELETE_TARGET_KINDS = frozenset({"Annotation", "ImageAnnotationLink"})
 
 
 def _validated_delete_object_id(value, label: str) -> int:
-    """Validated delete object ID.
+    """Return the validated delete object ID.
 
-    Inputs: `value`, `label`. Output: `int`. Raises on invalid or unavailable state.
+    Inputs: `value` input value, `label` (str). Output: `int`. Raises: ValueError when
+    validation or the called operation fails.
     """
     object_id = int(value)
     if object_id <= 0:
@@ -45,12 +46,10 @@ def _validated_delete_object_id(value, label: str) -> int:
 
 
 def _run_omero_delete(cli_base_cmd, object_kind: str, object_id: int):
-    """OMERO delete.
+    """Run the OMERO delete.
 
-    Inputs: `cli_base_cmd`, `object_kind`, `object_id`. Output: `process_utils.run`
-    result. Raises on invalid or unavailable state.
-
-    result. Raises on invalid or unavailable state.
+    Inputs: `cli_base_cmd`, `object_kind` (str), `object_id` (int). Output: `run`
+    Raises: ValueError when validation or the called operation fails.
     """
     if object_kind not in _DELETE_TARGET_KINDS:
         raise ValueError("Unsupported OMERO delete target.")
@@ -69,9 +68,10 @@ def _run_omero_delete(cli_base_cmd, object_kind: str, object_id: int):
 @login_required()
 @require_non_root_user
 def delete_plugin_keyvaluepairs(request, conn=None, _url=None, **kwargs):
-    """Delete plugin keyvaluepairs.
+    """Delete the plugin keyvaluepairs.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     try:
         if request.method != "POST":

@@ -10,9 +10,9 @@ from omeroweb_admin_tools.services import storage_quotas
 
 @pytest.fixture(autouse=True)
 def _quota_env(monkeypatch):
-    """Quota env.
+    """Record the quota env call on the test double for later assertions.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: `monkeypatch` pytest monkeypatch fixture. Output: None.
     """
     monkeypatch.setenv(storage_quotas.MIN_GROUP_QUOTA_ENV, "0.10")
     monkeypatch.setenv(storage_quotas.DEFAULT_GROUP_QUOTA_ENV, "0.25")
@@ -23,12 +23,10 @@ def test_storage_quota_env_and_root_helpers_cover_validation_edges(
     monkeypatch,
     tmp_path,
 ):
-    """Verify storage quota environment and root helpers cover validation edges.
+    """Verify storage quota env and root helpers cover validation edges.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: `real_resolve` result. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` temporary path fixture.
+    Output: `real_resolve` result. Raises: FileNotFoundError for the exercised failure path.
     """
     monkeypatch.setenv(storage_quotas.AUTO_GROUP_QUOTA_ENV, "maybe")
     with pytest.raises(storage_quotas.QuotaError, match="expected one of"):
@@ -64,12 +62,10 @@ def test_storage_quota_env_and_root_helpers_cover_validation_edges(
     real_resolve = Path.resolve
 
     def _resolve(self, *args, **kwargs):
-        """Resolve.
+        """Resolve the resolve.
 
-        Inputs: `*args`, `**kwargs`. Output: `real_resolve` result. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `real_resolve` result. Raises: FileNotFoundError for the exercised failure path.
         """
         if self == managed_root:
             raise FileNotFoundError("deferred mount metadata")
@@ -85,7 +81,7 @@ def test_storage_quota_state_and_log_helpers_cover_normalization_paths(
 ):
     """Verify storage quota state and log helpers cover normalization paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in storage quota state and log helpers cover normalization paths.
     """
     state_path = tmp_path / "quotas.json"
     state_path.write_text(
@@ -127,7 +123,7 @@ def test_storage_quota_csv_filesystem_and_state_helpers_cover_edge_cases(
 ):
     """Verify storage quota csv filesystem and state helpers cover edge cases.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in storage quota csv filesystem and state helpers cover edge cases.
     """
     with pytest.raises(storage_quotas.QuotaError, match="CSV file is empty"):
         storage_quotas.import_quotas_csv("")
@@ -187,7 +183,7 @@ def test_reconcile_quotas_covers_invalid_state_entries_and_persist_warnings(
 ):
     """Verify reconcile quotas covers invalid state entries and persist warnings.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in reconcile quotas covers invalid state entries and persist warnings.
     """
     invalid_state_path = tmp_path / "invalid-state.json"
     invalid_state_path.write_text(

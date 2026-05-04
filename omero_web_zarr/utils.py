@@ -25,7 +25,7 @@ DEFAULT_CHANNEL_COLORS = (
 
 
 def marshal_pixel_sizes(image):
-    """Marshal pixel sizes.
+    """Return the marshal pixel sizes.
 
     Inputs: `image`. Output: `pixel_sizes`.
     """
@@ -52,7 +52,7 @@ def marshal_pixel_sizes(image):
 
 
 def marshal_axes_v3(image):
-    """Marshal axes v3.
+    """Return the marshal axes v3.
 
     Inputs: `image`. Output: `axes`.
     """
@@ -65,12 +65,10 @@ def marshal_axes_v3(image):
 
 
 def marshal_axes(image, version):
-    """Marshal axes.
+    """Return the marshal axes.
 
-    Inputs: `image`, `version`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `image`, `version`. Output: `axes`. Raises: Http404 when validation or
+    external operations fail.
     """
     if version not in ("0.3", "0.4"):
         raise Http404("version not supported")
@@ -101,9 +99,10 @@ def marshal_axes(image, version):
 
 
 def generate_coordinate_transformations(shapes):
-    """Generate coordinate transformations.
+    """Generate the coordinate transformations.
 
-    Inputs: `shapes`. Output: `transformations`. Raises on invalid or unavailable state.
+    Inputs: `shapes`. Output: `transformations`. Raises: ValueError when validation or
+    external operations fail.
     """
     data_shape = shapes[0]
     transformations = []
@@ -120,14 +119,9 @@ def generate_coordinate_transformations(shapes):
 
 
 def open_compat_array(path, *, mode, shape, chunks, dtype):
-    """Open compat array.
+    """Open the compat array.
 
-    Inputs: `path`, `mode`, `shape`, `chunks`, `dtype`. Output: `zarr.open_array`
-    result. Raises on invalid or unavailable state.
-
-    Empty arrays may omit ``.zattrs`` until attributes are written, so the
-    compatibility contract here is the v2 array layout itself, not eager
-    creation of every optional metadata file.
+    Inputs: `path` path, `mode`, `shape`, `chunks`, `dtype`. Output: `open_array`
     """
     kwargs = {
         "mode": mode,
@@ -167,10 +161,10 @@ def get_image_connection(image):
 
 
 def prepare_image_rendering_engine(image, *, required=True):
-    """Prepare image rendering engine.
+    """Prepare the image rendering engine.
 
-    Inputs: `image`, `required`. Output: computed value. Raises on invalid or
-    unavailable state.
+    Inputs: `image`, `required`. Output: `prepare` result. Raises: AttributeError when
+    validation or the called operation fails.
     """
     prepare = getattr(image, "prepareRenderingEngine", None)
     if not callable(prepare):
@@ -201,8 +195,8 @@ def get_image_rendering_engine(image, *, initialize=False):
 def require_image_rendering_engine(image, *, initialize=False):
     """Return the ImageWrapper rendering engine or fail with a clear adapter error.
 
-    Inputs: `image`, `initialize`. Output: `rendering_engine`. Raises on invalid or
-    unavailable state.
+    Inputs: `image`, `initialize`. Output: `rendering_engine`. Raises: AttributeError
+    when validation or the called operation fails.
     """
     rendering_engine = get_image_rendering_engine(image, initialize=initialize)
     if rendering_engine is None:
@@ -211,9 +205,9 @@ def require_image_rendering_engine(image, *, initialize=False):
 
 
 def _resolve_image_external_lsid(image):
-    """Resolve image external lsid.
+    """Resolve the image external lsid.
 
-    Inputs: `image`. Output: computed value or None.
+    Inputs: `image`. Output: `getattr` result.
     """
     details = image.getDetails()
     external_info = getattr(details, "externalInfo", None)
@@ -288,10 +282,10 @@ def resolve_local_zarr_store(location):
 
 
 def resolve_local_zarr_file(store_root, *parts):
-    """Return resolve local Zarr file.
+    """Resolve the local Zarr file.
 
-    Inputs: `store_root`, `*parts`. Output: `target`. Raises on invalid or unavailable
-    state.
+    Inputs: `store_root`, `*parts`. Output: `target`. Raises: Http404 when validation or
+    external operations fail.
     """
     relative_path = Path(*parts)
     if relative_path.is_absolute() or ".." in relative_path.parts:
@@ -330,9 +324,10 @@ def is_local_zarr_store(path):
 
 
 def _resolve_store_root(store_root):
-    """Resolve store root.
+    """Resolve the store root.
 
-    Inputs: `store_root`. Output: `resolved`. Raises on invalid or unavailable state.
+    Inputs: `store_root`. Output: `resolved`. Raises: FileNotFoundError when validation or the
+    called operation fails.
     """
     try:
         resolved = Path(store_root).resolve(strict=True)
@@ -344,12 +339,10 @@ def _resolve_store_root(store_root):
 
 
 def _resolve_store_metadata_file(store_root, *parts):
-    """Resolve store metadata file.
+    """Resolve the store metadata file.
 
-    Inputs: `store_root`, `*parts`. Output: `target`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `store_root`, `*parts`. Output: `target`. Raises: FileNotFoundError when validation
+    or the called operation fails.
     """
     root = _resolve_store_root(store_root)
     relative_path = Path(*parts)
@@ -374,9 +367,9 @@ def is_store_backed_image(image):
 
 
 def sanitize_download_basename(name, default="ome-zarr"):
-    """Sanitize download basename.
+    """Sanitize the download basename.
 
-    Inputs: `name`, `default`. Output: call result.
+    Inputs: `name` name, `default`. Output: `replace` result.
     """
     candidate = Path((name or "").strip()).name
     if not candidate:
@@ -385,9 +378,9 @@ def sanitize_download_basename(name, default="ome-zarr"):
 
 
 def collect_store_metadata_documents(image):
-    """Collect store metadata documents.
+    """Collect the store metadata documents.
 
-    Inputs: `image`. Output: `documents` or None.
+    Inputs: `image`. Output: `documents`.
     """
     store_root = resolve_image_backing_zarr_store(image)
     if store_root is None:
@@ -406,9 +399,9 @@ def collect_store_metadata_documents(image):
 
 
 def _read_store_root_attrs(store_root):
-    """Read store root attrs.
+    """Read the store root attrs.
 
-    Inputs: `store_root`. Output: `json.load` result.
+    Inputs: `store_root`. Output: `load` result.
     """
     zattrs_path = _resolve_store_metadata_file(store_root, ".zattrs")
     with zattrs_path.open("r", encoding="utf-8") as handle:
@@ -416,9 +409,9 @@ def _read_store_root_attrs(store_root):
 
 
 def _read_store_json(store_root, *parts):
-    """Read store JSON.
+    """Read the store JSON.
 
-    Inputs: `store_root`, `*parts`. Output: `json.load` result.
+    Inputs: `store_root`, `*parts`. Output: `load` result.
     """
     target = _resolve_store_metadata_file(store_root, *parts)
     with target.open("r", encoding="utf-8") as handle:
@@ -426,9 +419,9 @@ def _read_store_json(store_root, *parts):
 
 
 def _read_store_attrs(store_root):
-    """Read store attrs.
+    """Read the store attrs.
 
-    Inputs: `store_root`. Output: computed value.
+    Inputs: `store_root`. Output: `dict`.
     """
     zattrs_path = store_root / ".zattrs"
     if zattrs_path.is_file():
@@ -446,7 +439,7 @@ def _read_store_attrs(store_root):
 def _store_relative_metadata_path(store_root, dataset_path):
     """Relative metadata path.
 
-    Inputs: `store_root`, `dataset_path`. Output: computed value or None.
+    Inputs: `store_root`, `dataset_path`. Output: `Path` or path text.
     """
     dataset_root = (
         store_root if dataset_path in ("", ".") else store_root / dataset_path
@@ -467,9 +460,9 @@ def _store_relative_metadata_path(store_root, dataset_path):
 
 
 def _store_node_signature(store_root):
-    """Node signature.
+    """Return the store node signature.
 
-    Inputs: `store_root`. Output: `tuple` result.
+    Inputs: `store_root`. Output: `tuple`.
     """
     attrs = _read_store_attrs(store_root)
     multiscales = attrs.get("multiscales") or []
@@ -504,12 +497,12 @@ def _store_node_signature(store_root):
 
 
 class _StoreBackedNode:
-    """Represent store backed node."""
+    """Helper type for store backed node behavior."""
 
     __slots__ = ("data", "metadata")
 
     def __init__(self, data, metadata):
-        """Initialize the instance.
+        """Create `_StoreBackedNode` with `data` and `metadata`.
 
         Inputs: `data`, `metadata`. Output: None.
         """
@@ -518,9 +511,9 @@ class _StoreBackedNode:
 
 
 def _channel_limits_from_omero_channel(channel):
-    """Channel limits from OMERO channel.
+    """Return the channel limits from OMERO channel.
 
-    Inputs: `channel`. Output: tuple or None.
+    Inputs: `channel`. Output: `tuple`.
     """
     window = channel.get("window") or {}
     start = window.get("start")
@@ -534,9 +527,9 @@ def _channel_limits_from_omero_channel(channel):
 
 
 def _build_store_backed_metadata(attrs):
-    """Backed metadata.
+    """Build the store backed metadata.
 
-    Inputs: `attrs`. Output: dict.
+    Inputs: `attrs`. Output: `dict`.
     """
     multiscales = attrs.get("multiscales") or []
     axes: list[Any] = []
@@ -567,9 +560,9 @@ def _build_store_backed_metadata(attrs):
 
 
 def _load_store_backed_image_node_from_metadata(store_root):
-    """Load store backed image node from metadata.
+    """Load the store backed image node from metadata.
 
-    Inputs: `store_root`. Output: `_StoreBackedNode` result or None.
+    Inputs: `store_root`. Output: `_StoreBackedNode` result.
     """
     attrs = _read_store_attrs(store_root)
     multiscales = attrs.get("multiscales") or []
@@ -598,9 +591,9 @@ def _load_store_backed_image_node_from_metadata(store_root):
 
 
 def _resolve_ome_zarr_format(store_root):
-    """Resolve OME Zarr format.
+    """Resolve the OME Zarr format.
 
-    Inputs: `store_root`. Output: computed value.
+    Inputs: `store_root`. Output: `CurrentFormat` result.
     """
     version = ""
     try:
@@ -619,9 +612,9 @@ def _resolve_ome_zarr_format(store_root):
 
 
 def _load_store_backed_image_node_with_reader(store_root):
-    """Load store backed image node with reader.
+    """Load the store backed image node with reader.
 
-    Inputs: `store_root`. Output: `node` or None.
+    Inputs: `store_root`. Output: `node`.
     """
     from ome_zarr.io import parse_url
     from ome_zarr.reader import Reader
@@ -644,9 +637,10 @@ def _load_store_backed_image_node_with_reader(store_root):
 
 @lru_cache(maxsize=_STORE_BACKED_NODE_CACHE_SIZE)
 def _load_store_backed_image_node_cached(store_root_text, _signature):
-    """Load store backed image node cached.
+    """Load the store backed image node cached.
 
-    Inputs: `store_root_text`, `_signature`. Output: computed value.
+    Inputs: `store_root_text`, `_signature`. Output:
+    `_load_store_backed_image_node_with_reader` result.
     """
     store_root = Path(store_root_text)
     try:
@@ -666,7 +660,7 @@ def _load_store_backed_image_node_cached(store_root_text, _signature):
 def load_store_backed_image_node(image):
     """Return load store backed image node.
 
-    Inputs: `image`. Output: computed value or None.
+    Inputs: `image`. Output: `cached`.
     """
     cached = getattr(image, "_omero_web_zarr_node", _MISSING)
     if cached is not _MISSING:
@@ -700,9 +694,9 @@ def load_store_backed_image_node(image):
 
 
 def _cached_channel_overrides(image, channels):
-    """Cached channel overrides.
+    """Return the cached channel overrides.
 
-    Inputs: `image`, `channels`. Output: computed value.
+    Inputs: `image`, `channels`. Output: `_MISSING`.
     """
     cached = getattr(image, "_omero_web_zarr_channel_overrides", _MISSING)
     if (
@@ -715,9 +709,9 @@ def _cached_channel_overrides(image, channels):
 
 
 def _channel_override_metadata(node):
-    """Channel override metadata.
+    """Return the channel override metadata.
 
-    Inputs: `node`. Output: tuple.
+    Inputs: `node`. Output: `tuple`.
     """
     metadata = (getattr(node, "metadata", {}) or {}) if node is not None else {}
     return (
@@ -747,9 +741,9 @@ def _store_backed_channel_count(image, channels, sequences):
 
 
 def _sequence_value(sequence, index, default=None):
-    """Sequence value.
+    """Return the sequence value.
 
-    Inputs: `sequence`, `index`, `default`. Output: computed value.
+    Inputs: `sequence`, `index`, `default`. Output: `default`.
     """
     try:
         if index < len(sequence):
@@ -760,9 +754,9 @@ def _sequence_value(sequence, index, default=None):
 
 
 def _channel_label(channel_names, index):
-    """Channel label.
+    """Return the channel label.
 
-    Inputs: `channel_names`, `index`. Output: `str` result or None.
+    Inputs: `channel_names`, `index`. Output: `str`.
     """
     label = _sequence_value(channel_names, index)
     if label is not None and str(label).strip():
@@ -771,9 +765,9 @@ def _channel_label(channel_names, index):
 
 
 def _metadata_window(contrast_limits, index):
-    """Metadata window.
+    """Return the metadata window.
 
-    Inputs: `contrast_limits`, `index`. Output: tuple or None.
+    Inputs: `contrast_limits`, `index`. Output: `tuple`.
     """
     limits = _sequence_value(contrast_limits, index)
     if isinstance(limits, (list, tuple)) and len(limits) >= 2:
@@ -782,9 +776,9 @@ def _metadata_window(contrast_limits, index):
 
 
 def _omero_channel_window(channels, index):
-    """OMERO channel window.
+    """Return the OMERO channel window.
 
-    Inputs: `channels`, `index`. Output: tuple or None.
+    Inputs: `channels`, `index`. Output: `tuple`.
     """
     if channels is None or index >= len(channels):
         return None
@@ -803,7 +797,7 @@ def _omero_channel_window(channels, index):
 def _channel_override(
     index, channel_names, visible, contrast_limits, colormap, channels
 ):
-    """Channel override.
+    """Return the channel override.
 
     Inputs: `index`, `channel_names`, `visible`, `contrast_limits`, `colormap`,
     `channels`. Output: `override`.
@@ -830,7 +824,7 @@ def _channel_override(
 def get_store_backed_channel_overrides(image, channels=None):
     """Return store backed channel overrides.
 
-    Inputs: `image`, `channels`. Output: computed value.
+    Inputs: `image`, `channels`. Output: `overrides`.
     """
     cached = _cached_channel_overrides(image, channels)
     if cached is not _MISSING:
@@ -858,9 +852,9 @@ def get_store_backed_channel_overrides(image, channels=None):
 
 
 def _normalize_axis_name(axis):
-    """Normalize axis name.
+    """Normalize the axis name.
 
-    Inputs: `axis`. Output: computed value.
+    Inputs: `axis`. Output: `lower` result.
     """
     if isinstance(axis, dict):
         return str(axis.get("name") or "").lower()
@@ -870,7 +864,7 @@ def _normalize_axis_name(axis):
 def get_store_backed_axis_names(node, level=0):
     """Return store backed axis names.
 
-    Inputs: `node`, `level`. Output: computed value.
+    Inputs: `node`, `level`. Output: name string.
     """
     metadata = getattr(node, "metadata", {}) or {}
     axes = metadata.get("axes") or []
@@ -882,9 +876,9 @@ def get_store_backed_axis_names(node, level=0):
 
 
 def _yx_shape(shape, axis_names):
-    """Yx shape.
+    """Return the yx shape.
 
-    Inputs: `shape`, `axis_names`. Output: tuple.
+    Inputs: `shape`, `axis_names`. Output: `tuple`.
     """
     shape_by_axis = dict(zip(axis_names, shape))
     return int(shape_by_axis.get("y", 1)), int(shape_by_axis.get("x", 1))
@@ -902,7 +896,7 @@ def get_store_backed_level_count(node):
 def get_store_backed_datasets(node):
     """Return store backed datasets.
 
-    Inputs: `node`. Output: computed value.
+    Inputs: `node`. Output: get store backed datasets result.
     """
     metadata = getattr(node, "metadata", {}) or {}
     multiscales = metadata.get("multiscales") or []
@@ -928,9 +922,9 @@ def get_store_backed_level_sizes(node):
 
 
 def _chunk_shape(array):
-    """Chunk shape.
+    """Return the chunk shape.
 
-    Inputs: `array`. Output: `tuple` result or None.
+    Inputs: `array`. Output: `tuple`.
     """
     chunks = getattr(array, "chunks", None)
     if chunks is None:
@@ -971,9 +965,9 @@ def get_store_backed_tile_size(node, default=256, max_length=1024):
 
 
 def select_store_backed_viewer_level(node, viewer_level):
-    """Select store backed viewer level.
+    """Select the store backed viewer level.
 
-    Inputs: `node`, `viewer_level`. Output: computed value.
+    Inputs: `node`, `viewer_level`. Output: select store backed viewer level result.
     """
     level_count = get_store_backed_level_count(node)
     if level_count <= 1:
@@ -985,7 +979,7 @@ def select_store_backed_viewer_level(node, viewer_level):
 def get_store_backed_zoom_level_scaling(node):
     """Return store backed zoom level scaling.
 
-    Inputs: `node`. Output: computed value.
+    Inputs: `node`. Output: get store backed zoom level scaling result.
     """
     level_sizes = get_store_backed_level_sizes(node)
     base_width = max(1, int(level_sizes[0]["sizeX"]))
@@ -995,9 +989,9 @@ def get_store_backed_zoom_level_scaling(node):
 
 
 def select_store_backed_level(node, max_width=None, max_height=None):
-    """Select store backed level.
+    """Select the store backed level.
 
-    Inputs: `node`, `max_width`, `max_height`. Output: computed value.
+    Inputs: `node`, `max_width`, `max_height`. Output: `selected`.
     """
     if not getattr(node, "data", None):
         return 0
@@ -1016,9 +1010,9 @@ def select_store_backed_level(node, max_width=None, max_height=None):
 
 
 def _clamp_index(index, size):
-    """Clamp index.
+    """Return the clamp index.
 
-    Inputs: `index`, `size`. Output: computed value.
+    Inputs: `index`, `size`. Output: bounded minimum value.
     """
     if size <= 0:
         return 0
@@ -1029,9 +1023,7 @@ def _map_multiscale_index(full_resolution_index, full_resolution_size, level_siz
     """Map multiscale index with.
 
     Inputs: `full_resolution_index`, `full_resolution_size`, `level_size`. Output:
-    computed value.
-
-    computed value.
+    bounded minimum value.
     """
     if full_resolution_size <= 1 or level_size <= 1:
         return 0
@@ -1042,9 +1034,9 @@ def _map_multiscale_index(full_resolution_index, full_resolution_size, level_siz
 
 
 def _select_axis_index(axis_name, requested, full_size, level_size):
-    """Select axis index.
+    """Select the axis index.
 
-    Inputs: `axis_name`, `requested`, `full_size`, `level_size`. Output: computed value.
+    Inputs: `axis_name`, `requested`, `full_size`, `level_size`. Output: `int`.
     """
     if axis_name == "z":
         full_index = _clamp_index(
@@ -1058,10 +1050,10 @@ def _select_axis_index(axis_name, requested, full_size, level_size):
 
 
 def read_store_backed_plane(node, *, level=0, z=None, t=None):
-    """Return read store backed plane.
+    """Read the store backed plane.
 
-    Inputs: `node`, `level`, `z`, `t`. Output: tuple. Raises on invalid or unavailable
-    state.
+    Inputs: `node`, `level`, `z`, `t`. Output: `tuple`. Raises: ValueError when validation or
+    the called operation fails.
     """
     if not getattr(node, "data", None):
         raise ValueError("store-backed node has no image data")
@@ -1100,9 +1092,9 @@ def read_store_backed_plane(node, *, level=0, z=None, t=None):
 
 
 def _channel_color(entry, index):
-    """Channel color.
+    """Return the channel color.
 
-    Inputs: `entry`, `index`. Output: computed value.
+    Inputs: `entry`, `index`. Output: channel color result.
     """
     if isinstance(entry, str):
         candidate = entry.strip().lstrip("#")
@@ -1129,9 +1121,9 @@ def _channel_color(entry, index):
 
 
 def _channel_limits(entry, data):
-    """Channel limits.
+    """Return the channel limits.
 
-    Inputs: `entry`, `data`. Output: tuple.
+    Inputs: `entry`, `data` payload. Output: `tuple`.
     """
     if isinstance(entry, (list, tuple)) and len(entry) >= 2:
         low = float(entry[0])
@@ -1143,9 +1135,9 @@ def _channel_limits(entry, data):
 
 
 def _normalize_to_uint8(data, limits=None):
-    """Normalize to uint8.
+    """Normalize the to uint8.
 
-    Inputs: `data`, `limits`. Output: computed value.
+    Inputs: `data` payload, `limits`. Output: `astype` result.
     """
     plane = np.asarray(data, dtype=np.float32)
     low, high = _channel_limits(limits, plane)
@@ -1160,9 +1152,9 @@ def _normalize_to_uint8(data, limits=None):
 
 
 def render_store_backed_plane(node, *, level=0, z=None, t=None):
-    """Render store backed plane.
+    """Render the store backed plane.
 
-    Inputs: `node`, `level`, `z`, `t`. Output: computed value.
+    Inputs: `node`, `level`, `z`, `t`. Output: `astype` result.
     """
     plane, remaining_axes = read_store_backed_plane(node, level=level, z=z, t=t)
     metadata = getattr(node, "metadata", {}) or {}
@@ -1229,10 +1221,10 @@ def render_store_backed_pil_image(
     t=None,
     level=None,
 ):
-    """Render store backed pil image.
+    """Render the store backed pil image.
 
     Inputs: `image`, `max_width`, `max_height`, `z`, `t`, `level`. Output: `pil_image`.
-    Raises on invalid or unavailable state.
+    Raises: Http404 when validation or the called operation fails.
     """
     node = load_store_backed_image_node(image)
     if node is None:
@@ -1269,10 +1261,10 @@ def render_store_backed_region_pil_image(
     t=None,
     level=0,
 ):
-    """Render store backed region pil image.
+    """Render the store backed region pil image.
 
-    Inputs: `image`, `x`, `y`, `width`, `height`, `z`, `t`, `level`. Output:
-    `Image.fromarray` result. Raises on invalid or unavailable state.
+    Inputs: `image`, `x`, `y`, `width`, `height`, `z`, `t`, `level`. Output: `fromarray`
+    Raises: Http404 when validation or the called operation fails.
     """
     node = load_store_backed_image_node(image)
     if node is None:
@@ -1298,12 +1290,10 @@ def render_store_backed_region_pil_image(
 
 
 def encode_store_backed_pil_image(pil_image, image_format):
-    """Encode store backed pil image.
+    """Encode the store backed pil image.
 
-    Inputs: `pil_image`, `image_format`. Output: tuple. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `pil_image`, `image_format`. Output: `tuple`. Raises: Http404 when validation or the
+    called operation fails.
     """
     from io import BytesIO
 
@@ -1334,9 +1324,9 @@ def encode_store_backed_pil_image(pil_image, image_format):
 
 
 def render_store_backed_thumbnail_bytes(image, *, size=96, z=None, t=None):
-    """Render store backed thumbnail bytes.
+    """Render the store backed thumbnail bytes.
 
-    Inputs: `image`, `size`, `z`, `t`. Output: `data`.
+    Inputs: `image`, `size`, `z`, `t`. Output: `bytes` or byte count.
     """
     pil_image = render_store_backed_pil_image(
         image,
@@ -1350,9 +1340,9 @@ def render_store_backed_thumbnail_bytes(image, *, size=96, z=None, t=None):
 
 
 def _exception_text(exc):
-    """Exception text.
+    """Return the exception text.
 
-    Inputs: `exc`. Output: joined exception-message text.
+    Inputs: `exc`. Output: `join` result.
     """
     parts = [
         str(exc),
@@ -1374,9 +1364,9 @@ def is_known_tile_size_failure(exc):
 
 
 def _configured_max_tile_length(conn, default=1024):
-    """Configured max tile length.
+    """Return the configured max tile length.
 
-    Inputs: `conn`, `default`. Output: computed value.
+    Inputs: `conn` OMERO gateway connection, `default`. Output: `int`.
     """
     if conn is None:
         return int(default)
@@ -1393,9 +1383,9 @@ def _configured_max_tile_length(conn, default=1024):
 
 
 def _fallback_tile_size(image, conn=None):
-    """Fallback tile size.
+    """Return the fallback tile size.
 
-    Inputs: `image`, `conn`. Output: tuple.
+    Inputs: `image`, `conn` OMERO gateway connection. Output: `tuple`.
     """
     max_tile_length = _configured_max_tile_length(conn or get_image_connection(image))
     return (
@@ -1407,8 +1397,7 @@ def _fallback_tile_size(image, conn=None):
 def get_safe_image_tile_size(image, conn=None):
     """Return safe image tile size.
 
-    Inputs: `image`, `conn`. Output: computed value. Raises on invalid or unavailable
-    state.
+    Inputs: `image`, `conn` OMERO gateway connection. Output: `_fallback_tile_size`
     """
     rendering_engine = get_image_rendering_engine(image)
     if rendering_engine is None:

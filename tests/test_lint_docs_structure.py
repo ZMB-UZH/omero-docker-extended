@@ -16,16 +16,16 @@ class DocsStructureLintTests(unittest.TestCase):
     def test_validation_passes_for_project_repository(self) -> None:
         """Verify validation passes for project repository.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in validation passes for project repository.
         """
         repo_root: Path = Path(__file__).resolve().parents[1]
         errors = run_validations(repo_root)
         self.assertEqual(errors, [])
 
     def test_validation_fails_when_index_is_missing(self) -> None:
-        """Verify validation fails when index is missing.
+        """Confirm validation fails when index is missing exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in validation fails when index is missing.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = Path(temp_dir)
@@ -36,7 +36,7 @@ class DocsStructureLintTests(unittest.TestCase):
     def test_validation_flags_bloated_or_unrouted_agent_surfaces(self) -> None:
         """Verify validation flags bloated or unrouted agent surfaces.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in validation flags bloated or unrouted agent surfaces.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = Path(temp_dir)

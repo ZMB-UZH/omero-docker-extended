@@ -7,9 +7,9 @@ from omeroweb_omp_plugin.services import ai_assist
 
 
 def test_generate_ai_regex_accepts_reasonable_separator_pattern(monkeypatch):
-    """Verify generate AI regex accepts reasonable separator pattern.
+    """Verify generate ai regex accepts reasonable separator pattern.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in generate ai regex accepts reasonable separator pattern.
     """
     filenames = [
         "sample_cond_ctrl_rep_3_ch_DAPI.tif",
@@ -29,9 +29,9 @@ def test_generate_ai_regex_accepts_reasonable_separator_pattern(monkeypatch):
 
 
 def test_generate_ai_regex_falls_back_when_pattern_is_too_generic(monkeypatch):
-    """Verify generate AI regex falls back when pattern is too generic.
+    """Verify generate ai regex falls back when pattern is too generic.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in generate ai regex falls back when pattern is too generic.
     """
     filenames = [
         "sample_cond_ctrl_rep_3_ch_DAPI.tif",
@@ -49,9 +49,9 @@ def test_generate_ai_regex_falls_back_when_pattern_is_too_generic(monkeypatch):
 
 
 def test_prompt_and_regex_helpers_cover_strict_hints_cleanup_and_validation():
-    """Verify prompt and regex helpers cover strict hints cleanup and validation.
+    """Check prompt and regex helpers cover strict hints cleanup and validation cleanup behavior.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions in prompt and regex helpers cover strict hints cleanup and validation.
     """
     filenames = [
         "10444-ec-01-sa-01-sc-01-20x.tif",
@@ -78,18 +78,16 @@ def test_prompt_and_regex_helpers_cover_strict_hints_cleanup_and_validation():
 def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeypatch):
     """Verify post JSON and provider dispatch cover success and failure paths.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in post JSON and provider dispatch cover success and failure paths.
+    Raises: exc when validation or the called operation fails.
     """
     captured = []
 
     class _Response:
-        """Represent response."""
+        """Test double for response behavior in this module."""
 
         def __init__(self, payload, status_code=200, headers=None):
-            """Initialize the instance.
+            """Create `_Response` with `payload`, `status_code`, and `headers`.
 
             Inputs: `payload`, `status_code`, `headers`. Output: None.
             """
@@ -106,9 +104,9 @@ def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeyp
             return json.loads(self.payload.decode("utf-8"))
 
         def raise_for_status(self):
-            """Raise for status.
+            """Raise the configured HTTP error for this fake response.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             if self.status_code >= 400:
                 exc = ai_assist.requests.HTTPError("request failed")
@@ -116,9 +114,10 @@ def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeyp
                 raise exc
 
     def fake_post(url, headers=None, data=None, timeout=15):
-        """Fake post.
+        """Simulate post so the surrounding test controls that dependency.
 
-        Inputs: `url`, `headers`, `data`, `timeout`. Output: `_Response` result.
+        Inputs: `url` URL, `headers`, `data` payload, `timeout` timeout seconds. Output:
+        `_Response` result.
         """
         captured.append((url, dict(headers or {}), data, timeout))
         return _Response(b'{"ok": true}')
@@ -140,12 +139,10 @@ def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeyp
         ai_assist._post_json(insecure_url, {}, {})
 
     def raise_http_error(url, headers=None, data=None, timeout=15):
-        """Raise HTTP error.
+        """Record the raise http error call on the test double for later assertions.
 
-        Inputs: `url`, `headers`, `data`, `timeout`. Output: None. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `url` URL, `headers`, `data` payload, `timeout` timeout seconds. Output:
+        None. Raises: exc when validation or the called operation fails.
         """
         response = _Response(
             b'{"error": {"message": "slow down"}}',
@@ -175,9 +172,10 @@ def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeyp
     provider_calls = []
 
     def fake_post_json(url, headers, payload, timeout=15):
-        """Fake post JSON.
+        """Simulate post JSON so the surrounding test controls that dependency.
 
-        Inputs: `url`, `headers`, `payload`, `timeout`. Output: dict.
+        Inputs: `url` URL, `headers`, `payload` payload, `timeout` timeout seconds.
+        Output: `dict`.
         """
         provider_calls.append((url, headers, payload))
         if "anthropic" in url:
@@ -223,19 +221,16 @@ def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeyp
 def test_generate_ai_regex_retries_with_strict_prompt_before_accepting_result(
     monkeypatch,
 ):
-    """Verify generate AI regex retries with strict prompt before accepting result.
+    """Verify generate ai regex retries with strict prompt before accepting result result shape.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in generate ai regex retries with strict prompt before accepting result.
     """
     prompts = []
 
     def fake_call(provider, api_key, prompt, max_tokens, model=None):
-        """Fake call.
+        """Simulate call so the surrounding test controls that dependency.
 
-        Inputs: `provider`, `api_key`, `prompt`, `max_tokens`, `model`. Output: computed
-        value.
-
-        value.
+        Inputs: `provider`, `api_key`, `prompt`, `max_tokens`, `model`. Output: `str`.
         """
         prompts.append(prompt)
         if len(prompts) == 1:
@@ -257,9 +252,9 @@ def test_generate_ai_regex_retries_with_strict_prompt_before_accepting_result(
 
 
 def test_parse_prompt_rows_and_generate_ai_parsed_values_cover_validation(monkeypatch):
-    """Verify parse prompt rows and generate AI parsed values cover validation.
+    """Verify parse prompt rows and generate ai parsed values cover validation.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in parse prompt rows and generate ai parsed values cover validation.
     """
     filenames = ["10444-ec-01-sa-01.tif", "10445-ec-02-sa-03.tif"]
     prompt = ai_assist._build_parse_prompt(
@@ -307,9 +302,9 @@ def test_parse_prompt_rows_and_generate_ai_parsed_values_cover_validation(monkey
 def test_ai_assist_helper_edges_cover_empty_inputs_and_provider_shape_failures(
     monkeypatch,
 ):
-    """Verify AI assist helper edges cover empty inputs and provider shape failures.
+    """Verify ai assist helper edges cover empty inputs and provider shape failures.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in ai assist helper edges cover empty inputs and provider shape failures.
     """
     filenames = [
         "sample_A-01.tif",

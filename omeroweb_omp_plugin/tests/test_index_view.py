@@ -10,17 +10,17 @@ from omeroweb_omp_plugin.views import index_view
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._raw_value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self._raw_value`.
         """
@@ -28,10 +28,10 @@ class _Value:
 
 
 class _Owner:
-    """Represent owner."""
+    """Test double for owner behavior in this module."""
 
     def __init__(self, owner_id, name="owner"):
-        """Initialize the instance.
+        """Create `_Owner` with `owner_id` and `name`.
 
         Inputs: `owner_id`, `name`. Output: None.
         """
@@ -39,7 +39,7 @@ class _Owner:
         self._name = name
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_Owner`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -54,7 +54,7 @@ class _Owner:
 
 
 class _Permissions:
-    """Represent permissions."""
+    """Test double for permissions behavior in this module."""
 
     def __init__(
         self,
@@ -67,7 +67,7 @@ class _Permissions:
         group_write=False,
         group_annotate=False,
     ):
-        """Initialize the instance.
+        """Create `_Permissions` with `label`.
 
         Inputs: `label`, `read`, `write`, `annotate`, `group_read`, `group_write`,
         `group_annotate`. Output: None.
@@ -81,56 +81,56 @@ class _Permissions:
         self._group_annotate = group_annotate
 
     def __str__(self):
-        """Return the string representation.
+        """Return `_Permissions` as test-readable text.
 
         Inputs: none. Output: `self._label`.
         """
         return self._label
 
     def isRead(self):
-        """Return whether Read.
+        """Report the read boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: `self._read`.
         """
         return self._read
 
     def isWrite(self):
-        """Return whether Write.
+        """Report the write boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: `self._write`.
         """
         return self._write
 
     def isAnnotate(self):
-        """Return whether Annotate.
+        """Report the annotate boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: `self._annotate`.
         """
         return self._annotate
 
     def canAnnotate(self):
-        """Return whether Annotate.
+        """Report the annotate boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: `self._annotate`.
         """
         return self._annotate
 
     def isGroupRead(self):
-        """Return whether Group Read.
+        """Return whether `_Permissions` grants group-read access.
 
         Inputs: none. Output: `self._group_read`.
         """
         return self._group_read
 
     def isGroupWrite(self):
-        """Return whether Group Write.
+        """Return whether `_Permissions` grants group-write access.
 
         Inputs: none. Output: `self._group_write`.
         """
         return self._group_write
 
     def isGroupAnnotate(self):
-        """Return whether Group Annotate.
+        """Return whether `_Permissions` grants group-annotate access.
 
         Inputs: none. Output: `self._group_annotate`.
         """
@@ -138,10 +138,10 @@ class _Permissions:
 
 
 class _Details:
-    """Represent details."""
+    """Test double for details behavior in this module."""
 
     def __init__(self, *, owner=None, permissions=None, group=None):
-        """Initialize the instance.
+        """Create `_Details` with its default state.
 
         Inputs: `owner`, `permissions`, `group`. Output: None.
         """
@@ -157,25 +157,25 @@ class _Details:
         return self._owner
 
     def getPermissions(self):
-        """Return fake permissions.
+        """Return `_Details`'s fake permissions object.
 
         Inputs: none. Output: `self._permissions`.
         """
         return self._permissions
 
     def getGroup(self):
-        """Return Group.
+        """Return the group for `_Details`.
 
-        Inputs: none. Output: `self._group`.
+        Inputs: none. Output: `_group`.
         """
         return self._group
 
 
 class _Group:
-    """Represent group."""
+    """Test double for group behavior in this module."""
 
     def __init__(self, group_id, permissions, member_count=1):
-        """Initialize the instance.
+        """Create `_Group` with `group_id`, `permissions`, and `member_count`.
 
         Inputs: `group_id`, `permissions`, `member_count`. Output: None.
         """
@@ -185,28 +185,28 @@ class _Group:
         self._details = _Details(permissions=permissions)
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_Group`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
         return _Value(self.id)
 
     def getDetails(self):
-        """Return Details.
+        """Return the details for `_Group`.
 
-        Inputs: none. Output: `self._details`.
+        Inputs: none. Output: `_details`.
         """
         return self._details
 
     def getPermissions(self):
-        """Return fake permissions.
+        """Return `_Group`'s fake permissions object.
 
         Inputs: none. Output: `self._permissions`.
         """
         return self._permissions
 
     def getMemberCount(self):
-        """Return Member Count.
+        """Return the fake member count value used by this test double.
 
         Inputs: none. Output: `self._member_count`.
         """
@@ -214,10 +214,10 @@ class _Group:
 
 
 class _Project:
-    """Represent project."""
+    """Test double for project behavior in this module."""
 
     def __init__(self, project_id, name, *, owner=None, permissions=None, group=None):
-        """Initialize the instance.
+        """Create `_Project` with `project_id` and `name`.
 
         Inputs: `project_id`, `name`, `owner`, `permissions`, `group`. Output: None.
         """
@@ -233,23 +233,23 @@ class _Project:
         )
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_Project`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
         return _Value(self.id)
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_Project`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
         return self._name
 
     def getDetails(self):
-        """Return Details.
+        """Return the details for `_Project`.
 
-        Inputs: none. Output: `self._details`.
+        Inputs: none. Output: `_details`.
         """
         return self._details
 
@@ -261,7 +261,7 @@ class _Project:
         return self._owner
 
     def getPermissions(self):
-        """Return fake permissions.
+        """Return `_Project`'s fake permissions object.
 
         Inputs: none. Output: `self._permissions`.
         """
@@ -269,10 +269,10 @@ class _Project:
 
 
 class _Dataset:
-    """Represent dataset."""
+    """Test double for dataset behavior in this module."""
 
     def __init__(self, dataset_id, name):
-        """Initialize the instance.
+        """Create `_Dataset` with `dataset_id` and `name`.
 
         Inputs: `dataset_id`, `name`. Output: None.
         """
@@ -280,14 +280,14 @@ class _Dataset:
         self._name = name
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_Dataset`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
         return _Value(self.id)
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_Dataset`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
@@ -295,10 +295,10 @@ class _Dataset:
 
 
 class _ImageObject:
-    """Represent image object."""
+    """Test double for image object behavior in this module."""
 
     def __init__(self, image_id, name):
-        """Initialize the instance.
+        """Create `_ImageObject` with `image_id` and `name`.
 
         Inputs: `image_id`, `name`. Output: None.
         """
@@ -306,14 +306,14 @@ class _ImageObject:
         self._name = name
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_ImageObject`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
         return _Value(self.id)
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_ImageObject`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
@@ -321,21 +321,21 @@ class _ImageObject:
 
 
 class _BrokenProject(_Project):
-    """Represent broken project."""
+    """Test double for broken project behavior in this module."""
 
     def getDetails(self):
-        """Return Details.
+        """Return the details for `_BrokenProject`.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("details unavailable")
 
 
 class _ServiceOpts:
-    """Represent service opts."""
+    """Test double for service opts behavior in this module."""
 
     def __init__(self, initial_group="4"):
-        """Initialize the instance.
+        """Create `_ServiceOpts` with `initial_group`.
 
         Inputs: `initial_group`. Output: None.
         """
@@ -343,26 +343,26 @@ class _ServiceOpts:
         self.set_calls = []
 
     def getOmeroGroup(self):
-        """Return OMERO Group.
+        """Return the fake omero group value used by this test double.
 
         Inputs: none. Output: `self.current_group`.
         """
         return self.current_group
 
     def setOmeroGroup(self, value):
-        """Set OMERO Group.
+        """Set the OMERO Group for `_ServiceOpts`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.set_calls.append(value)
         self.current_group = value
 
 
 class _Conn:
-    """Represent conn."""
+    """Test double for conn behavior in this module."""
 
     def __init__(self, user_id=10, username="alice"):
-        """Initialize the instance.
+        """Create `_Conn` with `user_id` and `username`.
 
         Inputs: `user_id`, `username`. Output: None.
         """
@@ -388,17 +388,17 @@ class _Conn:
         return self._user
 
     def getGroupsMemberOf(self):
-        """Return Groups Member Of.
+        """Return the fake groups member of value used by this test double.
 
         Inputs: none. Output: `list` result.
         """
         return list(self.groups)
 
     def getObjects(self, object_type, opts=None):
-        """Return Objects.
+        """Return the objects for `_Conn`.
 
-        Inputs: `object_type`, `opts`. Output: `iter` result. Raises on invalid or
-        unavailable state.
+        Inputs: `object_type`, `opts`. Output: `iter` result. Raises: AssertionError,
+        RuntimeError when validation or the called operation fails.
         """
         if object_type == "Project":
             if opts == {"group": "-1"}:
@@ -422,26 +422,26 @@ class _Conn:
         return list(self.list_projects)
 
     def getObject(self, object_type, object_id):
-        """Return Object.
+        """Return the object for `_Conn`.
 
-        Inputs: `object_type`, `object_id`. Output: `self.project_by_id.get` result.
+        Inputs: `object_type`, `object_id`. Output: `get` result.
         """
         assert object_type == "Project"
         return self.project_by_id.get(int(object_id))
 
 
 def _json_payload(response):
-    """JSON payload.
+    """Return the JSON payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_owner_and_permission_helpers_use_fallback_accessors():
-    """Verify owner and permission helpers use fallback accessors.
+    """Verify the owner and permission helpers use fallback accessors safety boundary.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions when owner and permission helpers use fallback accessors accepts unsafe input.
     """
     owner = _Owner(7, "alice")
     read_write = _Permissions("rwrw--", read=True, write=True)
@@ -472,7 +472,7 @@ def test_owner_and_permission_helpers_use_fallback_accessors():
 def test_iter_accessible_projects_restores_group_after_fallback():
     """Verify iter accessible projects restores group after fallback.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions in iter accessible projects restores group after fallback.
     """
     conn = _Conn()
     project = _Project(1, "Fallback")
@@ -489,7 +489,7 @@ def test_iter_accessible_projects_restores_group_after_fallback():
 def test_group_helpers_detect_collaboration_modes_and_membership():
     """Verify group helpers detect collaboration modes and membership.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions in group helpers detect collaboration modes and membership.
     """
     conn = _Conn()
     rw_group = _Group(1, _Permissions("rwrw--", group_read=True, group_write=True), 3)
@@ -528,9 +528,9 @@ def test_group_helpers_detect_collaboration_modes_and_membership():
 def test_collect_project_payload_separates_owned_and_collaboration_projects(
     monkeypatch,
 ):
-    """Verify collect project payload separates owned and collaboration projects.
+    """Verify collect project payload separates owned and collaboration projects result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in collect project payload separates owned and collaboration projects.
     """
     conn = _Conn()
     owner = _Owner(10, "alice")
@@ -575,9 +575,9 @@ def test_collect_project_payload_separates_owned_and_collaboration_projects(
 
 
 def test_get_accessible_project_returns_expected_access_levels():
-    """Verify get accessible project returns expected access levels.
+    """Verify get accessible project returns expected access levels result shape.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions in get accessible project returns expected access levels.
     """
     conn = _Conn()
     owner = _Owner(10, "alice")
@@ -596,7 +596,7 @@ def test_get_accessible_project_returns_expected_access_levels():
 def test_index_list_datasets_requires_project_and_uses_owner_filter(monkeypatch):
     """Verify index list datasets requires project and uses owner filter.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index list datasets requires project and uses owner filter.
     """
     factory = RequestFactory()
     request = factory.post("/", data={"action": "list_datasets", "project": "5"})
@@ -628,9 +628,9 @@ def test_index_list_datasets_requires_project_and_uses_owner_filter(monkeypatch)
 
 
 def test_index_ai_regex_returns_local_suggestion(monkeypatch):
-    """Verify index AI regex returns local suggestion.
+    """Verify index ai regex returns local suggestion result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index ai regex returns local suggestion.
     """
     factory = RequestFactory()
     request = factory.post(
@@ -671,9 +671,9 @@ def test_index_ai_regex_returns_local_suggestion(monkeypatch):
 
 
 def test_index_ai_parse_attaches_image_ids(monkeypatch):
-    """Verify index AI parse attaches image IDs.
+    """Verify index ai parse attaches image IDs.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index ai parse attaches image IDs.
     """
     factory = RequestFactory()
     request = factory.post(
@@ -724,9 +724,9 @@ def test_index_ai_parse_attaches_image_ids(monkeypatch):
 
 
 def test_index_preview_renders_rows_and_caps_variables(monkeypatch):
-    """Verify index preview renders rows and caps variables.
+    """Check index preview renders rows and caps variables renders the expected surface.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index preview renders rows and caps variables.
     """
     factory = RequestFactory()
     request = factory.post(
@@ -790,7 +790,7 @@ def test_index_preview_renders_rows_and_caps_variables(monkeypatch):
 def test_list_projects_and_root_status_return_json(monkeypatch):
     """Verify list projects and root status return JSON.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in list projects and root status return JSON.
     """
     factory = RequestFactory()
     conn = _Conn(username="root")
@@ -812,9 +812,9 @@ def test_list_projects_and_root_status_return_json(monkeypatch):
 
 
 def test_permission_and_group_helpers_support_attribute_style_wrappers():
-    """Verify permission and group helpers support attribute style wrappers.
+    """Verify the permission and group helpers support attribute style wrappers safety boundary.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions when permission and group helpers support attribute style wrappers accepts unsafe input.
     """
     permissions = _Permissions("rwrw--", read=True, write=True)
     attr_owner = SimpleNamespace(
@@ -842,9 +842,9 @@ def test_permission_and_group_helpers_support_attribute_style_wrappers():
 def test_index_ai_regex_remote_paths_cover_credential_and_provider_failures(
     monkeypatch,
 ):
-    """Verify index AI regex remote paths cover credential and provider failures.
+    """Verify index ai regex remote paths cover credential and provider failures.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index ai regex remote paths cover credential and provider failures.
     """
     factory = RequestFactory()
     request = factory.post(
@@ -934,9 +934,9 @@ def test_index_ai_regex_remote_paths_cover_credential_and_provider_failures(
 
 
 def test_index_ai_parse_validates_provider_inputs_and_rate_limits(monkeypatch):
-    """Verify index AI parse validates provider inputs and rate limits.
+    """Verify index ai parse validates provider inputs and rate limits.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index ai parse validates provider inputs and rate limits.
     """
     conn = _Conn()
     monkeypatch.setattr(
@@ -1010,9 +1010,9 @@ def test_index_ai_parse_validates_provider_inputs_and_rate_limits(monkeypatch):
 def test_index_preview_rejects_invalid_ai_payloads_regexes_and_empty_results(
     monkeypatch,
 ):
-    """Verify index preview rejects invalid AI payloads regexes and empty results.
+    """Confirm index preview rejects invalid ai payloads regexes and empty results is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index preview rejects invalid ai payloads regexes and empty results.
     """
     conn = _Conn()
     rendered = {}
@@ -1117,9 +1117,9 @@ def test_index_preview_rejects_invalid_ai_payloads_regexes_and_empty_results(
 
 
 def test_index_landing_page_and_top_level_error_paths(monkeypatch):
-    """Verify index landing page and top level error paths.
+    """Confirm index landing page and top level error paths exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when index landing page and top level error paths stops reporting the expected error.
     """
     conn = _Conn()
     rendered = {}
@@ -1170,26 +1170,24 @@ def test_index_landing_page_and_top_level_error_paths(monkeypatch):
 
 
 def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkeypatch):
-    """Verify helper fallback paths cover group membership and permission text.
+    """Verify the helper fallback paths cover group membership and permission text safety boundary.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when helper fallback paths cover group membership and permission text accepts unsafe input.
+    Raises: RuntimeError when validation or the called operation fails.
     """
 
     class _OwnerByName:
-        """Represent owner by name."""
+        """Test double for owner by name behavior in this module."""
 
         def __init__(self, owner_id):
-            """Initialize the instance.
+            """Create `_OwnerByName` with `owner_id`.
 
             Inputs: `owner_id`. Output: None.
             """
             self._owner_id = owner_id
 
         def getId(self):
-            """Return the fake OMERO identifier.
+            """Return `_OwnerByName`'s fake OMERO identifier.
 
             Inputs: none. Output: `SimpleNamespace` result.
             """
@@ -1199,31 +1197,31 @@ def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkey
         def getOmeName():
             """Return the fake OMERO name.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("missing ome name")
 
         @staticmethod
         def getName():
-            """Return the fake object name.
+            """Return `_OwnerByName`'s fake object name.
 
             Inputs: none. Output: 'fallback-name'.
             """
             return "fallback-name"
 
     class _PermissionText:
-        """Represent permission text."""
+        """Test double for permission text behavior in this module."""
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_PermissionText` as test-readable text.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("string conversion failed")
 
         @staticmethod
         def isGroupRead():
-            """Return whether Group Read.
+            """Return whether `_PermissionText` grants group-read access.
 
             Inputs: none. Output: bool.
             """
@@ -1231,7 +1229,7 @@ def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkey
 
         @staticmethod
         def isGroupWrite():
-            """Return whether Group Write.
+            """Return whether `_PermissionText` grants group-write access.
 
             Inputs: none. Output: bool.
             """
@@ -1239,7 +1237,7 @@ def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkey
 
         @staticmethod
         def isGroupAnnotate():
-            """Return whether Group Annotate.
+            """Return whether `_PermissionText` grants group-annotate access.
 
             Inputs: none. Output: bool.
             """
@@ -1276,7 +1274,7 @@ def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkey
 def test_index_request_validation_paths_cover_json_errors_and_rate_limits(monkeypatch):
     """Verify index request validation paths cover JSON errors and rate limits.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index request validation paths cover JSON errors and rate limits.
     """
     conn = _Conn()
     monkeypatch.setattr(
@@ -1380,9 +1378,9 @@ def test_index_request_validation_paths_cover_json_errors_and_rate_limits(monkey
 
 
 def test_index_ai_provider_and_preview_fallbacks_cover_error_paths(monkeypatch):
-    """Verify index AI provider and preview fallbacks cover error paths.
+    """Confirm index ai provider and preview fallbacks cover error paths exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when index ai provider and preview fallbacks cover error paths stops reporting the expected error.
     """
     conn = _Conn()
     monkeypatch.setattr(
@@ -1517,28 +1515,26 @@ def test_index_ai_provider_and_preview_fallbacks_cover_error_paths(monkeypatch):
 def test_index_helper_and_validation_edges_cover_remaining_branch_paths(monkeypatch):
     """Verify index helper and validation edges cover remaining branch paths.
 
-    Inputs: `monkeypatch`. Output: `SimpleNamespace` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index helper and validation edges cover remaining branch paths.
+    Raises: RuntimeError when validation or the called operation fails.
     """
 
     class _OwnerWithVal:
-        """Represent owner with val."""
+        """Test double for owner with val behavior in this module."""
 
         @staticmethod
         def getOmeName():
             """Return the fake OMERO name.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("no ome name")
 
         @staticmethod
         def getName():
-            """Return the fake object name.
+            """Return `_OwnerWithVal`'s fake object name.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("no display name")
 
@@ -1546,13 +1542,13 @@ def test_index_helper_and_validation_edges_cover_remaining_branch_paths(monkeypa
         def getFirstName():
             """Return the fake first name.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("no first name")
 
         @staticmethod
         def getId():
-            """Return the fake OMERO identifier.
+            """Return `_OwnerWithVal`'s fake OMERO identifier.
 
             Inputs: none. Output: `SimpleNamespace` result.
             """
@@ -1575,12 +1571,12 @@ def test_index_helper_and_validation_edges_cover_remaining_branch_paths(monkeypa
     assert list(index_view._iter_accessible_projects(conn)) == [fallback_project]
 
     class _BrokenPermissionText:
-        """Represent broken permission text."""
+        """Test double for broken permission text behavior in this module."""
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_BrokenPermissionText` as test-readable text.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("bad permissions")
 

@@ -12,14 +12,14 @@ class BuildVersionEnvContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `BuildVersionEnvContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def read_text(self, relative_path: str) -> str:
-        """Return read text.
+        """Return `BuildVersionEnvContractTests`'s configured text fixture.
 
         Inputs: `relative_path`. Output: `str`.
         """
@@ -28,7 +28,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
     def test_installation_paths_example_excludes_build_version_pins(self) -> None:
         """Verify installation paths example excludes build version pins.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation paths example excludes build version pins.
         """
         env_text = self.read_text("installation_paths_example.env")
         self.assertNotIn("OMERO_CLI_ZARR_VERSION=", env_text)
@@ -39,7 +39,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
     def test_omeroserver_example_defines_native_zarr_build_versions(self) -> None:
         """Verify omeroserver example defines native Zarr build versions.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroserver example defines native Zarr build versions.
         """
         env_text = self.read_text("env/omeroserver_example.env")
         self.assertIn("OMERO_DROPBOX_VERSION=5.7.0", env_text)
@@ -54,9 +54,9 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("BIOFORMATS_VERSION=8.5.0", env_text)
 
     def test_compose_requires_build_versions_from_omeroserver_env(self) -> None:
-        """Verify compose requires build versions from omeroserver environment.
+        """Verify compose requires build versions from omeroserver env.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in compose requires build versions from omeroserver env.
         """
         compose_text = self.read_text("docker-compose.yml")
         self.assertIn(
@@ -87,7 +87,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
     def test_compose_pins_monitoring_and_management_image_versions(self) -> None:
         """Verify compose pins monitoring and management image versions.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in compose pins monitoring and management image versions.
         """
         compose_text = self.read_text("docker-compose.yml")
         self.assertIn('image: "portainer/portainer-ce:2.40.0-alpine"', compose_text)
@@ -114,7 +114,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
     def test_alloy_persists_runtime_positions(self) -> None:
         """Verify alloy persists runtime positions.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in alloy persists runtime positions.
         """
         compose_text = self.read_text("docker-compose.yml")
         alloy_service = compose_text.split("\n  alloy:\n", 1)[1].split(
@@ -143,9 +143,9 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
 
     def test_installation_script_manages_alloy_data_path_contract(self) -> None:
-        """Verify installation script manages alloy data path contract.
+        """Verify the installation script manages alloy data path contract execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when installation script manages alloy data path contract accepts unsafe input.
         """
         script_text = self.read_text("installation/installation_script.sh")
         self.assertIn('ALLOY_DATA_PATH="${OMERO_DATA_PATH%/}/alloy_data"', script_text)
@@ -165,7 +165,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
     def test_compose_images_are_explicitly_tagged_and_never_latest(self) -> None:
         """Verify compose images are explicitly tagged and never latest.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in compose images are explicitly tagged and never latest.
         """
         compose_text = self.read_text("docker-compose.yml")
         image_refs = re.findall(r"^\s*image:\s*[\"']?([^\"'\n#]+)", compose_text, re.M)
@@ -181,7 +181,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
     def test_alpine_323_base_images_use_current_verified_digest(self) -> None:
         """Verify alpine 323 base images use current verified digest.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in alpine 323 base images use current verified digest.
         """
         expected_from = (
             "FROM alpine:3.23@"
@@ -201,9 +201,9 @@ class BuildVersionEnvContractTests(unittest.TestCase):
                 )
 
     def test_omeroserver_dockerfile_fails_closed_without_dropbox_version(self) -> None:
-        """Verify omeroserver dockerfile fails closed without dropbox version.
+        """Confirm omeroserver dockerfile fails closed without dropbox version exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroserver dockerfile fails closed without dropbox version.
         """
         dockerfile_text = self.read_text("docker/omero-server.Dockerfile")
         self.assertIn("ARG OMERO_DROPBOX_VERSION\n", dockerfile_text)
@@ -219,9 +219,9 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
 
     def test_omeroweb_dockerfile_fails_closed_without_version_args(self) -> None:
-        """Verify omeroweb dockerfile fails closed without version args.
+        """Confirm omeroweb dockerfile fails closed without version args exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroweb dockerfile fails closed without version args.
         """
         dockerfile_text = self.read_text("docker/omero-web.Dockerfile")
         self.assertIn("ARG OMERO_CLI_ZARR_VERSION\n", dockerfile_text)
@@ -246,9 +246,9 @@ class BuildVersionEnvContractTests(unittest.TestCase):
     def test_installation_script_generated_dot_env_includes_server_env_file(
         self,
     ) -> None:
-        """Verify installation script generated dot environment includes server environment file.
+        """Verify the installation script generated dot env includes server env file execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation script generated dot env includes server env file integration.
         """
         script_text = self.read_text("installation/installation_script.sh")
         self.assertIn(

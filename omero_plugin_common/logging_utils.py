@@ -64,9 +64,9 @@ _REDACTED_VALUE = "REDACTED"
 
 
 def _quote_userinfo(value: str) -> str:
-    """Quote userinfo.
+    """Return the quote userinfo.
 
-    Inputs: `value`. Output: `str`.
+    Inputs: `value` (str) input value. Output: `str`.
     """
     try:
         return quote(value, safe="")
@@ -75,7 +75,7 @@ def _quote_userinfo(value: str) -> str:
 
 
 def _redacted_netloc(parsed) -> str:
-    """Redacted netloc.
+    """Return the redacted netloc.
 
     Inputs: `parsed`. Output: `str`.
     """
@@ -93,9 +93,9 @@ def _redacted_netloc(parsed) -> str:
 
 
 def _redact_query(query: str) -> str:
-    """Redact query.
+    """Redact the query.
 
-    Inputs: `query`. Output: `str`.
+    Inputs: `query` (str). Output: `str`.
     """
     pairs = [
         (key, _REDACTED_VALUE if key.lower() in _SENSITIVE_QUERY_KEYS else value)
@@ -148,7 +148,7 @@ def sanitized_exc_info(exc: BaseException):
 
 
 def _gateway_logging_configured() -> bool:
-    """Gateway logging configured.
+    """Return the gateway logging configured.
 
     Inputs: none. Output: `bool`.
     """
@@ -156,9 +156,9 @@ def _gateway_logging_configured() -> bool:
 
 
 def _set_gateway_logging_configured(configured: bool) -> None:
-    """Set gateway logging configured.
+    """Set the gateway logging configured.
 
-    Inputs: `configured`. Output: None.
+    Inputs: `configured` (bool). Output: None.
     """
     setattr(configure_omero_gateway_logging, "_configured", configured)
 
@@ -166,7 +166,7 @@ def _set_gateway_logging_configured(configured: bool) -> None:
 def configure_omero_gateway_logging() -> None:
     """Reduce noisy OMERO gateway debug logs in production web logs.
 
-    Inputs: none. Output: None.
+    Inputs: no caller arguments. Output: performs the documented action and returns None.
 
     OMERO's ``setOmeroShare()`` helper emits a debug line on every regular
     non-share request because ``omero.share`` is not present in default

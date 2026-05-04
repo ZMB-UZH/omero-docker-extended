@@ -39,7 +39,7 @@ subprocess = process_utils
 def _existing_regular_path(path):
     """Return existing regular path.
 
-    Inputs: `path`. Output: computed value or None.
+    Inputs: `path` path. Output: `Path` or path text.
     """
     try:
         path_text = os.fspath(path)
@@ -59,12 +59,7 @@ def _existing_regular_path(path):
 def _get_export_root():
     """Return export root.
 
-    Inputs: none. Output: computed value.
-
-    This function is intentionally NOT called at module level so that the
-    OMERO processor can parse script parameters without triggering side
-    effects (filesystem access, env-file reads) that would crash parameter
-    discovery and cause the 'Can't find params for <id>' ValidationException.
+    Inputs: none. Output: `get_env` result.
     """
     try:
         return get_env(
@@ -106,9 +101,9 @@ def _safe_filename(name, fallback="image"):
 
 
 def _ensure_bioformats_jar(install_dir):
-    """Ensure bioformats jar.
+    """Ensure the bioformats jar.
 
-    Inputs: `install_dir`. Output: `jar_path` or None.
+    Inputs: `install_dir`. Output: `jar_path`.
     """
     jar_dir = os.path.join(install_dir, BIOFORMATS_SUBDIR)
     jar_path = os.path.join(jar_dir, BIOFORMATS_JAR_NAME)
@@ -160,9 +155,9 @@ def _ensure_bioformats_jar(install_dir):
 
 
 def _read_expected_sha256(path):
-    """Read expected sha256.
+    """Read the expected sha256.
 
-    Inputs: `path`. Output: `token` or None.
+    Inputs: `path` path. Output: `token`.
     """
     checksum_path = _existing_regular_path(path)
     if checksum_path is None:
@@ -179,9 +174,9 @@ def _read_expected_sha256(path):
 
 
 def _write_expected_sha256(path, sha256_value):
-    """Write expected sha256.
+    """Write the expected sha256.
 
-    Inputs: `path`, `sha256_value`. Output: bool.
+    Inputs: `path` path, `sha256_value`. Output: `bool`.
     """
     tmp_path = path + ".tmp"
     try:
@@ -203,12 +198,10 @@ def _write_expected_sha256(path, sha256_value):
 
 
 def _sha256_file(path):
-    """Sha256 file.
+    """Return the sha256 file.
 
-    Inputs: `path`. Output: `digest.hexdigest` result. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `path` path. Output: `hexdigest` result. Raises: FileNotFoundError when validation
+    or the called operation fails.
     """
     source_path = _existing_regular_path(path)
     if source_path is None:
@@ -242,10 +235,10 @@ def _is_valid_bioformats_jar(path, expected_sha256=None):
 def _copy_bioformats_jar(
     source_path, destination_path, expected_sha256, file_mode, description
 ):
-    """Copy bioformats jar.
+    """Copy the bioformats jar.
 
     Inputs: `source_path`, `destination_path`, `expected_sha256`, `file_mode`,
-    `description`. Output: bool.
+    `description`. Output: `bool`.
     """
     tmp_path = destination_path + ".tmp"
     try:
@@ -326,7 +319,7 @@ def _get_voxel_size_from_image(image):
 def _managed_repository_root_from_value(source, value):
     """A managed repository root from a configured value.
 
-    Inputs: `source`, `value`. Output: call result or None.
+    Inputs: `source`, `value` input value. Output: `resolve` result.
     """
     try:
         managed_root = str(value or "").strip()
@@ -352,7 +345,8 @@ def _managed_repository_root_from_value(source, value):
 def _get_managed_repository_root(conn):
     """Return the configured OMERO managed repository root.
 
-    Inputs: `conn`. Output: call result or None.
+    Inputs: `conn` OMERO gateway connection. Output:
+    `_managed_repository_root_from_value` result.
     """
     if _CONFIG_MANAGED_DIR_ENV in os.environ:
         return _managed_repository_root_from_value(
@@ -377,9 +371,9 @@ def _get_managed_repository_root(conn):
 
 
 def _managed_original_file_path(managed_root, file_path, file_name):
-    """Managed original file path.
+    """Return the managed original file path.
 
-    Inputs: `managed_root`, `file_path`, `file_name`. Output: `str` result or None.
+    Inputs: `managed_root`, `file_path` file path, `file_name`. Output: `str`.
     """
     relative_dir = str(file_path or "").strip().strip("/\\")
     relative_name = str(file_name or "").strip().strip("/\\")
@@ -428,7 +422,8 @@ def _absolute_original_file_path(file_path, file_name):
 def get_original_file_path(conn, image):
     """Return original file path.
 
-    Inputs: `conn`, `image`. Output: computed value or None.
+    Inputs: `conn` OMERO gateway connection, `image`. Output:
+    `_managed_original_file_path` result.
     """
     try:
         fileset = image.getFileset()
@@ -458,9 +453,9 @@ def get_original_file_path(conn, image):
 
 
 def convert_to_ims(image, input_file, output_file):
-    """Convert to IMS.
+    """Convert the to IMS.
 
-    Inputs: `image`, `input_file`, `output_file`. Output: computed value.
+    Inputs: `image`, `input_file`, `output_file`. Output: `exists` result.
     """
     try:
         # Prefer the binary installed by startup/51-install-imarisconvert.sh
@@ -546,9 +541,9 @@ def convert_to_ims(image, input_file, output_file):
 
 
 def _build_export_path(export_root, image, image_id):
-    """Export path.
+    """Build the export path.
 
-    Inputs: `export_root`, `image`, `image_id`. Output: `os.path.join` result.
+    Inputs: `export_root`, `image`, `image_id` OMERO image ID. Output: `join` result.
     """
     safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -570,9 +565,9 @@ def _build_intermediate_ome_tiff_path(export_root, image, image_id):
 
 
 def _write_binary_chunk(handle, chunk):
-    """Write binary chunk.
+    """Write the binary chunk.
 
-    Inputs: `handle`, `chunk`. Output: computed value.
+    Inputs: `handle`, `chunk`. Output: `int` count.
     """
     if chunk is None:
         return 0
@@ -585,9 +580,9 @@ def _write_binary_chunk(handle, chunk):
 
 
 def _write_ome_tiff_from_image_wrapper(image, output_handle):
-    """Write OME tiff from image wrapper.
+    """Write the OME tiff from image wrapper.
 
-    Inputs: `image`, `output_handle`. Output: bool.
+    Inputs: `image`, `output_handle`. Output: `bool`.
     """
     exporter = getattr(image, "exportOmeTiff", None)
     if not callable(exporter):
@@ -603,9 +598,10 @@ def _write_ome_tiff_from_image_wrapper(image, output_handle):
 
 
 def _write_ome_tiff_from_exporter(conn, image_id, output_handle):
-    """Write OME tiff from exporter.
+    """Write the OME tiff from exporter.
 
-    Inputs: `conn`, `image_id`, `output_handle`. Output: bool.
+    Inputs: `conn` OMERO gateway connection, `image_id` OMERO image ID, `output_handle`.
+    Output: `bool`.
     """
     create_exporter = getattr(conn, "createExporter", None)
     if not callable(create_exporter):
@@ -641,22 +637,23 @@ def _write_ome_tiff_from_exporter(conn, image_id, output_handle):
 def _materialize_ome_tiff_source(conn, image, image_id, export_root):
     """A converter-readable OME-TIFF source through OMERO APIs.
 
-    Inputs: `conn`, `image`, `image_id`, `export_root`. Output: computed value or None.
+    Inputs: `conn` OMERO gateway connection, `image`, `image_id` OMERO image ID,
+    `export_root`. Output: `_write_ome_tiff_from_image_wrapper` result.
     """
     output_file = _build_intermediate_ome_tiff_path(export_root, image, image_id)
     output_dir = os.path.dirname(output_file)
 
     def write_from_wrapper(handle):
-        """Write from wrapper.
+        """Write the from wrapper.
 
-        Inputs: `handle`. Output: call result.
+        Inputs: `handle`. Output: `_write_ome_tiff_from_image_wrapper` result.
         """
         return _write_ome_tiff_from_image_wrapper(image, handle)
 
     def write_from_exporter(handle):
-        """Write from exporter.
+        """Write the from exporter.
 
-        Inputs: `handle`. Output: call result.
+        Inputs: `handle`. Output: `_write_ome_tiff_from_exporter` result.
         """
         return _write_ome_tiff_from_exporter(conn, image_id, handle)
 
@@ -705,9 +702,9 @@ def _materialize_ome_tiff_source(conn, image, image_id, export_root):
 
 
 def _remove_intermediate_source(path):
-    """Remove intermediate source.
+    """Remove the intermediate source.
 
-    Inputs: `path`. Output: None.
+    Inputs: `path` path. Output: None.
     """
     try:
         if path and os.path.exists(path):
@@ -769,7 +766,7 @@ def run_script():
     # 'Can't find params for <id>'.
     """The script entrypoint.
 
-    Inputs: none. Output: None.
+    Inputs: no caller arguments. Output: performs the documented action and returns None.
     """
     export_root = _get_export_root()
     os.makedirs(export_root, exist_ok=True)

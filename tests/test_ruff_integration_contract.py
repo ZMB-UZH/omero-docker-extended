@@ -16,14 +16,14 @@ class RuffIntegrationContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `RuffIntegrationContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def read_text(self, relative_path: str) -> str:
-        """Return read text.
+        """Return `RuffIntegrationContractTests`'s configured text fixture.
 
         Inputs: `relative_path`. Output: `str`.
         """
@@ -32,7 +32,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
     def test_readme_has_ruff_badge_in_top_row(self) -> None:
         """Verify readme has ruff badge in top row.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in readme has ruff badge in top row.
         """
         readme_text = self.read_text("README.md")
         self.assertIn(
@@ -63,7 +63,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
     def test_docs_index_links_to_python_style_reference(self) -> None:
         """Verify docs index links to python style reference.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in docs index links to python style reference.
         """
         index_text = self.read_text("docs/index.md")
         doc_text = self.read_text("docs/reference/python-style-and-linting.md")
@@ -79,7 +79,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
     def test_agents_document_ruff_commands(self) -> None:
         """Verify agents document ruff commands.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in agents document ruff commands.
         """
         agents_text = self.read_text("AGENTS.md")
         self.assertIn("Use Ruff as the canonical Python formatter", agents_text)
@@ -128,7 +128,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
     def test_ruff_config_is_pinned_and_repo_specific(self) -> None:
         """Verify ruff config is pinned and repo specific.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in ruff config is pinned and repo specific.
         """
         config = tomllib.loads(self.read_text(".ruff.toml"))
         self.assertEqual("==0.15.12", config["required-version"])
@@ -139,7 +139,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
     def test_pre_commit_uses_pinned_ruff_hooks(self) -> None:
         """Verify pre commit uses pinned ruff hooks.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in pre commit uses pinned ruff hooks.
         """
         config = yaml.safe_load(self.read_text(".pre-commit-config.yaml"))
         self.assertEqual(1, len(config["repos"]))
@@ -152,9 +152,9 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertEqual(["python", "pyi"], hooks["ruff-format"]["types_or"])
 
     def test_ruff_workflow_is_pinned_and_runs_on_default_branch_only(self) -> None:
-        """Verify ruff workflow is pinned and runs on default branch only.
+        """Verify the ruff workflow is pinned and runs on default branch only execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in ruff workflow is pinned and runs on default branch only integration.
         """
         workflow = yaml.safe_load(self.read_text(".github/workflows/ruff.yml"))
         # yaml.safe_load parses the YAML key `on:` as boolean True

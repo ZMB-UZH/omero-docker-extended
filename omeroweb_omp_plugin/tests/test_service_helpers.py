@@ -14,17 +14,17 @@ from omeroweb_omp_plugin.services.omero import (
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._raw_value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self._raw_value`.
         """
@@ -32,10 +32,10 @@ class _Value:
 
 
 class _ErrorBody:
-    """Represent error body."""
+    """Test double for error body behavior in this module."""
 
     def __init__(self, payload):
-        """Initialize the instance.
+        """Create `_ErrorBody` with `payload`.
 
         Inputs: `payload`. Output: None.
         """
@@ -50,9 +50,9 @@ class _ErrorBody:
 
 
 def test_extract_error_details_prefers_nested_messages_and_plaintext():
-    """Verify extract error details prefers nested messages and plaintext.
+    """Confirm extract error details prefers nested messages and plaintext exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions when extract error details prefers nested messages and plaintext stops reporting the expected error.
     """
     nested = _ErrorBody(
         json.dumps({"error": {"message": "staging failed"}}).encode("utf-8")
@@ -69,7 +69,7 @@ def test_extract_error_details_prefers_nested_messages_and_plaintext():
 def test_core_reexports_follow_live_annotation_service_bindings(monkeypatch):
     """Verify core reexports follow live annotation service bindings.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in core reexports follow live annotation service bindings.
     """
     monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "secret")
     monkeypatch.setattr(
@@ -85,7 +85,7 @@ def test_core_reexports_follow_live_annotation_service_bindings(monkeypatch):
 def test_filename_helpers_detect_label_value_pairs_and_protect_scientific_hyphens():
     """Verify filename helpers detect label value pairs and protect scientific hyphens.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions in filename helpers detect label value pairs and protect scientific hyphens.
     """
     filenames = [
         "experiment-ch-01-pos-02.tif",
@@ -112,9 +112,9 @@ def test_filename_helpers_detect_label_value_pairs_and_protect_scientific_hyphen
 
 
 def test_in_memory_cache_expires_entries_and_supports_delete_clear(monkeypatch):
-    """Verify in memory cache expires entries and supports delete clear.
+    """Check in memory cache expires entries and supports delete clear cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in in memory cache expires entries and supports delete clear.
     """
     current_time = [100.0]
     cache = rate_limit.InMemoryCache()
@@ -139,31 +139,32 @@ def test_in_memory_cache_expires_entries_and_supports_delete_clear(monkeypatch):
 def test_rate_limit_uses_shared_counter_and_reports_block_status(monkeypatch):
     """Verify rate limit uses shared counter and reports block status.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in rate limit uses shared counter and reports block status.
     """
     current_time = [1000.0]
     state = {}
 
     def fake_get(key):
-        """Fake get.
+        """Simulate get so the surrounding test controls that dependency.
 
-        Inputs: `key`. Output: `state.get` result.
+        Inputs: `key` lookup key. Output: `get` result.
         """
         return state.get(key)
 
     def fake_set(key, value, timeout):
-        """Fake set.
+        """Simulate set so the surrounding test controls that dependency.
 
-        Inputs: `key`, `value`, `timeout`. Output: bool.
+        Inputs: `key` lookup key, `value` input value, `timeout` timeout seconds.
+        Output: `bool`.
         """
         state[key] = value
         state["timeout"] = timeout
         return True
 
     def fake_delete(key):
-        """Fake delete.
+        """Simulate delete so the surrounding test controls that dependency.
 
-        Inputs: `key`. Output: bool.
+        Inputs: `key` lookup key. Output: `bool`.
         """
         state.pop(key, None)
         return True
@@ -211,7 +212,8 @@ def test_rate_limit_uses_shared_counter_and_reports_block_status(monkeypatch):
 def test_rate_limit_handles_django_ip_fallbacks_and_cache_failures(monkeypatch):
     """Verify rate limit handles django ip fallbacks and cache failures.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in rate limit handles django ip fallbacks and cache failures.
+    when validation or the called operation fails.
     """
     request = SimpleNamespace(
         META={
@@ -246,12 +248,9 @@ def test_rate_limit_handles_django_ip_fallbacks_and_cache_failures(monkeypatch):
     assert status["is_blocked"] is False
 
     def failing_cache(*_args, **_kwargs):
-        """Failing cache.
+        """Record the failing cache call on the test double for later assertions.
 
-        Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: `*_args`, `**_kwargs`. Output: None. Raises: RuntimeError when validation or the called operation fails.
         """
         raise RuntimeError("cache boom")
 
@@ -275,25 +274,25 @@ class _FakeParameters:
     """Test double for fake parameters."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeParameters` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.values = {}
 
     def add(self, key, value):
-        """Add.
+        """Add the add for `_FakeParameters`.
 
-        Inputs: `key`, `value`. Output: None.
+        Inputs: `key` lookup key, `value` input value. Output: None.
         """
         self.values[key] = value
 
 
 class _NamedValue:
-    """Represent named value."""
+    """Test double for named value behavior in this module."""
 
     def __init__(self, name, value):
-        """Initialize the instance.
+        """Create `_NamedValue` with `name` and `value`.
 
         Inputs: `name`, `value`. Output: None.
         """
@@ -302,10 +301,10 @@ class _NamedValue:
 
 
 class _MapAnnotation:
-    """Represent map annotation."""
+    """Test double for map annotation behavior in this module."""
 
     def __init__(self, ann_id, mapping, *, ns=MAP_NS):
-        """Initialize the instance.
+        """Create `_MapAnnotation` with `ann_id` and `mapping`.
 
         Inputs: `ann_id`, `mapping`, `ns`. Output: None.
         """
@@ -315,21 +314,21 @@ class _MapAnnotation:
         self._obj = self
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_MapAnnotation`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
         return _Value(self.id)
 
     def getMapValue(self):
-        """Return Map Value.
+        """Return the fake map payload used by this test double.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: get map value result.
         """
         return [_NamedValue(key, value) for key, value in self._mapping.items()]
 
     def getNs(self):
-        """Return Ns.
+        """Return the ns for `_MapAnnotation`.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -337,7 +336,7 @@ class _MapAnnotation:
 
 
 def _plugin_mapping(secret=None, **extra):
-    """Plugin mapping.
+    """Return the plugin mapping.
 
     Inputs: `secret`, `**extra`. Output: `mapping`.
     """
@@ -354,7 +353,7 @@ def _plugin_mapping(secret=None, **extra):
 def test_annotation_hash_helpers_detect_preloaded_and_database_fallback(monkeypatch):
     """Verify annotation hash helpers detect preloaded and database fallback.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in annotation hash helpers detect preloaded and database fallback.
     """
     monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
     monkeypatch.setattr(annotation_service, "rlong", _Value)
@@ -387,12 +386,10 @@ def test_annotation_hash_helpers_detect_preloaded_and_database_fallback(monkeypa
 
 
 def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
-    """Verify annotation queries and plugin delete mode.
+    """Check annotation queries and plugin delete mode cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in annotation queries and plugin delete mode.
+    AssertionError when validation or the called operation fails.
     """
     monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
     monkeypatch.setattr(annotation_service, "rlong", _Value)
@@ -413,12 +410,10 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
 
         @staticmethod
         def projection(hql, params, service_opts=None):
-            """Projection.
+            """Return the projection for `_FakeQueryService`.
 
-            Inputs: `hql`, `params`, `service_opts`. Output: computed value. Raises on
-            invalid or unavailable state.
-
-            invalid or unavailable state.
+            Inputs: `hql`, `params` SQL parameters, `service_opts`. Output: `list`.
+            Raises: AssertionError when validation or the called operation fails.
             """
             if "where l.parent.id = :iid and a.ns = :ns" in hql:
                 return [[_Value(1)], [_Value(2)], [_Value(3)]]
@@ -447,14 +442,14 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
         """Test double for fake update service."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_FakeUpdateService` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.deleted = []
 
         def deleteObject(self, obj):
-            """Delete Object.
+            """Delete the object for `_FakeUpdateService`.
 
             Inputs: `obj`. Output: None.
             """
@@ -506,12 +501,10 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
 
 
 def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch):
-    """Verify annotation helpers cover tuple pairs and link stub cleanup.
+    """Check annotation helpers cover tuple pairs and link stub cleanup cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in annotation helpers cover tuple pairs and link stub cleanup.
+    Raises: AssertionError when validation or the called operation fails.
     """
     monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
     monkeypatch.setattr(annotation_service, "rlong", _Value)
@@ -540,16 +533,14 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
     deleted_annotation_ids = set()
 
     class _QueryService:
-        """Represent query service."""
+        """Test double for query service behavior in this module."""
 
         @staticmethod
         def projection(hql, params, service_opts=None):
-            """Projection.
+            """Return the projection for `_QueryService`.
 
-            Inputs: `hql`, `params`, `service_opts`. Output: computed value. Raises on
-            invalid or unavailable state.
-
-            invalid or unavailable state.
+            Inputs: `hql`, `params` SQL parameters, `service_opts`. Output: projection
+            Raises: AssertionError when validation or the called operation fails.
             """
             if "where l.child.id = :aid" in hql:
                 aid = params.values["aid"].getValue()
@@ -562,17 +553,17 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
             raise AssertionError(f"Unexpected HQL: {hql}")
 
     class _UpdateService:
-        """Represent update service."""
+        """Test double for update service behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_UpdateService` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.deleted = []
 
         def deleteObject(self, obj):
-            """Delete Object.
+            """Delete the object for `_UpdateService`.
 
             Inputs: `obj`. Output: None.
             """
@@ -619,7 +610,8 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
 def test_annotation_query_helpers_cover_invalid_inputs_and_legacy_controls(monkeypatch):
     """Verify annotation query helpers cover invalid inputs and legacy controls.
 
-    Inputs: `monkeypatch`. Output: list. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in annotation query helpers cover invalid inputs and legacy controls.
+    AssertionError, RuntimeError when validation or the called operation fails.
     """
     monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
     monkeypatch.setattr(annotation_service, "rlong", _Value)
@@ -641,16 +633,15 @@ def test_annotation_query_helpers_cover_invalid_inputs_and_legacy_controls(monke
     invalid_marker_ann = _MapAnnotation(10, {"alpha": "1", HASH_KEY: "not-plugin"})
 
     class _QueryService:
-        """Represent query service."""
+        """Test double for query service behavior in this module."""
 
         @staticmethod
         def projection(hql, params, service_opts=None):
-            """Projection.
+            """Return the projection for `_QueryService`.
 
-            Inputs: `hql`, `params`, `service_opts`. Output: list. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `hql`, `params` SQL parameters, `service_opts`. Output: `list`.
+            Raises: AssertionError, RuntimeError when validation or external operations
+            fail.
             """
             if "where l.parent.id = :iid and a.ns = :ns" in hql:
                 return [[_Value(4)], [_Value(5)]]
@@ -681,12 +672,10 @@ def test_annotation_query_helpers_cover_invalid_inputs_and_legacy_controls(monke
 def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annotations(
     monkeypatch,
 ):
-    """Verify annotation delete paths cover keep mode link residue and missing annotations.
+    """Check annotation delete paths cover keep mode link residue and missing annotations cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in annotation delete paths cover keep mode link residue and missing annotations.
+    Raises: AssertionError when validation or the called operation fails.
     """
     monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
     monkeypatch.setattr(annotation_service, "rlong", _Value)
@@ -710,16 +699,14 @@ def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annota
     deleted = []
 
     class _QueryService:
-        """Represent query service."""
+        """Test double for query service behavior in this module."""
 
         @staticmethod
         def projection(hql, params, service_opts=None):
-            """Projection.
+            """Return the projection for `_QueryService`.
 
-            Inputs: `hql`, `params`, `service_opts`. Output: computed value. Raises on
-            invalid or unavailable state.
-
-            invalid or unavailable state.
+            Inputs: `hql`, `params` SQL parameters, `service_opts`. Output: projection
+            Raises: AssertionError when validation or the called operation fails.
             """
             if "where l.child.id = :aid" in hql:
                 aid = params.values["aid"].getValue()
@@ -729,11 +716,11 @@ def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annota
             raise AssertionError(f"Unexpected HQL: {hql}")
 
     class _UpdateService:
-        """Represent update service."""
+        """Test double for update service behavior in this module."""
 
         @staticmethod
         def deleteObject(obj):
-            """Delete Object.
+            """Delete the object for `_UpdateService`.
 
             Inputs: `obj`. Output: None.
             """
@@ -771,9 +758,9 @@ class _FakeOriginalFile:
     """Test double for fake original file."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeOriginalFile` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self._id = _Value(501)
         self.name = None
@@ -782,35 +769,35 @@ class _FakeOriginalFile:
         self.mimetype = None
 
     def setName(self, value):
-        """Set Name.
+        """Set the name for `_FakeOriginalFile`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.name = value
 
     def setPath(self, value):
-        """Set Path.
+        """Set the path for `_FakeOriginalFile`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.path = value
 
     def setSize(self, value):
-        """Set Size.
+        """Set the size for `_FakeOriginalFile`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.size = value
 
     def setMimetype(self, value):
-        """Set Mimetype.
+        """Set the mimetype for `_FakeOriginalFile`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.mimetype = value
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_FakeOriginalFile`'s fake OMERO identifier.
 
         Inputs: none. Output: `self._id`.
         """
@@ -821,24 +808,24 @@ class _FakeFileAnnotation:
     """Test double for fake file annotation."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeFileAnnotation` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.ns = None
         self.file = None
 
     def setNs(self, value):
-        """Set Ns.
+        """Set the ns for `_FakeFileAnnotation`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.ns = value
 
     def setFile(self, value):
-        """Set File.
+        """Set the file for `_FakeFileAnnotation`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.file = value
 
@@ -847,24 +834,24 @@ class _FakeImageAnnotationLink:
     """Test double for fake image annotation link."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeImageAnnotationLink` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.parent = None
         self.child = None
 
     def setParent(self, value):
-        """Set Parent.
+        """Set the parent for `_FakeImageAnnotationLink`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.parent = value
 
     def setChild(self, value):
-        """Set Child.
+        """Set the child for `_FakeImageAnnotationLink`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.child = value
 
@@ -873,7 +860,7 @@ class _FakeImageRef:
     """Test double for fake image ref."""
 
     def __init__(self, image_id, loaded):
-        """Initialize the instance.
+        """Create `_FakeImageRef` with `image_id` and `loaded`.
 
         Inputs: `image_id`, `loaded`. Output: None.
         """
@@ -885,9 +872,9 @@ class _FakeRawFileStore:
     """Test double for fake raw file store."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeRawFileStore` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.file_id = None
         self.buffer = b""
@@ -895,9 +882,9 @@ class _FakeRawFileStore:
         self.closed = False
 
     def setFileId(self, value):
-        """Set File ID.
+        """Set the file ID for `_FakeRawFileStore`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.file_id = value
 
@@ -909,16 +896,16 @@ class _FakeRawFileStore:
         self.buffer = data[offset : offset + length]
 
     def save(self):
-        """Persist the object state.
+        """Persist `_FakeRawFileStore`'s fake object state.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
         """
         self.saved = True
 
     def close(self):
-        """Close the resource.
+        """Close `_FakeRawFileStore`'s fake resource handle.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.closed = True
 
@@ -927,14 +914,14 @@ class _FakeUpdateServiceForMetadata:
     """Test double for fake update service for metadata."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeUpdateServiceForMetadata` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.saved = []
 
     def saveAndReturnObject(self, obj):
-        """Save and return object.
+        """Return the fake saved OMERO object from OMP service-helper tests.
 
         Inputs: `obj`. Output: `obj`.
         """
@@ -946,7 +933,7 @@ class _FakeImageForMetadata:
     """Test double for fake image for metadata."""
 
     def __init__(self, raw_store):
-        """Initialize the instance.
+        """Create `_FakeImageForMetadata` with `raw_store`.
 
         Inputs: `raw_store`. Output: None.
         """
@@ -960,7 +947,7 @@ class _FakeImageForMetadata:
 
     @staticmethod
     def getId():
-        """Return the fake OMERO identifier.
+        """Return `_FakeImageForMetadata`'s fake OMERO identifier.
 
         Inputs: none. Output: 99.
         """
@@ -968,7 +955,7 @@ class _FakeImageForMetadata:
 
     @staticmethod
     def getAcquisitionDate():
-        """Return Acquisition Date.
+        """Return `_FakeImageForMetadata`'s fake acquisition date.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -976,7 +963,7 @@ class _FakeImageForMetadata:
 
     @staticmethod
     def getObjectiveSettings():
-        """Return Objective Settings.
+        """Return `_FakeImageForMetadata`'s fake objective settings.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -987,9 +974,9 @@ class _FakeImageForMetadata:
 
     @staticmethod
     def getChannels():
-        """Return Channels.
+        """Return the channels for `_FakeImageForMetadata`.
 
-        Inputs: none. Output: list.
+        Inputs: none. Output: `list`.
         """
         return [
             SimpleNamespace(
@@ -1002,7 +989,7 @@ class _FakeImageForMetadata:
 
     @staticmethod
     def getDetectorSettings():
-        """Return Detector Settings.
+        """Return `_FakeImageForMetadata`'s fake detector settings.
 
         Inputs: none. Output: list.
         """
@@ -1016,7 +1003,7 @@ class _FakeImageForMetadata:
 
     @staticmethod
     def loadOriginalMetadata():
-        """Return load original metadata.
+        """Return `_FakeImageForMetadata`'s fake original-metadata payload.
 
         Inputs: none. Output: tuple.
         """
@@ -1032,7 +1019,7 @@ def test_extract_acquisition_metadata_collects_searchable_fields_and_attaches_lo
 ):
     """Verify extract acquisition metadata collects searchable fields and attaches long values.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in extract acquisition metadata collects searchable fields and attaches long values.
     """
     raw_store = _FakeRawFileStore()
     image = _FakeImageForMetadata(raw_store)
@@ -1068,17 +1055,15 @@ def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
 ):
     """Verify image collection helpers cover fetch fallbacks and format detection.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image collection helpers cover fetch fallbacks and format detection.
+    RuntimeError, TypeError when validation or the called operation fails.
     """
 
     class _Image:
-        """Represent image."""
+        """Test double for image behavior in this module."""
 
         def __init__(self, image_id, name, fileset=None):
-            """Initialize the instance.
+            """Create `_Image` with `image_id`, `name`, and `fileset`.
 
             Inputs: `image_id`, `name`, `fileset`. Output: None.
             """
@@ -1087,31 +1072,31 @@ def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
             self._fileset = fileset
 
         def getId(self):
-            """Return the fake OMERO identifier.
+            """Return `_Image`'s fake OMERO identifier.
 
             Inputs: none. Output: `_Value` result.
             """
             return _Value(self.id)
 
         def getName(self):
-            """Return the fake object name.
+            """Return `_Image`'s fake object name.
 
             Inputs: none. Output: `_Value` result.
             """
             return _Value(self._name)
 
         def getFileset(self):
-            """Return Fileset.
+            """Return the fileset for `_Image`.
 
-            Inputs: none. Output: `self._fileset`.
+            Inputs: none. Output: `_fileset`.
             """
             return self._fileset
 
     class _Dataset:
-        """Represent dataset."""
+        """Test double for dataset behavior in this module."""
 
         def __init__(self, dataset_id, name, images, owner_id=7):
-            """Initialize the instance.
+            """Create `_Dataset` with `dataset_id`, `name`, `images`, and `owner_id`.
 
             Inputs: `dataset_id`, `name`, `images`, `owner_id`. Output: None.
             """
@@ -1121,48 +1106,48 @@ def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
             self._images = list(images)
 
         def getId(self):
-            """Return the fake OMERO identifier.
+            """Return `_Dataset`'s fake OMERO identifier.
 
             Inputs: none. Output: `_Value` result.
             """
             return _Value(self.id)
 
         def getName(self):
-            """Return the fake object name.
+            """Return `_Dataset`'s fake object name.
 
             Inputs: none. Output: `_Value` result.
             """
             return _Value(self._name)
 
         def listChildren(self):
-            """Return list children.
+            """Return `_Dataset`'s fake child listing.
 
             Inputs: none. Output: `list` result.
             """
             return list(self._images)
 
     class _Project:
-        """Represent project."""
+        """Test double for project behavior in this module."""
 
         def __init__(self, datasets):
-            """Initialize the instance.
+            """Create `_Project` with `datasets`.
 
             Inputs: `datasets`. Output: None.
             """
             self._datasets = list(datasets)
 
         def listChildren(self):
-            """Return list children.
+            """Return `_Project`'s fake child listing.
 
             Inputs: none. Output: `list` result.
             """
             return list(self._datasets)
 
     class _OriginalFile:
-        """Represent original file."""
+        """Test double for original file behavior in this module."""
 
         def __init__(self, *, fmt=None, name=None):
-            """Initialize the instance.
+            """Create `_OriginalFile` with its default state.
 
             Inputs: `fmt`, `name`. Output: None.
             """
@@ -1170,50 +1155,50 @@ def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
             self._name = name
 
         def getFormat(self):
-            """Return Format.
+            """Return the format for `_OriginalFile`.
 
-            Inputs: none. Output: computed value.
+            Inputs: none. Output: get format result.
             """
             return _Value(self._fmt) if self._fmt is not None else None
 
         def getName(self):
-            """Return the fake object name.
+            """Return `_OriginalFile`'s fake object name.
 
             Inputs: none. Output: `_Value` result.
             """
             return _Value(self._name)
 
     class _UsedFile:
-        """Represent used file."""
+        """Test double for used file behavior in this module."""
 
         def __init__(self, original_file):
-            """Initialize the instance.
+            """Create `_UsedFile` with `original_file`.
 
             Inputs: `original_file`. Output: None.
             """
             self._original_file = original_file
 
         def getOriginalFile(self):
-            """Return Original File.
+            """Return `_UsedFile`'s fake original file.
 
             Inputs: none. Output: `self._original_file`.
             """
             return self._original_file
 
     class _Fileset:
-        """Represent fileset."""
+        """Test double for fileset behavior in this module."""
 
         def __init__(self, used_files):
-            """Initialize the instance.
+            """Create `_Fileset` with `used_files`.
 
             Inputs: `used_files`. Output: None.
             """
             self._used_files = list(used_files)
 
         def copyUsedFiles(self):
-            """Copy Used Files.
+            """Copy the used Files for `_Fileset`.
 
-            Inputs: none. Output: `list` result.
+            Inputs: none. Output: `list`.
             """
             return list(self._used_files)
 
@@ -1244,14 +1229,14 @@ def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
     fetched = {1: image_one, 2: image_two}
 
     class _FetchConn:
-        """Represent fetch conn."""
+        """Test double for fetch conn behavior in this module."""
 
         @staticmethod
         def getObjects(object_type, ids=None, obj_ids=None):
-            """Return Objects.
+            """Return the objects for `_FetchConn`.
 
-            Inputs: `object_type`, `ids`, `obj_ids`. Output: None. Raises on invalid or
-            unavailable state.
+            Inputs: `object_type`, `ids`, `obj_ids`. Output: None. Raises: RuntimeError,
+            TypeError when validation or the called operation fails.
             """
             assert object_type == "Image"
             if ids is not None:
@@ -1260,9 +1245,9 @@ def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
 
         @staticmethod
         def getObject(object_type, image_id):
-            """Return Object.
+            """Return the object for `_FetchConn`.
 
-            Inputs: `object_type`, `image_id`. Output: `fetched.get` result.
+            Inputs: `object_type`, `image_id` OMERO image ID. Output: `get` result.
             """
             assert object_type == "Image"
             return fetched.get(image_id)
@@ -1326,16 +1311,16 @@ def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
 def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures():
     """Verify extract acquisition metadata handles direct values and partial failures.
 
-    Inputs: none. Output: computed value.
+    Inputs: OMP service fakes. Output: fails on regressions in extract acquisition metadata handles direct values and partial failures.
     """
 
     class _ImageWithFallbacks:
-        """Represent image with fallbacks."""
+        """Test double for image with fallbacks behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_ImageWithFallbacks` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self._raw_store = _FakeRawFileStore()
             self._update = _FakeUpdateServiceForMetadata()
@@ -1349,7 +1334,7 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
         @staticmethod
         def getId():
-            """Return the fake OMERO identifier.
+            """Return `_ImageWithFallbacks`'s fake OMERO identifier.
 
             Inputs: none. Output: 101.
             """
@@ -1357,7 +1342,7 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
         @staticmethod
         def getAcquisitionDate():
-            """Return Acquisition Date.
+            """Return `_ImageWithFallbacks`'s fake acquisition date.
 
             Inputs: none. Output: '2026-03-21T10:11:12'.
             """
@@ -1365,7 +1350,7 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
         @staticmethod
         def getObjectiveSettings():
-            """Return Objective Settings.
+            """Return `_ImageWithFallbacks`'s fake objective settings.
 
             Inputs: none. Output: `SimpleNamespace` result.
             """
@@ -1376,9 +1361,9 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
         @staticmethod
         def getChannels():
-            """Return Channels.
+            """Return the channels for `_ImageWithFallbacks`.
 
-            Inputs: none. Output: list.
+            Inputs: none. Output: `list`.
             """
             return [
                 SimpleNamespace(
@@ -1399,7 +1384,7 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
         @staticmethod
         def getDetectorSettings():
-            """Return Detector Settings.
+            """Return `_ImageWithFallbacks`'s fake detector settings.
 
             Inputs: none. Output: list.
             """
@@ -1415,7 +1400,7 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
         @staticmethod
         def loadOriginalMetadata():
-            """Return load original metadata.
+            """Return `_ImageWithFallbacks`'s fake original-metadata payload.
 
             Inputs: none. Output: tuple.
             """
@@ -1442,17 +1427,17 @@ def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures
 
 
 def test_extract_acquisition_metadata_returns_empty_when_sections_raise():
-    """Verify extract acquisition metadata returns empty when sections raise.
+    """Confirm extract acquisition metadata returns empty when sections raise exposes the expected failure.
 
-    Inputs: none. Output: 202. Raises on invalid or unavailable state.
+    Inputs: OMP service fakes. Output: fails on regressions in extract acquisition metadata returns empty when sections raise.
     """
 
     class _BrokenImage:
-        """Represent broken image."""
+        """Test double for broken image behavior in this module."""
 
         @staticmethod
         def getId():
-            """Return the fake OMERO identifier.
+            """Return `_BrokenImage`'s fake OMERO identifier.
 
             Inputs: none. Output: 202.
             """
@@ -1460,41 +1445,41 @@ def test_extract_acquisition_metadata_returns_empty_when_sections_raise():
 
         @staticmethod
         def getAcquisitionDate():
-            """Return Acquisition Date.
+            """Return `_BrokenImage`'s fake acquisition date.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("date failed")
 
         @staticmethod
         def getObjectiveSettings():
-            """Return Objective Settings.
+            """Return `_BrokenImage`'s fake objective settings.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("objective failed")
 
         @staticmethod
         def getChannels():
-            """Return Channels.
+            """Return the channels for `_BrokenImage`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("channels failed")
 
         @staticmethod
         def getDetectorSettings():
-            """Return Detector Settings.
+            """Return `_BrokenImage`'s fake detector settings.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("detectors failed")
 
         @staticmethod
         def loadOriginalMetadata():
-            """Return load original metadata.
+            """Return `_BrokenImage`'s fake original-metadata payload.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("metadata failed")
 
@@ -1505,7 +1490,7 @@ class _FakeOriginalFileRef:
     """Test double for fake original file ref."""
 
     def __init__(self, name, fmt):
-        """Initialize the instance.
+        """Create `_FakeOriginalFileRef` with `name` and `fmt`.
 
         Inputs: `name`, `fmt`. Output: None.
         """
@@ -1513,14 +1498,14 @@ class _FakeOriginalFileRef:
         self._fmt = fmt
 
     def getFormat(self):
-        """Return Format.
+        """Return the format for `_FakeOriginalFileRef`.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: get format result.
         """
         return _Value(self._fmt) if self._fmt is not None else None
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_FakeOriginalFileRef`'s fake object name.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -1531,14 +1516,14 @@ class _FakeUsedFile:
     """Test double for fake used file."""
 
     def __init__(self, original_file):
-        """Initialize the instance.
+        """Create `_FakeUsedFile` with `original_file`.
 
         Inputs: `original_file`. Output: None.
         """
         self._original_file = original_file
 
     def getOriginalFile(self):
-        """Return Original File.
+        """Return `_FakeUsedFile`'s fake original file.
 
         Inputs: none. Output: `self._original_file`.
         """
@@ -1549,16 +1534,16 @@ class _FakeFileset:
     """Test double for fake fileset."""
 
     def __init__(self, used_files):
-        """Initialize the instance.
+        """Create `_FakeFileset` with `used_files`.
 
         Inputs: `used_files`. Output: None.
         """
         self._used_files = used_files
 
     def copyUsedFiles(self):
-        """Copy Used Files.
+        """Copy the used Files for `_FakeFileset`.
 
-        Inputs: none. Output: `list` result.
+        Inputs: none. Output: `list`.
         """
         return list(self._used_files)
 
@@ -1567,7 +1552,7 @@ class _FakeImage:
     """Test double for fake image."""
 
     def __init__(self, image_id, name, fileset=None):
-        """Initialize the instance.
+        """Create `_FakeImage` with `image_id`, `name`, and `fileset`.
 
         Inputs: `image_id`, `name`, `fileset`. Output: None.
         """
@@ -1576,14 +1561,14 @@ class _FakeImage:
         self._fileset = fileset
 
     def getFileset(self):
-        """Return Fileset.
+        """Return the fileset for `_FakeImage`.
 
-        Inputs: none. Output: `self._fileset`.
+        Inputs: none. Output: `_fileset`.
         """
         return self._fileset
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_FakeImage`'s fake object name.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -1594,7 +1579,7 @@ class _FakeDataset:
     """Test double for fake dataset."""
 
     def __init__(self, dataset_id, name, owner_id, images):
-        """Initialize the instance.
+        """Create `_FakeDataset` with `dataset_id`, `name`, `owner_id`, and `images`.
 
         Inputs: `dataset_id`, `name`, `owner_id`, `images`. Output: None.
         """
@@ -1604,14 +1589,14 @@ class _FakeDataset:
         self._images = list(images)
 
     def listChildren(self):
-        """Return list children.
+        """Return `_FakeDataset`'s fake child listing.
 
         Inputs: none. Output: `list` result.
         """
         return list(self._images)
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_FakeDataset`'s fake object name.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -1622,14 +1607,14 @@ class _FakeProject:
     """Test double for fake project."""
 
     def __init__(self, datasets):
-        """Initialize the instance.
+        """Create `_FakeProject` with `datasets`.
 
         Inputs: `datasets`. Output: None.
         """
         self._datasets = list(datasets)
 
     def listChildren(self):
-        """Return list children.
+        """Return `_FakeProject`'s fake child listing.
 
         Inputs: none. Output: `list` result.
         """
@@ -1639,10 +1624,8 @@ class _FakeProject:
 def test_image_service_collectors_and_format_detection(monkeypatch):
     """Verify image service collectors and format detection.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image service collectors and format detection.
+    RuntimeError, TypeError when validation or the called operation fails.
     """
     monkeypatch.setattr(image_service, "get_id", lambda obj: getattr(obj, "id", None))
     monkeypatch.setattr(
@@ -1679,10 +1662,10 @@ def test_image_service_collectors_and_format_detection(monkeypatch):
 
         @staticmethod
         def getObjects(kind, ids=None, obj_ids=None):
-            """Return Objects.
+            """Return the objects for `_FakeConn`.
 
-            Inputs: `kind`, `ids`, `obj_ids`. Output: list. Raises on invalid or
-            unavailable state.
+            Inputs: `kind`, `ids`, `obj_ids`. Output: `list`. Raises: RuntimeError,
+            TypeError when validation or the called operation fails.
             """
             if ids is not None:
                 raise TypeError("legacy gateway")
@@ -1692,9 +1675,9 @@ def test_image_service_collectors_and_format_detection(monkeypatch):
 
         @staticmethod
         def getObject(kind, object_id):
-            """Return Object.
+            """Return the object for `_FakeConn`.
 
-            Inputs: `kind`, `object_id`. Output: computed value.
+            Inputs: `kind`, `object_id`. Output: `get` result.
             """
             if kind == "Project":
                 return project if object_id == 77 else None

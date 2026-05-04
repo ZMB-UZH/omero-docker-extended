@@ -15,17 +15,17 @@ TEST_AUTH_INPUT = "fixture-auth-input"
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._raw_value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self._raw_value`.
         """
@@ -33,17 +33,17 @@ class _Value:
 
 
 class _User:
-    """Represent user."""
+    """Test double for user behavior in this module."""
 
     def __init__(self, name="alice"):
-        """Initialize the instance.
+        """Create `_User` with `name`.
 
         Inputs: `name`. Output: None.
         """
         self._name = name
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_User`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
@@ -51,10 +51,10 @@ class _User:
 
 
 class _Image:
-    """Represent image."""
+    """Test double for image behavior in this module."""
 
     def __init__(self, image_id, name):
-        """Initialize the instance.
+        """Create `_Image` with `image_id` and `name`.
 
         Inputs: `image_id`, `name`. Output: None.
         """
@@ -63,14 +63,14 @@ class _Image:
         self._obj = object()
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_Image`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
         return _Value(self.id)
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_Image`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
@@ -78,10 +78,10 @@ class _Image:
 
 
 class _Conn:
-    """Represent conn."""
+    """Test double for conn behavior in this module."""
 
     def __init__(self, username="alice", host="omeroserver", port=4064):
-        """Initialize the instance.
+        """Create `_Conn` with `username`, `host`, and `port`.
 
         Inputs: `username`, `host`, `port`. Output: None.
         """
@@ -100,7 +100,7 @@ class _Conn:
         return self._user
 
     def getUpdateService(self):
-        """Return Update Service.
+        """Return `_Conn`'s fake update service.
 
         Inputs: none. Output: `self._update`.
         """
@@ -108,7 +108,7 @@ class _Conn:
 
     @staticmethod
     def getObjects(object_type):
-        """Return Objects.
+        """Return the objects for `_Conn`.
 
         Inputs: `object_type`. Output: `iter` result.
         """
@@ -120,14 +120,14 @@ class _FakeMapAnnotation:
     """Test double for fake map annotation."""
 
     def setNs(self, value):
-        """Set Ns.
+        """Set the ns for `_FakeMapAnnotation`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.ns = value
 
     def setMapValue(self, values):
-        """Set Map Value.
+        """Set the map Value for `_FakeMapAnnotation`.
 
         Inputs: `values`. Output: None.
         """
@@ -138,14 +138,14 @@ class _FakeLink:
     """Test double for fake link."""
 
     def setParent(self, parent):
-        """Set Parent.
+        """Set the parent for `_FakeLink`.
 
         Inputs: `parent`. Output: None.
         """
         self.parent = parent
 
     def setChild(self, child):
-        """Set Child.
+        """Set the child for `_FakeLink`.
 
         Inputs: `child`. Output: None.
         """
@@ -156,7 +156,7 @@ class _FakeImageRef:
     """Test double for fake image ref."""
 
     def __init__(self, image_id, loaded):
-        """Initialize the instance.
+        """Create `_FakeImageRef` with `image_id` and `loaded`.
 
         Inputs: `image_id`, `loaded`. Output: None.
         """
@@ -165,18 +165,18 @@ class _FakeImageRef:
 
 
 def _json_request(payload):
-    """JSON request.
+    """Return the JSON request.
 
-    Inputs: `payload`. Output: `factory.post` result.
+    Inputs: `payload` payload. Output: `post` result.
     """
     factory = RequestFactory()
     return factory.post("/", data=json.dumps(payload), content_type="application/json")
 
 
 def _json_payload(response):
-    """JSON payload.
+    """Return the JSON payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
@@ -184,11 +184,22 @@ def _json_payload(response):
 def test_parse_image_ids_and_regex_safety_helpers():
     """Verify parse image IDs and regex safety helpers.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions in parse image IDs and regex safety helpers.
     """
     assert job_view.parse_image_ids("1, 2, nope, 3") == [1, 2, 3]
     assert sorted(job_view.parse_image_ids({4, "5", "bad"})) == [4, 5]
     assert job_view.parse_image_ids(object()) == []
+
+
+def test_image_ids_from_objects_skips_unusable_ids() -> None:
+    """Verify image IDs from objects skips unusable IDs.
+
+    Inputs: OMP service fakes. Output: fails on regressions in image IDs from objects skips unusable IDs.
+    """
+    broken = SimpleNamespace(getId=lambda: "not-an-int")
+    valid = SimpleNamespace(getId=lambda: _Value(9))
+
+    assert job_view._image_ids_from_objects([broken, valid, valid]) == [9]
     assert job_view._is_safe_separator_regex(r"[_-]+") is True
     assert job_view._is_safe_separator_regex(123) is False
     assert job_view._is_safe_separator_regex("") is False
@@ -202,7 +213,7 @@ def test_job_view_helper_guards_cover_ownership_host_resolution_and_link_save(
 ):
     """Verify job view helper guards cover ownership host resolution and link save.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in job view helper guards cover ownership host resolution and link save.
     """
     request = RequestFactory().get("/")
     conn = _Conn()
@@ -256,7 +267,7 @@ def test_job_view_helper_guards_cover_ownership_host_resolution_and_link_save(
 def test_annotation_mapping_helpers_preserve_user_keys_and_hash_marker(monkeypatch):
     """Verify annotation mapping helpers preserve user keys and hash marker.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in annotation mapping helpers preserve user keys and hash marker.
     """
     monkeypatch.setattr(job_view, "compute_plugin_hash", lambda mapping: "hash")
 
@@ -295,13 +306,13 @@ def test_annotation_mapping_helpers_preserve_user_keys_and_hash_marker(monkeypat
 def test_save_image_map_annotation_builds_expected_link(monkeypatch):
     """Verify save image map annotation builds expected link.
 
-    Inputs: `monkeypatch`. Output: `link`.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in save image map annotation builds expected link.
     """
     saved_links = []
     image = _Image(7, "sample.ome.tif")
 
     def save_link(link):
-        """Save link.
+        """Save the link.
 
         Inputs: `link`. Output: `link`.
         """
@@ -327,9 +338,9 @@ def test_save_image_map_annotation_builds_expected_link(monkeypatch):
 
 
 def test_save_image_map_annotation_rejects_missing_or_invalid_image_id(monkeypatch):
-    """Verify save image map annotation rejects missing or invalid image ID.
+    """Confirm save image map annotation rejects missing or invalid image ID is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in save image map annotation rejects missing or invalid image ID.
     """
     update = SimpleNamespace(saveAndReturnObject=lambda link: link)
 
@@ -345,9 +356,10 @@ def test_save_image_map_annotation_rejects_missing_or_invalid_image_id(monkeypat
 
 
 def test_validate_user_password_handles_missing_details_and_auth_failure(monkeypatch):
-    """Verify validate user password handles missing details and auth failure.
+    """Check that validate user password handles missing details and auth failure keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when validate user password handles missing details and auth failure accepts unsafe input.
+    when validation or the called operation fails.
     """
     conn = _Conn()
     missing_host_conn = _Conn(host=None, port=None)
@@ -357,22 +369,22 @@ def test_validate_user_password_handles_missing_details_and_auth_failure(monkeyp
     assert error is not None
 
     class FailingClient:
-        """Represent failing client."""
+        """Test double for failing client behavior in this module."""
 
         @staticmethod
         def createSession(username, password):
-            """Create Session.
+            """Create the session for `FailingClient`.
 
-            Inputs: `username`, `password`. Output: None. Raises on invalid or
-            unavailable state.
+            Inputs: `username` username, `password` password. Output: None. Raises:
+            RuntimeError when validation or the called operation fails.
             """
             raise RuntimeError("bad password")
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `FailingClient`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -396,7 +408,7 @@ def test_resolve_image_ids_prefers_selected_ids_and_deduplicates_project_images(
 ):
     """Verify resolve image IDs prefers selected IDs and deduplicates project images.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve image IDs prefers selected IDs and deduplicates project images.
     """
     conn = _Conn()
     monkeypatch.setattr(
@@ -414,9 +426,9 @@ def test_resolve_image_ids_prefers_selected_ids_and_deduplicates_project_images(
 
 
 def test_start_job_rejects_invalid_regex_and_persists_expected_payload(monkeypatch):
-    """Verify start job rejects invalid regex and persists expected payload.
+    """Confirm start job rejects invalid regex and persists expected payload is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start job rejects invalid regex and persists expected payload.
     """
     conn = _Conn()
     saved = {}
@@ -467,9 +479,9 @@ def test_start_job_rejects_invalid_regex_and_persists_expected_payload(monkeypat
 
 
 def test_start_acq_and_delete_jobs_apply_types_and_password_checks(monkeypatch):
-    """Verify start acq and delete jobs apply types and password checks.
+    """Check that start acq and delete jobs apply types and password checks keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start acq and delete jobs apply types and password checks.
     """
     conn = _Conn()
     saved_jobs = []
@@ -517,7 +529,7 @@ def test_start_job_variants_cover_methods_rate_limits_and_validation_errors(
 ):
     """Verify start job variants cover methods rate limits and validation errors.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start job variants cover methods rate limits and validation errors.
     """
     conn = _Conn()
     factory = RequestFactory()
@@ -568,9 +580,9 @@ def test_start_job_variants_cover_methods_rate_limits_and_validation_errors(
 
 
 def test_start_job_variants_cover_exception_paths(monkeypatch):
-    """Verify start job variants cover exception paths.
+    """Confirm start job variants cover exception paths exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when start job variants cover exception paths stops reporting the expected error.
     """
     conn = _Conn()
     failing_request = _json_request({"project_id": 5})
@@ -598,9 +610,10 @@ def test_start_job_variants_cover_exception_paths(monkeypatch):
 
 
 def test_job_progress_rejects_other_users_and_reports_lock_contention(monkeypatch):
-    """Verify job progress rejects other users and reports lock contention.
+    """Confirm job progress rejects other users and reports lock contention is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in job progress rejects other users and reports lock contention.
+    LockException when validation or the called operation fails.
     """
     conn = _Conn()
     request = RequestFactory().get("/")
@@ -622,10 +635,10 @@ def test_job_progress_rejects_other_users_and_reports_lock_contention(monkeypatc
     forbidden = inspect.unwrap(job_view.job_progress)(request, "a" * 32, conn=conn)
 
     class BusyLock:
-        """Represent busy lock."""
+        """Test double for busy lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `BusyLock` with its default state.
 
             Inputs: `*_args`, `**_kwargs`. Output: None.
             """
@@ -633,9 +646,10 @@ def test_job_progress_rejects_other_users_and_reports_lock_contention(monkeypatc
 
         @staticmethod
         def acquire():
-            """Acquire the lock.
+            """Acquire `BusyLock`'s fake lock.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
+            external operations fail.
             """
             raise job_view.portalocker.exceptions.LockException("busy")
 
@@ -658,7 +672,7 @@ def test_job_progress_rejects_other_users_and_reports_lock_contention(monkeypatc
 def test_job_progress_processes_acquisition_batches(monkeypatch):
     """Verify job progress processes acquisition batches.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in job progress processes acquisition batches.
     """
     conn = _Conn()
     request = RequestFactory().get("/")
@@ -680,10 +694,10 @@ def test_job_progress_processes_acquisition_batches(monkeypatch):
     }
 
     class Lock:
-        """Represent lock."""
+        """Test double for lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `Lock` with its default state.
 
             Inputs: `*_args`, `**_kwargs`. Output: None.
             """
@@ -691,17 +705,17 @@ def test_job_progress_processes_acquisition_batches(monkeypatch):
 
         @staticmethod
         def acquire():
-            """Acquire the lock.
+            """Acquire `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         @staticmethod
         def release():
-            """Release the lock.
+            """Release `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -750,7 +764,7 @@ def test_job_progress_processes_filename_mapping_and_duplicate_variable_names(
 ):
     """Verify job progress processes filename mapping and duplicate variable names.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in job progress processes filename mapping and duplicate variable names.
     """
     conn = _Conn()
     request = RequestFactory().get("/")
@@ -773,10 +787,10 @@ def test_job_progress_processes_filename_mapping_and_duplicate_variable_names(
     }
 
     class Lock:
-        """Represent lock."""
+        """Test double for lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `Lock` with its default state.
 
             Inputs: `*_args`, `**_kwargs`. Output: None.
             """
@@ -784,17 +798,17 @@ def test_job_progress_processes_filename_mapping_and_duplicate_variable_names(
 
         @staticmethod
         def acquire():
-            """Acquire the lock.
+            """Acquire `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         @staticmethod
         def release():
-            """Release the lock.
+            """Release `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -842,9 +856,9 @@ def test_job_progress_processes_filename_mapping_and_duplicate_variable_names(
 
 
 def test_job_progress_preserves_reserved_hash_variable_name(monkeypatch):
-    """Verify job progress preserves reserved hash variable name.
+    """Check that job progress preserves reserved hash variable name remains stable.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in job progress preserves reserved hash variable name.
     """
     conn = _Conn()
     request = RequestFactory().get("/")
@@ -865,10 +879,10 @@ def test_job_progress_preserves_reserved_hash_variable_name(monkeypatch):
     }
 
     class Lock:
-        """Represent lock."""
+        """Test double for lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `Lock` with its default state.
 
             Inputs: `*_args`, `**_kwargs`. Output: None.
             """
@@ -876,17 +890,17 @@ def test_job_progress_preserves_reserved_hash_variable_name(monkeypatch):
 
         @staticmethod
         def acquire():
-            """Acquire the lock.
+            """Acquire `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         @staticmethod
         def release():
-            """Release the lock.
+            """Release `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -925,19 +939,19 @@ def test_job_progress_preserves_reserved_hash_variable_name(monkeypatch):
 def test_job_progress_covers_unknown_finished_delete_paths_and_save_failures(
     monkeypatch,
 ):
-    """Verify job progress covers unknown finished delete paths and save failures.
+    """Check job progress covers unknown finished delete paths and save failures cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in job progress covers unknown finished delete paths and save failures.
     """
     conn = _Conn()
     request = RequestFactory().get("/")
     request.user = SimpleNamespace(username="alice")
 
     class Lock:
-        """Represent lock."""
+        """Test double for lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `Lock` with its default state.
 
             Inputs: `*_args`, `**_kwargs`. Output: None.
             """
@@ -945,17 +959,17 @@ def test_job_progress_covers_unknown_finished_delete_paths_and_save_failures(
 
         @staticmethod
         def acquire():
-            """Acquire the lock.
+            """Acquire `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         @staticmethod
         def release():
-            """Release the lock.
+            """Release `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -1120,22 +1134,20 @@ def test_job_progress_covers_unknown_finished_delete_paths_and_save_failures(
 
 
 def test_job_progress_covers_error_logs_and_save_failures(monkeypatch):
-    """Verify job progress covers error logs and save failures.
+    """Confirm job progress covers error logs and save failures exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: tuple or None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when job progress covers error logs and save failures stops reporting the expected error.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     conn = _Conn()
     request = RequestFactory().get("/")
     request.user = SimpleNamespace(username="alice")
 
     class Lock:
-        """Represent lock."""
+        """Test double for lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `Lock` with its default state.
 
             Inputs: `*_args`, `**_kwargs`. Output: None.
             """
@@ -1143,17 +1155,17 @@ def test_job_progress_covers_error_logs_and_save_failures(monkeypatch):
 
         @staticmethod
         def acquire():
-            """Acquire the lock.
+            """Acquire `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         @staticmethod
         def release():
-            """Release the lock.
+            """Release `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -1249,9 +1261,9 @@ def test_job_progress_covers_error_logs_and_save_failures(monkeypatch):
     )
 
     def _delete_existing_annotations(*args):
-        """Delete existing annotations.
+        """Delete the existing annotations.
 
-        Inputs: `*args`. Output: tuple. Raises on invalid or unavailable state.
+        Inputs: `*args` positional arguments. Output: `tuple`. Raises: RuntimeError when validation or the called operation fails.
         """
         image_id = args[2].id
         if image_id == 51:
@@ -1315,7 +1327,7 @@ def test_job_view_start_helpers_cover_method_chunk_size_and_rate_limit_edges(
 ):
     """Verify job view start helpers cover method chunk size and rate limit edges.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in job view start helpers cover method chunk size and rate limit edges.
     """
     conn = _Conn()
     factory = RequestFactory()
@@ -1389,31 +1401,29 @@ def test_job_view_start_helpers_cover_method_chunk_size_and_rate_limit_edges(
 def test_validate_user_password_and_job_progress_cover_remaining_logging_and_regex_edges(
     monkeypatch,
 ):
-    """Verify validate user password and job progress cover remaining logging and regex edges.
+    """Check that validate user password and job progress cover remaining logging and regex edges keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: tuple or None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in validate user password and job progress cover remaining logging and regex edges.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     conn = _Conn()
 
     class _Client:
-        """Represent client."""
+        """Test double for client behavior in this module."""
 
         @staticmethod
         def createSession(username, password):
-            """Create Session.
+            """Create the session for `_Client`.
 
-            Inputs: `username`, `password`. Output: None.
+            Inputs: `username` username, `password` password. Output: None.
             """
             return None
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `_Client`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close exploded")
 
@@ -1432,10 +1442,10 @@ def test_validate_user_password_and_job_progress_cover_remaining_logging_and_reg
     saved_jobs = []
 
     class Lock:
-        """Represent lock."""
+        """Test double for lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `Lock` with its default state.
 
             Inputs: `*_args`, `**_kwargs`. Output: None.
             """
@@ -1443,17 +1453,17 @@ def test_validate_user_password_and_job_progress_cover_remaining_logging_and_reg
 
         @staticmethod
         def acquire():
-            """Acquire the lock.
+            """Acquire `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         @staticmethod
         def release():
-            """Release the lock.
+            """Release `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -1539,9 +1549,9 @@ def test_validate_user_password_and_job_progress_cover_remaining_logging_and_reg
     monkeypatch.setattr(job_view.time, "time", lambda: 14.0)
 
     def _delete_annotations(*args):
-        """Delete annotations.
+        """Delete the annotations.
 
-        Inputs: `*args`. Output: tuple. Raises on invalid or unavailable state.
+        Inputs: `*args` positional arguments. Output: `tuple`. Raises: RuntimeError when validation or the called operation fails.
         """
         image_id = args[2].id
         if image_id == 62:

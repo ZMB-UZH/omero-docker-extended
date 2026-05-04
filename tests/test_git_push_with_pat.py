@@ -21,18 +21,19 @@ TEST_GITHUB_CREDENTIAL = "-".join(("placeholder", "credential"))
 
 
 def test_pat_push_uses_one_shot_askpass_without_leaking_token(monkeypatch) -> None:
-    """Verify pat push uses one shot askpass without leaking token.
+    """Check that PAT push uses one shot askpass without leaking token keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in PAT push uses one shot askpass without leaking token.
     """
     monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
     monkeypatch.setattr(git_push_with_pat.sys.stdin, "isatty", lambda: True)
     captured: dict[str, object] = {}
 
     def fake_run(command, *, env, check):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `command`, `env`, `check`. Output: call result.
+        Inputs: `command`, `env` environment mapping, `check`. Output:
+        `CompletedProcess` result.
         """
         captured["command"] = command
         captured["env"] = env
@@ -88,26 +89,27 @@ def test_pat_push_uses_one_shot_askpass_without_leaking_token(monkeypatch) -> No
 
 
 def test_pat_push_accepts_env_token_without_prompt(monkeypatch) -> None:
-    """Verify pat push accepts environment token without prompt.
+    """Check that PAT push accepts env token without prompt keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in PAT push accepts env token without prompt.
     """
     monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
     prompted = False
 
     def fail_prompt(_prompt):
-        """Fail prompt.
+        """Return the fail prompt.
 
-        Inputs: `_prompt`. Output: 'wrong'.
+        Inputs: `_prompt`. Output: `str`.
         """
         nonlocal prompted
         prompted = True
         return "wrong"
 
     def fake_run(command, *, env, check):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `command`, `env`, `check`. Output: call result.
+        Inputs: `command`, `env` environment mapping, `check`. Output:
+        `CompletedProcess` result.
         """
         password = subprocess.check_output(
             [env["GIT_ASKPASS"], "Password for https://github.com:"],
@@ -130,18 +132,19 @@ def test_pat_push_accepts_env_token_without_prompt(monkeypatch) -> None:
 
 
 def test_pat_push_accepts_explicit_force_with_lease(monkeypatch) -> None:
-    """Verify pat push accepts explicit force with lease.
+    """Verify PAT push accepts explicit force with lease.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in PAT push accepts explicit force with lease.
     """
     monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
     captured: dict[str, object] = {}
     expected = "".join(format(value % 16, "x") for value in range(40))
 
     def fake_run(command, *, env, check):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `command`, `env`, `check`. Output: call result.
+        Inputs: `command`, `env` environment mapping, `check`. Output:
+        `CompletedProcess` result.
         """
         captured["command"] = command
         return subprocess.CompletedProcess(command, 0)
@@ -175,17 +178,18 @@ def test_pat_push_accepts_explicit_force_with_lease(monkeypatch) -> None:
 
 
 def test_pat_push_does_not_write_credential_to_temp_tree(monkeypatch) -> None:
-    """Verify pat push does not write credential to temp tree.
+    """Verify PAT push does not write credential to temp tree.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in PAT push does not write credential to temp tree.
     """
     monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
     observed_files: dict[str, str] = {}
 
     def fake_run(command, *, env, check):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `command`, `env`, `check`. Output: call result.
+        Inputs: `command`, `env` environment mapping, `check`. Output:
+        `CompletedProcess` result.
         """
         temp_root = Path(env["GIT_ASKPASS"]).parent
         for path in temp_root.iterdir():
@@ -218,9 +222,9 @@ def test_pat_push_does_not_write_credential_to_temp_tree(monkeypatch) -> None:
     [("-origin", "main"), ("origin", "-main")],
 )
 def test_pat_push_rejects_option_like_git_arguments(remote, refspec) -> None:
-    """Verify pat push rejects option like git arguments.
+    """Confirm PAT push rejects option like git arguments is rejected at the boundary.
 
-    Inputs: `remote`, `refspec`. Output: None.
+    Inputs: pytest provides `remote`, `refspec`. Output: fails on regressions in PAT push rejects option like git arguments.
     """
     args = git_push_with_pat.argparse.Namespace(
         remote=remote,
@@ -247,9 +251,9 @@ def test_pat_push_rejects_option_like_git_arguments(remote, refspec) -> None:
     ],
 )
 def test_pat_push_rejects_invalid_force_with_lease(force_with_lease) -> None:
-    """Verify pat push rejects invalid force with lease.
+    """Confirm PAT push rejects invalid force with lease is rejected at the boundary.
 
-    Inputs: `force_with_lease`. Output: None.
+    Inputs: pytest provides `force_with_lease`. Output: fails on regressions in PAT push rejects invalid force with lease.
     """
     args = git_push_with_pat.argparse.Namespace(
         remote="origin",

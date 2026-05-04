@@ -28,16 +28,16 @@ class TestConstantsAreLowercase:
     def test_filenames_all_lowercase():
         """Verify filenames all lowercase.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in filenames all lowercase.
         """
         for name in _ALWAYS_SKIP_FILENAMES:
             assert name == name.lower(), f"{name!r} is not lowercase"
 
     @staticmethod
     def test_dirs_all_lowercase():
-        """Verify directories all lowercase.
+        """Verify dirs all lowercase.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in dirs all lowercase.
         """
         for name in _ALWAYS_SKIP_DIRS:
             assert name == name.lower(), f"{name!r} is not lowercase"
@@ -47,7 +47,7 @@ class TestConstantsAreLowercase:
 
 
 class TestWindowsJunkFiles:
-    """Represent test windows junk files."""
+    """Test double for test windows junk files behavior in this module."""
 
     @pytest.mark.parametrize(
         "filename",
@@ -68,7 +68,7 @@ class TestWindowsJunkFiles:
     def test_windows_files_skipped(self, filename):
         """Verify windows files skipped.
 
-        Inputs: `filename`. Output: None.
+        Inputs: pytest provides `filename`. Output: fails on regressions in windows files skipped.
         """
         assert _should_auto_skip_import(filename) is True
 
@@ -82,7 +82,7 @@ class TestWindowsJunkFiles:
     def test_windows_files_in_subdirectory_skipped(self, filename):
         """Verify windows files in subdirectory skipped.
 
-        Inputs: `filename`. Output: None.
+        Inputs: pytest provides `filename`. Output: fails on regressions in windows files in subdirectory skipped.
         """
         assert _should_auto_skip_import(f"experiment/{filename}") is True
 
@@ -91,7 +91,7 @@ class TestWindowsJunkFiles:
 
 
 class TestMacOSJunkFiles:
-    """Represent test mac osjunk files."""
+    """Test double for test mac osjunk files behavior in this module."""
 
     @pytest.mark.parametrize(
         "filename",
@@ -110,7 +110,7 @@ class TestMacOSJunkFiles:
     def test_macos_files_skipped(self, filename):
         """Verify macos files skipped.
 
-        Inputs: `filename`. Output: None.
+        Inputs: pytest provides `filename`. Output: fails on regressions in macos files skipped.
         """
         assert _should_auto_skip_import(filename) is True
 
@@ -118,7 +118,7 @@ class TestMacOSJunkFiles:
     def test_macos_resource_fork_files():
         """Verify macos resource fork files.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in macos resource fork files.
         """
         assert _should_auto_skip_import("._image.tif") is True
         assert _should_auto_skip_import("folder/._data.xml") is True
@@ -129,13 +129,13 @@ class TestMacOSJunkFiles:
 
 
 class TestLinuxJunkFiles:
-    """Represent test linux junk files."""
+    """Test double for test linux junk files behavior in this module."""
 
     @staticmethod
     def test_directory_file_skipped():
         """Verify directory file skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in directory file skipped.
         """
         assert _should_auto_skip_import(".directory") is True
 
@@ -143,7 +143,7 @@ class TestLinuxJunkFiles:
     def test_trash_sentinel_skipped():
         """Verify trash sentinel skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in trash sentinel skipped.
         """
         assert _should_auto_skip_import(".Trash-1000") is True
 
@@ -152,7 +152,7 @@ class TestLinuxJunkFiles:
 
 
 class TestApplicationJunkFiles:
-    """Represent test application junk files."""
+    """Test double for test application junk files behavior in this module."""
 
     @pytest.mark.parametrize(
         "filename",
@@ -172,7 +172,7 @@ class TestApplicationJunkFiles:
     def test_app_metadata_skipped(self, filename):
         """Verify app metadata skipped.
 
-        Inputs: `filename`. Output: None.
+        Inputs: pytest provides `filename`. Output: fails on regressions in app metadata skipped.
         """
         assert _should_auto_skip_import(filename) is True
 
@@ -181,13 +181,13 @@ class TestApplicationJunkFiles:
 
 
 class TestJunkDirectories:
-    """Represent test junk directories."""
+    """Test double for test junk directories behavior in this module."""
 
     @staticmethod
     def test_lost_and_found_contents_skipped():
         """Verify lost and found contents skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in lost and found contents skipped.
         """
         assert _should_auto_skip_import("lost+found/file.tif") is True
         assert _should_auto_skip_import("lost+found/subdir/image.png") is True
@@ -196,7 +196,7 @@ class TestJunkDirectories:
     def test_lost_and_found_case_insensitive():
         """Verify lost and found case insensitive.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in lost and found case insensitive.
         """
         assert _should_auto_skip_import("Lost+Found/file.tif") is True
         assert _should_auto_skip_import("LOST+FOUND/file.tif") is True
@@ -205,7 +205,7 @@ class TestJunkDirectories:
     def test_recycle_bin_contents_skipped():
         """Verify recycle bin contents skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in recycle bin contents skipped.
         """
         assert _should_auto_skip_import("$RECYCLE.BIN/file.tif") is True
         assert _should_auto_skip_import("$Recycle.Bin/S-1-5/image.jpg") is True
@@ -214,47 +214,47 @@ class TestJunkDirectories:
     def test_system_volume_information_skipped():
         """Verify system volume information skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in system volume information skipped.
         """
         assert _should_auto_skip_import("System Volume Information/file.tif") is True
 
     @staticmethod
     def test_spotlight_dir_contents_skipped():
-        """Verify spotlight directory contents skipped.
+        """Verify spotlight dir contents skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in spotlight dir contents skipped.
         """
         assert _should_auto_skip_import(".Spotlight-V100/store.db") is True
 
     @staticmethod
     def test_fseventsd_dir_contents_skipped():
-        """Verify fseventsd directory contents skipped.
+        """Verify fseventsd dir contents skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in fseventsd dir contents skipped.
         """
         assert _should_auto_skip_import(".fseventsd/000001") is True
 
     @staticmethod
     def test_trashes_dir_contents_skipped():
-        """Verify trashes directory contents skipped.
+        """Verify trashes dir contents skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in trashes dir contents skipped.
         """
         assert _should_auto_skip_import(".Trashes/501/image.tif") is True
 
     @staticmethod
     def test_temporaryitems_dir_contents_skipped():
-        """Verify temporaryitems directory contents skipped.
+        """Verify temporaryitems dir contents skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in temporaryitems dir contents skipped.
         """
         assert _should_auto_skip_import(".TemporaryItems/temp.tif") is True
 
     @staticmethod
     def test_junk_dir_nested_deep():
-        """Verify junk directory nested deep.
+        """Verify junk dir nested deep.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in junk dir nested deep.
         """
         assert _should_auto_skip_import("volume/lost+found/deep/file.tif") is True
 
@@ -269,7 +269,7 @@ class TestXMLFilesNeverSkipped:
     def test_plain_xml_not_skipped():
         """Verify plain xml not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in plain xml not skipped.
         """
         assert _should_auto_skip_import("data.xml") is False
 
@@ -277,7 +277,7 @@ class TestXMLFilesNeverSkipped:
     def test_ome_xml_not_skipped():
         """Verify ome xml not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in ome xml not skipped.
         """
         assert _should_auto_skip_import("image.ome.xml") is False
 
@@ -285,7 +285,7 @@ class TestXMLFilesNeverSkipped:
     def test_companion_ome_not_skipped():
         """Verify companion ome not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in companion ome not skipped.
         """
         assert _should_auto_skip_import("image.companion.ome") is False
 
@@ -293,15 +293,15 @@ class TestXMLFilesNeverSkipped:
     def test_xml_in_root_not_skipped():
         """Verify xml in root not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in xml in root not skipped.
         """
         assert _should_auto_skip_import("settings.xml") is False
 
     @staticmethod
     def test_xml_in_metadata_dir_not_skipped():
-        """XML files inside metadata/ directories must NOT be auto-skipped.
+        """Verify xml in metadata dir not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in xml in metadata dir not skipped.
 
         OMERO should decide whether it can import them.
         """
@@ -311,26 +311,26 @@ class TestXMLFilesNeverSkipped:
 
     @staticmethod
     def test_xml_in_arbitrary_dir_not_skipped():
-        """Verify xml in arbitrary directory not skipped.
+        """Verify xml in arbitrary dir not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in xml in arbitrary dir not skipped.
         """
         assert _should_auto_skip_import("experiment/data.xml") is False
         assert _should_auto_skip_import("project/subfolder/config.xml") is False
 
     @staticmethod
     def test_xml_in_deeply_nested_dir_not_skipped():
-        """Verify xml in deeply nested directory not skipped.
+        """Verify xml in deeply nested dir not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in xml in deeply nested dir not skipped.
         """
         assert _should_auto_skip_import("a/b/c/d/image.xml") is False
 
     @staticmethod
     def test_ome_xml_in_metadata_dir_not_skipped():
-        """Verify ome xml in metadata directory not skipped.
+        """Verify ome xml in metadata dir not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in ome xml in metadata dir not skipped.
         """
         assert _should_auto_skip_import("metadata/image.ome.xml") is False
 
@@ -338,7 +338,7 @@ class TestXMLFilesNeverSkipped:
     def test_xml_with_various_cases_not_skipped():
         """Verify xml with various cases not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in xml with various cases not skipped.
         """
         assert _should_auto_skip_import("DATA.XML") is False
         assert _should_auto_skip_import("Image.Xml") is False
@@ -382,7 +382,7 @@ class TestLegitimateFilesNotSkipped:
     def test_image_and_data_files_not_skipped(self, path):
         """Verify image and data files not skipped.
 
-        Inputs: `path`. Output: None.
+        Inputs: pytest provides `path`. Output: fails on regressions in image and data files not skipped.
         """
         assert _should_auto_skip_import(path) is False
 
@@ -390,7 +390,7 @@ class TestLegitimateFilesNotSkipped:
     def test_files_in_subdirectories_not_skipped():
         """Verify files in subdirectories not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in files in subdirectories not skipped.
         """
         assert _should_auto_skip_import("experiment/image.tif") is False
         assert _should_auto_skip_import("project/data/image.czi") is False
@@ -398,9 +398,9 @@ class TestLegitimateFilesNotSkipped:
 
     @staticmethod
     def test_files_in_metadata_named_dir_not_skipped():
-        """Files in directories called 'metadata' must NOT be auto-skipped.
+        """Verify files in metadata named dir not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in files in metadata named dir not skipped.
 
         (only OS junk dirs trigger skipping).
         """
@@ -412,13 +412,13 @@ class TestLegitimateFilesNotSkipped:
 
 
 class TestEdgeCases:
-    """Represent test edge cases."""
+    """Test double for test edge cases behavior in this module."""
 
     @staticmethod
     def test_empty_string_not_skipped():
         """Verify empty string not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in empty string not skipped.
         """
         assert _should_auto_skip_import("") is False
 
@@ -427,7 +427,7 @@ class TestEdgeCases:
         # The function checks `if not relative_path`
         """Verify none like empty not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in none like empty not skipped.
         """
         assert _should_auto_skip_import("") is False
 
@@ -435,33 +435,33 @@ class TestEdgeCases:
     def test_filename_only_no_directory():
         """Verify filename only no directory.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in filename only no directory.
         """
         assert _should_auto_skip_import("Thumbs.db") is True
         assert _should_auto_skip_import("image.tif") is False
 
     @staticmethod
     def test_hidden_regular_file_not_skipped():
-        """Hidden files that aren't in the skip list pass through.
+        """Verify hidden regular file not skipped.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in hidden regular file not skipped.
         """
         assert _should_auto_skip_import(".hidden_image.tif") is False
 
     @staticmethod
     def test_resource_fork_prefix_only_skipped_for_dot_underscore():
-        """Only ._* prefix triggers skip, not just underscore.
+        """Verify resource fork prefix only skipped for dot underscore.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in resource fork prefix only skipped for dot underscore.
         """
         assert _should_auto_skip_import("._resource") is True
         assert _should_auto_skip_import("_normalfile.tif") is False
 
     @staticmethod
     def test_directory_name_matching_skip_filename_does_not_skip_contents():
-        """A directory named 'thumbs.db' should not cause its contents to be skipped.
+        """Verify directory name matching skip filename does not skip contents.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in directory name matching skip filename does not skip contents.
 
         (only _ALWAYS_SKIP_DIRS entries trigger directory-level skipping).
         """
@@ -469,9 +469,9 @@ class TestEdgeCases:
 
     @staticmethod
     def test_skip_dir_at_any_depth():
-        """_ALWAYS_SKIP_DIRS matching works at any path depth.
+        """Verify skip dir at any depth.
 
-        Inputs: none. Output: None.
+        Inputs: import-job fakes. Output: fails on regressions in skip dir at any depth.
         """
         assert _should_auto_skip_import("a/lost+found/b/file.tif") is True
         assert _should_auto_skip_import("x/y/$RECYCLE.BIN/file.tif") is True

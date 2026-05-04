@@ -78,9 +78,9 @@ _INLINE_TEMPLATE_BACKEND = DjangoTemplates(
 def _proxy_method_not_allowed_response(
     allowed: tuple = _PROXY_SAFE_METHODS,
 ) -> JsonResponse:
-    """Proxy method not allowed response.
+    """Return the proxy method not allowed response.
 
-    Inputs: `allowed`. Output: `JsonResponse`.
+    Inputs: `allowed` (tuple). Output: `JsonResponse`.
     """
     response = JsonResponse(
         {"error": "Method not allowed", "allowed_methods": list(allowed)},
@@ -111,7 +111,8 @@ def _to_int_env(name: str, default: int) -> int:
 def _validated_http_url(url: str, *, allow_query: bool = False) -> str:
     """Return a normalized HTTP(S) URL or raise ValueError.
 
-    Inputs: `url`, `allow_query`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `url` (str) URL, `allow_query` (bool). Output: `str`. Raises: ValueError
+    when validation or the called operation fails.
     """
     parsed = urlparse(str(url or "").strip())
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -139,10 +140,10 @@ def _internal_service_base_url(
     default_port: int,
     scheme_env_name: str = "ADMIN_TOOLS_INTERNAL_SERVICE_SCHEME",
 ) -> str:
-    """Internal service base URL.
+    """Return the internal service base URL.
 
-    Inputs: `url_env_name`, `default_host`, `default_port`, `scheme_env_name`. Output:
-    `str`.
+    Inputs: `url_env_name` (str), `default_host` (str), `default_port` (int),
+    `scheme_env_name` (str). Output: `str`.
     """
     configured_url = os.environ.get(url_env_name, "").strip()
     if configured_url:
@@ -187,9 +188,9 @@ def _probe_http_url(url: str, timeout_seconds: float = 2.5) -> Dict[str, object]
 
 
 def _normalize_proxy_prefix(proxy_prefix: str) -> str:
-    """Normalize proxy prefix.
+    """Normalize the proxy prefix.
 
-    Inputs: `proxy_prefix`. Output: `str`.
+    Inputs: `proxy_prefix` (str). Output: `str`.
     """
     stripped = str(proxy_prefix or "").strip().strip("/")
     return f"/{stripped}" if stripped else ""
@@ -227,12 +228,10 @@ def _safe_dashboard_uid(value: str, default: str) -> str:
 
 
 def _normalize_proxy_request_target(subpath: str) -> Tuple[str, str]:
-    """Normalize proxy request target.
+    """Normalize the proxy request target.
 
-    Inputs: `subpath`. Output: `Tuple[str, str]`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `subpath` (str). Output: `Tuple[str, str]`. Raises: ValueError when validation or
+    the called operation fails.
     """
     raw_target = str(subpath or "").strip()
     parsed_target = urllib.parse.urlsplit(raw_target)
@@ -259,9 +258,9 @@ def _normalize_proxy_request_target(subpath: str) -> Tuple[str, str]:
 
 
 def _normalize_proxy_query_string(query: str) -> str:
-    """Normalize proxy query string.
+    """Normalize the proxy query string.
 
-    Inputs: `query`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `query` (str). Output: `str`. Raises: ValueError for the exercised failure path.
     """
     normalized_query = str(query or "").lstrip("?")
     if any(ord(char) < 32 or ord(char) == 127 for char in normalized_query):
@@ -272,10 +271,8 @@ def _normalize_proxy_query_string(query: str) -> str:
 def _build_proxy_target_url(base_url: str, path: str, query: str) -> tuple[str, str]:
     """Proxy target URL.
 
-    Inputs: `base_url`, `path`, `query`. Output: `tuple[str, str]`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `base_url` (str) base URL, `path` (str) path, `query` (str). Output:
+    `tuple[str, str]`. Raises: ValueError when validation or the called operation fails.
     """
     normalized_path, _ignored_query = _normalize_proxy_request_target(path)
     base_parsed = urllib.parse.urlparse(_validated_http_url(base_url))
@@ -313,7 +310,8 @@ def _build_proxy_target_url(base_url: str, path: str, query: str) -> tuple[str, 
 def _build_proxy_request_target(target_url: str) -> str:
     """Proxy request target.
 
-    Inputs: `target_url`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `target_url` (str). Output: `str`. Raises: ValueError when validation or
+    external operations fail.
     """
     target_parsed = urllib.parse.urlparse(target_url)
     request_target = urllib.parse.urlunparse(
@@ -337,9 +335,10 @@ def _collect_proxy_headers(
     django_request,
     extra_forwarded_headers: tuple,
 ) -> dict[str, str]:
-    """Collect proxy headers.
+    """Collect the proxy headers.
 
-    Inputs: `django_request`, `extra_forwarded_headers`. Output: `dict[str, str]`.
+    Inputs: `django_request`, `extra_forwarded_headers` (tuple). Output: `dict[str,
+    str]`.
     """
     forwarded_headers: dict[str, str] = {}
     for header_name in (
@@ -359,9 +358,9 @@ def _collect_proxy_headers(
 
 
 def _rewrite_origin_headers(headers: dict[str, str], base_url: str) -> None:
-    """Rewrite origin headers.
+    """Rewrite proxied Origin and Referer headers for the backend target.
 
-    Inputs: `headers`, `base_url`. Output: None.
+    Inputs: `headers` (dict[str, str]), `base_url` (str) base URL. Output: None.
     """
     backend_origin = _origin_from_url(base_url)
     if not backend_origin:
@@ -373,7 +372,7 @@ def _rewrite_origin_headers(headers: dict[str, str], base_url: str) -> None:
 
 
 def _proxy_request_body(django_request) -> bytes | None:
-    """Proxy request body.
+    """Return the proxy request body.
 
     Inputs: `django_request`. Output: `bytes | None`.
     """
@@ -383,10 +382,10 @@ def _proxy_request_body(django_request) -> bytes | None:
 
 
 class _ProxyBackendResponse:
-    """Represent proxy backend response."""
+    """Helper type for proxy backend response behavior."""
 
     def __init__(self, raw_response, connection) -> None:
-        """Initialize the instance.
+        """Create `_ProxyBackendResponse` with `raw_response` and `connection`.
 
         Inputs: `raw_response`, `connection`. Output: None.
         """
@@ -407,9 +406,9 @@ class _ProxyBackendResponse:
         return self._content
 
     def close(self) -> None:
-        """Close the resource.
+        """Close `_ProxyBackendResponse`'s fake resource handle.
 
-        Inputs: none. Output: None.
+        Inputs: no caller arguments. Output: closes the described state and returns None.
         """
         self._connection.close()
 
@@ -423,13 +422,11 @@ def _send_proxy_backend_request(
     headers: dict[str, str],
     timeout_seconds: float,
 ) -> _ProxyBackendResponse:
-    """Send proxy backend request.
+    """Send the proxy backend request.
 
-    Inputs: `base_url`, `method`, `request_target`, `data`, `headers`,
-    `timeout_seconds`. Output: `_ProxyBackendResponse`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `base_url` (str) base URL, `method` (str), `request_target` (str), `data`
+    (bytes | None) payload, `headers` (dict[str, str]), `timeout_seconds` (float).
+    Output: `_ProxyBackendResponse`. Raises: ValueError for the exercised failure path.
     """
     base_parsed = urllib.parse.urlparse(_validated_http_url(base_url))
     hostname = base_parsed.hostname
@@ -558,9 +555,9 @@ def _proxy_http_request(
 
 
 def _header_first(headers, name: str, default: str = "") -> str:
-    """Header first.
+    """Return the header first.
 
-    Inputs: `headers`, `name`, `default`. Output: `str`.
+    Inputs: `headers`, `name` (str) name, `default` (str). Output: `str`.
     """
     value = None
     getter = getattr(headers, "get", None)
@@ -572,9 +569,9 @@ def _header_first(headers, name: str, default: str = "") -> str:
 
 
 def _header_values(headers, name: str) -> List[str]:
-    """Header values.
+    """Return the header values.
 
-    Inputs: `headers`, `name`. Output: `List[str]`.
+    Inputs: `headers`, `name` (str) name. Output: `List[str]`.
     """
     for attr in ("get_all", "getlist"):
         getter = getattr(headers, attr, None)
@@ -672,9 +669,10 @@ def _origin_from_url(url: str) -> str:
 
 
 def _rewrite_proxied_location(location: str, base_url: str, proxy_prefix: str) -> str:
-    """Rewrite proxied location.
+    """Return the rewrite proxied location.
 
-    Inputs: `location`, `base_url`, `proxy_prefix`. Output: `str`.
+    Inputs: `location` (str), `base_url` (str) base URL, `proxy_prefix` (str). Output:
+    `str`.
     """
     normalized_prefix = _normalize_proxy_prefix(proxy_prefix)
     parsed_location = urlparse(str(location or ""))
@@ -977,7 +975,7 @@ def _build_public_service_url(
 def _unwrap_rtype_value(value, default=None):
     """Extract primitive values from OMERO rtypes and similar wrappers.
 
-    Inputs: `value`, `default`. Output: computed value.
+    Inputs: `value` input value, `default`. Output: unwrap rtype value result.
     """
     if value is None:
         return default
@@ -1038,7 +1036,7 @@ def _safe_group_name(group_obj) -> str:
 def _call_admin_listing(admin_service, method_name, arg_options=None):
     """Call admin-service listing methods with tolerant signatures.
 
-    Inputs: `admin_service`, `method_name`, `arg_options`. Output: computed value.
+    Inputs: `admin_service`, `method_name`, `arg_options`. Output: `list`.
     """
     if not hasattr(admin_service, method_name):
         return []
@@ -1056,7 +1054,7 @@ def _call_admin_listing(admin_service, method_name, arg_options=None):
 def _safe_object_id(obj):
     """Extract numeric ID for OMERO model-like objects.
 
-    Inputs: `obj`. Output: computed value or None.
+    Inputs: `obj`. Output: ID value.
     """
     if obj is None:
         return None
@@ -1093,9 +1091,9 @@ def _list_omero_group_names(conn) -> List[str]:
 
 
 def _first_admin_listing(admin_service, method_names: tuple[str, ...]) -> list:
-    """First admin listing.
+    """Return the first admin listing.
 
-    Inputs: `admin_service`, `method_names`. Output: `list`.
+    Inputs: `admin_service`, `method_names` (tuple[str, ...]). Output: `list`.
     """
     for method_name in method_names:
         objects = _call_admin_listing(admin_service, method_name)
@@ -1107,9 +1105,10 @@ def _first_admin_listing(admin_service, method_names: tuple[str, ...]) -> list:
 def _register_admin_users(
     experimenters: list,
 ) -> tuple[dict[str, str], dict[str, set[str]]]:
-    """Register admin users.
+    """Return the register admin users.
 
-    Inputs: `experimenters`. Output: `tuple[dict[str, str], dict[str, set[str]]]`.
+    Inputs: `experimenters` (list). Output: `tuple[dict[str, str], dict[str,
+    set[str]]]`.
     """
     users: dict[str, str] = {}
     groups_by_user: dict[str, set[str]] = {}
@@ -1124,12 +1123,10 @@ def _register_admin_users(
 def _register_admin_groups(
     experimenter_groups: list,
 ) -> tuple[set[str], dict[str, str], dict[str, set[str]]]:
-    """Register admin groups.
+    """Return the register admin groups.
 
-    Inputs: `experimenter_groups`. Output: `tuple[set[str], dict[str, str], dict[str,
-    set[str]]]`.
-
-    set[str]]]`.
+    Inputs: `experimenter_groups` (list). Output: `tuple[set[str], dict[str, str],
+    dict[str, set[str]]]`.
     """
     groups: set[str] = set()
     group_permissions: dict[str, str] = {}
@@ -1144,9 +1141,9 @@ def _register_admin_groups(
 
 
 def _admin_id_arg_options(object_id: int) -> tuple[tuple[object, ...], ...]:
-    """Admin ID arg options.
+    """Return the admin ID arg options.
 
-    Inputs: `object_id`. Output: `tuple[tuple[object, ...], ...]`.
+    Inputs: `object_id` (int). Output: `tuple[tuple[object, ...], ...]`.
     """
     return ((object_id,), (int(object_id),), (object_id, False), (object_id, None))
 
@@ -1159,10 +1156,11 @@ def _link_user_group_memberships(
     groups_by_user: dict[str, set[str]],
     users_by_group: dict[str, set[str]],
 ) -> None:
-    """Link user group memberships.
+    """Attach group membership rows to their serialized user records.
 
-    Inputs: `admin_service`, `experimenters`, `groups`, `group_permissions`,
-    `groups_by_user`, `users_by_group`. Output: None.
+    Inputs: `admin_service`, `experimenters` (list), `groups` (set[str]),
+    `group_permissions` (dict[str, str]), `groups_by_user` (dict[str, set[str]]),
+    `users_by_group` (dict[str, set[str]]). Output: None.
     """
     for user in experimenters:
         user_id = _safe_object_id(user)
@@ -1192,10 +1190,11 @@ def _link_group_user_memberships(
     groups_by_user: dict[str, set[str]],
     users_by_group: dict[str, set[str]],
 ) -> None:
-    """Link group user memberships.
+    """Attach user membership rows to their serialized group records.
 
-    Inputs: `admin_service`, `experimenter_groups`, `users`, `groups_by_user`,
-    `users_by_group`. Output: None.
+    Inputs: `admin_service`, `experimenter_groups` (list), `users` (dict[str, str]),
+    `groups_by_user` (dict[str, set[str]]), `users_by_group` (dict[str, set[str]]).
+    Output: None.
     """
     for group in experimenter_groups:
         group_id = _safe_object_id(group)
@@ -1216,9 +1215,9 @@ def _link_group_user_memberships(
 
 
 def _list_all_users_and_groups(conn):
-    """List all users and groups.
+    """Return the all users and groups.
 
-    Inputs: `conn`. Output: tuple.
+    Inputs: `conn` OMERO gateway connection. Output: `tuple`.
     """
     users: dict[str, str] = {}
     groups: set[str] = set()
@@ -1280,7 +1279,7 @@ def _permission_flag(permission_obj, method_name: str) -> bool:
 def _safe_group_permission_object(group_obj):
     """Return safe group permission object.
 
-    Inputs: `group_obj`. Output: computed value or None.
+    Inputs: `group_obj`. Output: safe group permission object result.
     """
     try:
         details = group_obj.getDetails()
@@ -1290,7 +1289,7 @@ def _safe_group_permission_object(group_obj):
 
 
 def _permission_label_from_flags(permission_obj) -> str:
-    """Permission label from flags.
+    """Return the permission label from flags.
 
     Inputs: `permission_obj`. Output: `str`.
     """
@@ -1307,7 +1306,7 @@ def _permission_label_from_flags(permission_obj) -> str:
 
 
 def _permission_label_from_text(permission_obj) -> str:
-    """Permission label from text.
+    """Return the permission label from text.
 
     Inputs: `permission_obj`. Output: `str`.
     """
@@ -1336,9 +1335,10 @@ def _safe_group_permission_label(group_obj) -> str:
 
 
 def _require_root_user(request, conn):
-    """Root user.
+    """Require the root user.
 
-    Inputs: `request`, `conn`. Output: `JsonResponse` result or None.
+    Inputs: `request` Django request, `conn` OMERO gateway connection. Output: Django
+    `JsonResponse`.
     """
     username = current_username(request, conn)
     if username != "root":
@@ -1396,9 +1396,10 @@ def _build_log_sources() -> List[Dict[str, str]]:
 
 
 def _parse_since_ns(raw_value: str) -> int:
-    """Parse since ns.
+    """Parse and validate the since ns input.
 
-    Inputs: `raw_value`. Output: `int`. Raises on invalid or unavailable state.
+    Inputs: `raw_value` (str) raw value. Output: `int`. Raises: ValueError when validation or
+    the called operation fails.
     """
     value = raw_value.strip()
     if not value:
@@ -1433,12 +1434,10 @@ def logs_view(request, _conn=None, _url=None, **kwargs):
 
 
 def _parse_log_limits(request, log_config) -> tuple[int, int]:
-    """Parse log limits.
+    """Parse and validate the log limits input.
 
-    Inputs: `request`, `log_config`. Output: `tuple[int, int]`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `request` Django request, `log_config`. Output: `tuple[int, int]`. Raises:
+    ValueError when validation or the called operation fails.
     """
     lookback_seconds = int(request.GET.get("lookback", log_config.lookback_seconds))
     max_entries = int(request.GET.get("limit", log_config.max_entries))
@@ -1449,9 +1448,9 @@ def _parse_log_limits(request, log_config) -> tuple[int, int]:
 
 
 def _parse_optional_since_ns(request) -> int | None:
-    """Parse optional since ns.
+    """Parse and validate the optional since ns input.
 
-    Inputs: `request`. Output: `int | None`.
+    Inputs: `request` Django request. Output: `int | None`.
     """
     since_raw = request.GET.get("since", "").strip()
     if not since_raw:
@@ -1460,7 +1459,7 @@ def _parse_optional_since_ns(request) -> int | None:
 
 
 def _valid_log_container_keys() -> set[str]:
-    """Valid log container keys.
+    """Return the valid log container keys.
 
     Inputs: none. Output: `set[str]`.
     """
@@ -1470,9 +1469,10 @@ def _valid_log_container_keys() -> set[str]:
 
 
 def _log_containers_from_request(request) -> list[str]:
-    """Log containers from request.
+    """Log the containers from request.
 
-    Inputs: `request`. Output: `list[str]`. Raises on invalid or unavailable state.
+    Inputs: `request` Django request. Output: `list[str]`. Raises: ValueError when validation or
+    the called operation fails.
     """
     containers = [
         str(value or "").strip() for value in request.GET.getlist("container")
@@ -1488,12 +1488,10 @@ def _log_containers_from_request(request) -> list[str]:
 
 
 def _internal_log_files_from_query(values: list[str]) -> dict[str, set[str]]:
-    """Internal log files from query.
+    """Return the internal log files from query.
 
-    Inputs: `values`. Output: `dict[str, set[str]]`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `values` (list[str]). Output: `dict[str, set[str]]`. Raises: ValueError when
+    validation or the called operation fails.
     """
     internal_files: dict[str, set[str]] = {}
     for value in values:
@@ -1509,9 +1507,9 @@ def _internal_log_files_from_query(values: list[str]) -> dict[str, set[str]]:
 
 
 def _filter_log_entries(entries, *, level: str, query: str):
-    """Filter log entries.
+    """Filter the log entries.
 
-    Inputs: `entries`, `level`, `query`. Output: computed value.
+    Inputs: `entries`, `level` (str), `query` (str). Output: filter log entries result.
     """
     filtered_entries = entries
     if level:
@@ -1533,7 +1531,8 @@ def _filter_log_entries(entries, *, level: str, query: str):
 def logs_data(request, conn=None, _url=None, **kwargs):
     """Serve log entries as JSON from the Loki backend.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -1605,7 +1604,8 @@ def root_status(request, conn=None, _url=None, **kwargs):
 def internal_log_labels(request, conn=None, _url=None, **kwargs):
     """Return available filenames for an internal log compose_service.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -1688,9 +1688,9 @@ def _prometheus_instant_query(prometheus_base_url: str, expr: str) -> Optional[f
 
 
 def _collect_system_metrics(prometheus_base_url: str) -> Dict[str, Optional[float]]:
-    """Collect system metrics.
+    """Collect the system metrics.
 
-    Inputs: `prometheus_base_url`. Output: `Dict[str, Optional[float]]`.
+    Inputs: `prometheus_base_url` (str). Output: `Dict[str, Optional[float]]`.
     """
     metrics: Dict[str, Optional[float]] = {
         "cpu_usage_percent": None,
@@ -1782,7 +1782,7 @@ class _UnixSocketHTTPConnection(HTTPConnection):
     """HTTP client connection implementation for Docker Unix sockets."""
 
     def __init__(self, unix_socket_path: str, timeout: float = 3.0):
-        """Initialize the instance.
+        """Create `_UnixSocketHTTPConnection` with `unix_socket_path` and `timeout`.
 
         Inputs: `unix_socket_path`, `timeout`. Output: None.
         """
@@ -1790,9 +1790,9 @@ class _UnixSocketHTTPConnection(HTTPConnection):
         self.unix_socket_path = unix_socket_path
 
     def connect(self) -> None:
-        """Open the connection.
+        """Open the connection for `_UnixSocketHTTPConnection`.
 
-        Inputs: none. Output: None.
+        Inputs: no caller arguments. Output: opens the described state and returns None.
         """
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.settimeout(self.timeout)
@@ -1843,9 +1843,9 @@ def _docker_api_json(path: str, timeout_seconds: float = 3.0) -> Optional[object
 
 
 def _docker_identity_diagnostics(diag: dict[str, object]) -> list[int]:
-    """Docker identity diagnostics.
+    """Return the docker identity diagnostics.
 
-    Inputs: `diag`. Output: `list[int]`.
+    Inputs: `diag` (dict[str, object]). Output: `list[int]`.
     """
     try:
         diag["current_uid"] = os.getuid()
@@ -1872,9 +1872,10 @@ def _docker_socket_diagnostics(
     docker_socket: str,
     current_gids: list[int],
 ) -> None:
-    """Docker socket diagnostics.
+    """Collect Docker socket diagnostics for the admin status payload.
 
-    Inputs: `diag`, `docker_socket`, `current_gids`. Output: None.
+    Inputs: `diag` (dict[str, object]), `docker_socket` (str), `current_gids`
+    (list[int]). Output: None.
     """
     if not diag["socket_exists"]:
         return
@@ -1898,9 +1899,9 @@ def _docker_socket_diagnostics(
 
 
 def _docker_status_sample(container: dict) -> dict[str, str]:
-    """Docker status sample.
+    """Return the docker status sample.
 
-    Inputs: `container`. Output: `dict[str, str]`.
+    Inputs: `container` (dict). Output: `dict[str, str]`.
     """
     labels = container.get("Labels", {}) or {}
     service = str(labels.get("com.docker.compose.service", "")).strip()
@@ -1918,9 +1919,9 @@ def _docker_status_sample(container: dict) -> dict[str, str]:
 def _docker_container_health_summary(
     containers: list,
 ) -> tuple[int, list[dict[str, str]]]:
-    """Docker container health summary.
+    """Return the docker container health summary.
 
-    Inputs: `containers`. Output: `tuple[int, list[dict[str, str]]]`.
+    Inputs: `containers` (list). Output: `tuple[int, list[dict[str, str]]]`.
     """
     health_count = 0
     samples: list[dict[str, str]] = []
@@ -1935,9 +1936,9 @@ def _docker_container_health_summary(
 
 
 def _docker_api_diagnostics(diag: dict[str, object]) -> None:
-    """Docker API diagnostics.
+    """Collect Docker API diagnostics for the admin status payload.
 
-    Inputs: `diag`. Output: None.
+    Inputs: `diag` (dict[str, object]). Output: None.
     """
     try:
         containers = _docker_api_json("/containers/json?all=1")
@@ -1995,9 +1996,9 @@ def _diagnose_docker_health() -> Dict[str, object]:
 
 
 def _parse_docker_status_health(status: str) -> str:
-    """Parse docker status health.
+    """Parse and validate the docker status health input.
 
-    Inputs: `status`. Output: `str`.
+    Inputs: `status` (str) status. Output: `str`.
     """
     match = re.search(r"\((healthy|unhealthy|starting)\)", str(status or "").lower())
     if match:
@@ -2006,9 +2007,9 @@ def _parse_docker_status_health(status: str) -> str:
 
 
 def _compose_service_from_container(container: dict) -> str:
-    """Compose service from container.
+    """Compose the service from container.
 
-    Inputs: `container`. Output: `str`.
+    Inputs: `container` (dict). Output: `str`.
     """
     labels = container.get("Labels", {}) or {}
     if not isinstance(labels, dict):
@@ -2017,9 +2018,9 @@ def _compose_service_from_container(container: dict) -> str:
 
 
 def _container_runtime_health(container: dict) -> tuple[str, str, str]:
-    """Container runtime health.
+    """Return the container runtime health.
 
-    Inputs: `container`. Output: `tuple[str, str, str]`.
+    Inputs: `container` (dict). Output: `tuple[str, str, str]`.
     """
     service_name = _compose_service_from_container(container)
     if not service_name:
@@ -2030,9 +2031,9 @@ def _container_runtime_health(container: dict) -> tuple[str, str, str]:
 
 
 def _container_id(container: dict) -> str:
-    """Container ID.
+    """Return the container ID.
 
-    Inputs: `container`. Output: `str`.
+    Inputs: `container` (dict). Output: `str`.
     """
     return str(container.get("Id", "")).strip()
 
@@ -2052,9 +2053,9 @@ def _has_inspected_healthcheck(inspect_payload: dict) -> bool:
 
 
 def _inspected_health_status(inspect_payload: dict) -> str:
-    """Inspected health status.
+    """Return the inspected health status.
 
-    Inputs: `inspect_payload`. Output: `str`.
+    Inputs: `inspect_payload` (dict). Output: `str`.
     """
     state_payload = inspect_payload.get("State", {}) or {}
     state_health = state_payload.get("Health", {}) or {}
@@ -2072,10 +2073,10 @@ def _apply_container_inspect_health(
     healthcheck_config: dict[str, bool],
     runtime_health: dict[str, dict[str, str]],
 ) -> None:
-    """Apply container inspect health.
+    """Apply the container inspect health.
 
-    Inputs: `service_name`, `container_id`, `healthcheck_config`, `runtime_health`.
-    Output: None.
+    Inputs: `service_name` (str), `container_id` (str), `healthcheck_config` (dict[str,
+    bool]), `runtime_health` (dict[str, dict[str, str]]). Output: None.
     """
     inspect_payload = _docker_api_json(f"/containers/{container_id}/json")
     if not isinstance(inspect_payload, dict):
@@ -2199,9 +2200,9 @@ def _load_compose_runtime_health() -> Dict[str, Dict[str, str]]:
 
 
 def _service_name_variants(raw_candidate: str) -> set[str]:
-    """Service name variants.
+    """Return the service name variants.
 
-    Inputs: `raw_candidate`. Output: `set[str]`.
+    Inputs: `raw_candidate` (str). Output: `set[str]`.
     """
     candidate = str(raw_candidate or "").strip().lstrip("/")
     if not candidate:
@@ -2230,9 +2231,9 @@ def _resolve_expected_service_name(
     raw_candidate: str,
     expected_lookup: dict[str, str],
 ) -> str:
-    """Resolve expected service name.
+    """Resolve the expected service name.
 
-    Inputs: `raw_candidate`, `expected_lookup`. Output: `str`.
+    Inputs: `raw_candidate` (str), `expected_lookup` (dict[str, str]). Output: `str`.
     """
     for variant in _service_name_variants(raw_candidate):
         direct_match = expected_lookup.get(variant)
@@ -2242,9 +2243,9 @@ def _resolve_expected_service_name(
 
 
 def _target_service_candidates(target: dict[str, object]) -> tuple[str, ...]:
-    """Target service candidates.
+    """Return the target service candidates.
 
-    Inputs: `target`. Output: `tuple[str, ...]`.
+    Inputs: `target` (dict[str, object]). Output: `tuple[str, ...]`.
     """
     raw_labels = target.get("labels", {}) or {}
     raw_discovered_labels = target.get("discoveredLabels", {}) or {}
@@ -2270,9 +2271,10 @@ def _status_by_prometheus_target(
     active_targets: List[Dict[str, object]],
     expected_services: List[str],
 ) -> dict[str, str]:
-    """Status by prometheus target.
+    """Return the status by prometheus target.
 
-    Inputs: `active_targets`, `expected_services`. Output: `dict[str, str]`.
+    Inputs: `active_targets` (List[Dict[str, object]]), `expected_services` (List[str]).
+    Output: `dict[str, str]`.
     """
     expected_lookup = {service.lower(): service for service in expected_services}
     status_by_service = {service: "unknown" for service in expected_services}
@@ -2290,9 +2292,10 @@ def _apply_prometheus_target_health(
     service_name: str,
     health: str,
 ) -> None:
-    """Apply prometheus target health.
+    """Apply the prometheus target health.
 
-    Inputs: `status_by_service`, `service_name`, `health`. Output: None.
+    Inputs: `status_by_service` (dict[str, str]), `service_name` (str), `health` (str).
+    Output: None.
     """
     current = status_by_service[service_name]
     if health == "up":
@@ -2305,9 +2308,10 @@ def _mark_recently_seen_services(
     status_by_service: dict[str, str],
     recently_seen_services: Optional[List[str]],
 ) -> None:
-    """Mark recently seen services.
+    """Mark recently observed Compose services in the monitoring payload.
 
-    Inputs: `status_by_service`, `recently_seen_services`. Output: None.
+    Inputs: `status_by_service` (dict[str, str]), `recently_seen_services`
+    (Optional[List[str]]). Output: None.
     """
     recently_seen = {
         str(service).strip().lower() for service in (recently_seen_services or [])
@@ -2318,9 +2322,9 @@ def _mark_recently_seen_services(
 
 
 def _lower_bool_lookup(values: Optional[Dict[str, bool]]) -> dict[str, bool]:
-    """Lower bool lookup.
+    """Return the lower bool lookup.
 
-    Inputs: `values`. Output: `dict[str, bool]`.
+    Inputs: `values` (Optional[Dict[str, bool]]). Output: `dict[str, bool]`.
     """
     return {
         str(name).lower(): bool(enabled) for name, enabled in (values or {}).items()
@@ -2330,9 +2334,10 @@ def _lower_bool_lookup(values: Optional[Dict[str, bool]]) -> dict[str, bool]:
 def _lower_runtime_lookup(
     values: Optional[Dict[str, Dict[str, str]]],
 ) -> dict[str, Dict[str, str]]:
-    """Lower runtime lookup.
+    """Return the lower runtime lookup.
 
-    Inputs: `values`. Output: `dict[str, Dict[str, str]]`.
+    Inputs: `values` (Optional[Dict[str, Dict[str, str]]]). Output: `dict[str, Dict[str,
+    str]]`.
     """
     return {str(name).lower(): payload for name, payload in (values or {}).items()}
 
@@ -2343,10 +2348,10 @@ def _target_service_health(
     healthcheck_state: str,
     has_healthcheck: bool,
 ) -> str:
-    """Target service health.
+    """Return the target service health.
 
-    Inputs: `prometheus_health`, `state`, `healthcheck_state`, `has_healthcheck`.
-    Output: `str`.
+    Inputs: `prometheus_health` (str), `state` (str), `healthcheck_state` (str),
+    `has_healthcheck` (bool). Output: `str`.
     """
     if not has_healthcheck:
         return (
@@ -2369,10 +2374,10 @@ def _target_service_entry(
     healthcheck_lookup: dict[str, bool],
     runtime_lookup: dict[str, Dict[str, str]],
 ) -> dict[str, str]:
-    """Target service entry.
+    """Return the target service entry.
 
-    Inputs: `service`, `prometheus_health`, `healthcheck_lookup`, `runtime_lookup`.
-    Output: `dict[str, str]`.
+    Inputs: `service` (str), `prometheus_health` (str), `healthcheck_lookup` (dict[str,
+    bool]), `runtime_lookup` (dict[str, Dict[str, str]]). Output: `dict[str, str]`.
     """
     runtime = runtime_lookup.get(service.lower(), {})
     state = str(runtime.get("state", "")).lower()
@@ -2430,10 +2435,10 @@ def _public_monitoring_base_url(
     host_port: int,
     proxied: bool,
 ) -> str:
-    """Public monitoring base URL.
+    """Return the public monitoring base URL.
 
-    Inputs: `configured_public_url`, `internal_url`, `request_scheme`, `request_host`,
-    `host_port`, `proxied`. Output: `str`.
+    Inputs: `configured_public_url` (str), `internal_url` (str), `request_scheme` (str),
+    `request_host` (str), `host_port` (int), `proxied` (bool). Output: `str`.
     """
     if configured_public_url:
         return configured_public_url
@@ -2450,7 +2455,7 @@ def _public_monitoring_base_url(
 
 
 def _monitoring_dashboard_query() -> str:
-    """Monitoring dashboard query.
+    """Return the monitoring dashboard query.
 
     Inputs: none. Output: `str`.
     """
@@ -2469,7 +2474,7 @@ def _grafana_dashboard_urls(
     grafana_public_base_url: str,
     dashboard_query: str,
 ) -> dict[str, str]:
-    """Grafana dashboard urls.
+    """Build Grafana dashboard URLs for the admin tools view model.
 
     Inputs: `grafana_public_base_url`, `dashboard_query`. Output: `dict[str, str]`.
     """
@@ -2516,7 +2521,7 @@ def _grafana_dashboard_urls(
 
 
 def _empty_targets_overview() -> dict[str, Any]:
-    """Empty targets overview.
+    """Return the empty targets overview.
 
     Inputs: none. Output: `dict[str, Any]`.
     """
@@ -2524,9 +2529,9 @@ def _empty_targets_overview() -> dict[str, Any]:
 
 
 def _prometheus_active_targets(prometheus_base_url: str) -> list[dict[str, object]]:
-    """Prometheus active targets.
+    """Return the prometheus active targets.
 
-    Inputs: `prometheus_base_url`. Output: `list[dict[str, object]]`.
+    Inputs: `prometheus_base_url` (str). Output: `list[dict[str, object]]`.
     """
     response = requests.get(
         f"{_validated_http_url(prometheus_base_url).rstrip('/')}/api/v1/targets",
@@ -2541,9 +2546,9 @@ def _prometheus_active_targets(prometheus_base_url: str) -> list[dict[str, objec
 
 
 def _target_counts(active_targets: list[dict[str, object]]) -> dict[str, int]:
-    """Target counts.
+    """Return the target counts.
 
-    Inputs: `active_targets`. Output: `dict[str, int]`.
+    Inputs: `active_targets` (list[dict[str, object]]). Output: `dict[str, int]`.
     """
     up_count = sum(
         1 for target in active_targets if str(target.get("health", "")).lower() == "up"
@@ -2562,9 +2567,9 @@ def _target_counts(active_targets: list[dict[str, object]]) -> dict[str, int]:
 
 
 def _recently_seen_services(prometheus_base_url: str) -> list[str]:
-    """Recently seen services.
+    """Return the recently seen services.
 
-    Inputs: `prometheus_base_url`. Output: `list[str]`.
+    Inputs: `prometheus_base_url` (str). Output: `list[str]`.
     """
     try:
         return _collect_recently_seen_services(prometheus_base_url)
@@ -2577,9 +2582,10 @@ def _monitoring_targets_overview(
     prometheus_base_url: str,
     expected_services: list[str],
 ) -> dict[str, Any]:
-    """Monitoring targets overview.
+    """Return the monitoring targets overview.
 
-    Inputs: `prometheus_base_url`, `expected_services`. Output: `dict[str, Any]`.
+    Inputs: `prometheus_base_url` (str), `expected_services` (list[str]). Output:
+    `dict[str, Any]`.
     """
     targets_overview = _empty_targets_overview()
     try:
@@ -2617,7 +2623,8 @@ def resource_monitoring_view(request, _conn=None, _url=None, **kwargs):
 def resource_monitoring_data(request, conn=None, _url=None, **kwargs):
     """Return monitoring endpoint URLs for Grafana and Prometheus dashboards.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -2707,8 +2714,9 @@ def resource_monitoring_data(request, conn=None, _url=None, **kwargs):
 def grafana_proxy(request, subpath: str, conn=None, _url=None, **kwargs):
     """Proxy Grafana HTTP responses through OMERO.web.
 
-    Inputs: `request`, `subpath`, `conn`, `_url`, `**kwargs`. Output: computed value.
-    Raises on invalid or unavailable state.
+    Inputs: `request` Django request, `subpath` (str), `conn` OMERO gateway connection,
+    `_url`, `**kwargs` keyword arguments. Output: `_grafana_unavailable_response`
+    Raises: RuntimeError when validation or the called operation fails.
     """
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -2772,8 +2780,9 @@ def grafana_proxy(request, subpath: str, conn=None, _url=None, **kwargs):
 def prometheus_proxy(request, subpath: str, conn=None, _url=None, **kwargs):
     """Proxy Prometheus HTTP responses through OMERO.web.
 
-    Inputs: `request`, `subpath`, `conn`, `_url`, `**kwargs`. Output: computed value.
-    Raises on invalid or unavailable state.
+    Inputs: `request` Django request, `subpath` (str), `conn` OMERO gateway connection,
+    `_url`, `**kwargs` keyword arguments. Output: `last_response`. Raises: RuntimeError
+    when validation or the called operation fails.
     """
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -2847,7 +2856,7 @@ _STORAGE_DISTRIBUTION_QUERY = """
 
 
 def _storage_distribution_from_rows(rows) -> dict[str, object]:
-    """Storage distribution from rows.
+    """Return the storage distribution from rows.
 
     Inputs: `rows`. Output: `dict[str, object]`.
     """
@@ -2884,9 +2893,9 @@ def _storage_distribution_from_rows(rows) -> dict[str, object]:
 
 
 def _query_storage_distribution(conn) -> dict[str, object]:
-    """Query storage distribution.
+    """Query the storage distribution.
 
-    Inputs: `conn`. Output: `dict[str, object]`.
+    Inputs: `conn` OMERO gateway connection. Output: `dict[str, object]`.
     """
     service_opts = conn.SERVICE_OPTS
     if hasattr(service_opts, "setOmeroGroup"):
@@ -2902,9 +2911,10 @@ def _query_storage_distribution(conn) -> dict[str, object]:
 
 
 def _merge_known_storage_principals(conn, distribution: dict[str, object]) -> None:
-    """Merge known storage principals.
+    """Merge the known storage principals.
 
-    Inputs: `conn`, `distribution`. Output: None.
+    Inputs: `conn` OMERO gateway connection, `distribution` (dict[str, object]). Output:
+    None.
     """
     totals_by_user = cast(dict[str, int], distribution["totals_by_user"])
     full_name_by_user = cast(dict[str, str], distribution["full_name_by_user"])
@@ -2938,9 +2948,9 @@ def _merge_known_storage_principals(conn, distribution: dict[str, object]) -> No
 
 
 def _storage_disk_usage(data_root: str) -> tuple[int | None, int | None, int | None]:
-    """Storage disk usage.
+    """Return the storage disk usage.
 
-    Inputs: `data_root`. Output: `tuple[int | None, int | None, int | None]`.
+    Inputs: `data_root` (str). Output: `tuple[int | None, int | None, int | None]`.
     """
     try:
         return shutil.disk_usage(data_root)
@@ -2953,9 +2963,9 @@ def _storage_disk_usage(data_root: str) -> tuple[int | None, int | None, int | N
 
 
 def _storage_quota_status(known_groups: list[str]) -> dict[str, object]:
-    """Storage quota status.
+    """Return the storage quota status.
 
-    Inputs: `known_groups`. Output: `dict[str, object]`.
+    Inputs: `known_groups` (list[str]). Output: `dict[str, object]`.
     """
     try:
         return reconcile_quotas(known_groups)
@@ -2976,9 +2986,9 @@ def _storage_quota_status(known_groups: list[str]) -> dict[str, object]:
 
 
 def _storage_bytes_sort_key(item: dict[str, object]) -> int:
-    """Storage bytes sort key.
+    """Return the storage bytes sort key.
 
-    Inputs: `item`. Output: `int`.
+    Inputs: `item` (dict[str, object]). Output: `int`.
     """
     value = item.get("bytes", 0)
     return int(value) if isinstance(value, (int, float, str)) else 0
@@ -2992,10 +3002,11 @@ def _storage_response_payload(
     data_free: int | None,
     quota_status: dict[str, object],
 ) -> dict[str, object]:
-    """Storage response payload.
+    """Return the storage response payload.
 
-    Inputs: `distribution`, `data_root`, `data_total`, `data_used`, `data_free`,
-    `quota_status`. Output: `dict[str, object]`.
+    Inputs: `distribution` (dict[str, object]), `data_root` (str), `data_total` (int |
+    None), `data_used` (int | None), `data_free` (int | None), `quota_status` (dict[str,
+    object]). Output: `dict[str, object]`.
     """
     totals_by_user = cast(dict[str, int], distribution["totals_by_user"])
     full_name_by_user = cast(dict[str, str], distribution["full_name_by_user"])
@@ -3051,7 +3062,8 @@ def _storage_response_payload(
 def storage_data(request, conn=None, _url=None, **kwargs):
     """Return size distribution by OMERO user and group using OriginalFile sizes.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -3085,7 +3097,8 @@ def storage_data(request, conn=None, _url=None, **kwargs):
 def storage_quota_data(request, conn=None, _url=None, **kwargs):
     """Persisted quota definitions and reconciliation logs.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -3127,9 +3140,9 @@ def storage_quota_data(request, conn=None, _url=None, **kwargs):
 
 
 def _json_payload_from_request(request) -> dict[str, object]:
-    """JSON payload from request.
+    """Return the JSON payload from request.
 
-    Inputs: `request`. Output: `dict[str, object]`.
+    Inputs: `request` Django request. Output: `dict[str, object]`.
     """
     raw_body = request.body.decode("utf-8").strip()
     if not raw_body:
@@ -3142,9 +3155,9 @@ def _json_payload_from_request(request) -> dict[str, object]:
 
 
 def _quota_updates_from_form(request):
-    """Quota updates from form.
+    """Return the quota updates from form.
 
-    Inputs: `request`. Output: computed value or None.
+    Inputs: `request` Django request. Output: quota updates from form result.
     """
     if not request.POST:
         return None
@@ -3155,12 +3168,10 @@ def _quota_updates_from_form(request):
 
 
 def _normalize_quota_updates(updates) -> list[tuple[str, object]]:
-    """Normalize quota updates.
+    """Normalize the quota updates.
 
-    Inputs: `updates`. Output: `list[tuple[str, object]]`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `updates`. Output: `list[tuple[str, object]]`. Raises: QuotaError when validation or
+    the called operation fails.
     """
     if updates is None:
         return []
@@ -3175,9 +3186,9 @@ def _normalize_quota_updates(updates) -> list[tuple[str, object]]:
 
 
 def _quota_updates_from_request(request) -> list[tuple[str, object]]:
-    """Quota updates from request.
+    """Return the quota updates from request.
 
-    Inputs: `request`. Output: `list[tuple[str, object]]`.
+    Inputs: `request` Django request. Output: `list[tuple[str, object]]`.
     """
     payload = _json_payload_from_request(request)
     updates = payload.get("updates")
@@ -3191,7 +3202,8 @@ def _quota_updates_from_request(request) -> list[tuple[str, object]]:
 def storage_quota_update(request, conn=None, _url=None, **kwargs):
     """Group quota values from UI edits.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -3232,7 +3244,8 @@ def storage_quota_update(request, conn=None, _url=None, **kwargs):
 def storage_quota_import(request, conn=None, _url=None, **kwargs):
     """Import group quotas from a CSV upload.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -3276,7 +3289,8 @@ def storage_quota_import(request, conn=None, _url=None, **kwargs):
 def storage_quota_template(request, conn=None, _url=None, **kwargs):
     """Download quota CSV template.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: storage quota template result.
     """
     root_error = _require_root_user(request, conn)
     if root_error:
@@ -3306,7 +3320,7 @@ def server_database_testing_view(request, _conn=None, _url=None, **kwargs):
 def _diagnostic_script_ids_from_request(
     request,
 ) -> tuple[list[str], JsonResponse | None]:
-    """Diagnostic script ids from request.
+    """Parse diagnostic script IDs from an admin tools request.
 
     Inputs: `request`. Output: `tuple[list[str], JsonResponse | None]`.
     """
@@ -3332,9 +3346,9 @@ def _diagnostic_script_ids_from_request(
 
 
 def _request_username_or_unknown(request, conn) -> str:
-    """Request username or unknown.
+    """Request the username or unknown.
 
-    Inputs: `request`, `conn`. Output: `str`.
+    Inputs: `request` Django request, `conn` OMERO gateway connection. Output: `str`.
     """
     try:
         return current_username(request, conn)
@@ -3343,9 +3357,9 @@ def _request_username_or_unknown(request, conn) -> str:
 
 
 def _sanitized_script_id_list(script_ids: list[str]) -> str:
-    """Sanitized script ID list.
+    """Return the sanitized script ID list.
 
-    Inputs: `script_ids`. Output: `str`.
+    Inputs: `script_ids` (list[str]). Output: `str`.
     """
     return ", ".join(sanitize_log_value(script_id) for script_id in script_ids)
 
@@ -3355,7 +3369,8 @@ def _sanitized_script_id_list(script_ids: list[str]) -> str:
 def server_database_testing_run(request, conn=None, _url=None, **kwargs):
     """Selected diagnostics scripts and return a report.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     root_error = _require_root_user(request, conn)
     if root_error:

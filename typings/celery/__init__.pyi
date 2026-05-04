@@ -9,7 +9,7 @@ class _Config:
 class Celery:
     conf: _Config
 
-    # Initialize the instance. Inputs: *args, **kwargs. Output: None.
+    # Create the typed stub object. Inputs: *args, **kwargs. Output: None.
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
     # Return autodiscover tasks. Inputs: *args, **kwargs. Output: Any.
     def autodiscover_tasks(self, *args: Any, **kwargs: Any) -> Any: ...

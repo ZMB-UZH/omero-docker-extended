@@ -22,9 +22,9 @@ from omero_web_zarr.templatetags import zarr_webclient
 
 
 def test_zarr_module_contracts_cover_ready_routes_and_template_filter(monkeypatch):
-    """Verify Zarr module contracts cover ready routes and template filter.
+    """Check Zarr module contracts cover ready routes and template filter renders the expected surface.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in Zarr module contracts cover ready routes and template filter.
     """
     installed = []
     monkeypatch.setattr(

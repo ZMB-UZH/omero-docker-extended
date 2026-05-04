@@ -10,7 +10,7 @@ from omeroweb_admin_tools.views.index_view import server_database_testing_run
 def test_server_database_testing_run_requires_post(monkeypatch) -> None:
     """Verify server database testing run requires post.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in server database testing run requires post.
     """
     request = RequestFactory().get("/admin_tools/server-database-testing/run/")
     monkeypatch.setattr(
@@ -28,9 +28,9 @@ def test_server_database_testing_run_requires_post(monkeypatch) -> None:
 
 
 def test_server_database_testing_run_rejects_empty_script_ids(monkeypatch) -> None:
-    """Verify server database testing run rejects empty script IDs.
+    """Confirm server database testing run rejects empty script IDs is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in server database testing run rejects empty script IDs integration.
     """
     request = RequestFactory().post(
         "/admin_tools/server-database-testing/run/",
@@ -54,9 +54,9 @@ def test_server_database_testing_run_rejects_empty_script_ids(monkeypatch) -> No
 
 
 def test_server_database_testing_run_returns_results(monkeypatch) -> None:
-    """Verify server database testing run returns results.
+    """Verify server database testing run returns results result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in server database testing run returns results.
     """
     request = RequestFactory().post(
         "/admin_tools/server-database-testing/run/",

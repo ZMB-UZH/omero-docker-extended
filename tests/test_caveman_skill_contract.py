@@ -13,14 +13,14 @@ class CavemanSkillContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `CavemanSkillContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def read_text(self, relative_path: str) -> str:
-        """Return read text.
+        """Return `CavemanSkillContractTests`'s configured text fixture.
 
         Inputs: `relative_path`. Output: `str`.
         """
@@ -29,24 +29,25 @@ class CavemanSkillContractTests(unittest.TestCase):
     def test_vendored_caveman_reference_exists(self) -> None:
         """Verify vendored caveman reference exists.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in vendored caveman reference exists.
         """
         self.assertTrue(
-            (self.repo_root / "third_party/caveman-v1.6.0/LICENSE").is_file()
+            (self.repo_root / "third_party/caveman-v1.7.0/LICENSE").is_file()
         )
         self.assertTrue(
             (
-                self.repo_root / "third_party/caveman-v1.6.0/skills/caveman/SKILL.md"
+                self.repo_root / "third_party/caveman-v1.7.0/skills/caveman/SKILL.md"
             ).is_file()
         )
         self.assertFalse(
-            (self.repo_root / "third_party/caveman-v1.6.0/README.md").exists()
+            (self.repo_root / "third_party/caveman-v1.7.0/README.md").exists()
         )
+        self.assertFalse((self.repo_root / "third_party/caveman-v1.6.0").exists())
 
     def test_active_caveman_skill_is_guarded_and_repo_specific(self) -> None:
         """Verify active caveman skill is guarded and repo specific.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in active caveman skill is guarded and repo specific.
         """
         skill_text = self.read_text(".agents/skills/caveman/SKILL.md")
         self.assertIn("Use this skill only when the user explicitly asks", skill_text)
@@ -59,15 +60,19 @@ class CavemanSkillContractTests(unittest.TestCase):
         self.assertIn("Never use caveman prose", skill_text)
         self.assertIn("CAVEMAN_DEFAULT_MODE", skill_text)
         self.assertIn("caveman-help", skill_text)
+        self.assertIn("caveman-shrink", skill_text)
+        self.assertIn("cavecrew subagents", skill_text)
+        self.assertIn("stats/statusline scripts", skill_text)
+        self.assertIn("never abbreviate code symbols", skill_text)
         self.assertIn("All supported agents", skill_text)
         self.assertIn(".codex", skill_text)
         self.assertIn("natural-language auto-activation", skill_text)
-        self.assertIn("third_party/caveman-v1.6.0/skills/caveman/SKILL.md", skill_text)
+        self.assertIn("third_party/caveman-v1.7.0/skills/caveman/SKILL.md", skill_text)
 
     def test_caveman_adapter_disables_implicit_invocation(self) -> None:
         """Verify caveman adapter disables implicit invocation.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in caveman adapter disables implicit invocation.
         """
         adapter = yaml.safe_load(
             self.read_text(".agents/skills/caveman/agents/openai.yaml")
@@ -83,7 +88,7 @@ class CavemanSkillContractTests(unittest.TestCase):
     def test_cross_agent_surfaces_present_caveman_as_opt_in(self) -> None:
         """Verify cross agent surfaces present caveman as opt in.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in cross agent surfaces present caveman as opt in.
         """
         tracked_surfaces = (
             "AGENTS.md",
@@ -113,7 +118,7 @@ class CavemanSkillContractTests(unittest.TestCase):
     def test_supported_agent_adapters_route_to_shared_skill_catalog(self) -> None:
         """Verify supported agent adapters route to shared skill catalog.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in supported agent adapters route to shared skill catalog.
         """
         tracked_surfaces = (
             "AGENTS.md",
@@ -133,7 +138,7 @@ class CavemanSkillContractTests(unittest.TestCase):
     def test_public_docs_keep_caveman_prompt_only(self) -> None:
         """Verify public docs keep caveman prompt only.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in public docs keep caveman prompt only.
         """
         tracked_docs = (
             "README.md",
@@ -160,7 +165,7 @@ class CavemanSkillContractTests(unittest.TestCase):
     def test_repo_does_not_activate_upstream_caveman_runtime(self) -> None:
         """Verify repo does not activate upstream caveman runtime.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in repo does not activate upstream caveman runtime.
         """
         integrations_text = self.read_text("docs/reference/ai-agent-integrations.md")
         self.assertIn("shared `.agents/skills/` catalog", integrations_text)
@@ -177,24 +182,30 @@ class CavemanSkillContractTests(unittest.TestCase):
     def test_upstream_reference_records_latest_reviewed_release(self) -> None:
         """Verify upstream reference records latest reviewed release.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in upstream reference records latest reviewed release.
         """
         upstream_text = self.read_text("docs/reference/ai-agent-upstream-sources.md")
         reviewed_caveman_commit = "".join(
             (
-                "c2ed24b3e5d412cd0c251",
-                "97b2bc9af587621fd99",
+                "ef6050c5e1848b6880ff",
+                "47c32ade1a608a64f85e",
             )
         )
-        self.assertIn("Reviewed release notes: `v1.5.1` and `v1.6.0`", upstream_text)
-        self.assertIn("caveman release tag: `v1.6.0`", upstream_text)
+        self.assertIn(
+            "Reviewed release notes: `v1.5.1`, `v1.6.0`, and `v1.7.0`",
+            upstream_text,
+        )
+        self.assertIn("Reviewed open issues on 2026-05-04", upstream_text)
+        self.assertIn("caveman release tag: `v1.7.0`", upstream_text)
+        self.assertIn("caveman-shrink", upstream_text)
+        self.assertIn("cavecrew subagents", upstream_text)
         self.assertIn(reviewed_caveman_commit, upstream_text)
-        self.assertIn("third_party/caveman-v1.6.0/", upstream_text)
+        self.assertIn("third_party/caveman-v1.7.0/", upstream_text)
 
     def test_readme_documents_opt_in_caveman_badge(self) -> None:
         """Verify readme documents opt in caveman badge.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in readme documents opt in caveman badge.
         """
         readme_text = self.read_text("README.md")
         self.assertIn("[![caveman](", readme_text)

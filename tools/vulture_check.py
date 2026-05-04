@@ -15,9 +15,10 @@ EXCLUDED_TOP_LEVEL_DIRS: frozenset[str] = frozenset({"docs", "tests", "third_par
 
 
 def resolve_required_executable(name: str) -> str:
-    """Resolve required executable.
+    """Resolve the required executable.
 
-    Inputs: `name`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name. Output: `str`. Raises: RuntimeError when validation or
+    external operations fail.
     """
     resolved = shutil.which(name)
     if not resolved:
@@ -52,9 +53,9 @@ def is_vulture_target(relative_path: PurePosixPath) -> bool:
 
 
 def _run_git(repo_root: Path, *args: str) -> str:
-    """Git.
+    """Run the git.
 
-    Inputs: `repo_root`, `*args`. Output: `str`.
+    Inputs: `repo_root` (Path), `*args` (str) positional arguments. Output: `str`.
     """
     safe_repo_root = str(repo_root.resolve())
     completed = subprocess.run(
@@ -73,9 +74,10 @@ def _run_git(repo_root: Path, *args: str) -> str:
 
 
 def list_vulture_targets(repo_root: Path) -> list[str]:
-    """List vulture targets.
+    """Return the vulture targets.
 
-    Inputs: `repo_root`. Output: `list[str]`. Raises on invalid or unavailable state.
+    Inputs: `repo_root` (Path). Output: `list[str]`. Raises: RuntimeError when validation or the
+    called operation fails.
     """
     tracked_files = _run_git(repo_root, "ls-files", "--", TRACKED_PYTHON_PATHSPEC)
     targets = [
@@ -143,7 +145,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.vulture_check` command entrypoint.
 
     Inputs: `argv`. Output: `int`.
     """

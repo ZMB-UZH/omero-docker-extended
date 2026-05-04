@@ -7,17 +7,17 @@ from omero_plugin_common import omero_helpers, request_utils, string_utils
 
 
 class _ValueBox:
-    """Represent value box."""
+    """Test double for value box behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_ValueBox` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_ValueBox`'s fake OMERO value.
 
         Inputs: none. Output: `self._value`.
         """
@@ -25,18 +25,18 @@ class _ValueBox:
 
 
 class _BrokenValueBox:
-    """Represent broken value box."""
+    """Test double for broken value box behavior in this module."""
 
     @staticmethod
     def getValue():
-        """Return the fake OMERO value.
+        """Return `_BrokenValueBox`'s fake OMERO value.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("boom")
 
     def __str__(self) -> str:
-        """Return the string representation.
+        """Return `_BrokenValueBox` as test-readable text.
 
         Inputs: none. Output: `str`.
         """
@@ -44,10 +44,10 @@ class _BrokenValueBox:
 
 
 class _OwnerStub:
-    """Represent owner stub."""
+    """Test double for owner stub behavior in this module."""
 
     def __init__(self, owner_id, *, ome_name=None, name=None, first_name=None):
-        """Initialize the instance.
+        """Create `_OwnerStub` with `owner_id`.
 
         Inputs: `owner_id`, `ome_name`, `name`, `first_name`. Output: None.
         """
@@ -57,37 +57,34 @@ class _OwnerStub:
         self._first_name = first_name
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_OwnerStub`'s fake OMERO identifier.
 
         Inputs: none. Output: `_ValueBox` result.
         """
         return _ValueBox(self._owner_id)
 
     def getOmeName(self):
-        """Return the fake OMERO name.
+        """Return the OME Name for `_OwnerStub`.
 
-        Inputs: none. Output: `_ValueBox` result. Raises on invalid or unavailable
-        state.
+        Inputs: none. Output: `_ValueBox` result. Raises: AttributeError when validation or the called operation fails.
         """
         if self._ome_name is None:
             raise AttributeError("missing ome name")
         return _ValueBox(self._ome_name)
 
     def getName(self):
-        """Return the fake object name.
+        """Return the name for `_OwnerStub`.
 
-        Inputs: none. Output: `_ValueBox` result. Raises on invalid or unavailable
-        state.
+        Inputs: none. Output: `_ValueBox` result. Raises: AttributeError when validation or the called operation fails.
         """
         if self._name is None:
             raise AttributeError("missing display name")
         return _ValueBox(self._name)
 
     def getFirstName(self):
-        """Return the fake first name.
+        """Return the first Name for `_OwnerStub`.
 
-        Inputs: none. Output: `_ValueBox` result. Raises on invalid or unavailable
-        state.
+        Inputs: none. Output: `_ValueBox` result. Raises: AttributeError when validation or the called operation fails.
         """
         if self._first_name is None:
             raise AttributeError("missing first name")
@@ -95,22 +92,22 @@ class _OwnerStub:
 
 
 class _OwnerWithBrokenId:
-    """Represent owner with broken identifier."""
+    """Test double for owner with broken identifier behavior in this module."""
 
     @staticmethod
     def getId():
-        """Return the fake OMERO identifier.
+        """Return `_OwnerWithBrokenId`'s fake OMERO identifier.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("broken owner id")
 
 
 class _DetailsStub:
-    """Represent details stub."""
+    """Test double for details stub behavior in this module."""
 
     def __init__(self, *, owner=None, permissions=None):
-        """Initialize the instance.
+        """Create `_DetailsStub` with its default state.
 
         Inputs: `owner`, `permissions`. Output: None.
         """
@@ -125,18 +122,26 @@ class _DetailsStub:
         return self._owner
 
     def getPermissions(self):
-        """Return fake permissions.
+        """Return `_DetailsStub`'s fake permissions object.
 
         Inputs: none. Output: `self._permissions`.
         """
         return self._permissions
 
 
+def test_owner_from_details_or_method_returns_none_without_owner() -> None:
+    """Verify owner from details or method returns none without owner result shape.
+
+    Inputs: helper fakes. Output: fails on regressions in owner from details or method returns none without owner.
+    """
+    assert omero_helpers._owner_from_details_or_method(object()) is None
+
+
 class _PermissionsStub:
-    """Represent permissions stub."""
+    """Test double for permissions stub behavior in this module."""
 
     def __init__(self, *, can_read, can_write):
-        """Initialize the instance.
+        """Create `_PermissionsStub` with its default state.
 
         Inputs: `can_read`, `can_write`. Output: None.
         """
@@ -144,14 +149,14 @@ class _PermissionsStub:
         self._can_write = can_write
 
     def isRead(self):
-        """Return whether Read.
+        """Report the read boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: `self._can_read`.
         """
         return self._can_read
 
     def isWrite(self):
-        """Return whether Write.
+        """Report the write boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: `self._can_write`.
         """
@@ -161,7 +166,7 @@ class _PermissionsStub:
 def test_omero_helper_accessors_cover_value_resolution_owner_fallbacks_and_permissions():
     """Verify OMERO helper accessors cover value resolution owner fallbacks and permissions.
 
-    Inputs: none. Output: None.
+    Inputs: helper fakes. Output: fails on regressions in OMERO helper accessors cover value resolution owner fallbacks and permissions.
     """
     internal = SimpleNamespace(_obj=SimpleNamespace(id=SimpleNamespace(val=17)))
     via_method = SimpleNamespace(getId=lambda: _ValueBox(42))
@@ -258,9 +263,9 @@ def test_omero_helper_accessors_cover_value_resolution_owner_fallbacks_and_permi
 
 
 def test_request_and_string_helpers_cover_user_resolution_json_fallbacks_and_payload_keys():
-    """Verify request and string helpers cover user resolution JSON fallbacks and payload keys.
+    """Verify request and string helpers cover user resolution JSON fallbacks and payload keys result shape.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: helper fakes. Output: fails on regressions in request and string helpers cover user resolution JSON fallbacks and payload keys.
     """
     conn = SimpleNamespace(
         getUser=lambda: SimpleNamespace(getName=lambda: "omero-user")
@@ -272,13 +277,13 @@ def test_request_and_string_helpers_cover_user_resolution_json_fallbacks_and_pay
     invalid_utf8_request = SimpleNamespace(body=b"\xff")
 
     class FailingConn:
-        """Represent failing conn."""
+        """Test double for failing conn behavior in this module."""
 
         @staticmethod
         def getUser():
             """Return the fake user.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("connection unavailable")
 
@@ -317,28 +322,26 @@ def test_request_and_string_helpers_cover_user_resolution_json_fallbacks_and_pay
 
 
 def test_omero_helper_debug_logs_sanitize_exception_text(caplog):
-    """Verify OMERO helper debug logs sanitize exception text.
+    """Confirm OMERO helper debug logs sanitize exception text exposes the expected failure.
 
-    Inputs: `caplog`. Output: `_ValueBox` result. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `caplog`. Output: fails on regressions when OMERO helper debug logs sanitize exception text stops reporting the expected error.
+    Raises: RuntimeError when validation or the called operation fails.
     """
 
     class ObjectWithUnsafeInternalId:
-        """Represent object with unsafe internal identifier."""
+        """Test double for object with unsafe internal identifier behavior in this module."""
 
         @property
         def _obj(self):
-            """Obj.
+            """Record the obj call on `ObjectWithUnsafeInternalId` for later assertions.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             raise RuntimeError("bad\nid")
 
         @staticmethod
         def getId():
-            """Return the fake OMERO identifier.
+            """Return `ObjectWithUnsafeInternalId`'s fake OMERO identifier.
 
             Inputs: none. Output: `_ValueBox` result.
             """

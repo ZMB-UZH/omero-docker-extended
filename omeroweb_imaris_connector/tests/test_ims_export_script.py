@@ -12,9 +12,9 @@ import pytest
 
 
 def _install_omero_stub() -> None:
-    """Install OMERO stub.
+    """Install the OMERO stub.
 
-    Inputs: none. Output: None.
+    Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
     """
     omero_module = types.ModuleType("omero")
 
@@ -36,7 +36,7 @@ def _install_omero_stub() -> None:
 
 
 def _load_script_module():
-    """Load script module.
+    """Load the script module.
 
     Inputs: none. Output: `module`.
     """
@@ -55,18 +55,18 @@ def _load_script_module():
 
 
 def _write_file(path: pathlib.Path, payload: bytes) -> None:
-    """Write file.
+    """Write the file.
 
-    Inputs: `path`, `payload`. Output: None.
+    Inputs: `path` (pathlib.Path) path, `payload` (bytes) payload. Output: None.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(payload)
 
 
 def _write_sha256(path: pathlib.Path, payload: bytes) -> None:
-    """Write sha256.
+    """Write the sha256.
 
-    Inputs: `path`, `payload`. Output: None.
+    Inputs: `path` (pathlib.Path) path, `payload` (bytes) payload. Output: None.
     """
     digest = hashlib.sha256(payload).hexdigest()
     path.write_text(f"{digest}  bioformats_package.jar\n", encoding="ascii")
@@ -75,7 +75,7 @@ def _write_sha256(path: pathlib.Path, payload: bytes) -> None:
 def test_ensure_bioformats_jar_seeds_cache_from_runtime(monkeypatch, tmp_path) -> None:
     """Verify ensure bioformats jar seeds cache from runtime.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in ensure bioformats jar seeds cache from runtime.
     """
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
@@ -101,7 +101,7 @@ def test_ensure_bioformats_jar_restores_runtime_from_cache(
 ) -> None:
     """Verify ensure bioformats jar restores runtime from cache.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in ensure bioformats jar restores runtime from cache.
     """
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
@@ -127,7 +127,7 @@ def test_ensure_bioformats_jar_replaces_invalid_runtime_from_cache(
 ) -> None:
     """Verify ensure bioformats jar replaces invalid runtime from cache.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in ensure bioformats jar replaces invalid runtime from cache.
     """
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
@@ -152,9 +152,9 @@ def test_ensure_bioformats_jar_replaces_invalid_runtime_from_cache(
 def test_ensure_bioformats_jar_returns_none_without_runtime_or_cache(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify ensure bioformats jar returns none without runtime or cache.
+    """Verify ensure bioformats jar returns none without runtime or cache result shape.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in ensure bioformats jar returns none without runtime or cache.
     """
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
@@ -170,10 +170,8 @@ def test_safe_filename_and_checksum_helpers_cover_edge_cases(
 ) -> None:
     """Verify safe filename and checksum helpers cover edge cases.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` temporary path fixture.
+    Output: None. Raises: OSError when validation or the called operation fails.
     """
     module = _load_script_module()
     checksum_path = tmp_path / "bioformats.sha256"
@@ -193,18 +191,18 @@ def test_safe_filename_and_checksum_helpers_cover_edge_cases(
     assert module._read_expected_sha256(str(tmp_path)) is None
 
     class _StatFailingPath:
-        """Represent stat failing path."""
+        """Test double for stat failing path behavior in this module."""
 
         @staticmethod
         def is_file():
             """Return whether file.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise OSError("stat failed")
 
     def _stat_failing_path(_path_text):
-        """Stat failing path.
+        """Return the stat failing path.
 
         Inputs: `_path_text`. Output: `_StatFailingPath` result.
         """
@@ -227,9 +225,9 @@ def test_safe_filename_and_checksum_helpers_cover_edge_cases(
 def test_export_root_and_checksum_helpers_cover_fallback_cleanup_and_altsep(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify export root and checksum helpers cover fallback cleanup and altsep.
+    """Check export root and checksum helpers cover fallback cleanup and altsep cleanup behavior.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in export root and checksum helpers cover fallback cleanup and altsep.
     """
     module = _load_script_module()
     printed = []
@@ -290,20 +288,20 @@ def test_export_root_and_checksum_helpers_cover_fallback_cleanup_and_altsep(
 
 
 def test_run_conversion_returns_unprepared_source_error(tmp_path) -> None:
-    """Verify run conversion reports source-preparation failures.
+    """Confirm run conversion returns unprepared source error exposes the expected failure.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when run conversion returns unprepared source error stops reporting the expected error.
     """
     module = _load_script_module()
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         @staticmethod
         def getObject(object_type, image_id):
-            """Return Object.
+            """Return the object for `_Conn`.
 
-            Inputs: `object_type`, `image_id`. Output: `types.SimpleNamespace` result.
+            Inputs: `object_type`, `image_id` OMERO image ID. Output: `SimpleNamespace`
             """
             return types.SimpleNamespace(getName=lambda: "demo.ome.tif")
 
@@ -321,7 +319,7 @@ def test_copy_and_validate_bioformats_jar_cover_integrity_paths(
 ) -> None:
     """Verify copy and validate bioformats jar cover integrity paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in copy and validate bioformats jar cover integrity paths.
     """
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
@@ -367,12 +365,10 @@ def test_copy_and_validate_bioformats_jar_cover_integrity_paths(
 def test_copy_and_path_helpers_cover_error_and_exception_fallbacks(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify copy and path helpers cover error and exception fallbacks.
+    """Confirm copy and path helpers cover error and exception fallbacks exposes the expected failure.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` temporary path fixture.
+    Output: None. Raises: RuntimeError when validation or the called operation fails.
     """
     module = _load_script_module()
     source = tmp_path / "source.jar"
@@ -409,22 +405,22 @@ def test_copy_and_path_helpers_cover_error_and_exception_fallbacks(
     )
 
     class _BadPhysicalSize:
-        """Represent bad physical size."""
+        """Test double for bad physical size behavior in this module."""
 
         @staticmethod
         def getValue():
-            """Return the fake OMERO value.
+            """Return `_BadPhysicalSize`'s fake OMERO value.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("bad value")
 
     class _BadPrimaryPixels:
-        """Represent bad primary pixels."""
+        """Test double for bad primary pixels behavior in this module."""
 
         @staticmethod
         def getPhysicalSizeX():
-            """Return Physical Size X.
+            """Return `_BadPrimaryPixels`'s fake physical X size.
 
             Inputs: none. Output: `_BadPhysicalSize` result.
             """
@@ -432,7 +428,7 @@ def test_copy_and_path_helpers_cover_error_and_exception_fallbacks(
 
         @staticmethod
         def getPhysicalSizeY():
-            """Return Physical Size Y.
+            """Return `_BadPrimaryPixels`'s fake physical Y size.
 
             Inputs: none. Output: `_BadPhysicalSize` result.
             """
@@ -440,7 +436,7 @@ def test_copy_and_path_helpers_cover_error_and_exception_fallbacks(
 
         @staticmethod
         def getPhysicalSizeZ():
-            """Return Physical Size Z.
+            """Return `_BadPrimaryPixels`'s fake physical Z size.
 
             Inputs: none. Output: `_BadPhysicalSize` result.
             """
@@ -473,35 +469,35 @@ def test_copy_and_path_helpers_cover_error_and_exception_fallbacks(
 def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks(
     monkeypatch,
 ) -> None:
-    """Verify voxel size and original file path helpers cover safe fallbacks.
+    """Verify the voxel size and original file path helpers cover safe fallbacks safety boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when voxel size and original file path helpers cover safe fallbacks accepts unsafe input.
     """
     module = _load_script_module()
     monkeypatch.delenv(module._CONFIG_MANAGED_DIR_ENV, raising=False)
 
     class _PhysicalSize:
-        """Represent physical size."""
+        """Test double for physical size behavior in this module."""
 
         def __init__(self, value):
-            """Initialize the instance.
+            """Create `_PhysicalSize` with `value`.
 
             Inputs: `value`. Output: None.
             """
             self._value = value
 
         def getValue(self):
-            """Return the fake OMERO value.
+            """Return `_PhysicalSize`'s fake OMERO value.
 
             Inputs: none. Output: `self._value`.
             """
             return self._value
 
     class _PrimaryPixels:
-        """Represent primary pixels."""
+        """Test double for primary pixels behavior in this module."""
 
         def __init__(self, x, y, z):
-            """Initialize the instance.
+            """Create `_PrimaryPixels` with `x`, `y`, and `z`.
 
             Inputs: `x`, `y`, `z`. Output: None.
             """
@@ -510,21 +506,21 @@ def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks(
             self._z = z
 
         def getPhysicalSizeX(self):
-            """Return Physical Size X.
+            """Return `_PrimaryPixels`'s fake physical X size.
 
             Inputs: none. Output: `self._x`.
             """
             return self._x
 
         def getPhysicalSizeY(self):
-            """Return Physical Size Y.
+            """Return `_PrimaryPixels`'s fake physical Y size.
 
             Inputs: none. Output: `self._y`.
             """
             return self._y
 
         def getPhysicalSizeZ(self):
-            """Return Physical Size Z.
+            """Return `_PrimaryPixels`'s fake physical Z size.
 
             Inputs: none. Output: `self._z`.
             """
@@ -589,17 +585,17 @@ def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks(
     assert module.get_original_file_path(bad_conn, image) is None
 
     class ConfigServiceHolder:
-        """Represent config service holder."""
+        """Test double for config service holder behavior in this module."""
 
         def __init__(self, config_service):
-            """Initialize the instance.
+            """Create `ConfigServiceHolder` with `config_service`.
 
             Inputs: `config_service`. Output: None.
             """
             self.config_service = config_service
 
         def getConfigService(self):
-            """Return Config Service.
+            """Return `ConfigServiceHolder`'s fake config service.
 
             Inputs: none. Output: `self.config_service`.
             """
@@ -628,9 +624,9 @@ def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks(
 def test_original_file_path_uses_declared_env_and_absolute_original_paths(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify original file path resolution without managed-repository assumptions.
+    """Verify the original file path uses declared env and absolute original paths safety boundary.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when original file path uses declared env and absolute original paths accepts unsafe input.
     """
     module = _load_script_module()
     env_root = tmp_path / "managed-root"
@@ -683,20 +679,21 @@ def test_original_file_path_uses_declared_env_and_absolute_original_paths(
 def test_original_file_path_helpers_reject_invalid_roots_and_paths(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify managed and absolute source path validation edge cases.
+    """Confirm original file path helpers reject invalid roots and paths is rejected at the boundary.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None. Raises on invalid or unavailable
-    state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` temporary path fixture.
+    Output: None. Raises: OSError, RuntimeError when validation or external operations
+    fail.
     """
     module = _load_script_module()
 
     class _BrokenStr:
-        """Represent value that cannot be stringified."""
+        """Test double for value that cannot be stringified behavior in this module."""
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_BrokenStr` as test-readable text.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("bad value")
 
@@ -706,10 +703,10 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
     real_path = module.Path
 
     class _UnresolvablePath:
-        """Represent path whose resolution fails."""
+        """Test double for path whose resolution fails behavior in this module."""
 
         def __init__(self, value):
-            """Initialize the instance.
+            """Create `_UnresolvablePath` with `value`.
 
             Inputs: `value`. Output: None.
             """
@@ -719,7 +716,7 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
         def resolve(strict=False):
             """Raise resolution failure.
 
-            Inputs: `strict`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `strict`. Output: None. Raises: OSError for the exercised failure path.
             """
             raise OSError("resolve failed")
 
@@ -739,10 +736,10 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
     assert module._absolute_original_file_path("/data\x00source", "image.tif") is None
 
     class _BrokenAbsolutePath:
-        """Represent absolute path whose resolution fails."""
+        """Test double for absolute path whose resolution fails behavior in this module."""
 
         def __init__(self, value):
-            """Initialize the instance.
+            """Create `_BrokenAbsolutePath` with `value`.
 
             Inputs: `value`. Output: None.
             """
@@ -775,7 +772,7 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
         def resolve(strict=False):
             """Raise resolution failure.
 
-            Inputs: `strict`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `strict`. Output: None. Raises: OSError for the exercised failure path.
             """
             raise OSError("resolve failed")
 
@@ -786,30 +783,30 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
 def test_ome_tiff_source_materialization_covers_wrapper_and_exporter_paths(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify OMERO API source materialization for non-shared storage layouts.
+    """Verify ome tiff source materialization covers wrapper and exporter paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in ome tiff source materialization covers wrapper and exporter paths.
     """
     module = _load_script_module()
 
     class _FixedDatetime:
-        """Represent fixed datetime."""
+        """Test double for fixed datetime behavior in this module."""
 
         @staticmethod
         def now(_timezone):
-            """Now.
+            """Return `_FixedDatetime`'s fixed timestamp.
 
-            Inputs: `_timezone`. Output: computed value.
+            Inputs: `_timezone`. Output: `_Now` result.
             """
 
             class _Now:
-                """Represent now."""
+                """Test double for now behavior in this module."""
 
                 @staticmethod
                 def strftime(fmt):
-                    """Strftime.
+                    """Return the strftime for `_Now`.
 
-                    Inputs: `fmt`. Output: '20260429T120000Z'.
+                    Inputs: `fmt`. Output: `str`.
                     """
                     return "20260429T120000Z"
 
@@ -829,28 +826,28 @@ def test_ome_tiff_source_materialization_covers_wrapper_and_exporter_paths(
     assert not pathlib.Path(source + ".tmp").exists()
 
     class _Exporter:
-        """Represent exporter service."""
+        """Test double for exporter service behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_Exporter` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.closed = False
 
         @staticmethod
         def addImage(image_id):
-            """Add image.
+            """Add the image for `_Exporter`.
 
-            Inputs: `image_id`. Output: None.
+            Inputs: `image_id` OMERO image ID. Output: None.
             """
             assert image_id == 8
 
         @staticmethod
         def generateTiff(_service_opts):
-            """Generate tiff.
+            """Generate the tiff for `_Exporter`.
 
-            Inputs: `_service_opts`. Output: 6.
+            Inputs: `_service_opts`. Output: `int`.
             """
             return 6
 
@@ -858,22 +855,22 @@ def test_ome_tiff_source_materialization_covers_wrapper_and_exporter_paths(
         def read(offset, size):
             """Read data from the resource.
 
-            Inputs: `offset`, `size`. Output: computed value.
+            Inputs: `offset`, `size`. Output: read result.
             """
             chunks = {0: b"abc", 3: b"def"}
             return chunks.get(offset, b"")[:size]
 
         def close(self):
-            """Close the resource.
+            """Close `_Exporter`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
     exporter = _Exporter()
 
     def create_exporter():
-        """Create exporter.
+        """Create the exporter.
 
         Inputs: none. Output: `exporter`.
         """
@@ -895,10 +892,10 @@ def test_ome_tiff_source_materialization_covers_wrapper_and_exporter_paths(
 def test_ome_tiff_source_materialization_covers_chunk_and_cleanup_edges(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify chunk coercion, exporter fallbacks, and cleanup failures.
+    """Check ome tiff source materialization covers chunk and cleanup edges cleanup behavior.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None. Raises on invalid or unavailable
-    state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` temporary path fixture.
+    Output: None. Raises: TypeError when validation or the called operation fails.
     """
     module = _load_script_module()
     chunk_file = tmp_path / "chunk.bin"
@@ -915,13 +912,13 @@ def test_ome_tiff_source_materialization_covers_chunk_and_cleanup_edges(
     assert direct_output.read_bytes() == b"direct"
 
     class _NoServiceOptsExporter:
-        """Represent exporter used without service options."""
+        """Test double for exporter used without service options behavior in this module."""
 
         @staticmethod
         def addImage(image_id):
-            """Add image.
+            """Add the image for `_NoServiceOptsExporter`.
 
-            Inputs: `image_id`. Output: None.
+            Inputs: `image_id` OMERO image ID. Output: None.
             """
 
         @staticmethod
@@ -936,15 +933,15 @@ def test_ome_tiff_source_materialization_covers_chunk_and_cleanup_edges(
         def read(offset, size):
             """Return one export chunk.
 
-            Inputs: `offset`, `size`. Output: computed value.
+            Inputs: `offset`, `size`. Output: read result.
             """
             return b"xyz"[offset : offset + size]
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_NoServiceOptsExporter`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
 
     no_opts_output = tmp_path / "no-opts.ome.tif"
@@ -957,20 +954,20 @@ def test_ome_tiff_source_materialization_covers_chunk_and_cleanup_edges(
     assert no_opts_output.read_bytes() == b"xyz"
 
     class _TypeErrorExporter:
-        """Represent exporter whose generateTiff has the old signature."""
+        """Test double for exporter whose generateTiff has the old signature behavior in this module."""
 
         @staticmethod
         def addImage(image_id):
-            """Add image.
+            """Add the image for `_TypeErrorExporter`.
 
-            Inputs: `image_id`. Output: None.
+            Inputs: `image_id` OMERO image ID. Output: None.
             """
 
         @staticmethod
         def generateTiff(*args):
             """Return generated size.
 
-            Inputs: `*args`. Output: 2. Raises on invalid or unavailable state.
+            Inputs: `*args` positional arguments. Output: `int`. Raises: TypeError when validation or the called operation fails.
             """
             if args:
                 raise TypeError("old signature")
@@ -980,7 +977,7 @@ def test_ome_tiff_source_materialization_covers_chunk_and_cleanup_edges(
         def read(offset, size):
             """Return one export chunk.
 
-            Inputs: `offset`, `size`. Output: computed value.
+            Inputs: `offset`, `size`. Output: read result.
             """
             return b"mn"[offset : offset + size]
 
@@ -997,13 +994,13 @@ def test_ome_tiff_source_materialization_covers_chunk_and_cleanup_edges(
     assert type_error_output.read_bytes() == b"mn"
 
     class _ShortReadExporter:
-        """Represent exporter that returns no bytes before declared size."""
+        """Test double for exporter that returns no bytes before declared size behavior in this module."""
 
         @staticmethod
         def addImage(image_id):
-            """Add image.
+            """Add the image for `_ShortReadExporter`.
 
-            Inputs: `image_id`. Output: None.
+            Inputs: `image_id` OMERO image ID. Output: None.
             """
 
         @staticmethod
@@ -1063,9 +1060,9 @@ def test_ome_tiff_source_materialization_covers_chunk_and_cleanup_edges(
 def test_convert_to_ims_uses_resolved_binary_runtime_env_and_output(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify convert to IMS uses resolved binary runtime environment and output.
+    """Verify convert to IMS uses resolved binary runtime env and output.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in convert to IMS uses resolved binary runtime env and output.
     """
     module = _load_script_module()
     install_dir = tmp_path / "install"
@@ -1094,9 +1091,10 @@ def test_convert_to_ims_uses_resolved_binary_runtime_env_and_output(
     captured = {}
 
     def fake_run(cmd, *, timeout, env, cwd, **_kwargs):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `cmd`, `timeout`, `env`, `cwd`, `**_kwargs`. Output: call result.
+        Inputs: `cmd`, `timeout` timeout seconds, `env` environment mapping, `cwd`
+        working directory, `**_kwargs`. Output: `CompletedProcess` result.
         """
         captured["cmd"] = cmd
         captured["timeout"] = timeout
@@ -1128,7 +1126,7 @@ def test_convert_and_run_conversion_cover_missing_runtime_and_success_paths(
 ) -> None:
     """Verify convert and run conversion cover missing runtime and success paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in convert and run conversion cover missing runtime and success paths.
     """
     module = _load_script_module()
     monkeypatch.setattr(module, "IMARISCONVERT_INSTALL_DIR", str(tmp_path / "missing"))
@@ -1152,23 +1150,23 @@ def test_convert_and_run_conversion_cover_missing_runtime_and_success_paths(
     monkeypatch.setattr(module, "convert_to_ims", lambda image, src, dst: True)
 
     class _FixedDatetime:
-        """Represent fixed datetime."""
+        """Test double for fixed datetime behavior in this module."""
 
         @staticmethod
         def now(_timezone):
-            """Now.
+            """Return `_FixedDatetime`'s fixed timestamp.
 
-            Inputs: `_timezone`. Output: computed value.
+            Inputs: `_timezone`. Output: `_Now` result.
             """
 
             class _Now:
-                """Represent now."""
+                """Test double for now behavior in this module."""
 
                 @staticmethod
                 def strftime(fmt):
-                    """Strftime.
+                    """Return the strftime for `_Now`.
 
-                    Inputs: `fmt`. Output: '20260330T120000Z'.
+                    Inputs: `fmt`. Output: `str`.
                     """
                     return "20260330T120000Z"
 
@@ -1192,7 +1190,7 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
 ) -> None:
     """Verify convert to IMS and run conversion cover failure paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in convert to IMS and run conversion cover failure paths.
     """
     module = _load_script_module()
     install_dir = tmp_path / "install"
@@ -1204,23 +1202,23 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
     output_file = tmp_path / "output.ims"
 
     class _FixedDatetime:
-        """Represent fixed datetime."""
+        """Test double for fixed datetime behavior in this module."""
 
         @staticmethod
         def now(_timezone):
-            """Now.
+            """Return `_FixedDatetime`'s fixed timestamp.
 
-            Inputs: `_timezone`. Output: computed value.
+            Inputs: `_timezone`. Output: `_Now` result.
             """
 
             class _Now:
-                """Represent now."""
+                """Test double for now behavior in this module."""
 
                 @staticmethod
                 def strftime(fmt):
-                    """Strftime.
+                    """Return the strftime for `_Now`.
 
-                    Inputs: `fmt`. Output: '20260331T120000Z'.
+                    Inputs: `fmt`. Output: `str`.
                     """
                     return "20260331T120000Z"
 
@@ -1254,9 +1252,10 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
     calls = []
 
     def _failed_run(cmd, *, timeout, env, cwd, **_kwargs):
-        """Failed run.
+        """Return the failed run.
 
-        Inputs: `cmd`, `timeout`, `env`, `cwd`, `**_kwargs`. Output: call result.
+        Inputs: `cmd`, `timeout` timeout seconds, `env` environment mapping, `cwd`
+        working directory, `**_kwargs`. Output: `CompletedProcess` result.
         """
         calls.append({"env": env, "cwd": cwd})
         return subprocess.CompletedProcess(
@@ -1306,10 +1305,10 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
     generated_source = tmp_path / "generated.ome.tif"
 
     def _materialize_source(current_conn, current_image, image_id, export_root):
-        """Materialize source.
+        """Return the materialize source.
 
-        Inputs: `current_conn`, `current_image`, `image_id`, `export_root`. Output:
-        `str` result.
+        Inputs: `current_conn`, `current_image`, `image_id` OMERO image ID,
+        `export_root`. Output: `str`.
         """
         generated_source.write_text("generated", encoding="utf-8")
         return str(generated_source)
@@ -1317,9 +1316,9 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
     captured = {}
 
     def _successful_conversion(current_image, src, dst):
-        """Successful conversion.
+        """Return the successful conversion.
 
-        Inputs: `current_image`, `src`, `dst`. Output: bool.
+        Inputs: `current_image`, `src`, `dst`. Output: `bool`.
         """
         captured["src"] = src
         captured["dst"] = dst
@@ -1359,9 +1358,9 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
 def test_run_script_sets_outputs_and_attaches_exported_file(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify run script sets outputs and attaches exported file.
+    """Verify the run script sets outputs and attaches exported file execution contract.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in run script sets outputs and attaches exported file integration.
     """
     module = _load_script_module()
     export_root = tmp_path / "exports"
@@ -1387,30 +1386,30 @@ def test_run_script_sets_outputs_and_attaches_exported_file(
     )
 
     class _Client:
-        """Represent client."""
+        """Test double for client behavior in this module."""
 
         @staticmethod
         def getInputs(unwrap=True):
-            """Return Inputs.
+            """Return the inputs for `_Client`.
 
-            Inputs: `unwrap`. Output: dict.
+            Inputs: `unwrap`. Output: `dict`.
             """
             assert unwrap is True
             return {"Image_ID": 7}
 
         @staticmethod
         def setOutput(key, value):
-            """Set Output.
+            """Set the output for `_Client`.
 
-            Inputs: `key`, `value`. Output: None.
+            Inputs: `key` lookup key, `value` input value. Output: None.
             """
             outputs[key] = value
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `_Client`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             outputs["closed"] = True
 
@@ -1458,9 +1457,9 @@ def test_run_script_sets_outputs_and_attaches_exported_file(
 def test_run_script_survives_attachment_failure_and_reports_export_path(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify run script survives attachment failure and reports export path.
+    """Verify the run script survives attachment failure and reports export path execution contract.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when run script survives attachment failure and reports export path accepts unsafe input.
     """
     module = _load_script_module()
     export_root = tmp_path / "exports"
@@ -1484,29 +1483,29 @@ def test_run_script_survives_attachment_failure_and_reports_export_path(
     )
 
     class _Client:
-        """Represent client."""
+        """Test double for client behavior in this module."""
 
         @staticmethod
         def getInputs(unwrap=True):
-            """Return Inputs.
+            """Return the inputs for `_Client`.
 
-            Inputs: `unwrap`. Output: dict.
+            Inputs: `unwrap`. Output: `dict`.
             """
             return {"Image_ID": 8}
 
         @staticmethod
         def setOutput(key, value):
-            """Set Output.
+            """Set the output for `_Client`.
 
-            Inputs: `key`, `value`. Output: None.
+            Inputs: `key` lookup key, `value` input value. Output: None.
             """
             outputs[key] = value
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `_Client`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             outputs["closed"] = True
 
@@ -1544,12 +1543,10 @@ def test_run_script_survives_attachment_failure_and_reports_export_path(
 def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify run script covers missing image output failure and top level errors.
+    """Verify the run script covers missing image output failure and top level errors execution contract.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` temporary path fixture.
+    Output: None. Raises: RuntimeError when validation or the called operation fails.
     """
     module = _load_script_module()
     export_root = tmp_path / "exports"
@@ -1560,22 +1557,22 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
     output_calls = []
 
     class _Client:
-        """Represent client."""
+        """Test double for client behavior in this module."""
 
         @staticmethod
         def getInputs(unwrap=True):
-            """Return Inputs.
+            """Return the inputs for `_Client`.
 
-            Inputs: `unwrap`. Output: dict.
+            Inputs: `unwrap`. Output: `dict`.
             """
             return {"Image_ID": 9}
 
         @staticmethod
         def setOutput(key, value):
-            """Set Output.
+            """Set the output for `_Client`.
 
-            Inputs: `key`, `value`. Output: None. Raises on invalid or unavailable
-            state.
+            Inputs: `key` lookup key, `value` input value. Output: None. Raises:
+            RuntimeError when validation or the called operation fails.
             """
             output_calls.append((key, value))
             if key == "File_Annotation":
@@ -1583,9 +1580,9 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `_Client`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             output_calls.append(("closed", True))
 
@@ -1642,29 +1639,29 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
     missing_image_calls = []
 
     class _MissingImageClient:
-        """Represent missing image client."""
+        """Test double for missing image client behavior in this module."""
 
         @staticmethod
         def getInputs(unwrap=True):
-            """Return Inputs.
+            """Return the inputs for `_MissingImageClient`.
 
-            Inputs: `unwrap`. Output: dict.
+            Inputs: `unwrap`. Output: `dict`.
             """
             return {"Image_ID": 10}
 
         @staticmethod
         def setOutput(key, value):
-            """Set Output.
+            """Set the output for `_MissingImageClient`.
 
-            Inputs: `key`, `value`. Output: None.
+            Inputs: `key` lookup key, `value` input value. Output: None.
             """
             missing_image_calls.append((key, value))
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `_MissingImageClient`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             missing_image_calls.append(("closed", True))
 
@@ -1692,21 +1689,21 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
     error_calls = []
 
     class _ExplodingClient:
-        """Represent exploding client."""
+        """Test double for exploding client behavior in this module."""
 
         @staticmethod
         def setOutput(key, value):
-            """Set Output.
+            """Set the output for `_ExplodingClient`.
 
-            Inputs: `key`, `value`. Output: None.
+            Inputs: `key` lookup key, `value` input value. Output: None.
             """
             error_calls.append((key, value))
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `_ExplodingClient`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             error_calls.append(("closed", True))
 
@@ -1730,38 +1727,39 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
 
 
 def test_ims_export_script_main_entrypoint_executes_run_script() -> None:
-    """Verify IMS export script main entrypoint executes run script.
+    """Verify the IMS export script main entrypoint executes run script execution contract.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: Imaris and OMERO fakes. Output: fails on regressions in IMS export script main entrypoint executes run script integration.
     """
     _install_omero_stub()
 
     output_calls = []
 
     class _Client:
-        """Represent client."""
+        """Test double for client behavior in this module."""
 
         @staticmethod
         def getInputs(unwrap=True):
-            """Return Inputs.
+            """Return the inputs for `_Client`.
 
-            Inputs: `unwrap`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `unwrap`. Output: None. Raises: RuntimeError when validation or
+            external operations fail.
             """
             raise RuntimeError("boom")
 
         @staticmethod
         def setOutput(key, value):
-            """Set Output.
+            """Set the output for `_Client`.
 
-            Inputs: `key`, `value`. Output: None.
+            Inputs: `key` lookup key, `value` input value. Output: None.
             """
             output_calls.append((key, value))
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `_Client`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             output_calls.append(("closed", True))
 

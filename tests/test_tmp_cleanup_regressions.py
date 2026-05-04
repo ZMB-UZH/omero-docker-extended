@@ -20,9 +20,9 @@ class TmpCleanupRegressionTests(TestCase):
     """Test cases for tmp cleanup regression tests."""
 
     def test_safe_mark_path_for_deferred_cleanup_marks_directory_root(self):
-        """Verify safe mark path for deferred cleanup marks directory root.
+        """Check safe mark path for deferred cleanup marks directory root cleanup behavior.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when safe mark path for deferred cleanup marks directory root accepts unsafe input.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -42,9 +42,9 @@ class TmpCleanupRegressionTests(TestCase):
             self.assertEqual("1120", marker.read_text(encoding="utf-8").strip())
 
     def test_safe_mark_path_for_deferred_cleanup_marks_file_sidecar(self):
-        """Verify safe mark path for deferred cleanup marks file sidecar.
+        """Check safe mark path for deferred cleanup marks file sidecar cleanup behavior.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when safe mark path for deferred cleanup marks file sidecar accepts unsafe input.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -64,9 +64,9 @@ class TmpCleanupRegressionTests(TestCase):
             self.assertEqual("2300", marker.read_text(encoding="utf-8").strip())
 
     def test_tmp_cleaner_respects_active_directory_retention_marker(self):
-        """Verify temporary cleaner respects active directory retention marker.
+        """Verify tmp cleaner respects active directory retention marker.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in tmp cleaner respects active directory retention marker.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -103,9 +103,9 @@ class TmpCleanupRegressionTests(TestCase):
             )
 
     def test_tmp_cleaner_respects_active_file_retention_marker(self):
-        """Verify temporary cleaner respects active file retention marker.
+        """Verify tmp cleaner respects active file retention marker.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in tmp cleaner respects active file retention marker.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -143,9 +143,9 @@ class TmpCleanupRegressionTests(TestCase):
             self.assertTrue(marker.exists())
 
     def test_tmp_cleaner_deletes_expired_retained_file(self):
-        """Verify temporary cleaner deletes expired retained file.
+        """Check tmp cleaner deletes expired retained file cleanup behavior.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in tmp cleaner deletes expired retained file.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -183,9 +183,9 @@ class TmpCleanupRegressionTests(TestCase):
             self.assertFalse(job_file.exists())
 
     def test_tmp_cleaner_preserves_structural_namespace_directories(self):
-        """Namespace dirs (depth-1) and their tmp/ subdirs must survive cleanup.
+        """Check that tmp cleaner preserves structural namespace directories remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in tmp cleaner preserves structural namespace directories.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -221,9 +221,9 @@ class TmpCleanupRegressionTests(TestCase):
                 )
 
     def test_tmp_cleaner_still_deletes_deep_empty_subdirectories(self):
-        """Non-structural dirs deeper than depth-2 should still be pruned.
+        """Check tmp cleaner still deletes deep empty subdirectories cleanup behavior.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in tmp cleaner still deletes deep empty subdirectories.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

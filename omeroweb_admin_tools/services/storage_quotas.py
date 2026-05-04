@@ -44,7 +44,7 @@ class QuotaError(RuntimeError):
 
 
 def _now_iso() -> str:
-    """Now iso.
+    """Return the current UTC timestamp as ISO text.
 
     Inputs: none. Output: `str`.
     """
@@ -62,9 +62,10 @@ def quota_state_path() -> Path:
 
 
 def _required_env(name: str) -> str:
-    """Required env.
+    """Return the required environment.
 
-    Inputs: `name`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name. Output: `str`. Raises: QuotaError when validation or
+    external operations fail.
     """
     value = os.environ.get(name, "").strip()
     if not value:
@@ -73,9 +74,10 @@ def _required_env(name: str) -> str:
 
 
 def _parse_bool_env(name: str) -> bool:
-    """Parse bool environment.
+    """Parse and validate the bool env input.
 
-    Inputs: `name`. Output: `bool`. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name. Output: `bool`. Raises: QuotaError when validation or
+    external operations fail.
     """
     raw_value = _required_env(name).lower()
     if raw_value in {"1", "true", "yes", "on"}:
@@ -88,9 +90,10 @@ def _parse_bool_env(name: str) -> bool:
 
 
 def _parse_quota_env(name: str) -> float:
-    """Parse quota environment.
+    """Parse and validate the quota env input.
 
-    Inputs: `name`. Output: `float`. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name. Output: `float`. Raises: QuotaError when validation or
+    external operations fail.
     """
     raw_value = _required_env(name)
     try:
@@ -210,7 +213,8 @@ def _path_access_summary(path: Path) -> Dict[str, object]:
 
 
 def managed_group_root() -> Path:
-    """Return OMERO managed repository group root from environment.
+    """Return the omero managed repository group root from environment value exposed by this
+    OMERO-compatible object.
 
     Inputs: none. Output: `Path`.
     """
@@ -269,9 +273,9 @@ def _is_safe_managed_repository_root(path: Path) -> Tuple[bool, str]:
 
 
 def _ensure_parent(path: Path) -> None:
-    """Ensure parent.
+    """Ensure the parent.
 
-    Inputs: `path`. Output: None.
+    Inputs: `path` (Path) path. Output: None.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -289,9 +293,10 @@ def _fresh_state() -> Dict[str, object]:
 
 
 def _load_state(path: Path) -> Dict[str, object]:
-    """Load state.
+    """Load the state.
 
-    Inputs: `path`. Output: `Dict[str, object]`. Raises on invalid or unavailable state.
+    Inputs: `path` (Path) path. Output: `Dict[str, object]`. Raises: QuotaError when validation
+    or the called operation fails.
     """
     if not path.exists():
         return _fresh_state()
@@ -328,9 +333,10 @@ def _load_state(path: Path) -> Dict[str, object]:
 
 
 def _write_state(path: Path, state: Dict[str, object]) -> None:
-    """Write state.
+    """Write the state.
 
-    Inputs: `path`, `state`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `path` (Path) path, `state` (Dict[str, object]). Output: None. Raises:
+    QuotaError when validation or the called operation fails.
     """
     state[STATE_SCHEMA_VERSION_KEY] = STATE_SCHEMA_VERSION
     _ensure_parent(path)
@@ -381,12 +387,10 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
 
 
 def _append_log(state: Dict[str, object], level: str, message: str) -> None:
-    """Append log.
+    """Append the log.
 
-    Inputs: `state`, `level`, `message`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `state` (Dict[str, object]), `level` (str), `message` (str). Output: None.
+    Raises: TypeError when validation or the called operation fails.
     """
     logs = state.setdefault("logs", [])
     if not isinstance(logs, list):
@@ -405,9 +409,9 @@ def _append_log(state: Dict[str, object], level: str, message: str) -> None:
 
 
 def _reconcile_event_cache(state: Dict[str, object]) -> Dict[str, str]:
-    """Reconcile event cache.
+    """Return the reconcile event cache.
 
-    Inputs: `state`. Output: `Dict[str, str]`.
+    Inputs: `state` (Dict[str, object]). Output: `Dict[str, str]`.
     """
     cache = state.setdefault("_reconcile_event_cache", {})
     if not isinstance(cache, dict):
@@ -427,9 +431,10 @@ def _append_reconcile_event(
     level: str,
     message: str,
 ) -> None:
-    """Append reconcile event.
+    """Append the reconcile event.
 
-    Inputs: `state`, `event_key`, `level`, `message`. Output: None.
+    Inputs: `state` (Dict[str, object]), `event_key` (str), `level` (str), `message`
+    (str). Output: None.
     """
     cache = _reconcile_event_cache(state)
     cache_value = f"{level}|{message}"
@@ -442,9 +447,9 @@ def _append_reconcile_event(
 def _prune_reconcile_event_cache(
     state: Dict[str, object], valid_keys: Sequence[str]
 ) -> None:
-    """Prune reconcile event cache.
+    """Prune stale storage-quota reconcile events from the in-memory cache.
 
-    Inputs: `state`, `valid_keys`. Output: None.
+    Inputs: `state` (Dict[str, object]), `valid_keys` (Sequence[str]). Output: None.
     """
     cache = _reconcile_event_cache(state)
     valid = {str(key) for key in valid_keys}
@@ -454,9 +459,10 @@ def _prune_reconcile_event_cache(
 
 
 def _normalize_group(value: str) -> str:
-    """Normalize group.
+    """Normalize the group.
 
-    Inputs: `value`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `value` (str) input value. Output: `str`. Raises: QuotaError when validation or the
+    called operation fails.
     """
     group_name = value.strip()
     if not group_name:
@@ -465,9 +471,10 @@ def _normalize_group(value: str) -> str:
 
 
 def _normalize_quota_gb(value: object) -> Optional[float]:
-    """Normalize quota gb.
+    """Normalize the quota gb.
 
-    Inputs: `value`. Output: `Optional[float]`. Raises on invalid or unavailable state.
+    Inputs: `value` (object) input value. Output: `Optional[float]`. Raises: QuotaError
+    when validation or the called operation fails.
     """
     minimum_quota_gb = min_quota_gb()
     if value is None:
@@ -486,7 +493,8 @@ def _normalize_quota_gb(value: object) -> Optional[float]:
 
 
 def managed_repository_template() -> str:
-    """Return OMERO managed repository template for compatibility checks.
+    """Return the omero managed repository template for compatibility checks value exposed by
+    this OMERO-compatible object.
 
     Inputs: none. Output: `str`.
     """
@@ -561,8 +569,8 @@ def upsert_quotas(
 ) -> Dict[str, object]:
     """Quotas in GB and return the latest full state.
 
-    Inputs: `updates`, `source`. Output: `Dict[str, object]`. Raises on invalid or
-    unavailable state.
+    Inputs: `updates` (Sequence[Tuple[str, object]]), `source` (str). Output: `Dict[str,
+    object]`. Raises: TypeError when validation or the called operation fails.
     """
     path = quota_state_path()
     state = _load_state(path)
@@ -605,10 +613,10 @@ def upsert_quotas(
 
 
 def import_quotas_csv(content: str) -> Dict[str, object]:
-    """Import quotas from CSV content containing Group,Quota [GB].
+    """Import the quotas csv.
 
-    Inputs: `content`. Output: `Dict[str, object]`. Raises on invalid or unavailable
-    state.
+    Inputs: `content` (str). Output: `Dict[str, object]`. Raises: QuotaError when validation or
+    the called operation fails.
     """
     reader = csv.reader(io.StringIO(content))
     rows = list(reader)
@@ -630,7 +638,7 @@ def import_quotas_csv(content: str) -> Dict[str, object]:
 
 
 def quota_csv_template() -> str:
-    """Return CSV template text for quota imports.
+    """Return the csv template text for quota imports value exposed by this OMERO-compatible object.
 
     Inputs: none. Output: `str`.
     """
@@ -638,9 +646,9 @@ def quota_csv_template() -> str:
 
 
 def list_group_directories(group_root: Path) -> List[str]:
-    """List group directories.
+    """Return the group directories.
 
-    Inputs: `group_root`. Output: `List[str]`.
+    Inputs: `group_root` (Path). Output: `List[str]`.
     """
     if not group_root.exists() or not group_root.is_dir():
         return []
@@ -673,14 +681,8 @@ def get_state() -> Dict[str, object]:
 def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
     """Reconcile quota definitions with existing directories.
 
-    Inputs: `known_groups`. Output: `Dict[str, object]`. Raises on invalid or
-    unavailable state.
-
-    This function manages the quota state file and reports quota readiness.
-    It never creates ManagedRepository group directories because OMERO.server
-    owns repository registration. Actual filesystem-level enforcement (chattr, setquota) is
-    performed by the host-side systemd timer (omero-quota-enforcer) which
-    reads the same state file with root privileges.
+    Inputs: `known_groups` (Sequence[str]). Output: `Dict[str, object]`. Raises:
+    QuotaError, TypeError when validation or the called operation fails.
     """
     with _RECONCILE_LOCK:
         path = quota_state_path()

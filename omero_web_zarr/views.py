@@ -57,10 +57,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 class _UnlinkOnCloseFile:
-    """Represent unlink on close file."""
+    """Helper type for unlink on close file behavior."""
 
     def __init__(self, stream: Any, path: Path) -> None:
-        """Initialize the instance.
+        """Create `_UnlinkOnCloseFile` with `stream` and `path`.
 
         Inputs: `stream`, `path`. Output: None.
         """
@@ -82,9 +82,9 @@ class _UnlinkOnCloseFile:
         return self._stream.read(*args, **kwargs)
 
     def close(self) -> None:
-        """Close the resource.
+        """Close `_UnlinkOnCloseFile`'s fake resource handle.
 
-        Inputs: none. Output: None.
+        Inputs: no caller arguments. Output: closes the described state and returns None.
         """
         try:
             self._stream.close()
@@ -129,9 +129,9 @@ def _runtime_generated_zarray_metadata(shape, chunks, dtype) -> dict[str, object
 
 
 def _store_backed_response(image, version, *parts):
-    """Backed response.
+    """Return the store backed response.
 
-    Inputs: `image`, `version`, `*parts`. Output: computed value or None.
+    Inputs: `image`, `version`, `*parts`. Output: `rsp`.
     """
     if version != "0.4":
         return None
@@ -157,10 +157,8 @@ def _store_backed_response(image, version, *parts):
 def _store_backed_json_response(image, version, *parts):
     """Backed JSON response.
 
-    Inputs: `image`, `version`, `*parts`. Output: `response` or None. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `image`, `version`, `*parts`. Output: JSON-compatible value. Raises: Http404
+    when validation or the called operation fails.
     """
     response = _store_backed_response(image, version, *parts)
     if response is None:
@@ -201,9 +199,10 @@ def _build_store_backed_preview_context(request, image):
 
 @login_required()
 def index(request, _conn=None, **kwargs):
-    """Index.
+    """Return the index.
 
-    Inputs: `request`, `_conn`, `**kwargs`. Output: `StreamingHttpResponse` result.
+    Inputs: `request` Django request, `_conn`, `**kwargs` keyword arguments. Output:
+    streaming HTTP response.
     """
     home = reverse("omero_web_zarr_index")
     vizarr = reverse("zarr_app", kwargs={"app": "vizarr", "url": ""})
@@ -219,10 +218,11 @@ def index(request, _conn=None, **kwargs):
 
 @login_required()
 def image_zattrs(request, iid, version, conn=None, **kwargs):
-    """Image zattrs.
+    """Return the image zattrs.
 
-    Inputs: `request`, `iid`, `version`, `conn`, `**kwargs`. Output: computed value.
-    Raises on invalid or unavailable state.
+    Inputs: `request` Django request, `iid`, `version`, `conn` OMERO gateway connection,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`. Raises: Http404 when validation
+    or the called operation fails.
     """
     if version not in ("0.3", "0.4"):
         raise Http404("version not supported")
@@ -270,9 +270,10 @@ def image_zattrs(request, iid, version, conn=None, **kwargs):
 
 
 def image_zgroup(request, **kwargs):
-    """Image zgroup.
+    """Return the image zgroup.
 
-    Inputs: `request`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `**kwargs` keyword arguments. Output: Django
+    `JsonResponse`.
     """
     image = kwargs.get("conn") and kwargs["conn"].getObject("Image", kwargs["iid"])
     if image is not None:
@@ -283,10 +284,9 @@ def image_zgroup(request, **kwargs):
 
 
 def get_image_shape(image, level):
-    """Return image shape.
+    """Return the image shape.
 
-    Inputs: `image`, `level`. Output: `shapes[level]`. Raises on invalid or unavailable
-    state.
+    Inputs: `image`, `level`. Output: get image shape result.
     """
     shapes = get_image_shapes(image)
     if level >= len(shapes):
@@ -346,13 +346,10 @@ def _read_lower_pyramid_plane(
     tile_h,
     np_type,
 ):
-    """Read lower pyramid plane.
+    """Read the lower pyramid plane.
 
     Inputs: `image`, `level`, `z`, `c`, `t`, `tile_x`, `tile_y`, `tile_w`, `tile_h`,
-    `np_type`. Output: `tile_array.reshape` result. Raises on invalid or unavailable
-    state.
-
-    state.
+    `np_type`. Output: `reshape` result. Raises: Http404 for the exercised failure path.
     """
     image_connection = get_image_connection(image)
     if image_connection is None:
@@ -372,9 +369,9 @@ def _read_lower_pyramid_plane(
 
 
 def _read_runtime_chunk_plane(image, level, z, c, t, tile, np_type):
-    """Read runtime chunk plane.
+    """Read the runtime chunk plane.
 
-    Inputs: `image`, `level`, `z`, `c`, `t`, `tile`, `np_type`. Output: call result.
+    Inputs: `image`, `level`, `z`, `c`, `t`, `tile`, `np_type`. Output: `getTile`
     """
     tile_x, tile_y, tile_w, tile_h = tile
     if image.requiresPixelsPyramid() and level > 0:
@@ -395,9 +392,10 @@ def _read_runtime_chunk_plane(image, level, z, c, t, tile, np_type):
 
 @login_required()
 def image_zarray(request, iid, level, conn=None, **kwargs):
-    """Image zarray.
+    """Return the image zarray.
 
-    Inputs: `request`, `iid`, `level`, `conn`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `iid`, `level`, `conn` OMERO gateway connection,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     level = int(level)
     image = conn.getObject("Image", iid)
@@ -415,12 +413,11 @@ def image_zarray(request, iid, level, conn=None, **kwargs):
 
 @login_required()
 def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
-    """Image chunk.
+    """Return the image chunk.
 
-    Inputs: `request`, `iid`, `level`, `chunk`, `conn`, `**kwargs`. Output: computed
-    value. Raises on invalid or unavailable state.
-
-    value. Raises on invalid or unavailable state.
+    Inputs: `request` Django request, `iid`, `level`, `chunk`, `conn` OMERO gateway
+    connection, `**kwargs` keyword arguments. Output: `rsp`. Raises: Http404 when validation or
+    the called operation fails.
     """
     dims = [int(dim) for dim in chunk.split("/")]
 
@@ -495,10 +492,11 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
 
 @login_required()
 def image_store_path(request, iid, version, store_path, conn=None, **kwargs):
-    """Image store path.
+    """Return the image store path.
 
-    Inputs: `request`, `iid`, `version`, `store_path`, `conn`, `**kwargs`. Output:
-    `store_rsp`. Raises on invalid or unavailable state.
+    Inputs: `request` Django request, `iid`, `version`, `store_path`, `conn` OMERO
+    gateway connection, `**kwargs` keyword arguments. Output: `store_rsp`. Raises:
+    Raises: Http404 when validation or the called operation fails.
     """
     image = conn.getObject("Image", iid)
     store_rsp = _store_backed_response(image, version, *store_path.split("/"))
@@ -509,46 +507,40 @@ def image_store_path(request, iid, version, store_path, conn=None, **kwargs):
 
 @login_required()
 def preview_image_zattrs(request, iid, version="0.4", conn=None, **kwargs):
-    """Preview image zattrs.
+    """Return the preview image zattrs.
 
-    Inputs: `request`, `iid`, `version`, `conn`, `**kwargs`. Output: `image_zattrs`
-    result.
-
-    result.
+    Inputs: `request` Django request, `iid`, `version`, `conn` OMERO gateway connection,
+    `**kwargs` keyword arguments. Output: `image_zattrs` result.
     """
     return image_zattrs(request, iid, version, conn=conn, **kwargs)
 
 
 @login_required()
 def preview_image_zgroup(request, iid, version="0.4", conn=None, **kwargs):
-    """Preview image zgroup.
+    """Return the preview image zgroup.
 
-    Inputs: `request`, `iid`, `version`, `conn`, `**kwargs`. Output: `image_zgroup`
-    result.
-
-    result.
+    Inputs: `request` Django request, `iid`, `version`, `conn` OMERO gateway connection,
+    `**kwargs` keyword arguments. Output: `image_zgroup` result.
     """
     return image_zgroup(request, iid=iid, version=version, conn=conn, **kwargs)
 
 
 @login_required()
 def preview_image_zarray(request, iid, level, conn=None, **kwargs):
-    """Preview image zarray.
+    """Return the preview image zarray.
 
-    Inputs: `request`, `iid`, `level`, `conn`, `**kwargs`. Output: `image_zarray`
-    result.
-
-    result.
+    Inputs: `request` Django request, `iid`, `level`, `conn` OMERO gateway connection,
+    `**kwargs` keyword arguments. Output: `image_zarray` result.
     """
     return image_zarray(request, iid, level, conn=conn, **kwargs)
 
 
 @login_required()
 def preview_image_chunk(request, iid, level, chunk, conn=None, **kwargs):
-    """Preview image chunk.
+    """Return the preview image chunk.
 
-    Inputs: `request`, `iid`, `level`, `chunk`, `conn`, `**kwargs`. Output:
-    `image_chunk` result.
+    Inputs: `request` Django request, `iid`, `level`, `chunk`, `conn` OMERO gateway
+    connection, `**kwargs` keyword arguments. Output: `image_chunk` result.
     """
     return image_chunk(request, iid, level, chunk, conn=conn, **kwargs)
 
@@ -557,10 +549,10 @@ def preview_image_chunk(request, iid, level, chunk, conn=None, **kwargs):
 def preview_image_store_path(
     request, iid, version="0.4", store_path=None, conn=None, **kwargs
 ):
-    """Preview image store path.
+    """Return the preview image store path.
 
-    Inputs: `request`, `iid`, `version`, `store_path`, `conn`, `**kwargs`. Output:
-    `image_store_path` result.
+    Inputs: `request` Django request, `iid`, `version`, `store_path`, `conn` OMERO
+    gateway connection, `**kwargs` keyword arguments. Output: `image_store_path` result.
     """
     return image_store_path(
         request,
@@ -574,12 +566,11 @@ def preview_image_store_path(
 
 @login_required()
 def image_preview(request, iid, conn=None, **kwargs):
-    """Image preview.
+    """Return the image preview.
 
-    Inputs: `request`, `iid`, `conn`, `**kwargs`. Output: computed value. Raises on
-    invalid or unavailable state.
-
-    invalid or unavailable state.
+    Inputs: `request` Django request, `iid`, `conn` OMERO gateway connection, `**kwargs`
+    keyword arguments. Output: rendered Django response. Raises: Http404 when validation or the
+    called operation fails.
     """
     image = conn.getObject("Image", iid)
     if image is None:
@@ -606,7 +597,7 @@ def _store_backed_download_name(image, suffix):
 def _store_backed_ome_axes_and_array(node):
     """Backed ome axes and array.
 
-    Inputs: `node`. Output: tuple. Raises on invalid or unavailable state.
+    Inputs: `node`. Output: `tuple`. Raises: Http404 for the exercised failure path.
     """
     array = node.data[0]
     axis_names = get_store_backed_axis_names(node, level=0)
@@ -666,12 +657,11 @@ def _store_backed_ome_tiff_metadata(image, node, axes):
 
 @login_required()
 def download_store_original(request, iid, conn=None, **kwargs):
-    """Download store original.
+    """Download the store original.
 
-    Inputs: `request`, `iid`, `conn`, `**kwargs`. Output: `FileResponse` result. Raises
-    on invalid or unavailable state.
-
-    on invalid or unavailable state.
+    Inputs: `request` Django request, `iid`, `conn` OMERO gateway connection, `**kwargs`
+    keyword arguments. Output: Django `FileResponse`. Raises: Http404 when validation or
+    external operations fail.
     """
     image = conn.getObject("Image", iid)
     if image is None:
@@ -704,12 +694,11 @@ def download_store_original(request, iid, conn=None, **kwargs):
 
 @login_required()
 def download_store_metadata(request, iid, conn=None, **kwargs):
-    """Download store metadata.
+    """Download the store metadata.
 
-    Inputs: `request`, `iid`, `conn`, `**kwargs`. Output: `response`. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `request` Django request, `iid`, `conn` OMERO gateway connection, `**kwargs`
+    keyword arguments. Output: metadata mapping. Raises: Http404 when validation or
+    external operations fail.
     """
     image = conn.getObject("Image", iid)
     if image is None:
@@ -736,12 +725,11 @@ def download_store_metadata(request, iid, conn=None, **kwargs):
 
 @login_required()
 def download_store_ome_tiff(request, iid, conn=None, **kwargs):
-    """Download store OME tiff.
+    """Download the store OME tiff.
 
-    Inputs: `request`, `iid`, `conn`, `**kwargs`. Output: `response`. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `request` Django request, `iid`, `conn` OMERO gateway connection, `**kwargs`
+    keyword arguments. Output: download store OME tiff result. Raises: Http404 when validation
+    or the called operation fails.
     """
     image = conn.getObject("Image", iid)
     if image is None or resolve_image_backing_zarr_store(image) is None:
@@ -784,9 +772,10 @@ def download_store_ome_tiff(request, iid, conn=None, **kwargs):
 
 
 def _sanitize_app_asset_path(url):
-    """Sanitize app asset path.
+    """Sanitize the app asset path.
 
-    Inputs: `url`. Output: computed value. Raises on invalid or unavailable state.
+    Inputs: `url` URL. Output: `join` result. Raises: Http404 when validation or
+    external operations fail.
     """
     raw = (url or "").strip()
     if not raw:
@@ -805,7 +794,7 @@ def _sanitize_app_asset_path(url):
 def _build_app_launch_url(app, source):
     """App launch URL.
 
-    Inputs: `app`, `source`. Output: computed value.
+    Inputs: `app`, `source`. Output: URL string.
     """
     return (
         f"{reverse('zarr_app', kwargs={'app': app, 'url': ''})}"
@@ -814,9 +803,9 @@ def _build_app_launch_url(app, source):
 
 
 def _inject_launcher_head(html, base_url):
-    """Inject launcher head.
+    """Return the inject launcher head.
 
-    Inputs: `html`, `base_url`. Output: computed value.
+    Inputs: `html`, `base_url` base URL. Output: inject launcher head result.
     """
     head_fragment = (
         f'<base href="{base_url}">'
@@ -849,9 +838,9 @@ def _inject_launcher_head(html, base_url):
 
 @lru_cache(maxsize=16)
 def _fetch_remote_app_shell(base_url, _cache_bucket):
-    """Fetch remote app shell.
+    """Fetch the remote app shell.
 
-    Inputs: `base_url`, `_cache_bucket`. Output: `response.text`.
+    Inputs: `base_url` base URL, `_cache_bucket`. Output: `text`.
     """
     response = requests.get(base_url, timeout=20)
     response.raise_for_status()
@@ -859,12 +848,10 @@ def _fetch_remote_app_shell(base_url, _cache_bucket):
 
 
 def apps(request, app, url):
-    """Apps.
+    """Return the apps.
 
-    Inputs: `request`, `app`, `url`. Output: computed value. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `request` Django request, `app`, `url` URL. Output: apps result. Raises:
+    Raises: Http404 when validation or the called operation fails.
     """
     if app not in _APP_BASE_URLS:
         raise Http404(f"App: {app} not found")

@@ -8,17 +8,17 @@ from omero_plugin_common import env_utils, omero_helpers, tmp_cleanup, tmp_utils
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._stored_value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self._stored_value`.
         """
@@ -28,9 +28,9 @@ class _Value:
 def test_env_utils_cover_reference_messages_and_optional_required_values(
     monkeypatch,
 ) -> None:
-    """Verify environment utils cover reference messages and optional required values.
+    """Verify env utils cover reference messages and optional required values.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in env utils cover reference messages and optional required values.
     """
     docs_url = "https://example.invalid/docs"
     assert env_utils._env_reference(env_utils.ENV_FILE_OMEROWEB, docs_url) == (
@@ -93,9 +93,9 @@ def test_env_utils_cover_reference_messages_and_optional_required_values(
 
 
 def test_env_utils_cover_numeric_boolean_and_sanitized_validation(monkeypatch) -> None:
-    """Verify environment utils cover numeric boolean and sanitized validation.
+    """Verify env utils cover numeric boolean and sanitized validation.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in env utils cover numeric boolean and sanitized validation.
     """
     monkeypatch.setenv("INT_SETTING", "41")
     assert (
@@ -171,9 +171,9 @@ def test_env_utils_cover_numeric_boolean_and_sanitized_validation(monkeypatch) -
 def test_env_utils_and_tmp_utils_cover_sanitized_empty_and_missing_tmp_root(
     monkeypatch,
 ) -> None:
-    """Verify environment utils and temporary utils cover sanitized empty and missing temporary root.
+    """Verify env utils and tmp utils cover sanitized empty and missing tmp root.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in env utils and tmp utils cover sanitized empty and missing tmp root.
     """
     monkeypatch.setenv("SANITIZED_SETTING", "configured")
     with pytest.raises(ValueError, match="Expected a non-empty integer"):
@@ -191,9 +191,9 @@ def test_env_utils_and_tmp_utils_cover_sanitized_empty_and_missing_tmp_root(
 
 
 def test_omero_helpers_cover_none_and_exception_fallback_paths() -> None:
-    """Verify OMERO helpers cover none and exception fallback paths.
+    """Confirm OMERO helpers cover none and exception fallback paths exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: helper fakes. Output: fails on regressions when OMERO helpers cover none and exception fallback paths stops reporting the expected error.
     """
     invalid_owner = SimpleNamespace(
         getDetails=lambda: SimpleNamespace(
@@ -224,9 +224,9 @@ def test_tmp_cleanup_handles_missing_paths_and_walk_failures(
     tmp_path,
     monkeypatch,
 ) -> None:
-    """Verify temporary cleanup handles missing paths and walk failures.
+    """Check tmp cleanup handles missing paths and walk failures cleanup behavior.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in tmp cleanup handles missing paths and walk failures.
     """
     root = tmp_path / "root"
     root.mkdir()

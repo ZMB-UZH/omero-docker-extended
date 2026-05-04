@@ -13,7 +13,7 @@ from omeroweb_omp_plugin.views import save_keyvaluepairs_view
 def test_filename_utils_cover_whitespace_and_separator_fallback_paths():
     """Verify filename utils cover whitespace and separator fallback paths.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions in filename utils cover whitespace and separator fallback paths.
     """
     no_pairs = [
         "alpha-A-01.tif",
@@ -35,9 +35,9 @@ def test_filename_utils_cover_whitespace_and_separator_fallback_paths():
 
 
 def test_http_utils_internal_response_helpers_cover_none_and_empty_payloads():
-    """Verify HTTP utils internal response helpers cover none and empty payloads.
+    """Verify HTTP utils internal response helpers cover none and empty payloads result shape.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions in HTTP utils internal response helpers cover none and empty payloads.
     """
     assert http_utils._extract_message_from_response(None) is None
 
@@ -49,9 +49,9 @@ def test_http_utils_internal_response_helpers_cover_none_and_empty_payloads():
 
 
 def test_save_keyvaluepairs_ready_endpoint_returns_plain_response():
-    """Verify save keyvaluepairs ready endpoint returns plain response.
+    """Verify save keyvaluepairs ready endpoint returns plain response result shape.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions in save keyvaluepairs ready endpoint returns plain response.
     """
     response = inspect.unwrap(save_keyvaluepairs_view.save_keyvaluepairs)(
         RequestFactory().get("/omeroweb_omp_plugin/save-keyvaluepairs/")

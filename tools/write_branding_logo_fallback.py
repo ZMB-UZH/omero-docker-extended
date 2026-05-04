@@ -143,9 +143,9 @@ def build_png_bytes() -> bytes:
     ihdr = struct.pack(">IIBBBBB", WIDTH, HEIGHT, 8, 6, 0, 0, 0)
 
     def chunk(tag: bytes, payload: bytes) -> bytes:
-        """Chunk.
+        """Return the chunk.
 
-        Inputs: `tag`, `payload`. Output: `bytes`.
+        Inputs: `tag` (bytes), `payload` (bytes) payload. Output: `bytes`.
         """
         checksum = zlib.crc32(tag + payload) & 0xFFFFFFFF
         return (
@@ -166,9 +166,10 @@ def build_png_bytes() -> bytes:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse args.
+    """Parse command-line arguments for `tools.write_branding_logo_fallback`.
 
-    Inputs: `argv`. Output: `argparse.Namespace`.
+    Inputs: `argv` (list[str] | None) command-line arguments. Output:
+    `argparse.Namespace`.
     """
     parser = argparse.ArgumentParser(
         description="Write the deterministic fallback branding logo PNG."
@@ -178,7 +179,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.write_branding_logo_fallback` command entrypoint.
 
     Inputs: `argv`. Output: `int`.
     """
