@@ -260,7 +260,9 @@ def test_rate_limit_handles_django_ip_fallbacks_and_cache_failures(monkeypatch):
 
     assert allowed is False
     assert remaining == rate_limit.MAJOR_ACTION_BLOCK_SECONDS
-    assert "cache boom" in rate_limit.get_rate_limit_status(request)["error"]
+    rate_status = rate_limit.get_rate_limit_status(request)
+    assert rate_status["error"] == rate_limit.errors.unexpected_error()
+    assert "cache boom" not in rate_status["error"]
 
     monkeypatch.setattr(
         rate_limit,
