@@ -14,18 +14,18 @@ SHA256SUM_BIN = shutil.which("sha256sum") or "/usr/bin/sha256sum"
 
 
 def _write_executable(path: Path, content: str = "#!/bin/sh\nexit 0\n") -> None:
-    """Write executable.
+    """Write the executable.
 
-    Inputs: `path`, `content`. Output: None.
+    Inputs: `path` (Path) path, `content` (str). Output: None.
     """
     path.write_text(content, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
 def _write_large_jar(path: Path) -> None:
-    """Write large jar.
+    """Write the large jar.
 
-    Inputs: `path`. Output: None.
+    Inputs: `path` (Path) path. Output: None.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as handle:
@@ -33,9 +33,9 @@ def _write_large_jar(path: Path) -> None:
 
 
 def _write_sha256_manifest(jar_path: Path) -> None:
-    """Write sha256 manifest.
+    """Write the sha256 manifest.
 
-    Inputs: `jar_path`. Output: None.
+    Inputs: `jar_path` (Path). Output: None.
     """
     digest = subprocess.check_output(
         [SHA256SUM_BIN, str(jar_path)],
@@ -48,9 +48,9 @@ def _write_sha256_manifest(jar_path: Path) -> None:
 
 
 def _prepare_valid_install(tmp_path: Path) -> tuple[Path, Path]:
-    """Prepare valid install.
+    """Prepare the valid install.
 
-    Inputs: `tmp_path`. Output: `tuple[Path, Path]`.
+    Inputs: `tmp_path` (Path) temporary path fixture. Output: `tuple[Path, Path]`.
     """
     install_dir = tmp_path / "imarisconvert"
     wrapper_path = tmp_path / "bin" / "imarisconvert"
@@ -70,9 +70,9 @@ def _prepare_valid_install(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _script_env(install_dir: Path, wrapper_path: Path) -> dict[str, str]:
-    """Script env.
+    """Return the script environment.
 
-    Inputs: `install_dir`, `wrapper_path`. Output: `dict[str, str]`.
+    Inputs: `install_dir` (Path), `wrapper_path` (Path). Output: `dict[str, str]`.
     """
     return {
         **os.environ,
@@ -85,7 +85,7 @@ def _script_env(install_dir: Path, wrapper_path: Path) -> dict[str, str]:
 def test_imarisconvert_startup_default_verifies_existing_install(tmp_path):
     """Verify imarisconvert startup default verifies existing install.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in imarisconvert startup default verifies existing install.
     """
     install_dir, wrapper_path = _prepare_valid_install(tmp_path)
 
@@ -104,7 +104,7 @@ def test_imarisconvert_startup_default_verifies_existing_install(tmp_path):
 def test_imarisconvert_startup_ignores_entrypoint_arguments_in_verify_mode(tmp_path):
     """Verify imarisconvert startup ignores entrypoint arguments in verify mode.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in imarisconvert startup ignores entrypoint arguments in verify mode.
     """
     install_dir, wrapper_path = _prepare_valid_install(tmp_path)
 
@@ -121,9 +121,9 @@ def test_imarisconvert_startup_ignores_entrypoint_arguments_in_verify_mode(tmp_p
 
 
 def test_imarisconvert_startup_fails_fast_when_runtime_artifacts_are_missing(tmp_path):
-    """Verify imarisconvert startup fails fast when runtime artifacts are missing.
+    """Confirm imarisconvert startup fails fast when runtime artifacts are missing exposes the expected failure.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in imarisconvert startup fails fast when runtime artifacts are missing.
     """
     install_dir, wrapper_path = _prepare_valid_install(tmp_path)
     (install_dir / "artifacts" / "bioformats" / "bioformats_package.jar").unlink()
@@ -145,7 +145,7 @@ def test_imarisconvert_build_time_mode_repairs_wrapper_and_cache_without_network
 ):
     """Verify imarisconvert build time mode repairs wrapper and cache without network.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in imarisconvert build time mode repairs wrapper and cache without network.
     """
     install_dir, wrapper_path = _prepare_valid_install(tmp_path)
     wrapper_path.unlink()

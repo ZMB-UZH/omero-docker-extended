@@ -17,9 +17,9 @@ PLUGIN_DB_AUTH_ENV = "PLUGIN_DB_" + "PASS"
 
 
 def _maintenance_env(**overrides: str) -> dict[str, str]:
-    """Maintenance env.
+    """Return the maintenance environment.
 
-    Inputs: `**overrides`. Output: `dict[str, str]`.
+    Inputs: `**overrides` (str). Output: `dict[str, str]`.
     """
     env = {
         "PATH": os.environ["PATH"],
@@ -39,9 +39,10 @@ def _maintenance_env(**overrides: str) -> dict[str, str]:
 
 
 def _run_bash(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    """Bash.
+    """Run the bash.
 
-    Inputs: `script`, `env`. Output: `subprocess.CompletedProcess[str]`.
+    Inputs: `script` (str), `env` (dict[str, str]) environment mapping. Output:
+    `subprocess.CompletedProcess[str]`.
     """
     return subprocess.run(
         [BASH_BIN, "-c", script],
@@ -54,9 +55,9 @@ def _run_bash(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[s
 
 
 def test_entrypoint_writes_private_shell_quoted_cron_env(tmp_path: Path) -> None:
-    """Verify entrypoint writes private shell quoted cron environment.
+    """Verify entrypoint writes private shell quoted cron env.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in entrypoint writes private shell quoted cron env.
     """
     env_file = tmp_path / "pg-maintenance-env"
     marker = tmp_path / "command-substitution-ran"
@@ -98,9 +99,9 @@ def test_entrypoint_writes_private_shell_quoted_cron_env(tmp_path: Path) -> None
 def test_entrypoint_fails_before_cron_when_required_env_is_missing(
     tmp_path: Path,
 ) -> None:
-    """Verify entrypoint fails before cron when required environment is missing.
+    """Confirm entrypoint fails before cron when required env is missing exposes the expected failure.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in entrypoint fails before cron when required env is missing.
     """
     env_file = tmp_path / "pg-maintenance-env"
     env = _maintenance_env(PG_MAINTENANCE_ENV_FILE=str(env_file))
@@ -123,9 +124,9 @@ def test_entrypoint_fails_before_cron_when_required_env_is_missing(
 def test_entrypoint_derives_plugin_database_auth_from_compose_secret_name(
     tmp_path: Path,
 ) -> None:
-    """Verify entrypoint derives plugin database auth from compose secret name.
+    """Check that entrypoint derives plugin database auth from compose secret name keeps sensitive data out of output.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when entrypoint derives plugin database auth from compose secret name accepts unsafe input.
     """
     env_file = tmp_path / "pg-maintenance-env"
     expected_plugin_auth = "plugin-auth-from-env-file"
@@ -152,7 +153,7 @@ def test_entrypoint_derives_plugin_database_auth_from_compose_secret_name(
 def test_cron_schedule_uses_runner_without_self_rewriting_or_guard_leak() -> None:
     """Verify cron schedule uses runner without self rewriting or guard leak.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in cron schedule uses runner without self rewriting or guard leak.
     """
     cron_text = CRON.read_text(encoding="utf-8")
 
@@ -166,9 +167,9 @@ def test_cron_schedule_uses_runner_without_self_rewriting_or_guard_leak() -> Non
 
 
 def test_cron_runner_sources_private_env_before_exec(tmp_path: Path) -> None:
-    """Verify cron runner sources private environment before exec.
+    """Verify cron runner sources private env before exec.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in cron runner sources private env before exec.
     """
     env_file = tmp_path / "pg-maintenance-env"
     output_file = tmp_path / "runner-output"
@@ -221,9 +222,9 @@ def test_cron_runner_sources_private_env_before_exec(tmp_path: Path) -> None:
 
 
 def test_pg_maintenance_fails_when_database_command_fails(tmp_path: Path) -> None:
-    """Verify pg maintenance fails when database command fails.
+    """Confirm pg maintenance fails when database command fails exposes the expected failure.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in pg maintenance fails when database command fails integration.
     """
     stub_bin = tmp_path / "bin"
     stub_bin.mkdir()

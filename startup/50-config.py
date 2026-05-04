@@ -21,9 +21,9 @@ LEGACY_CONFIG_ALIASES = {
 
 
 def resolve_omero_bin() -> str:
-    """Resolve OMERO bin.
+    """Resolve the OMERO bin.
 
-    Inputs: none. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `str`. Raises: RuntimeError for the exercised failure path.
     """
     explicit = os.environ.get("OMERO_WEB_OMERO_BIN") or os.environ.get("OMERO_BIN")
     if explicit:
@@ -49,9 +49,10 @@ def resolve_omero_bin() -> str:
 
 
 def resolve_python_bin(omero_bin: str) -> str:
-    """Resolve python bin.
+    """Resolve the python bin.
 
-    Inputs: `omero_bin`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `omero_bin` (str). Output: `str`. Raises: RuntimeError when validation or
+    external operations fail.
     """
     explicit = os.environ.get("OMERO_WEB_PYTHON_BIN") or os.environ.get("PYTHON_BIN")
     if explicit:
@@ -81,9 +82,9 @@ def resolve_python_bin(omero_bin: str) -> str:
 
 
 def resolve_config_glob(omero_bin: str) -> str:
-    """Resolve config glob.
+    """Resolve the config glob.
 
-    Inputs: `omero_bin`. Output: `str`.
+    Inputs: `omero_bin` (str). Output: `str`.
     """
     explicit = os.environ.get("OMERO_CONFIG_GLOB") or os.environ.get(
         "OMERO_WEB_CONFIG_GLOB"
@@ -100,7 +101,7 @@ def resolve_config_glob(omero_bin: str) -> str:
 
 
 def config_env_to_property(env_name: str) -> str:
-    """Config env to property.
+    """Convert an environment variable name into an OMERO config property.
 
     Inputs: `env_name`. Output: `str`.
     """
@@ -111,9 +112,9 @@ def config_env_to_property(env_name: str) -> str:
 
 
 def run_omero_command(omero_bin: str, *args: str) -> None:
-    """OMERO command.
+    """Run the OMERO command.
 
-    Inputs: `omero_bin`, `*args`. Output: None.
+    Inputs: `omero_bin` (str), `*args` (str) positional arguments. Output: None.
     """
     subprocess.run([omero_bin, *args], check=True)
 
@@ -147,9 +148,9 @@ def run_omero_config_set(omero_bin: str, property_name: str, value: str) -> None
 
 
 def _normalize_aliases(value: object) -> object:
-    """Normalize aliases.
+    """Normalize the aliases.
 
-    Inputs: `value`. Output: `object`.
+    Inputs: `value` (object) input value. Output: `object`.
     """
     if isinstance(value, str):
         return LEGACY_CONFIG_ALIASES.get(value, value)
@@ -161,9 +162,9 @@ def _normalize_aliases(value: object) -> object:
 
 
 def normalize_config_value(env_name: str, raw_value: str) -> str:
-    """Normalize config value.
+    """Normalize the config value.
 
-    Inputs: `env_name`, `raw_value`. Output: `str`.
+    Inputs: `env_name` (str), `raw_value` (str) raw value. Output: `str`.
     """
     normalized_scalar = LEGACY_CONFIG_ALIASES.get(raw_value)
     if normalized_scalar is not None:
@@ -190,9 +191,10 @@ def normalize_config_value(env_name: str, raw_value: str) -> str:
 
 
 def parse_additional_apps(raw_value: str) -> list[str]:
-    """Parse additional apps.
+    """Parse and validate the additional apps input.
 
-    Inputs: `raw_value`. Output: `list[str]`. Raises on invalid or unavailable state.
+    Inputs: `raw_value` (str) raw value. Output: `list[str]`. Raises: RuntimeError when
+    validation or the called operation fails.
     """
     try:
         parsed = json.loads(raw_value)
@@ -212,9 +214,9 @@ def parse_additional_apps(raw_value: str) -> list[str]:
 
 
 def validate_additional_apps(python_bin: str, app_modules: list[str]) -> None:
-    """Validate additional apps.
+    """Validate the additional apps.
 
-    Inputs: `python_bin`, `app_modules`. Output: None.
+    Inputs: `python_bin` (str), `app_modules` (list[str]). Output: None.
     """
     if not app_modules:
         return
@@ -245,7 +247,7 @@ if missing:
 
 
 def main() -> int:
-    """Execute the command entrypoint.
+    """Run the `startup.50-config` command entrypoint.
 
     Inputs: none. Output: `int`.
     """

@@ -25,9 +25,10 @@ VOLATILE_TEMPLATE_TOKENS = {
 
 
 def _validate_path_component(value: str, label: str) -> str:
-    """Validate path component.
+    """Validate the path component.
 
-    Inputs: `value`, `label`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `value` (str) input value, `label` (str). Output: `str`. Raises: ValueError
+    when validation or the called operation fails.
     """
     component = str(value or "").strip()
     if (
@@ -42,12 +43,10 @@ def _validate_path_component(value: str, label: str) -> str:
 
 
 def _template_parts(repo_template: str) -> list[str]:
-    """Template parts.
+    """Return the template parts.
 
-    Inputs: `repo_template`. Output: `list[str]`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `repo_template` (str). Output: `list[str]`. Raises: ValueError when validation or
+    the called operation fails.
     """
     template = str(repo_template or "").strip()
     if not template:
@@ -56,12 +55,10 @@ def _template_parts(repo_template: str) -> list[str]:
 
 
 def stable_shared_prefix_parts(repo_template: str) -> list[str]:
-    """Stable shared prefix parts.
+    """Return the stable shared prefix parts.
 
-    Inputs: `repo_template`. Output: `list[str]`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `repo_template` (str). Output: `list[str]`. Raises: ValueError when validation or
+    the called operation fails.
     """
     stable_parts: list[str] = []
 
@@ -90,12 +87,10 @@ def stable_shared_prefix_parts(repo_template: str) -> list[str]:
 
 
 def _stable_prefix_matcher(raw_part: str) -> re.Pattern[str]:
-    """Stable prefix matcher.
+    """Return the stable prefix matcher.
 
-    Inputs: `raw_part`. Output: `re.Pattern[str]`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `raw_part` (str). Output: `re.Pattern[str]`. Raises: ValueError when validation or
+    the called operation fails.
     """
     pieces: list[str] = ["^"]
     cursor = 0
@@ -122,9 +117,9 @@ def _stable_prefix_matcher(raw_part: str) -> re.Pattern[str]:
 
 
 def _parse_install_groups(install_groups: str) -> list[str]:
-    """Parse install groups.
+    """Parse and validate the install groups input.
 
-    Inputs: `install_groups`. Output: `list[str]`.
+    Inputs: `install_groups` (str). Output: `list[str]`.
     """
     groups: list[str] = []
     seen: set[str] = set()
@@ -146,9 +141,9 @@ def _parse_install_groups(install_groups: str) -> list[str]:
 
 
 def _truthy(value: str) -> bool:
-    """Truthy.
+    """Return the truthy.
 
-    Inputs: `value`. Output: `bool`.
+    Inputs: `value` (str) input value. Output: `bool`.
     """
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -158,9 +153,10 @@ def _configured_groups(
     ldap_enabled: str,
     ldap_group: str,
 ) -> list[str]:
-    """Configured groups.
+    """Return the configured groups.
 
-    Inputs: `install_groups`, `ldap_enabled`, `ldap_group`. Output: `list[str]`.
+    Inputs: `install_groups` (str), `ldap_enabled` (str), `ldap_group` (str). Output:
+    `list[str]`.
     """
     groups = _parse_install_groups(install_groups)
     seen = set(groups)
@@ -182,9 +178,9 @@ def _configured_groups(
 
 
 def _emit_cumulative_paths(parts: Iterable[str]) -> list[str]:
-    """Emit cumulative paths.
+    """Emit the cumulative paths.
 
-    Inputs: `parts`. Output: `list[str]`.
+    Inputs: `parts` (Iterable[str]). Output: `list[str]`.
     """
     current: list[str] = []
     paths: list[str] = []
@@ -200,10 +196,11 @@ def configured_seed_paths(
     ldap_enabled: str,
     ldap_group: str,
 ) -> list[str]:
-    """Configured seed paths.
+    """Return the configured seed paths.
 
-    Inputs: `repo_template`, `install_groups`, `ldap_enabled`, `ldap_group`. Output:
-    `list[str]`. Raises on invalid or unavailable state.
+    Inputs: `repo_template` (str), `install_groups` (str), `ldap_enabled` (str),
+    `ldap_group` (str). Output: `list[str]`. Raises: ValueError when validation or
+    external operations fail.
     """
     stable_parts = stable_shared_prefix_parts(repo_template)
     if not stable_parts:
@@ -253,10 +250,10 @@ def planned_paths(
     # filesystem root can contain internal OMERO directories, stale test data,
     # or historical group trees that should not block installation-time
     # normalization of the current deployment contract.
-    """Planned paths.
+    """Return the planned paths.
 
-    Inputs: `_managed_root`, `repo_template`, `install_groups`, `ldap_enabled`,
-    `ldap_group`. Output: `list[str]`.
+    Inputs: `_managed_root` (str), `repo_template` (str), `install_groups` (str),
+    `ldap_enabled` (str), `ldap_group` (str). Output: `list[str]`.
     """
     return configured_seed_paths(
         repo_template,
@@ -273,10 +270,10 @@ def lookup_prefix(
     repo_dir_path: str,
     expected_managed_dir: str,
 ) -> int:
-    """Lookup prefix.
+    """Return the lookup prefix.
 
-    Inputs: `root_pass`, `host`, `port`, `repo_dir_path`, `expected_managed_dir`.
-    Output: `int`.
+    Inputs: `root_pass` (str), `host` (str), `port` (int), `repo_dir_path` (str),
+    `expected_managed_dir` (str). Output: `int`.
     """
     try:
         from omero.gateway import BlitzGateway
@@ -304,9 +301,9 @@ def lookup_prefix(
         parent_path = "/" + "/".join(path_parts[:-1]) + "/"
 
     def unwrap_text(value):
-        """Unwrap text.
+        """Return the unwrap text.
 
-        Inputs: `value`. Output: computed value.
+        Inputs: `value` input value. Output: text string.
         """
         if value is None:
             return ""
@@ -314,9 +311,9 @@ def lookup_prefix(
         return "" if inner is None else str(inner)
 
     def model_attr(model_obj, attr_name):
-        """Model attr.
+        """Return the model attr.
 
-        Inputs: `model_obj`, `attr_name`. Output: `value`.
+        Inputs: `model_obj`, `attr_name`. Output: model attr result.
         """
         value = getattr(model_obj, attr_name, None)
         if value is None:
@@ -324,9 +321,9 @@ def lookup_prefix(
         return value
 
     def repo_description_path(model_obj):
-        """Repo description path.
+        """Return the repo description path.
 
-        Inputs: `model_obj`. Output: computed value.
+        Inputs: `model_obj`. Output: `rstrip` result.
         """
         desc_path = unwrap_text(model_attr(model_obj, "path"))
         desc_name = unwrap_text(model_attr(model_obj, "name"))
@@ -335,7 +332,7 @@ def lookup_prefix(
         return (desc_path.rstrip("/") + "/" + desc_name).rstrip("/")
 
     def repo_description_uuid(model_obj):
-        """Repo description UUID.
+        """Return the repo description UUID.
 
         Inputs: `model_obj`. Output: `unwrap_text` result.
         """
@@ -424,7 +421,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Execute the command entrypoint.
+    """Run the `startup.repo_root_sync_helper` command entrypoint.
 
     Inputs: `argv`. Output: `int`.
     """

@@ -18,16 +18,16 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `BuildWorkflowIntegrationContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def test_installation_script_references_compressed_helper(self) -> None:
-        """Verify Installation script references compressed helper.
+        """Verify the installation script references compressed helper execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation script references compressed helper integration.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -53,9 +53,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_script_checks_build_and_flatten_helper_failures_explicitly(
         self,
     ) -> None:
-        """Verify Installation script checks build and flatten helper failures explicitly.
+        """Verify the installation script checks build and flatten helper failures explicitly execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation script checks build and flatten helper failures explicitly integration.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -69,9 +69,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("ERROR: Buildx compressed build workflow failed.", script_text)
 
     def test_installation_script_runs_env_contract_check_before_workflow(self) -> None:
-        """Verify Installation script runs env contract check before workflow.
+        """Verify the installation script runs env contract check before workflow execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation script runs env contract check before workflow integration.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -103,9 +103,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_script_propagates_omero_data_dir_into_generated_compose_env(
         self,
     ) -> None:
-        """Verify Installation script propagates OMERO data dir into generated compose env.
+        """Verify the installation script propagates OMERO data dir into generated compose env execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation script propagates OMERO data dir into generated compose env integration.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -124,9 +124,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_installation_script_does_not_inject_top_logo_defaults(self) -> None:
-        """Verify Installation script does not inject top logo defaults.
+        """Verify the installation script does not inject top logo defaults execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation script does not inject top logo defaults integration.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -136,9 +136,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("CONFIG_omero_web_top__logo__link=/webclient/", script_text)
 
     def test_omeroweb_example_env_defines_only_login_logo_default(self) -> None:
-        """Verify OMERO.web example env defines only login logo default.
+        """Verify omeroweb example env defines only login logo default.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroweb example env defines only login logo default.
         """
         env_text = (self.repo_root / "env" / "omeroweb_example.env").read_text(
             encoding="utf-8"
@@ -150,9 +150,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("CONFIG_omero_web_top__logo__link=", env_text)
 
     def test_omeroweb_dockerfile_applies_logo_context_patch(self) -> None:
-        """Verify OMERO.web dockerfile applies logo context patch.
+        """Verify omeroweb dockerfile applies logo context patch.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroweb dockerfile applies logo context patch.
         """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-web.Dockerfile"
@@ -162,9 +162,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_group_bootstrap_uses_dynamic_omero_cli_discovery(
         self,
     ) -> None:
-        """Verify Installation group bootstrap uses dynamic OMERO CLI discovery.
+        """Verify the installation group bootstrap uses dynamic OMERO CLI discovery execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation group bootstrap uses dynamic OMERO CLI discovery.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -183,9 +183,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_server_bootstrap_job_service_uses_python_api_helper_and_configured_port(
         self,
     ) -> None:
-        """Verify Server bootstrap job service uses Python API helper and configured port.
+        """Verify server bootstrap job service uses python API helper and configured port.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server bootstrap job service uses python API helper and configured port.
         """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
@@ -219,9 +219,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_server_bootstrap_normalizes_managed_repo_shared_prefixes_for_runtime_groups(
         self,
     ) -> None:
-        """Verify Server bootstrap normalizes managed repo shared prefixes for runtime groups.
+        """Check server bootstrap normalizes managed repo shared prefixes for runtime groups parsing against the documented contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server bootstrap normalizes managed repo shared prefixes for runtime groups.
         """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
@@ -259,9 +259,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_server_bootstrap_python_helpers_use_dynamic_server_paths_and_cli_home(
         self,
     ) -> None:
-        """Verify Server bootstrap Python helpers use dynamic server paths and CLI home.
+        """Verify the server bootstrap python helpers use dynamic server paths and CLI home execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server bootstrap python helpers use dynamic server paths and CLI home.
         """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
@@ -280,9 +280,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("repo-root-lookup.XXXXXX.py", script_text)
 
     def test_server_bootstrap_keeps_omero_tmpdir_for_service_user_cli(self) -> None:
-        """Verify Server bootstrap keeps OMERO tmpdir for service user CLI.
+        """Check that server bootstrap keeps OMERO tmpdir for service user CLI remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server bootstrap keeps OMERO tmpdir for service user CLI.
         """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
@@ -315,9 +315,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn('OMERO_TEMPDIR="${TMPDIR:-/tmp}"', script_text)
 
     def test_omeroserver_image_copies_repo_root_sync_helper(self) -> None:
-        """Verify Omeroserver image copies repo root sync helper.
+        """Verify omeroserver image copies repo root sync helper.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroserver image copies repo root sync helper.
         """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-server.Dockerfile"
@@ -331,9 +331,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn(f"/startup/{helper_name}", dockerfile_text)
 
     def test_omeroserver_image_copies_dropbox_user_dir_sync_helper(self) -> None:
-        """Verify Omeroserver image copies dropbox user dir sync helper.
+        """Verify omeroserver image copies dropbox user dir sync helper.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroserver image copies dropbox user dir sync helper.
         """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-server.Dockerfile"
@@ -347,9 +347,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn(f"/startup/{helper_name}", dockerfile_text)
 
     def test_omeroserver_image_copies_healthcheck_helper(self) -> None:
-        """Verify Omeroserver image copies healthcheck helper.
+        """Verify omeroserver image copies healthcheck helper.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroserver image copies healthcheck helper.
         """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-server.Dockerfile"
@@ -361,9 +361,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("/startup/healthcheck-omeroserver.sh", dockerfile_text)
 
     def test_omeroserver_image_replaces_inherited_config_loader(self) -> None:
-        """Verify Omeroserver image replaces inherited config loader.
+        """Verify omeroserver image replaces inherited config loader.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroserver image replaces inherited config loader.
         """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-server.Dockerfile"
@@ -381,9 +381,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("/opt/omero/server/venv3/bin/omero", config_script_text)
 
     def test_server_bootstrap_schedules_dropbox_user_dir_sync(self) -> None:
-        """Verify Server bootstrap schedules dropbox user dir sync.
+        """Verify server bootstrap schedules dropbox user dir sync.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server bootstrap schedules dropbox user dir sync.
         """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
@@ -438,9 +438,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("/opt/omero/omero_data", script_text)
 
     def test_server_bootstrap_schedules_dropbox_ice_after_server_start(self) -> None:
-        """Verify Server bootstrap schedules dropbox ice after server start.
+        """Verify server bootstrap schedules dropbox ice after server start.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server bootstrap schedules dropbox ice after server start.
         """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-server.Dockerfile"
@@ -521,9 +521,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_dropbox_readiness_waits_do_not_use_hidden_defaults(
         self,
     ) -> None:
-        """Verify Installation dropbox readiness waits do not use hidden defaults.
+        """Verify installation dropbox readiness waits do not use hidden defaults.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation dropbox readiness waits do not use hidden defaults.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -585,9 +585,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_runs_job_service_group_sync_before_dropbox_waits(
         self,
     ) -> None:
-        """Verify Installation runs job service group sync before dropbox waits.
+        """Verify installation runs job service group sync before dropbox waits.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation runs job service group sync before dropbox waits.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -609,9 +609,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("dropbox_user_dir_wait_rc=$?", script_text)
 
     def test_server_bootstrap_uses_dedicated_runtime_tmp_slot(self) -> None:
-        """Verify Server bootstrap uses dedicated runtime tmp slot.
+        """Verify server bootstrap uses dedicated runtime tmp slot.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server bootstrap uses dedicated runtime tmp slot.
         """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
@@ -631,9 +631,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_server_bootstrap_schedules_binary_repository_cleanse_with_keepalive(
         self,
     ) -> None:
-        """Verify Server bootstrap schedules binary repository cleanse with keepalive.
+        """Verify server bootstrap schedules binary repository cleanse with keepalive.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server bootstrap schedules binary repository cleanse with keepalive.
         """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
@@ -653,9 +653,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_script_preserves_server_temp_namespace_ownership(
         self,
     ) -> None:
-        """Verify Installation script preserves server temp namespace ownership.
+        """Check that installation script preserves server temp namespace ownership remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation script preserves server temp namespace ownership integration.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -674,9 +674,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_script_reports_binary_repository_cleanse_runtime_hook(
         self,
     ) -> None:
-        """Verify Installation script reports binary repository cleanse runtime hook.
+        """Verify the installation script reports binary repository cleanse runtime hook execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation script reports binary repository cleanse runtime hook integration.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -694,9 +694,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_omeroserver_example_env_defines_binary_repository_cleanse_defaults(
         self,
     ) -> None:
-        """Verify Omeroserver example env defines binary repository cleanse defaults.
+        """Verify omeroserver example env defines binary repository cleanse defaults.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroserver example env defines binary repository cleanse defaults.
         """
         env_text = (self.repo_root / "env" / "omeroserver_example.env").read_text(
             encoding="utf-8"
@@ -708,9 +708,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("CONFIG_omero_managed_dir=/OMERO/ManagedRepository", env_text)
 
     def test_omeroserver_runtime_does_not_force_server_tree_cwd(self) -> None:
-        """Verify Omeroserver runtime does not force server tree cwd.
+        """Verify omeroserver runtime does not force server tree cwd.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroserver runtime does not force server tree cwd.
         """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-server.Dockerfile"
@@ -724,9 +724,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_database_secret_values_are_not_compose_interpolation_inputs(
         self,
     ) -> None:
-        """Verify Database secret values are not compose interpolation inputs.
+        """Check that database secret values are not compose interpolation inputs keeps sensitive data out of output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in database secret values are not compose interpolation inputs.
         """
         compose_text = (self.repo_root / "docker-compose.yml").read_text(
             encoding="utf-8"
@@ -760,9 +760,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_secret_derivation_entrypoints_are_tracked_and_executable(self) -> None:
-        """Verify Secret derivation entrypoints are tracked and executable.
+        """Check that secret derivation entrypoints are tracked and executable keeps sensitive data out of output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in secret derivation entrypoints are tracked and executable.
         """
         for relative_path in (
             "docker/postgres-entrypoint-from-env.sh",
@@ -776,9 +776,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 self.assertIn("Missing required environment variable", script_text)
 
     def test_supervisord_sets_writable_gunicorn_chdir_by_default(self) -> None:
-        """Verify Supervisord sets writable gunicorn chdir by default.
+        """Verify supervisord sets writable gunicorn chdir by default.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in supervisord sets writable gunicorn chdir by default.
         """
         supervisord_text = (self.repo_root / "supervisord.conf").read_text(
             encoding="utf-8"
@@ -814,9 +814,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_supervisord_uses_private_socket_without_checked_in_auth(self) -> None:
-        """Verify Supervisord uses private socket without checked in auth.
+        """Verify the supervisord uses private socket without checked in auth safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when supervisord uses private socket without checked in auth accepts unsafe input.
         """
         supervisord_text = (self.repo_root / "supervisord.conf").read_text(
             encoding="utf-8"
@@ -827,9 +827,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("password=%(ENV_SUPERVISOR_", supervisord_text)
 
     def test_github_pull_script_exports_compressed_build_env(self) -> None:
-        """Verify GitHub pull script exports compressed build env.
+        """Verify the github pull script exports compressed build env execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in github pull script exports compressed build env integration.
         """
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
             encoding="utf-8"
@@ -849,9 +849,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_pull_scripts_enable_transcript_capture(self) -> None:
-        """Verify Pull scripts enable transcript capture.
+        """Verify pull scripts enable transcript capture.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in pull scripts enable transcript capture.
         """
         scripts = [self.repo_root / "github_pull_project_bash_example"]
 
@@ -869,9 +869,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_script_publishes_transcript_destination_after_path_resolution(
         self,
     ) -> None:
-        """Verify Installation script publishes transcript destination after path resolution.
+        """Verify the installation script publishes transcript destination after path resolution execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when installation script publishes transcript destination after path resolution accepts unsafe input.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -890,9 +890,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("tty_read_line()", script_text)
 
     def test_public_pull_script_defaults_to_public_repo(self) -> None:
-        """Verify Public pull script defaults to public repo.
+        """Verify the public pull script defaults to public repo execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in public pull script defaults to public repo integration.
         """
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
             encoding="utf-8"
@@ -904,9 +904,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('REPO_BRANCH="${REPO_BRANCH:-main}"', script_text)
 
     def test_public_pull_script_is_https_only(self) -> None:
-        """Verify Public pull script is HTTPS only.
+        """Verify the public pull script is https only execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in public pull script is https only integration.
         """
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
             encoding="utf-8"
@@ -915,9 +915,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("supports only HTTP(S) repository URLs", script_text)
 
     def test_public_pull_script_protects_runtime_pull_helper(self) -> None:
-        """Verify Public pull script protects runtime pull helper.
+        """Verify the public pull script protects runtime pull helper execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in public pull script protects runtime pull helper integration.
         """
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
             encoding="utf-8"
@@ -931,7 +931,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_prometheus_yml_contains_crowdsec_probe_marker(self) -> None:
         """Verify prometheus yml contains crowdsec probe marker.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in prometheus yml contains crowdsec probe marker.
 
         The installation script uses the marker as the injection point. The actual
         CrowdSec probe line may or may not be present — the installation script
@@ -944,9 +944,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("# CROWDSEC_PROBE_MARKER", prom_text)
 
     def test_installation_script_injects_crowdsec_probe_conditionally(self) -> None:
-        """Verify Installation script injects crowdsec probe conditionally.
+        """Verify the installation script injects crowdsec probe conditionally execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation script injects crowdsec probe conditionally integration.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -957,9 +957,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("Removed CrowdSec health probe from prometheus.yml", script_text)
 
     def test_is_crowdsec_enabled_rejects_both_placeholder_values(self) -> None:
-        """Verify Is crowdsec enabled rejects both placeholder values.
+        """Confirm is crowdsec enabled rejects both placeholder values is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in is crowdsec enabled rejects both placeholder values.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -971,9 +971,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_script_schedules_one_shot_crowdsec_restart_only_when_needed(
         self,
     ) -> None:
-        """Verify Installation script schedules one shot crowdsec restart only when needed.
+        """Verify the installation script schedules one shot crowdsec restart only when needed execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation script schedules one shot crowdsec restart only when needed integration.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -995,9 +995,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("Scheduled one-time CrowdSec install auto-restart", script_text)
 
     def test_installation_script_prints_crowdsec_banner_before_compose_up(self) -> None:
-        """Verify Installation script prints crowdsec banner before compose up.
+        """Verify the installation script prints crowdsec banner before compose up execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation script prints crowdsec banner before compose up integration.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
@@ -1015,9 +1015,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_crowdsec_restart_helper_is_single_shot(self) -> None:
-        """Verify Crowdsec restart helper is single shot.
+        """Verify crowdsec restart helper is single shot.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in crowdsec restart helper is single shot.
         """
         helper_text = (
             self.repo_root / "installation" / "crowdsec_install_auto_restart.sh"
@@ -1029,9 +1029,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_crowdsec_entrypoint_enrolls_only_when_install_bootstrap_is_armed(
         self,
     ) -> None:
-        """Verify Crowdsec entrypoint enrolls only when install bootstrap is armed.
+        """Verify crowdsec entrypoint enrolls only when install bootstrap is armed.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in crowdsec entrypoint enrolls only when install bootstrap is armed.
         """
         entrypoint_text = (
             self.repo_root / "docker" / "crowdsec-entrypoint.sh"
@@ -1052,9 +1052,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("--overwrite", entrypoint_text)
 
     def test_crowdsec_forward_chains_wait_for_bouncer_sets(self) -> None:
-        """Verify Crowdsec forward chains wait for bouncer sets.
+        """Verify crowdsec forward chains wait for bouncer sets.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in crowdsec forward chains wait for bouncer sets.
         """
         entrypoint_text = (
             self.repo_root / "docker" / "crowdsec-entrypoint.sh"
@@ -1080,9 +1080,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_docker_compose_defaults_crowdsec_install_bootstrap_enroll_to_disabled(
         self,
     ) -> None:
-        """Verify Docker compose defaults crowdsec install bootstrap enroll to disabled.
+        """Verify docker compose defaults crowdsec install bootstrap enroll to disabled.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in docker compose defaults crowdsec install bootstrap enroll to disabled.
         """
         compose_text = (self.repo_root / "docker-compose.yml").read_text(
             encoding="utf-8"
@@ -1099,9 +1099,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_docker_compose_omeroserver_passes_omero_data_dir_and_omero_dir(
         self,
     ) -> None:
-        """Verify docker compose omeroserver passes OMERO data directory and OMERO directory.
+        """Verify docker compose omeroserver passes OMERO data dir and OMERO dir.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in docker compose omeroserver passes OMERO data dir and OMERO dir.
 
         The server must receive OMERO_DATA_DIR and OMERO_DIR so it resolves
         managed repository paths against the bind-mounted data volume, not the
@@ -1121,9 +1121,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_server_bootstrap_validates_managed_repository_before_startup(self) -> None:
-        """Verify Server bootstrap validates managed repository before startup.
+        """Verify server bootstrap validates managed repository before startup.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server bootstrap validates managed repository before startup.
         """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
@@ -1137,9 +1137,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_omeroserver_example_env_uses_absolute_managed_dir(self) -> None:
-        """Verify omeroserver example environment uses absolute managed directory.
+        """Verify omeroserver example env uses absolute managed dir.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroserver example env uses absolute managed dir.
 
         CONFIG_omero_managed_dir must be absolute so OMERO never resolves it
         against the server install directory. A relative value causes silent data
@@ -1161,9 +1161,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.fail("CONFIG_omero_managed_dir not found in omeroserver_example.env")
 
     def test_server_bootstrap_rejects_managed_dir_outside_omero_dir(self) -> None:
-        """Reject managed repository paths outside OMERO_DIR.
+        """Confirm server bootstrap rejects managed dir outside OMERO dir is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server bootstrap rejects managed dir outside OMERO dir.
 
         The managed-repository guard must check that the configured path lives
         inside OMERO_DIR and must produce a clear error when it does not, so the
@@ -1185,7 +1185,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_coveragerc_tracks_all_python_source_directories(self) -> None:
         """Verify coveragerc tracks all python source directories.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in coveragerc tracks all python source directories.
 
         Every plugin/library directory that contains Python source must appear in
         .coveragerc [run] source so coverage.py traces it.
@@ -1208,9 +1208,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             )
 
     def test_ci_workflow_runs_all_test_suites(self) -> None:
-        """Verify ci workflow runs all test suites.
+        """Verify the ci workflow runs all test suites execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in ci workflow runs all test suites integration.
 
         The CI workflow must run every test suite as a separate coverage
         invocation so the conftest mock stubs do not interfere.
@@ -1236,9 +1236,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             )
 
     def test_all_workflow_checkout_steps_use_verified_v6_pin(self) -> None:
-        """Verify All workflow checkout steps use verified v6 pin.
+        """Verify the all workflow checkout steps use verified v6 pin execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in all workflow checkout steps use verified v6 pin integration.
         """
         expected_checkout = "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd"
         workflow_dir = self.repo_root / ".github" / "workflows"
@@ -1259,9 +1259,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_security_code_scanning_workflow_includes_zero_delta_alert_gate(
         self,
     ) -> None:
-        """Verify Security code scanning workflow includes zero delta alert gate.
+        """Verify the security code scanning workflow includes zero delta alert gate execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when security code scanning workflow includes zero delta alert gate accepts unsafe input.
         """
         import yaml  # noqa: F811  — available in CI
 
@@ -1307,9 +1307,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("GITHUB_TOKEN: ${{ github.token }}", workflow_text)
 
     def test_standalone_security_delta_workflow_is_not_present(self) -> None:
-        """Verify Standalone security delta workflow is not present.
+        """Verify the standalone security delta workflow is not present execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when standalone security delta workflow is not present accepts unsafe input.
         """
         self.assertFalse(
             (self.repo_root / ".github" / "workflows" / "security-delta.yml").exists()
@@ -1318,7 +1318,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_codecov_yml_has_component_for_each_source_directory(self) -> None:
         """Verify codecov yml has component for each source directory.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in codecov yml has component for each source directory.
 
         Each plugin/library tracked in .coveragerc must have a matching Codecov
         project component so per-module coverage is reported.
@@ -1355,10 +1355,42 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 f"Codecov component for {prefix!r} is missing",
             )
 
-    def test_ci_workflows_install_from_pinned_requirement_manifests(self) -> None:
-        """Verify CI workflows install from pinned requirement manifests.
+    def test_codecov_denominator_scope_is_documented(self) -> None:
+        """Verify codecov denominator scope is documented.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in codecov denominator scope is documented.
+        """
+        operations_text = (
+            self.repo_root / "docs" / "operations" / "code-scanning.md"
+        ).read_text(encoding="utf-8")
+        for package_root in (
+            "omero_plugin_common/",
+            "omero_web_zarr/",
+            "omeroweb_admin_tools/",
+            "omeroweb_imaris_connector/",
+            "omeroweb_import/",
+            "omeroweb_omp_plugin/",
+            "omeroweb_tools/",
+        ):
+            self.assertIn(package_root, operations_text)
+        for excluded_root in (
+            "tools/",
+            "startup/",
+            "monitoring/",
+            "docker/",
+            "docs/",
+            "scripts/",
+            "env/",
+        ):
+            self.assertIn(excluded_root, operations_text)
+        self.assertIn(
+            "smaller than the repository's full Python footprint", operations_text
+        )
+
+    def test_ci_workflows_install_from_pinned_requirement_manifests(self) -> None:
+        """Verify ci workflows install from pinned requirement manifests.
+
+        Inputs: repository fixtures. Output: fails on regressions in ci workflows install from pinned requirement manifests.
         """
         tests_workflow = (
             self.repo_root / ".github" / "workflows" / "tests.yml"
@@ -1377,9 +1409,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_python_backed_ci_workflows_pin_exact_setup_python_runtime(self) -> None:
-        """Verify Python backed CI workflows pin exact setup Python runtime.
+        """Verify python backed ci workflows pin exact setup python runtime.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in python backed ci workflows pin exact setup python runtime.
         """
         import yaml  # noqa: F811  — available in CI
 
@@ -1406,9 +1438,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 self.assertEqual(expected, actual)
 
     def test_python_dependency_jobs_enable_setup_python_pip_cache(self) -> None:
-        """Verify Python dependency jobs enable setup Python pip cache.
+        """Verify python dependency jobs enable setup python pip cache.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in python dependency jobs enable setup python pip cache.
         """
         import yaml  # noqa: F811  — available in CI
 
@@ -1451,9 +1483,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 )
 
     def test_security_codeql_uses_build_free_interpreted_language_mode(self) -> None:
-        """Verify Security CodeQL uses build free interpreted language mode.
+        """Verify the security codeql uses build free interpreted language mode safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when security codeql uses build free interpreted language mode accepts unsafe input.
         """
         import yaml  # noqa: F811  — available in CI
 
@@ -1482,8 +1514,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertFalse(
             any(
-                step.get("uses")
-                == "github/codeql-action/autobuild@95e58e9a2cdfd71adc6e0353d5c52f41a045d225"
+                str(step.get("uses", "")).startswith("github/codeql-action/autobuild@")
                 for step in steps
             )
         )
@@ -1505,9 +1536,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_super_linter_workflow_is_pinned_and_covers_repo_hygiene_surfaces(
         self,
     ) -> None:
-        """Verify Super linter workflow is pinned and covers repo hygiene surfaces.
+        """Verify the super linter workflow is pinned and covers repo hygiene surfaces execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in super linter workflow is pinned and covers repo hygiene surfaces integration.
         """
         import yaml  # noqa: F811  — available in CI
 
@@ -1559,7 +1590,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             lint_step["env"]["DEFAULT_BRANCH"],
         )
         self.assertEqual(
-            "(^|/)third_party/(ecc-v1\\.10\\.0|caveman-v1\\.6\\.0)/",
+            "(^|/)third_party/(ecc-v1\\.10\\.0|caveman-v1\\.7\\.0)/",
             lint_step["env"]["FILTER_REGEX_EXCLUDE"],
         )
         self.assertEqual(".", lint_step["env"]["LINTER_RULES_PATH"])
@@ -1585,7 +1616,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertFalse(markdown_config["MD033"])
         self.assertEqual(
-            "third_party/ecc-v1.10.0/**\nthird_party/caveman-v1.6.0/**\n",
+            "third_party/ecc-v1.10.0/**\nthird_party/caveman-v1.7.0/**\n",
             (self.repo_root / ".markdownlintignore").read_text(encoding="utf-8"),
         )
 
@@ -1603,9 +1634,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_tests_workflow_uploads_codecov_via_oidc_without_environment_or_secret(
         self,
     ) -> None:
-        """Verify Tests workflow uploads Codecov via OIDC without environment or secret.
+        """Check that tests workflow uploads codecov via oidc without environment or secret keeps sensitive data out of output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in tests workflow uploads codecov via oidc without environment or secret integration.
         """
         import yaml  # noqa: F811  — available in CI
 
@@ -1643,9 +1674,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_security_workflow_avoids_unpinned_container_and_template_injection(
         self,
     ) -> None:
-        """Verify Security workflow avoids unpinned container and template injection.
+        """Check security workflow avoids unpinned container and template injection renders the expected surface.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when security workflow avoids unpinned container and template injection accepts unsafe input.
         """
         import yaml  # noqa: F811  — available in CI
 
@@ -1747,9 +1778,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_workflow_scanner_scope_exclusions_are_limited_and_audited(
         self,
     ) -> None:
-        """Verify Workflow scanner scope exclusions are limited and audited.
+        """Verify the workflow scanner scope exclusions are limited and audited execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in workflow scanner scope exclusions are limited and audited integration.
         """
         import yaml  # noqa: F811 - available in CI
 
@@ -1837,9 +1868,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("DevSkim `DS162092`", docs_text)
 
     def test_security_sarif_upload_jobs_can_read_workflow_run_metadata(self) -> None:
-        """Verify Security SARIF upload jobs can read workflow run metadata.
+        """Verify the security sarif upload jobs can read workflow run metadata execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when security sarif upload jobs can read workflow run metadata accepts unsafe input.
         """
         import yaml  # noqa: F811  — available in CI
 
@@ -1863,9 +1894,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             )
 
     def test_all_workflow_checkouts_disable_persisted_credentials(self) -> None:
-        """Verify All workflow checkouts disable persisted credentials.
+        """Verify the all workflow checkouts disable persisted credentials execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in all workflow checkouts disable persisted credentials integration.
         """
         import yaml  # noqa: F811  — available in CI
 
@@ -1882,9 +1913,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                         )
 
     def test_all_workflow_jobs_gate_runner_execution_to_default_branch(self) -> None:
-        """Verify All workflow jobs gate runner execution to default branch.
+        """Verify the all workflow jobs gate runner execution to default branch execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in all workflow jobs gate runner execution to default branch integration.
         """
         import yaml  # noqa: F811  — available in CI
 
@@ -1905,9 +1936,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                     )
 
     def test_dependabot_updates_define_cooldown_windows(self) -> None:
-        """Verify Dependabot updates define cooldown windows.
+        """Verify dependabot updates define cooldown windows.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in dependabot updates define cooldown windows.
         """
         import yaml  # noqa: F811  — available in CI
 
@@ -1919,9 +1950,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.assertGreaterEqual(update["cooldown"]["default-days"], 7)
 
     def test_ci_requirement_manifests_pin_every_dependency(self) -> None:
-        """Verify CI requirement manifests pin every dependency.
+        """Verify ci requirement manifests pin every dependency.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in ci requirement manifests pin every dependency.
         """
         requirement_paths = [
             self.repo_root / ".github" / "requirements" / "tests-ci.txt",
@@ -1979,9 +2010,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                     )
 
     def test_ci_requirement_source_manifests_exist(self) -> None:
-        """Verify CI requirement source manifests exist.
+        """Verify ci requirement source manifests exist.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in ci requirement source manifests exist.
         """
         source_paths = [
             self.repo_root / ".github" / "requirements" / "tests-ci.in",
@@ -1991,9 +2022,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.assertTrue(source_path.exists(), f"{source_path.name} is missing")
 
     def test_shell_helpers_avoid_global_ifs_mutation(self) -> None:
-        """Verify Shell helpers avoid global IFS mutation.
+        """Verify shell helpers avoid global ifs mutation.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in shell helpers avoid global ifs mutation.
         """
         extra_packages_script = (
             self.repo_root
@@ -2016,9 +2047,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_server_bootstrap_avoids_bash_operator_portability_findings(self) -> None:
-        """Verify Server bootstrap avoids bash operator portability findings.
+        """Verify server bootstrap avoids bash operator portability findings.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in server bootstrap avoids bash operator portability findings.
         """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"

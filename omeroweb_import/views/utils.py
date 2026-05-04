@@ -22,7 +22,7 @@ def current_username(request, conn):
 def load_json_body(request):
     """Return load JSON body.
 
-    Inputs: `request`. Output: computed value.
+    Inputs: `request` Django request. Output: JSON-compatible value.
     """
     payload, _error = parse_json_body(request)
     return payload if payload is not None else {}
@@ -37,9 +37,9 @@ def load_request_data(request):
 
 
 def json_error(message, status=200, extra=None):
-    """JSON error.
+    """Return the JSON error.
 
-    Inputs: `message`, `status`, `extra`. Output: `JsonResponse` result.
+    Inputs: `message`, `status` status, `extra`. Output: Django `JsonResponse`.
     """
     payload = {"ok": False, "error": message}
     if extra:
@@ -50,14 +50,15 @@ def json_error(message, status=200, extra=None):
 def require_non_root_user(view_func):
     """Non root user.
 
-    Inputs: `view_func`. Output: computed value.
+    Inputs: `view_func`. Output: `_wrapped`.
     """
 
     @wraps(view_func)
     def _wrapped(request, *args, conn=None, url=None, **kwargs):
-        """Wrapped.
+        """Call the wrapped view after resolving user and connector context.
 
-        Inputs: `request`, `conn`, `url`, `*args`, `**kwargs`. Output: computed value.
+        Inputs: `request` Django request, `*args` positional arguments, `conn` OMERO
+        gateway connection, `url` URL, `**kwargs` keyword arguments. Output: `view_func`
         """
         remaining_args = args
         if remaining_args and conn is None:

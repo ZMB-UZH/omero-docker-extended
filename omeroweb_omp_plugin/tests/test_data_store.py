@@ -15,7 +15,7 @@ class _FakeSqlTemplate:
     """Test double for fake SQL template."""
 
     def __init__(self, query):
-        """Initialize the instance.
+        """Create `_FakeSqlTemplate` with `query`.
 
         Inputs: `query`. Output: None.
         """
@@ -34,7 +34,7 @@ class _FakeSqlModule:
 
     @staticmethod
     def SQL(query):
-        """SQL.
+        """Return the SQL for `_FakeSqlModule`.
 
         Inputs: `query`. Output: `_FakeSqlTemplate` result.
         """
@@ -42,9 +42,9 @@ class _FakeSqlModule:
 
     @staticmethod
     def Identifier(name):
-        """Identifier.
+        """Return the identifier for `_FakeSqlModule`.
 
-        Inputs: `name`. Output: `name`.
+        Inputs: `name` name. Output: `name`.
         """
         return name
 
@@ -54,9 +54,9 @@ class _FakeExtras:
 
     @staticmethod
     def Json(payload):
-        """JSON.
+        """Return the JSON for `_FakeExtras`.
 
-        Inputs: `payload`. Output: dict.
+        Inputs: `payload` payload. Output: `dict`.
         """
         return {"json": payload}
 
@@ -65,7 +65,7 @@ class _FakeCursor:
     """Test double for fake cursor."""
 
     def __init__(self, *, fetchone=None, fetchall=None, rowcount=0, rowcounts=None):
-        """Initialize the instance.
+        """Create `_FakeCursor` with its default state.
 
         Inputs: `fetchone`, `fetchall`, `rowcount`, `rowcounts`. Output: None.
         """
@@ -76,7 +76,7 @@ class _FakeCursor:
         self.executed = []
 
     def execute(self, query, params=None):
-        """Execute the query or command.
+        """Execute `_FakeCursor`'s captured query or command.
 
         Inputs: `query`, `params`. Output: None.
         """
@@ -85,7 +85,7 @@ class _FakeCursor:
             self.rowcount = self.rowcounts.pop(0)
 
     def fetchone(self):
-        """Return one result row.
+        """Return one result row from `_FakeCursor`.
 
         Inputs: none. Output: `self.fetchone_value`.
         """
@@ -99,14 +99,14 @@ class _FakeCursor:
         return list(self.fetchall_value)
 
     def __enter__(self):
-        """Enter the context manager.
+        """Enter `_FakeCursor`'s context-managed fake resource.
 
         Inputs: none. Output: `self`.
         """
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        """Exit the context manager.
+        """Exit `_FakeCursor`'s context-managed fake resource.
 
         Inputs: `exc_type`, `exc`, `tb`. Output: bool.
         """
@@ -117,7 +117,7 @@ class _FakeConnection:
     """Test double for fake connection."""
 
     def __init__(self, cursors):
-        """Initialize the instance.
+        """Create `_FakeConnection` with `cursors`.
 
         Inputs: `cursors`. Output: None.
         """
@@ -135,39 +135,40 @@ class _FakeConnection:
         return self._cursors.pop(0)
 
     def commit(self):
-        """Commit the transaction.
+        """Commit `_FakeConnection`'s fake transaction.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.commits += 1
 
     def close(self):
-        """Close the resource.
+        """Close `_FakeConnection`'s fake resource handle.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.closed = True
 
 
 class _RaisingContext:
-    """Represent raising context."""
+    """Test double for raising context behavior in this module."""
 
     def __init__(self, error):
-        """Initialize the instance.
+        """Create `_RaisingContext` with `error`.
 
         Inputs: `error`. Output: None.
         """
         self.error = error
 
     def __enter__(self):
-        """Enter the context manager.
+        """Enter `_RaisingContext`'s context-managed fake resource.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
+        fail.
         """
         raise self.error
 
     def __exit__(self, exc_type, exc, tb):
-        """Exit the context manager.
+        """Exit `_RaisingContext`'s context-managed fake resource.
 
         Inputs: `exc_type`, `exc`, `tb`. Output: bool.
         """
@@ -175,17 +176,18 @@ class _RaisingContext:
 
 
 def _patch_connection_queue(monkeypatch, connections):
-    """Patch connection queue.
+    """Patch the connection queue.
 
-    Inputs: `monkeypatch`, `connections`. Output: yielded values.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `connections`. Output: iterator of
+    yielded items.
     """
     queue = list(connections)
 
     @contextmanager
     def fake_connect():
-        """Fake connect.
+        """Simulate connect so the surrounding test controls that dependency.
 
-        Inputs: none. Output: yielded values.
+        Inputs: none. Output: iterator of yielded items.
         """
         yield queue.pop(0)
 
@@ -193,9 +195,9 @@ def _patch_connection_queue(monkeypatch, connections):
 
 
 def test_connection_and_schema_helpers_cover_env_validation_and_cleanup(monkeypatch):
-    """Verify connection and schema helpers cover environment validation and cleanup.
+    """Check connection and schema helpers cover env validation and cleanup cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in connection and schema helpers cover env validation and cleanup.
     """
     env_values = {
         data_store.ENV_USER: "plugin-user",
@@ -251,9 +253,9 @@ def test_connection_and_schema_helpers_cover_env_validation_and_cleanup(monkeypa
 
 
 def test_crud_helpers_cover_variable_sets_credentials_and_user_cleanup(monkeypatch):
-    """Verify crud helpers cover variable sets credentials and user cleanup.
+    """Check crud helpers cover variable sets credentials and user cleanup cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in crud helpers cover variable sets credentials and user cleanup.
     """
     monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
@@ -304,9 +306,9 @@ def test_crud_helpers_cover_variable_sets_credentials_and_user_cleanup(monkeypat
 
 
 def test_delete_validation_and_table_listing_reject_unconfirmed_removals(monkeypatch):
-    """Verify delete validation and table listing reject unconfirmed removals.
+    """Confirm delete validation and table listing reject unconfirmed removals is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when delete validation and table listing reject unconfirmed removals stops reporting the expected error.
     """
     monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(data_store, "_ensure_schema", lambda conn: None)
@@ -338,20 +340,18 @@ def test_delete_validation_and_table_listing_reject_unconfirmed_removals(monkeyp
 def test_import_and_connection_helpers_raise_store_errors_on_backend_failures(
     monkeypatch,
 ):
-    """Verify import and connection helpers raise store errors on backend failures.
+    """Confirm import and connection helpers raise store errors on backend failures exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: `original_import` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in import and connection helpers raise store errors on backend failures.
+    Raises: ImportError when validation or the called operation fails.
     """
     original_import = builtins.__import__
 
     def failing_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):
-        """Failing import.
+        """Return the failing import.
 
-        Inputs: `name`, `global_vars`, `local_vars`, `fromlist`, `level`. Output:
-        `original_import` result. Raises on invalid or unavailable state.
+        Inputs: `name` name, `global_vars`, `local_vars`, `fromlist`, `level`. Output:
+        `original_import` result. Raises: ImportError for the exercised failure path.
         """
         if name == "psycopg2" or name.startswith("psycopg2"):
             raise ImportError("psycopg2 missing")
@@ -460,7 +460,7 @@ def test_crud_operations_wrap_unexpected_backend_failures(
 ):
     """Verify crud operations wrap unexpected backend failures.
 
-    Inputs: `monkeypatch`, `operation`, `args`, `error_type`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `operation`, `args`, `error_type`. Output: fails on regressions in crud operations wrap unexpected backend failures.
     """
     monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
@@ -482,9 +482,10 @@ def test_crud_operations_wrap_unexpected_backend_failures(
 def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
     monkeypatch,
 ):
-    """Verify cached import helpers and connection cleanup cover remaining branches.
+    """Check cached import helpers and connection cleanup cover remaining branches cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in cached import helpers and connection cleanup cover remaining branches.
+    when validation or the called operation fails.
     """
     sentinel_mod = object()
     sentinel_extras = object()
@@ -527,12 +528,12 @@ def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
         pass
 
     class _ClosingConnection(_FakeConnection):
-        """Represent closing connection."""
+        """Test double for closing connection behavior in this module."""
 
         def close(self):
-            """Close the resource.
+            """Close `_ClosingConnection`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close exploded")
 
@@ -562,9 +563,9 @@ def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
 def test_specific_store_error_paths_and_confirmation_failures_are_propagated(
     monkeypatch,
 ):
-    """Verify specific store error paths and confirmation failures are propagated.
+    """Confirm specific store error paths and confirmation failures are propagated exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when specific store error paths and confirmation failures are propagated stops reporting the expected error.
     """
     monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
@@ -639,7 +640,7 @@ def test_specific_store_error_paths_and_confirmation_failures_are_propagated(
 def test_real_psycopg2_loader_paths_cover_success_imports(monkeypatch):
     """Verify real psycopg2 loader paths cover success imports.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in real psycopg2 loader paths cover success imports.
     """
     data_store._PSYCOPG2_MODULES.module = None
     data_store._PSYCOPG2_MODULES.extras = None
@@ -654,9 +655,9 @@ def test_real_psycopg2_loader_paths_cover_success_imports(monkeypatch):
 
 
 def test_connect_re_raises_variable_store_errors_from_backend(monkeypatch):
-    """Verify connect re raises variable store errors from backend.
+    """Confirm connect re raises variable store errors from backend exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when connect re raises variable store errors from backend stops reporting the expected error.
     """
     monkeypatch.setattr(
         data_store,

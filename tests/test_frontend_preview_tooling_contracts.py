@@ -35,7 +35,7 @@ def load_frontend_preview_tooling():
 def test_frontend_preview_tooling_manifest_pins_expected_versions():
     """Verify frontend preview tooling manifest pins expected versions.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in frontend preview tooling manifest pins expected versions.
     """
     manifest_path = (
         Path(__file__).resolve().parents[1]
@@ -58,7 +58,7 @@ def test_frontend_preview_tooling_manifest_pins_expected_versions():
 def test_frontend_preview_wrapper_help_surfaces_supported_commands():
     """Verify frontend preview wrapper help surfaces supported commands.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in frontend preview wrapper help surfaces supported commands.
     """
     script_path = (
         Path(__file__).resolve().parents[1] / "tools" / "frontend_preview_tooling.py"
@@ -82,7 +82,7 @@ def test_frontend_preview_wrapper_help_surfaces_supported_commands():
 def test_frontend_preview_wrapper_requires_exact_node_version():
     """Verify frontend preview wrapper requires exact node version.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in frontend preview wrapper requires exact node version.
     """
     tooling = load_frontend_preview_tooling()
     manifest = {"node_version": "24.15.0"}
@@ -101,9 +101,9 @@ def test_frontend_preview_wrapper_requires_exact_node_version():
 
 
 def test_frontend_preview_safe_extract_rejects_path_traversal():
-    """Verify frontend preview safe extract rejects path traversal.
+    """Confirm frontend preview safe extract rejects path traversal is rejected at the boundary.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions when frontend preview safe extract rejects path traversal accepts unsafe input.
     """
     tooling = load_frontend_preview_tooling()
     with tempfile.TemporaryDirectory() as tmp:
@@ -121,9 +121,9 @@ def test_frontend_preview_safe_extract_rejects_path_traversal():
 
 
 def test_frontend_preview_node_release_path_allows_only_expected_artifacts():
-    """Verify frontend preview node release path allows only expected artifacts.
+    """Verify the frontend preview node release path allows only expected artifacts safety boundary.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions when frontend preview node release path allows only expected artifacts accepts unsafe input.
     """
     tooling = load_frontend_preview_tooling()
 
@@ -146,15 +146,17 @@ def test_frontend_preview_node_release_path_allows_only_expected_artifacts():
 def test_frontend_preview_download_uses_validated_curl_args(monkeypatch, tmp_path):
     """Verify frontend preview download uses validated curl args.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: call result.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` temporary path fixture.
+    Output: `CompletedProcess` result.
     """
     tooling = load_frontend_preview_tooling()
     calls = []
 
     def _fake_run(args, **kwargs):
-        """Fake run.
+        """Return `tests.test_frontend_preview_tooling_contracts`'s fake command result.
 
-        Inputs: `args`, `**kwargs`. Output: call result.
+        Inputs: `args` positional arguments, `**kwargs` keyword arguments. Output:
+        `CompletedProcess` result.
         """
         calls.append((args, kwargs))
         return subprocess.CompletedProcess(
@@ -182,17 +184,16 @@ def test_frontend_preview_download_uses_validated_curl_args(monkeypatch, tmp_pat
 def test_frontend_preview_safe_extract_does_not_call_extractall(monkeypatch):
     """Verify frontend preview safe extract does not call extractall.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in frontend preview safe extract does not call extractall.
+    AssertionError when validation or the called operation fails.
     """
     tooling = load_frontend_preview_tooling()
 
     def _fail_extractall(*args, **kwargs):
-        """Fail extractall.
+        """Record the fail extractall call on the test double for later assertions.
 
-        Inputs: `*args`, `**kwargs`. Output: None. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        None. Raises: AssertionError when validation or the called operation fails.
         """
         raise AssertionError("extractall must not be used")
 
@@ -230,7 +231,7 @@ def test_frontend_preview_safe_extract_does_not_call_extractall(monkeypatch):
 def test_frontend_preview_skill_points_to_wrapper_and_drops_stale_temp_setup():
     """Verify frontend preview skill points to wrapper and drops stale temp setup.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in frontend preview skill points to wrapper and drops stale temp setup.
     """
     skill_path = (
         Path(__file__).resolve().parents[1]
@@ -262,7 +263,7 @@ def test_frontend_preview_skill_points_to_wrapper_and_drops_stale_temp_setup():
 def test_frontend_preview_vitest_config_exposes_browser_mode_support():
     """Verify frontend preview vitest config exposes browser mode support.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in frontend preview vitest config exposes browser mode support.
     """
     config_path = (
         Path(__file__).resolve().parents[1]
@@ -287,7 +288,7 @@ def test_frontend_preview_vitest_config_exposes_browser_mode_support():
 def test_frontend_preview_vite_config_allows_explicit_temp_spec_paths():
     """Verify frontend preview vite config allows explicit temp spec paths.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in frontend preview vite config allows explicit temp spec paths.
     """
     config_path = (
         Path(__file__).resolve().parents[1]

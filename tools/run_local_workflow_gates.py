@@ -26,7 +26,7 @@ DEFAULT_ARTIFACT_DIR = REPO_ROOT / ".cache" / "local-workflow-gates"
 
 @dataclass(frozen=True)
 class BanditTargets:
-    """Represent bandit targets."""
+    """Helper type for bandit targets behavior."""
 
     scan_dirs: tuple[str, ...]
     package_test_dirs: tuple[str, ...]
@@ -36,7 +36,7 @@ class BanditTargets:
 
 @dataclass(frozen=True)
 class GateContext:
-    """Represent gate context."""
+    """Helper type for gate context behavior."""
 
     repo_root: Path
     artifact_dir: Path
@@ -50,9 +50,10 @@ class GateError(RuntimeError):
 
 
 def _require_executable(name: str, context: GateContext | None = None) -> str:
-    """Executable.
+    """Require the executable.
 
-    Inputs: `name`, `context`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name, `context` (GateContext | None). Output: `str`. Raises:
+    GateError when validation or the called operation fails.
     """
     if context is not None:
         venv_executable = context.tool_venv / "bin" / name
@@ -80,8 +81,9 @@ def _run(
 ) -> subprocess.CompletedProcess[str]:
     """A labeled command and optionally enforce success.
 
-    Inputs: `command`, `cwd`, `env`, `label`, `check`. Output:
-    `subprocess.CompletedProcess[str]`. Raises on invalid or unavailable state.
+    Inputs: `command` (Sequence[str]), `cwd` (Path) working directory, `env` (dict[str,
+    str] | None) environment mapping, `label` (str), `check` (bool). Output:
+    `subprocess.CompletedProcess[str]`. Raises: GateError for the exercised failure path.
     """
     print(f"\n==> {label}", flush=True)
     print("+ " + " ".join(command), flush=True)
@@ -98,9 +100,10 @@ def _run(
 
 
 def _git_stdout(repo_root: Path, *args: str) -> str | None:
-    """Git stdout.
+    """Return the git stdout.
 
-    Inputs: `repo_root`, `*args`. Output: `str | None`.
+    Inputs: `repo_root` (Path), `*args` (str) positional arguments. Output: `str |
+    None`.
     """
     git = _require_executable("git")
     result = subprocess.run(
@@ -116,9 +119,9 @@ def _git_stdout(repo_root: Path, *args: str) -> str | None:
 
 
 def _upstream_remote(repo_root: Path) -> str:
-    """Upstream remote.
+    """Return the upstream remote.
 
-    Inputs: `repo_root`. Output: `str`.
+    Inputs: `repo_root` (Path). Output: `str`.
     """
     stdout = _git_stdout(
         repo_root,
@@ -134,9 +137,9 @@ def _upstream_remote(repo_root: Path) -> str:
 
 
 def _configured_remotes(repo_root: Path) -> tuple[str, ...]:
-    """Configured remotes.
+    """Return the configured remotes.
 
-    Inputs: `repo_root`. Output: `tuple[str, ...]`.
+    Inputs: `repo_root` (Path). Output: `tuple[str, ...]`.
     """
     stdout = _git_stdout(repo_root, "remote")
     if not stdout:
@@ -145,9 +148,9 @@ def _configured_remotes(repo_root: Path) -> tuple[str, ...]:
 
 
 def _preferred_remotes(repo_root: Path) -> tuple[str, ...]:
-    """Preferred remotes.
+    """Return the preferred remotes.
 
-    Inputs: `repo_root`. Output: `tuple[str, ...]`.
+    Inputs: `repo_root` (Path). Output: `tuple[str, ...]`.
     """
     preferred_remotes: list[str] = []
     upstream_remote = _upstream_remote(repo_root)
@@ -160,9 +163,9 @@ def _preferred_remotes(repo_root: Path) -> tuple[str, ...]:
 
 
 def _remote_head_branch(repo_root: Path, remote_name: str) -> str:
-    """Remote head branch.
+    """Return the remote head branch.
 
-    Inputs: `repo_root`, `remote_name`. Output: `str`.
+    Inputs: `repo_root` (Path), `remote_name` (str). Output: `str`.
     """
     stdout = _git_stdout(repo_root, "remote", "show", remote_name)
     if not stdout:
@@ -175,9 +178,9 @@ def _remote_head_branch(repo_root: Path, remote_name: str) -> str:
 
 
 def _symbolic_remote_head_branch(repo_root: Path, remote_name: str) -> str:
-    """Symbolic remote head branch.
+    """Return the symbolic remote head branch.
 
-    Inputs: `repo_root`, `remote_name`. Output: `str`.
+    Inputs: `repo_root` (Path), `remote_name` (str). Output: `str`.
     """
     stdout = _git_stdout(
         repo_root,
@@ -193,9 +196,9 @@ def _symbolic_remote_head_branch(repo_root: Path, remote_name: str) -> str:
 
 
 def _first_default_branch_candidate(repo_root: Path) -> str:
-    """First default branch candidate.
+    """Return the first default branch candidate.
 
-    Inputs: `repo_root`. Output: `str`.
+    Inputs: `repo_root` (Path). Output: `str`.
     """
     preferred_remotes = _preferred_remotes(repo_root)
     for remote_name in preferred_remotes:
@@ -212,9 +215,10 @@ def _first_default_branch_candidate(repo_root: Path) -> str:
 
 
 def _default_branch(repo_root: Path) -> str:
-    """Default branch.
+    """Return the default branch.
 
-    Inputs: `repo_root`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `repo_root` (Path). Output: `str`. Raises: GateError when validation or
+    external operations fail.
     """
     configured = os.environ.get("DEFAULT_BRANCH")
     if configured:
@@ -231,9 +235,10 @@ def _default_branch(repo_root: Path) -> str:
 
 
 def _run_many(context: GateContext, steps: Sequence[tuple[str, Sequence[str]]]) -> None:
-    """Many.
+    """Run the many.
 
-    Inputs: `context`, `steps`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `context` (GateContext), `steps` (Sequence[tuple[str, Sequence[str]]]).
+    Output: None. Raises: GateError when validation or the called operation fails.
     """
     failures: list[str] = []
     for label, command in steps:
@@ -249,9 +254,9 @@ def _run_many(context: GateContext, steps: Sequence[tuple[str, Sequence[str]]]) 
 
 
 def _install_python_workflow_dependencies(context: GateContext) -> None:
-    """Install python workflow dependencies.
+    """Install the python workflow dependencies.
 
-    Inputs: `context`. Output: None.
+    Inputs: `context` (GateContext). Output: None.
     """
     if not (context.tool_venv / "bin" / "python").is_file():
         _run(
@@ -291,9 +296,10 @@ def _install_python_workflow_dependencies(context: GateContext) -> None:
 
 
 def _read_required_ruff_version(repo_root: Path) -> str:
-    """Read required ruff version.
+    """Read the required ruff version.
 
-    Inputs: `repo_root`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `repo_root` (Path). Output: `str`. Raises: GateError when validation or
+    external operations fail.
     """
     for line in (repo_root / ".ruff.toml").read_text(encoding="utf-8").splitlines():
         key, separator, raw_value = line.partition("=")
@@ -306,9 +312,10 @@ def _read_required_ruff_version(repo_root: Path) -> str:
 
 
 def _read_super_linter_image(repo_root: Path) -> str:
-    """Read super linter image.
+    """Read the super linter image.
 
-    Inputs: `repo_root`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `repo_root` (Path). Output: `str`. Raises: GateError when validation or
+    external operations fail.
     """
     workflow_text = (
         repo_root / ".github" / "workflows" / "super-linter.yml"
@@ -401,7 +408,8 @@ def run_vulture(context: GateContext) -> None:
 def run_tests(context: GateContext) -> None:
     """Split pytest suites with coverage.
 
-    Inputs: `context`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `context` (GateContext). Output: None. Raises: GateError when validation or
+    external operations fail.
     """
     python = context.python
     suites = (
@@ -492,9 +500,9 @@ def run_tests(context: GateContext) -> None:
 
 
 def discover_bandit_targets(repo_root: Path) -> BanditTargets:
-    """Discover bandit targets.
+    """Discover the bandit targets.
 
-    Inputs: `repo_root`. Output: `BanditTargets`.
+    Inputs: `repo_root` (Path). Output: `BanditTargets`.
     """
     scan_dirs = tuple(
         sorted(
@@ -527,9 +535,9 @@ def discover_bandit_targets(repo_root: Path) -> BanditTargets:
 
 
 def _sarif_result_count(path: Path) -> int:
-    """Sarif result count.
+    """Return the sarif result count.
 
-    Inputs: `path`. Output: `int`.
+    Inputs: `path` (Path) path. Output: `int`.
     """
     with path.open(encoding="utf-8") as handle:
         data = json.load(handle)
@@ -539,7 +547,8 @@ def _sarif_result_count(path: Path) -> int:
 def run_bandit(context: GateContext) -> None:
     """Bandit scans and fail on SARIF findings.
 
-    Inputs: `context`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `context` (GateContext). Output: None. Raises: GateError when validation or
+    external operations fail.
     """
     bandit = _require_executable("bandit", context)
     context.artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -703,9 +712,9 @@ PROFILES: dict[str, tuple[GateRunner, ...]] = {
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    """Parse args.
+    """Parse command-line arguments for `tools.run_local_workflow_gates`.
 
-    Inputs: `argv`. Output: `argparse.Namespace`.
+    Inputs: `argv` (Sequence[str]) command-line arguments. Output: `argparse.Namespace`.
     """
     parser = argparse.ArgumentParser(
         description="Run locally reproducible gates from the GitHub workflows."
@@ -755,7 +764,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.run_local_workflow_gates` command entrypoint.
 
     Inputs: `argv`. Output: `int`.
     """

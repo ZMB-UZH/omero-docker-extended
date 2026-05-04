@@ -32,7 +32,7 @@ def test_ttl_cache_handles_loader_failures_inflight_results_and_pruning(
 ) -> None:
     """Verify ttl cache handles loader failures inflight results and pruning.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in ttl cache handles loader failures inflight results and pruning.
     """
     current_time = [100.0]
     monkeypatch.setattr(log_query_module.time, "monotonic", lambda: current_time[0])
@@ -71,12 +71,12 @@ def test_ttl_cache_handles_loader_failures_inflight_results_and_pruning(
     assert cache._total_size_bytes == 4
 
     class _StalePopDict(dict):
-        """Represent stale pop dict."""
+        """Test double for stale pop dict behavior in this module."""
 
         def pop(self, key, default=None):
-            """Pop.
+            """Remove the pop for `_StalePopDict`.
 
-            Inputs: `key`, `default`. Output: `super().pop` result or None.
+            Inputs: `key` lookup key, `default`. Output: `pop` result.
             """
             if key == "stale":
                 super().pop(key, None)
@@ -104,7 +104,7 @@ def test_ttl_cache_handles_loader_failures_inflight_results_and_pruning(
 def test_log_query_helpers_cover_internal_containers_caps_and_serialization() -> None:
     """Verify log query helpers cover internal containers caps and serialization.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in log query helpers cover internal containers caps and serialization.
     """
     entries = [
         LogEntry(
@@ -172,7 +172,7 @@ def test_log_query_level_and_filesystem_helpers_cover_remaining_edges(
 ) -> None:
     """Verify log query level and filesystem helpers cover remaining edges.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in log query level and filesystem helpers cover remaining edges.
     """
     log_file = tmp_path / "master.err"
     log_file.write_text("payload", encoding="utf-8")
@@ -218,7 +218,7 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
 ) -> None:
     """Verify log query remaining runtime paths cover loki failures job errors and empty labels.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in log query remaining runtime paths cover loki failures job errors and empty labels.
     """
     config = log_query_module.LogConfig(
         loki_url="https://loki.example.test:3100",
@@ -302,21 +302,21 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
         """Test double for fake executor."""
 
         def __init__(self, max_workers):
-            """Initialize the instance.
+            """Create `_FakeExecutor` with `max_workers`.
 
             Inputs: `max_workers`. Output: None.
             """
             self.max_workers = max_workers
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_FakeExecutor`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_FakeExecutor`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -324,10 +324,10 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
 
         @staticmethod
         def submit(fn, config, job, lookback_seconds, max_entries, since_ns):
-            """Submit.
+            """Return the submit for `_FakeExecutor`.
 
-            Inputs: `fn`, `config`, `job`, `lookback_seconds`, `max_entries`,
-            `since_ns`. Output: `future`.
+            Inputs: `fn`, `config` configuration, `job`, `lookback_seconds`,
+            `max_entries`, `since_ns`. Output: `future`.
             """
             future = concurrent.futures.Future()
             if job is docker_job:
@@ -345,9 +345,9 @@ def test_log_query_remaining_runtime_paths_cover_loki_failures_job_errors_and_em
     )
 
     def _as_completed(futures):
-        """As completed.
+        """Return the as completed.
 
-        Inputs: `futures`. Output: `list` result.
+        Inputs: `futures`. Output: `list`.
         """
         return list(futures)
 

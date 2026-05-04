@@ -14,7 +14,7 @@ from omeroweb_tools.services import enhanced_search_service as service
 def test_parse_search_query_validates_scope_and_date_ranges():
     """Verify parse search query validates scope and date ranges.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in parse search query validates scope and date ranges.
     """
     query, errors = service.parse_search_query(
         {
@@ -34,7 +34,7 @@ def test_parse_search_query_validates_scope_and_date_ranges():
 def test_parse_search_query_accepts_display_date_formats():
     """Verify parse search query accepts display date formats.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in parse search query accepts display date formats.
     """
     query, errors = service.parse_search_query(
         {
@@ -60,7 +60,7 @@ def test_parse_search_query_accepts_display_date_formats():
 def test_search_query_display_dates_do_not_localize_end_of_day_forward():
     """Verify search query display dates do not localize end of day forward.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in search query display dates do not localize end of day forward.
     """
     assert service.SearchQuery().acquisition_date_from_display == ""
     assert service.SearchQuery().acquisition_date_to_display == ""
@@ -89,9 +89,9 @@ def test_search_query_display_dates_do_not_localize_end_of_day_forward():
 
 
 def test_saved_query_redirect_url_urlencodes_payload():
-    """Verify saved query redirect URL urlencodes payload.
+    """Verify saved query redirect URL urlencodes payload result shape.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in saved query redirect URL urlencodes payload.
     """
     with override_settings(ROOT_URLCONF="omeroweb_tools.urls"):
         target = service.saved_query_redirect_url(
@@ -109,9 +109,9 @@ def test_saved_query_redirect_url_urlencodes_payload():
 
 
 def test_search_without_live_omero_connection_returns_empty_payload():
-    """Verify search without live OMERO connection returns empty payload.
+    """Verify search without live OMERO connection returns empty payload result shape.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in search without live OMERO connection returns empty payload.
     """
     payload = service.search(
         None,
@@ -130,9 +130,9 @@ def test_search_without_live_omero_connection_returns_empty_payload():
 
 
 def test_search_without_query_text_or_date_filters_returns_empty_payload():
-    """Verify search without query text or date filters returns empty payload.
+    """Verify search without query text or date filters returns empty payload result shape.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in search without query text or date filters returns empty payload.
     """
     payload = service.search(
         object(),
@@ -153,7 +153,7 @@ def test_search_without_query_text_or_date_filters_returns_empty_payload():
 def test_search_omero_builtin_scope_runs_without_acquisition_index(monkeypatch):
     """Verify search OMERO builtin scope runs without acquisition index.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in search OMERO builtin scope runs without acquisition index.
     """
     calls = []
     monkeypatch.setattr(
@@ -182,7 +182,7 @@ def test_search_omero_builtin_scope_runs_without_acquisition_index(monkeypatch):
 def test_search_does_not_query_user_index_without_current_user(monkeypatch):
     """Verify search does not query user index without current user.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in search does not query user index without current user.
     """
     called = []
     monkeypatch.setattr(
@@ -232,21 +232,22 @@ def test_search_runs_with_one_sided_date_filters(
 ):
     """Verify search runs with one sided date filters.
 
-    Inputs: `monkeypatch`, `query`, `expected_filter_key`. Output: computed value.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `query`, `expected_filter_key`.
+    Output: `self`.
     """
 
     class _DbConn:
-        """Represent database conn."""
+        """Test double for database conn behavior in this module."""
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_DbConn`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_DbConn`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -326,7 +327,7 @@ def test_search_runs_with_one_sided_date_filters(
 def test_sync_state_needs_refresh_for_stale_running_state(monkeypatch):
     """Verify sync state needs refresh for stale running state.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in sync state needs refresh for stale running state.
     """
     monkeypatch.setattr(
         service,
@@ -345,7 +346,7 @@ def test_sync_state_needs_refresh_for_stale_running_state(monkeypatch):
 def test_sync_state_needs_refresh_for_recent_running_state(monkeypatch):
     """Verify sync state needs refresh for recent running state.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in sync state needs refresh for recent running state.
     """
     monkeypatch.setattr(
         service,
@@ -364,21 +365,21 @@ def test_sync_state_needs_refresh_for_recent_running_state(monkeypatch):
 def test_save_user_settings_clears_current_user_scope_when_disabled(monkeypatch):
     """Verify save user settings clears current user scope when disabled.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in save user settings clears current user scope when disabled.
     """
 
     class _DbConn:
-        """Represent database conn."""
+        """Test double for database conn behavior in this module."""
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_DbConn`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_DbConn`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -439,21 +440,21 @@ def test_save_user_settings_clears_current_user_scope_when_disabled(monkeypatch)
 def test_save_user_settings_auto_starts_indexing_for_enabled_user(monkeypatch):
     """Verify save user settings auto starts indexing for enabled user.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in save user settings auto starts indexing for enabled user.
     """
 
     class _DbConn:
-        """Represent database conn."""
+        """Test double for database conn behavior in this module."""
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_DbConn`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_DbConn`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -512,9 +513,9 @@ def test_save_user_settings_auto_starts_indexing_for_enabled_user(monkeypatch):
 
 
 def test_scope_from_key_rejects_non_user_scopes():
-    """Verify scope from key rejects non user scopes.
+    """Confirm scope from key rejects non user scopes is rejected at the boundary.
 
-    Inputs: none. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in scope from key rejects non user scopes.
     """
     assert service.scope_from_key("dataset:7") is None
     assert service.scope_from_key("group:9") is None
@@ -525,7 +526,7 @@ def test_ensure_user_index_sync_autostarts_enabled_user_when_state_is_missing(
 ):
     """Verify ensure user index sync autostarts enabled user when state is missing.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in ensure user index sync autostarts enabled user when state is missing.
     """
     monkeypatch.setattr(
         service,
@@ -573,7 +574,7 @@ def test_ensure_user_index_sync_autostarts_enabled_user_when_state_is_missing(
 def test_ensure_user_index_sync_skips_recent_success(monkeypatch):
     """Verify ensure user index sync skips recent success.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in ensure user index sync skips recent success.
     """
     recent_success = datetime.now(timezone.utc) - timedelta(seconds=30)
     monkeypatch.setattr(
@@ -629,7 +630,7 @@ def test_ensure_user_index_sync_skips_recent_success(monkeypatch):
 def test_search_merges_omero_and_acquisition_results(monkeypatch):
     """Verify search merges OMERO and acquisition results.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in search merges OMERO and acquisition results.
     """
     monkeypatch.setattr(
         service, "runtime_config", lambda: SimpleNamespace(max_results=10)
@@ -638,17 +639,17 @@ def test_search_merges_omero_and_acquisition_results(monkeypatch):
     monkeypatch.setattr(service, "_current_user_id", lambda conn: 11)
 
     class _DbConn:
-        """Represent database conn."""
+        """Test double for database conn behavior in this module."""
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_DbConn`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_DbConn`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -756,9 +757,9 @@ def test_search_merges_omero_and_acquisition_results(monkeypatch):
     )
 
     def _image(name):
-        """Image.
+        """Return the image.
 
-        Inputs: `name`. Output: `SimpleNamespace` result.
+        Inputs: `name` name. Output: `SimpleNamespace` result.
         """
         return SimpleNamespace(getName=lambda: name)
 
@@ -800,16 +801,16 @@ def test_search_merges_omero_and_acquisition_results(monkeypatch):
 def test_all_indexed_search_dispatches_independent_sources_concurrently(monkeypatch):
     """Verify all indexed search dispatches independent sources concurrently.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in all indexed search dispatches independent sources concurrently.
     """
     events = []
     executor_inits = []
 
     class _Future:
-        """Represent future."""
+        """Test double for future behavior in this module."""
 
         def __init__(self, func, kwargs):
-            """Initialize the instance.
+            """Create `_Future` with `func` and `kwargs`.
 
             Inputs: `func`, `kwargs`. Output: None.
             """
@@ -825,10 +826,10 @@ def test_all_indexed_search_dispatches_independent_sources_concurrently(monkeypa
             return self._func(**self._kwargs)
 
     class _Executor:
-        """Represent executor."""
+        """Test double for executor behavior in this module."""
 
         def __init__(self, max_workers, thread_name_prefix):
-            """Initialize the instance.
+            """Create `_Executor` with `max_workers` and `thread_name_prefix`.
 
             Inputs: `max_workers`, `thread_name_prefix`. Output: None.
             """
@@ -840,14 +841,14 @@ def test_all_indexed_search_dispatches_independent_sources_concurrently(monkeypa
             )
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_Executor`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_Executor`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -855,9 +856,9 @@ def test_all_indexed_search_dispatches_independent_sources_concurrently(monkeypa
 
         @staticmethod
         def submit(func, **kwargs):
-            """Submit.
+            """Return the submit for `_Executor`.
 
-            Inputs: `func`, `**kwargs`. Output: `_Future` result.
+            Inputs: `func`, `**kwargs` keyword arguments. Output: `_Future` result.
             """
             events.append("submit-acquisition")
             return _Future(func, kwargs)
@@ -904,18 +905,18 @@ def test_all_indexed_search_dispatches_independent_sources_concurrently(monkeypa
 def test_search_omero_builtin_rows_uses_prefix_query_for_partial_matching(monkeypatch):
     """Verify search OMERO builtin rows uses prefix query for partial matching.
 
-    Inputs: `monkeypatch`. Output: list.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in search OMERO builtin rows uses prefix query for partial matching.
     """
     captured = {}
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         @staticmethod
         def searchObjects(obj_types, text, **kwargs):
-            """Search objects.
+            """Return the search Objects for `_Conn`.
 
-            Inputs: `obj_types`, `text`, `**kwargs`. Output: list.
+            Inputs: `obj_types`, `text`, `**kwargs` keyword arguments. Output: `list`.
             """
             captured["obj_types"] = obj_types
             captured["text"] = text
@@ -936,18 +937,18 @@ def test_search_omero_builtin_rows_uses_prefix_query_for_partial_matching(monkey
 def test_search_omero_builtin_rows_drops_single_letter_noise_terms(monkeypatch):
     """Verify search OMERO builtin rows drops single letter noise terms.
 
-    Inputs: `monkeypatch`. Output: list.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in search OMERO builtin rows drops single letter noise terms.
     """
     captured = {}
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         @staticmethod
         def searchObjects(obj_types, text, **kwargs):
-            """Search objects.
+            """Return the search Objects for `_Conn`.
 
-            Inputs: `obj_types`, `text`, `**kwargs`. Output: list.
+            Inputs: `obj_types`, `text`, `**kwargs` keyword arguments. Output: `list`.
             """
             captured["obj_types"] = obj_types
             captured["text"] = text
@@ -968,7 +969,7 @@ def test_search_omero_builtin_rows_drops_single_letter_noise_terms(monkeypatch):
 def test_request_scope_sync_dispatches_celery_task(monkeypatch):
     """Verify request scope sync dispatches celery task.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in request scope sync dispatches celery task.
     """
     scope = service.EnhancedSearchScope("user", 7, "Your universal metadata index")
     monkeypatch.setattr(service, "scope_from_key", lambda scope_key, label=None: scope)
@@ -989,17 +990,17 @@ def test_request_scope_sync_dispatches_celery_task(monkeypatch):
     )
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_Conn`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_Conn`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -1043,9 +1044,9 @@ def test_request_scope_sync_dispatches_celery_task(monkeypatch):
 
 
 def test_request_scope_sync_marks_error_when_celery_dispatch_fails(monkeypatch):
-    """Verify request scope sync marks error when celery dispatch fails.
+    """Confirm request scope sync marks error when celery dispatch fails exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when request scope sync marks error when celery dispatch fails stops reporting the expected error.
     """
     scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
     monkeypatch.setattr(service, "scope_from_key", lambda scope_key, label=None: scope)
@@ -1066,17 +1067,17 @@ def test_request_scope_sync_marks_error_when_celery_dispatch_fails(monkeypatch):
     )
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_Conn`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_Conn`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -1130,7 +1131,7 @@ def test_request_scope_sync_marks_error_when_celery_dispatch_fails(monkeypatch):
 def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
     """Verify dispatch scope sync task uses explicit broker connection.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in dispatch scope sync task uses explicit broker connection.
     """
     send_calls = {}
 
@@ -1138,7 +1139,7 @@ def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
         """Test double for fake connection."""
 
         def __init__(self, url):
-            """Initialize the instance.
+            """Create `_FakeConnection` with `url`.
 
             Inputs: `url`. Output: None.
             """
@@ -1146,7 +1147,7 @@ def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
             self.closed = False
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_FakeConnection`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
@@ -1154,7 +1155,7 @@ def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_FakeConnection`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -1167,9 +1168,10 @@ def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
 
         @staticmethod
         def send_task(name, *, args, queue, connection):
-            """Send task.
+            """Send the task for `_FakeApp`.
 
-            Inputs: `name`, `args`, `queue`, `connection`. Output: None.
+            Inputs: `name` name, `args` positional arguments, `queue`, `connection`.
+            Output: None.
             """
             send_calls.update(
                 {
@@ -1212,7 +1214,7 @@ def test_dispatch_scope_sync_task_uses_explicit_broker_connection(monkeypatch):
 def test_request_scope_sync_uses_thread_fallback_when_celery_is_disabled(monkeypatch):
     """Verify request scope sync uses thread fallback when celery is disabled.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in request scope sync uses thread fallback when celery is disabled.
     """
     scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
     monkeypatch.setattr(service, "scope_from_key", lambda scope_key, label=None: scope)
@@ -1228,17 +1230,17 @@ def test_request_scope_sync_uses_thread_fallback_when_celery_is_disabled(monkeyp
     )
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_Conn`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_Conn`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -1271,25 +1273,23 @@ def test_request_scope_sync_uses_thread_fallback_when_celery_is_disabled(monkeyp
 def test_process_sync_batch_stops_when_sync_lease_is_not_active(monkeypatch):
     """Verify process sync batch stops when sync lease is not active.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in process sync batch stops when sync lease is not active.
+    AssertionError when validation or the called operation fails.
     """
     scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_Conn`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_Conn`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -1320,39 +1320,39 @@ def test_process_sync_batch_stops_when_sync_lease_is_not_active(monkeypatch):
 def test_process_sync_batch_commits_after_progress_update(monkeypatch):
     """Verify process sync batch commits after progress update.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in process sync batch commits after progress update.
     """
     scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
     lease_id = f"{scope.scope_key}:lease"
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_Conn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.commits = 0
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_Conn`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_Conn`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
             return False
 
         def commit(self):
-            """Commit the transaction.
+            """Commit `_Conn`'s fake transaction.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.commits += 1
 
@@ -1411,24 +1411,24 @@ def test_process_sync_batch_commits_after_progress_update(monkeypatch):
 def test_process_sync_batch_skips_non_callable_commit_attribute(monkeypatch):
     """Verify process sync batch skips non callable commit attribute.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in process sync batch skips non callable commit attribute.
     """
     scope = service.EnhancedSearchScope("user", 9, "Your universal metadata index")
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         commit = "not-callable"
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_Conn`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_Conn`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """

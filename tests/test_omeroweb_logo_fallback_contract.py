@@ -9,16 +9,16 @@ class OmeroWebLogoFallbackContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `OmeroWebLogoFallbackContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def test_omeroweb_dockerfile_copies_logo_fallback_writer(self) -> None:
         """Verify omeroweb dockerfile copies logo fallback writer.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroweb dockerfile copies logo fallback writer.
         """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-web.Dockerfile"
@@ -29,9 +29,9 @@ class OmeroWebLogoFallbackContractTests(unittest.TestCase):
         )
 
     def test_web_bootstrap_uses_logo_fallback_writer_path(self) -> None:
-        """Verify web bootstrap uses logo fallback writer path.
+        """Verify the web bootstrap uses logo fallback writer path safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when web bootstrap uses logo fallback writer path accepts unsafe input.
         """
         bootstrap_text = (self.repo_root / "startup" / "10-web-bootstrap.sh").read_text(
             encoding="utf-8"

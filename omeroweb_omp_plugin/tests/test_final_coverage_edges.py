@@ -11,15 +11,15 @@ from omeroweb_omp_plugin.views import ai_credentials_view, index_view
 
 
 def _json_payload(response):
-    """JSON payload.
+    """Return the JSON payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
 
 def _unwrap_view(func):
-    """Unwrap view.
+    """Return the unwrap view.
 
     Inputs: `func`. Output: `func`.
     """
@@ -29,17 +29,17 @@ def _unwrap_view(func):
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._raw_value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self._raw_value`.
         """
@@ -47,10 +47,10 @@ class _Value:
 
 
 class _Image:
-    """Represent image."""
+    """Test double for image behavior in this module."""
 
     def __init__(self, image_id, name):
-        """Initialize the instance.
+        """Create `_Image` with `image_id` and `name`.
 
         Inputs: `image_id`, `name`. Output: None.
         """
@@ -58,14 +58,14 @@ class _Image:
         self._name = name
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_Image`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
         return _Value(self._id)
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_Image`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
@@ -73,10 +73,10 @@ class _Image:
 
 
 class _Dataset:
-    """Represent dataset."""
+    """Test double for dataset behavior in this module."""
 
     def __init__(self, dataset_id, name, images):
-        """Initialize the instance.
+        """Create `_Dataset` with `dataset_id`, `name`, and `images`.
 
         Inputs: `dataset_id`, `name`, `images`. Output: None.
         """
@@ -85,21 +85,21 @@ class _Dataset:
         self._images = list(images)
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_Dataset`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
         return _Value(self._id)
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_Dataset`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
         return self._name
 
     def listChildren(self):
-        """Return list children.
+        """Return `_Dataset`'s fake child listing.
 
         Inputs: none. Output: `list` result.
         """
@@ -107,17 +107,17 @@ class _Dataset:
 
 
 class _Project:
-    """Represent project."""
+    """Test double for project behavior in this module."""
 
     def __init__(self, datasets):
-        """Initialize the instance.
+        """Create `_Project` with `datasets`.
 
         Inputs: `datasets`. Output: None.
         """
         self._datasets = list(datasets)
 
     def listChildren(self):
-        """Return list children.
+        """Return `_Project`'s fake child listing.
 
         Inputs: none. Output: `list` result.
         """
@@ -125,19 +125,19 @@ class _Project:
 
 
 class _ExplodingFormatImage:
-    """Represent exploding format image."""
+    """Test double for exploding format image behavior in this module."""
 
     @property
     def getFileset(self):
-        """Return Fileset.
+        """Return the fileset for `_ExplodingFormatImage`.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("format failure")
 
     @staticmethod
     def getId():
-        """Return the fake OMERO identifier.
+        """Return `_ExplodingFormatImage`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -145,7 +145,7 @@ class _ExplodingFormatImage:
 
     @staticmethod
     def getName():
-        """Return the fake object name.
+        """Return `_ExplodingFormatImage`'s fake object name.
 
         Inputs: none. Output: 'sample.tif'.
         """
@@ -155,7 +155,7 @@ class _ExplodingFormatImage:
 def test_list_models_covers_claude_custom_and_empty_model_sets(monkeypatch):
     """Verify list models covers claude custom and empty model sets.
 
-    Inputs: `monkeypatch`. Output: `self._payload`.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in list models covers claude custom and empty model sets.
     """
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "alice")
     monkeypatch.setattr(
@@ -165,10 +165,10 @@ def test_list_models_covers_claude_custom_and_empty_model_sets(monkeypatch):
     )
 
     class _Response:
-        """Represent response."""
+        """Test double for response behavior in this module."""
 
         def __init__(self, payload):
-            """Initialize the instance.
+            """Create `_Response` with `payload`.
 
             Inputs: `payload`. Output: None.
             """
@@ -234,29 +234,27 @@ def test_annotation_and_image_services_cover_remaining_nonfatal_edge_paths(
 ):
     """Verify annotation and image services cover remaining nonfatal edge paths.
 
-    Inputs: `monkeypatch`. Output: `object` result. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in annotation and image services cover remaining nonfatal edge paths.
+    Raises: RuntimeError when validation or the called operation fails.
     """
 
     def _query_service():
-        """Query service.
+        """Query the service.
 
         Inputs: none. Output: `object` result.
         """
         return object()
 
     class _NamedValueWithBrokenGetter:
-        """Represent named value with broken getter."""
+        """Test double for named value with broken getter behavior in this module."""
 
         name = _Value("alpha")
 
         @staticmethod
         def getValue():
-            """Return the fake OMERO value.
+            """Return `_NamedValueWithBrokenGetter`'s fake OMERO value.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("value unavailable")
 
@@ -313,16 +311,16 @@ def test_annotation_and_image_services_cover_remaining_nonfatal_edge_paths(
 
 
 def test_index_view_covers_remaining_group_helper_and_action_guard_edges(monkeypatch):
-    """Verify index view covers remaining group helper and action guard edges.
+    """Verify the index view covers remaining group helper and action guard edges execution contract.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index view covers remaining group helper and action guard edges integration.
     """
 
     class _Group:
-        """Represent group."""
+        """Test double for group behavior in this module."""
 
         def __init__(self, permissions, member_count=1):
-            """Initialize the instance.
+            """Create `_Group` with `permissions` and `member_count`.
 
             Inputs: `permissions`, `member_count`. Output: None.
             """
@@ -330,21 +328,21 @@ def test_index_view_covers_remaining_group_helper_and_action_guard_edges(monkeyp
             self._member_count = member_count
 
         def getDetails(self):
-            """Return Details.
+            """Return the details for `_Group`.
 
             Inputs: none. Output: `SimpleNamespace` result.
             """
             return SimpleNamespace(getPermissions=lambda: self._permissions)
 
         def getPermissions(self):
-            """Return fake permissions.
+            """Return `_Group`'s fake permissions object.
 
             Inputs: none. Output: `self._permissions`.
             """
             return self._permissions
 
         def getMemberCount(self):
-            """Return Member Count.
+            """Return the fake member count value used by this test double.
 
             Inputs: none. Output: `self._member_count`.
             """
@@ -352,7 +350,7 @@ def test_index_view_covers_remaining_group_helper_and_action_guard_edges(monkeyp
 
         @staticmethod
         def getId():
-            """Return the fake OMERO identifier.
+            """Return `_Group`'s fake OMERO identifier.
 
             Inputs: none. Output: `_Value` result.
             """

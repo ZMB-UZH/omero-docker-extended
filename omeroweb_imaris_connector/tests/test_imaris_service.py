@@ -20,9 +20,9 @@ TEST_RUNTIME_ROOT = Path(__file__).resolve().parent / "_runtime"
 
 
 def _install_omero_stub() -> None:
-    """Install OMERO stub.
+    """Install the OMERO stub.
 
-    Inputs: none. Output: None.
+    Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
     """
     omero_module = types.ModuleType("omero")
     omero_module.NoProcessorAvailable = NoProcessorAvailable
@@ -38,9 +38,9 @@ def _install_omero_stub() -> None:
 
 
 def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Set required environment.
+    """Set the required environment.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: `monkeypatch` (pytest.MonkeyPatch) pytest monkeypatch fixture. Output: None.
     """
     monkeypatch.setenv("OMERO_IMS_SCRIPT_NAME", "IMS_Export.py")
     monkeypatch.setenv("OMERO_IMS_EXPORT_DIR", str(TEST_RUNTIME_ROOT / "export"))
@@ -53,7 +53,7 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _import_imaris_service(monkeypatch: pytest.MonkeyPatch):
-    """Import imaris service.
+    """Import the Imaris service module with test-controlled settings.
 
     Inputs: `monkeypatch`. Output: `imaris_service`.
     """
@@ -67,9 +67,10 @@ def _import_imaris_service(monkeypatch: pytest.MonkeyPatch):
 def test_run_script_retries_until_processor_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify run script retries until processor available.
+    """Verify the run script retries until processor available execution contract.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in run script retries until processor available integration.
+    Raises: NoProcessorAvailable when validation or the called operation fails.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -78,19 +79,17 @@ def test_run_script_retries_until_processor_available(
         """Test double for dummy service."""
 
         def __init__(self) -> None:
-            """Initialize the instance.
+            """Create `DummyService` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.calls = 0
 
         def runScript(self, *args, **kwargs):
-            """The script entrypoint.
+            """Run the script for `DummyService`.
 
-            Inputs: `*args`, `**kwargs`. Output: 123. Raises on invalid or unavailable
-            state.
-
-            state.
+            Inputs: `*args`, `**kwargs`. Output: run script result. Raises:
+            NoProcessorAvailable when validation or the called operation fails.
             """
             self.calls += 1
             if self.calls == 1:
@@ -115,9 +114,10 @@ def test_run_script_retries_until_processor_available(
 
 
 def test_run_script_fails_after_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify run script fails after timeout.
+    """Confirm run script fails after timeout exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in run script fails after timeout integration.
+    Raises: NoProcessorAvailable when validation or the called operation fails.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -127,12 +127,9 @@ def test_run_script_fails_after_timeout(monkeypatch: pytest.MonkeyPatch) -> None
 
         @staticmethod
         def runScript(*args, **kwargs):
-            """The script entrypoint.
+            """Run the script for `DummyService`.
 
-            Inputs: `*args`, `**kwargs`. Output: None. Raises on invalid or unavailable
-            state.
-
-            state.
+            Inputs: `*args`, `**kwargs`. Output: None. Raises: NoProcessorAvailable when validation or the called operation fails.
             """
             raise NoProcessorAvailable("No processor available")
 
@@ -159,9 +156,10 @@ def test_run_script_fails_after_timeout(monkeypatch: pytest.MonkeyPatch) -> None
 def test_run_script_fails_fast_when_processors_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify run script fails fast when processors disabled.
+    """Confirm run script fails fast when processors disabled exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in run script fails fast when processors disabled integration.
+    Raises: NoProcessorAvailable when validation or the called operation fails.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -170,19 +168,16 @@ def test_run_script_fails_fast_when_processors_disabled(
         """Test double for dummy service."""
 
         def __init__(self) -> None:
-            """Initialize the instance.
+            """Create `DummyService` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.calls = 0
 
         def runScript(self, *args, **kwargs):
-            """The script entrypoint.
+            """Run the script for `DummyService`.
 
-            Inputs: `*args`, `**kwargs`. Output: None. Raises on invalid or unavailable
-            state.
-
-            state.
+            Inputs: `*args`, `**kwargs`. Output: None. Raises: NoProcessorAvailable when validation or the called operation fails.
             """
             self.calls += 1
             raise NoProcessorAvailable("No processor available")
@@ -192,7 +187,7 @@ def test_run_script_fails_fast_when_processors_disabled(
 
         @staticmethod
         def getConfigValue(key):
-            """Return Config Value.
+            """Return `DummyConfigService`'s fake config value.
 
             Inputs: `key`. Output: '0'.
             """
@@ -204,7 +199,7 @@ def test_run_script_fails_fast_when_processors_disabled(
 
         @staticmethod
         def getConfigService():
-            """Return Config Service.
+            """Return `DummyServiceFactory`'s fake config service.
 
             Inputs: none. Output: `DummyConfigService` result.
             """
@@ -214,15 +209,15 @@ def test_run_script_fails_fast_when_processors_disabled(
         """Test double for dummy conn."""
 
         def __init__(self) -> None:
-            """Initialize the instance.
+            """Create `DummyConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.c = types.SimpleNamespace(sf=DummyServiceFactory())
 
         @staticmethod
         def isAdmin() -> bool:
-            """Return whether Admin.
+            """Report the admin boolean exposed by this OMERO-compatible object.
 
             Inputs: none. Output: `bool`.
             """
@@ -250,9 +245,11 @@ def test_run_script_fails_fast_when_processors_disabled(
 def test_run_script_fails_fast_when_processor_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify run script fails fast when processor missing.
+    """Confirm run script fails fast when processor missing exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in run script fails fast when processor missing integration.
+    Raises: AssertionError, NoProcessorAvailable when validation or external operations
+    fail.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -261,19 +258,16 @@ def test_run_script_fails_fast_when_processor_missing(
         """Test double for dummy service."""
 
         def __init__(self) -> None:
-            """Initialize the instance.
+            """Create `DummyService` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.calls = 0
 
         def runScript(self, *args, **kwargs):
-            """The script entrypoint.
+            """Run the script for `DummyService`.
 
-            Inputs: `*args`, `**kwargs`. Output: None. Raises on invalid or unavailable
-            state.
-
-            state.
+            Inputs: `*args`, `**kwargs`. Output: None. Raises: NoProcessorAvailable when validation or the called operation fails.
             """
             self.calls += 1
             raise NoProcessorAvailable("No processor available")
@@ -283,10 +277,9 @@ def test_run_script_fails_fast_when_processor_missing(
 
         @staticmethod
         def getConfigValue(key):
-            """Return Config Value.
+            """Return `DummyConfigService`'s fake config value.
 
-            Inputs: `key`. Output: computed value. Raises on invalid or unavailable
-            state.
+            Inputs: `key` lookup key. Output: `str`. Raises: AssertionError when validation or the called operation fails.
             """
             if key == "omero.scripts.processors":
                 return "2"
@@ -299,7 +292,7 @@ def test_run_script_fails_fast_when_processor_missing(
 
         @staticmethod
         def getConfigService():
-            """Return Config Service.
+            """Return `DummyServiceFactory`'s fake config service.
 
             Inputs: none. Output: `DummyConfigService` result.
             """
@@ -309,15 +302,15 @@ def test_run_script_fails_fast_when_processor_missing(
         """Test double for dummy conn."""
 
         def __init__(self) -> None:
-            """Initialize the instance.
+            """Create `DummyConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.c = types.SimpleNamespace(sf=DummyServiceFactory())
 
         @staticmethod
         def isAdmin() -> bool:
-            """Return whether Admin.
+            """Report the admin boolean exposed by this OMERO-compatible object.
 
             Inputs: none. Output: `bool`.
             """
@@ -354,7 +347,7 @@ def test_wait_for_process_detaches_after_completion(
 ) -> None:
     """Verify wait for process detaches after completion.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in wait for process detaches after completion.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -363,9 +356,9 @@ def test_wait_for_process_detaches_after_completion(
         """Test double for dummy process."""
 
         def __init__(self) -> None:
-            """Initialize the instance.
+            """Create `DummyProcess` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.closed = False
             self.poll_calls = 0
@@ -380,14 +373,14 @@ def test_wait_for_process_detaches_after_completion(
 
         @staticmethod
         def getResults(*_args):
-            """Return Results.
+            """Return the results for `DummyProcess`.
 
-            Inputs: `*_args`. Output: dict.
+            Inputs: `*_args`. Output: `dict`.
             """
             return {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")}
 
         def close(self, *_args):
-            """Close the resource.
+            """Close `DummyProcess`'s fake resource handle.
 
             Inputs: `*_args`. Output: None.
             """
@@ -408,7 +401,7 @@ def test_process_job_files_round_trip(
 ) -> None:
     """Verify process job files round trip.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in process job files round trip.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -431,9 +424,9 @@ def test_process_job_files_round_trip(
 def test_read_process_job_file_returns_none_for_invalid_json(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    """Verify read process job file returns none for invalid JSON.
+    """Verify read process job file returns none for invalid JSON result shape.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in read process job file returns none for invalid JSON.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -446,7 +439,7 @@ def test_read_process_job_file_returns_none_for_invalid_json(
 def test_serialize_outputs_unwraps_rtypes(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify serialize outputs unwraps rtypes.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in serialize outputs unwraps rtypes.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -464,7 +457,7 @@ def test_poll_process_job_times_out_stale_disk_record(
 ) -> None:
     """Verify poll process job times out stale disk record.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in poll process job times out stale disk record.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -494,7 +487,7 @@ def test_poll_process_job_persists_completed_live_process(
 ) -> None:
     """Verify poll process job persists completed live process.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in poll process job persists completed live process.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -521,9 +514,9 @@ def test_poll_process_job_persists_completed_live_process(
 
         @staticmethod
         def getResults(*_args):
-            """Return Results.
+            """Return the results for `DummyProcess`.
 
-            Inputs: `*_args`. Output: dict.
+            Inputs: `*_args`. Output: `dict`.
             """
             return {"Export_Path": SimpleNamespace(val=str(export_path))}
 
@@ -546,9 +539,9 @@ def test_poll_process_job_persists_completed_live_process(
 def test_resolve_async_result_prefers_service_end_method(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify resolve async result prefers service end method.
+    """Verify resolve async result prefers service end method result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve async result prefers service end method.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -558,17 +551,17 @@ def test_resolve_async_result_prefers_service_end_method(
 
         @staticmethod
         def waitForCompleted():
-            """Wait For Completed.
+            """Wait for the for Completed for `DummyAsyncResult`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         @staticmethod
         def getResponse():
-            """Return Response.
+            """Return the response for `DummyAsyncResult`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             return None
 
@@ -583,9 +576,9 @@ def test_resolve_async_result_prefers_service_end_method(
 def test_resolve_async_result_waits_and_uses_response_getter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify resolve async result waits and uses response getter.
+    """Verify resolve async result waits and uses response getter result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve async result waits and uses response getter.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -596,17 +589,17 @@ def test_resolve_async_result_waits_and_uses_response_getter(
 
         @staticmethod
         def waitForCompleted():
-            """Wait For Completed.
+            """Wait for the for Completed for `DummyAsyncResult`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             calls.append("wait")
 
         @staticmethod
         def getResponse():
-            """Return Response.
+            """Return the response for `DummyAsyncResult`.
 
-            Inputs: none. Output: dict.
+            Inputs: none. Output: `dict`.
             """
             calls.append("response")
             return {"job": 7}
@@ -624,9 +617,10 @@ def test_resolve_async_result_waits_and_uses_response_getter(
 def test_call_script_method_retries_after_type_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify call script method retries after type error.
+    """Confirm call script method retries after type error exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when call script method retries after type error stops reporting the expected error.
+    Raises: TypeError when validation or the called operation fails.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -634,12 +628,10 @@ def test_call_script_method_retries_after_type_error(
     seen_wait_values = []
 
     def fake_method(script_id, inputs, wait_value):
-        """Fake method.
+        """Simulate method so the surrounding test controls that dependency.
 
-        Inputs: `script_id`, `inputs`, `wait_value`. Output: dict. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `script_id`, `inputs`, `wait_value`. Output: `dict`. Raises: TypeError
+        when validation or the called operation fails.
         """
         seen_wait_values.append(wait_value)
         if isinstance(wait_value, tuple):
@@ -661,9 +653,9 @@ def test_call_script_method_retries_after_type_error(
 def test_get_script_processor_config_caches_admin_lookup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify get script processor config caches admin lookup.
+    """Verify the get script processor config caches admin lookup execution contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in get script processor config caches admin lookup integration.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -675,7 +667,7 @@ def test_get_script_processor_config_caches_admin_lookup(
 
         @staticmethod
         def getConfigValue(key):
-            """Return Config Value.
+            """Return `DummyConfigService`'s fake config value.
 
             Inputs: `key`. Output: '3'.
             """
@@ -702,9 +694,9 @@ def test_get_script_processor_config_caches_admin_lookup(
 def test_get_script_processor_config_skips_non_admin_sessions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify get script processor config skips non admin sessions.
+    """Verify the get script processor config skips non admin sessions execution contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in get script processor config skips non admin sessions integration.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -726,15 +718,15 @@ def test_get_script_processor_config_skips_non_admin_sessions(
 def test_exception_helpers_detect_chained_security_and_processor_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify exception helpers detect chained security and processor errors.
+    """Confirm exception helpers detect chained security and processor errors exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when exception helpers detect chained security and processor errors stops reporting the expected error.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
 
     class SecurityViolation(Exception):
-        """Represent security violation."""
+        """Test double for security violation behavior in this module."""
 
     outer = RuntimeError("outer")
     outer.__cause__ = SecurityViolation("permission denied")
@@ -754,7 +746,7 @@ def test_no_processor_detector_ignores_non_type_omero_sentinel(
 ) -> None:
     """Verify no processor detector ignores non type OMERO sentinel.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in no processor detector ignores non type OMERO sentinel.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -778,7 +770,7 @@ def test_extract_job_id_handles_dict_sequence_and_accessor_objects(
 ) -> None:
     """Verify extract job ID handles dict sequence and accessor objects.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in extract job ID handles dict sequence and accessor objects.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -796,9 +788,9 @@ def test_extract_job_id_handles_dict_sequence_and_accessor_objects(
 def test_get_job_state_and_outputs_supports_outputs_only_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify get job state and outputs supports outputs only path.
+    """Verify the get job state and outputs supports outputs only path safety boundary.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when get job state and outputs supports outputs only path accepts unsafe input.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -815,9 +807,9 @@ def test_get_job_state_and_outputs_supports_outputs_only_path(
 def test_normalize_job_state_handles_wrapped_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify normalize job state handles wrapped values.
+    """Check normalize job state handles wrapped values parsing against the documented contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in normalize job state handles wrapped values.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -841,9 +833,10 @@ def test_normalize_job_state_handles_wrapped_values(
 def test_detach_script_process_falls_back_to_close_without_flag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify detach script process falls back to close without flag.
+    """Verify the detach script process falls back to close without flag execution contract.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in detach script process falls back to close without flag integration.
+    Raises: TypeError when validation or the called operation fails.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -854,9 +847,9 @@ def test_detach_script_process_falls_back_to_close_without_flag(
 
         @staticmethod
         def close(*args):
-            """Close the resource.
+            """Close `DummyProcess`'s fake resource handle.
 
-            Inputs: `*args`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `*args` positional arguments. Output: None. Raises: TypeError when validation or the called operation fails.
             """
             calls.append(args)
             if args:
@@ -872,7 +865,7 @@ def test_raw_file_generator_converts_memoryviews_and_closes_store(
 ) -> None:
     """Verify raw file generator converts memoryviews and closes store.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in raw file generator converts memoryviews and closes store.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -881,9 +874,9 @@ def test_raw_file_generator_converts_memoryviews_and_closes_store(
         """Test double for dummy store."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyStore` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.closed = False
             self.chunks = [memoryview(b"ab"), b"cd", b""]
@@ -896,9 +889,9 @@ def test_raw_file_generator_converts_memoryviews_and_closes_store(
             return self.chunks.pop(0)
 
         def close(self):
-            """Close the resource.
+            """Close `DummyStore`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
@@ -914,9 +907,9 @@ def test_raw_file_generator_converts_memoryviews_and_closes_store(
 def test_sanitize_filename_strips_control_and_path_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify sanitize filename strips control and path content.
+    """Check that sanitize filename strips control and path content keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when sanitize filename strips control and path content accepts unsafe input.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -928,9 +921,9 @@ def test_sanitize_filename_strips_control_and_path_content(
 def test_response_from_file_annotation_streams_file_bytes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify response from file annotation streams file bytes.
+    """Verify response from file annotation streams file bytes result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in response from file annotation streams file bytes.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -939,16 +932,16 @@ def test_response_from_file_annotation_streams_file_bytes(
         """Test double for dummy store."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyStore` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.file_id = None
             self.closed = False
             self.chunks = [b"abc", memoryview(b"def"), b""]
 
         def setFileId(self, file_id):
-            """Set File ID.
+            """Set the file ID for `DummyStore`.
 
             Inputs: `file_id`. Output: None.
             """
@@ -962,9 +955,9 @@ def test_response_from_file_annotation_streams_file_bytes(
             return self.chunks.pop(0)
 
         def close(self):
-            """Close the resource.
+            """Close `DummyStore`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
@@ -994,25 +987,25 @@ def test_response_from_file_annotation_streams_file_bytes(
 def test_unwrap_rtype_and_file_annotation_response_support_get_value_wrappers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify unwrap rtype and file annotation response support get value wrappers.
+    """Verify unwrap rtype and file annotation response support get value wrappers result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in unwrap rtype and file annotation response support get value wrappers.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
 
     class _GetValueWrapper:
-        """Represent get value wrapper."""
+        """Test double for get value wrapper behavior in this module."""
 
         def __init__(self, value):
-            """Initialize the instance.
+            """Create `_GetValueWrapper` with `value`.
 
             Inputs: `value`. Output: None.
             """
             self._value = value
 
         def getValue(self):
-            """Return the fake OMERO value.
+            """Return `_GetValueWrapper`'s fake OMERO value.
 
             Inputs: none. Output: `self._value`.
             """
@@ -1022,16 +1015,16 @@ def test_unwrap_rtype_and_file_annotation_response_support_get_value_wrappers(
         """Test double for dummy store."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyStore` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.file_id = None
             self.closed = False
             self.chunks = [b"ab", b"cd", b""]
 
         def setFileId(self, file_id):
-            """Set File ID.
+            """Set the file ID for `DummyStore`.
 
             Inputs: `file_id`. Output: None.
             """
@@ -1045,9 +1038,9 @@ def test_unwrap_rtype_and_file_annotation_response_support_get_value_wrappers(
             return self.chunks.pop(0)
 
         def close(self):
-            """Close the resource.
+            """Close `DummyStore`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
@@ -1081,9 +1074,9 @@ def test_unwrap_rtype_and_file_annotation_response_support_get_value_wrappers(
 def test_build_download_response_prefers_safe_export_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify build download response prefers safe export path.
+    """Verify build download response prefers safe export path result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when build download response prefers safe export path accepts unsafe input.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -1111,9 +1104,9 @@ def test_build_download_response_prefers_safe_export_path(
 def test_build_download_response_falls_back_to_file_annotation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify build download response falls back to file annotation.
+    """Verify build download response falls back to file annotation result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in build download response falls back to file annotation.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -1136,9 +1129,9 @@ def test_build_download_response_falls_back_to_file_annotation(
 def test_build_download_response_reports_missing_or_invalid_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify build download response reports missing or invalid paths.
+    """Verify build download response reports missing or invalid paths result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in build download response reports missing or invalid paths.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -1173,7 +1166,7 @@ def test_register_and_monitor_process_job_persists_running_and_finished_state(
 ) -> None:
     """Verify register and monitor process job persists running and finished state.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in register and monitor process job persists running and finished state.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -1192,10 +1185,10 @@ def test_register_and_monitor_process_job_persists_running_and_finished_state(
     )
 
     class _ImmediateThread:
-        """Represent immediate thread."""
+        """Test double for immediate thread behavior in this module."""
 
         def __init__(self, target, args=(), daemon=False):
-            """Initialize the instance.
+            """Create `_ImmediateThread` with `target`, `args`, and `daemon`.
 
             Inputs: `target`, `args`, `daemon`. Output: None.
             """
@@ -1204,9 +1197,9 @@ def test_register_and_monitor_process_job_persists_running_and_finished_state(
             self.daemon = daemon
 
         def start(self):
-            """Start the operation.
+            """Start `_ImmediateThread`'s fake operation.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self._target(*self._args)
 
@@ -1226,7 +1219,7 @@ def test_poll_process_job_covers_unknown_job_ids_and_live_timeouts(
 ) -> None:
     """Verify poll process job covers unknown job IDs and live timeouts.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in poll process job covers unknown job IDs and live timeouts.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -1264,12 +1257,11 @@ def test_poll_process_job_covers_unknown_job_ids_and_live_timeouts(
 def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify script service discovery iteration and job queries cover fallback paths.
+    """Verify the script service discovery iteration and job queries fallback paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `monkeypatch` (pytest.MonkeyPatch) pytest monkeypatch fixture, `tmp_path`
+    (Path) temporary path fixture. Output: fails on regressions in script discovery or job lookup
+    fallback behavior. Raises: RuntimeError, TypeError when validation or the called operation fails.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -1278,13 +1270,13 @@ def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths
     raw_service = object()
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         @staticmethod
         def getScriptService():
-            """Return Script Service.
+            """Return the fake script service value used by this test double.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("gateway unavailable")
 
@@ -1293,37 +1285,37 @@ def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths
     assert imaris_service._get_script_services(_Conn()) == [raw_service]
 
     class _Service:
-        """Represent service."""
+        """Test double for service behavior in this module."""
 
         @staticmethod
         def runScriptAsync():
             """The async script path.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         @staticmethod
         def executeScript():
-            """Execute Script.
+            """Execute the script for `_Service`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         @staticmethod
         def begin_runScript():
-            """Begin run script.
+            """Record that the fake script runner started execution.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         @staticmethod
         def canRunScript():
-            """Return whether Run Script.
+            """Report the run script boolean exposed by this OMERO-compatible object.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             return None
 
@@ -1336,9 +1328,10 @@ def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths
     calls = []
 
     def async_method(*args):
-        """Async method.
+        """Return the async method.
 
-        Inputs: `*args`. Output: 'async-result'. Raises on invalid or unavailable state.
+        Inputs: `*args` positional arguments. Output: `str`. Raises: TypeError for
+        invalid call signatures.
         """
         calls.append(args)
         if len(args) != 2:
@@ -1354,11 +1347,11 @@ def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths
     assert calls[0] == (7, {"a": 1})
 
     class _DedicatedStateService:
-        """Represent dedicated state service."""
+        """Test double for dedicated state service behavior in this module."""
 
         @staticmethod
         def getJobStatus(job_id):
-            """Return Job Status.
+            """Return the fake job status value used by this test double.
 
             Inputs: `job_id`. Output: 'FINISHED'.
             """
@@ -1366,7 +1359,7 @@ def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths
 
         @staticmethod
         def getJobOutputs(job_id):
-            """Return Job Outputs.
+            """Return the fake job outputs value used by this test double.
 
             Inputs: `job_id`. Output: dict.
             """
@@ -1381,13 +1374,13 @@ def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths
     )
 
     class _JobInfoService:
-        """Represent job info service."""
+        """Test double for job info service behavior in this module."""
 
         @staticmethod
         def getJobs():
-            """Return Jobs.
+            """Return the jobs for `_JobInfoService`.
 
-            Inputs: none. Output: list.
+            Inputs: none. Output: `list`.
             """
             return [
                 SimpleNamespace(
@@ -1405,12 +1398,11 @@ def test_script_service_discovery_iteration_and_job_queries_cover_fallback_paths
 def test_find_script_id_and_async_result_resolution_prefer_official_paths_and_fallbacks(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify find script ID and async result resolution prefer official paths and fallbacks.
+    """Verify the find script ID and async result resolution prefer official paths and fallbacks execution contract.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `monkeypatch` (pytest.MonkeyPatch) pytest monkeypatch fixture, `tmp_path`
+    (Path) temporary path fixture. Output: None. Raises: RuntimeError when validation or
+    external operations fail.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -1443,40 +1435,41 @@ def test_find_script_id_and_async_result_resolution_prefer_official_paths_and_fa
     assert imaris_service._find_script_id(object()) == 11
 
     class _AsyncResult:
-        """Represent async result."""
+        """Test double for async result behavior in this module."""
 
         @staticmethod
         def waitForCompleted():
-            """Wait For Completed.
+            """Wait for the for Completed for `_AsyncResult`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             raise RuntimeError("wait failed")
 
         @staticmethod
         def getResponse():
-            """Return Response.
+            """Return the response for `_AsyncResult`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("response missing")
 
         @staticmethod
         def getResults():
-            """Return Results.
+            """Return the results for `_AsyncResult`.
 
-            Inputs: none. Output: dict.
+            Inputs: none. Output: `dict`.
             """
             return {"Export_Path": resolved_export}
 
     class _AsyncService:
-        """Represent async service."""
+        """Test double for async service behavior in this module."""
 
         @staticmethod
         def end_runScript(result):
-            """End run script.
+            """Record the fake script runner result or raise the configured failure.
 
-            Inputs: `result`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `result`. Output: None. Raises: RuntimeError when validation or
+            external operations fail.
             """
             raise RuntimeError("end failed")
 
@@ -1492,28 +1485,30 @@ def test_wait_for_process_timeout_and_request_bool_helpers_cover_remaining_edges
 ) -> None:
     """Verify wait for process timeout and request bool helpers cover remaining edges.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in wait for process timeout and request bool helpers cover remaining edges.
+    Raises: AssertionError when validation or the called operation fails.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
     detached = []
 
     class _NeverFinishes:
-        """Represent never finishes."""
+        """Test double for never finishes behavior in this module."""
 
         @staticmethod
         def poll():
             """Return process completion status.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             return None
 
         @staticmethod
         def getResults(*_args):
-            """Return Results.
+            """Return the results for `_NeverFinishes`.
 
-            Inputs: `*_args`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `*_args`. Output: None. Raises: AssertionError when validation or
+            external operations fail.
             """
             raise AssertionError("results should not be requested")
 
@@ -1538,19 +1533,20 @@ def test_imaris_helper_fallbacks_cover_service_discovery_and_job_queries(
 ) -> None:
     """Verify imaris helper fallbacks cover service discovery and job queries.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris helper fallbacks cover service discovery and job queries.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
 
     class _BrokenConn:
-        """Represent broken conn."""
+        """Test double for broken conn behavior in this module."""
 
         @staticmethod
         def getScriptService():
-            """Return Script Service.
+            """Return the fake script service value used by this test double.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("gateway missing")
 
@@ -1565,13 +1561,13 @@ def test_imaris_helper_fallbacks_cover_service_discovery_and_job_queries(
     assert imaris_service._get_script_services(_BrokenConn()) == []
 
     class _BrokenService:
-        """Represent broken service."""
+        """Test double for broken service behavior in this module."""
 
         @staticmethod
         def getScripts():
-            """Return Scripts.
+            """Return the scripts for `_BrokenService`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("script listing failed")
 
@@ -1588,29 +1584,31 @@ def test_imaris_helper_fallbacks_cover_service_discovery_and_job_queries(
     ) == {"job": 4}
 
     class _StateService:
-        """Represent state service."""
+        """Test double for state service behavior in this module."""
 
         @staticmethod
         def getJobStatus(_job_id):
-            """Return Job Status.
+            """Return the fake job status value used by this test double.
 
-            Inputs: `_job_id`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `_job_id`. Output: None. Raises: RuntimeError when validation or
+            external operations fail.
             """
             raise RuntimeError("status failed")
 
         @staticmethod
         def getJobOutputs(_job_id):
-            """Return Job Outputs.
+            """Return the fake job outputs value used by this test double.
 
-            Inputs: `_job_id`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `_job_id`. Output: None. Raises: RuntimeError when validation or
+            external operations fail.
             """
             raise RuntimeError("outputs failed")
 
         @staticmethod
         def getJobs():
-            """Return Jobs.
+            """Return the jobs for `_StateService`.
 
-            Inputs: none. Output: list.
+            Inputs: none. Output: `list`.
             """
             return [
                 SimpleNamespace(
@@ -1632,7 +1630,8 @@ def test_imaris_helper_fallbacks_cover_call_signatures_and_config_failures(
 ) -> None:
     """Verify imaris helper fallbacks cover call signatures and config failures.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris helper fallbacks cover call signatures and config failures.
+    Raises: AssertionError, TypeError, fail when validation or the called operation fails.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -1641,9 +1640,10 @@ def test_imaris_helper_fallbacks_cover_call_signatures_and_config_failures(
     seen_args = []
 
     def _four_arg_method(*args):
-        """Four arg method.
+        """Return the four arg method.
 
-        Inputs: `*args`. Output: 'ok'. Raises on invalid or unavailable state.
+        Inputs: `*args` positional arguments. Output: `str`. Raises: TypeError for
+        invalid call signatures.
         """
         seen_args.append(args)
         if len(args) != 4:
@@ -1672,13 +1672,13 @@ def test_imaris_helper_fallbacks_cover_call_signatures_and_config_failures(
         )
 
     class SecurityViolation(Exception):
-        """Represent security violation."""
+        """Test double for security violation behavior in this module."""
 
     class _ConfigService:
-        """Represent config service."""
+        """Test double for config service behavior in this module."""
 
         def __init__(self, *, processors="2", descriptors="Processor-0", fail=None):
-            """Initialize the instance.
+            """Create `_ConfigService` with its default state.
 
             Inputs: `processors`, `descriptors`, `fail`. Output: None.
             """
@@ -1687,10 +1687,10 @@ def test_imaris_helper_fallbacks_cover_call_signatures_and_config_failures(
             self.fail = fail
 
         def getConfigValue(self, key):
-            """Return Config Value.
+            """Return `_ConfigService`'s fake config value.
 
-            Inputs: `key`. Output: computed value. Raises on invalid or unavailable
-            state.
+            Inputs: `key` lookup key. Output: `processors`. Raises: AssertionError, fail
+            when validation or the called operation fails.
             """
             if self.fail is not None:
                 raise self.fail
@@ -1737,9 +1737,10 @@ def test_imaris_helper_fallbacks_cover_call_signatures_and_config_failures(
 def test_imaris_file_and_output_helpers_cover_invalid_annotations_and_cleanup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify imaris file and output helpers cover invalid annotations and cleanup.
+    """Check imaris file and output helpers cover invalid annotations and cleanup cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris file and output helpers cover invalid annotations and cleanup.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -1770,12 +1771,12 @@ def test_imaris_file_and_output_helpers_cover_invalid_annotations_and_cleanup(
     )
 
     class _BrokenStore:
-        """Represent broken store."""
+        """Test double for broken store behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_BrokenStore` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.closed = False
 
@@ -1788,9 +1789,9 @@ def test_imaris_file_and_output_helpers_cover_invalid_annotations_and_cleanup(
             return b""
 
         def close(self):
-            """Close the resource.
+            """Close `_BrokenStore`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
             raise RuntimeError("close failed")
@@ -1802,27 +1803,27 @@ def test_imaris_file_and_output_helpers_cover_invalid_annotations_and_cleanup(
     assert store.closed is True
 
     class _InvalidSizeFile:
-        """Represent invalid size file."""
+        """Test double for invalid size file behavior in this module."""
 
         @staticmethod
         def getName():
-            """Return the fake object name.
+            """Return `_InvalidSizeFile`'s fake object name.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("name missing")
 
         @staticmethod
         def getSize():
-            """Return Size.
+            """Return the size for `_InvalidSizeFile`.
 
-            Inputs: none. Output: 'bad-size'.
+            Inputs: none. Output: `str`.
             """
             return "bad-size"
 
         @staticmethod
         def getId():
-            """Return the fake OMERO identifier.
+            """Return `_InvalidSizeFile`'s fake OMERO identifier.
 
             Inputs: none. Output: `SimpleNamespace` result.
             """
@@ -1856,7 +1857,8 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
 ) -> None:
     """Verify imaris helper edges cover runtime fallbacks and filename safety.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris helper edges cover runtime fallbacks and filename safety.
+    Raises: AttributeError, RuntimeError when validation or the called operation fails.
     """
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
@@ -1867,11 +1869,11 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
     raw_service = object()
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         @staticmethod
         def getScriptService():
-            """Return Script Service.
+            """Return the fake script service value used by this test double.
 
             Inputs: none. Output: `direct_service`.
             """
@@ -1922,12 +1924,12 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
     assert persisted["proc-finished"]["outputs"] is None
 
     class _ScriptId:
-        """Represent script identifier."""
+        """Test double for script identifier behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_ScriptId` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.calls = 0
 
@@ -1935,7 +1937,7 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
         def val(self):
             """Return the fake value.
 
-            Inputs: none. Output: computed value.
+            Inputs: none. Output: val result.
             """
             self.calls += 1
             return None if self.calls == 1 else 13
@@ -1953,37 +1955,37 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
     assert imaris_service._find_script_id(object()) == 13
 
     class _BrokenAsyncResult:
-        """Represent broken async result."""
+        """Test double for broken async result behavior in this module."""
 
         @staticmethod
         def waitForCompleted():
-            """Wait For Completed.
+            """Wait for the for Completed for `_BrokenAsyncResult`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         @staticmethod
         def getResponse():
-            """Return Response.
+            """Return the response for `_BrokenAsyncResult`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("response exploded")
 
         @staticmethod
         def getResult():
-            """Return Result.
+            """Return the result for `_BrokenAsyncResult`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("result exploded")
 
         @staticmethod
         def getResults():
-            """Return Results.
+            """Return the results for `_BrokenAsyncResult`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("results exploded")
 
@@ -1991,7 +1993,7 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
         def get():
             """Return the requested value.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("get exploded")
 
@@ -2006,19 +2008,20 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
     )
 
     class _BrokenService:
-        """Represent broken service."""
+        """Test double for broken service behavior in this module."""
 
         def __getattr__(self, name):
             """Return a dynamic attribute value by name.
 
-            Inputs: `name`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `name` name. Output: None. Raises: AttributeError when validation or
+            external operations fail.
             """
             raise AttributeError("attribute exploded")
 
         def __dir__(self):
             """Return advertised dynamic attributes.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("dir exploded")
 
@@ -2047,11 +2050,11 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
     )
 
     class _OriginalFile:
-        """Represent original file."""
+        """Test double for original file behavior in this module."""
 
         @staticmethod
         def getName():
-            """Return the fake object name.
+            """Return `_OriginalFile`'s fake object name.
 
             Inputs: none. Output: '..\\\\unsafe\\name.ims'.
             """
@@ -2059,15 +2062,15 @@ def test_imaris_helper_edges_cover_runtime_fallbacks_and_filename_safety(
 
         @staticmethod
         def getSize():
-            """Return Size.
+            """Return the size for `_OriginalFile`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("size exploded")
 
         @staticmethod
         def getId():
-            """Return the fake OMERO identifier.
+            """Return `_OriginalFile`'s fake OMERO identifier.
 
             Inputs: none. Output: `SimpleNamespace` result.
             """

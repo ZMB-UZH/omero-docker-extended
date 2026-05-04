@@ -8,12 +8,10 @@ from .utils import require_root_user
 @login_required()
 @require_root_user
 def help_page(request, **kwargs):
-    """Help page.
+    """Return the help page.
 
-    Inputs: `request`, `**kwargs`. Output: `FileResponse` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `request` Django request, `**kwargs` keyword arguments. Output: Django
+    `FileResponse`. Raises: Http404 when validation or the called operation fails.
     """
     help_path = (
         Path(__file__).resolve().parents[2]

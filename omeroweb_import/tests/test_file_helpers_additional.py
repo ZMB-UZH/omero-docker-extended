@@ -12,7 +12,7 @@ def test_file_helpers_return_false_for_directory_creation_and_chmod_failures(
 ):
     """Verify file helpers return false for directory creation and chmod failures.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in file helpers return false for directory creation and chmod failures.
     """
     path_type = type(tmp_path)
     existing_dir = tmp_path / "existing"
@@ -42,7 +42,7 @@ def test_file_helpers_return_false_for_directory_creation_and_chmod_failures(
 def test_file_helpers_cover_cache_safe_names_and_remove_failures(tmp_path, monkeypatch):
     """Verify file helpers cover cache safe names and remove failures.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in file helpers cover cache safe names and remove failures.
     """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
@@ -89,7 +89,7 @@ def test_file_helpers_do_not_cache_directory_paths_when_a_root_is_a_file(
 ):
     """Verify file helpers do not cache directory paths when a root is a file.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in file helpers do not cache directory paths when a root is a file.
     """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
@@ -109,9 +109,9 @@ def test_file_helpers_do_not_cache_directory_paths_when_a_root_is_a_file(
 def test_file_helpers_cover_cached_initialization_getters_and_new_dir_creation(
     tmp_path, monkeypatch
 ):
-    """Verify file helpers cover cached initialization getters and new directory creation.
+    """Verify file helpers cover cached initialization getters and new dir creation.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in file helpers cover cached initialization getters and new dir creation.
     """
     cached_upload = tmp_path / "cached-upload"
     cached_jobs = tmp_path / "cached-jobs"

@@ -15,7 +15,7 @@ DOCKERFILE = REPO_ROOT / "docker" / "omero-web.Dockerfile"
 def test_extractor_produces_sorted_unique_output():
     """Verify extractor produces sorted unique output.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in extractor produces sorted unique output.
     """
     result = subprocess.run(
         [sys.executable, str(EXTRACTOR), str(DOCKERFILE)],
@@ -31,7 +31,7 @@ def test_extractor_produces_sorted_unique_output():
 def test_extractor_includes_known_direct_dependencies():
     """Verify extractor includes known direct dependencies.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in extractor includes known direct dependencies.
     """
     result = subprocess.run(
         [sys.executable, str(EXTRACTOR), str(DOCKERFILE)],
@@ -50,7 +50,7 @@ def test_extractor_includes_known_direct_dependencies():
 def test_omeroweb_runtime_pins_psycopg2_binary_to_monitored_requirement():
     """Verify omeroweb runtime pins psycopg2 binary to monitored requirement.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in omeroweb runtime pins psycopg2 binary to monitored requirement.
     """
     requirement_prefix = "psycopg2-binary>="
     monitored_version = None
@@ -75,7 +75,7 @@ def test_omeroweb_runtime_pins_psycopg2_binary_to_monitored_requirement():
 def test_extractor_excludes_build_tooling():
     """Verify extractor excludes build tooling.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in extractor excludes build tooling.
     """
     result = subprocess.run(
         [sys.executable, str(EXTRACTOR), str(DOCKERFILE)],
@@ -94,7 +94,7 @@ def test_extractor_excludes_build_tooling():
 def test_extractor_excludes_shell_variable_references():
     """Verify extractor excludes shell variable references.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in extractor excludes shell variable references.
     """
     result = subprocess.run(
         [sys.executable, str(EXTRACTOR), str(DOCKERFILE)],
@@ -110,7 +110,7 @@ def test_extractor_excludes_shell_variable_references():
 def test_extractor_accepts_common_version_specifiers(tmp_path):
     """Verify extractor accepts common version specifiers.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in extractor accepts common version specifiers.
     """
     dockerfile = tmp_path / "Dockerfile"
     dockerfile.write_text(
@@ -143,9 +143,9 @@ def test_extractor_accepts_common_version_specifiers(tmp_path):
 
 
 def test_extractor_fails_on_missing_file():
-    """Verify extractor fails on missing file.
+    """Confirm extractor fails on missing file exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in extractor fails on missing file.
     """
     result = subprocess.run(
         [sys.executable, str(EXTRACTOR), "/nonexistent/Dockerfile"],
@@ -157,9 +157,9 @@ def test_extractor_fails_on_missing_file():
 
 
 def test_extractor_fails_without_arguments():
-    """Verify extractor fails without arguments.
+    """Confirm extractor fails without arguments exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in extractor fails without arguments.
     """
     result = subprocess.run(
         [sys.executable, str(EXTRACTOR)],

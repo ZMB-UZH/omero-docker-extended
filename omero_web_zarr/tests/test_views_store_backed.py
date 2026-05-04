@@ -29,18 +29,18 @@ from omero_web_zarr import views
 
 
 def _response_text(response) -> str:
-    """Response text.
+    """Return the response text.
 
-    Inputs: `response`. Output: `str`.
+    Inputs: `response` response object. Output: `str`.
     """
     return b"".join(response.streaming_content).decode("utf-8")
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
@@ -48,10 +48,10 @@ class _Value:
 
 
 class _ExternalInfo:
-    """Represent external info."""
+    """Test double for external info behavior in this module."""
 
     def __init__(self, lsid):
-        """Initialize the instance.
+        """Create `_ExternalInfo` with `lsid`.
 
         Inputs: `lsid`. Output: None.
         """
@@ -59,10 +59,10 @@ class _ExternalInfo:
 
 
 class _Details:
-    """Represent details."""
+    """Test double for details behavior in this module."""
 
     def __init__(self, lsid):
-        """Initialize the instance.
+        """Create `_Details` with `lsid`.
 
         Inputs: `lsid`. Output: None.
         """
@@ -73,7 +73,7 @@ class _FakeImage:
     """Test double for fake image."""
 
     def __init__(self, lsid, image_id=1, name="store-backed"):
-        """Initialize the instance.
+        """Create `_FakeImage` with `lsid`, `image_id`, and `name`.
 
         Inputs: `lsid`, `image_id`, `name`. Output: None.
         """
@@ -82,14 +82,14 @@ class _FakeImage:
         self._name = name
 
     def getDetails(self):
-        """Return Details.
+        """Return the details for `_FakeImage`.
 
-        Inputs: none. Output: `self._details`.
+        Inputs: none. Output: `_details`.
         """
         return self._details
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_FakeImage`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
@@ -97,7 +97,7 @@ class _FakeImage:
 
     @staticmethod
     def getPixelSizeX(units=True):
-        """Return Pixel Size X.
+        """Return `_FakeImage`'s fake physical X size.
 
         Inputs: `units`. Output: None.
         """
@@ -105,7 +105,7 @@ class _FakeImage:
 
     @staticmethod
     def getPixelSizeY(units=True):
-        """Return Pixel Size Y.
+        """Return `_FakeImage`'s fake physical Y size.
 
         Inputs: `units`. Output: None.
         """
@@ -113,7 +113,7 @@ class _FakeImage:
 
     @staticmethod
     def getPixelSizeZ(units=True):
-        """Return Pixel Size Z.
+        """Return `_FakeImage`'s fake physical Z size.
 
         Inputs: `units`. Output: None.
         """
@@ -125,7 +125,7 @@ class _FakeChunkImage:
 
     @staticmethod
     def requiresPixelsPyramid():
-        """Requires pixels pyramid.
+        """Return whether the fake store-backed image requires a pyramid.
 
         Inputs: none. Output: bool.
         """
@@ -133,7 +133,7 @@ class _FakeChunkImage:
 
     @staticmethod
     def getSizeT():
-        """Return Size T.
+        """Return `_FakeChunkImage`'s fake timepoint count.
 
         Inputs: none. Output: 1.
         """
@@ -141,7 +141,7 @@ class _FakeChunkImage:
 
     @staticmethod
     def getSizeC():
-        """Return Size C.
+        """Return `_FakeChunkImage`'s fake channel count.
 
         Inputs: none. Output: 1.
         """
@@ -149,7 +149,7 @@ class _FakeChunkImage:
 
     @staticmethod
     def getSizeZ():
-        """Return Size Z.
+        """Return `_FakeChunkImage`'s fake SizeZ value.
 
         Inputs: none. Output: 1.
         """
@@ -157,7 +157,7 @@ class _FakeChunkImage:
 
     @staticmethod
     def getSizeY():
-        """Return Size Y.
+        """Return `_FakeChunkImage`'s fake SizeY value.
 
         Inputs: none. Output: 512.
         """
@@ -165,7 +165,7 @@ class _FakeChunkImage:
 
     @staticmethod
     def getSizeX():
-        """Return Size X.
+        """Return `_FakeChunkImage`'s fake SizeX value.
 
         Inputs: none. Output: 1024.
         """
@@ -173,7 +173,7 @@ class _FakeChunkImage:
 
 
 def _write_store(root):
-    """Write store.
+    """Write the store.
 
     Inputs: `root`. Output: None.
     """
@@ -194,9 +194,9 @@ def _write_store(root):
 
 
 def test_store_backed_json_response_returns_canonical_metadata(tmp_path):
-    """Verify store backed JSON response returns canonical metadata.
+    """Verify store backed JSON response returns canonical metadata result shape.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in store backed JSON response returns canonical metadata.
     """
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()))
@@ -210,9 +210,9 @@ def test_store_backed_json_response_returns_canonical_metadata(tmp_path):
 
 
 def test_store_backed_json_response_skips_non_v04_requests(tmp_path):
-    """Verify store backed JSON response skips non v04 requests.
+    """Verify store backed JSON response skips non v04 requests result shape.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in store backed JSON response skips non v04 requests.
     """
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()))
@@ -221,9 +221,9 @@ def test_store_backed_json_response_skips_non_v04_requests(tmp_path):
 
 
 def test_store_backed_chunk_response_returns_exact_chunk_bytes(tmp_path):
-    """Verify store backed chunk response returns exact chunk bytes.
+    """Verify store backed chunk response returns exact chunk bytes result shape.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in store backed chunk response returns exact chunk bytes.
     """
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()))
@@ -236,9 +236,9 @@ def test_store_backed_chunk_response_returns_exact_chunk_bytes(tmp_path):
 
 
 def test_store_backed_response_supports_non_numeric_dataset_paths(tmp_path):
-    """Verify store backed response supports non numeric dataset paths.
+    """Verify store backed response supports non numeric dataset paths result shape.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in store backed response supports non numeric dataset paths.
     """
     _write_store(tmp_path)
     (tmp_path / "s0").mkdir()
@@ -259,21 +259,18 @@ def test_build_store_backed_preview_context_points_to_omero_zarr_endpoints(
 ):
     """Verify build store backed preview context points to OMERO Zarr endpoints.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: computed value. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `str`. Raises: AssertionError when validation or the called operation fails.
     """
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=502, name="10150")
 
     def fake_reverse(name, args=None, kwargs=None):
-        """Fake reverse.
+        """Simulate reverse so the surrounding test controls that dependency.
 
-        Inputs: `name`, `args`, `kwargs`. Output: computed value. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `name` name, `args` positional arguments, `kwargs` keyword arguments.
+        Output: `str`. Raises: AssertionError when validation or external operations
+        fail.
         """
         if name == "omero_web_zarr_index":
             return "/zarr/"
@@ -300,9 +297,9 @@ def test_build_store_backed_preview_context_points_to_omero_zarr_endpoints(
 def test_preview_image_zattrs_preserves_store_backed_raw_multiscales(
     tmp_path, monkeypatch
 ):
-    """Verify preview image zattrs preserves store backed raw multiscales.
+    """Check that preview image zattrs preserves store backed raw multiscales remains stable.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in preview image zattrs preserves store backed raw multiscales.
     """
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=12, name="pyramid.zarr")
@@ -347,9 +344,9 @@ def test_preview_image_zattrs_preserves_store_backed_raw_multiscales(
 
 
 def test_get_chunk_shape_preserves_yx_order_for_non_pyramid_images():
-    """Verify get chunk shape preserves yx order for non pyramid images.
+    """Check that get chunk shape preserves yx order for non pyramid images remains stable.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in get chunk shape preserves yx order for non pyramid images.
     """
     assert views.get_chunk_shape(_FakeChunkImage()) == [512, 1024]
 
@@ -358,7 +355,7 @@ class _FakeConn:
     """Test double for fake conn."""
 
     def __init__(self, image):
-        """Initialize the instance.
+        """Create `_FakeConn` with `image`.
 
         Inputs: `image`. Output: None.
         """
@@ -366,9 +363,9 @@ class _FakeConn:
         self.c = None
 
     def getObject(self, object_type, iid):
-        """Return Object.
+        """Return the object for `_FakeConn`.
 
-        Inputs: `object_type`, `iid`. Output: `self._image`.
+        Inputs: `object_type`, `iid`. Output: `_image`.
         """
         assert object_type == "Image"
         assert iid == self._image.id
@@ -378,7 +375,7 @@ class _FakeConn:
 def test_preview_image_zarray_delegates_to_raw_endpoint(monkeypatch):
     """Verify preview image zarray delegates to raw endpoint.
 
-    Inputs: `monkeypatch`. Output: `sentinel`.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in preview image zarray delegates to raw endpoint.
     """
     image = _FakeImage("/managed/demo.ome.zarr", image_id=43, name="managed.ome.zarr")
     request = RequestFactory().get("/zarr/v0.4/preview/image/43.zarr/0/.zarray")
@@ -387,9 +384,10 @@ def test_preview_image_zarray_delegates_to_raw_endpoint(monkeypatch):
     conn = _FakeConn(image)
 
     def fake_image_zarray(request, iid, level, conn=None, **kwargs):
-        """Fake image zarray.
+        """Simulate image zarray so the surrounding test controls that dependency.
 
-        Inputs: `request`, `iid`, `level`, `conn`, `**kwargs`. Output: `sentinel`.
+        Inputs: `request` Django request, `iid`, `level`, `conn` OMERO gateway
+        connection, `**kwargs` keyword arguments. Output: `sentinel`.
         """
         captured["call"] = (request, iid, level, conn, kwargs)
         return sentinel
@@ -405,7 +403,7 @@ def test_preview_image_zarray_delegates_to_raw_endpoint(monkeypatch):
 def test_preview_image_chunk_delegates_to_raw_endpoint(monkeypatch):
     """Verify preview image chunk delegates to raw endpoint.
 
-    Inputs: `monkeypatch`. Output: `sentinel`.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in preview image chunk delegates to raw endpoint.
     """
     image = _FakeImage("/managed/demo.ome.zarr", image_id=44, name="managed.ome.zarr")
     request = RequestFactory().get("/zarr/v0.4/preview/image/44.zarr/0/0/0/0/0")
@@ -414,10 +412,10 @@ def test_preview_image_chunk_delegates_to_raw_endpoint(monkeypatch):
     conn = _FakeConn(image)
 
     def fake_image_chunk(request, iid, level, chunk, conn=None, **kwargs):
-        """Fake image chunk.
+        """Simulate image chunk so the surrounding test controls that dependency.
 
-        Inputs: `request`, `iid`, `level`, `chunk`, `conn`, `**kwargs`. Output:
-        `sentinel`.
+        Inputs: `request` Django request, `iid`, `level`, `chunk`, `conn` OMERO gateway
+        connection, `**kwargs` keyword arguments. Output: `sentinel`.
         """
         captured["call"] = (request, iid, level, chunk, conn, kwargs)
         return sentinel
@@ -433,9 +431,9 @@ def test_preview_image_chunk_delegates_to_raw_endpoint(monkeypatch):
 
 
 def test_preview_image_store_path_delegates_to_raw_endpoint(monkeypatch):
-    """Verify preview image store path delegates to raw endpoint.
+    """Verify the preview image store path delegates to raw endpoint safety boundary.
 
-    Inputs: `monkeypatch`. Output: `sentinel`.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when preview image store path delegates to raw endpoint accepts unsafe input.
     """
     image = _FakeImage("/managed/demo.ome.zarr", image_id=45, name="managed.ome.zarr")
     request = RequestFactory().get("/zarr/v0.4/preview/image/45.zarr/s1/.zarray")
@@ -444,10 +442,10 @@ def test_preview_image_store_path_delegates_to_raw_endpoint(monkeypatch):
     conn = _FakeConn(image)
 
     def fake_image_store_path(request, iid, version, store_path, conn=None, **kwargs):
-        """Fake image store path.
+        """Simulate image store path so the surrounding test controls that dependency.
 
-        Inputs: `request`, `iid`, `version`, `store_path`, `conn`, `**kwargs`. Output:
-        `sentinel`.
+        Inputs: `request` Django request, `iid`, `version`, `store_path`, `conn` OMERO
+        gateway connection, `**kwargs` keyword arguments. Output: `sentinel`.
         """
         captured["call"] = (request, iid, version, store_path, conn, kwargs)
         return sentinel
@@ -466,9 +464,9 @@ def test_preview_image_store_path_delegates_to_raw_endpoint(monkeypatch):
 
 
 def test_download_store_metadata_returns_json_manifest(tmp_path):
-    """Verify download store metadata returns JSON manifest.
+    """Verify download store metadata returns JSON manifest result shape.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in download store metadata returns JSON manifest.
     """
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=7, name="demo.zarr")
@@ -488,9 +486,9 @@ def test_download_store_metadata_returns_json_manifest(tmp_path):
 
 
 def test_download_store_original_returns_zip_file(tmp_path):
-    """Verify download store original returns zip file.
+    """Verify download store original returns zip file result shape.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in download store original returns zip file.
     """
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=8, name="demo.zarr")
@@ -513,9 +511,9 @@ def test_download_store_original_returns_zip_file(tmp_path):
 
 
 def test_download_store_ome_tiff_returns_ome_tiff_file(tmp_path, monkeypatch):
-    """Verify download store ome tiff returns ome tiff file.
+    """Verify download store ome tiff returns ome tiff file result shape.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in download store ome tiff returns ome tiff file.
     """
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=9, name="demo.zarr")
@@ -559,12 +557,10 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
     tmp_path,
     monkeypatch,
 ):
-    """Verify download store ome tiff cleans up temp file when writer fails.
+    """Confirm download store ome tiff cleans up temp file when writer fails exposes the expected failure.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: computed value or None. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `self`. Raises: RuntimeError when validation or the called operation fails.
     """
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=10, name="broken.zarr")
@@ -587,10 +583,10 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
     target_path = tmp_path / "broken-output.ome.tif"
 
     class _NamedTempFile:
-        """Represent named temp file."""
+        """Test double for named temp file behavior in this module."""
 
         def __init__(self, path):
-            """Initialize the instance.
+            """Create `_NamedTempFile` with `path`.
 
             Inputs: `path`. Output: None.
             """
@@ -599,31 +595,31 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_NamedTempFile`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
     class _FailingWriter:
-        """Represent failing writer."""
+        """Test double for failing writer behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `_FailingWriter` with its default state.
 
             Inputs: `*_args`, `**_kwargs`. Output: None.
             """
             return None
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_FailingWriter`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_FailingWriter`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -633,8 +629,7 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
         def write(*_args, **_kwargs):
             """Write data to the resource.
 
-            Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or
-            unavailable state.
+            Inputs: `*_args`, `**_kwargs`. Output: None. Raises: RuntimeError when validation or the called operation fails.
             """
             raise RuntimeError("writer failed")
 
@@ -656,7 +651,7 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
 def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
     """Verify apps serves base injected shell and redirects assets.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in apps serves base injected shell and redirects assets.
     """
 
     class _FakeResponse:
@@ -666,9 +661,9 @@ def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
 
         @staticmethod
         def raise_for_status():
-            """Raise for status.
+            """Raise the configured HTTP error for this fake response.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
@@ -700,7 +695,7 @@ def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
 def test_inject_launcher_head_replaces_existing_base_tag():
     """Verify inject launcher head replaces existing base tag.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in inject launcher head replaces existing base tag.
     """
     html = '<html><head><base href="https://stale.example/"></head><body>validator</body></html>'
 
@@ -717,7 +712,7 @@ def test_inject_launcher_head_replaces_existing_base_tag():
 def test_build_app_launch_url_quotes_root_relative_source(monkeypatch):
     """Verify build app launch URL quotes root relative source.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in build app launch URL quotes root relative source.
     """
     monkeypatch.setattr(
         views,
@@ -735,7 +730,7 @@ def test_store_backed_views_cover_missing_paths_and_preview_routes(
 ):
     """Verify store backed views cover missing paths and preview routes.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in store backed views cover missing paths and preview routes.
     """
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=13, name="demo.zarr")
@@ -787,7 +782,7 @@ def test_image_preview_and_download_views_cover_missing_store_backed_images(
 ):
     """Verify image preview and download views cover missing store backed images.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in image preview and download views cover missing store backed images.
     """
     request = RequestFactory().get("/zarr/preview/image/14/")
     missing_conn = SimpleNamespace(getObject=lambda object_type, iid: None)
@@ -858,7 +853,7 @@ def test_image_preview_and_download_views_cover_missing_store_backed_images(
 def test_app_shell_helpers_cover_empty_paths_cache_fetch_and_invalid_apps(monkeypatch):
     """Verify app shell helpers cover empty paths cache fetch and invalid apps.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in app shell helpers cover empty paths cache fetch and invalid apps.
     """
     assert views._sanitize_app_asset_path("") == ""
     injected = views._inject_launcher_head(
@@ -878,9 +873,9 @@ def test_app_shell_helpers_cover_empty_paths_cache_fetch_and_invalid_apps(monkey
 
         @staticmethod
         def raise_for_status():
-            """Raise for status.
+            """Raise the configured HTTP error for this fake response.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             events.append("raise_for_status")
 

@@ -40,9 +40,9 @@ class InMemoryCache:
     """
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `InMemoryCache` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes instance state.
         """
         self._store = {}
         self._lock = threading.Lock()
@@ -52,7 +52,7 @@ class InMemoryCache:
     def _cleanup_expired(self):
         """Expired entries to prevent memory bloat.
 
-        Inputs: none. Output: None.
+        Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
         now = time.time()
 
@@ -109,9 +109,9 @@ class InMemoryCache:
             return True
 
     def delete(self, key):
-        """Delete.
+        """Delete the delete for `InMemoryCache`.
 
-        Inputs: `key`. Output: bool.
+        Inputs: `key` lookup key. Output: `bool`.
         """
         with self._lock:
             if key in self._store:
@@ -120,9 +120,9 @@ class InMemoryCache:
             return False
 
     def clear(self):
-        """Clear.
+        """Clear the clear for `InMemoryCache`.
 
-        Inputs: none. Output: None.
+        Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
         with self._lock:
             self._store.clear()
@@ -144,9 +144,7 @@ def _is_dummy_cache():
 def _cache_get(key):
     """Value from cache,.
 
-    Inputs: `key`. Output: computed value.
-
-    otherwise fall back to in-memory cache.
+    Inputs: `key` lookup key. Output: `get` result.
     """
     if _is_dummy_cache():
         return _memory_cache.get(key)
@@ -156,9 +154,8 @@ def _cache_get(key):
 def _cache_set(key, value, timeout):
     """Value in cache,.
 
-    Inputs: `key`, `value`, `timeout`. Output: computed value.
-
-    otherwise fall back to in-memory cache.
+    Inputs: `key` lookup key, `value` input value, `timeout` timeout seconds. Output:
+    `bool`.
     """
     if _is_dummy_cache():
         return _memory_cache.set(key, value, timeout)
@@ -169,7 +166,7 @@ def _cache_set(key, value, timeout):
 def _cache_delete(key):
     """A key from cache.
 
-    Inputs: `key`. Output: computed value.
+    Inputs: `key` lookup key. Output: `bool`.
     """
     if _is_dummy_cache():
         return _memory_cache.delete(key)
@@ -180,7 +177,7 @@ def _cache_delete(key):
 def _cache_timeout_seconds():
     """Calculate cache timeout - should be longer than rate limit window.
 
-    Inputs: none. Output: computed value.
+    Inputs: none. Output: cache timeout seconds result.
     """
     return max(MAJOR_ACTION_WINDOW_SECONDS, MAJOR_ACTION_BLOCK_SECONDS) * 2
 
@@ -247,13 +244,7 @@ def _get_user_key(request, conn=None):
 def build_rate_limit_message(remaining_seconds):
     """A user-friendly rate limit error message.
 
-    Inputs: `remaining_seconds`. Output: call result.
-
-    Args:
-        remaining_seconds: Time until the user can make requests again
-
-    Returns:
-        str: Formatted error message
+    Inputs: `remaining_seconds`. Output: `rate_limit_exceeded` result.
     """
     remaining = max(0, int(ceil(remaining_seconds)))
 
@@ -272,28 +263,9 @@ def build_rate_limit_message(remaining_seconds):
 
 
 def check_major_action_rate_limit(request, conn=None):
-    """Check major action rate limit.
+    """Verify major action rate limit.
 
-    Inputs: `request`, `conn`. Output: tuple.
-
-    This function implements a sliding window rate limiter:
-    - Tracks timestamps of recent actions
-    - Allows up to MAJOR_ACTION_LIMIT actions per MAJOR_ACTION_WINDOW_SECONDS
-    - Blocks users for MAJOR_ACTION_BLOCK_SECONDS when limit is exceeded
-
-    ALL major actions (save, delete, preview) share the SAME counter.
-
-    Args:
-        request: Django HttpRequest object
-        conn: Optional OMERO connection object
-
-    Returns:
-        tuple: (allowed: bool, remaining_seconds: float or None)
-            - If allowed=True: User can proceed, remaining_seconds=None
-            - If allowed=False: User is blocked, remaining_seconds=time until unblock
-
-    Thread-safety: Uses cache operations which are atomic. In-memory fallback
-    uses threading.Lock for thread safety.
+    Inputs: `request` Django request, `conn` OMERO gateway connection. Output: `tuple`.
     """
     now = time.time()
     key = _get_user_key(request, conn=conn)

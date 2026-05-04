@@ -29,18 +29,52 @@ def _test_job_id(suffix: str) -> str:
 
 
 def _payload(response):
-    """Payload.
+    """Return the payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
 
+class _FailingChunkUpload:
+    """Upload stub whose chunk reader fails before hashing completes."""
+
+    @staticmethod
+    def chunks():
+        """Raise the configured chunk-read failure.
+
+        Inputs: none. Output: none; always raises OSError.
+        """
+        raise OSError("read failed")
+
+
+class _FileOnlySeekUpload:
+    """Upload stub that rewinds through the nested file handle."""
+
+    def __init__(self, payload: bytes):
+        """Store bytes and a nested file-like rewind hook.
+
+        Inputs: `payload`. Output: None.
+        """
+        self._payload = payload
+        self.file = SimpleNamespace(
+            seek=lambda offset: setattr(self, "rewound", offset)
+        )
+        self.rewound = None
+
+    def chunks(self):
+        """Yield the stored upload bytes once.
+
+        Inputs: none. Output: list of bytes.
+        """
+        return [self._payload]
+
+
 @pytest.fixture(autouse=True)
 def _regular_wrapper_user(monkeypatch):
-    """Regular wrapper user.
+    """Record the regular wrapper user call on the test double for later assertions.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: `monkeypatch` pytest monkeypatch fixture. Output: None.
     """
     monkeypatch.setattr(
         import_view_utils,
@@ -50,17 +84,17 @@ def _regular_wrapper_user(monkeypatch):
 
 
 class _NamedObject:
-    """Represent named object."""
+    """Test double for named object behavior in this module."""
 
     def __init__(self, name: str):
-        """Initialize the instance.
+        """Create `_NamedObject` with `name`.
 
         Inputs: `name`. Output: None.
         """
         self._name = name
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_NamedObject`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
@@ -68,11 +102,11 @@ class _NamedObject:
 
 
 class _Project(_NamedObject):
-    """Represent project."""
+    """Test double for project behavior in this module."""
 
 
 class _Conn:
-    """Represent conn."""
+    """Test double for conn behavior in this module."""
 
     def __init__(
         self,
@@ -82,7 +116,7 @@ class _Conn:
         event_context=None,
         event_error: Exception | None = None,
     ):
-        """Initialize the instance.
+        """Create `_Conn` with its default state.
 
         Inputs: `project`, `group`, `event_context`, `event_error`. Output: None.
         """
@@ -92,10 +126,9 @@ class _Conn:
         self._event_error = event_error
 
     def getObject(self, kind, obj_id):
-        """Return Object.
+        """Return the object for `_Conn`.
 
-        Inputs: `kind`, `obj_id`. Output: computed value. Raises on invalid or
-        unavailable state.
+        Inputs: `kind`, `obj_id`. Output: `_project`. Raises: AssertionError when validation or the called operation fails.
         """
         if kind == "Project":
             return self._project
@@ -104,10 +137,10 @@ class _Conn:
         raise AssertionError(f"unexpected object lookup: {kind!r} {obj_id!r}")
 
     def getEventContext(self):
-        """Return Event Context.
+        """Return the event Context for `_Conn`.
 
-        Inputs: none. Output: `self._event_context`. Raises on invalid or unavailable
-        state.
+        Inputs: none. Output: text string. Raises: _event_error when validation or
+        external operations fail.
         """
         if self._event_error is not None:
             raise self._event_error
@@ -117,7 +150,7 @@ class _Conn:
 def test_index_list_projects_and_root_status_surface_runtime_context(monkeypatch):
     """Verify index list projects and root status surface runtime context.
 
-    Inputs: `monkeypatch`. Output: `HttpResponse` result.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index list projects and root status surface runtime context.
     """
     upload_root = Path(tempfile.gettempdir()) / "import-upload-root"
     request = RequestFactory().get("/omeroweb_import/")
@@ -151,9 +184,9 @@ def test_index_list_projects_and_root_status_surface_runtime_context(monkeypatch
     monkeypatch.setattr(index_view, "reverse", lambda name, kwargs=None: f"/{name}/")
 
     def fake_render(_request, _template, context):
-        """Fake render.
+        """Simulate render so the surrounding test controls that dependency.
 
-        Inputs: `_request`, `_template`, `context`. Output: `HttpResponse` result.
+        Inputs: `_request`, `_template`, `context`. Output: Django `HttpResponse`.
         """
         return HttpResponse(
             json.dumps(context, sort_keys=True),
@@ -182,10 +215,304 @@ def test_index_list_projects_and_root_status_surface_runtime_context(monkeypatch
     assert _payload(root_response) == {"is_root_user": True}
 
 
-def test_start_upload_wrapper_returns_sanitized_server_error(monkeypatch):
-    """Verify start upload wrapper returns sanitized server error.
+def test_upload_start_identity_rejects_bad_retry_identity() -> None:
+    """Confirm upload start identity rejects bad retry identity is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: import-job fakes. Output: fails on regressions in upload start identity rejects bad retry identity.
+    """
+    identity = index_view._upload_start_identity({"client_upload_id": "bad/id"})
+
+    assert identity[0] is None
+    assert identity[2].status_code == 400
+
+
+def test_client_upload_and_manifest_helpers_cover_empty_and_mismatched_inputs(
+    monkeypatch,
+) -> None:
+    """Verify client upload and manifest helpers cover empty and mismatched inputs.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in client upload and manifest helpers cover empty and mismatched inputs.
+    """
+    assert index_view._normalize_client_upload_id("x" * 65)[1]
+    assert index_view._find_client_upload_job("", "retry-1") is None
+    monkeypatch.setattr(
+        index_view,
+        "_get_jobs_root",
+        lambda: (_ for _ in ()).throw(OSError("jobs unavailable")),
+    )
+    assert index_view._find_client_upload_job("alice", "retry-1") is None
+
+    existing_job = {
+        "dataset_name_override": "Batch A",
+        "project_id": 7,
+        "files": [{"relative_path": "a.tif", "size": 1}],
+    }
+    assert (
+        index_view._same_upload_manifest(
+            existing_job,
+            [{"relative_path": "a.tif", "size": 1}],
+            "Batch B",
+            7,
+        )
+        is False
+    )
+    assert (
+        index_view._same_upload_manifest(
+            existing_job,
+            [{"relative_path": "a.tif", "size": 1}],
+            "Batch A",
+            8,
+        )
+        is False
+    )
+    assert index_view._client_upload_retry_response("alice", "", [], None, None) is None
+    monkeypatch.setattr(index_view, "_find_client_upload_job", lambda *args: None)
+    assert (
+        index_view._client_upload_retry_response(
+            "alice",
+            "retry-1",
+            [],
+            None,
+            None,
+        )
+        is None
+    )
+
+
+def test_find_client_upload_job_scans_safe_job_files_only(
+    tmp_path, monkeypatch
+) -> None:
+    """Verify find client upload job scans safe job files only.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in find client upload job scans safe job files only.
+    """
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    unsafe_path = jobs_root / "not-a-safe-id.json"
+    matching_id = _test_job_id("01")
+    matching_path = jobs_root / f"{matching_id}.json"
+    unsafe_path.write_text("{}", encoding="utf-8")
+    matching_path.write_text("{}", encoding="utf-8")
+    loaded = []
+
+    def load_job(job_id):
+        """Return a matching job only for the safe retry fixture.
+
+        Inputs: `job_id`. Output: dict.
+        """
+        loaded.append(job_id)
+        return {
+            "client_upload_id": "retry-1",
+            "username": " alice ",
+            "job_id": job_id,
+        }
+
+    monkeypatch.setattr(index_view, "_get_jobs_root", lambda: jobs_root)
+    monkeypatch.setattr(index_view, "_load_job", load_job)
+
+    assert (
+        index_view._find_client_upload_job("alice", "retry-1")["job_id"] == matching_id
+    )
+    assert loaded == [matching_id]
+
+
+def test_find_client_upload_job_ignores_unsafe_and_nonmatching_jobs(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """Verify find client upload job ignores unsafe and nonmatching jobs.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in find client upload job ignores unsafe and nonmatching jobs.
+    """
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    (jobs_root / "not-a-safe-id.json").write_text("{}", encoding="utf-8")
+    safe_id = _test_job_id("02")
+    (jobs_root / f"{safe_id}.json").write_text("{}", encoding="utf-8")
+    loaded = []
+
+    def load_job(job_id):
+        """Return a job owned by another retry identity.
+
+        Inputs: `job_id`. Output: dict.
+        """
+        loaded.append(job_id)
+        return {"client_upload_id": "other-retry", "username": "alice"}
+
+    monkeypatch.setattr(index_view, "_get_jobs_root", lambda: jobs_root)
+    monkeypatch.setattr(index_view, "_load_job", load_job)
+
+    assert index_view._find_client_upload_job("alice", "retry-1") is None
+    assert loaded == [safe_id]
+
+
+def test_upload_checksum_and_retry_response_edges(monkeypatch, tmp_path) -> None:
+    """Verify upload checksum and retry response edges result shape.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in upload checksum and retry response edges.
+    """
+    upload = _FileOnlySeekUpload(b"abc")
+    checksum, error = index_view._uploaded_file_sha256(upload)
+    assert checksum
+    assert error is None
+    assert upload.rewound == 0
+
+    checksum, error = index_view._uploaded_file_sha256(_FailingChunkUpload())
+    assert checksum is None
+    assert error == errors.unexpected_server_error_uploading_files()
+
+    invalid = index_view._validate_uploaded_chunk_checksum(upload, "bad")
+    assert invalid.status_code == 400
+    monkeypatch.setattr(
+        index_view,
+        "_uploaded_file_sha256",
+        lambda current_upload: (None, "hash failed"),
+    )
+    assert (
+        index_view._validate_uploaded_chunk_checksum(upload, "0" * 64).status_code
+        == 500
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_uploaded_file_sha256",
+        lambda current_upload: ("1" * 64, None),
+    )
+    assert (
+        index_view._validate_uploaded_chunk_checksum(upload, "0" * 64).status_code
+        == 400
+    )
+
+    retry_response = index_view._chunk_upload_incomplete_retry_response("a.tif", 3)
+    retry_payload = _payload(retry_response)
+    assert retry_payload["complete"] is False
+    assert retry_payload["saved"] == []
+    assert retry_payload["uploaded_bytes_for_file"] == 3
+
+    request = RequestFactory().post("/import/chunk/", data={"is_last_chunk": "0"})
+    monkeypatch.setattr(
+        index_view,
+        "_staged_upload_chunk_matches",
+        lambda *args: (False, None),
+    )
+    assert (
+        index_view._idempotent_chunk_retry_response(
+            request,
+            "job-id",
+            object(),
+            {},
+            tmp_path / "job-root",
+            {"status": "pending"},
+            "a.tif",
+            "_staged/a.tif",
+            3,
+            0,
+            3,
+            10,
+            "0" * 64,
+        )
+        is None
+    )
+
+
+def test_idempotent_chunk_retry_classifies_match_errors_and_completion(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """Verify idempotent chunk retry classifies match errors and completion.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in idempotent chunk retry classifies match errors and completion.
+    """
+    request = RequestFactory().post("/import/chunk/", data={"is_last_chunk": "1"})
+    common_args = (
+        request,
+        "job-id",
+        object(),
+        {"files": []},
+        tmp_path / "job-root",
+        {"status": "pending"},
+        "a.tif",
+        "_staged/a.tif",
+        3,
+        0,
+        3,
+        3,
+        "0" * 64,
+    )
+
+    monkeypatch.setattr(
+        index_view,
+        "_staged_upload_chunk_matches",
+        lambda *args: (
+            False,
+            import_core_functions._managed_upload_internal_error("storage failed"),
+        ),
+    )
+    assert index_view._idempotent_chunk_retry_response(*common_args).status_code == 500
+
+    monkeypatch.setattr(
+        index_view,
+        "_staged_upload_chunk_matches",
+        lambda *args: (False, "bad staged bytes"),
+    )
+    assert index_view._idempotent_chunk_retry_response(*common_args).status_code == 400
+
+    incomplete_request = RequestFactory().post(
+        "/import/chunk/",
+        data={"is_last_chunk": "0"},
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_staged_upload_chunk_matches",
+        lambda *args: (True, None),
+    )
+    incomplete_args = list(common_args)
+    incomplete_args[11] = 10
+    incomplete = index_view._idempotent_chunk_retry_response(
+        incomplete_request,
+        *incomplete_args[1:],
+    )
+    assert _payload(incomplete)["complete"] is False
+
+    completed = {"called": False}
+    monkeypatch.setattr(
+        index_view,
+        "_complete_chunk_upload_response",
+        lambda *args: completed.update({"called": True}) or HttpResponse("complete"),
+    )
+    final = index_view._idempotent_chunk_retry_response(*common_args)
+    assert final.content == b"complete"
+    assert completed["called"] is True
+
+
+def test_import_non_root_wrapper_accepts_legacy_positional_conn_and_url(
+    monkeypatch,
+) -> None:
+    """Verify import non root wrapper accepts legacy positional conn and URL.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in import non root wrapper accepts legacy positional conn and URL.
+    """
+    monkeypatch.setattr(
+        import_view_utils, "current_username", lambda request, conn: "alice"
+    )
+
+    @import_view_utils.require_non_root_user
+    def view(request, *, conn=None, url=None):
+        """Return the connector arguments received through the wrapper.
+
+        Inputs: `request`, `conn`, `url`. Output: dict.
+        """
+        return {"conn": conn, "url": url}
+
+    conn = object()
+    request = RequestFactory().get("/omeroweb_import/demo/")
+
+    assert view(request, conn, "webclient") == {"conn": conn, "url": "webclient"}
+
+
+def test_start_upload_wrapper_returns_sanitized_server_error(monkeypatch):
+    """Confirm start upload wrapper returns sanitized server error exposes the expected failure.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when start upload wrapper returns sanitized server error stops reporting the expected error.
     """
     request = RequestFactory().post("/omeroweb_import/start/")
 
@@ -209,9 +536,9 @@ def test_start_upload_wrapper_returns_sanitized_server_error(monkeypatch):
 def test_start_upload_success_normalizes_entries_and_captures_group_context(
     tmp_path, monkeypatch
 ):
-    """Verify start upload success normalizes entries and captures group context.
+    """Check start upload success normalizes entries and captures group context parsing against the documented contract.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: bool.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in start upload success normalizes entries and captures group context.
     """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
@@ -287,9 +614,9 @@ def test_start_upload_success_normalizes_entries_and_captures_group_context(
     )
 
     def save_job(job):
-        """Save job.
+        """Save the job.
 
-        Inputs: `job`. Output: bool.
+        Inputs: `job`. Output: `bool`.
         """
         saved["job"] = json.loads(json.dumps(job))
         return True
@@ -337,9 +664,9 @@ def test_start_upload_success_normalizes_entries_and_captures_group_context(
 
 
 def test_start_upload_uses_client_retry_id_idempotently(tmp_path, monkeypatch):
-    """Verify client upload retry IDs return existing matching jobs.
+    """Verify start upload uses client retry ID idempotently.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in start upload uses client retry ID idempotently.
     """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
@@ -423,7 +750,7 @@ def test_start_upload_handles_disabled_special_methods_event_context_failures_an
 ):
     """Verify start upload handles disabled special methods event context failures and save errors.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: bool.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in start upload handles disabled special methods event context failures and save errors.
     """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
@@ -465,9 +792,9 @@ def test_start_upload_handles_disabled_special_methods_event_context_failures_an
     )
 
     def save_job(job):
-        """Save job.
+        """Save the job.
 
-        Inputs: `job`. Output: bool.
+        Inputs: `job`. Output: `bool`.
         """
         captured["job"] = json.loads(json.dumps(job))
         return False
@@ -493,7 +820,7 @@ def test_start_upload_accepts_dataset_name_override_for_root_dataset(
 ):
     """Verify start upload accepts dataset name override for root dataset.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: bool.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in start upload accepts dataset name override for root dataset.
     """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
@@ -533,9 +860,9 @@ def test_start_upload_accepts_dataset_name_override_for_root_dataset(
     )
 
     def save_job(job):
-        """Save job.
+        """Save the job.
 
-        Inputs: `job`. Output: bool.
+        Inputs: `job`. Output: `bool`.
         """
         captured["job"] = json.loads(json.dumps(job))
         return True
@@ -553,9 +880,9 @@ def test_start_upload_accepts_dataset_name_override_for_root_dataset(
 def test_start_upload_rejects_invalid_project_payloads_paths_and_batch_limits(
     tmp_path, monkeypatch
 ):
-    """Verify start upload rejects invalid project payloads paths and batch limits.
+    """Confirm start upload rejects invalid project payloads paths and batch limits is rejected at the boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: 'Unsafe staged target' or None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in start upload rejects invalid project payloads paths and batch limits.
     """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
@@ -682,9 +1009,9 @@ def test_start_upload_rejects_invalid_project_payloads_paths_and_batch_limits(
     )
 
     def staged_error(upload_root, staged_path):
-        """Staged error.
+        """Return the staged error.
 
-        Inputs: `upload_root`, `staged_path`. Output: 'Unsafe staged target' or None.
+        Inputs: `upload_root`, `staged_path`. Output: `str`.
         """
         if "blocked" in staged_path:
             return "Unsafe staged target"
@@ -739,7 +1066,7 @@ def test_start_upload_rejects_invalid_project_payloads_paths_and_batch_limits(
 def test_upload_helpers_non_chunked_paths_and_preparation_errors(tmp_path, monkeypatch):
     """Verify upload helpers non chunked paths and preparation errors.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in upload helpers non chunked paths and preparation errors.
     """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("b2")
@@ -1025,7 +1352,7 @@ def test_upload_helpers_non_chunked_paths_and_preparation_errors(tmp_path, monke
 def test_chunk_import_confirm_prune_and_status_control_paths(tmp_path, monkeypatch):
     """Verify chunk import confirm prune and status control paths.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in chunk import confirm prune and status control paths.
     """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("c2")
@@ -1412,9 +1739,9 @@ def test_chunk_import_confirm_prune_and_status_control_paths(tmp_path, monkeypat
 def test_index_view_wrapper_and_chunk_error_edges_cover_persisted_state_failures(
     tmp_path, monkeypatch
 ):
-    """Verify index view wrapper and chunk error edges cover persisted state failures.
+    """Confirm index view wrapper and chunk error edges cover persisted state failures exposes the expected failure.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions when index view wrapper and chunk error edges cover persisted state failures stops reporting the expected error.
     """
     job_id = _test_job_id("d3")
     upload_root = tmp_path / "upload-root"
@@ -1604,9 +1931,9 @@ def test_index_view_wrapper_and_chunk_error_edges_cover_persisted_state_failures
 def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     tmp_path, monkeypatch
 ):
-    """Verify prune upload edge paths cover payload normalization and error states.
+    """Confirm prune upload edge paths cover payload normalization and error states exposes the expected failure.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `updated`.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions when prune upload edge paths cover payload normalization and error states stops reporting the expected error.
     """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
@@ -1667,7 +1994,7 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     monkeypatch.setattr(index_view, "load_json_body", lambda request: [])
 
     def update_job_none(current_job_id, updater):
-        """Update job none.
+        """Update the job none.
 
         Inputs: `current_job_id`, `updater`. Output: None.
         """
@@ -1690,7 +2017,7 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     normalized_keep_paths = []
 
     def update_job_capture(current_job_id, updater):
-        """Update job capture.
+        """Update the job capture.
 
         Inputs: `current_job_id`, `updater`. Output: `updated`.
         """
@@ -1711,7 +2038,7 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     statuses = []
 
     def update_job_status(current_job_id, updater):
-        """Update job status.
+        """Update the job status.
 
         Inputs: `current_job_id`, `updater`. Output: `updated`.
         """
@@ -1892,9 +2219,10 @@ def test_index_view_additional_chunk_and_prune_error_paths_cover_remaining_retur
     tmp_path,
     monkeypatch,
 ):
-    """Verify index view additional chunk and prune error paths cover remaining returns.
+    """Confirm index view additional chunk and prune error paths cover remaining returns exposes the expected failure.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: computed value.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `post` result.
     """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("f5")
@@ -1930,9 +2258,9 @@ def test_index_view_additional_chunk_and_prune_error_paths_cover_remaining_retur
     )
 
     def _chunk_request():
-        """Chunk request.
+        """Return the chunk request.
 
-        Inputs: none. Output: `RequestFactory().post` result.
+        Inputs: none. Output: `post` result.
         """
         return RequestFactory().post(
             f"/omeroweb_import/upload/{job_id}/",
@@ -2174,7 +2502,7 @@ def test_index_view_additional_chunk_and_prune_error_paths_cover_remaining_retur
     )
 
     def update_job(current_job_id, updater):
-        """Update job.
+        """Update the job.
 
         Inputs: `current_job_id`, `updater`. Output: `updater` result.
         """

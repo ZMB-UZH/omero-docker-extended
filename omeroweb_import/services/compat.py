@@ -45,9 +45,9 @@ def _job_path(job_id: str):
 
 
 def _load_job(job_id: str):
-    """Load job.
+    """Load the job.
 
-    Inputs: `job_id`. Output: `_load_job_internal` result.
+    Inputs: `job_id` (str). Output: `_load_job_internal` result.
     """
     return _load_job_internal(job_id, get_jobs_root())
 
@@ -70,7 +70,8 @@ def _robust_update_job(
 ):
     """Job without needing to pass jobs_root.
 
-    Inputs: `job_id`, `update_fn`, `retries`, `timeout`. Output: call result.
+    Inputs: `job_id` (str), `update_fn`, `retries` (int), `timeout` (float) timeout
+    seconds. Output: `_robust_update_job_internal` result.
     """
     return _robust_update_job_internal(
         job_id, update_fn, get_jobs_root(), retries, timeout

@@ -49,9 +49,9 @@ SAMPLE_ARGUMENTS = {
 
 
 def _public_functions(module):
-    """Public functions.
+    """Return the public functions.
 
-    Inputs: `module`. Output: yielded values.
+    Inputs: `module` module object. Output: iterator of yielded items.
     """
     for name, value in vars(module).items():
         if name.startswith("_") or not callable(value):
@@ -60,7 +60,7 @@ def _public_functions(module):
 
 
 def _build_call_args(func):
-    """Call args.
+    """Build the call args.
 
     Inputs: `func`. Output: `args`.
     """
@@ -82,9 +82,9 @@ def _build_call_args(func):
 
 
 def _referenced_helper_names(package_name: str, module_alias: str) -> set[str]:
-    """Referenced helper names.
+    """Return the referenced helper names.
 
-    Inputs: `package_name`, `module_alias`. Output: `set[str]`.
+    Inputs: `package_name` (str), `module_alias` (str). Output: `set[str]`.
     """
     names: set[str] = set()
     for source_path in (REPO_ROOT / package_name).rglob("*.py"):
@@ -104,9 +104,9 @@ def _referenced_helper_names(package_name: str, module_alias: str) -> set[str]:
 
 
 def test_referenced_string_helpers_exist_across_import_and_omp_packages():
-    """Verify referenced string helpers exist across import and omp packages.
+    """Verify referenced string helpers exist across import and OMP packages.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in referenced string helpers exist across import and OMP packages.
     """
     for package_name, modules in STRING_PACKAGES.items():
         for module_alias, module in modules.items():
@@ -123,7 +123,7 @@ def test_referenced_string_helpers_exist_across_import_and_omp_packages():
 def test_public_string_helpers_return_non_empty_text():
     """Verify public string helpers return non empty text.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in public string helpers return non empty text.
     """
     for package_name, modules in STRING_PACKAGES.items():
         for module_alias, module in modules.items():

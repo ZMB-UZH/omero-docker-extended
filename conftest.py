@@ -69,9 +69,9 @@ def _set_module_metadata(
 
 
 def _mock_module(module_name: str) -> MagicMock:
-    """Mock module.
+    """Return the mock module.
 
-    Inputs: `module_name`. Output: `MagicMock`.
+    Inputs: `module_name` (str). Output: `MagicMock`.
     """
     return _set_module_metadata(MagicMock(), module_name)
 
@@ -79,23 +79,20 @@ def _mock_module(module_name: str) -> MagicMock:
 def _passthrough_login_required(*args, **kwargs):
     """Replicate omeroweb.decorators.login_required as a no-op decorator.
 
-    Inputs: `*args`, `**kwargs`. Output: computed value.
-
-    Returns a thin wrapper that forwards all arguments unchanged and exposes
-    ``__wrapped__`` (the ``functools.wraps`` contract) so tests can unwrap
-    the decorator the same way they would in production.
+    Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+    `decorator`.
     """
     from functools import wraps
 
     def decorator(func):
-        """Decorator.
+        """Return the decorator.
 
-        Inputs: `func`. Output: computed value.
+        Inputs: `func`. Output: `wrapper`.
         """
 
         @wraps(func)
         def wrapper(*a, **kw):
-            """Wrapper.
+            """Return the wrapper.
 
             Inputs: `*a`, `**kw`. Output: `func` result.
             """
@@ -126,7 +123,7 @@ class _ColorHolder:
     """Minimal stand-in for omero.gateway.ColorHolder."""
 
     def __init__(self, r=0, g=0, b=0, a=255):
-        """Initialize the instance.
+        """Create `_ColorHolder` with `r`, `g`, `b`, and `a`.
 
         Inputs: `r`, `g`, `b`, `a`. Output: None.
         """
@@ -134,7 +131,7 @@ class _ColorHolder:
 
     @classmethod
     def fromRGBA(cls, r, g, b, a):
-        """From rgba.
+        """Return the from RGBA for `_ColorHolder`.
 
         Inputs: `r`, `g`, `b`, `a`. Output: `cls` result.
         """
@@ -143,7 +140,7 @@ class _ColorHolder:
     def getHtml(self):
         """Return the HTML color value.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: HTML text.
         """
         return f"{self._r:02X}{self._g:02X}{self._b:02X}"
 
@@ -194,7 +191,7 @@ class _DummyCelery:
     """Test double for dummy celery."""
 
     def __init__(self, *args, **kwargs):
-        """Initialize the instance.
+        """Create `_DummyCelery` with its default state.
 
         Inputs: `*args`, `**kwargs`. Output: None.
         """
@@ -202,21 +199,23 @@ class _DummyCelery:
 
     @staticmethod
     def autodiscover_tasks(*args, **kwargs):
-        """Autodiscover tasks.
+        """Record Celery autodiscovery calls for the surrounding test.
 
-        Inputs: `*args`, `**kwargs`. Output: None.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        None.
         """
         return None
 
     @staticmethod
     def task(*args, **kwargs):
-        """Task.
+        """Return the task for `_DummyCelery`.
 
-        Inputs: `*args`, `**kwargs`. Output: computed value.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `decorator`.
         """
 
         def decorator(func):
-            """Decorator.
+            """Return the decorator for `_DummyCelery`.
 
             Inputs: `func`. Output: `func`.
             """
@@ -366,9 +365,9 @@ _MODULE_STATE_BASELINE: dict[str, tuple[ModuleType, dict[str, Any]]] = {}
 
 
 def _matches_isolated_prefix(module_name: str) -> bool:
-    """Matches isolated prefix.
+    """Return whether isolated prefix.
 
-    Inputs: `module_name`. Output: `bool`.
+    Inputs: `module_name` (str). Output: `bool`.
     """
     return any(
         module_name == prefix or module_name.startswith(f"{prefix}.")
@@ -377,7 +376,7 @@ def _matches_isolated_prefix(module_name: str) -> bool:
 
 
 def _snapshot_module_state() -> dict[str, tuple[ModuleType, dict[str, Any]]]:
-    """Snapshot module state.
+    """Return the snapshot module state.
 
     Inputs: none. Output: `dict[str, tuple[ModuleType, dict[str, Any]]]`.
     """
@@ -391,9 +390,9 @@ def _snapshot_module_state() -> dict[str, tuple[ModuleType, dict[str, Any]]]:
 def _restore_module_state(
     snapshot: dict[str, tuple[ModuleType, dict[str, Any]]],
 ) -> None:
-    """Restore module state.
+    """Restore isolated module state after collection-time imports.
 
-    Inputs: `snapshot`. Output: None.
+    Inputs: `snapshot` (dict[str, tuple[ModuleType, dict[str, Any]]]). Output: None.
     """
     if not snapshot:
         return
@@ -414,9 +413,9 @@ def _restore_module_state(
 
 
 def pytest_collection_finish() -> None:
-    """Pytest collection finish.
+    """Finalize pytest collection after applying repository import isolation.
 
-    Inputs: none. Output: None.
+    Inputs: no caller arguments. Output: performs the documented action and returns None.
     """
     _MODULE_STATE_BASELINE.clear()
     _MODULE_STATE_BASELINE.update(_snapshot_module_state())
@@ -424,9 +423,9 @@ def pytest_collection_finish() -> None:
 
 @pytest.fixture(autouse=True)
 def _isolate_module_state():
-    """Isolate module state.
+    """Return the isolate module state.
 
-    Inputs: none. Output: yielded values.
+    Inputs: none. Output: iterator of yielded items.
     """
     _restore_module_state(_MODULE_STATE_BASELINE)
     yield

@@ -14,10 +14,9 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
 ):
     """Verify core function small helper edges cover early validation paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: 'fallback'. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` (Path) temporary path
+    fixture. Output: `str`. Raises: RuntimeError when validation or external operations
+    fail.
     """
     monkeypatch.setenv("EDGE_INT_VALUE", "bad")
     assert core_functions._get_env_int("EDGE_INT_VALUE", 7, 1, 10) == 7
@@ -133,18 +132,18 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
     assert derived == {"image.png": ["note.txt"]}
 
     class _BrokenValue:
-        """Represent broken value."""
+        """Test double for broken value behavior in this module."""
 
         @staticmethod
         def getValue():
-            """Return the fake OMERO value.
+            """Return `_BrokenValue`'s fake OMERO value.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("boom")
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_BrokenValue` as test-readable text.
 
             Inputs: none. Output: 'fallback'.
             """
@@ -187,15 +186,15 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
     assert core_functions._native_zarr_length_from_value_unit([]) is None
 
     class _BrokenLength:
-        """Represent broken length."""
+        """Test double for broken length behavior in this module."""
 
         val = None
 
         @staticmethod
         def getValue():
-            """Return the fake OMERO value.
+            """Return `_BrokenLength`'s fake OMERO value.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("bad value")
 
@@ -207,7 +206,8 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
 ):
     """Verify core function connection and name normalization helpers cover remaining paths.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in core function connection and name normalization helpers cover remaining paths.
+    when validation or the called operation fails.
     """
     monkeypatch.delenv(core_functions.JOB_SERVICE_USER_ENV, raising=False)
     monkeypatch.delenv(core_functions.JOB_SERVICE_USER_ENV_FALLBACK, raising=False)
@@ -244,9 +244,9 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
     )
 
     def _raising_connect():
-        """Raising connect.
+        """Record the raising connect call on the test double for later assertions.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
         """
         raise RuntimeError("connect exploded")
 
@@ -367,7 +367,7 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
 def test_core_function_message_and_import_verification_helpers_cover_remaining_paths():
     """Verify core function message and import verification helpers cover remaining paths.
 
-    Inputs: none. Output: None.
+    Inputs: import-job fakes. Output: fails on regressions in core function message and import verification helpers cover remaining paths.
     """
     job = {}
     core_functions._append_job_message(job, "")

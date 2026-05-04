@@ -12,9 +12,9 @@ RETENTION_FILE_MARKER_SUFFIX = ".retain-until"
 
 
 def _resolve_existing(path: Path) -> Path | None:
-    """Resolve existing.
+    """Resolve the existing.
 
-    Inputs: `path`. Output: `Path | None`.
+    Inputs: `path` (Path) path. Output: `Path | None`.
     """
     try:
         return path.resolve(strict=True)
@@ -23,9 +23,9 @@ def _resolve_existing(path: Path) -> Path | None:
 
 
 def _resolve_child_candidate(path: Path) -> Path | None:
-    """Resolve child candidate.
+    """Resolve the child candidate.
 
-    Inputs: `path`. Output: `Path | None`.
+    Inputs: `path` (Path) path. Output: `Path | None`.
     """
     if path.exists() or path.is_symlink():
         return _resolve_existing(path)
@@ -116,9 +116,9 @@ def safe_remove_job_data(job_id: str, upload_root: Path) -> bool:
 
 
 def _retention_marker_path(path: Path) -> Path:
-    """Retention marker path.
+    """Return the retention marker path.
 
-    Inputs: `path`. Output: `Path`.
+    Inputs: `path` (Path) path. Output: `Path`.
     """
     if path.is_dir():
         return path / RETENTION_DIR_MARKER_NAME
@@ -126,9 +126,9 @@ def _retention_marker_path(path: Path) -> Path:
 
 
 def _fsync_directory(path: Path) -> None:
-    """Fsync directory.
+    """Flush directory metadata after atomic filesystem updates.
 
-    Inputs: `path`. Output: None.
+    Inputs: `path` (Path) path. Output: None.
     """
     try:
         dir_fd = os.open(path, os.O_DIRECTORY)

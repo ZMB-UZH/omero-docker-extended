@@ -19,15 +19,15 @@ from omeroweb_admin_tools.views import index_view, utils as view_utils
 
 
 def _json_payload(response):
-    """JSON payload.
+    """Return the JSON payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
 
 def _unwrap_view(func):
-    """Unwrap view.
+    """Return the unwrap view.
 
     Inputs: `func`. Output: `func`.
     """
@@ -37,17 +37,17 @@ def _unwrap_view(func):
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._raw_value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self._raw_value`.
         """
@@ -55,10 +55,10 @@ class _Value:
 
 
 class _User:
-    """Represent user."""
+    """Test double for user behavior in this module."""
 
     def __init__(self, user_id, username):
-        """Initialize the instance.
+        """Create `_User` with `user_id` and `username`.
 
         Inputs: `user_id`, `username`. Output: None.
         """
@@ -66,7 +66,7 @@ class _User:
         self.omeName = _Value(username)
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_User`'s fake OMERO identifier.
 
         Inputs: none. Output: `self.id`.
         """
@@ -81,10 +81,10 @@ class _User:
 
 
 class _Group:
-    """Represent group."""
+    """Test double for group behavior in this module."""
 
     def __init__(self, group_id, name):
-        """Initialize the instance.
+        """Create `_Group` with `group_id` and `name`.
 
         Inputs: `group_id`, `name`. Output: None.
         """
@@ -92,14 +92,14 @@ class _Group:
         self.name = _Value(name)
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_Group`'s fake OMERO identifier.
 
         Inputs: none. Output: `self.id`.
         """
         return self.id
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_Group`'s fake object name.
 
         Inputs: none. Output: `self.name`.
         """
@@ -107,7 +107,7 @@ class _Group:
 
     @staticmethod
     def getDetails():
-        """Return Details.
+        """Return the details for `_Group`.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -119,7 +119,7 @@ def test_admin_config_and_root_user_decorator_cover_remaining_validation_edges(
 ):
     """Verify admin config and root user decorator cover remaining validation edges.
 
-    Inputs: `monkeypatch`. Output: `HttpResponse` result.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in admin config and root user decorator cover remaining validation edges.
     """
     monkeypatch.setattr(
         admin_config,
@@ -164,9 +164,10 @@ def test_admin_config_and_root_user_decorator_cover_remaining_validation_edges(
 
     @view_utils.require_root_user
     def _sentinel(_request, *args, **kwargs):
-        """Sentinel.
+        """Return the sentinel.
 
-        Inputs: `_request`, `*args`, `**kwargs`. Output: `HttpResponse` result.
+        Inputs: `_request`, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: Django `HttpResponse`.
         """
         return HttpResponse("ok")
 
@@ -181,12 +182,11 @@ def test_storage_quota_and_cache_helpers_cover_cleanup_and_type_guard_edges(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ):
-    """Verify storage quota and cache helpers cover cleanup and type guard edges.
+    """Check storage quota and cache helpers cover cleanup and type guard edges cleanup behavior.
 
-    Inputs: `monkeypatch`, `tmp_path`, `caplog`. Output: computed value. Raises on
-    invalid or unavailable state.
-
-    invalid or unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` (Path) temporary path
+    fixture, `caplog` (pytest.LogCaptureFixture) pytest log capture fixture. Output:
+    `real_unlink` result. Raises: OSError when validation or the called operation fails.
     """
     monkeypatch.setenv(storage_quotas.MIN_GROUP_QUOTA_ENV, "0.10")
     monkeypatch.setenv(storage_quotas.DEFAULT_GROUP_QUOTA_ENV, "0.25")
@@ -197,12 +197,9 @@ def test_storage_quota_and_cache_helpers_cover_cleanup_and_type_guard_edges(
     real_unlink = Path.unlink
 
     def _patched_unlink(self, missing_ok=False):
-        """Patched unlink.
+        """Return the patched unlink.
 
-        Inputs: `missing_ok`. Output: `real_unlink` result. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `missing_ok`. Output: `real_unlink` result. Raises: OSError when validation or the called operation fails.
         """
         if self == legacy_tmp:
             raise OSError("legacy cleanup blocked")
@@ -250,9 +247,9 @@ def test_storage_quota_and_cache_helpers_cover_cleanup_and_type_guard_edges(
     )
 
     def _loader():
-        """Loader.
+        """Return the loader.
 
-        Inputs: none. Output: 'new'.
+        Inputs: none. Output: `str`.
         """
         cache._values["key"] = log_query._CacheRecord(
             value="old",
@@ -272,10 +269,8 @@ def test_admin_index_helpers_and_views_cover_remaining_proxy_compose_and_quota_e
 ):
     """Verify admin index helpers and views cover remaining proxy compose and quota edges.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in admin index helpers and views cover remaining proxy compose and quota edges.
+    RuntimeError when validation or the called operation fails.
     """
     headers = HTTPMessage()
     headers.add_header("Content-Type", "text/html; charset=utf-8")
@@ -301,38 +296,39 @@ def test_admin_index_helpers_and_views_cover_remaining_proxy_compose_and_quota_e
     user = _User(5, "alice")
 
     class _AdminService:
-        """Represent admin service."""
+        """Test double for admin service behavior in this module."""
 
         @staticmethod
         def lookupExperimenters():
-            """Lookup experimenters.
+            """Return the lookup Experimenters for `_AdminService`.
 
-            Inputs: none. Output: list.
+            Inputs: none. Output: `list`.
             """
             return [user]
 
         @staticmethod
         def lookupGroups():
-            """Lookup groups.
+            """Return the lookup Groups for `_AdminService`.
 
-            Inputs: none. Output: list.
+            Inputs: none. Output: `list`.
             """
             return [blank_group, valid_group]
 
         @staticmethod
         def containedGroups(*args):
-            """Contained groups.
+            """Return the contained Groups for `_AdminService`.
 
-            Inputs: `*args`. Output: computed value.
+            Inputs: `*args` positional arguments. Output: contained groups result.
             """
             identifier = args[0] if args else None
             return [blank_group] if identifier is not None else [valid_group]
 
         @staticmethod
         def containedExperimenters(*args):
-            """Contained experimenters.
+            """Record the contained experimenters call on `_AdminService` for later assertions.
 
-            Inputs: `*args`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `*args` positional arguments. Output: None. Raises: RuntimeError
+            when validation or the called operation fails.
             """
             raise RuntimeError("enumeration failed")
 
@@ -496,9 +492,9 @@ def test_admin_index_helpers_and_views_cover_remaining_proxy_compose_and_quota_e
 def test_system_diagnostics_import_success_path_caches_psycopg2_module(
     monkeypatch,
 ):
-    """Verify system diagnostics import success path caches psycopg2 module.
+    """Verify the system diagnostics import success path caches psycopg2 module safety boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when system diagnostics import success path caches psycopg2 module accepts unsafe input.
     """
     from omeroweb_admin_tools.services import system_diagnostics
 

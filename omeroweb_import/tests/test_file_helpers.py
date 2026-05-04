@@ -6,7 +6,7 @@ from omeroweb_import.utils import file_helpers
 def test_initialize_directories_populates_caches_and_permissions(tmp_path, monkeypatch):
     """Verify initialize directories populates caches and permissions.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in initialize directories populates caches and permissions.
     """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
@@ -27,7 +27,7 @@ def test_initialize_directories_populates_caches_and_permissions(tmp_path, monke
 def test_file_helper_directory_and_name_safety_helpers(tmp_path):
     """Verify file helper directory and name safety helpers.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in file helper directory and name safety helpers.
     """
     target = tmp_path / "nested" / "artifact.txt"
 
@@ -47,7 +47,7 @@ def test_file_helper_directory_and_name_safety_helpers(tmp_path):
 def test_file_helper_safe_remove_tree_requires_root_membership(tmp_path):
     """Verify file helper safe remove tree requires root membership.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in file helper safe remove tree requires root membership.
     """
     root = tmp_path / "root"
     root.mkdir()

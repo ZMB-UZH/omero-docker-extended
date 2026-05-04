@@ -22,9 +22,9 @@ DEFAULT_REQUEST_TIMEOUT_SECONDS = 120
 
 
 def curl_config_quote(value: str) -> str:
-    """Curl config quote.
+    """Return the curl config quote.
 
-    Inputs: `value`. Output: `str`.
+    Inputs: `value` (str) input value. Output: `str`.
     """
     escaped = (
         value.replace("\\", "\\\\")
@@ -36,7 +36,7 @@ def curl_config_quote(value: str) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse args.
+    """Parse command-line arguments for `tools.scanner_inventory`.
 
     Inputs: none. Output: `argparse.Namespace`.
     """
@@ -118,9 +118,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def positive_int(value: str) -> int:
-    """Positive int.
+    """Return the positive int.
 
-    Inputs: `value`. Output: `int`. Raises on invalid or unavailable state.
+    Inputs: `value` (str) input value. Output: `int`. Raises: ArgumentTypeError when validation
+    or the called operation fails.
     """
     try:
         parsed = int(value)
@@ -132,9 +133,9 @@ def positive_int(value: str) -> int:
 
 
 def add_request_timeout_argument(parser: argparse.ArgumentParser) -> None:
-    """Add request timeout argument.
+    """Add the request timeout argument.
 
-    Inputs: `parser`. Output: None.
+    Inputs: `parser` (argparse.ArgumentParser). Output: None.
     """
     parser.add_argument(
         "--request-timeout",
@@ -150,7 +151,8 @@ def add_request_timeout_argument(parser: argparse.ArgumentParser) -> None:
 def read_token(env_name: str, label: str) -> str:
     """Return read token.
 
-    Inputs: `env_name`, `label`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `env_name` (str), `label` (str). Output: `str`. Raises: SystemExit when validation
+    or the called operation fails.
     """
     token = os.environ.get(env_name, "").strip()
     if token:
@@ -176,10 +178,10 @@ def validate_repository_component(value: str) -> bool:
 
 
 def parse_github_repository(repository: str) -> tuple[str, str]:
-    """Return a validated GitHub OWNER/REPO tuple.
+    """Validate an OWNER/REPO identifier and split it for GitHub API paths.
 
-    Inputs: `repository`. Output: `tuple[str, str]`. Raises on invalid or unavailable
-    state.
+    Inputs: `repository` (str). Output: `tuple[str, str]`. Raises: SystemExit when validation or
+    the called operation fails.
     """
     parts = repository.split("/")
     if (
@@ -202,10 +204,11 @@ def fetch_json(
     service: str,
     timeout_seconds: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
 ) -> Any:
-    """Fetch JSON.
+    """Fetch the JSON.
 
-    Inputs: `url`, `headers`, `data`, `method`, `service`, `timeout_seconds`. Output:
-    `Any`. Raises on invalid or unavailable state.
+    Inputs: `url` (str) URL, `headers` (dict[str, str]), `data` (bytes | None) payload,
+    `method` (str | None), `service` (str), `timeout_seconds` (int). Output: `Any`.
+    Raises: SystemExit when validation or the called operation fails.
     """
     parsed_url = urllib.parse.urlsplit(url)
     if parsed_url.scheme != "https" or not parsed_url.hostname:
@@ -251,9 +254,10 @@ def fetch_json(
 def latest_github_api_version(
     timeout_seconds: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
 ) -> str:
-    """Latest github API version.
+    """Return the latest github API version.
 
-    Inputs: `timeout_seconds`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `timeout_seconds` (int). Output: `str`. Raises: SystemExit when validation or the
+    called operation fails.
     """
     versions = fetch_json(
         "https://api.github.com/versions",
@@ -272,9 +276,10 @@ def latest_github_api_version(
 
 
 def summarize_github_code_scanning(args: argparse.Namespace) -> dict[str, Any]:
-    """Summarize github code scanning.
+    """Return the summarize github code scanning.
 
-    Inputs: `args`. Output: `dict[str, Any]`. Raises on invalid or unavailable state.
+    Inputs: `args` (argparse.Namespace) positional arguments. Output: `dict[str, Any]`.
+    Raises: SystemExit when validation or the called operation fails.
     """
     owner, repo = parse_github_repository(args.repository)
     repository = f"{owner}/{repo}"
@@ -327,10 +332,10 @@ def summarize_github_code_scanning(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def parse_deepsource_repository(repository: str) -> tuple[str, str, str]:
-    """Parse deepsource repository.
+    """Validate a gh/OWNER/REPO identifier and split it for DeepSource API calls.
 
-    Inputs: `repository`. Output: `tuple[str, str, str]`. Raises on invalid or
-    unavailable state.
+    Inputs: `repository` (str). Output: `tuple[str, str, str]`. Raises: SystemExit when
+    validation or the called operation fails.
     """
     parts = repository.split("/")
     if (
@@ -346,9 +351,10 @@ def parse_deepsource_repository(repository: str) -> tuple[str, str, str]:
 
 
 def summarize_deepsource(args: argparse.Namespace) -> dict[str, Any]:
-    """Summarize deepsource.
+    """Return the summarize deepsource.
 
-    Inputs: `args`. Output: `dict[str, Any]`. Raises on invalid or unavailable state.
+    Inputs: `args` (argparse.Namespace) positional arguments. Output: `dict[str, Any]`.
+    Raises: SystemExit when validation or the called operation fails.
     """
     vcs_provider, login, name = parse_deepsource_repository(args.repository)
     token = read_token(args.token_env, "DeepSource")
@@ -404,9 +410,10 @@ def summarize_deepsource(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def summarize_deepsource_issues(args: argparse.Namespace) -> dict[str, Any]:
-    """Summarize deepsource issues.
+    """Return the summarize deepsource issues.
 
-    Inputs: `args`. Output: `dict[str, Any]`. Raises on invalid or unavailable state.
+    Inputs: `args` (argparse.Namespace) positional arguments. Output: `dict[str, Any]`.
+    Raises: SystemExit when validation or the called operation fails.
     """
     vcs_provider, login, name = parse_deepsource_repository(args.repository)
     token = read_token(args.token_env, "DeepSource")
@@ -537,9 +544,9 @@ def summarize_deepsource_issues(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.scanner_inventory` command entrypoint.
 
-    Inputs: none. Output: `int`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `int`. Raises: SystemExit for the exercised failure path.
     """
     args = parse_args()
     if args.command == "github-code-scanning":

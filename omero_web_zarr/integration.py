@@ -54,9 +54,10 @@ def _safe_rendering_enabled():
 
 
 def _require_webgateway_callable(module, name):
-    """Webgateway callable.
+    """Require the webgateway callable.
 
-    Inputs: `module`, `name`. Output: `hook`. Raises on invalid or unavailable state.
+    Inputs: `module` module object, `name` name. Output: `hook`. Raises: AttributeError
+    when validation or the called operation fails.
     """
     hook = getattr(module, name, None)
     if callable(hook):
@@ -66,10 +67,10 @@ def _require_webgateway_callable(module, name):
 
 
 class _StoreBackedChannelWrapper:
-    """Represent store backed channel wrapper."""
+    """Helper type for store backed channel wrapper behavior."""
 
     def __init__(self, channel, override):
-        """Initialize the instance.
+        """Create `_StoreBackedChannelWrapper` with `channel` and `override`.
 
         Inputs: `channel`, `override`. Output: None.
         """
@@ -84,9 +85,9 @@ class _StoreBackedChannelWrapper:
         return getattr(self._channel, name)
 
     def getLabel(self):
-        """Return Label.
+        """Return the label for `_StoreBackedChannelWrapper`.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: `getLabel` result.
         """
         label = self._override.get("label")
         if label:
@@ -94,9 +95,9 @@ class _StoreBackedChannelWrapper:
         return self._channel.getLabel()
 
     def getColor(self):
-        """Return Color.
+        """Return the color for `_StoreBackedChannelWrapper`.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: `fromRGBA` result.
         """
         color = self._override.get("color")
         if color is None:
@@ -106,9 +107,9 @@ class _StoreBackedChannelWrapper:
         return ColorHolder.fromRGBA(color[0], color[1], color[2], 255)
 
     def isActive(self):
-        """Return whether Active.
+        """Report the active boolean exposed by this OMERO-compatible object.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: `bool`.
         """
         active = self._override.get("active")
         if active is None:
@@ -116,9 +117,9 @@ class _StoreBackedChannelWrapper:
         return bool(active)
 
     def isInverted(self):
-        """Return whether Inverted.
+        """Report the inverted boolean exposed by this OMERO-compatible object.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: `bool`.
         """
         inverted = self._override.get("inverted")
         if inverted is None:
@@ -127,9 +128,9 @@ class _StoreBackedChannelWrapper:
         return bool(inverted)
 
     def getWindowStart(self):
-        """Return Window Start.
+        """Return the window start value exposed by this OMERO-compatible object.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: get window start result.
         """
         window = self._override.get("window")
         if window is None:
@@ -137,9 +138,9 @@ class _StoreBackedChannelWrapper:
         return window[0]
 
     def getWindowEnd(self):
-        """Return Window End.
+        """Return the window end value exposed by this OMERO-compatible object.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: get window end result.
         """
         window = self._override.get("window")
         if window is None:
@@ -148,9 +149,9 @@ class _StoreBackedChannelWrapper:
 
 
 def _decorate_store_backed_channels(image, channels):
-    """Decorate store backed channels.
+    """Return the decorate store backed channels.
 
-    Inputs: `image`, `channels`. Output: computed value.
+    Inputs: `image`, `channels`. Output: `wrapped`.
     """
     if not channels:
         return channels
@@ -177,7 +178,8 @@ def _get_store_backed_image(conn, iid):
 def _store_backed_render_response(image, request, z=None, t=None, download=False):
     """Backed render response.
 
-    Inputs: `image`, `request`, `z`, `t`, `download`. Output: computed value.
+    Inputs: `image`, `request` Django request, `z`, `t`, `download`. Output: response
+    object.
     """
     requested_format = request.GET.get("format", "jpeg")
     pil_image = render_store_backed_pil_image(image, z=z, t=t)
@@ -225,7 +227,7 @@ def _store_backed_pixel_range(node):
 def _store_backed_rendering_model(channels):
     """Backed rendering model.
 
-    Inputs: `channels`. Output: computed value.
+    Inputs: `channels`. Output: `str`.
     """
     if len(channels) > 1:
         return "color"
@@ -241,9 +243,9 @@ def _store_backed_rendering_model(channels):
 
 
 def _store_backed_project(image):
-    """Backed project.
+    """Return the store backed project.
 
-    Inputs: `image`. Output: `image.getProject` result or None.
+    Inputs: `image`. Output: `getProject` result.
     """
     try:
         return image.getProject()
@@ -278,9 +280,9 @@ def _store_backed_parent_context(image):
 
 
 def _truthy_attribute(entity, name, default):
-    """Truthy attribute.
+    """Return the truthy attribute.
 
-    Inputs: `entity`, `name`, `default`. Output: computed value.
+    Inputs: `entity`, `name` name, `default`. Output: `bool`.
     """
     if entity is None:
         return default
@@ -291,7 +293,7 @@ def _truthy_attribute(entity, name, default):
 def _store_backed_well_id(well):
     """Backed well ID.
 
-    Inputs: `well`. Output: computed value.
+    Inputs: `well`. Output: `bool`.
     """
     if well is None:
         return ""
@@ -299,9 +301,9 @@ def _store_backed_well_id(well):
 
 
 def _store_backed_metadata(image):
-    """Backed metadata.
+    """Return the store backed metadata.
 
-    Inputs: `image`. Output: dict.
+    Inputs: `image`. Output: `dict`.
     """
     project = _store_backed_project(image)
     dataset, well = _store_backed_parent_context(image)
@@ -327,9 +329,9 @@ def _store_backed_metadata(image):
 
 
 def _exception_text(exc):
-    """Exception text.
+    """Return the exception text.
 
-    Inputs: `exc`. Output: joined exception-message text.
+    Inputs: `exc`. Output: `join` result.
     """
     parts = [
         str(exc),
@@ -352,7 +354,7 @@ def _is_known_rendering_engine_failure(exc):
 
 
 def _pixel_size_in_microns(image):
-    """Pixel size in microns.
+    """Return the pixel size in microns.
 
     Inputs: `image`. Output: `pixel_size`.
     """
@@ -375,9 +377,9 @@ def _pixel_size_in_microns(image):
 
 
 def _regular_image_marshal_base_payload(image):
-    """Regular image marshal base payload.
+    """Return the regular image marshal base payload.
 
-    Inputs: `image`. Output: dict.
+    Inputs: `image`. Output: `dict`.
     """
     return {
         "id": image.id,
@@ -392,9 +394,9 @@ def _regular_image_marshal_base_payload(image):
 
 
 def _regular_image_rendering_engine_or_payload(image, payload):
-    """Regular image rendering engine or payload.
+    """Return the regular image rendering engine or payload.
 
-    Inputs: `image`, `payload`. Output: tuple.
+    Inputs: `image`, `payload` payload. Output: `tuple`.
     """
     try:
         rendering_engine_ready = prepare_image_rendering_engine(image)
@@ -411,9 +413,9 @@ def _regular_image_rendering_engine_or_payload(image, payload):
 
 
 def _apply_regular_tile_metadata(payload, image, rendering_engine):
-    """Apply regular tile metadata.
+    """Apply the regular tile metadata.
 
-    Inputs: `payload`, `image`, `rendering_engine`. Output: `levels`.
+    Inputs: `payload` payload, `image`, `rendering_engine`. Output: `levels`.
     """
     levels = rendering_engine.getResolutionLevels()
     tiles = levels > 1
@@ -441,9 +443,9 @@ def _apply_regular_tile_metadata(payload, image, rendering_engine):
 
 
 def _regular_nominal_magnification(image):
-    """Regular nominal magnification.
+    """Return the regular nominal magnification.
 
-    Inputs: `image`. Output: bool.
+    Inputs: `image`. Output: `bool`.
     """
     objective_settings = image.getObjectiveSettings()
     return (
@@ -454,9 +456,9 @@ def _regular_nominal_magnification(image):
 
 
 def _regular_viewer_settings(request):
-    """Regular viewer settings.
+    """Return the regular viewer settings.
 
-    Inputs: `request`. Output: computed value.
+    Inputs: `request` Django request. Output: `get` result.
     """
     try:
         return request.session.get("server_settings", {}).get("viewer", {})
@@ -465,9 +467,9 @@ def _regular_viewer_settings(request):
 
 
 def _regular_initial_zoom(viewer_settings, levels):
-    """Regular initial zoom.
+    """Return the regular initial zoom.
 
-    Inputs: `viewer_settings`, `levels`. Output: computed value.
+    Inputs: `viewer_settings`, `levels`. Output: `init_zoom`.
     """
     init_zoom = viewer_settings.get("initial_zoom_level", 0)
     if init_zoom is not None and init_zoom < 0:
@@ -476,9 +478,9 @@ def _regular_initial_zoom(viewer_settings, levels):
 
 
 def _apply_regular_viewer_metadata(payload, image, viewer_settings, levels):
-    """Apply regular viewer metadata.
+    """Apply the regular viewer metadata.
 
-    Inputs: `payload`, `image`, `viewer_settings`, `levels`. Output: None.
+    Inputs: `payload` payload, `image`, `viewer_settings`, `levels`. Output: None.
     """
     init_zoom = _regular_initial_zoom(viewer_settings, levels)
     payload.update(
@@ -499,9 +501,9 @@ def _apply_regular_viewer_metadata(payload, image, viewer_settings, levels):
 
 
 def _apply_regular_objective_metadata(payload, image):
-    """Apply regular objective metadata.
+    """Apply the regular objective metadata.
 
-    Inputs: `payload`, `image`. Output: None.
+    Inputs: `payload` payload, `image`. Output: None.
     """
     nominal_magnification = _regular_nominal_magnification(image)
     if nominal_magnification is not None:
@@ -509,9 +511,9 @@ def _apply_regular_objective_metadata(payload, image):
 
 
 def _apply_regular_channel_metadata(payload, image, rendering_engine):
-    """Apply regular channel metadata.
+    """Apply the regular channel metadata.
 
-    Inputs: `payload`, `image`, `rendering_engine`. Output: None.
+    Inputs: `payload` payload, `image`, `rendering_engine`. Output: None.
     """
     try:
         payload["pixel_range"] = image.getPixelRange()
@@ -541,9 +543,9 @@ def _apply_regular_channel_metadata(payload, image, rendering_engine):
 
 
 def _marshal_regular_image_data_with_safe_tile_size(image, request):
-    """Marshal regular image data with safe tile size.
+    """Return the marshal regular image data with safe tile size.
 
-    Inputs: `image`, `request`. Output: computed value.
+    Inputs: `image`, `request` Django request. Output: `int` size.
     """
     payload = _regular_image_marshal_base_payload(image)
     rendering_engine, fallback_payload = _regular_image_rendering_engine_or_payload(
@@ -561,9 +563,9 @@ def _marshal_regular_image_data_with_safe_tile_size(image, request):
 
 
 def _select_marshaled_key(payload, key):
-    """Select marshaled key.
+    """Select the marshaled key.
 
-    Inputs: `payload`, `key`. Output: computed value or None.
+    Inputs: `payload` payload, `key` lookup key. Output: select marshaled key result.
     """
     result = payload
     for part in key.split("."):
@@ -574,20 +576,18 @@ def _select_marshaled_key(payload, key):
 
 
 def _regular_region_bad_request(message):
-    """Regular region bad request.
+    """Return the regular region bad request.
 
-    Inputs: `message`. Output: `HttpResponseBadRequest` result.
+    Inputs: `message`. Output: Django bad-request response.
     """
     return HttpResponseBadRequest(message, content_type="text/plain; charset=utf-8")
 
 
 def _prepared_regular_region_image(request, iid, conn=None):
-    """Prepared regular region image.
+    """Return the prepared regular region image.
 
-    Inputs: `request`, `iid`, `conn`. Output: `prepared_image`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `request` Django request, `iid`, `conn` OMERO gateway connection. Output:
+    `prepared_image`. Raises: Http404 when validation or the called operation fails.
     """
     from omeroweb.webgateway import views as webgateway_views
 
@@ -607,9 +607,9 @@ def _prepared_regular_region_image(request, iid, conn=None):
 
 
 def _regular_max_tile_length(conn):
-    """Regular max tile length.
+    """Return the regular max tile length.
 
-    Inputs: `conn`. Output: computed value.
+    Inputs: `conn` OMERO gateway connection. Output: `max_tile_length`.
     """
     max_tile_length = 1024
     if conn is None:
@@ -627,9 +627,10 @@ def _regular_max_tile_length(conn):
 
 
 def _regular_requested_tile_size(fields, width, height, conn=None):
-    """Regular requested tile size.
+    """Return the regular requested tile size.
 
-    Inputs: `fields`, `width`, `height`, `conn`. Output: computed value.
+    Inputs: `fields`, `width`, `height`, `conn` OMERO gateway connection. Output:
+    `requested_tile_size`.
     """
     if len(fields) <= 4:
         return width, height
@@ -645,9 +646,9 @@ def _regular_requested_tile_size(fields, width, height, conn=None):
 
 
 def _regular_viewer_level(viewer_level, max_viewer_level):
-    """Regular viewer level.
+    """Return the regular viewer level.
 
-    Inputs: `viewer_level`, `max_viewer_level`. Output: tuple.
+    Inputs: `viewer_level`, `max_viewer_level`. Output: `tuple`.
     """
     if viewer_level < 0:
         return None, "invalid resolution level"
@@ -662,9 +663,10 @@ def _regular_viewer_level(viewer_level, max_viewer_level):
 
 
 def _regular_tile_region_args(request, image, conn=None):
-    """Regular tile region args.
+    """Return the regular tile region args.
 
-    Inputs: `request`, `image`, `conn`. Output: computed value.
+    Inputs: `request` Django request, `image`, `conn` OMERO gateway connection. Output:
+    `tuple`.
     """
     try:
         prepare_image_rendering_engine(image)
@@ -686,9 +688,9 @@ def _regular_tile_region_args(request, image, conn=None):
 
 
 def _regular_explicit_region_args(region):
-    """Regular explicit region args.
+    """Return the regular explicit region args.
 
-    Inputs: `region`. Output: computed value.
+    Inputs: `region`. Output: `tuple`.
     """
     try:
         x, y, width, height = [int(value) for value in region.split(",")]
@@ -700,9 +702,10 @@ def _regular_explicit_region_args(region):
 
 
 def _regular_region_args(request, image, conn=None):
-    """Regular region args.
+    """Return the regular region args.
 
-    Inputs: `request`, `image`, `conn`. Output: call result.
+    Inputs: `request` Django request, `image`, `conn` OMERO gateway connection. Output:
+    `_regular_region_bad_request` result.
     """
     if request.GET.get("tile"):
         return _regular_tile_region_args(request, image, conn=conn)
@@ -713,12 +716,10 @@ def _regular_region_args(request, image, conn=None):
 
 
 def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=None):
-    """Render regular image region with safe tile size.
+    """Render the regular image region with safe tile size.
 
-    Inputs: `request`, `iid`, `z`, `t`, `conn`. Output: computed value. Raises on
-    invalid or unavailable state.
-
-    invalid or unavailable state.
+    Inputs: `request` Django request, `iid`, `z`, `t`, `conn` OMERO gateway connection.
+    Output: Django `HttpResponse`. Raises: Http404 for the exercised failure path.
     """
     image, compress_quality = _prepared_regular_region_image(request, iid, conn=conn)
     region_args = _regular_region_args(request, image, conn=conn)
@@ -744,8 +745,8 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
 def _safe_regular_image_marshal(original_image_marshal, image, key=None, request=None):
     """Return safe regular image marshal.
 
-    Inputs: `original_image_marshal`, `image`, `key`, `request`. Output: computed value.
-    Raises on invalid or unavailable state.
+    Inputs: `original_image_marshal`, `image`, `key` lookup key, `request` Django
+    request. Output: `original_image_marshal` result.
     """
     try:
         return original_image_marshal(image, key=key, request=request)
@@ -759,9 +760,9 @@ def _safe_regular_image_marshal(original_image_marshal, image, key=None, request
 
 
 def _install_safe_image_marshal_overrides(webgateway_marshal):
-    """Install safe image marshal overrides.
+    """Install the safe image marshal overrides.
 
-    Inputs: `webgateway_marshal`. Output: computed value.
+    Inputs: `webgateway_marshal`. Output: `safe_image_marshal`.
     """
     if getattr(
         webgateway_marshal, "_omero_web_zarr_safe_image_marshal_installed", False
@@ -774,7 +775,8 @@ def _install_safe_image_marshal_overrides(webgateway_marshal):
     def safe_image_marshal(image, key=None, request=None):
         """Return safe image marshal.
 
-        Inputs: `image`, `key`, `request`. Output: call result.
+        Inputs: `image`, `key` lookup key, `request` Django request. Output:
+        `_safe_regular_image_marshal` result.
         """
         return _safe_regular_image_marshal(
             original_image_marshal,
@@ -818,10 +820,10 @@ def _install_safe_image_marshal_overrides(webgateway_marshal):
 def _load_metadata_preview_with_safe_rendering(
     request, c_type, c_id, conn=None, share_id=None, **kwargs
 ):
-    """Load metadata preview with safe rendering.
+    """Load the metadata preview with safe rendering.
 
-    Inputs: `request`, `c_type`, `c_id`, `conn`, `share_id`, `**kwargs`. Output:
-    `context`. Raises on invalid or unavailable state.
+    Inputs: `request` Django request, `c_type`, `c_id`, `conn` OMERO gateway connection,
+    `share_id`, `**kwargs` keyword arguments. Output: `context`.
     """
     from omeroweb.webclient import views as webclient_views
 
@@ -932,9 +934,9 @@ def _store_backed_tiles_enabled(image, level_count):
 
 
 def _store_backed_projection(image):
-    """Backed projection.
+    """Return the store backed projection.
 
-    Inputs: `image`. Output: computed value.
+    Inputs: `image`. Output: `getProjection` result.
     """
     try:
         return image.getProjection()
@@ -1014,9 +1016,9 @@ def _store_backed_base_image_data(
 
 
 def _apply_store_backed_init_zoom(payload, request, level_count):
-    """Apply store backed init zoom.
+    """Apply the store backed init zoom.
 
-    Inputs: `payload`, `request`, `level_count`. Output: None.
+    Inputs: `payload` payload, `request` Django request, `level_count`. Output: None.
     """
     viewer_settings = request.session.get("server_settings", {}).get("viewer", {})
     init_zoom = viewer_settings.get("initial_zoom_level", 0)
@@ -1027,9 +1029,9 @@ def _apply_store_backed_init_zoom(payload, request, level_count):
 
 
 def _apply_store_backed_objective(payload, image):
-    """Apply store backed objective.
+    """Apply the store backed objective.
 
-    Inputs: `payload`, `image`. Output: None.
+    Inputs: `payload` payload, `image`. Output: None.
     """
     try:
         objective_settings = image.getObjectiveSettings()
@@ -1051,9 +1053,9 @@ def _apply_store_backed_tile_metadata(
     level_sizes,
     zoom_scaling,
 ):
-    """Apply store backed tile metadata.
+    """Apply the store backed tile metadata.
 
-    Inputs: `payload`, `tiles`, `tile_size`, `level_count`, `level_sizes`,
+    Inputs: `payload` payload, `tiles`, `tile_size`, `level_count`, `level_sizes`,
     `zoom_scaling`. Output: None.
     """
     if tiles:
@@ -1105,7 +1107,8 @@ def _store_backed_image_data(image, request):
 def _store_backed_region_response(image, request, z=None, t=None, conn=None):
     """Backed region response.
 
-    Inputs: `image`, `request`, `z`, `t`, `conn`. Output: computed value.
+    Inputs: `image`, `request` Django request, `z`, `t`, `conn` OMERO gateway
+    connection. Output: Django `HttpResponse`.
     """
     node = load_store_backed_image_node(image)
     if node is None:
@@ -1178,7 +1181,7 @@ def _store_backed_region_response(image, request, z=None, t=None, conn=None):
 
 
 def _patch_urlpatterns(urlpatterns, replacements):
-    """Patch urlpatterns.
+    """Patch the urlpatterns.
 
     Inputs: `urlpatterns`, `replacements`. Output: None.
     """
@@ -1195,7 +1198,7 @@ def _patch_urlpatterns(urlpatterns, replacements):
 
 
 def _unwrap_callback(callback, *, depth):
-    """Unwrap callback.
+    """Return the unwrap callback.
 
     Inputs: `callback`, `depth`. Output: `unwrapped`.
     """
@@ -1208,7 +1211,7 @@ def _unwrap_callback(callback, *, depth):
 def _store_backed_thumbnail_size(request, w=None, h=None):
     """Backed thumbnail size.
 
-    Inputs: `request`, `w`, `h`. Output: computed value.
+    Inputs: `request` Django request, `w`, `h`. Output: `int` size.
     """
     server_settings = request.session.get("server_settings", {}).get("browser", {})
     default_size = server_settings.get("thumb_default_size", 96)
@@ -1220,9 +1223,9 @@ def _store_backed_thumbnail_size(request, w=None, h=None):
 
 
 def _batch_thumbnail_size(request, w=None):
-    """Batch thumbnail size.
+    """Return the batch thumbnail size.
 
-    Inputs: `request`, `w`. Output: computed value.
+    Inputs: `request` Django request, `w`. Output: `get` result.
     """
     if w is not None:
         return w
@@ -1231,16 +1234,17 @@ def _batch_thumbnail_size(request, w=None):
 
 
 def _make_get_channels_override(original_get_channels):
-    """Channels override.
+    """Create the get channels override.
 
-    Inputs: `original_get_channels`. Output: computed value.
+    Inputs: `original_get_channels`. Output: `get_channels_override`.
     """
 
     @wraps(original_get_channels)
     def get_channels_override(self, *args, **kwargs):
         """Return channels override.
 
-        Inputs: `*args`, `**kwargs`. Output: computed value.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `_decorate_store_backed_channels` result.
         """
         if not is_store_backed_image(self):
             return original_get_channels(self, *args, **kwargs)
@@ -1251,9 +1255,10 @@ def _make_get_channels_override(original_get_channels):
 
 
 def _make_render_thumbnail_override(original_render_thumbnail, webgateway_views):
-    """Thumbnail override.
+    """Create the render thumbnail override.
 
-    Inputs: `original_render_thumbnail`, `webgateway_views`. Output: computed value.
+    Inputs: `original_render_thumbnail`, `webgateway_views`. Output:
+    `render_thumbnail_override`.
     """
 
     @wraps(original_render_thumbnail)
@@ -1266,12 +1271,11 @@ def _make_render_thumbnail_override(original_render_thumbnail, webgateway_views)
         _defcb=None,
         **kwargs,
     ):
-        """Render thumbnail override.
+        """Render the thumbnail override.
 
-        Inputs: `request`, `iid`, `w`, `h`, `conn`, `_defcb`, `**kwargs`. Output: call
-        result.
-
-        result.
+        Inputs: `request` Django request, `iid`, `w`, `h`, `conn` OMERO gateway
+        connection, `_defcb`, `**kwargs` keyword arguments. Output:
+        `render_store_backed_thumbnail_bytes` result.
         """
         image = _get_store_backed_image(conn, iid)
         if image is None:
@@ -1328,9 +1332,10 @@ def _store_backed_thumbnail_entries(image_ids, conn, size, z_index, t_index):
 
 
 def _add_regular_thumbnail_entries(response, conn, regular_ids, size):
-    """Add regular thumbnail entries.
+    """Add the regular thumbnail entries.
 
-    Inputs: `response`, `conn`, `regular_ids`, `size`. Output: None.
+    Inputs: `response` response object, `conn` OMERO gateway connection, `regular_ids`,
+    `size`. Output: None.
     """
     if not regular_ids:
         return
@@ -1353,14 +1358,16 @@ def _add_regular_thumbnail_entries(response, conn, regular_ids, size):
 def _make_get_thumbnails_json_override(original_get_thumbnails_json, webgateway_views):
     """Thumbnails JSON override with.
 
-    Inputs: `original_get_thumbnails_json`, `webgateway_views`. Output: computed value.
+    Inputs: `original_get_thumbnails_json`, `webgateway_views`. Output:
+    `get_thumbnails_json_override`.
     """
 
     @wraps(original_get_thumbnails_json)
     def get_thumbnails_json_override(request, w=None, conn=None, **kwargs):
         """Return thumbnails JSON override.
 
-        Inputs: `request`, `w`, `conn`, `**kwargs`. Output: computed value.
+        Inputs: `request` Django request, `w`, `conn` OMERO gateway connection,
+        `**kwargs` keyword arguments. Output: ID value.
         """
         image_ids = list(set(webgateway_views.get_longs(request, "id")))
         if len(image_ids) <= 1:
@@ -1384,16 +1391,18 @@ def _make_get_thumbnails_json_override(original_get_thumbnails_json, webgateway_
 
 
 def _make_render_image_override(original_render_image):
-    """Image override.
+    """Create the render image override.
 
-    Inputs: `original_render_image`. Output: computed value.
+    Inputs: `original_render_image`. Output: `render_image_override`.
     """
 
     @wraps(original_render_image)
     def render_image_override(request, iid, z=None, t=None, conn=None, **kwargs):
-        """Render image override.
+        """Render the image override.
 
-        Inputs: `request`, `iid`, `z`, `t`, `conn`, `**kwargs`. Output: computed value.
+        Inputs: `request` Django request, `iid`, `z`, `t`, `conn` OMERO gateway
+        connection, `**kwargs` keyword arguments. Output:
+        `_store_backed_render_response` result.
         """
         image = _get_store_backed_image(conn, iid)
         if image is None:
@@ -1419,13 +1428,11 @@ def _regular_image_region_response(
     conn=None,
     **kwargs,
 ):
-    """Regular image region response.
+    """Return the regular image region response.
 
-    Inputs: `original_render_image_region_impl`, `safe_rendering_on`, `request`, `iid`,
-    `z`, `t`, `conn`, `**kwargs`. Output: call result. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `original_render_image_region_impl`, `safe_rendering_on`, `request` Django
+    request, `iid`, `z`, `t`, `conn` OMERO gateway connection, `**kwargs` keyword
+    arguments. Output: `original_render_image_region_impl` result.
     """
     try:
         return original_render_image_region_impl(
@@ -1456,14 +1463,16 @@ def _make_render_image_region_override(
     """Image region override with.
 
     Inputs: `original_render_image_region`, `original_render_image_region_impl`,
-    `safe_rendering_on`. Output: computed value.
+    `safe_rendering_on`. Output: `render_image_region_override`.
     """
 
     @wraps(original_render_image_region)
     def render_image_region_override(request, iid, z, t, conn=None, **kwargs):
-        """Render image region override.
+        """Render the image region override.
 
-        Inputs: `request`, `iid`, `z`, `t`, `conn`, `**kwargs`. Output: call result.
+        Inputs: `request` Django request, `iid`, `z`, `t`, `conn` OMERO gateway
+        connection, `**kwargs` keyword arguments. Output:
+        `_store_backed_region_response` result.
         """
         image = _get_store_backed_image(conn, iid)
         if image is None:
@@ -1489,9 +1498,9 @@ def _make_render_image_region_override(
 
 
 def _select_payload_key(payload, key):
-    """Select payload key.
+    """Select the payload key.
 
-    Inputs: `payload`, `key`. Output: computed value.
+    Inputs: `payload` payload, `key` lookup key. Output: `_select_marshaled_key` result.
     """
     if key is None:
         return payload
@@ -1507,13 +1516,11 @@ def _regular_image_data_json_response(
     _internal=False,
     **kwargs,
 ):
-    """Regular image data JSON response.
+    """Return the regular image data JSON response.
 
-    Inputs: `original_image_data_json_impl`, `safe_rendering_on`, `image`, `request`,
-    `conn`, `_internal`, `**kwargs`. Output: computed value. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `original_image_data_json_impl`, `safe_rendering_on`, `image`, `request`
+    Django request, `conn` OMERO gateway connection, `_internal`, `**kwargs` keyword
+    arguments. Output: `original_image_data_json_impl` result.
     """
     try:
         return original_image_data_json_impl(
@@ -1540,14 +1547,15 @@ def _make_image_data_json_override(
     """Image data JSON override with.
 
     Inputs: `original_image_data_json`, `original_image_data_json_impl`,
-    `safe_rendering_on`. Output: computed value.
+    `safe_rendering_on`. Output: `image_data_json_override`.
     """
 
     @wraps(original_image_data_json)
     def image_data_json_override(request, conn=None, _internal=False, **kwargs):
-        """Image data JSON override.
+        """Return the image data JSON override.
 
-        Inputs: `request`, `conn`, `_internal`, `**kwargs`. Output: computed value.
+        Inputs: `request` Django request, `conn` OMERO gateway connection, `_internal`,
+        `**kwargs` keyword arguments. Output: `_select_payload_key` result.
         """
         image = conn.getObject("Image", kwargs["iid"])
         if image is None:
@@ -1582,19 +1590,18 @@ def _make_load_metadata_preview_override(
     """Metadata preview override with.
 
     Inputs: `original_load_metadata_preview`, `original_load_metadata_preview_impl`,
-    `safe_rendering_on`. Output: computed value. Raises on invalid or unavailable state.
+    `safe_rendering_on`. Output: `load_metadata_preview_override`.
     """
 
     @wraps(original_load_metadata_preview)
     def load_metadata_preview_override(
         request, c_type, c_id, conn=None, share_id=None, **kwargs
     ):
-        """Load metadata preview override.
+        """Load the metadata preview override.
 
-        Inputs: `request`, `c_type`, `c_id`, `conn`, `share_id`, `**kwargs`. Output:
-        call result. Raises on invalid or unavailable state.
-
-        call result. Raises on invalid or unavailable state.
+        Inputs: `request` Django request, `c_type`, `c_id`, `conn` OMERO gateway
+        connection, `share_id`, `**kwargs` keyword arguments. Output:
+        `original_load_metadata_preview_impl` result.
         """
         try:
             return original_load_metadata_preview_impl(
@@ -1629,11 +1636,11 @@ def _decorate_webgateway_overrides(
     render_image_region_override,
     load_metadata_preview_override,
 ):
-    """Decorate webgateway overrides.
+    """Return the decorate webgateway overrides.
 
     Inputs: `webgateway_views`, `webclient_views`, `get_thumbnails_json_override`,
     `image_data_json_override`, `render_image_override`, `render_image_region_override`,
-    `load_metadata_preview_override`. Output: dict.
+    `load_metadata_preview_override`. Output: `dict`.
     """
     return {
         "get_thumbnails_json": login_required()(
@@ -1660,7 +1667,7 @@ def _apply_webgateway_overrides(
     render_thumbnail_override,
     decorated_overrides,
 ):
-    """Apply webgateway overrides.
+    """Apply the webgateway overrides.
 
     Inputs: `webclient_gateway`, `webgateway_views`, `webclient_views`,
     `webgateway_urls`, `webclient_urls`, `get_channels_override`,
@@ -1703,9 +1710,9 @@ def _apply_webgateway_overrides(
 
 
 def install_webgateway_overrides():
-    """Install webgateway overrides.
+    """Install the webgateway overrides.
 
-    Inputs: none. Output: None.
+    Inputs: no caller arguments. Output: installs the described state and returns None.
     """
     try:
         from omeroweb.webgateway import urls as webgateway_urls

@@ -32,18 +32,40 @@ from omero_web_zarr import views
 
 
 def _response_text(response) -> str:
-    """Response text.
+    """Return the response text.
 
-    Inputs: `response`. Output: `str`.
+    Inputs: `response` response object. Output: `str`.
     """
     return b"".join(response.streaming_content).decode("utf-8")
+
+
+def test_lower_pyramid_plane_requires_image_connection(monkeypatch) -> None:
+    """Verify lower pyramid plane requires image connection.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in lower pyramid plane requires image connection.
+    """
+    monkeypatch.setattr(views, "get_image_connection", lambda image: None)
+
+    with pytest.raises(Http404, match="image connection unavailable"):
+        views._read_lower_pyramid_plane(
+            SimpleNamespace(),
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            np.uint8,
+        )
 
 
 class _FakeLength:
     """Test double for fake length."""
 
     def __init__(self, value, symbol):
-        """Initialize the instance.
+        """Create `_FakeLength` with `value` and `symbol`.
 
         Inputs: `value`, `symbol`. Output: None.
         """
@@ -51,23 +73,23 @@ class _FakeLength:
         self._symbol = symbol
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_FakeLength`'s fake OMERO value.
 
         Inputs: none. Output: `self._value`.
         """
         return self._value
 
     def getSymbol(self):
-        """Return Symbol.
+        """Return the symbol for `_FakeLength`.
 
-        Inputs: none. Output: `self._symbol`.
+        Inputs: none. Output: `_symbol`.
         """
         return self._symbol
 
     def getUnit(self):
-        """Return Unit.
+        """Return the unit for `_FakeLength`.
 
-        Inputs: none. Output: `self._symbol`.
+        Inputs: none. Output: `_symbol`.
         """
         return self._symbol
 
@@ -76,14 +98,14 @@ class _FakePixelsType:
     """Test double for fake pixels type."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_FakePixelsType` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_FakePixelsType`'s fake OMERO value.
 
         Inputs: none. Output: `self._value`.
         """
@@ -94,7 +116,7 @@ class _FakePrimaryPixels:
     """Test double for fake primary pixels."""
 
     def __init__(self, pixel_type, tile_value=7):
-        """Initialize the instance.
+        """Create `_FakePrimaryPixels` with `pixel_type` and `tile_value`.
 
         Inputs: `pixel_type`, `tile_value`. Output: None.
         """
@@ -102,16 +124,16 @@ class _FakePrimaryPixels:
         self._tile_value = tile_value
 
     def getPixelsType(self):
-        """Return Pixels Type.
+        """Return the fake pixels type value used by this test double.
 
         Inputs: none. Output: `_FakePixelsType` result.
         """
         return _FakePixelsType(self._pixel_type)
 
     def getTile(self, _z, _c, _t, tile):
-        """Return Tile.
+        """Return the tile for `_FakePrimaryPixels`.
 
-        Inputs: `_z`, `_c`, `_t`, `tile`. Output: `np.full` result.
+        Inputs: `_z`, `_c`, `_t`, `tile`. Output: `full` result.
         """
         _x, _y, width, height = tile
         dtype = views.PIXEL_TYPES[self._pixel_type]
@@ -122,7 +144,7 @@ class _FakeChannel:
     """Test double for fake channel."""
 
     def __init__(self, label="Channel-1"):
-        """Initialize the instance.
+        """Create `_FakeChannel` with `label`.
 
         Inputs: `label`. Output: None.
         """
@@ -133,7 +155,7 @@ class _FakeResolutionDescription:
     """Test double for fake resolution description."""
 
     def __init__(self, size_x, size_y):
-        """Initialize the instance.
+        """Create `_FakeResolutionDescription` with `size_x` and `size_y`.
 
         Inputs: `size_x`, `size_y`. Output: None.
         """
@@ -145,7 +167,7 @@ class _FakeResolutionEngine:
     """Test double for fake resolution engine."""
 
     def __init__(self, descriptions, default_z=0, default_t=0):
-        """Initialize the instance.
+        """Create `_FakeResolutionEngine` with `descriptions`, `default_z`, and `default_t`.
 
         Inputs: `descriptions`, `default_z`, `default_t`. Output: None.
         """
@@ -154,21 +176,21 @@ class _FakeResolutionEngine:
         self._default_t = default_t
 
     def getResolutionDescriptions(self):
-        """Return Resolution Descriptions.
+        """Return the fake resolution descriptions value used by this test double.
 
         Inputs: none. Output: `self._descriptions`.
         """
         return self._descriptions
 
     def getDefaultZ(self):
-        """Return Default Z.
+        """Return the fake default z value used by this test double.
 
         Inputs: none. Output: `self._default_z`.
         """
         return self._default_z
 
     def getDefaultT(self):
-        """Return Default T.
+        """Return the fake default t value used by this test double.
 
         Inputs: none. Output: `self._default_t`.
         """
@@ -179,7 +201,7 @@ class _FakeRawPixelsStore:
     """Test double for fake raw pixels store."""
 
     def __init__(self, payload):
-        """Initialize the instance.
+        """Create `_FakeRawPixelsStore` with `payload`.
 
         Inputs: `payload`. Output: None.
         """
@@ -188,31 +210,31 @@ class _FakeRawPixelsStore:
         self.closed = False
 
     def setPixelsId(self, pixels_id, _bypass):
-        """Set Pixels ID.
+        """Set the pixels ID for `_FakeRawPixelsStore`.
 
         Inputs: `pixels_id`, `_bypass`. Output: None.
         """
         self.calls.append(("setPixelsId", pixels_id))
 
     def setResolutionLevel(self, level):
-        """Set Resolution Level.
+        """Set the resolution Level for `_FakeRawPixelsStore`.
 
         Inputs: `level`. Output: None.
         """
         self.calls.append(("setResolutionLevel", level))
 
     def getTile(self, z, c, t, x, y, width, height):
-        """Return Tile.
+        """Return the tile for `_FakeRawPixelsStore`.
 
-        Inputs: `z`, `c`, `t`, `x`, `y`, `width`, `height`. Output: computed value.
+        Inputs: `z`, `c`, `t`, `x`, `y`, `width`, `height`. Output: get tile result.
         """
         self.calls.append(("getTile", z, c, t, x, y, width, height))
         return self.payload[: width * height]
 
     def close(self):
-        """Close the resource.
+        """Close `_FakeRawPixelsStore`'s fake resource handle.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.closed = True
 
@@ -221,16 +243,16 @@ class _FakeConn:
     """Test double for fake conn."""
 
     def __init__(self, image):
-        """Initialize the instance.
+        """Create `_FakeConn` with `image`.
 
         Inputs: `image`. Output: None.
         """
         self._image = image
 
     def getObject(self, object_type, iid):
-        """Return Object.
+        """Return the object for `_FakeConn`.
 
-        Inputs: `object_type`, `iid`. Output: `self._image`.
+        Inputs: `object_type`, `iid`. Output: `_image`.
         """
         assert object_type == "Image"
         assert iid == self._image.id
@@ -258,7 +280,7 @@ class _FakeImage:
         conn=None,
         lsid=None,
     ):
-        """Initialize the instance.
+        """Create `_FakeImage` with its default state.
 
         Inputs: `image_id`, `name`, `size_t`, `size_c`, `size_z`, `size_y`, `size_x`,
         `pyramid`, `resolution_descriptions`, `color`, `pixel_sizes`, `primary_pixels`,
@@ -290,84 +312,84 @@ class _FakeImage:
         )
 
     def getDetails(self):
-        """Return Details.
+        """Return the details for `_FakeImage`.
 
-        Inputs: none. Output: `self._details`.
+        Inputs: none. Output: `_details`.
         """
         return self._details
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_FakeImage`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
         return self._name
 
     def getSizeT(self):
-        """Return Size T.
+        """Return `_FakeImage`'s fake timepoint count.
 
         Inputs: none. Output: `self._sizes['T']`.
         """
         return self._sizes["T"]
 
     def getSizeC(self):
-        """Return Size C.
+        """Return `_FakeImage`'s fake channel count.
 
         Inputs: none. Output: `self._sizes['C']`.
         """
         return self._sizes["C"]
 
     def getSizeZ(self):
-        """Return Size Z.
+        """Return `_FakeImage`'s fake SizeZ value.
 
         Inputs: none. Output: `self._sizes['Z']`.
         """
         return self._sizes["Z"]
 
     def getSizeY(self):
-        """Return Size Y.
+        """Return `_FakeImage`'s fake SizeY value.
 
         Inputs: none. Output: `self._sizes['Y']`.
         """
         return self._sizes["Y"]
 
     def getSizeX(self):
-        """Return Size X.
+        """Return `_FakeImage`'s fake SizeX value.
 
         Inputs: none. Output: `self._sizes['X']`.
         """
         return self._sizes["X"]
 
     def requiresPixelsPyramid(self):
-        """Requires pixels pyramid.
+        """Return whether the fake image requires a pixels pyramid.
 
         Inputs: none. Output: `self._pyramid`.
         """
         return self._pyramid
 
     def getZoomLevelScaling(self):
-        """Return Zoom Level Scaling.
+        """Return the fake zoom level scaling value used by this test double.
 
-        Inputs: none. Output: computed value.
+        Inputs: none. Output: get zoom level scaling result.
         """
         return [1.0] * len(self._re.getResolutionDescriptions())
 
     def getChannels(self):
-        """Return Channels.
+        """Return the channels for `_FakeImage`.
 
-        Inputs: none. Output: `self._channels`.
+        Inputs: none. Output: `_channels`.
         """
         return self._channels
 
     def isGreyscaleRenderingModel(self):
-        """Return whether Greyscale Rendering Model.
+        """Report the greyscale rendering model boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: bool.
         """
         return not self._color
 
     def getPrimaryPixels(self):
-        """Return Primary Pixels.
+        """Return the fake primary pixels value used by this test double.
 
         Inputs: none. Output: `self._primary_pixels`.
         """
@@ -375,28 +397,28 @@ class _FakeImage:
 
     @staticmethod
     def getPixelsId():
-        """Return Pixels ID.
+        """Return the fake pixels ID value used by this test double.
 
         Inputs: none. Output: 17.
         """
         return 17
 
     def getPixelSizeX(self, units=True):
-        """Return Pixel Size X.
+        """Return `_FakeImage`'s fake physical X size.
 
         Inputs: `units`. Output: `self._pixel_sizes.get` result.
         """
         return self._pixel_sizes.get("x")
 
     def getPixelSizeY(self, units=True):
-        """Return Pixel Size Y.
+        """Return `_FakeImage`'s fake physical Y size.
 
         Inputs: `units`. Output: `self._pixel_sizes.get` result.
         """
         return self._pixel_sizes.get("y")
 
     def getPixelSizeZ(self, units=True):
-        """Return Pixel Size Z.
+        """Return `_FakeImage`'s fake physical Z size.
 
         Inputs: `units`. Output: `self._pixel_sizes.get` result.
         """
@@ -407,7 +429,7 @@ class _FakeChunkWriter:
     """Test double for fake chunk writer."""
 
     def __init__(self, root):
-        """Initialize the instance.
+        """Create `_FakeChunkWriter` with `root`.
 
         Inputs: `root`. Output: None.
         """
@@ -424,19 +446,15 @@ class _FakeChunkWriter:
 def test_index_and_image_zgroup_return_non_store_defaults(monkeypatch):
     """Verify index and image zgroup return non store defaults.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in index and image zgroup return non store defaults.
+    AssertionError when validation or the called operation fails.
     """
 
     def fake_reverse(name, kwargs=None):
-        """Fake reverse.
+        """Simulate reverse so the surrounding test controls that dependency.
 
-        Inputs: `name`, `kwargs`. Output: computed value. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `name` name, `kwargs` keyword arguments. Output: `str`. Raises:
+        AssertionError when validation or the called operation fails.
         """
         if name == "omero_web_zarr_index":
             return "/zarr/"
@@ -457,7 +475,7 @@ def test_index_and_image_zgroup_return_non_store_defaults(monkeypatch):
 def test_image_zattrs_builds_non_store_multiscales_for_pyramids(monkeypatch):
     """Verify image zattrs builds non store multiscales for pyramids.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image zattrs builds non store multiscales for pyramids.
     """
     image = _FakeImage(
         image_id=21,
@@ -508,9 +526,9 @@ def test_image_zattrs_builds_non_store_multiscales_for_pyramids(monkeypatch):
 def test_image_zattrs_v03_omits_transformations_and_rejects_unknown_version(
     monkeypatch,
 ):
-    """Verify image zattrs v03 omits transformations and rejects unknown version.
+    """Confirm image zattrs v03 omits transformations and rejects unknown version is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image zattrs v03 omits transformations and rejects unknown version.
     """
     image = _FakeImage(image_id=22, size_z=2, size_y=6, size_x=8)
     monkeypatch.setattr(views, "_store_backed_json_response", lambda *_args: None)
@@ -541,7 +559,7 @@ def test_image_zattrs_v03_omits_transformations_and_rejects_unknown_version(
 def test_get_image_shape_and_chunk_shape_cover_pyramid_levels(monkeypatch):
     """Verify get image shape and chunk shape cover pyramid levels.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in get image shape and chunk shape cover pyramid levels.
     """
     image = _FakeImage(
         pyramid=True,
@@ -563,9 +581,9 @@ def test_get_image_shape_and_chunk_shape_cover_pyramid_levels(monkeypatch):
 def test_image_zarray_returns_dimension_separator_for_runtime_generated_metadata(
     monkeypatch,
 ):
-    """Verify image zarray returns dimension separator for runtime generated metadata.
+    """Verify image zarray returns dimension separator for runtime generated metadata result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image zarray returns dimension separator for runtime generated metadata.
     """
     image = _FakeImage(image_id=31, size_y=5, size_x=7)
     monkeypatch.setattr(views, "_store_backed_json_response", lambda *_args: None)
@@ -586,7 +604,7 @@ def test_image_zarray_returns_dimension_separator_for_runtime_generated_metadata
 def test_image_chunk_pads_edge_tiles_for_non_store_pyramids(monkeypatch):
     """Verify image chunk pads edge tiles for non store pyramids.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image chunk pads edge tiles for non store pyramids.
     """
     image = _FakeImage(
         image_id=41,
@@ -623,7 +641,7 @@ def test_image_chunk_pads_edge_tiles_for_non_store_pyramids(monkeypatch):
 def test_image_chunk_uses_raw_pixels_store_for_lower_pyramid_levels(monkeypatch):
     """Verify image chunk uses raw pixels store for lower pyramid levels.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image chunk uses raw pixels store for lower pyramid levels.
     """
     raw_tile = np.array([[1, 2], [3, 4]], dtype=np.uint8).tobytes()
     raw_store = _FakeRawPixelsStore(raw_tile)
@@ -666,14 +684,14 @@ def test_image_chunk_uses_raw_pixels_store_for_lower_pyramid_levels(monkeypatch)
 def test_image_chunk_builds_runtime_chunk_indices_for_tcz_axes(monkeypatch):
     """Verify image chunk builds runtime chunk indices for tcz axes.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image chunk builds runtime chunk indices for tcz axes.
     """
 
     class _RichFakeChunkWriter:
         """Test double for rich fake chunk writer."""
 
         def __init__(self, root):
-            """Initialize the instance.
+            """Create `_RichFakeChunkWriter` with `root`.
 
             Inputs: `root`. Output: None.
             """
@@ -725,9 +743,9 @@ def test_image_chunk_builds_runtime_chunk_indices_for_tcz_axes(monkeypatch):
 
 
 def test_image_chunk_rejects_wrong_dimension_count(monkeypatch):
-    """Verify image chunk rejects wrong dimension count.
+    """Confirm image chunk rejects wrong dimension count is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image chunk rejects wrong dimension count.
     """
     image = _FakeImage(image_id=43, size_y=4, size_x=4)
     monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
@@ -745,23 +763,20 @@ def test_image_chunk_rejects_wrong_dimension_count(monkeypatch):
 def test_image_store_path_and_preview_cover_store_and_non_store_paths(
     monkeypatch, tmp_path
 ):
-    """Verify image store path and preview cover store and non store paths.
+    """Verify the image store path and preview cover store and non store paths safety boundary.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: computed value. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` temporary path fixture.
+    Output: None after assertions pass. Raises: AssertionError when validation or
+    external operations fail.
     """
     image = _FakeImage(image_id=51, name="preview.zarr", lsid=str(tmp_path))
     conn = _FakeConn(image)
 
     def fake_reverse(name, args=None, kwargs=None):
-        """Fake reverse.
+        """Simulate reverse so the surrounding test controls that dependency.
 
-        Inputs: `name`, `args`, `kwargs`. Output: computed value. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `name` name, `args` positional arguments, `kwargs` keyword arguments.
+        Output: fake reverse result. Raises: AssertionError for the exercised failure path.
         """
         if name == "load_metadata_preview":
             return f"/preview/{kwargs['c_type']}/{kwargs['c_id']}/"
@@ -824,7 +839,7 @@ def test_store_backed_ome_tiff_helpers_cover_reordering_planes_and_metadata(
 ):
     """Verify store backed ome tiff helpers cover reordering planes and metadata.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in store backed ome tiff helpers cover reordering planes and metadata.
     """
     node = SimpleNamespace(
         data=[np.arange(6, dtype=np.uint16).reshape(2, 3, 1)],
@@ -870,9 +885,9 @@ def test_store_backed_ome_tiff_helpers_cover_reordering_planes_and_metadata(
 def test_app_helpers_reject_invalid_asset_paths_and_surface_fetch_failures(
     monkeypatch,
 ):
-    """Verify app helpers reject invalid asset paths and surface fetch failures.
+    """Confirm app helpers reject invalid asset paths and surface fetch failures is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when app helpers reject invalid asset paths and surface fetch failures stops reporting the expected error.
     """
     with pytest.raises(Http404):
         views._sanitize_app_asset_path("https://example.com/app.js")
@@ -904,7 +919,7 @@ def test_runtime_view_helpers_cover_store_shortcuts_and_single_plane_iterators(
 ):
     """Verify runtime view helpers cover store shortcuts and single plane iterators.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in runtime view helpers cover store shortcuts and single plane iterators.
     """
     multi_dim_image = _FakeImage(image_id=71, size_t=2, size_z=3, size_y=4, size_x=5)
     assert views.get_chunk_shape(multi_dim_image) == [1, 1, 4, 5]

@@ -15,7 +15,7 @@ from omeroweb_admin_tools.services.system_diagnostics import (
 def test_build_log_config_validates_environment_values(monkeypatch):
     """Verify build log config validates environment values.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in build log config validates environment values.
     """
     monkeypatch.setattr(
         admin_config,
@@ -69,15 +69,32 @@ def test_build_log_config_validates_environment_values(monkeypatch):
     monkeypatch.setattr(
         admin_config,
         "get_int_env",
+        lambda name, env_file=None: (
+            0
+            if name == "ADMIN_TOOLS_LOG_LOOKBACK_SECONDS"
+            else {
+                "ADMIN_TOOLS_LOG_MAX_ENTRIES": 250,
+                "ADMIN_TOOLS_LOG_CACHE_MAX_MB": 128,
+                "ADMIN_TOOLS_LOG_INTERNAL_FILE_BATCH_SIZE": 12,
+                "ADMIN_TOOLS_LOG_MAX_PARALLEL_QUERIES": 4,
+            }[name]
+        ),
+    )
+    with pytest.raises(ValueError, match="LOOKBACK_SECONDS"):
+        admin_config.build_log_config()
+
+    monkeypatch.setattr(
+        admin_config,
+        "get_int_env",
         lambda name, env_file=None: (_ for _ in ()).throw(RuntimeError("missing env")),
     )
     assert admin_config.optional_log_config() is None
 
 
 def _result(check_id: str, status: str) -> DiagnosticCheckResult:
-    """Return result.
+    """Return the result.
 
-    Inputs: `check_id`, `status`. Output: `DiagnosticCheckResult`.
+    Inputs: `check_id` (str), `status` (str) status. Output: `DiagnosticCheckResult`.
     """
     return DiagnosticCheckResult(
         check_id=check_id,
@@ -92,10 +109,8 @@ def _result(check_id: str, status: str) -> DiagnosticCheckResult:
 def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
     """Verify system diagnostics edge branches cover runtime failures.
 
-    Inputs: `monkeypatch`. Output: computed value or None. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in system diagnostics edge branches cover runtime failures.
+    RuntimeError when validation or the called operation fails.
     """
     monkeypatch.delenv("EMPTY_PRIMARY", raising=False)
     monkeypatch.setenv("EMPTY_PRIMARY", " ")
@@ -115,9 +130,9 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
     calls = []
 
     def docker_api(path, timeout_seconds=4.0):
-        """Docker API.
+        """Return the docker API.
 
-        Inputs: `path`, `timeout_seconds`. Output: tuple.
+        Inputs: `path` path, `timeout_seconds`. Output: `tuple`.
         """
         calls.append(path)
         if path.startswith("/containers/json"):
@@ -171,21 +186,21 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
     assert "inspect payload was invalid" in error
 
     class _Connection:
-        """Represent connection."""
+        """Test double for connection behavior in this module."""
 
         @staticmethod
         def cursor():
             """Return a database cursor.
 
-            Inputs: none. Output: computed value or None.
+            Inputs: none. Output: `_Cursor` result.
             """
 
             class _Cursor:
-                """Represent cursor."""
+                """Test double for cursor behavior in this module."""
 
                 @staticmethod
                 def execute(query):
-                    """Execute the query or command.
+                    """Execute `_Cursor`'s captured query or command.
 
                     Inputs: `query`. Output: None.
                     """
@@ -193,21 +208,21 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
 
                 @staticmethod
                 def fetchone():
-                    """Return one result row.
+                    """Return one result row from `_Cursor`.
 
-                    Inputs: none. Output: None.
+                    Inputs: caller provides no extra arguments. Output: returns the fake value described above.
                     """
                     return None
 
                 def __enter__(self):
-                    """Enter the context manager.
+                    """Enter `_Cursor`'s context-managed fake resource.
 
                     Inputs: none. Output: `self`.
                     """
                     return self
 
                 def __exit__(self, exc_type, exc, tb):
-                    """Exit the context manager.
+                    """Exit `_Cursor`'s context-managed fake resource.
 
                     Inputs: `exc_type`, `exc`, `tb`. Output: bool.
                     """
@@ -217,16 +232,16 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_Connection`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
     def _psycopg2_connection():
-        """Psycopg2 connection.
+        """Return the psycopg2 connection.
 
-        Inputs: none. Output: call result.
+        Inputs: none. Output: psycopg2 connection result.
         """
         return type(
             "Psycopg2",

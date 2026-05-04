@@ -2,7 +2,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 class FuzzedDataProvider:
-    # Initialize the instance. Inputs: data. Output: None.
+    # Store fuzz bytes for later provider reads. Inputs: data. Output: None.
     def __init__(self, data: bytes) -> None: ...
     # Return a bounded fuzz integer. Inputs: minimum, maximum. Output: int.
     def ConsumeIntInRange(self, minimum: int, maximum: int) -> int: ...

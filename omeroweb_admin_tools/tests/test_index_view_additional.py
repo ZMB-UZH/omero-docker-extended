@@ -16,7 +16,7 @@ from omeroweb_admin_tools.views import index_view
 
 
 def _unwrap_view(func):
-    """Unwrap view.
+    """Return the unwrap view.
 
     Inputs: `func`. Output: `func`.
     """
@@ -26,18 +26,18 @@ def _unwrap_view(func):
 
 
 def _payload(response):
-    """Payload.
+    """Return the payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
 
 class _AttrUser:
-    """Represent attr user."""
+    """Test double for attr user behavior in this module."""
 
     def __init__(self, first_name, last_name, username):
-        """Initialize the instance.
+        """Create `_AttrUser` with `first_name`, `last_name`, and `username`.
 
         Inputs: `first_name`, `last_name`, `username`. Output: None.
         """
@@ -47,10 +47,10 @@ class _AttrUser:
 
 
 class _AttrGroup:
-    """Represent attr group."""
+    """Test double for attr group behavior in this module."""
 
     def __init__(self, name, permissions):
-        """Initialize the instance.
+        """Create `_AttrGroup` with `name` and `permissions`.
 
         Inputs: `name`, `permissions`. Output: None.
         """
@@ -58,7 +58,7 @@ class _AttrGroup:
         self._permissions = permissions
 
     def getDetails(self):
-        """Return Details.
+        """Return the details for `_AttrGroup`.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -66,10 +66,10 @@ class _AttrGroup:
 
 
 class _PermissionText:
-    """Represent permission text."""
+    """Test double for permission text behavior in this module."""
 
     def __init__(self, text, *, read=False, write=False, annotate=False):
-        """Initialize the instance.
+        """Create `_PermissionText` with `text`.
 
         Inputs: `text`, `read`, `write`, `annotate`. Output: None.
         """
@@ -79,28 +79,28 @@ class _PermissionText:
         self._annotate = annotate
 
     def __str__(self):
-        """Return the string representation.
+        """Return `_PermissionText` as test-readable text.
 
         Inputs: none. Output: `self._text`.
         """
         return self._text
 
     def isGroupRead(self):
-        """Return whether Group Read.
+        """Return whether `_PermissionText` grants group-read access.
 
         Inputs: none. Output: `self._read`.
         """
         return self._read
 
     def isGroupWrite(self):
-        """Return whether Group Write.
+        """Return whether `_PermissionText` grants group-write access.
 
         Inputs: none. Output: `self._write`.
         """
         return self._write
 
     def isGroupAnnotate(self):
-        """Return whether Group Annotate.
+        """Return whether `_PermissionText` grants group-annotate access.
 
         Inputs: none. Output: `self._annotate`.
         """
@@ -112,7 +112,7 @@ def test_proxy_helpers_cover_request_failures_and_cookie_edge_cases(
 ) -> None:
     """Verify proxy helpers cover request failures and cookie edge cases.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy helpers cover request failures and cookie edge cases.
     """
     monkeypatch.setattr(
         index_view.requests,
@@ -167,7 +167,7 @@ def test_proxy_helpers_cover_request_failures_and_cookie_edge_cases(
 def test_root_gated_views_cover_simple_render_and_guard_paths(monkeypatch) -> None:
     """Verify root gated views cover simple render and guard paths.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in root gated views cover simple render and guard paths.
     """
     factory = RequestFactory()
     sentinel = JsonResponse({"error": "root required"}, status=403)
@@ -261,9 +261,9 @@ def test_root_gated_views_cover_simple_render_and_guard_paths(monkeypatch) -> No
 
 
 def test_identity_group_and_permission_helpers_cover_attribute_fallbacks() -> None:
-    """Verify identity group and permission helpers cover attribute fallbacks.
+    """Verify the identity group and permission helpers cover attribute fallbacks safety boundary.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions when identity group and permission helpers cover attribute fallbacks accepts unsafe input.
     """
     attr_user = _AttrUser("Ada", "Lovelace", "ada")
     attr_group = _AttrGroup("scientists", _PermissionText("rwra--"))
@@ -345,7 +345,7 @@ def test_logs_views_and_compose_helpers_cover_validation_paths(
 ) -> None:
     """Verify logs views and compose helpers cover validation paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in logs views and compose helpers cover validation paths.
     """
     log_config = LogConfig(
         loki_url="https://loki.example.test:3100",
@@ -385,10 +385,10 @@ def test_logs_views_and_compose_helpers_cover_validation_paths(
         since_ns=None,
         text_query=None,
     ):
-        """Fetch logs.
+        """Fetch the logs.
 
-        Inputs: `config`, `containers`, `lookback_seconds`, `max_entries`,
-        `internal_files`, `since_ns`, `text_query`. Output: `list` result.
+        Inputs: `config` configuration, `containers`, `lookback_seconds`, `max_entries`,
+        `internal_files`, `since_ns`, `text_query`. Output: `list`.
         """
         captured["containers"] = containers
         captured["internal_files"] = internal_files
@@ -543,9 +543,9 @@ def test_logs_views_and_compose_helpers_cover_validation_paths(
 
 
 def test_proxy_quota_and_diagnostics_views_cover_error_paths(monkeypatch) -> None:
-    """Verify proxy quota and diagnostics views cover error paths.
+    """Confirm proxy quota and diagnostics views cover error paths exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when proxy quota and diagnostics views cover error paths stops reporting the expected error.
     """
     grafana_proxy = _unwrap_view(index_view.grafana_proxy)
     prometheus_proxy = _unwrap_view(index_view.prometheus_proxy)

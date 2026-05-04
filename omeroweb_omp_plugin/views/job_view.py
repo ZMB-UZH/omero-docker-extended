@@ -42,15 +42,16 @@ logger = logging.getLogger(__name__)
 def _is_safe_separator_regex(pattern):
     """Return whether safe separator regex.
 
-    Inputs: `pattern`. Output: call result.
+    Inputs: `pattern`. Output: `is_supported_separator_pattern` result.
     """
     return is_supported_separator_pattern(pattern)
 
 
 def _job_owned_by_request(job, request, conn):
-    """Job owned by request.
+    """Return the job owned by request.
 
-    Inputs: `job`, `request`, `conn`. Output: computed value.
+    Inputs: `job`, `request` Django request, `conn` OMERO gateway connection. Output:
+    `bool`.
     """
     if not isinstance(job, dict):
         return False
@@ -62,9 +63,9 @@ def _job_owned_by_request(job, request, conn):
 
 
 def parse_image_ids(raw_ids):
-    """Parse image IDs.
+    """Parse and validate the image IDs input.
 
-    Inputs: `raw_ids`. Output: computed value.
+    Inputs: `raw_ids`. Output: `image_ids`.
     """
     if not raw_ids:
         return []
@@ -84,9 +85,9 @@ def parse_image_ids(raw_ids):
 
 
 def _resolve_omero_host_port(conn):
-    """Resolve OMERO host port.
+    """Resolve the OMERO host port.
 
-    Inputs: `conn`. Output: tuple.
+    Inputs: `conn` OMERO gateway connection. Output: `tuple`.
     """
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
     port = getattr(conn, "port", None) or getattr(conn, "_port", None)
@@ -106,9 +107,9 @@ def _resolve_omero_host_port(conn):
 
 
 def _validate_user_password(conn, password):
-    """Validate user password.
+    """Validate the user password.
 
-    Inputs: `conn`, `password`. Output: tuple.
+    Inputs: `conn` OMERO gateway connection, `password` password. Output: `tuple`.
     """
     if not password:
         return False, error_messages.missing_password()
@@ -143,7 +144,7 @@ def _validate_user_password(conn, password):
 
 
 def _image_ids_from_objects(images):
-    """Image ids from objects.
+    """Extract numeric image IDs from OMERO image-like objects.
 
     Inputs: `images`. Output: `image_ids`.
     """
@@ -166,9 +167,10 @@ def _image_ids_from_objects(images):
 
 
 def _resolve_image_ids(conn, project_id, selected_image_ids):
-    """Resolve image IDs.
+    """Resolve the image IDs.
 
-    Inputs: `conn`, `project_id`, `selected_image_ids`. Output: computed value.
+    Inputs: `conn` OMERO gateway connection, `project_id` OMERO project ID,
+    `selected_image_ids`. Output: `_image_ids_from_objects` result.
     """
     images = collect_images_in_project(conn, project_id)
     project_image_ids = _image_ids_from_objects(images)
@@ -191,9 +193,9 @@ def _resolve_image_ids(conn, project_id, selected_image_ids):
 
 
 def _save_annotation_link(update, link):
-    """Save annotation link.
+    """Save the annotation link.
 
-    Inputs: `update`, `link`. Output: computed value.
+    Inputs: `update`, `link`. Output: `bool`.
     """
     saved_link = update.saveAndReturnObject(link)
     if saved_link is None:
@@ -202,7 +204,7 @@ def _save_annotation_link(update, link):
 
 
 def _unique_annotation_key(existing_mapping, base_key):
-    """Unique annotation key.
+    """Return the unique annotation key.
 
     Inputs: `existing_mapping`, `base_key`. Output: `key`.
     """
@@ -216,7 +218,7 @@ def _unique_annotation_key(existing_mapping, base_key):
 
 
 def _with_plugin_hash(mapping):
-    """With plugin hash.
+    """Return the with plugin hash.
 
     Inputs: `mapping`. Output: `annotation_mapping`.
     """
@@ -227,9 +229,9 @@ def _with_plugin_hash(mapping):
 
 
 def _save_image_map_annotation(update, img, mapping):
-    """Save image map annotation.
+    """Save the image map annotation.
 
-    Inputs: `update`, `img`, `mapping`. Output: computed value.
+    Inputs: `update`, `img`, `mapping`. Output: `_save_annotation_link` result.
     """
     image_id = get_id(img)
     if image_id is None:
@@ -255,9 +257,10 @@ def _save_image_map_annotation(update, img, mapping):
 @login_required()
 @require_non_root_user
 def start_job(request, conn=None, _url=None, **kwargs):
-    """Start job.
+    """Start the job.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     try:
         if request.method != "POST":
@@ -345,9 +348,10 @@ def start_job(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_acq_job(request, conn=None, _url=None, **kwargs):
-    """Start acq job.
+    """Start the acq job.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     try:
         if request.method != "POST":
@@ -416,9 +420,10 @@ def start_acq_job(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_delete_all_job(request, conn=None, _url=None, **kwargs):
-    """Start delete all job.
+    """Start the delete all job.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     try:
         if request.method != "POST":
@@ -493,9 +498,10 @@ def start_delete_all_job(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_delete_plugin_job(request, conn=None, _url=None, **kwargs):
-    """Start delete plugin job.
+    """Start the delete plugin job.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     try:
         if request.method != "POST":
@@ -573,12 +579,10 @@ def start_delete_plugin_job(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def job_progress(request, job_id, conn=None, _url=None, **kwargs):
-    """Job progress.
+    """Return the job progress.
 
-    Inputs: `request`, `job_id`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse`
-    result.
-
-    result.
+    Inputs: `request` Django request, `job_id`, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     lk = None
     try:

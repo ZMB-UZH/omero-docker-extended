@@ -12,10 +12,19 @@ from django.test import override_settings
 from omeroweb_tools.views import index_view, utils as view_utils
 
 
-def test_enhanced_search_view_blocks_root_without_running_search(monkeypatch):
-    """Verify enhanced search view blocks root without running search.
+def test_saved_query_id_rejects_zero_values() -> None:
+    """Confirm saved query ID rejects zero values is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: tools-service fixtures. Output: fails on regressions in saved query ID rejects zero values.
+    """
+    with pytest.raises(ValueError):
+        index_view._parse_saved_query_id("0")
+
+
+def test_enhanced_search_view_blocks_root_without_running_search(monkeypatch):
+    """Confirm enhanced search view blocks root without running search is rejected at the boundary.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in enhanced search view blocks root without running search.
     """
     captured = {}
     monkeypatch.setattr(
@@ -76,9 +85,9 @@ def test_enhanced_search_view_blocks_root_without_running_search(monkeypatch):
 
 
 def test_enhanced_search_view_blocks_unresolved_user_without_store_access(monkeypatch):
-    """Verify enhanced search view blocks unresolved user without store access.
+    """Confirm enhanced search view blocks unresolved user without store access is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in enhanced search view blocks unresolved user without store access.
     """
     monkeypatch.setattr(
         index_view,
@@ -130,7 +139,7 @@ def test_enhanced_search_view_blocks_unresolved_user_without_store_access(monkey
 def test_enhanced_search_view_builds_pagination_querystrings(monkeypatch):
     """Verify enhanced search view builds pagination querystrings.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in enhanced search view builds pagination querystrings.
     """
     captured = {}
     monkeypatch.setattr(
@@ -211,7 +220,7 @@ def test_enhanced_search_view_builds_pagination_querystrings(monkeypatch):
 def test_enhanced_search_view_handles_settings_store_failure(monkeypatch):
     """Verify enhanced search view handles settings store failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in enhanced search view handles settings store failure.
     """
     captured = {}
     monkeypatch.setattr(
@@ -262,9 +271,9 @@ def test_enhanced_search_view_handles_settings_store_failure(monkeypatch):
 
 
 def test_start_scope_sync_view_rejects_root_user(monkeypatch):
-    """Verify start scope sync view rejects root user.
+    """Confirm start scope sync view rejects root user is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start scope sync view rejects root user.
     """
     monkeypatch.setattr(
         "omeroweb_tools.views.utils.current_username",
@@ -285,7 +294,7 @@ def test_start_scope_sync_view_rejects_root_user(monkeypatch):
 def test_start_scope_sync_view_requires_acquisition_indexing(monkeypatch):
     """Verify start scope sync view requires acquisition indexing.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start scope sync view requires acquisition indexing.
     """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
@@ -313,9 +322,9 @@ def test_start_scope_sync_view_requires_acquisition_indexing(monkeypatch):
 def test_start_scope_sync_view_returns_database_error_when_settings_unavailable(
     monkeypatch,
 ):
-    """Verify start scope sync view returns database error when settings unavailable.
+    """Confirm start scope sync view returns database error when settings unavailable exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when start scope sync view returns database error when settings unavailable stops reporting the expected error.
     """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
@@ -340,9 +349,9 @@ def test_start_scope_sync_view_returns_database_error_when_settings_unavailable(
 
 
 def test_save_user_settings_view_persists_payload(monkeypatch):
-    """Verify save user settings view persists payload.
+    """Verify save user settings view persists payload result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in save user settings view persists payload.
     """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
@@ -382,9 +391,9 @@ def test_save_user_settings_view_persists_payload(monkeypatch):
 
 
 def test_save_user_settings_view_returns_database_error_message(monkeypatch):
-    """Verify save user settings view returns database error message.
+    """Confirm save user settings view returns database error message exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when save user settings view returns database error message stops reporting the expected error.
     """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
@@ -413,7 +422,7 @@ def test_save_user_settings_view_returns_database_error_message(monkeypatch):
 def test_start_scope_sync_view_targets_current_user_scope(monkeypatch):
     """Verify start scope sync view targets current user scope.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start scope sync view targets current user scope.
     """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
@@ -465,7 +474,7 @@ def test_start_scope_sync_view_targets_current_user_scope(monkeypatch):
 def test_start_scope_sync_view_ignores_requested_scope_key(monkeypatch):
     """Verify start scope sync view ignores requested scope key.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start scope sync view ignores requested scope key.
     """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
@@ -518,9 +527,9 @@ def test_start_scope_sync_view_ignores_requested_scope_key(monkeypatch):
 
 
 def test_save_query_view_validates_required_payload(monkeypatch):
-    """Verify save query view validates required payload.
+    """Verify save query view validates required payload result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in save query view validates required payload.
     """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     request = RequestFactory().post(
@@ -537,9 +546,9 @@ def test_save_query_view_validates_required_payload(monkeypatch):
 
 
 def test_save_query_view_rejects_overlong_query_names(monkeypatch):
-    """Verify save query view rejects overlong query names.
+    """Confirm save query view rejects overlong query names is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in save query view rejects overlong query names.
     """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     request = RequestFactory().post(
@@ -564,7 +573,7 @@ def test_save_query_view_rejects_overlong_query_names(monkeypatch):
 def test_apply_saved_query_view_redirects_with_safe_query_string(monkeypatch):
     """Verify apply saved query view redirects with safe query string.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in apply saved query view redirects with safe query string.
     """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
@@ -597,30 +606,30 @@ def test_apply_saved_query_view_redirects_with_safe_query_string(monkeypatch):
 
 
 def test_validate_user_password_closes_session_after_success(monkeypatch):
-    """Verify validate user password closes session after success.
+    """Check that validate user password closes session after success keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in validate user password closes session after success.
     """
     closed = []
     credential_value = "opaque-value"
 
     class _Client:
-        """Represent client."""
+        """Test double for client behavior in this module."""
 
         @staticmethod
         def createSession(username, provided_value):
-            """Create Session.
+            """Create the session for `_Client`.
 
-            Inputs: `username`, `provided_value`. Output: None.
+            Inputs: `username` username, `provided_value`. Output: None.
             """
             assert username == "alice"
             assert provided_value == credential_value
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `_Client`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             closed.append(True)
 
@@ -640,31 +649,32 @@ def test_validate_user_password_closes_session_after_success(monkeypatch):
 
 
 def test_validate_user_password_does_not_close_session_when_login_fails(monkeypatch):
-    """Verify validate user password does not close session when login fails.
+    """Confirm validate user password does not close session when login fails exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in validate user password does not close session when login fails.
+    when validation or the called operation fails.
     """
     closed = []
     credential_value = "opaque-value"
 
     class _Client:
-        """Represent client."""
+        """Test double for client behavior in this module."""
 
         @staticmethod
         def createSession(username, provided_value):
-            """Create Session.
+            """Create the session for `_Client`.
 
-            Inputs: `username`, `provided_value`. Output: None. Raises on invalid or
-            unavailable state.
+            Inputs: `username` username, `provided_value`. Output: None. Raises:
+            RuntimeError when validation or the called operation fails.
             """
             assert provided_value == credential_value
             raise RuntimeError("nope")
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `_Client`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             closed.append(True)
 
@@ -684,29 +694,30 @@ def test_validate_user_password_does_not_close_session_when_login_fails(monkeypa
 
 
 def test_validate_user_password_suppresses_close_failure_after_success(monkeypatch):
-    """Verify validate user password suppresses close failure after success.
+    """Check that validate user password suppresses close failure after success keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in validate user password suppresses close failure after success.
+    when validation or the called operation fails.
     """
     credential_value = "opaque-value"
 
     class _Client:
-        """Represent client."""
+        """Test double for client behavior in this module."""
 
         @staticmethod
         def createSession(username, provided_value):
-            """Create Session.
+            """Create the session for `_Client`.
 
-            Inputs: `username`, `provided_value`. Output: None.
+            Inputs: `username` username, `provided_value`. Output: None.
             """
             assert username == "alice"
             assert provided_value == credential_value
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `_Client`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 

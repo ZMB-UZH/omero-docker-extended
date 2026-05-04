@@ -42,7 +42,7 @@ from omero_web_zarr.utils import select_store_backed_viewer_level
 
 
 def _write_minimal_zarr_group(root):
-    """Write minimal Zarr group.
+    """Write the minimal Zarr group.
 
     Inputs: `root`. Output: None.
     """
@@ -55,7 +55,7 @@ class _FakeNode:
     """Test double for fake node."""
 
     def __init__(self, data, metadata):
-        """Initialize the instance.
+        """Create `_FakeNode` with `data` and `metadata`.
 
         Inputs: `data`, `metadata`. Output: None.
         """
@@ -67,7 +67,7 @@ class _FakeValue:
     """Test double for fake value."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_FakeValue` with `value`.
 
         Inputs: `value`. Output: None.
         """
@@ -78,7 +78,7 @@ class _FakeExternalInfo:
     """Test double for fake external info."""
 
     def __init__(self, lsid):
-        """Initialize the instance.
+        """Create `_FakeExternalInfo` with `lsid`.
 
         Inputs: `lsid`. Output: None.
         """
@@ -89,7 +89,7 @@ class _FakeDetails:
     """Test double for fake details."""
 
     def __init__(self, lsid):
-        """Initialize the instance.
+        """Create `_FakeDetails` with `lsid`.
 
         Inputs: `lsid`. Output: None.
         """
@@ -100,7 +100,7 @@ class _FakeImage:
     """Test double for fake image."""
 
     def __init__(self, lsid, name="store.zarr", *, query_lsid=None):
-        """Initialize the instance.
+        """Create `_FakeImage` with `lsid` and `name`.
 
         Inputs: `lsid`, `name`, `query_lsid`. Output: None.
         """
@@ -114,21 +114,21 @@ class _FakeImage:
             self._conn = _FakeConnForExternalInfo(query_lsid)
 
     def getDetails(self):
-        """Return Details.
+        """Return the details for `_FakeImage`.
 
-        Inputs: none. Output: `self._details`.
+        Inputs: none. Output: `_details`.
         """
         return self._details
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_FakeImage`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
         return self._name
 
     def getSizeC(self):
-        """Return Size C.
+        """Return `_FakeImage`'s fake channel count.
 
         Inputs: none. Output: `self._size_c`.
         """
@@ -139,7 +139,7 @@ class _FakeProjectionValue:
     """Test double for fake projection value."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_FakeProjectionValue` with `value`.
 
         Inputs: `value`. Output: None.
         """
@@ -150,16 +150,16 @@ class _FakeQueryService:
     """Test double for fake query service."""
 
     def __init__(self, lsid):
-        """Initialize the instance.
+        """Create `_FakeQueryService` with `lsid`.
 
         Inputs: `lsid`. Output: None.
         """
         self._lsid = lsid
 
     def projection(self, query, params, service_opts):
-        """Projection.
+        """Return the projection for `_FakeQueryService`.
 
-        Inputs: `query`, `params`, `service_opts`. Output: list.
+        Inputs: `query`, `params` SQL parameters, `service_opts`. Output: `list`.
         """
         assert "externalInfo.lsid" in query
         return [[_FakeProjectionValue(self._lsid)]]
@@ -169,7 +169,7 @@ class _FakeConnForExternalInfo:
     """Test double for fake conn for external info."""
 
     def __init__(self, lsid):
-        """Initialize the instance.
+        """Create `_FakeConnForExternalInfo` with `lsid`.
 
         Inputs: `lsid`. Output: None.
         """
@@ -177,7 +177,7 @@ class _FakeConnForExternalInfo:
         self._query_service = _FakeQueryService(lsid)
 
     def getQueryService(self):
-        """Return Query Service.
+        """Return the fake query service value used by this test double.
 
         Inputs: none. Output: `self._query_service`.
         """
@@ -188,14 +188,14 @@ class _FakeConfigService:
     """Test double for fake config service."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_FakeConfigService` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._value = value
 
     def getConfigValue(self, key):
-        """Return Config Value.
+        """Return `_FakeConfigService`'s fake config value.
 
         Inputs: `key`. Output: `str` result.
         """
@@ -207,14 +207,14 @@ class _FakeConnForTileSize:
     """Test double for fake conn for tile size."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_FakeConnForTileSize` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._config = _FakeConfigService(value)
 
     def getConfigService(self):
-        """Return Config Service.
+        """Return `_FakeConnForTileSize`'s fake config service.
 
         Inputs: none. Output: `self._config`.
         """
@@ -222,28 +222,27 @@ class _FakeConnForTileSize:
 
 
 class _BrokenQueryService:
-    """Represent broken query service."""
+    """Test double for broken query service behavior in this module."""
 
     @staticmethod
     def projection(*args, **kwargs):
-        """Projection.
+        """Record the projection call on `_BrokenQueryService` for later assertions.
 
-        Inputs: `*args`, `**kwargs`. Output: None. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        None. Raises: RuntimeError when validation or the called operation fails.
         """
         raise RuntimeError("boom")
 
 
 class _EmptyQueryService:
-    """Represent empty query service."""
+    """Test double for empty query service behavior in this module."""
 
     @staticmethod
     def projection(*args, **kwargs):
-        """Projection.
+        """Return the projection for `_EmptyQueryService`.
 
-        Inputs: `*args`, `**kwargs`. Output: list.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `list`.
         """
         return []
 
@@ -254,7 +253,7 @@ class _FakeChannel:
     def __init__(
         self, *, window_start=None, window_end=None, window_min=0.0, window_max=1.0
     ):
-        """Initialize the instance.
+        """Create `_FakeChannel` with its default state.
 
         Inputs: `window_start`, `window_end`, `window_min`, `window_max`. Output: None.
         """
@@ -264,28 +263,28 @@ class _FakeChannel:
         self._window_max = window_max
 
     def getWindowStart(self):
-        """Return Window Start.
+        """Return the fake window start value used by this test double.
 
         Inputs: none. Output: `self._window_start`.
         """
         return self._window_start
 
     def getWindowEnd(self):
-        """Return Window End.
+        """Return the fake window end value used by this test double.
 
         Inputs: none. Output: `self._window_end`.
         """
         return self._window_end
 
     def getWindowMin(self):
-        """Return Window Min.
+        """Return the fake window min value used by this test double.
 
         Inputs: none. Output: `self._window_min`.
         """
         return self._window_min
 
     def getWindowMax(self):
-        """Return Window Max.
+        """Return the fake window max value used by this test double.
 
         Inputs: none. Output: `self._window_max`.
         """
@@ -293,22 +292,22 @@ class _FakeChannel:
 
 
 class _TileFailureRenderingEngine:
-    """Represent tile failure rendering engine."""
+    """Test double for tile failure rendering engine behavior in this module."""
 
     @staticmethod
     def getTileSize():
-        """Return Tile Size.
+        """Return the fake tile size value used by this test double.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
 
 
 class _TileFailureImage:
-    """Represent tile failure image."""
+    """Test double for tile failure image behavior in this module."""
 
     def __init__(self, *, size_x, size_y, max_tile_length):
-        """Initialize the instance.
+        """Create `_TileFailureImage` with its default state.
 
         Inputs: `size_x`, `size_y`, `max_tile_length`. Output: None.
         """
@@ -319,14 +318,14 @@ class _TileFailureImage:
         self._re = _TileFailureRenderingEngine()
 
     def getSizeX(self):
-        """Return Size X.
+        """Return `_TileFailureImage`'s fake SizeX value.
 
         Inputs: none. Output: `self._size_x`.
         """
         return self._size_x
 
     def getSizeY(self):
-        """Return Size Y.
+        """Return `_TileFailureImage`'s fake SizeY value.
 
         Inputs: none. Output: `self._size_y`.
         """
@@ -334,7 +333,7 @@ class _TileFailureImage:
 
 
 def _write_multiscale_store(root, *, attrs=None):
-    """Write multiscale store.
+    """Write the multiscale store.
 
     Inputs: `root`, `attrs`. Output: None.
     """
@@ -352,15 +351,15 @@ def _write_multiscale_store(root, *, attrs=None):
 def test_open_compat_array_requests_v2_layout_by_default(tmp_path, monkeypatch):
     """Verify open compat array requests v2 layout by default.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `sentinel`.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in open compat array requests v2 layout by default.
     """
     calls = []
     sentinel = object()
 
     def fake_open_array(path, **kwargs):
-        """Fake open array.
+        """Simulate open array so the surrounding test controls that dependency.
 
-        Inputs: `path`, `**kwargs`. Output: `sentinel`.
+        Inputs: `path` path, `**kwargs` keyword arguments. Output: `sentinel`.
         """
         calls.append((Path(path), kwargs.copy()))
         Path(path).mkdir(parents=True, exist_ok=True)
@@ -399,20 +398,17 @@ def test_open_compat_array_retries_without_zarr_format_when_unsupported(
 ):
     """Verify open compat array retries without Zarr format when unsupported.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `object` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `object` result. Raises: TypeError when validation or external operations
+    fail.
     """
     calls = []
 
     def fake_open_array(path, **kwargs):
-        """Fake open array.
+        """Simulate open array so the surrounding test controls that dependency.
 
-        Inputs: `path`, `**kwargs`. Output: `object` result. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `path` path, `**kwargs` keyword arguments. Output: `object` result.
+        Raises: TypeError when validation or the called operation fails.
         """
         calls.append(kwargs.copy())
         if "zarr_format" in kwargs:
@@ -442,20 +438,17 @@ def test_open_compat_array_retries_without_zarr_format_when_runtime_warns(
 ):
     """Verify open compat array retries without Zarr format when runtime warns.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `object` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `object` result. Raises: UserWarning when validation or external operations
+    fail.
     """
     calls = []
 
     def fake_open_array(path, **kwargs):
-        """Fake open array.
+        """Simulate open array so the surrounding test controls that dependency.
 
-        Inputs: `path`, `**kwargs`. Output: `object` result. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `path` path, `**kwargs` keyword arguments. Output: `object` result.
+        Raises: UserWarning when validation or the called operation fails.
         """
         calls.append(kwargs.copy())
         if "zarr_format" in kwargs:
@@ -481,19 +474,15 @@ def test_open_compat_array_retries_without_zarr_format_when_runtime_warns(
 def test_open_compat_array_does_not_hide_other_type_errors(tmp_path, monkeypatch):
     """Verify open compat array does not hide other type errors.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: None after assertions pass. Raises: TypeError for the exercised failure path.
     """
 
     def fake_open_array(path, **kwargs):
-        """Fake open array.
+        """Simulate open array so the surrounding test controls that dependency.
 
-        Inputs: `path`, `**kwargs`. Output: None. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: `path` path, `**kwargs` keyword arguments. Output: None. Raises:
+        TypeError when validation or the called operation fails.
         """
         raise TypeError("different failure")
 
@@ -510,9 +499,9 @@ def test_open_compat_array_does_not_hide_other_type_errors(tmp_path, monkeypatch
 
 
 def test_resolve_local_zarr_store_accepts_absolute_path(tmp_path):
-    """Verify resolve local Zarr store accepts absolute path.
+    """Verify the resolve local Zarr store accepts absolute path safety boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when resolve local Zarr store accepts absolute path accepts unsafe input.
     """
     _write_minimal_zarr_group(tmp_path)
 
@@ -522,7 +511,7 @@ def test_resolve_local_zarr_store_accepts_absolute_path(tmp_path):
 def test_resolve_local_zarr_store_accepts_file_uri(tmp_path):
     """Verify resolve local Zarr store accepts file uri.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in resolve local Zarr store accepts file uri.
     """
     _write_minimal_zarr_group(tmp_path)
 
@@ -530,9 +519,9 @@ def test_resolve_local_zarr_store_accepts_file_uri(tmp_path):
 
 
 def test_resolve_local_zarr_store_rejects_non_group_path(tmp_path):
-    """Verify resolve local Zarr store rejects non group path.
+    """Confirm resolve local Zarr store rejects non group path is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when resolve local Zarr store rejects non group path accepts unsafe input.
     """
     tmp_path.mkdir(parents=True, exist_ok=True)
 
@@ -544,16 +533,16 @@ def test_resolve_image_backing_zarr_store_queries_lsid_when_wrapper_details_are_
 ):
     """Verify resolve image backing Zarr store queries lsid when wrapper details are incomplete.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `self`.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in resolve image backing Zarr store queries lsid when wrapper details are incomplete.
     """
 
     class _FakeParametersI:
         """Test double for fake parameters i."""
 
         def addId(self, image_id):
-            """Add ID.
+            """Add the ID for `_FakeParametersI`.
 
-            Inputs: `image_id`. Output: `self`.
+            Inputs: `image_id` OMERO image ID. Output: `self`.
             """
             self.image_id = image_id
             return self
@@ -571,9 +560,9 @@ def test_resolve_image_backing_zarr_store_queries_lsid_when_wrapper_details_are_
 
 
 def test_resolve_local_zarr_file_rejects_parent_traversal(tmp_path):
-    """Verify resolve local Zarr file rejects parent traversal.
+    """Confirm resolve local Zarr file rejects parent traversal is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in resolve local Zarr file rejects parent traversal.
     """
     _write_minimal_zarr_group(tmp_path)
 
@@ -584,7 +573,7 @@ def test_resolve_local_zarr_file_rejects_parent_traversal(tmp_path):
 def test_resolve_local_zarr_file_accepts_nested_dataset_paths(tmp_path):
     """Verify resolve local Zarr file accepts nested dataset paths.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in resolve local Zarr file accepts nested dataset paths.
     """
     _write_minimal_zarr_group(tmp_path)
     nested = tmp_path / "s0" / ".zarray"
@@ -597,9 +586,9 @@ def test_resolve_local_zarr_file_accepts_nested_dataset_paths(tmp_path):
 
 
 def test_is_store_metadata_path_identifies_supported_metadata_files(tmp_path):
-    """Verify is store metadata path identifies supported metadata files.
+    """Verify the is store metadata path identifies supported metadata files safety boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when is store metadata path identifies supported metadata files accepts unsafe input.
     """
     assert is_store_metadata_path(tmp_path / ".zattrs")
     assert is_store_metadata_path(tmp_path / ".zgroup")
@@ -611,7 +600,7 @@ def test_is_store_metadata_path_identifies_supported_metadata_files(tmp_path):
 def test_collect_store_metadata_documents_includes_nested_metadata(tmp_path):
     """Verify collect store metadata documents includes nested metadata.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in collect store metadata documents includes nested metadata.
     """
     _write_minimal_zarr_group(tmp_path)
     nested = tmp_path / "tables" / "features" / ".zattrs"
@@ -629,7 +618,7 @@ def test_collect_store_metadata_documents_includes_nested_metadata(tmp_path):
 def test_get_store_backed_channel_overrides_prefers_zarr_display_metadata(monkeypatch):
     """Verify get store backed channel overrides prefers Zarr display metadata.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in get store backed channel overrides prefers Zarr display metadata.
     """
     image = _FakeImage(str(Path(tempfile.gettempdir()) / "fake.zarr"))
     image._size_c = 2
@@ -674,7 +663,7 @@ def test_get_store_backed_channel_overrides_prefers_zarr_display_metadata(monkey
 def test_get_store_backed_channel_overrides_falls_back_to_channel_windows(monkeypatch):
     """Verify get store backed channel overrides falls back to channel windows.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in get store backed channel overrides falls back to channel windows.
     """
     image = _FakeImage(str(Path(tempfile.gettempdir()) / "fake.zarr"))
     image._size_c = 1
@@ -704,9 +693,9 @@ def test_get_store_backed_channel_overrides_falls_back_to_channel_windows(monkey
 def test_load_store_backed_image_node_preserves_partial_channel_metadata_alignment(
     tmp_path, monkeypatch
 ):
-    """Verify load store backed image node preserves partial channel metadata alignment.
+    """Check that load store backed image node preserves partial channel metadata alignment remains stable.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in load store backed image node preserves partial channel metadata alignment.
     """
     _write_multiscale_store(
         tmp_path,
@@ -744,7 +733,7 @@ def test_load_store_backed_image_node_preserves_partial_channel_metadata_alignme
 def test_get_safe_image_tile_size_falls_back_to_configured_maximum():
     """Verify get safe image tile size falls back to configured maximum.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in get safe image tile size falls back to configured maximum.
     """
     image = _TileFailureImage(size_x=2048, size_y=512, max_tile_length=1024)
 
@@ -752,9 +741,9 @@ def test_get_safe_image_tile_size_falls_back_to_configured_maximum():
 
 
 def test_sanitize_download_basename_normalizes_empty_and_path_like_names():
-    """Verify sanitize download basename normalizes empty and path like names.
+    """Check that sanitize download basename normalizes empty and path like names keeps sensitive data out of output.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions when sanitize download basename normalizes empty and path like names accepts unsafe input.
     """
     assert sanitize_download_basename("", default="fallback") == "fallback"
     assert (
@@ -766,7 +755,7 @@ def test_sanitize_download_basename_normalizes_empty_and_path_like_names():
 def test_select_store_backed_level_prefers_smallest_sufficient_level():
     """Verify select store backed level prefers smallest sufficient level.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in select store backed level prefers smallest sufficient level.
     """
     node = _FakeNode(
         [
@@ -784,7 +773,7 @@ def test_select_store_backed_level_prefers_smallest_sufficient_level():
 def test_read_store_backed_plane_maps_full_resolution_z_to_subresolution():
     """Verify read store backed plane maps full resolution z to subresolution.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in read store backed plane maps full resolution z to subresolution.
     """
     node = _FakeNode(
         [
@@ -803,7 +792,7 @@ def test_read_store_backed_plane_maps_full_resolution_z_to_subresolution():
 def test_render_store_backed_plane_composites_visible_channels():
     """Verify render store backed plane composites visible channels.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in render store backed plane composites visible channels.
     """
     node = _FakeNode(
         [
@@ -836,7 +825,7 @@ def test_render_store_backed_plane_composites_visible_channels():
 def test_render_store_backed_thumbnail_bytes_uses_helper_node(monkeypatch):
     """Verify render store backed thumbnail bytes uses helper node.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in render store backed thumbnail bytes uses helper node.
     """
     node = _FakeNode(
         [np.arange(256, dtype=np.uint16).reshape(1, 16, 16)],
@@ -857,7 +846,7 @@ def test_render_store_backed_thumbnail_bytes_uses_helper_node(monkeypatch):
 def test_render_store_backed_pil_image_respects_requested_level(monkeypatch):
     """Verify render store backed pil image respects requested level.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in render store backed pil image respects requested level.
     """
     node = _FakeNode(
         [
@@ -880,7 +869,7 @@ def test_render_store_backed_pil_image_respects_requested_level(monkeypatch):
 def test_store_backed_level_metadata_uses_multiscale_shapes_and_chunks():
     """Verify store backed level metadata uses multiscale shapes and chunks.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in store backed level metadata uses multiscale shapes and chunks.
     """
     array0 = type(
         "FakeArray",
@@ -913,7 +902,7 @@ def test_store_backed_level_metadata_uses_multiscale_shapes_and_chunks():
 def test_render_store_backed_region_pil_image_crops_requested_level(monkeypatch):
     """Verify render store backed region pil image crops requested level.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in render store backed region pil image crops requested level.
     """
     node = _FakeNode(
         [
@@ -954,7 +943,7 @@ def test_render_store_backed_region_pil_image_crops_requested_level(monkeypatch)
 def test_encode_store_backed_pil_image_supports_png_and_tiff():
     """Verify encode store backed pil image supports png and tiff.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in encode store backed pil image supports png and tiff.
     """
     pil_image = Image.fromarray(np.full((4, 4), 255, dtype=np.uint8), mode="L")
 
@@ -976,9 +965,9 @@ def test_encode_store_backed_pil_image_supports_png_and_tiff():
 
 
 def test_generate_coordinate_transformations_computes_scales():
-    """Verify scale factors for a two-level pyramid.
+    """Verify generate coordinate transformations computes scales.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in generate coordinate transformations computes scales.
     """
     shapes = [(1, 1, 100, 200), (1, 1, 50, 100)]
     result = generate_coordinate_transformations(shapes)
@@ -988,9 +977,9 @@ def test_generate_coordinate_transformations_computes_scales():
 
 
 def test_generate_coordinate_transformations_rejects_dimension_mismatch():
-    """Shapes with differing number of dimensions must raise ValueError.
+    """Confirm generate coordinate transformations rejects dimension mismatch is rejected at the boundary.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in generate coordinate transformations rejects dimension mismatch.
     """
     shapes = [(1, 1, 100, 200), (1, 50, 100)]
     with pytest.raises(ValueError, match="Shape dimension mismatch"):
@@ -1000,14 +989,14 @@ def test_generate_coordinate_transformations_rejects_dimension_mismatch():
 def test_marshal_axes_and_pixel_sizes_cover_supported_and_invalid_versions():
     """Verify marshal axes and pixel sizes cover supported and invalid versions.
 
-    Inputs: none. Output: computed value.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in marshal axes and pixel sizes cover supported and invalid versions.
     """
 
     class _PixelSize:
-        """Represent pixel size."""
+        """Test double for pixel size behavior in this module."""
 
         def __init__(self, value, unit):
-            """Initialize the instance.
+            """Create `_PixelSize` with `value` and `unit`.
 
             Inputs: `value`, `unit`. Output: None.
             """
@@ -1015,14 +1004,14 @@ def test_marshal_axes_and_pixel_sizes_cover_supported_and_invalid_versions():
             self._unit = unit
 
         def getUnit(self):
-            """Return Unit.
+            """Return the unit for `_PixelSize`.
 
-            Inputs: none. Output: `self._unit`.
+            Inputs: none. Output: `_unit`.
             """
             return self._unit
 
         def getValue(self):
-            """Return the fake OMERO value.
+            """Return `_PixelSize`'s fake OMERO value.
 
             Inputs: none. Output: `self._value`.
             """
@@ -1064,7 +1053,7 @@ def test_marshal_axes_and_pixel_sizes_cover_supported_and_invalid_versions():
 def test_resolve_image_external_lsid_covers_missing_ids_and_query_failures(monkeypatch):
     """Verify resolve image external lsid covers missing IDs and query failures.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve image external lsid covers missing IDs and query failures.
     """
     image_without_conn = _FakeImage(None)
     assert _resolve_image_external_lsid(image_without_conn) is None
@@ -1083,7 +1072,7 @@ def test_read_store_attrs_and_format_resolution_support_zarr_json_and_v04(
 ):
     """Verify read store attrs and format resolution support Zarr JSON and v04.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in read store attrs and format resolution support Zarr JSON and v04.
     """
     payload = {
         "attributes": {
@@ -1111,7 +1100,7 @@ def test_read_store_attrs_and_format_resolution_support_zarr_json_and_v04(
 def test_load_store_backed_image_node_reader_and_cache_fallbacks(tmp_path, monkeypatch):
     """Verify load store backed image node reader and cache fallbacks.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in load store backed image node reader and cache fallbacks.
     """
     _write_minimal_zarr_group(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()))
@@ -1140,7 +1129,7 @@ def test_load_store_backed_image_node_reader_and_cache_fallbacks(tmp_path, monke
     assert cached is sentinel_node
 
     class _MissingStoreImage:
-        """Represent missing store image."""
+        """Test double for missing store image behavior in this module."""
 
     missing_store_image = _MissingStoreImage()
     monkeypatch.setattr(
@@ -1153,7 +1142,7 @@ def test_load_store_backed_image_node_reader_and_cache_fallbacks(tmp_path, monke
 def test_store_backed_dataset_and_render_helpers_cover_fallback_paths():
     """Verify store backed dataset and render helpers cover fallback paths.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in store backed dataset and render helpers cover fallback paths.
     """
     node = _FakeNode(
         [
@@ -1200,40 +1189,40 @@ def test_store_backed_dataset_and_render_helpers_cover_fallback_paths():
 def test_get_safe_image_tile_size_prepares_rendering_engine_and_falls_back():
     """Verify get safe image tile size prepares rendering engine and falls back.
 
-    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in get safe image tile size prepares rendering engine and falls back.
     """
 
     class _PreparedEngine:
-        """Represent prepared engine."""
+        """Test double for prepared engine behavior in this module."""
 
         @staticmethod
         def getTileSize():
-            """Return Tile Size.
+            """Return the fake tile size value used by this test double.
 
             Inputs: none. Output: tuple.
             """
             return (64, 32)
 
     class _PreparedImage:
-        """Represent prepared image."""
+        """Test double for prepared image behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_PreparedImage` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self._re = None
 
         def _prepareRenderingEngine(self):
-            """Prepare Rendering Engine.
+            """Prepare the rendering Engine for `_PreparedImage`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             self._re = _PreparedEngine()
 
         @staticmethod
         def getSizeX():
-            """Return Size X.
+            """Return `_PreparedImage`'s fake SizeX value.
 
             Inputs: none. Output: 512.
             """
@@ -1241,7 +1230,7 @@ def test_get_safe_image_tile_size_prepares_rendering_engine_and_falls_back():
 
         @staticmethod
         def getSizeY():
-            """Return Size Y.
+            """Return `_PreparedImage`'s fake SizeY value.
 
             Inputs: none. Output: 256.
             """
@@ -1250,24 +1239,24 @@ def test_get_safe_image_tile_size_prepares_rendering_engine_and_falls_back():
     assert get_safe_image_tile_size(_PreparedImage()) == (64, 32)
 
     class _BrokenEngine:
-        """Represent broken engine."""
+        """Test double for broken engine behavior in this module."""
 
         @staticmethod
         def getTileSize():
-            """Return Tile Size.
+            """Return the fake tile size value used by this test double.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("not a tile-size failure")
 
     class _BrokenImage:
-        """Represent broken image."""
+        """Test double for broken image behavior in this module."""
 
         _re = _BrokenEngine()
 
         @staticmethod
         def getSizeX():
-            """Return Size X.
+            """Return `_BrokenImage`'s fake SizeX value.
 
             Inputs: none. Output: 512.
             """
@@ -1275,7 +1264,7 @@ def test_get_safe_image_tile_size_prepares_rendering_engine_and_falls_back():
 
         @staticmethod
         def getSizeY():
-            """Return Size Y.
+            """Return `_BrokenImage`'s fake SizeY value.
 
             Inputs: none. Output: 256.
             """

@@ -6,7 +6,7 @@ from omeroweb_import.services.jobs import job_storage
 
 
 def _job_id() -> str:
-    """Job ID.
+    """Return the job ID.
 
     Inputs: none. Output: `str`.
     """
@@ -18,7 +18,7 @@ def test_job_storage_batch_and_compatibility_helpers_cover_threshold_and_status_
 ):
     """Verify job storage batch and compatibility helpers cover threshold and status logic.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in job storage batch and compatibility helpers cover threshold and status logic.
     """
     monkeypatch.setenv(job_storage.UPLOAD_BATCH_FILES_ENV, "2")
     job = {
@@ -97,10 +97,8 @@ def test_job_storage_file_access_helpers_cover_lock_fallback_retry_and_corrupt_u
 ):
     """Verify job storage file access helpers cover lock fallback retry and corrupt updates.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `real_lock` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `real_lock` result. Raises: LockException for the exercised failure path.
     """
     payload = {"job_id": _job_id(), "status": "ready"}
     path = tmp_path / f"{_job_id()}.json"
@@ -112,15 +110,12 @@ def test_job_storage_file_access_helpers_cover_lock_fallback_retry_and_corrupt_u
     assert job_storage.get_job_path(_job_id(), tmp_path) == path
 
     class _RaisingLock:
-        """Represent raising lock."""
+        """Test double for raising lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `_RaisingLock` with its default state.
 
-            Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `*_args`, `**_kwargs`. Output: None. Raises: LockException when validation or the called operation fails.
             """
             raise job_storage.portalocker.exceptions.LockException("busy")
 
@@ -131,12 +126,11 @@ def test_job_storage_file_access_helpers_cover_lock_fallback_retry_and_corrupt_u
     attempts = {"count": 0}
 
     def flaky_lock(*args, **kwargs):
-        """Flaky lock.
+        """Return the flaky lock.
 
-        Inputs: `*args`, `**kwargs`. Output: `real_lock` result. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `real_lock` result. Raises: LockException when validation or external operations
+        fail.
         """
         attempts["count"] += 1
         if attempts["count"] == 1:
@@ -153,15 +147,12 @@ def test_job_storage_file_access_helpers_cover_lock_fallback_retry_and_corrupt_u
     assert attempts["count"] >= 2
 
     class _AlwaysFailLock:
-        """Represent always fail lock."""
+        """Test double for always fail lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `_AlwaysFailLock` with its default state.
 
-            Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `*_args`, `**_kwargs`. Output: None. Raises: LockException when validation or the called operation fails.
             """
             raise job_storage.portalocker.exceptions.LockException("busy")
 
@@ -197,7 +188,7 @@ def test_job_storage_file_access_helpers_cover_lock_fallback_retry_and_corrupt_u
 def test_job_storage_append_helpers_store_timestamped_messages(monkeypatch):
     """Verify job storage append helpers store timestamped messages.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in job storage append helpers store timestamped messages.
     """
     monkeypatch.setattr(job_storage.time, "time", lambda: 123.5)
     job = {}
@@ -215,10 +206,9 @@ def test_job_storage_remaining_edges_cover_empty_paths_and_failed_update_retries
 ):
     """Verify job storage remaining edges cover empty paths and failed update retries.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: None after assertions pass. Raises: LockException when validation or
+    external operations fail.
     """
     monkeypatch.setenv("EDGE_BATCH_SIZE", "not-a-number")
     assert job_storage.get_env_int("EDGE_BATCH_SIZE", 4, 1, 10) == 4
@@ -229,15 +219,12 @@ def test_job_storage_remaining_edges_cover_empty_paths_and_failed_update_retries
     path.write_text(json.dumps({"job_id": _job_id(), "status": "checking"}))
 
     class _AlwaysFailLock:
-        """Represent always fail lock."""
+        """Test double for always fail lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `_AlwaysFailLock` with its default state.
 
-            Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `*_args`, `**_kwargs`. Output: None. Raises: LockException when validation or the called operation fails.
             """
             raise job_storage.portalocker.exceptions.LockException("busy")
 
@@ -263,10 +250,9 @@ def test_job_storage_load_job_covers_locked_success_and_failed_fallback_reads(
 ):
     """Verify job storage load job covers locked success and failed fallback reads.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: None after assertions pass. Raises: LockException when validation or
+    external operations fail.
     """
     payload = {"job_id": _job_id(), "status": "ready"}
     path = tmp_path / f"{_job_id()}.json"
@@ -275,15 +261,12 @@ def test_job_storage_load_job_covers_locked_success_and_failed_fallback_reads(
     assert job_storage.load_job(_job_id(), tmp_path) == payload
 
     class _FailingLock:
-        """Represent failing lock."""
+        """Test double for failing lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `_FailingLock` with its default state.
 
-            Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `*_args`, `**_kwargs`. Output: None. Raises: LockException when validation or the called operation fails.
             """
             raise job_storage.portalocker.exceptions.LockException("busy")
 

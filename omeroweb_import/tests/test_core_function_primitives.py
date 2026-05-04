@@ -14,14 +14,14 @@ class _FakeValue:
     """Test double for fake value."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_FakeValue` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self.val = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_FakeValue`'s fake OMERO value.
 
         Inputs: none. Output: `self.val`.
         """
@@ -32,7 +32,7 @@ class _FakeLength:
     """Test double for fake length."""
 
     def __init__(self, value, unit):
-        """Initialize the instance.
+        """Create `_FakeLength` with `value` and `unit`.
 
         Inputs: `value`, `unit`. Output: None.
         """
@@ -40,16 +40,16 @@ class _FakeLength:
         self._unit = unit
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_FakeLength`'s fake OMERO value.
 
         Inputs: none. Output: `self._value`.
         """
         return self._value
 
     def getUnit(self):
-        """Return Unit.
+        """Return the unit for `_FakeLength`.
 
-        Inputs: none. Output: `self._unit`.
+        Inputs: none. Output: `_unit`.
         """
         return self._unit
 
@@ -58,14 +58,14 @@ class _FakeUnit:
     """Test double for fake unit."""
 
     def __init__(self, name):
-        """Initialize the instance.
+        """Create `_FakeUnit` with `name`.
 
         Inputs: `name`. Output: None.
         """
         self.name = name
 
     def __str__(self):
-        """Return the string representation.
+        """Return `_FakeUnit` as test-readable text.
 
         Inputs: none. Output: `self.name`.
         """
@@ -75,7 +75,7 @@ class _FakeUnit:
 def test_job_gate_helpers_cover_pending_compatibility_and_plan_build(monkeypatch):
     """Verify job gate helpers cover pending compatibility and plan build.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in job gate helpers cover pending compatibility and plan build.
     """
     monkeypatch.setenv(core_functions.UPLOAD_BATCH_FILES_ENV, "25")
 
@@ -144,9 +144,9 @@ def test_job_gate_helpers_cover_pending_compatibility_and_plan_build(monkeypatch
 
 
 def test_path_and_sem_edx_helpers_normalize_and_validate_entries(monkeypatch, tmp_path):
-    """Verify path and sem edx helpers normalize and validate entries.
+    """Check path and SEM EDX helpers normalize and validate entries parsing against the documented contract.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when path and SEM EDX helpers normalize and validate entries accepts unsafe input.
     """
     monkeypatch.setattr(
         core_functions, "MAX_UPLOAD_RELATIVE_PATH_BYTES", 12, raising=False
@@ -217,9 +217,9 @@ def test_path_and_sem_edx_helpers_normalize_and_validate_entries(monkeypatch, tm
 def test_resolve_root_relative_path_returns_safe_validation_errors(
     monkeypatch, tmp_path
 ):
-    """Verify resolve root relative path returns safe validation errors.
+    """Verify resolve root relative path returns safe validation errors result shape.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when resolve root relative path returns safe validation errors accepts unsafe input.
     """
     monkeypatch.setattr(
         core_functions,
@@ -241,7 +241,7 @@ def test_external_info_units_and_dataset_helpers_cover_aliases_and_fallbacks(
 ):
     """Verify external info units and dataset helpers cover aliases and fallbacks.
 
-    Inputs: `monkeypatch`. Output: `self`.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in external info units and dataset helpers cover aliases and fallbacks.
     """
     assert core_functions._optional_int("17") == 17
     assert core_functions._optional_int("not-an-int") is None
@@ -263,12 +263,12 @@ def test_external_info_units_and_dataset_helpers_cover_aliases_and_fallbacks(
     )
 
     class _ParametersI:
-        """Represent parameters i."""
+        """Test double for parameters i behavior in this module."""
 
         def addId(self, value):
-            """Add ID.
+            """Add the ID for `_ParametersI`.
 
-            Inputs: `value`. Output: `self`.
+            Inputs: `value` input value. Output: `self`.
             """
             self.value = value
             return self
@@ -376,9 +376,9 @@ def test_external_info_units_and_dataset_helpers_cover_aliases_and_fallbacks(
 
 
 def test_cli_and_shared_zarr_helpers_cover_env_and_safe_cleanup(monkeypatch, tmp_path):
-    """Verify cli and shared Zarr helpers cover environment and safe cleanup.
+    """Verify the CLI and shared Zarr helpers cover env and safe cleanup execution contract.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in CLI and shared Zarr helpers cover env and safe cleanup.
     """
     monkeypatch.setenv(core_functions.CLI_KEEPALIVE_SECONDS_ENV, "9999")
     monkeypatch.setenv(core_functions.LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_ENV, "1")

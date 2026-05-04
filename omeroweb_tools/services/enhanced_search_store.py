@@ -42,9 +42,9 @@ USER_SETTINGS_NOT_PERSISTED_ERROR = "Enhanced-search user settings were not pers
 
 
 def _schema_ready(conn) -> bool:
-    """Schema ready.
+    """Return the schema ready.
 
-    Inputs: `conn`. Output: `bool`.
+    Inputs: `conn` OMERO gateway connection. Output: `bool`.
     """
     try:
         return bool(_SCHEMA_READY_CONNECTIONS.get(conn))
@@ -53,9 +53,9 @@ def _schema_ready(conn) -> bool:
 
 
 def _mark_schema_ready(conn) -> None:
-    """Mark schema ready.
+    """Mark the enhanced-search schema as initialized for later store calls.
 
-    Inputs: `conn`. Output: None.
+    Inputs: `conn` OMERO gateway connection. Output: None.
     """
     try:
         _SCHEMA_READY_CONNECTIONS[conn] = True
@@ -64,9 +64,9 @@ def _mark_schema_ready(conn) -> None:
 
 
 def _clear_schema_ready(conn) -> None:
-    """Clear schema ready.
+    """Clear the schema ready.
 
-    Inputs: `conn`. Output: None.
+    Inputs: `conn` OMERO gateway connection. Output: None.
     """
     try:
         _SCHEMA_READY_CONNECTIONS.pop(conn, None)
@@ -76,9 +76,10 @@ def _clear_schema_ready(conn) -> None:
 
 @cache
 def _load_psycopg2():
-    """Load psycopg2.
+    """Load the psycopg2.
 
-    Inputs: none. Output: tuple. Raises on invalid or unavailable state.
+    Inputs: none. Output: `tuple`. Raises: EnhancedSearchStoreError when validation or
+    external operations fail.
     """
     try:
         import psycopg2
@@ -92,9 +93,10 @@ def _load_psycopg2():
 
 @cache
 def _load_psycopg2_sql():
-    """Load psycopg2 sql.
+    """Load psycopg2 SQL helpers or raise the enhanced-search store error.
 
-    Inputs: none. Output: `sql`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `sql`. Raises: EnhancedSearchStoreError when validation or
+    external operations fail.
     """
     try:
         from psycopg2 import sql
@@ -108,16 +110,16 @@ def _load_psycopg2_sql():
 def _safe_query(template, *identifiers):
     """Return safe query.
 
-    Inputs: `template`, `*identifiers`. Output: call result.
+    Inputs: `template`, `*identifiers`. Output: `format` result.
     """
     sql_mod = _load_psycopg2_sql()
     return sql_mod.SQL(template).format(*[sql_mod.Identifier(i) for i in identifiers])
 
 
 def _db_params():
-    """DB params.
+    """Return the db params.
 
-    Inputs: none. Output: dict.
+    Inputs: none. Output: `dict`.
     """
     user = get_env(ENV_USER, env_file=ENV_FILE_OMEROWEB)
     password = get_env(ENV_AUTH, env_file=ENV_FILE_OMEROWEB)
@@ -135,9 +137,10 @@ def _db_params():
 
 @contextmanager
 def connect():
-    """Open the connection.
+    """Open the connection for `omeroweb_tools.services.enhanced_search_store`.
 
-    Inputs: none. Output: yielded values. Raises on invalid or unavailable state.
+    Inputs: none. Output: iterator of yielded items. Raises: EnhancedSearchStoreError
+    when validation or the called operation fails.
     """
     psycopg2, _ = _load_psycopg2()
     conn = None
@@ -169,9 +172,9 @@ def connect():
 
 
 def ensure_schema(conn) -> None:
-    """Ensure schema.
+    """Ensure the schema.
 
-    Inputs: `conn`. Output: None.
+    Inputs: `conn` OMERO gateway connection. Output: None.
     """
     if _schema_ready(conn):
         return
@@ -373,9 +376,10 @@ def ensure_schema(conn) -> None:
 def ensure_sync_state_rows(
     conn, scopes: Iterable[dict[str, Any]], schema_version: int
 ) -> None:
-    """Ensure sync state rows.
+    """Ensure the sync state rows.
 
-    Inputs: `conn`, `scopes`, `schema_version`. Output: None.
+    Inputs: `conn` OMERO gateway connection, `scopes` (Iterable[dict[str, Any]]),
+    `schema_version` (int). Output: None.
     """
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -471,10 +475,11 @@ def try_start_scope_sync(
     run_token: str,
     stale_after_seconds: int,
 ) -> bool:
-    """Try start scope sync.
+    """Return the try start scope sync.
 
-    Inputs: `conn`, `scope_type`, `scope_id`, `scope_label`, `schema_version`,
-    `requested_by`, `run_token`, `stale_after_seconds`. Output: `bool`.
+    Inputs: `conn` OMERO gateway connection, `scope_type` (str), `scope_id` (int),
+    `scope_label` (str), `schema_version` (int), `requested_by` (str), `run_token`
+    (str), `stale_after_seconds` (int). Output: `bool`.
     """
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -608,9 +613,10 @@ def sync_run_is_active(
     *,
     run_token: str,
 ) -> bool:
-    """Sync run is active.
+    """Synchronize the run is active.
 
-    Inputs: `conn`, `scope_type`, `scope_id`, `run_token`. Output: `bool`.
+    Inputs: `conn` OMERO gateway connection, `scope_type` (str), `scope_id` (int),
+    `run_token` (str). Output: `bool`.
     """
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -648,10 +654,11 @@ def update_sync_progress(
     current_message: str,
     last_cursor_image_id: int | None,
 ) -> None:
-    """Update sync progress.
+    """Update the sync progress.
 
-    Inputs: `conn`, `scope_type`, `scope_id`, `commit`, `run_token`,
-    `indexed_image_count`, `current_message`, `last_cursor_image_id`. Output: None.
+    Inputs: `conn` OMERO gateway connection, `scope_type` (str), `scope_id` (int),
+    `commit` (bool), `run_token` (str), `indexed_image_count` (int), `current_message`
+    (str), `last_cursor_image_id` (int | None). Output: None.
     """
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -690,10 +697,11 @@ def mark_sync_complete(
     indexed_image_count: int,
     current_message: str,
 ) -> None:
-    """Mark sync complete.
+    """Persist successful enhanced-search sync completion metadata.
 
-    Inputs: `conn`, `scope_type`, `scope_id`, `run_token`, `indexed_image_count`,
-    `current_message`. Output: None.
+    Inputs: `conn` OMERO gateway connection, `scope_type` (str), `scope_id` (int),
+    `run_token` (str), `indexed_image_count` (int), `current_message` (str). Output:
+    None.
     """
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -734,10 +742,10 @@ def mark_sync_error(
     error_text: str,
     indexed_image_count: int,
 ) -> None:
-    """Mark sync error.
+    """Persist enhanced-search sync failure metadata for operators.
 
-    Inputs: `conn`, `scope_type`, `scope_id`, `run_token`, `error_text`,
-    `indexed_image_count`. Output: None.
+    Inputs: `conn` OMERO gateway connection, `scope_type` (str), `scope_id` (int),
+    `run_token` (str), `error_text` (str), `indexed_image_count` (int). Output: None.
     """
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -778,10 +786,11 @@ def upsert_search_document(
     scope_id: int,
     run_token: str,
 ) -> None:
-    """Upsert search document.
+    """Insert or replace one enhanced-search document in the index store.
 
-    Inputs: `conn`, `commit`, `image_row`, `channels`, `attributes`, `scope_type`,
-    `scope_id`, `run_token`. Output: None.
+    Inputs: `conn` OMERO gateway connection, `commit` (bool), `image_row` (dict[str,
+    Any]), `channels` (Iterable[dict[str, Any]]), `attributes` (Iterable[dict[str,
+    Any]]), `scope_type` (str), `scope_id` (int), `run_token` (str). Output: None.
     """
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -961,9 +970,10 @@ def upsert_search_document(
 
 
 def prune_scope_membership(conn, scope_type: str, scope_id: int, run_token: str) -> int:
-    """Prune scope membership.
+    """Return the prune scope membership.
 
-    Inputs: `conn`, `scope_type`, `scope_id`, `run_token`. Output: `int`.
+    Inputs: `conn` OMERO gateway connection, `scope_type` (str), `scope_id` (int),
+    `run_token` (str). Output: `int`.
     """
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -983,9 +993,9 @@ def prune_scope_membership(conn, scope_type: str, scope_id: int, run_token: str)
 
 
 def prune_orphan_documents(conn) -> int:
-    """Prune orphan documents.
+    """Return the prune orphan documents.
 
-    Inputs: `conn`. Output: `int`.
+    Inputs: `conn` OMERO gateway connection. Output: `int`.
     """
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -1075,7 +1085,7 @@ _SEARCH_ORDER_SQL = """
 
 
 def _search_count_sql():
-    """Search count SQL.
+    """Return the search count SQL.
 
     Inputs: none. Output: `_safe_query` result.
     """
@@ -1091,9 +1101,9 @@ def _search_count_sql():
 
 
 def _search_rows_sql(*, paged: bool):
-    """Search rows SQL.
+    """Return the search rows SQL.
 
-    Inputs: `paged`. Output: `_safe_query` result.
+    Inputs: `paged` (bool). Output: `_safe_query` result.
     """
     pagination_sql = "\n        LIMIT %s OFFSET %s" if paged else ""
     return _safe_query(
@@ -1121,13 +1131,12 @@ def search_index_rows(
     limit: int | None = None,
     offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Search index rows.
+    """Return the search index rows.
 
-    Inputs: `conn`, `visible_group_ids`, `current_user_id`, `scope_type`, `scope_id`,
-    `query_text`, `filters`, `limit`, `offset`. Output: `tuple[list[dict[str, Any]],
-    int]`.
-
-    int]`.
+    Inputs: `conn` OMERO gateway connection, `visible_group_ids` (list[int] | None),
+    `current_user_id` (int | None), `scope_type` (str | None), `scope_id` (int | None),
+    `query_text` (str), `filters` (dict[str, Any]), `limit` (int | None), `offset`
+    (int). Output: `tuple[list[dict[str, Any]], int]`.
     """
     ensure_schema(conn)
     if visible_group_ids is not None:
@@ -1245,10 +1254,11 @@ def load_user_settings(
 def save_user_settings(
     conn, username: str, settings_payload: dict[str, Any]
 ) -> dict[str, Any]:
-    """Save user settings.
+    """Save the user settings.
 
-    Inputs: `conn`, `username`, `settings_payload`. Output: `dict[str, Any]`. Raises on
-    invalid or unavailable state.
+    Inputs: `conn` OMERO gateway connection, `username` (str) username,
+    `settings_payload` (dict[str, Any]). Output: `dict[str, Any]`. Raises:
+    EnhancedSearchStoreError when validation or the called operation fails.
     """
     _, extras = _load_psycopg2()
     ensure_schema(conn)
@@ -1282,12 +1292,10 @@ def clear_scope_index(
     *,
     current_message: str,
 ) -> dict[str, int]:
-    """Clear scope index.
+    """Clear the scope index.
 
-    Inputs: `conn`, `scope_type`, `scope_id`, `current_message`. Output: `dict[str,
-    int]`.
-
-    int]`.
+    Inputs: `conn` OMERO gateway connection, `scope_type` (str), `scope_id` (int),
+    `current_message` (str). Output: `dict[str, int]`.
     """
     ensure_schema(conn)
     with conn.cursor() as cur:
@@ -1367,9 +1375,10 @@ def list_saved_queries(conn, username: str) -> list[dict[str, Any]]:
 def save_saved_query(
     conn, username: str, query_name: str, query_payload: dict[str, Any]
 ) -> None:
-    """Save saved query.
+    """Save the saved query.
 
-    Inputs: `conn`, `username`, `query_name`, `query_payload`. Output: None.
+    Inputs: `conn` OMERO gateway connection, `username` (str) username, `query_name`
+    (str), `query_payload` (dict[str, Any]). Output: None.
     """
     _, extras = _load_psycopg2()
     ensure_schema(conn)
@@ -1394,9 +1403,10 @@ def save_saved_query(
 
 
 def delete_saved_query(conn, username: str, query_id: int) -> bool:
-    """Delete saved query.
+    """Delete the saved query.
 
-    Inputs: `conn`, `username`, `query_id`. Output: `bool`.
+    Inputs: `conn` OMERO gateway connection, `username` (str) username, `query_id`
+    (int). Output: `bool`.
     """
     ensure_schema(conn)
     with conn.cursor() as cur:

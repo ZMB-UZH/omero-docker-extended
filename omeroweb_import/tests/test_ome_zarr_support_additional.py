@@ -16,9 +16,9 @@ from omeroweb_import.services import ome_zarr_support as support
 
 
 def _write_json(path: Path, payload) -> None:
-    """Write JSON.
+    """Write the JSON.
 
-    Inputs: `path`, `payload`. Output: None.
+    Inputs: `path` (Path) path, `payload` payload. Output: None.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -29,7 +29,7 @@ def test_ome_zarr_support_covers_additional_root_and_single_image_validation_pat
 ) -> None:
     """Verify ome Zarr support covers additional root and single image validation paths.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in ome Zarr support covers additional root and single image validation paths.
     """
     not_a_directory = tmp_path / "not-a-directory"
     not_a_directory.write_text("payload", encoding="utf-8")
@@ -55,7 +55,7 @@ def test_ome_zarr_support_tolerates_unparseable_array_shapes(
 ) -> None:
     """Verify ome Zarr support tolerates unparseable array shapes.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in ome Zarr support tolerates unparseable array shapes.
     """
     metadata_payload = {
         "multiscales": [
@@ -199,7 +199,7 @@ def test_inspect_bioformats2raw_layout_covers_empty_and_invalid_series_paths(
 ) -> None:
     """Verify inspect bioformats2raw layout covers empty and invalid series paths.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in inspect bioformats2raw layout covers empty and invalid series paths.
     """
     empty_store = tmp_path / "bf2raw-empty.ome.zarr"
     empty_store.mkdir()
@@ -245,7 +245,7 @@ def test_rewrite_problematic_native_image_arrays_covers_additional_failures(
 ) -> None:
     """Verify rewrite problematic native image arrays covers additional failures.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in rewrite problematic native image arrays covers additional failures.
     """
     inspection = support.OMEZarrImageInspection(
         recognized=True,
@@ -300,7 +300,7 @@ def test_regenerate_xy_only_pyramid_covers_metadata_and_runtime_failures(
 ) -> None:
     """Verify regenerate xy only pyramid covers metadata and runtime failures.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in regenerate xy only pyramid covers metadata and runtime failures.
     """
     store = tmp_path / "pyramid.ome.zarr"
     store.mkdir()
@@ -363,9 +363,9 @@ def test_normalize_native_ome_zarr_copy_propagates_support_and_transform_failure
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """Verify normalize native ome Zarr copy propagates support and transform failures.
+    """Check normalize native ome Zarr copy propagates support and transform failures parsing against the documented contract.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in normalize native ome Zarr copy propagates support and transform failures.
     """
     store = tmp_path / "image.ome.zarr"
     unsupported = support.OMEZarrImageInspection(
@@ -413,7 +413,7 @@ def test_ome_zarr_support_additional_metadata_helpers_cover_edge_failures(
 ) -> None:
     """Verify ome Zarr support additional metadata helpers cover edge failures.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in ome Zarr support additional metadata helpers cover edge failures.
     """
     monkeypatch.setattr(
         support,
@@ -449,10 +449,10 @@ def test_ome_zarr_support_additional_metadata_helpers_cover_edge_failures(
     ) == ("0",)
 
     class _BrokenDType:
-        """Represent broken dtype."""
+        """Test double for broken dtype behavior in this module."""
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_BrokenDType` as test-readable text.
 
             Inputs: none. Output: 'custom-dtype'.
             """
@@ -472,7 +472,7 @@ def test_single_and_bioformats_inspection_cover_scale_array_and_series_errors(
 ) -> None:
     """Verify single and bioformats inspection cover scale array and series errors.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in single and bioformats inspection cover scale array and series errors.
     """
     assert "not numeric" in (
         support._inspect_single_ome_zarr_image(
@@ -548,10 +548,8 @@ def test_normalization_and_pyramid_helpers_cover_additional_runtime_failures(
 ) -> None:
     """Verify normalization and pyramid helpers cover additional runtime failures.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: None. Raises: OSError when validation or the called operation fails.
     """
     store = tmp_path / "normalized.ome.zarr"
     original_rewrite = support._rewrite_problematic_native_image_arrays
@@ -640,12 +638,10 @@ def test_normalization_and_pyramid_helpers_cover_additional_runtime_failures(
     original_write_text = Path.write_text
 
     def _failing_write_text(self, text, encoding=None):
-        """Failing write text.
+        """Return the failing write text.
 
-        Inputs: `text`, `encoding`. Output: `original_write_text` result. Raises on
-        invalid or unavailable state.
-
-        invalid or unavailable state.
+        Inputs: `text`, `encoding`. Output: `original_write_text` result. Raises:
+        OSError when validation or the called operation fails.
         """
         if self == failing_store / "0" / ".zarray":
             raise OSError("metadata write exploded")
@@ -669,12 +665,10 @@ def test_pyramid_and_runtime_helpers_cover_more_regeneration_error_paths(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """Verify pyramid and runtime helpers cover more regeneration error paths.
+    """Confirm pyramid and runtime helpers cover more regeneration error paths exposes the expected failure.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: None. Raises: OSError when validation or the called operation fails.
     """
     metadata_store = tmp_path / "detect.ome.zarr"
     metadata_store.mkdir()
@@ -750,12 +744,10 @@ def test_pyramid_and_runtime_helpers_cover_more_regeneration_error_paths(
     original_write_text = Path.write_text
 
     def _conditional_write_text(self, text, encoding=None):
-        """Conditional write text.
+        """Return the conditional write text.
 
-        Inputs: `text`, `encoding`. Output: `original_write_text` result. Raises on
-        invalid or unavailable state.
-
-        invalid or unavailable state.
+        Inputs: `text`, `encoding`. Output: `original_write_text` result. Raises:
+        OSError when validation or the called operation fails.
         """
         if self == pyramid_store / "s0" / ".zarray":
             raise OSError("s0 write exploded")
@@ -813,12 +805,10 @@ def test_write_level_and_runtime_helpers_cover_additional_error_paths(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """Verify write level and runtime helpers cover additional error paths.
+    """Confirm write level and runtime helpers cover additional error paths exposes the expected failure.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: None. Raises: ImportError, OSError when validation or external
     """
     output_dir = tmp_path / "level"
     data = np.arange(4, dtype=np.uint8).reshape(2, 2)
@@ -847,12 +837,10 @@ def test_write_level_and_runtime_helpers_cover_additional_error_paths(
     monkeypatch.setattr(Path, "write_text", original_write_text)
 
     def _failing_write_bytes(self, payload):
-        """Failing write bytes.
+        """Return the failing write bytes.
 
-        Inputs: `payload`. Output: `original_write_bytes` result. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `payload` payload. Output: `original_write_bytes` result. Raises:
+        OSError when validation or the called operation fails.
         """
         if self.name == "0":
             raise OSError("chunk write exploded")
@@ -876,12 +864,11 @@ def test_write_level_and_runtime_helpers_cover_additional_error_paths(
     original_import = builtins.__import__
 
     def _failing_import(name, *args, **kwargs):
-        """Failing import.
+        """Return the failing import.
 
-        Inputs: `name`, `*args`, `**kwargs`. Output: `original_import` result. Raises on
-        invalid or unavailable state.
-
-        invalid or unavailable state.
+        Inputs: `name` name, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: `original_import` result. Raises: ImportError when validation or
+        external operations fail.
         """
         if name.startswith("ome_zarr"):
             raise ImportError("ome-zarr missing")
@@ -899,7 +886,7 @@ def test_ome_zarr_support_helper_guards_cover_remaining_metadata_and_axis_edges(
 ) -> None:
     """Verify ome Zarr support helper guards cover remaining metadata and axis edges.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in ome Zarr support helper guards cover remaining metadata and axis edges.
     """
     support.ome_zarr_package_version.cache_clear()
     monkeypatch.setattr(
@@ -1010,10 +997,9 @@ def test_ome_zarr_support_downscale_and_codec_edges_cover_remaining_branches(
 ) -> None:
     """Verify ome Zarr support downscale and codec edges cover remaining branches.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: None. Raises: ImportError when validation or external operations
+    fail.
     """
     inspection = support.OMEZarrImageInspection(
         recognized=True,
@@ -1042,10 +1028,10 @@ def test_ome_zarr_support_downscale_and_codec_edges_cover_remaining_branches(
     def _failing_numcodecs_import(
         name, global_vars=None, local_vars=None, fromlist=(), level=0
     ):
-        """Failing numcodecs import.
+        """Return the failing numcodecs import.
 
-        Inputs: `name`, `global_vars`, `local_vars`, `fromlist`, `level`. Output:
-        `original_import` result. Raises on invalid or unavailable state.
+        Inputs: `name` name, `global_vars`, `local_vars`, `fromlist`, `level`. Output:
+        `original_import` result. Raises: ImportError for the exercised failure path.
         """
         if name == "numcodecs":
             raise ImportError("numcodecs missing")
@@ -1160,7 +1146,7 @@ def test_ome_zarr_support_covers_invalid_shape_and_native_pyramid_guard_paths(
 ) -> None:
     """Verify ome Zarr support covers invalid shape and native pyramid guard paths.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in ome Zarr support covers invalid shape and native pyramid guard paths.
     """
     store = tmp_path / "invalid-shape.ome.zarr"
     metadata_payload = {
@@ -1205,10 +1191,9 @@ def test_regenerate_xy_only_pyramid_handles_numpy_dependency_and_translation_edg
 ) -> None:
     """Verify regenerate xy only pyramid handles numpy dependency and translation edges.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: None. Raises: ImportError when validation or external operations
+    fail.
     """
     store = tmp_path / "translation.ome.zarr"
     store.mkdir()
@@ -1242,10 +1227,10 @@ def test_regenerate_xy_only_pyramid_handles_numpy_dependency_and_translation_edg
     def _failing_numpy_import(
         name, global_vars=None, local_vars=None, fromlist=(), level=0
     ):
-        """Failing numpy import.
+        """Return the failing numpy import.
 
-        Inputs: `name`, `global_vars`, `local_vars`, `fromlist`, `level`. Output:
-        `original_import` result. Raises on invalid or unavailable state.
+        Inputs: `name` name, `global_vars`, `local_vars`, `fromlist`, `level`. Output:
+        `original_import` result. Raises: ImportError for the exercised failure path.
         """
         if name == "numpy":
             raise ImportError("numpy missing")
@@ -1312,9 +1297,10 @@ def test_regenerate_xy_only_pyramid_handles_numpy_dependency_and_translation_edg
 def test_downscale_local_mean_falls_back_when_skimage_import_fails(
     monkeypatch,
 ) -> None:
-    """_downscale_local_mean uses the fallback when skimage.transform import fails.
+    """Confirm downscale local mean falls back when skimage import fails exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in downscale local mean falls back when skimage import fails.
+    when validation or the called operation fails.
     """
     # Remove skimage.transform from sys.modules so the import inside the
     # function actually executes, then make it raise ImportError.
@@ -1324,12 +1310,10 @@ def test_downscale_local_mean_falls_back_when_skimage_import_fails(
     real_import = builtins.__import__
 
     def blocked_import(name, *args, **kwargs):
-        """Blocked import.
+        """Return the blocked import.
 
-        Inputs: `name`, `*args`, `**kwargs`. Output: `real_import` result. Raises on
-        invalid or unavailable state.
-
-        invalid or unavailable state.
+        Inputs: `name` name, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: `real_import` result. Raises: ImportError for the exercised failure path.
         """
         if name in ("skimage.transform", "skimage"):
             raise ImportError("skimage blocked for test")

@@ -7,10 +7,10 @@ from omeroweb_tools.services import acquisition_metadata as metadata
 
 
 class _GetterlessValue:
-    """Represent getterless value."""
+    """Test double for getterless value behavior in this module."""
 
     def __str__(self):
-        """Return the string representation.
+        """Return `_GetterlessValue` as test-readable text.
 
         Inputs: none. Output: '2 mm'.
         """
@@ -18,38 +18,38 @@ class _GetterlessValue:
 
 
 class _BrokenEntry:
-    """Represent broken entry."""
+    """Test double for broken entry behavior in this module."""
 
     def __len__(self):
         """Return the instance length.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("broken entry")
 
 
 class _BrokenChannel:
-    """Represent broken channel."""
+    """Test double for broken channel behavior in this module."""
 
     @staticmethod
     def getIndex():
-        """Return Index.
+        """Return the index for `_BrokenChannel`.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("bad index")
 
     @staticmethod
     def getLabel():
-        """Return Label.
+        """Return the label for `_BrokenChannel`.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("bad label")
 
     @staticmethod
     def getExcitationWave():
-        """Return Excitation Wave.
+        """Return the fake excitation wave value used by this test double.
 
         Inputs: none. Output: '488 nm'.
         """
@@ -57,7 +57,7 @@ class _BrokenChannel:
 
     @staticmethod
     def getEmissionWave():
-        """Return Emission Wave.
+        """Return the fake emission wave value used by this test double.
 
         Inputs: none. Output: '525 nm'.
         """
@@ -65,11 +65,11 @@ class _BrokenChannel:
 
 
 class _BadChannelIndex:
-    """Represent bad channel index."""
+    """Test double for bad channel index behavior in this module."""
 
     @staticmethod
     def getIndex():
-        """Return Index.
+        """Return the index for `_BadChannelIndex`.
 
         Inputs: none. Output: `object` result.
         """
@@ -77,15 +77,15 @@ class _BadChannelIndex:
 
     @staticmethod
     def getLabel():
-        """Return Label.
+        """Return the label for `_BadChannelIndex`.
 
-        Inputs: none. Output: 'GFP'.
+        Inputs: none. Output: `str`.
         """
         return "GFP"
 
     @staticmethod
     def getExcitationWave():
-        """Return Excitation Wave.
+        """Return the fake excitation wave value used by this test double.
 
         Inputs: none. Output: '488 nm'.
         """
@@ -93,7 +93,7 @@ class _BadChannelIndex:
 
     @staticmethod
     def getEmissionWave():
-        """Return Emission Wave.
+        """Return the fake emission wave value used by this test double.
 
         Inputs: none. Output: '525 nm'.
         """
@@ -101,11 +101,11 @@ class _BadChannelIndex:
 
 
 class _LegacyPixelImage:
-    """Represent legacy pixel image."""
+    """Test double for legacy pixel image behavior in this module."""
 
     @staticmethod
     def loadOriginalMetadata():
-        """Return load original metadata.
+        """Return `_LegacyPixelImage`'s fake original-metadata payload.
 
         Inputs: none. Output: tuple.
         """
@@ -122,41 +122,41 @@ class _LegacyPixelImage:
 
     @staticmethod
     def getChannels():
-        """Return Channels.
+        """Return the channels for `_LegacyPixelImage`.
 
-        Inputs: none. Output: list.
+        Inputs: none. Output: `list`.
         """
         return [_BrokenChannel()]
 
     @staticmethod
     def getAcquisitionDate():
-        """Return Acquisition Date.
+        """Return `_LegacyPixelImage`'s fake acquisition date.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("missing date")
 
     @staticmethod
     def getObjectiveSettings():
-        """Return Objective Settings.
+        """Return `_LegacyPixelImage`'s fake objective settings.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("missing objective")
 
     @staticmethod
     def getDetectorSettings():
-        """Return Detector Settings.
+        """Return `_LegacyPixelImage`'s fake detector settings.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("missing detector")
 
     @staticmethod
     def getPixelSizeX(units=None):
-        """Return Pixel Size X.
+        """Return `_LegacyPixelImage`'s fake physical X size.
 
-        Inputs: `units`. Output: '250 nm'. Raises on invalid or unavailable state.
+        Inputs: `units`. Output: `str`. Raises: TypeError for the exercised failure path.
         """
         if units is True:
             raise TypeError("legacy signature")
@@ -164,17 +164,17 @@ class _LegacyPixelImage:
 
     @staticmethod
     def getPixelSizeY(units=True):
-        """Return Pixel Size Y.
+        """Return `_LegacyPixelImage`'s fake physical Y size.
 
-        Inputs: `units`. Output: None. Raises on invalid or unavailable state.
+        Inputs: `units`. Output: None. Raises: RuntimeError for the exercised failure path.
         """
         raise RuntimeError("missing y")
 
     @staticmethod
     def listParents():
-        """Return list parents.
+        """Return `_LegacyPixelImage`'s fake parent listing.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise RuntimeError("missing parents")
 
@@ -182,7 +182,7 @@ class _LegacyPixelImage:
 def test_metadata_helpers_cover_units_caps_and_empty_values():
     """Verify metadata helpers cover units caps and empty values.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: tools-service fixtures. Output: fails on regressions in metadata helpers cover units caps and empty values.
     """
     assert metadata._normalized_key(" BF_Objective NA ") == "objective na"
     assert metadata._normalized_text(None) == ""
@@ -258,13 +258,13 @@ def test_metadata_helpers_cover_units_caps_and_empty_values():
     assert len(capped) <= metadata._SEARCH_TEXT_CAP
 
     class _RaisingGetter:
-        """Represent raising getter."""
+        """Test double for raising getter behavior in this module."""
 
         @staticmethod
         def getLabel():
-            """Return Label.
+            """Return the label for `_RaisingGetter`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("boom")
 
@@ -277,113 +277,114 @@ def test_metadata_helpers_cover_units_caps_and_empty_values():
 def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_edges():
     """Verify metadata helpers cover malformed OMERO scalar annotation and iterable edges.
 
-    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    Inputs: tools-service fixtures. Output: fails on regressions in metadata helpers cover malformed OMERO scalar annotation and iterable edges.
+    external operations fail.
     """
 
     class _ValueWrapper:
-        """Represent value wrapper."""
+        """Test double for value wrapper behavior in this module."""
 
         value = "wrapped scalar"
 
     class _NonScalarWrapper:
-        """Represent non scalar wrapper."""
+        """Test double for non scalar wrapper behavior in this module."""
 
         value = ["not", "indexable"]
 
     class _BrokenValue:
-        """Represent broken value."""
+        """Test double for broken value behavior in this module."""
 
         @staticmethod
         def getValue():
-            """Return the fake OMERO value.
+            """Return `_BrokenValue`'s fake OMERO value.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("broken value")
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_BrokenValue` as test-readable text.
 
             Inputs: none. Output: '2.5'.
             """
             return "2.5"
 
     class _LegacyPlaneQuantity:
-        """Represent legacy plane quantity."""
+        """Test double for legacy plane quantity behavior in this module."""
 
         @staticmethod
         def getDeltaT(units=None):
-            """Return Delta T.
+            """Return the fake delta t value used by this test double.
 
-            Inputs: `units`. Output: `SimpleNamespace` result. Raises on invalid or
-            unavailable state.
+            Inputs: `units`. Output: `SimpleNamespace` result. Raises: TypeError when validation or the called operation fails.
             """
             if units is not None:
                 raise TypeError("legacy getter does not accept units")
             return SimpleNamespace(getValue=lambda: "1.25")
 
     class _BrokenLegacyPlaneQuantity:
-        """Represent broken legacy plane quantity."""
+        """Test double for broken legacy plane quantity behavior in this module."""
 
         @staticmethod
         def getDeltaT(units=None):
-            """Return Delta T.
+            """Return the fake delta t value used by this test double.
 
-            Inputs: `units`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `units`. Output: None. Raises: RuntimeError, TypeError when validation or the called operation fails.
             """
             if units is not None:
                 raise TypeError("legacy getter does not accept units")
             raise RuntimeError("broken legacy getter")
 
     class _BrokenPlaneQuantity:
-        """Represent broken plane quantity."""
+        """Test double for broken plane quantity behavior in this module."""
 
         @staticmethod
         def getDeltaT(units=None):
-            """Return Delta T.
+            """Return the fake delta t value used by this test double.
 
-            Inputs: `units`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `units`. Output: None. Raises: RuntimeError when validation or
+            external operations fail.
             """
             raise RuntimeError("broken getter")
 
     class _AxisGetter:
-        """Represent axis getter."""
+        """Test double for axis getter behavior in this module."""
 
         @staticmethod
         def getTheC():
-            """Return The C.
+            """Return the fake channel index used by this test double.
 
             Inputs: none. Output: '2'.
             """
             return "2"
 
     class _BrokenAxisGetter:
-        """Represent broken axis getter."""
+        """Test double for broken axis getter behavior in this module."""
 
         @staticmethod
         def getTheC():
-            """Return The C.
+            """Return the fake channel index used by this test double.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("broken axis getter")
 
     class _FallbackMapAnnotation:
-        """Represent fallback map annotation."""
+        """Test double for fallback map annotation behavior in this module."""
 
         OMERO_CLASS = "MapAnnotation"
 
         @staticmethod
         def getValue():
-            """Return the fake OMERO value.
+            """Return `_FallbackMapAnnotation`'s fake OMERO value.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("primary map getter failed")
 
         @staticmethod
         def getMapValue():
-            """Return Map Value.
+            """Return the fake map payload used by this test double.
 
             Inputs: none. Output: list.
             """
@@ -396,28 +397,28 @@ def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_e
             ]
 
     class _FallbackTextAnnotation:
-        """Represent fallback text annotation."""
+        """Test double for fallback text annotation behavior in this module."""
 
         OMERO_CLASS = "TextAnnotation"
 
         @staticmethod
         def getTextValue():
-            """Return Text Value.
+            """Return the fake text payload used by this test double.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("text missing")
 
         @staticmethod
         def getDescription():
-            """Return Description.
+            """Return the description for `_FallbackTextAnnotation`.
 
-            Inputs: none. Output: 'QC passed'.
+            Inputs: none. Output: `str`.
             """
             return "QC passed"
 
     class _NonIterableValue:
-        """Represent non iterable value."""
+        """Test double for non iterable value behavior in this module."""
 
         @staticmethod
         def listValues():
@@ -428,12 +429,12 @@ def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_e
             return object()
 
     class _BrokenIterable:
-        """Represent broken iterable."""
+        """Test double for broken iterable behavior in this module."""
 
         def __iter__(self):
             """Return an iterator for the instance.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("broken iteration")
 
@@ -497,13 +498,13 @@ def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_e
     )
 
     class _ImageWithBrokenRawChannels:
-        """Represent image with broken raw channels."""
+        """Test double for image with broken raw channels behavior in this module."""
 
         @staticmethod
         def getChannels():
-            """Return Channels.
+            """Return the channels for `_ImageWithBrokenRawChannels`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("channel load failed")
 
@@ -521,36 +522,36 @@ def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_e
 
 
 def test_plane_info_collection_keeps_legacy_targeted_copy_plane_info_path():
-    """Verify plane info collection keeps legacy targeted copy plane info path.
+    """Check that plane info collection keeps legacy targeted copy plane info path remains stable.
 
-    Inputs: none. Output: computed value.
+    Inputs: tools-service fixtures. Output: fails on regressions when plane info collection keeps legacy targeted copy plane info path accepts unsafe input.
     """
 
     class _Value:
-        """Represent value."""
+        """Test double for value behavior in this module."""
 
         def __init__(self, value):
-            """Initialize the instance.
+            """Create `_Value` with `value`.
 
             Inputs: `value`. Output: None.
             """
             self._raw_value = value
 
         def getValue(self):
-            """Return the fake OMERO value.
+            """Return `_Value`'s fake OMERO value.
 
             Inputs: none. Output: `self._raw_value`.
             """
             return self._raw_value
 
     class _PlaneInfo:
-        """Represent plane info."""
+        """Test double for plane info behavior in this module."""
 
         theT = 0
 
         @staticmethod
         def getDeltaT(units="SECOND"):
-            """Return Delta T.
+            """Return the fake delta t value used by this test double.
 
             Inputs: `units`. Output: `_Value` result.
             """
@@ -558,18 +559,18 @@ def test_plane_info_collection_keeps_legacy_targeted_copy_plane_info_path():
             return _Value(3.5)
 
     class _Pixels:
-        """Represent pixels."""
+        """Test double for pixels behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_Pixels` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.copy_plane_info_calls = []
 
         @staticmethod
         def getSizeZ():
-            """Return Size Z.
+            """Return `_Pixels`'s fake SizeZ value.
 
             Inputs: none. Output: 1.
             """
@@ -577,16 +578,16 @@ def test_plane_info_collection_keeps_legacy_targeted_copy_plane_info_path():
 
         @staticmethod
         def getSizeC():
-            """Return Size C.
+            """Return `_Pixels`'s fake channel count.
 
             Inputs: none. Output: 1.
             """
             return 1
 
         def copyPlaneInfo(self, theC, theZ):
-            """Copy Plane Info.
+            """Copy the plane Info for `_Pixels`.
 
-            Inputs: `theC`, `theZ`. Output: list.
+            Inputs: `theC`, `theZ`. Output: `list`.
             """
             self.copy_plane_info_calls.append((theC, theZ))
             return [_PlaneInfo()]
@@ -611,28 +612,29 @@ def test_plane_info_collection_keeps_legacy_targeted_copy_plane_info_path():
 def test_plane_info_collection_covers_unavailable_bulk_and_targeted_failures():
     """Verify plane info collection covers unavailable bulk and targeted failures.
 
-    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    Inputs: tools-service fixtures. Output: fails on regressions in plane info collection covers unavailable bulk and targeted failures.
+    or external operations fail.
     """
 
     class _Value:
-        """Represent value."""
+        """Test double for value behavior in this module."""
 
         def __init__(self, value):
-            """Initialize the instance.
+            """Create `_Value` with `value`.
 
             Inputs: `value`. Output: None.
             """
             self._raw_value = value
 
         def getValue(self):
-            """Return the fake OMERO value.
+            """Return `_Value`'s fake OMERO value.
 
             Inputs: none. Output: `self._raw_value`.
             """
             return self._raw_value
 
     class _PlaneInfo:
-        """Represent plane info."""
+        """Test double for plane info behavior in this module."""
 
         theC = 0
         theZ = 1
@@ -640,18 +642,18 @@ def test_plane_info_collection_covers_unavailable_bulk_and_targeted_failures():
 
         @staticmethod
         def getDeltaT(units="SECOND"):
-            """Return Delta T.
+            """Return the fake delta t value used by this test double.
 
             Inputs: `units`. Output: `_Value` result.
             """
             return _Value(2.5)
 
     class _NoPlaneInfoPixels:
-        """Represent no plane info pixels."""
+        """Test double for no plane info pixels behavior in this module."""
 
         @staticmethod
         def getSizeZ():
-            """Return Size Z.
+            """Return `_NoPlaneInfoPixels`'s fake SizeZ value.
 
             Inputs: none. Output: 1.
             """
@@ -659,18 +661,18 @@ def test_plane_info_collection_covers_unavailable_bulk_and_targeted_failures():
 
         @staticmethod
         def getSizeC():
-            """Return Size C.
+            """Return `_NoPlaneInfoPixels`'s fake channel count.
 
             Inputs: none. Output: 1.
             """
             return 1
 
     class _BulkTypeErrorPixels:
-        """Represent bulk type error pixels."""
+        """Test double for bulk type error pixels behavior in this module."""
 
         @staticmethod
         def getSizeZ():
-            """Return Size Z.
+            """Return `_BulkTypeErrorPixels`'s fake SizeZ value.
 
             Inputs: none. Output: 1.
             """
@@ -678,7 +680,7 @@ def test_plane_info_collection_covers_unavailable_bulk_and_targeted_failures():
 
         @staticmethod
         def getSizeC():
-            """Return Size C.
+            """Return `_BulkTypeErrorPixels`'s fake channel count.
 
             Inputs: none. Output: 1.
             """
@@ -686,55 +688,52 @@ def test_plane_info_collection_covers_unavailable_bulk_and_targeted_failures():
 
         @staticmethod
         def copyPlaneInfo(*args, **kwargs):
-            """Copy Plane Info.
+            """Copy the plane Info for `_BulkTypeErrorPixels`.
 
-            Inputs: `*args`, `**kwargs`. Output: list. Raises on invalid or unavailable
-            state.
-
-            state.
+            Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+            `list`. Raises: TypeError when validation or the called operation fails.
             """
             if not args and not kwargs:
                 raise TypeError("bulk unsupported")
             return [_PlaneInfo()]
 
     class _BulkFailurePixels(_BulkTypeErrorPixels):
-        """Represent bulk failure pixels."""
+        """Test double for bulk failure pixels behavior in this module."""
 
         def copyPlaneInfo(self, *args, **kwargs):
-            """Copy Plane Info.
+            """Copy the plane Info for `_BulkFailurePixels`.
 
-            Inputs: `*args`, `**kwargs`. Output: list. Raises on invalid or unavailable
-            state.
-
-            state.
+            Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+            `list`. Raises: RuntimeError when validation or the called operation fails.
             """
             if not args and not kwargs:
                 raise RuntimeError("bulk failed")
             return [_PlaneInfo()]
 
     class _BulkMissingAxisPixels(_BulkTypeErrorPixels):
-        """Represent bulk missing axis pixels."""
+        """Test double for bulk missing axis pixels behavior in this module."""
 
         def copyPlaneInfo(self, *args, **kwargs):
-            """Copy Plane Info.
+            """Copy the plane Info for `_BulkMissingAxisPixels`.
 
-            Inputs: `*args`, `**kwargs`. Output: list.
+            Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+            `list`.
             """
             return [SimpleNamespace(theC=None, theZ=0, theT=0)]
 
     class _TargetedFailurePixels:
-        """Represent targeted failure pixels."""
+        """Test double for targeted failure pixels behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_TargetedFailurePixels` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.calls = []
 
         @staticmethod
         def getSizeZ():
-            """Return Size Z.
+            """Return `_TargetedFailurePixels`'s fake SizeZ value.
 
             Inputs: none. Output: 2.
             """
@@ -742,19 +741,16 @@ def test_plane_info_collection_covers_unavailable_bulk_and_targeted_failures():
 
         @staticmethod
         def getSizeC():
-            """Return Size C.
+            """Return `_TargetedFailurePixels`'s fake channel count.
 
             Inputs: none. Output: 1.
             """
             return 1
 
         def copyPlaneInfo(self, theC, theZ):
-            """Copy Plane Info.
+            """Copy the plane Info for `_TargetedFailurePixels`.
 
-            Inputs: `theC`, `theZ`. Output: list. Raises on invalid or unavailable
-            state.
-
-            state.
+            Inputs: `theC`, `theZ`. Output: `list`. Raises: RuntimeError when validation or the called operation fails.
             """
             self.calls.append((theC, theZ))
             if theZ == 0:
@@ -813,32 +809,32 @@ def test_plane_info_collection_covers_unavailable_bulk_and_targeted_failures():
 def test_metadata_collection_helpers_tolerate_broken_omero_objects():
     """Verify metadata collection helpers tolerate broken OMERO objects.
 
-    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    Inputs: tools-service fixtures. Output: fails on regressions in metadata collection helpers tolerate broken OMERO objects.
     """
 
     class _BrokenMetadataImage:
-        """Represent broken metadata image."""
+        """Test double for broken metadata image behavior in this module."""
 
         @staticmethod
         def loadOriginalMetadata():
-            """Return load original metadata.
+            """Return `_BrokenMetadataImage`'s fake original-metadata payload.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("no metadata")
 
     class _WeirdMetadataImage:
-        """Represent weird metadata image."""
+        """Test double for weird metadata image behavior in this module."""
 
         def __init__(self, payload=None):
-            """Initialize the instance.
+            """Create `_WeirdMetadataImage` with `payload`.
 
             Inputs: `payload`. Output: None.
             """
             self._payload = payload
 
         def loadOriginalMetadata(self):
-            """Return load original metadata.
+            """Return `_WeirdMetadataImage`'s fake original-metadata payload.
 
             Inputs: none. Output: `self._payload`.
             """
@@ -846,15 +842,15 @@ def test_metadata_collection_helpers_tolerate_broken_omero_objects():
 
         @staticmethod
         def getChannels():
-            """Return Channels.
+            """Return the channels for `_WeirdMetadataImage`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("no channels")
 
         @staticmethod
         def listParents():
-            """Return list parents.
+            """Return `_WeirdMetadataImage`'s fake parent listing.
 
             Inputs: none. Output: list.
             """
@@ -870,7 +866,7 @@ def test_metadata_collection_helpers_tolerate_broken_omero_objects():
     assert weird_metadata == {"BF_Instrument Model": "LSM 980"}
 
     class _BrokenSection:
-        """Represent broken section."""
+        """Test double for broken section behavior in this module."""
 
         def __bool__(self):
             """Return the truth value for the instance.
@@ -882,7 +878,7 @@ def test_metadata_collection_helpers_tolerate_broken_omero_objects():
         def __iter__(self):
             """Return an iterator for the instance.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("broken section")
 
@@ -931,7 +927,8 @@ def test_metadata_attributes_and_extract_search_document_cover_legacy_omero_shap
 ):
     """Verify metadata attributes and extract search document cover legacy OMERO shapes.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in metadata attributes and extract search document cover legacy OMERO shapes.
+    RuntimeError, TypeError when validation or the called operation fails.
     """
     monkeypatch.setattr(
         metadata,
@@ -1003,12 +1000,12 @@ def test_metadata_attributes_and_extract_search_document_cover_legacy_omero_shap
     }
 
     class _FailingPixelImage(_LegacyPixelImage):
-        """Represent failing pixel image."""
+        """Test double for failing pixel image behavior in this module."""
 
         def getPixelSizeX(self, units=None):
-            """Return Pixel Size X.
+            """Return `_FailingPixelImage`'s fake physical X size.
 
-            Inputs: `units`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `units`. Output: None. Raises: RuntimeError, TypeError when validation or the called operation fails.
             """
             if units is True:
                 raise TypeError("legacy signature")

@@ -14,7 +14,7 @@ class _DummyLock:
     """Test double for dummy lock."""
 
     def __init__(self, acquired=True):
-        """Initialize the instance.
+        """Create `_DummyLock` with `acquired`.
 
         Inputs: `acquired`. Output: None.
         """
@@ -23,7 +23,7 @@ class _DummyLock:
         self.released = False
 
     def acquire(self, timeout=None):
-        """Acquire the lock.
+        """Acquire `_DummyLock`'s fake lock.
 
         Inputs: `timeout`. Output: `self._acquired`.
         """
@@ -31,25 +31,25 @@ class _DummyLock:
         return self._acquired
 
     def release(self):
-        """Release the lock.
+        """Release `_DummyLock`'s fake lock.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.released = True
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self.val = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self.val`.
         """
@@ -57,17 +57,17 @@ class _Value:
 
 
 class _ImageId:
-    """Represent image identifier."""
+    """Test double for image identifier behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_ImageId` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_ImageId`'s fake OMERO value.
 
         Inputs: none. Output: `self._value`.
         """
@@ -75,17 +75,17 @@ class _ImageId:
 
 
 class _ImageRow:
-    """Represent image row."""
+    """Test double for image row behavior in this module."""
 
     def __init__(self, image_id):
-        """Initialize the instance.
+        """Create `_ImageRow` with `image_id`.
 
         Inputs: `image_id`. Output: None.
         """
         self._image_id = image_id
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_ImageRow`'s fake OMERO identifier.
 
         Inputs: none. Output: `_ImageId` result.
         """
@@ -93,9 +93,9 @@ class _ImageRow:
 
 
 def _job_state(monkeypatch, job):
-    """Job state.
+    """Return the job state.
 
-    Inputs: `monkeypatch`, `job`. Output: computed value.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `job`. Output: `state`.
     """
     state = {"job": job}
 
@@ -108,17 +108,17 @@ def _job_state(monkeypatch, job):
         return state["job"]
 
     def save_job(job_dict):
-        """Save job.
+        """Save the job.
 
-        Inputs: `job_dict`. Output: bool.
+        Inputs: `job_dict`. Output: `bool`.
         """
         state["job"] = job_dict
         return True
 
     def update_job(job_id, mutator):
-        """Update job.
+        """Update the job.
 
-        Inputs: `job_id`, `mutator`. Output: `state['job']`.
+        Inputs: `job_id`, `mutator`. Output: update job result.
         """
         assert job_id == job["job_id"]
         state["job"] = mutator(state["job"])
@@ -133,32 +133,33 @@ def _job_state(monkeypatch, job):
 def test_find_image_by_name_prefers_dataset_search_and_global_fallback(monkeypatch):
     """Verify find image by name prefers dataset search and global fallback.
 
-    Inputs: `monkeypatch`. Output: list. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in find image by name prefers dataset search and global fallback.
+    RuntimeError when validation or the called operation fails.
     """
     params_seen = []
 
     class _Params:
-        """Represent params."""
+        """Test double for params behavior in this module."""
 
         @staticmethod
         def addLong(key, value):
-            """Add long.
+            """Add the long for `_Params`.
 
-            Inputs: `key`, `value`. Output: None.
+            Inputs: `key` lookup key, `value` input value. Output: None.
             """
             params_seen.append(("long", key, value))
 
         @staticmethod
         def addString(key, value):
-            """Add string.
+            """Add the string for `_Params`.
 
-            Inputs: `key`, `value`. Output: None.
+            Inputs: `key` lookup key, `value` input value. Output: None.
             """
             params_seen.append(("string", key, value))
 
         @staticmethod
         def page(offset, size):
-            """Page.
+            """Record the page call on `_Params` for later assertions.
 
             Inputs: `offset`, `size`. Output: None.
             """
@@ -172,19 +173,19 @@ def test_find_image_by_name_prefers_dataset_search_and_global_fallback(monkeypat
     )
 
     class _QueryService:
-        """Represent query service."""
+        """Test double for query service behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_QueryService` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.calls = []
 
         def findAllByQuery(self, query, params, service_opts):
-            """Find All By Query.
+            """Find the all By Query for `_QueryService`.
 
-            Inputs: `query`, `params`, `service_opts`. Output: list.
+            Inputs: `query`, `params` SQL parameters, `service_opts`. Output: `list`.
             """
             self.calls.append(query)
             if "JOIN FETCH i.datasetLinks" in query:
@@ -208,12 +209,10 @@ def test_find_image_by_name_prefers_dataset_search_and_global_fallback(monkeypat
     assert any(call[0] == "long" and call[2] == 7 for call in params_seen)
 
     def failing_dataset_search(query, params, service_opts):
-        """Failing dataset search.
+        """Return the failing dataset search.
 
-        Inputs: `query`, `params`, `service_opts`. Output: list. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `query`, `params` SQL parameters, `service_opts`. Output: `list`.
+        Raises: RuntimeError when validation or the called operation fails.
         """
         if "JOIN FETCH i.datasetLinks" in query:
             raise RuntimeError("dataset query failed")
@@ -252,7 +251,7 @@ def test_run_compatibility_check_inner_covers_remaining_idle_state_transitions(
 ) -> None:
     """Verify run compatibility check inner covers remaining idle state transitions.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in run compatibility check inner covers remaining idle state transitions.
     """
     monkeypatch.setattr(core_functions, "_load_job", lambda job_id: None)
     core_functions._run_compatibility_check_inner("0" * 32)
@@ -327,37 +326,37 @@ def test_run_compatibility_check_inner_covers_remaining_idle_state_transitions(
 def test_verify_import_helpers_and_dataset_creation(monkeypatch):
     """Verify verify import helpers and dataset creation.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in verify import helpers and dataset creation.
     """
 
     class _Params:
-        """Represent params."""
+        """Test double for params behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_Params` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.values = {}
 
         def addId(self, value):
-            """Add ID.
+            """Add the ID for `_Params`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.values["id"] = value
 
         def add(self, key, value):
-            """Add.
+            """Add the add for `_Params`.
 
-            Inputs: `key`, `value`. Output: None.
+            Inputs: `key` lookup key, `value` input value. Output: None.
             """
             self.values[key] = value
 
         def addList(self, key, value):
-            """Add list.
+            """Add the list for `_Params`.
 
-            Inputs: `key`, `value`. Output: None.
+            Inputs: `key` lookup key, `value` input value. Output: None.
             """
             self.values[key] = list(value)
 
@@ -375,19 +374,19 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
     )
 
     class _QueryService:
-        """Represent query service."""
+        """Test double for query service behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_QueryService` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.calls = []
 
         def projection(self, query, params, service_opts):
-            """Projection.
+            """Return the projection for `_QueryService`.
 
-            Inputs: `query`, `params`, `service_opts`. Output: list.
+            Inputs: `query`, `params` SQL parameters, `service_opts`. Output: `list`.
             """
             self.calls.append((query, dict(params.values)))
             if "externalInfo.lsid = :lsid" in query:
@@ -399,12 +398,12 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
             return []
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_Conn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.SERVICE_OPTS = types.SimpleNamespace(
                 setOmeroGroup=lambda value: setattr(self, "group", value)
@@ -415,21 +414,21 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
             self.project_links = []
 
         def getQueryService(self):
-            """Return Query Service.
+            """Return the fake query service value used by this test double.
 
             Inputs: none. Output: `self.query_service`.
             """
             return self.query_service
 
         def close(self):
-            """Close the resource.
+            """Close `_Conn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
         def getUpdateService(self):
-            """Return Update Service.
+            """Return `_Conn`'s fake update service.
 
             Inputs: none. Output: `types.SimpleNamespace` result.
             """
@@ -441,10 +440,10 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
             )
 
     class _AdminConn:
-        """Represent admin conn."""
+        """Test double for admin conn behavior in this module."""
 
         def __init__(self, user_conn):
-            """Initialize the instance.
+            """Create `_AdminConn` with `user_conn`.
 
             Inputs: `user_conn`. Output: None.
             """
@@ -452,17 +451,17 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
             self.closed = False
 
         def suConn(self, username):
-            """Su conn.
+            """Return the su Conn for `_AdminConn`.
 
-            Inputs: `username`. Output: `self.user_conn`.
+            Inputs: `username` username. Output: `user_conn`.
             """
             self.username = username
             return self.user_conn
 
         def close(self):
-            """Close the resource.
+            """Close `_AdminConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
@@ -540,24 +539,24 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
     ) == ["fallback-id"]
 
     class _CreatedDataset:
-        """Represent created dataset."""
+        """Test double for created dataset behavior in this module."""
 
         def __init__(self, dataset_id=None, _loaded=True):
-            """Initialize the instance.
+            """Create `_CreatedDataset` with `dataset_id` and `_loaded`.
 
             Inputs: `dataset_id`, `_loaded`. Output: None.
             """
             self.dataset_id = dataset_id
 
         def setName(self, value):
-            """Set Name.
+            """Set the name for `_CreatedDataset`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.name = value
 
         def getId(self):
-            """Return the fake OMERO identifier.
+            """Return `_CreatedDataset`'s fake OMERO identifier.
 
             Inputs: none. Output: `_ImageId` result.
             """
@@ -593,14 +592,12 @@ def test_verify_imported_zarr_images_renderable_reports_dimension_lsid_and_thumb
 ):
     """Verify verify imported Zarr images renderable reports dimension lsid and thumbnail errors.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in verify imported Zarr images renderable reports dimension lsid and thumbnail errors.
+    Raises: RuntimeError, value when validation or the called operation fails.
     """
 
     class _Image:
-        """Represent image."""
+        """Test double for image behavior in this module."""
 
         def __init__(
             self,
@@ -612,7 +609,7 @@ def test_verify_imported_zarr_images_renderable_reports_dimension_lsid_and_thumb
             image_exists=True,
             external_info=True,
         ):
-            """Initialize the instance.
+            """Create `_Image` with `image_id`.
 
             Inputs: `image_id`, `sizes`, `lsid`, `thumbs`, `image_exists`,
             `external_info`. Output: None.
@@ -627,45 +624,45 @@ def test_verify_imported_zarr_images_renderable_reports_dimension_lsid_and_thumb
             self._lsid = lsid
 
         def getSizeX(self):
-            """Return Size X.
+            """Return `_Image`'s fake SizeX value.
 
             Inputs: none. Output: `self._sizes[0]`.
             """
             return self._sizes[0]
 
         def getSizeY(self):
-            """Return Size Y.
+            """Return `_Image`'s fake SizeY value.
 
             Inputs: none. Output: `self._sizes[1]`.
             """
             return self._sizes[1]
 
         def getSizeZ(self):
-            """Return Size Z.
+            """Return `_Image`'s fake SizeZ value.
 
             Inputs: none. Output: `self._sizes[2]`.
             """
             return self._sizes[2]
 
         def getSizeC(self):
-            """Return Size C.
+            """Return `_Image`'s fake channel count.
 
             Inputs: none. Output: `self._sizes[3]`.
             """
             return self._sizes[3]
 
         def getSizeT(self):
-            """Return Size T.
+            """Return `_Image`'s fake timepoint count.
 
             Inputs: none. Output: `self._sizes[4]`.
             """
             return self._sizes[4]
 
         def getThumbnail(self, size, direct=True):
-            """Return Thumbnail.
+            """Return the thumbnail for `_Image`.
 
-            Inputs: `size`, `direct`. Output: `value`. Raises on invalid or unavailable
-            state.
+            Inputs: `size`, `direct`. Output: get thumbnail result. Raises:
+            RuntimeError, value when validation or the called operation fails.
             """
             if not self._thumbs:
                 raise RuntimeError("thumbnail failure")
@@ -675,10 +672,10 @@ def test_verify_imported_zarr_images_renderable_reports_dimension_lsid_and_thumb
             return value
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __init__(self, image):
-            """Initialize the instance.
+            """Create `_Conn` with `image`.
 
             Inputs: `image`. Output: None.
             """
@@ -689,24 +686,24 @@ def test_verify_imported_zarr_images_renderable_reports_dimension_lsid_and_thumb
             self.closed = False
 
         def getObject(self, obj_type, image_id):
-            """Return Object.
+            """Return the object for `_Conn`.
 
-            Inputs: `obj_type`, `image_id`. Output: `self.image`.
+            Inputs: `obj_type`, `image_id` OMERO image ID. Output: `image`.
             """
             return self.image
 
         def close(self):
-            """Close the resource.
+            """Close `_Conn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
     class _AdminConn:
-        """Represent admin conn."""
+        """Test double for admin conn behavior in this module."""
 
         def __init__(self, conn):
-            """Initialize the instance.
+            """Create `_AdminConn` with `conn`.
 
             Inputs: `conn`. Output: None.
             """
@@ -714,17 +711,17 @@ def test_verify_imported_zarr_images_renderable_reports_dimension_lsid_and_thumb
             self.closed = False
 
         def suConn(self, username):
-            """Su conn.
+            """Return the su Conn for `_AdminConn`.
 
-            Inputs: `username`. Output: `self.conn`.
+            Inputs: `username` username. Output: `conn`.
             """
             self.username = username
             return self.conn
 
         def close(self):
-            """Close the resource.
+            """Close `_AdminConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
@@ -802,9 +799,9 @@ def test_verify_imported_zarr_images_renderable_reports_dimension_lsid_and_thumb
 def test_run_compatibility_check_inner_updates_idle_disabled_and_result_paths(
     tmp_path: Path, monkeypatch
 ):
-    """Verify run compatibility check inner updates idle disabled and result paths.
+    """Verify run compatibility check inner updates idle disabled and result paths result shape.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in run compatibility check inner updates idle disabled and result paths.
     """
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
@@ -970,9 +967,9 @@ def test_run_compatibility_check_inner_updates_idle_disabled_and_result_paths(
 def test_process_import_job_covers_lock_timeout_success_and_failure_cleanup(
     tmp_path: Path, monkeypatch
 ):
-    """Verify process import job covers lock timeout success and failure cleanup.
+    """Check process import job covers lock timeout success and failure cleanup cleanup behavior.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in process import job covers lock timeout success and failure cleanup.
     """
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
@@ -1143,7 +1140,7 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
 ):
     """Verify attach txt to image service saves raw file store and links plot.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: yielded values.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in attach txt to image service saves raw file store and links plot.
     """
     txt_path = tmp_path / "spectrum.txt"
     txt_path.write_text("energy,count\n1,2\n", encoding="utf-8")
@@ -1152,12 +1149,12 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
     table_calls = []
 
     class _OriginalFileI:
-        """Represent original file i."""
+        """Test double for original file i behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_OriginalFileI` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self._id = 0
             self.name = None
@@ -1166,77 +1163,77 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
             self.mimetype = None
 
         def setName(self, value):
-            """Set Name.
+            """Set the name for `_OriginalFileI`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.name = value
 
         def setPath(self, value):
-            """Set Path.
+            """Set the path for `_OriginalFileI`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.path = value
 
         def setSize(self, value):
-            """Set Size.
+            """Set the size for `_OriginalFileI`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.size = value
 
         def setMimetype(self, value):
-            """Set Mimetype.
+            """Set the mimetype for `_OriginalFileI`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.mimetype = value
 
         def getId(self):
-            """Return the fake OMERO identifier.
+            """Return `_OriginalFileI`'s fake OMERO identifier.
 
             Inputs: none. Output: `_Value` result.
             """
             return _Value(self._id)
 
         def proxy(self):
-            """Proxy.
+            """Return the proxy for `_OriginalFileI`.
 
             Inputs: none. Output: `self`.
             """
             return self
 
     class _FileAnnotationI:
-        """Represent file annotation i."""
+        """Test double for file annotation i behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_FileAnnotationI` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.ns = None
             self.file = None
 
         def setNs(self, value):
-            """Set Ns.
+            """Set the ns for `_FileAnnotationI`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.ns = value
 
         def setFile(self, value):
-            """Set File.
+            """Set the file for `_FileAnnotationI`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.file = value
 
     class _FileAnnotationWrapper:
-        """Represent file annotation wrapper."""
+        """Test double for file annotation wrapper behavior in this module."""
 
         def __init__(self, conn, annotation):
-            """Initialize the instance.
+            """Create `_FileAnnotationWrapper` with `conn` and `annotation`.
 
             Inputs: `conn`, `annotation`. Output: None.
             """
@@ -1261,12 +1258,12 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
     linked_annotations = []
 
     class _RawFileStore:
-        """Represent raw file store."""
+        """Test double for raw file store behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_RawFileStore` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.file_id = None
             self.payload = b""
@@ -1274,9 +1271,9 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
             self.closed = False
 
         def setFileId(self, value):
-            """Set File ID.
+            """Set the file ID for `_RawFileStore`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.file_id = value
 
@@ -1288,32 +1285,32 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
             self.payload = data[offset : offset + length]
 
         def save(self):
-            """Persist the object state.
+            """Persist `_RawFileStore`'s fake object state.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             self.saved = True
 
         def close(self):
-            """Close the resource.
+            """Close `_RawFileStore`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
     class _UpdateService:
-        """Represent update service."""
+        """Test double for update service behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_UpdateService` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.saved = []
             self._next_id = 101
 
         def saveAndReturnObject(self, obj):
-            """Save and return object.
+            """Return the fake saved OMERO object from async-path tests.
 
             Inputs: `obj`. Output: `obj`.
             """
@@ -1326,11 +1323,11 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
     update_service = _UpdateService()
 
     class _Image:
-        """Represent image."""
+        """Test double for image behavior in this module."""
 
         @staticmethod
         def linkAnnotation(wrapper):
-            """Link annotation.
+            """Record the link annotation call on `_Image` for later assertions.
 
             Inputs: `wrapper`. Output: None.
             """
@@ -1339,12 +1336,12 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
     image = _Image()
 
     class _UserConn:
-        """Represent user conn."""
+        """Test double for user conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_UserConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.closed = False
             self.c = types.SimpleNamespace(
@@ -1353,7 +1350,7 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
 
         @staticmethod
         def _create_raw_file_store():
-            """Create raw file store.
+            """Create the raw file store for `_UserConn`.
 
             Inputs: none. Output: `store`.
             """
@@ -1363,7 +1360,7 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
 
         @staticmethod
         def getUpdateService():
-            """Return Update Service.
+            """Return `_UserConn`'s fake update service.
 
             Inputs: none. Output: `update_service`.
             """
@@ -1371,7 +1368,7 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
 
         @staticmethod
         def getObject(object_type, object_id):
-            """Return Object.
+            """Return the object for `_UserConn`.
 
             Inputs: `object_type`, `object_id`. Output: `image`.
             """
@@ -1379,9 +1376,9 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
             return image
 
         def close(self):
-            """Close the resource.
+            """Close `_UserConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
@@ -1389,9 +1386,10 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
 
     @contextmanager
     def _background_user_connection(*args, **kwargs):
-        """Background user connection.
+        """Return the background user connection.
 
-        Inputs: `*args`, `**kwargs`. Output: yielded values.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        iterator of yielded items.
         """
         try:
             yield user_conn
@@ -1441,9 +1439,9 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
 def test_verify_import_and_cleanup_imported_images_cover_dataset_and_admin_paths(
     monkeypatch,
 ):
-    """Verify verify import and cleanup imported images cover dataset and admin paths.
+    """Check verify import and cleanup imported images cover dataset and admin paths cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in verify import and cleanup imported images cover dataset and admin paths.
     """
     dataset = types.SimpleNamespace(
         listChildren=lambda: [
@@ -1465,12 +1463,12 @@ def test_verify_import_and_cleanup_imported_images_cover_dataset_and_admin_paths
     assert core_functions._verify_import(conn, "global.ome.tif") is True
 
     class _AdminConn:
-        """Represent admin conn."""
+        """Test double for admin conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_AdminConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.groups = []
             self.deleted = []
@@ -1478,16 +1476,16 @@ def test_verify_import_and_cleanup_imported_images_cover_dataset_and_admin_paths
             self.SERVICE_OPTS = types.SimpleNamespace(setOmeroGroup=self.groups.append)
 
         def deleteObjects(self, object_type, object_ids, wait=True):
-            """Delete Objects.
+            """Delete the objects for `_AdminConn`.
 
             Inputs: `object_type`, `object_ids`, `wait`. Output: None.
             """
             self.deleted.append((object_type, object_ids, wait))
 
         def close(self):
-            """Close the resource.
+            """Close `_AdminConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
@@ -1506,9 +1504,10 @@ def test_verify_import_and_cleanup_imported_images_cover_dataset_and_admin_paths
 def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     tmp_path: Path, monkeypatch
 ):
-    """Verify process import job handles sem edx associations and plot imports.
+    """Verify process import job handles SEM EDX associations and plot imports.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: computed value.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: `dict`.
     """
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
@@ -1552,7 +1551,8 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
         "errors": [],
         "messages": [],
         "status": "ready",
-        "dataset_map": {"images": 11},
+        "dataset_map": {"images": 11, "Override Dataset": 22},
+        "dataset_name_override": "Override Dataset",
         "orphan_dataset_name": "images",
         "imported_bytes": 0,
         "total_bytes": 8,
@@ -1591,18 +1591,18 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     )
 
     class _ImportedImage:
-        """Represent imported image."""
+        """Test double for imported image behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_ImportedImage` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self._obj = types.SimpleNamespace(id=types.SimpleNamespace(val=301))
 
         @staticmethod
         def listParents():
-            """Return list parents.
+            """Return `_ImportedImage`'s fake parent listing.
 
             Inputs: none. Output: list.
             """
@@ -1611,19 +1611,19 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     imported_image = _ImportedImage()
 
     class _ServiceConn:
-        """Represent service conn."""
+        """Test double for service conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_ServiceConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.closed = False
 
         def close(self):
-            """Close the resource.
+            """Close `_ServiceConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
@@ -1633,14 +1633,24 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
         "_open_service_connection",
         lambda host, port, group_id=None: service_conn,
     )
+    batch_lookup_calls = []
+
+    def batch_find_images_by_name(conn, names, dataset_id):
+        """Return the SEM EDX image lookup only for the override dataset.
+
+        Inputs: `conn`, `names`, `dataset_id`. Output: dict.
+        """
+        batch_lookup_calls.append((tuple(names), dataset_id))
+        return (
+            {"sample.ome.tif": imported_image}
+            if dataset_id == 22 or dataset_id is None
+            else {}
+        )
+
     monkeypatch.setattr(
         core_functions,
         "_batch_find_images_by_name",
-        lambda conn, names, dataset_id: (
-            {"sample.ome.tif": imported_image}
-            if dataset_id == 11 or dataset_id is None
-            else {}
-        ),
+        batch_find_images_by_name,
     )
     monkeypatch.setattr(
         core_functions,
@@ -1676,9 +1686,10 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     plot_imports = []
 
     def fake_import_job_entry(entry, *args, **kwargs):
-        """Fake import job entry.
+        """Simulate import job entry so the surrounding test controls that dependency.
 
-        Inputs: `entry`, `*args`, `**kwargs`. Output: dict.
+        Inputs: `entry`, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: `dict`.
         """
         if entry.get("relative_path") == "images/sample.ome.tif":
             return {
@@ -1726,6 +1737,7 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
         "Txt attachment success" in message for message in state["job"]["messages"]
     )
     assert any("sample_plot.png" in message for message in state["job"]["messages"])
+    assert batch_lookup_calls[0] == (("sample.ome.tif",), 22)
     assert len(attached) == 1
     assert attached[0]["image_id"] == 301
     assert attached[0]["txt_path"] == staged_txt
@@ -1745,12 +1757,11 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
 def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     tmp_path: Path, monkeypatch
 ):
-    """Verify process import job handles sem edx reconnect and attachment edge cases.
+    """Verify process import job handles SEM EDX reconnect and attachment edge cases.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: computed value. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: `dict`. Raises: RuntimeError when validation or external operations
+    fail.
     """
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
@@ -1868,30 +1879,30 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     )
 
     class _ImportedImage:
-        """Represent imported image."""
+        """Test double for imported image behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_ImportedImage` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self._obj = types.SimpleNamespace(id=types.SimpleNamespace(val=301))
 
         @staticmethod
         def listParents():
-            """Return list parents.
+            """Return `_ImportedImage`'s fake parent listing.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("parents unavailable")
 
     imported_image = _ImportedImage()
 
     class _ServiceConn:
-        """Represent service conn."""
+        """Test double for service conn behavior in this module."""
 
         def __init__(self, name):
-            """Initialize the instance.
+            """Create `_ServiceConn` with `name`.
 
             Inputs: `name`. Output: None.
             """
@@ -1899,9 +1910,9 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
             self.closed = False
 
         def close(self):
-            """Close the resource.
+            """Close `_ServiceConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
@@ -1923,9 +1934,10 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     batch_calls = []
 
     def _batch_find(conn, names, dataset_id):
-        """Batch find.
+        """Return the batch find.
 
-        Inputs: `conn`, `names`, `dataset_id`. Output: dict.
+        Inputs: `conn` OMERO gateway connection, `names`, `dataset_id` OMERO dataset ID.
+        Output: `dict`.
         """
         batch_calls.append((conn.name, tuple(sorted(names)), dataset_id))
         if "sample.ome.tif" in names:
@@ -1935,9 +1947,9 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     monkeypatch.setattr(core_functions, "_batch_find_images_by_name", _batch_find)
 
     def _resolve_staged(root, staged_path):
-        """Resolve staged.
+        """Resolve the staged.
 
-        Inputs: `root`, `staged_path`. Output: tuple.
+        Inputs: `root`, `staged_path`. Output: `tuple`.
         """
         target = root / staged_path
         name = target.name
@@ -1954,7 +1966,7 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     sem_edx_parser = types.ModuleType("omeroweb_import.services.omero.sem_edx_parser")
 
     def _create_plot(txt_path):
-        """Create plot.
+        """Create the plot.
 
         Inputs: `txt_path`. Output: `plot_path`.
         """
@@ -1972,9 +1984,10 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     copied_plots = []
 
     def _copy2(src, dst):
-        """Copy2.
+        """Record the copy2 call on the test double for later assertions.
 
-        Inputs: `src`, `dst`. Output: None. Raises on invalid or unavailable state.
+        Inputs: `src`, `dst`. Output: None. Raises: RuntimeError when validation or
+        external operations fail.
         """
         copied_plots.append(dst.name)
         if dst.name == "plot-copy-error.png":
@@ -2000,10 +2013,11 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
         plot_path=None,
         **kwargs,
     ):
-        """Attach txt.
+        """Record the attach txt call on the test double for later assertions.
 
-        Inputs: `conn`, `image_id`, `txt_path`, `username`, `create_tables`,
-        `plot_path`, `**kwargs`. Output: None. Raises on invalid or unavailable state.
+        Inputs: `conn` OMERO gateway connection, `image_id` OMERO image ID, `txt_path`,
+        `username` username, `create_tables`, `plot_path`, `**kwargs` keyword arguments.
+        Output: None. Raises: RuntimeError when validation or the called operation fails.
         """
         attached.append((txt_path.name, plot_path and plot_path.name))
         if txt_path.name == "attach-error.txt":
@@ -2014,9 +2028,10 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     plot_imports = []
 
     def _import_job_entry(entry, *args, **kwargs):
-        """Import job entry.
+        """Import the job entry.
 
-        Inputs: `entry`, `*args`, `**kwargs`. Output: dict.
+        Inputs: `entry`, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: `dict`.
         """
         relative_path = entry.get("relative_path")
         if relative_path == first_image:

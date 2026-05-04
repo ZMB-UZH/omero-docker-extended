@@ -18,9 +18,9 @@ def _test_job_id(suffix: str) -> str:
 
 
 def test_ensure_dir_rejects_unmanaged_path(tmp_path, monkeypatch):
-    """Verify ensure directory rejects unmanaged path.
+    """Confirm ensure dir rejects unmanaged path is rejected at the boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions when ensure dir rejects unmanaged path accepts unsafe input.
     """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
@@ -36,9 +36,9 @@ def test_ensure_dir_rejects_unmanaged_path(tmp_path, monkeypatch):
 
 
 def test_ensure_dir_accepts_managed_upload_subdirectory(tmp_path, monkeypatch):
-    """Verify ensure directory accepts managed upload subdirectory.
+    """Verify ensure dir accepts managed upload subdirectory.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in ensure dir accepts managed upload subdirectory.
     """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
@@ -56,7 +56,7 @@ def test_ensure_dir_accepts_managed_upload_subdirectory(tmp_path, monkeypatch):
 def test_job_paths_are_canonical_and_anchored_under_jobs_root(tmp_path, monkeypatch):
     """Verify job paths are canonical and anchored under jobs root.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in job paths are canonical and anchored under jobs root.
     """
     jobs_root = tmp_path / "jobs-root"
     jobs_root.mkdir()
@@ -75,9 +75,9 @@ def test_job_paths_are_canonical_and_anchored_under_jobs_root(tmp_path, monkeypa
 
 
 def test_load_job_reads_from_canonical_jobs_path(tmp_path, monkeypatch):
-    """Verify load job reads from canonical jobs path.
+    """Verify the load job reads from canonical jobs path safety boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions when load job reads from canonical jobs path accepts unsafe input.
     """
     jobs_root = tmp_path / "jobs-root"
     jobs_root.mkdir()
@@ -98,12 +98,11 @@ def test_load_job_reads_from_canonical_jobs_path(tmp_path, monkeypatch):
 def test_open_service_connection_redacts_password_when_connect_raises(
     monkeypatch, caplog
 ):
-    """Verify open service connection redacts password when connect raises.
+    """Confirm open service connection redacts password when connect raises exposes the expected failure.
 
-    Inputs: `monkeypatch`, `caplog`. Output: computed value. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `caplog` pytest log capture
+    fixture. Output: `conn`. Raises: RuntimeError when validation or external operations
+    fail.
     """
     for module in (import_service, core_functions):
         created = []
@@ -112,7 +111,7 @@ def test_open_service_connection_redacts_password_when_connect_raises(
             """Test double for fake conn."""
 
             def __init__(self, *_args, **_kwargs):
-                """Initialize the instance.
+                """Create `FakeConn` with its default state.
 
                 Inputs: `*_args`, `**_kwargs`. Output: None.
                 """
@@ -123,31 +122,33 @@ def test_open_service_connection_redacts_password_when_connect_raises(
 
             @staticmethod
             def connect():
-                """Open the connection.
+                """Open the connection for `FakeConn`.
 
-                Inputs: none. Output: None. Raises on invalid or unavailable state.
+                Inputs: caller provides no extra arguments. Output: records the fake side effect.
+                external operations fail.
                 """
                 raise RuntimeError("authentication failed for password super-secret")
 
             @staticmethod
             def getLastError():
-                """Return Last Error.
+                """Return `FakeConn`'s fake last-error text.
 
                 Inputs: none. Output: 'password=super-secret'.
                 """
                 return "password=super-secret"
 
             def close(self):
-                """Close the resource.
+                """Close `FakeConn`'s fake resource handle.
 
-                Inputs: none. Output: None.
+                Inputs: caller provides no extra arguments. Output: records the fake side effect.
                 """
                 self.closed = True
 
         def fake_gateway(*args, _created=created, _conn_factory=FakeConn, **kwargs):
-            """Fake gateway.
+            """Simulate gateway so the surrounding test controls that dependency.
 
-            Inputs: `_created`, `_conn_factory`, `*args`, `**kwargs`. Output: `conn`.
+            Inputs: `*args` positional arguments, `_created`, `_conn_factory`,
+            `**kwargs` keyword arguments. Output: `conn`.
             """
             conn = _conn_factory(*args, **kwargs)
             _created.append(conn)
@@ -175,9 +176,10 @@ def test_open_service_connection_redacts_password_when_connect_raises(
 def test_open_service_connection_redacts_password_when_connect_returns_false(
     monkeypatch, caplog
 ):
-    """Verify open service connection redacts password when connect returns false.
+    """Check that open service connection redacts password when connect returns false keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`, `caplog`. Output: computed value.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `caplog` pytest log capture
+    fixture. Output: `conn`.
     """
     for module in (import_service, core_functions):
         created = []
@@ -186,7 +188,7 @@ def test_open_service_connection_redacts_password_when_connect_returns_false(
             """Test double for fake conn."""
 
             def __init__(self, *_args, **_kwargs):
-                """Initialize the instance.
+                """Create `FakeConn` with its default state.
 
                 Inputs: `*_args`, `**_kwargs`. Output: None.
                 """
@@ -197,7 +199,7 @@ def test_open_service_connection_redacts_password_when_connect_returns_false(
 
             @staticmethod
             def connect():
-                """Open the connection.
+                """Open the connection for `FakeConn`.
 
                 Inputs: none. Output: bool.
                 """
@@ -205,23 +207,24 @@ def test_open_service_connection_redacts_password_when_connect_returns_false(
 
             @staticmethod
             def getLastError():
-                """Return Last Error.
+                """Return `FakeConn`'s fake last-error text.
 
                 Inputs: none. Output: 'password=super-secret'.
                 """
                 return "password=super-secret"
 
             def close(self):
-                """Close the resource.
+                """Close `FakeConn`'s fake resource handle.
 
-                Inputs: none. Output: None.
+                Inputs: caller provides no extra arguments. Output: records the fake side effect.
                 """
                 self.closed = True
 
         def fake_gateway(*args, _created=created, _conn_factory=FakeConn, **kwargs):
-            """Fake gateway.
+            """Simulate gateway so the surrounding test controls that dependency.
 
-            Inputs: `_created`, `_conn_factory`, `*args`, `**kwargs`. Output: `conn`.
+            Inputs: `*args` positional arguments, `_created`, `_conn_factory`,
+            `**kwargs` keyword arguments. Output: `conn`.
             """
             conn = _conn_factory(*args, **kwargs)
             _created.append(conn)
@@ -246,20 +249,21 @@ def test_open_service_connection_redacts_password_when_connect_returns_false(
 
 
 def _assert_service_connection_falls_back_to_job_group(module, monkeypatch):
-    """Assert service connection falls back to job group.
+    """Assert the service connection falls back to job group.
 
-    Inputs: `module`, `monkeypatch`. Output: bool or None.
+    Inputs: `module` module object, `monkeypatch` pytest monkeypatch fixture. Output:
+    `bool`.
     """
     group_calls = []
 
     class ServiceOpts:
-        """Represent service opts."""
+        """Test double for service opts behavior in this module."""
 
         @staticmethod
         def setOmeroGroup(value):
-            """Set OMERO Group.
+            """Set the OMERO Group for `ServiceOpts`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             group_calls.append(value)
 
@@ -267,7 +271,7 @@ def _assert_service_connection_falls_back_to_job_group(module, monkeypatch):
         """Test double for fake conn."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `FakeConn` with its default state.
 
             Inputs: `*_args`, `**_kwargs`. Output: None.
             """
@@ -275,7 +279,7 @@ def _assert_service_connection_falls_back_to_job_group(module, monkeypatch):
 
         @staticmethod
         def connect():
-            """Open the connection.
+            """Open the connection for `FakeConn`.
 
             Inputs: none. Output: bool.
             """
@@ -283,9 +287,9 @@ def _assert_service_connection_falls_back_to_job_group(module, monkeypatch):
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `FakeConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -307,7 +311,7 @@ def test_open_service_connection_falls_back_to_job_group_when_override_is_invali
 ):
     """Verify open service connection falls back to job group when override is invalid.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in open service connection falls back to job group when override is invalid.
     """
     for module in (import_service, core_functions):
         _assert_service_connection_falls_back_to_job_group(module, monkeypatch)

@@ -7,17 +7,17 @@ from omeroweb_import.views import core_functions
 
 
 class _ImageId:
-    """Represent image identifier."""
+    """Test double for image identifier behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_ImageId` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_ImageId`'s fake OMERO value.
 
         Inputs: none. Output: `self._value`.
         """
@@ -25,17 +25,17 @@ class _ImageId:
 
 
 class _ImageRow:
-    """Represent image row."""
+    """Test double for image row behavior in this module."""
 
     def __init__(self, image_id):
-        """Initialize the instance.
+        """Create `_ImageRow` with `image_id`.
 
         Inputs: `image_id`. Output: None.
         """
         self._image_id = image_id
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_ImageRow`'s fake OMERO identifier.
 
         Inputs: none. Output: `_ImageId` result.
         """
@@ -43,17 +43,17 @@ class _ImageRow:
 
 
 class _UnlockedLock:
-    """Represent unlocked lock."""
+    """Test double for unlocked lock behavior in this module."""
 
     def __enter__(self):
-        """Enter the context manager.
+        """Enter `_UnlockedLock`'s context-managed fake resource.
 
         Inputs: none. Output: `self`.
         """
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        """Exit the context manager.
+        """Exit `_UnlockedLock`'s context-managed fake resource.
 
         Inputs: `exc_type`, `exc`, `tb`. Output: bool.
         """
@@ -61,17 +61,17 @@ class _UnlockedLock:
 
 
 class _FailingLock:
-    """Represent failing lock."""
+    """Test double for failing lock behavior in this module."""
 
     def __enter__(self):
-        """Enter the context manager.
+        """Enter `_FailingLock`'s context-managed fake resource.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
         """
         raise core_functions.portalocker.exceptions.LockException("busy")
 
     def __exit__(self, exc_type, exc, tb):
-        """Exit the context manager.
+        """Exit `_FailingLock`'s context-managed fake resource.
 
         Inputs: `exc_type`, `exc`, `tb`. Output: bool.
         """
@@ -81,7 +81,7 @@ class _FailingLock:
 def test_timeout_expired_handles_invalid_negative_and_elapsed_values(monkeypatch):
     """Verify timeout expired handles invalid negative and elapsed values.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in timeout expired handles invalid negative and elapsed values.
     """
     monkeypatch.setattr(core_functions.time, "time", lambda: 15.0)
     assert core_functions._timeout_expired(10.0, "bad") is False
@@ -95,7 +95,7 @@ def test_job_storage_helpers_cover_missing_corrupt_and_lock_failure_paths(
 ):
     """Verify job storage helpers cover missing corrupt and lock failure paths.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `_FailingLock` result.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in job storage helpers cover missing corrupt and lock failure paths.
     """
     jobs_root = tmp_path / "jobs"
     jobs_root.mkdir()
@@ -130,9 +130,10 @@ def test_job_storage_helpers_cover_missing_corrupt_and_lock_failure_paths(
     lock_calls = []
 
     def failing_lock(*args, **kwargs):
-        """Failing lock.
+        """Return the failing lock.
 
-        Inputs: `*args`, `**kwargs`. Output: `_FailingLock` result.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `_FailingLock` result.
         """
         lock_calls.append((args, kwargs))
         return _FailingLock()
@@ -175,31 +176,31 @@ def test_job_storage_helpers_cover_missing_corrupt_and_lock_failure_paths(
 def test_batch_find_images_by_name_covers_dataset_global_and_failure_paths(monkeypatch):
     """Verify batch find images by name covers dataset global and failure paths.
 
-    Inputs: `monkeypatch`. Output: computed value.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in batch find images by name covers dataset global and failure paths.
     """
 
     class _Params:
-        """Represent params."""
+        """Test double for params behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_Params` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.values = {}
 
         def addLong(self, key, value):
-            """Add long.
+            """Add the long for `_Params`.
 
-            Inputs: `key`, `value`. Output: `self`.
+            Inputs: `key` lookup key, `value` input value. Output: `self`.
             """
             self.values[key] = value
             return self
 
         def addList(self, key, value):
-            """Add list.
+            """Add the list for `_Params`.
 
-            Inputs: `key`, `value`. Output: `self`.
+            Inputs: `key` lookup key, `value` input value. Output: `self`.
             """
             self.values[key] = list(value)
             return self
@@ -218,9 +219,9 @@ def test_batch_find_images_by_name_covers_dataset_global_and_failure_paths(monke
     }
 
     def find_all_by_query(query, params, opts):
-        """Find all by query.
+        """Find the all by query.
 
-        Inputs: `query`, `params`, `opts`. Output: list.
+        Inputs: `query`, `params` SQL parameters, `opts`. Output: `list`.
         """
         queries.append((query, dict(params.values)))
         return [_ImageRow(11), _ImageRow(12)]

@@ -8,17 +8,17 @@ from omeroweb_import.views import core_functions
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self.val = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self.val`.
         """
@@ -26,10 +26,10 @@ class _Value:
 
 
 class _Owner:
-    """Represent owner."""
+    """Test double for owner behavior in this module."""
 
     def __init__(self, owner_id, *, ome_name=None, first_name=None):
-        """Initialize the instance.
+        """Create `_Owner` with `owner_id`.
 
         Inputs: `owner_id`, `ome_name`, `first_name`. Output: None.
         """
@@ -38,7 +38,7 @@ class _Owner:
         self._first_name = first_name
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_Owner`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -47,7 +47,8 @@ class _Owner:
     def getOmeName(self):
         """Return the fake OMERO name.
 
-        Inputs: none. Output: `self._ome_name`. Raises on invalid or unavailable state.
+        Inputs: none. Output: `_ome_name`. Raises: RuntimeError when validation or
+        external operations fail.
         """
         if self._ome_name is None:
             raise RuntimeError("no ome name")
@@ -62,10 +63,10 @@ class _Owner:
 
 
 class _Permissions:
-    """Represent permissions."""
+    """Test double for permissions behavior in this module."""
 
     def __init__(self, can_read, can_write):
-        """Initialize the instance.
+        """Create `_Permissions` with `can_read` and `can_write`.
 
         Inputs: `can_read`, `can_write`. Output: None.
         """
@@ -73,14 +74,14 @@ class _Permissions:
         self._can_write = can_write
 
     def isRead(self):
-        """Return whether Read.
+        """Report the read boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: `self._can_read`.
         """
         return self._can_read
 
     def isWrite(self):
-        """Return whether Write.
+        """Report the write boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: `self._can_write`.
         """
@@ -88,10 +89,10 @@ class _Permissions:
 
 
 class _Details:
-    """Represent details."""
+    """Test double for details behavior in this module."""
 
     def __init__(self, *, owner=None, permissions=None):
-        """Initialize the instance.
+        """Create `_Details` with its default state.
 
         Inputs: `owner`, `permissions`. Output: None.
         """
@@ -106,7 +107,7 @@ class _Details:
         return self._owner
 
     def getPermissions(self):
-        """Return fake permissions.
+        """Return `_Details`'s fake permissions object.
 
         Inputs: none. Output: `self._permissions`.
         """
@@ -114,7 +115,7 @@ class _Details:
 
 
 class _NamedProject:
-    """Represent named project."""
+    """Test double for named project behavior in this module."""
 
     def __init__(
         self,
@@ -126,7 +127,7 @@ class _NamedProject:
         permissions=None,
         children=None,
     ):
-        """Initialize the instance.
+        """Create `_NamedProject` with `project_id` and `name`.
 
         Inputs: `project_id`, `name`, `owner_id`, `owner_name`, `permissions`,
         `children`. Output: None.
@@ -140,28 +141,28 @@ class _NamedProject:
         self._children = list(children or [])
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_NamedProject`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
         return _Value(self._project_id)
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_NamedProject`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
         return self._name
 
     def getDetails(self):
-        """Return Details.
+        """Return the details for `_NamedProject`.
 
-        Inputs: none. Output: `self._details`.
+        Inputs: none. Output: `_details`.
         """
         return self._details
 
     def listChildren(self):
-        """Return list children.
+        """Return `_NamedProject`'s fake child listing.
 
         Inputs: none. Output: `list` result.
         """
@@ -169,10 +170,10 @@ class _NamedProject:
 
 
 class _DatasetChild:
-    """Represent dataset child."""
+    """Test double for dataset child behavior in this module."""
 
     def __init__(self, dataset_id, name):
-        """Initialize the instance.
+        """Create `_DatasetChild` with `dataset_id` and `name`.
 
         Inputs: `dataset_id`, `name`. Output: None.
         """
@@ -180,14 +181,14 @@ class _DatasetChild:
         self._name = name
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_DatasetChild`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
         return _Value(self._dataset_id)
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_DatasetChild`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
@@ -195,17 +196,17 @@ class _DatasetChild:
 
 
 class _ExistingDataset:
-    """Represent existing dataset."""
+    """Test double for existing dataset behavior in this module."""
 
     def __init__(self, dataset_id):
-        """Initialize the instance.
+        """Create `_ExistingDataset` with `dataset_id`.
 
         Inputs: `dataset_id`. Output: None.
         """
         self._dataset_id = dataset_id
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_ExistingDataset`'s fake OMERO identifier.
 
         Inputs: none. Output: `_Value` result.
         """
@@ -213,9 +214,9 @@ class _ExistingDataset:
 
 
 def test_owner_and_permission_helpers_cover_fallback_paths() -> None:
-    """Verify owner and permission helpers cover fallback paths.
+    """Verify the owner and permission helpers cover fallback paths safety boundary.
 
-    Inputs: none. Output: None.
+    Inputs: import-job fakes. Output: fails on regressions when owner and permission helpers cover fallback paths accepts unsafe input.
     """
     owner = _Owner(7, ome_name="alice")
     details_obj = SimpleNamespace(
@@ -240,9 +241,9 @@ def test_owner_and_permission_helpers_cover_fallback_paths() -> None:
 
 
 def test_iter_accessible_projects_and_collect_project_payload_cover_fallbacks() -> None:
-    """Verify iter accessible projects and collect project payload cover fallbacks.
+    """Verify iter accessible projects and collect project payload cover fallbacks result shape.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: import-job fakes. Output: fails on regressions in iter accessible projects and collect project payload cover fallbacks.
     """
     service_opts = SimpleNamespace(
         current="5",
@@ -263,12 +264,9 @@ def test_iter_accessible_projects_and_collect_project_payload_cover_fallbacks() 
     )
 
     def _get_objects(model, opts=None):
-        """Return objects.
+        """Return the objects.
 
-        Inputs: `model`, `opts`. Output: `iter` result. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: `model`, `opts`. Output: `iter` result. Raises: RuntimeError when validation or the called operation fails.
         """
         assert model == "Project"
         if opts is None and service_opts.current == "-1":
@@ -301,7 +299,8 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
 ) -> None:
     """Verify dataset target helpers cover existing new and planned units.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in dataset target helpers cover existing new and planned units.
+    AssertionError when validation or the called operation fails.
     """
     project = _NamedProject(
         3,
@@ -310,19 +309,19 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
     )
 
     class _NewDataset:
-        """Represent new dataset."""
+        """Test double for new dataset behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_NewDataset` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.name = None
 
         def setName(self, value):
-            """Set Name.
+            """Set the name for `_NewDataset`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.name = value
 
@@ -338,12 +337,10 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
     )
 
     def _get_objects(model, *args, **kwargs):
-        """Return objects.
+        """Return the objects.
 
-        Inputs: `model`, `*args`, `**kwargs`. Output: `iter` result. Raises on invalid
-        or unavailable state.
-
-        or unavailable state.
+        Inputs: `model`, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: `iter` result. Raises: AssertionError for the exercised failure path.
         """
         if model == "Dataset":
             name = kwargs.get("attributes", {}).get("name")
@@ -460,14 +457,14 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
 def test_request_path_dataset_preparation_covers_success_and_failure(
     monkeypatch,
 ) -> None:
-    """Verify request path dataset preparation covers success and failure.
+    """Verify the request path dataset preparation covers success and failure safety boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when request path dataset preparation covers success and failure accepts unsafe input.
     """
     group_calls = []
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         SERVICE_OPTS = SimpleNamespace(setOmeroGroup=group_calls.append)
 
@@ -560,23 +557,23 @@ def test_dataset_creation_helpers_cover_cache_link_and_failure_paths(
 ) -> None:
     """Verify dataset creation helpers cover cache link and failure paths.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in dataset creation helpers cover cache link and failure paths.
     """
 
     class _NewDataset:
-        """Represent new dataset."""
+        """Test double for new dataset behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_NewDataset` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.name = None
 
         def setName(self, value):
-            """Set Name.
+            """Set the name for `_NewDataset`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.name = value
 
@@ -632,9 +629,9 @@ def test_dataset_creation_helpers_cover_cache_link_and_failure_paths(
 def test_request_path_dataset_helpers_cover_fallback_and_save_failures(
     monkeypatch,
 ) -> None:
-    """Verify request path dataset helpers cover fallback and save failures.
+    """Verify the request path dataset helpers cover fallback and save failures safety boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when request path dataset helpers cover fallback and save failures accepts unsafe input.
     """
     monkeypatch.setattr(
         core_functions, "_generate_orphan_dataset_name", lambda: "UploadRoot_TEST"
@@ -668,7 +665,7 @@ def test_request_path_dataset_helpers_cover_fallback_and_save_failures(
     monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
 
     class _ScopeFailConn:
-        """Represent scope fail conn."""
+        """Test double for scope fail conn behavior in this module."""
 
         SERVICE_OPTS = SimpleNamespace(
             setOmeroGroup=lambda value: (_ for _ in ()).throw(
@@ -737,9 +734,10 @@ def test_request_path_dataset_helpers_cover_fallback_and_save_failures(
 def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_branches(
     monkeypatch,
 ) -> None:
-    """Verify request path job preparation and dataset target guards cover remaining branches.
+    """Verify the request path job preparation and dataset target guards cover remaining branches safety boundary.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when request path job preparation and dataset target guards cover remaining branches accepts unsafe input.
+    when validation or the called operation fails.
     """
     saved = {}
     monkeypatch.setattr(core_functions, "_load_job", lambda job_id: {"job_id": job_id})
@@ -750,7 +748,7 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
     )
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         SERVICE_OPTS = SimpleNamespace(
             setOmeroGroup=lambda value: (_ for _ in ()).throw(
@@ -950,9 +948,10 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
 
     @contextmanager
     def _missing_background_user_connection(*args, **kwargs):
-        """Missing background user connection.
+        """Return the missing background user connection.
 
-        Inputs: `*args`, `**kwargs`. Output: yielded values.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        iterator of yielded items.
         """
         yield None
 
@@ -979,19 +978,19 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
     ) == (False, import_errors.unable_prepare_import_destination())
 
     class _UserConn:
-        """Represent user conn."""
+        """Test double for user conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_UserConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.closed = False
 
         def close(self):
-            """Close the resource.
+            """Close `_UserConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
             raise RuntimeError("user close exploded")
@@ -1000,9 +999,10 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
 
     @contextmanager
     def _background_user_connection(*args, **kwargs):
-        """Background user connection.
+        """Return the background user connection.
 
-        Inputs: `*args`, `**kwargs`. Output: yielded values.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        iterator of yielded items.
         """
         try:
             yield user_conn

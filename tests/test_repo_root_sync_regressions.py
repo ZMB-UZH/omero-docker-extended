@@ -16,9 +16,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `RepoRootSyncRegressionTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.installation_script = (
@@ -38,7 +38,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_helper_plan_uses_only_configured_shared_prefix_seeds(self) -> None:
         """Verify helper plan uses only configured shared prefix seeds.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in helper plan uses only configured shared prefix seeds.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "ManagedRepository"
@@ -68,7 +68,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_helper_plan_stops_before_volatile_tokens(self) -> None:
         """Verify helper plan stops before volatile tokens.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in helper plan stops before volatile tokens.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "ManagedRepository"
@@ -89,9 +89,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_helper_plan_handles_literal_shared_prefix_without_group_token(
         self,
     ) -> None:
-        """Verify helper plan handles literal shared prefix without group token.
+        """Check that helper plan handles literal shared prefix without group token keeps sensitive data out of output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in helper plan handles literal shared prefix without group token.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "ManagedRepository"
@@ -112,7 +112,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     ) -> None:
         """Verify helper plan does not infer group prefixes from repository contents.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in helper plan does not infer group prefixes from repository contents.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "ManagedRepository"
@@ -138,7 +138,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_helper_plan_is_read_only(self) -> None:
         """Verify helper plan is read only.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in helper plan is read only.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "ManagedRepository"
@@ -170,7 +170,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_write_repo_root_sync_status_records_expected_fields(self) -> None:
         """Verify write repo root sync status records expected fields.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in write repo root sync status records expected fields.
         """
         function_text = self._slice_function(
             self.server_bootstrap_script,
@@ -202,7 +202,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_installation_wait_accepts_current_repo_root_sync_status(self) -> None:
         """Verify installation wait accepts current repo root sync status.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation wait accepts current repo root sync status.
         """
         function_text = "\n".join(
             [
@@ -249,9 +249,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             self._run_bash(script)
 
     def test_installation_wait_skips_when_no_stable_shared_prefix(self) -> None:
-        """Verify installation wait skips when no stable shared prefix.
+        """Check that installation wait skips when no stable shared prefix remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation wait skips when no stable shared prefix.
         """
         function_text = "\n".join(
             [
@@ -285,9 +285,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_installation_wait_accepts_current_dropbox_user_dir_sync_status(
         self,
     ) -> None:
-        """Verify installation wait accepts current dropbox user directory sync status.
+        """Verify installation wait accepts current dropbox user dir sync status.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation wait accepts current dropbox user dir sync status.
         """
         function_text = "\n".join(
             [
@@ -344,7 +344,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     ) -> None:
         """Verify installation wait accepts current dropbox ice bootstrap status.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation wait accepts current dropbox ice bootstrap status.
         """
         function_text = "\n".join(
             [
@@ -394,7 +394,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_installation_dropbox_ice_timeout_is_retryable(self) -> None:
         """Verify installation dropbox ice timeout is retryable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation dropbox ice timeout is retryable.
         """
         function_text = "\n".join(
             [
@@ -448,9 +448,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertNotIn("ERROR:", result.stderr)
 
     def test_installation_dropbox_ice_error_is_non_retryable(self) -> None:
-        """Verify installation dropbox ice error is non retryable.
+        """Confirm installation dropbox ice error is non retryable exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when installation dropbox ice error is non retryable stops reporting the expected error.
         """
         function_text = "\n".join(
             [
@@ -503,9 +503,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertIn("non-retryable error", result.stderr)
 
     def test_installation_dropbox_user_dir_timeout_is_retryable(self) -> None:
-        """Verify installation dropbox user directory timeout is retryable.
+        """Verify installation dropbox user dir timeout is retryable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation dropbox user dir timeout is retryable.
         """
         function_text = "\n".join(
             [
@@ -569,9 +569,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertNotIn("ERROR:", result.stderr)
 
     def test_dropbox_ice_bootstrap_retry_budget_becomes_error(self) -> None:
-        """Verify dropbox ice bootstrap retry budget becomes error.
+        """Confirm dropbox ice bootstrap retry budget becomes error exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when dropbox ice bootstrap retry budget becomes error stops reporting the expected error.
         """
         function_text = self._slice_function(
             self.server_bootstrap_script,
@@ -644,7 +644,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_repo_root_bootstrap_retries_lookup_before_marking_failure(self) -> None:
         """Verify repo root bootstrap retries lookup before marking failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in repo root bootstrap retries lookup before marking failure.
         """
         function_text = self._slice_function(
             self.server_bootstrap_script,
@@ -733,7 +733,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_repo_root_bootstrap_lookup_is_repo_aware(self) -> None:
         """Verify repo root bootstrap lookup is repo aware.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in repo root bootstrap lookup is repo aware.
         """
         self.assertIn('target_repo_uuid = ""', self.helper_script)
         self.assertIn("sharedResources().repositories()", self.helper_script)
@@ -748,9 +748,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         )
 
     def test_helper_lookup_rejects_non_positive_port(self) -> None:
-        """Verify helper lookup rejects non positive port.
+        """Confirm helper lookup rejects non positive port is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in helper lookup rejects non positive port.
         """
         result = subprocess.run(
             [
@@ -780,9 +780,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_validate_managed_repository_configuration_rejects_relative_path(
         self,
     ) -> None:
-        """Verify validate managed repository configuration rejects relative path.
+        """Confirm validate managed repository configuration rejects relative path is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when validate managed repository configuration rejects relative path accepts unsafe input.
         """
         function_text = self._slice_function(
             self.server_bootstrap_script,
@@ -819,9 +819,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_validate_managed_repository_configuration_rejects_image_local_repo(
         self,
     ) -> None:
-        """Verify validate managed repository configuration rejects image local repo.
+        """Confirm validate managed repository configuration rejects image local repo is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in validate managed repository configuration rejects image local repo.
         """
         function_text = self._slice_function(
             self.server_bootstrap_script,
@@ -869,9 +869,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _run_bash(script: str) -> subprocess.CompletedProcess[str]:
-        """Bash.
+        """Run the bash for `RepoRootSyncRegressionTests`.
 
-        Inputs: `script`. Output: `subprocess.CompletedProcess[str]`.
+        Inputs: `script` (str). Output: `subprocess.CompletedProcess[str]`.
         """
         return subprocess.run(
             [BASH_BIN, "-lc", script],
@@ -882,9 +882,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         )
 
     def _run_helper(self, *args: str) -> subprocess.CompletedProcess[str]:
-        """Helper.
+        """Run the helper for `RepoRootSyncRegressionTests`.
 
-        Inputs: `*args`. Output: `subprocess.CompletedProcess[str]`.
+        Inputs: `*args` (str) positional arguments. Output:
+        `subprocess.CompletedProcess[str]`.
         """
         return subprocess.run(
             [sys.executable, str(self.helper_path), *args],
@@ -896,9 +897,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _slice_function(content: str, start_marker: str, end_marker: str) -> str:
-        """Slice function.
+        """Return the slice function for `RepoRootSyncRegressionTests`.
 
-        Inputs: `content`, `start_marker`, `end_marker`. Output: `str`.
+        Inputs: `content` (str), `start_marker` (str), `end_marker` (str). Output:
+        `str`.
         """
         start = content.index(start_marker)
         end = content.index(end_marker, start)

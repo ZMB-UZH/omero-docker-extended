@@ -53,7 +53,7 @@ MAX_MAX_RESULTS = 200
 
 @dataclass(frozen=True)
 class EnhancedSearchScope:
-    """Represent enhanced search scope."""
+    """Helper type for enhanced search scope behavior."""
 
     scope_type: str
     scope_id: int
@@ -61,14 +61,14 @@ class EnhancedSearchScope:
 
     @property
     def scope_key(self) -> str:
-        """Scope key.
+        """Return the scope key for `EnhancedSearchScope`.
 
         Inputs: none. Output: `str`.
         """
         return f"{self.scope_type}:{self.scope_id}"
 
     def to_dict(self) -> dict[str, Any]:
-        """To dict.
+        """Return the to dict for `EnhancedSearchScope`.
 
         Inputs: none. Output: `dict[str, Any]`.
         """
@@ -82,7 +82,7 @@ class EnhancedSearchScope:
 
 @dataclass(frozen=True)
 class EnhancedSearchRuntimeConfig:
-    """Represent enhanced search runtime config."""
+    """Data container for enhanced search runtime config."""
 
     batch_size: int
     max_results: int
@@ -92,7 +92,7 @@ class EnhancedSearchRuntimeConfig:
 
 @dataclass(frozen=True)
 class EnhancedSearchCeleryConfig:
-    """Represent enhanced search celery config."""
+    """Data container for enhanced search celery config."""
 
     enabled: bool
     broker_url: str
@@ -109,9 +109,10 @@ class EnhancedSearchCeleryConfig:
 def _bounded_int(
     raw_value: str | None, default: int, minimum: int, maximum: int
 ) -> int:
-    """Bounded int.
+    """Return the bounded int.
 
-    Inputs: `raw_value`, `default`, `minimum`, `maximum`. Output: `int`.
+    Inputs: `raw_value` (str | None) raw value, `default` (int), `minimum` (int),
+    `maximum` (int). Output: `int`.
     """
     if raw_value is None or str(raw_value).strip() == "":
         return default
@@ -128,9 +129,9 @@ def _bounded_int(
 
 
 def _optional_bool(raw_value: str | None, default: bool) -> bool:
-    """Optional bool.
+    """Return the optional bool.
 
-    Inputs: `raw_value`, `default`. Output: `bool`.
+    Inputs: `raw_value` (str | None) raw value, `default` (bool). Output: `bool`.
     """
     if raw_value is None or str(raw_value).strip() == "":
         return default
@@ -154,9 +155,10 @@ def _env_text(
     fallback_env: str | None = None,
     default: str = "",
 ) -> str:
-    """Env text.
+    """Return the environment text.
 
-    Inputs: `primary_env`, `env_file`, `fallback_env`, `default`. Output: `str`.
+    Inputs: `primary_env` (str), `env_file` (str) environment file path, `fallback_env`
+    (str | None), `default` (str). Output: `str`.
     """
     raw_value = get_optional_env(primary_env, env_file=env_file)
     text_value = str(raw_value or "").strip()

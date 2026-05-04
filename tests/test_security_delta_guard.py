@@ -21,9 +21,9 @@ TEST_GITHUB_CREDENTIAL = "-".join(("placeholder", "credential"))
 
 
 def _alert(number: int, *, created_at: str, severity: str = "high") -> dict:
-    """Alert.
+    """Return the alert.
 
-    Inputs: `number`, `created_at`, `severity`. Output: `dict`.
+    Inputs: `number` (int), `created_at` (str), `severity` (str). Output: `dict`.
     """
     return {
         "number": number,
@@ -37,9 +37,9 @@ def _alert(number: int, *, created_at: str, severity: str = "high") -> dict:
 
 
 def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
-    """Verify wait for stable snapshot rechecks until numbers repeat.
+    """Check that wait for stable snapshot rechecks until numbers repeat remains stable.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in wait for stable snapshot rechecks until numbers repeat.
     """
     snapshots = iter(
         (
@@ -50,7 +50,7 @@ def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
     calls = {"count": 0}
 
     def fetch_snapshot():
-        """Fetch snapshot.
+        """Fetch the snapshot.
 
         Inputs: none. Output: `next_or_fail` result.
         """
@@ -72,7 +72,7 @@ def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
 def test_github_api_get_json_uses_curl_config_stdin(monkeypatch) -> None:
     """Verify github API get JSON uses curl config stdin.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in github API get JSON uses curl config stdin.
     """
     security_delta_guard._GITHUB_API_VERSION_CACHE.value = None
     calls = []
@@ -82,9 +82,10 @@ def test_github_api_get_json_uses_curl_config_stdin(monkeypatch) -> None:
     )
 
     def fake_run(command: list[str], **kwargs):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `command`, `**kwargs`. Output: call result.
+        Inputs: `command` (list[str]), `**kwargs` keyword arguments. Output:
+        `CompletedProcess` result.
         """
         calls.append({"command": command, "kwargs": kwargs})
         config = kwargs["input"]
@@ -136,9 +137,9 @@ def test_github_api_get_json_uses_curl_config_stdin(monkeypatch) -> None:
 
 
 def test_github_api_get_json_requires_absolute_api_path() -> None:
-    """Verify github API get JSON requires absolute API path.
+    """Verify the github API get JSON requires absolute API path safety boundary.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions when github API get JSON requires absolute API path accepts unsafe input.
     """
     with pytest.raises(ValueError, match="must start with '/'"):
         security_delta_guard.github_api_get_json(
@@ -147,9 +148,9 @@ def test_github_api_get_json_requires_absolute_api_path() -> None:
 
 
 def test_validate_github_repository_rejects_unsafe_api_path_components() -> None:
-    """Verify validate github repository rejects unsafe API path components.
+    """Confirm validate github repository rejects unsafe API path components is rejected at the boundary.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions when validate github repository rejects unsafe API path components accepts unsafe input.
     """
     assert (
         security_delta_guard.validate_github_repository("ZMB-UZH/omero-docker-extended")
@@ -167,9 +168,9 @@ def test_validate_github_repository_rejects_unsafe_api_path_components() -> None
 
 
 def test_select_push_delta_alerts_only_keeps_alerts_created_after_run_start() -> None:
-    """Verify select push delta alerts only keeps alerts created after run start.
+    """Check that select push delta alerts only keeps alerts created after run start remains stable.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in select push delta alerts only keeps alerts created after run start.
     """
     workflow_started_at = datetime(2026, 4, 2, 12, 0, tzinfo=UTC)
     alerts = [
@@ -186,7 +187,7 @@ def test_select_push_delta_alerts_only_keeps_alerts_created_after_run_start() ->
 def test_select_pull_request_delta_alerts_subtracts_base_branch_backlog() -> None:
     """Verify select pull request delta alerts subtracts base branch backlog.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in select pull request delta alerts subtracts base branch backlog.
     """
     result = security_delta_guard.select_pull_request_delta_alerts(
         [
@@ -200,9 +201,9 @@ def test_select_pull_request_delta_alerts_subtracts_base_branch_backlog() -> Non
 
 
 def test_evaluate_push_alerts_fails_without_workflow_start_timestamp() -> None:
-    """Verify evaluate push alerts fails without workflow start timestamp.
+    """Confirm evaluate push alerts fails without workflow start timestamp exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in evaluate push alerts fails without workflow start timestamp integration.
     """
     result = security_delta_guard.evaluate_push_alerts(
         "refs/heads/main",
@@ -221,9 +222,9 @@ def test_evaluate_push_alerts_fails_without_workflow_start_timestamp() -> None:
 def test_evaluate_pull_request_alerts_fails_only_on_alerts_not_present_on_base_ref() -> (
     None
 ):
-    """Verify evaluate pull request alerts fails only on alerts not present on base ref.
+    """Confirm evaluate pull request alerts fails only on alerts not present on base ref exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in evaluate pull request alerts fails only on alerts not present on base ref.
     """
     result = security_delta_guard.evaluate_pull_request_alerts(
         17,
@@ -252,7 +253,7 @@ def test_evaluate_pull_request_alerts_passes_when_only_base_branch_alerts_remain
 ):
     """Verify evaluate pull request alerts passes when only base branch alerts remain.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in evaluate pull request alerts passes when only base branch alerts remain.
     """
     result = security_delta_guard.evaluate_pull_request_alerts(
         17,
@@ -271,7 +272,7 @@ def test_evaluate_pull_request_alerts_passes_when_only_base_branch_alerts_remain
 def test_evaluate_push_alerts_passes_when_only_old_backlog_remains() -> None:
     """Verify evaluate push alerts passes when only old backlog remains.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in evaluate push alerts passes when only old backlog remains.
     """
     result = security_delta_guard.evaluate_push_alerts(
         "refs/heads/main",
@@ -288,15 +289,15 @@ def test_evaluate_push_alerts_passes_when_only_old_backlog_remains() -> None:
 
 
 def test_get_workflow_run_started_at_prefers_run_started_at(monkeypatch) -> None:
-    """Verify get workflow run started at prefers run started at.
+    """Verify the get workflow run started at prefers run started at execution contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in get workflow run started at prefers run started at integration.
     """
 
     def fake_github_api_get_json(api_path: str, credential: str) -> dict:
-        """Fake github API get JSON.
+        """Simulate github API get JSON so the surrounding test controls that dependency.
 
-        Inputs: `api_path`, `credential`. Output: `dict`.
+        Inputs: `api_path` (str), `credential` (str). Output: `dict`.
         """
         assert api_path == "/repos/ZMB-UZH/omero-docker-extended/actions/runs/1234"
         assert credential == TEST_GITHUB_CREDENTIAL
@@ -321,9 +322,9 @@ def test_get_workflow_run_started_at_prefers_run_started_at(monkeypatch) -> None
 
 
 def test_load_event_payload_requires_readable_json_object_file(tmp_path) -> None:
-    """Verify load event payload requires readable JSON object file.
+    """Verify load event payload requires readable JSON object file result shape.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in load event payload requires readable JSON object file.
     """
     payload_path = tmp_path / "event.json"
     payload_path.write_text('{"ref": "refs/heads/main"}', encoding="utf-8")
@@ -344,16 +345,16 @@ def test_load_event_payload_requires_readable_json_object_file(tmp_path) -> None
 
 
 def test_evaluate_direct_event_pull_request_uses_payload_pr_number() -> None:
-    """Verify evaluate direct event pull request uses payload pr number.
+    """Verify evaluate direct event pull request uses payload pr number result shape.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in evaluate direct event pull request uses payload pr number.
     """
     calls = []
 
     def fetch_alerts(**kwargs):
-        """Fetch alerts.
+        """Fetch the alerts.
 
-        Inputs: `**kwargs`. Output: list.
+        Inputs: `**kwargs` keyword arguments. Output: `list`.
         """
         calls.append(kwargs)
         return [_alert(91, created_at="2026-04-02T12:30:00Z")]
@@ -378,14 +379,14 @@ def test_evaluate_direct_event_pull_request_uses_payload_pr_number() -> None:
 def test_evaluate_direct_event_push_uses_run_start_resolver() -> None:
     """Verify evaluate direct event push uses run start resolver.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in evaluate direct event push uses run start resolver.
     """
     calls = {"alerts": None, "run_started_at": None}
 
     def fetch_alerts(**kwargs):
-        """Fetch alerts.
+        """Fetch the alerts.
 
-        Inputs: `**kwargs`. Output: list.
+        Inputs: `**kwargs` keyword arguments. Output: `list`.
         """
         calls["alerts"] = kwargs
         return [_alert(44, created_at="2026-04-01T09:00:00Z")]
@@ -421,14 +422,14 @@ def test_evaluate_direct_event_push_uses_run_start_resolver() -> None:
 def test_evaluate_direct_event_skips_non_default_branch_schedule() -> None:
     """Verify evaluate direct event skips non default branch schedule.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in evaluate direct event skips non default branch schedule.
     """
     called = {"value": False}
 
     def fetch_alerts(**kwargs):
-        """Fetch alerts.
+        """Fetch the alerts.
 
-        Inputs: `**kwargs`. Output: list.
+        Inputs: `**kwargs` keyword arguments. Output: `list`.
         """
         called["value"] = True
         return []
@@ -451,9 +452,9 @@ def test_evaluate_direct_event_skips_non_default_branch_schedule() -> None:
 
 
 def test_evaluate_direct_event_fails_without_pull_request_number() -> None:
-    """Verify evaluate direct event fails without pull request number.
+    """Confirm evaluate direct event fails without pull request number exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in evaluate direct event fails without pull request number.
     """
     result = security_delta_guard.evaluate_direct_event(
         "pull_request",
@@ -473,16 +474,16 @@ def test_evaluate_direct_event_fails_without_pull_request_number() -> None:
 
 
 def test_evaluate_workflow_run_skips_non_default_branch_push() -> None:
-    """Verify evaluate workflow run skips non default branch push.
+    """Verify the evaluate workflow run skips non default branch push execution contract.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in evaluate workflow run skips non default branch push integration.
     """
     called = {"value": False}
 
     def fetch_alerts(**kwargs):
-        """Fetch alerts.
+        """Fetch the alerts.
 
-        Inputs: `**kwargs`. Output: list.
+        Inputs: `**kwargs` keyword arguments. Output: `list`.
         """
         called["value"] = True
         return []
@@ -510,16 +511,16 @@ def test_evaluate_workflow_run_skips_non_default_branch_push() -> None:
 def test_evaluate_workflow_run_uses_head_repository_default_branch_when_present() -> (
     None
 ):
-    """Verify evaluate workflow run uses head repository default branch when present.
+    """Verify the evaluate workflow run uses head repository default branch when present execution contract.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in evaluate workflow run uses head repository default branch when present integration.
     """
     calls = {"count": 0, "kwargs": None}
 
     def fetch_alerts(**kwargs):
-        """Fetch alerts.
+        """Fetch the alerts.
 
-        Inputs: `**kwargs`. Output: list.
+        Inputs: `**kwargs` keyword arguments. Output: `list`.
         """
         calls["count"] += 1
         calls["kwargs"] = kwargs
@@ -547,17 +548,17 @@ def test_evaluate_workflow_run_uses_head_repository_default_branch_when_present(
 
 
 def test_evaluate_workflow_run_resolves_default_branch_when_payload_omits_it() -> None:
-    """Verify evaluate workflow run resolves default branch when payload omits it.
+    """Verify the evaluate workflow run resolves default branch when payload omits it execution contract.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in evaluate workflow run resolves default branch when payload omits it integration.
     """
     calls = {"count": 0, "kwargs": None}
     resolved = {"repository": None}
 
     def fetch_alerts(**kwargs):
-        """Fetch alerts.
+        """Fetch the alerts.
 
-        Inputs: `**kwargs`. Output: list.
+        Inputs: `**kwargs` keyword arguments. Output: `list`.
         """
         calls["count"] += 1
         calls["kwargs"] = kwargs
@@ -595,9 +596,9 @@ def test_evaluate_workflow_run_resolves_default_branch_when_payload_omits_it() -
 
 
 def test_evaluate_workflow_run_fails_when_upstream_security_scan_failed() -> None:
-    """Verify evaluate workflow run fails when upstream security scan failed.
+    """Confirm evaluate workflow run fails when upstream security scan failed exposes the expected failure.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions when evaluate workflow run fails when upstream security scan failed accepts unsafe input.
     """
     result = security_delta_guard.evaluate_workflow_run(
         {
@@ -619,16 +620,16 @@ def test_evaluate_workflow_run_fails_when_upstream_security_scan_failed() -> Non
 
 
 def test_evaluate_workflow_run_pull_request_subtracts_base_branch_alerts() -> None:
-    """Verify evaluate workflow run pull request subtracts base branch alerts.
+    """Verify the evaluate workflow run pull request subtracts base branch alerts execution contract.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in evaluate workflow run pull request subtracts base branch alerts integration.
     """
     calls = []
 
     def fetch_alerts(**kwargs):
-        """Fetch alerts.
+        """Fetch the alerts.
 
-        Inputs: `**kwargs`. Output: list.
+        Inputs: `**kwargs` keyword arguments. Output: `list`.
         """
         calls.append(kwargs)
         if kwargs.get("ref") == "refs/heads/main":

@@ -39,7 +39,7 @@ class TestLocalProviderConstants(unittest.TestCase):
     def test_ollama_base_url_is_string():
         """Verify ollama base URL is string.
 
-        Inputs: none. Output: None.
+        Inputs: OMP service fakes. Output: fails on regressions in ollama base URL is string.
         """
         assert isinstance(OLLAMA_BASE_URL, str)
         assert OLLAMA_BASE_URL.startswith("http")
@@ -48,7 +48,7 @@ class TestLocalProviderConstants(unittest.TestCase):
     def test_ollama_model_is_nonempty():
         """Verify ollama model is nonempty.
 
-        Inputs: none. Output: None.
+        Inputs: OMP service fakes. Output: fails on regressions in ollama model is nonempty.
         """
         assert isinstance(OLLAMA_MODEL, str)
         assert len(OLLAMA_MODEL) > 0
@@ -57,7 +57,7 @@ class TestLocalProviderConstants(unittest.TestCase):
     def test_ollama_timeout_is_positive():
         """Verify ollama timeout is positive.
 
-        Inputs: none. Output: None.
+        Inputs: OMP service fakes. Output: fails on regressions in ollama timeout is positive.
         """
         assert isinstance(OLLAMA_TIMEOUT_SECONDS, (int, float))
         assert OLLAMA_TIMEOUT_SECONDS > 0
@@ -68,9 +68,9 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_returns_response_text(self, mock_post):
-        """Verify local provider returns response text.
+        """Verify local provider returns response text result shape.
 
-        Inputs: `mock_post`. Output: None.
+        Inputs: pytest provides `mock_post`. Output: fails on regressions in local provider returns response text.
         """
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -94,7 +94,7 @@ class TestCallLocalProvider(unittest.TestCase):
     def test_local_provider_custom_model(self, mock_post):
         """Verify local provider custom model.
 
-        Inputs: `mock_post`. Output: None.
+        Inputs: pytest provides `mock_post`. Output: fails on regressions in local provider custom model.
         """
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"response": "ok"}
@@ -107,9 +107,9 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_empty_response_raises(self, mock_post):
-        """Verify local provider empty response raises.
+        """Confirm local provider empty response raises exposes the expected failure.
 
-        Inputs: `mock_post`. Output: None.
+        Inputs: pytest provides `mock_post`. Output: fails on regressions when local provider empty response raises stops reporting the expected error.
         """
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"response": ""}
@@ -121,9 +121,9 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_none_response_raises(self, mock_post):
-        """Verify local provider none response raises.
+        """Confirm local provider none response raises exposes the expected failure.
 
-        Inputs: `mock_post`. Output: None.
+        Inputs: pytest provides `mock_post`. Output: fails on regressions when local provider none response raises stops reporting the expected error.
         """
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"response": None}
@@ -135,9 +135,9 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_missing_response_key_raises(self, mock_post):
-        """Verify local provider missing response key raises.
+        """Confirm local provider missing response key raises exposes the expected failure.
 
-        Inputs: `mock_post`. Output: None.
+        Inputs: pytest provides `mock_post`. Output: fails on regressions when local provider missing response key raises stops reporting the expected error.
         """
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"other_key": "data"}
@@ -149,9 +149,9 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_connection_error_raises(self, mock_post):
-        """Verify local provider connection error raises.
+        """Confirm local provider connection error raises exposes the expected failure.
 
-        Inputs: `mock_post`. Output: None.
+        Inputs: pytest provides `mock_post`. Output: fails on regressions when local provider connection error raises stops reporting the expected error.
         """
         mock_post.side_effect = requests.ConnectionError("refused")
 
@@ -161,9 +161,9 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_timeout_raises(self, mock_post):
-        """Verify local provider timeout raises.
+        """Confirm local provider timeout raises exposes the expected failure.
 
-        Inputs: `mock_post`. Output: None.
+        Inputs: pytest provides `mock_post`. Output: fails on regressions when local provider timeout raises stops reporting the expected error.
         """
         mock_post.side_effect = requests.Timeout("timed out")
 
@@ -172,9 +172,9 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_http_error_raises(self, mock_post):
-        """Verify local provider HTTP error raises.
+        """Confirm local provider HTTP error raises exposes the expected failure.
 
-        Inputs: `mock_post`. Output: None.
+        Inputs: pytest provides `mock_post`. Output: fails on regressions when local provider HTTP error raises stops reporting the expected error.
         """
         mock_resp = MagicMock()
         mock_resp.status_code = 500
@@ -188,7 +188,7 @@ class TestCallLocalProvider(unittest.TestCase):
     def test_local_provider_uses_correct_timeout(self, mock_post):
         """Verify local provider uses correct timeout.
 
-        Inputs: `mock_post`. Output: None.
+        Inputs: pytest provides `mock_post`. Output: fails on regressions in local provider uses correct timeout.
         """
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"response": "ok"}
@@ -200,9 +200,9 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_does_not_require_api_key(self, mock_post):
-        """Local provider works with empty API key.
+        """Verify local provider does not require API key.
 
-        Inputs: `mock_post`. Output: None.
+        Inputs: pytest provides `mock_post`. Output: fails on regressions in local provider does not require API key.
         """
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"response": "value1,value2"}
@@ -224,7 +224,7 @@ class TestGenerateAiParsedValuesLocal(unittest.TestCase):
     def test_local_provider_full_parse_flow(self, mock_call):
         """Verify local provider full parse flow.
 
-        Inputs: `mock_call`. Output: None.
+        Inputs: pytest provides `mock_call`. Output: fails on regressions in local provider full parse flow.
         """
         mock_call.return_value = "10444,01,01,01,20x\n10445,02,03,04,40x"
 
@@ -246,7 +246,7 @@ class TestGenerateAiParsedValuesLocal(unittest.TestCase):
     def test_local_provider_with_custom_instructions(self, mock_call):
         """Verify local provider with custom instructions.
 
-        Inputs: `mock_call`. Output: None.
+        Inputs: pytest provides `mock_call`. Output: fails on regressions in local provider with custom instructions.
         """
         mock_call.return_value = "ctrl,3,DAPI"
 
@@ -266,7 +266,7 @@ class TestGenerateAiParsedValuesLocal(unittest.TestCase):
     def test_local_provider_connection_failure_propagates(self, mock_call):
         """Verify local provider connection failure propagates.
 
-        Inputs: `mock_call`. Output: None.
+        Inputs: pytest provides `mock_call`. Output: fails on regressions in local provider connection failure propagates.
         """
         mock_call.side_effect = AiAssistError("AI service unreachable")
 
@@ -274,9 +274,9 @@ class TestGenerateAiParsedValuesLocal(unittest.TestCase):
             generate_ai_parsed_values("local", "", ["file.tif"])
 
     def test_local_provider_no_filenames_raises(self):
-        """Verify local provider no filenames raises.
+        """Confirm local provider no filenames raises exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: OMP service fakes. Output: fails on regressions when local provider no filenames raises stops reporting the expected error.
         """
         with self.assertRaises(AiAssistError):
             generate_ai_parsed_values("local", "", [])
@@ -287,9 +287,9 @@ class TestLocalProviderNotInUnsupportedList(unittest.TestCase):
 
     @staticmethod
     def test_local_is_not_unsupported():
-        """Calling _call_ai_provider_raw with 'local' should NOT raise.
+        """Verify local is not unsupported.
 
-        Inputs: none. Output: None.
+        Inputs: OMP service fakes. Output: fails on regressions in local is not unsupported.
 
         'provider not supported'. It should try Ollama (and may fail
         with connection error in test env, which is fine).
@@ -305,9 +305,9 @@ class TestLocalProviderNotInUnsupportedList(unittest.TestCase):
             assert result == "test"
 
     def test_truly_unsupported_provider_raises(self):
-        """Verify truly unsupported provider raises.
+        """Confirm truly unsupported provider raises exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: OMP service fakes. Output: fails on regressions when truly unsupported provider raises stops reporting the expected error.
         """
         with self.assertRaises(AiAssistError) as ctx:
             _call_ai_provider_raw("nonexistent_provider", "key", "prompt", 50)

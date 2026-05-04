@@ -28,45 +28,43 @@ from omeroweb_import.services.ome_zarr_support import (
 
 
 def _write_text(path: Path, payload: dict) -> None:
-    """Write text.
+    """Write the text.
 
-    Inputs: `path`, `payload`. Output: None.
+    Inputs: `path` (Path) path, `payload` (dict) payload. Output: None.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _write_chunk(path: Path) -> None:
-    """Write chunk.
+    """Write the chunk.
 
-    Inputs: `path`. Output: None.
+    Inputs: `path` (Path) path. Output: None.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"\x00")
 
 
 def _read_json(path: Path) -> dict:
-    """Read JSON.
+    """Read the JSON.
 
-    Inputs: `path`. Output: `dict`.
+    Inputs: `path` (Path) path. Output: `dict`.
     """
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _open_zarr_v2_array(store: Path, **kwargs):
-    """Open Zarr v2 array.
+    """Open the Zarr v2 array.
 
-    Inputs: `store`, `**kwargs`. Output: `_ArrayWriter` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `store` (Path), `**kwargs` keyword arguments. Output: `_ArrayWriter` result.
+    Raises: AssertionError, RuntimeError when validation or the called operation fails.
     """
 
     class _ArrayWriter:
-        """Represent array writer."""
+        """Test double for array writer behavior in this module."""
 
         def __init__(self, store_path: Path, *, chunks, dtype):
-            """Initialize the instance.
+            """Create `_ArrayWriter` with `store_path`.
 
             Inputs: `store_path`, `chunks`, `dtype`. Output: None.
             """
@@ -75,12 +73,10 @@ def _open_zarr_v2_array(store: Path, **kwargs):
             self._dtype = np.dtype(dtype)
 
         def __setitem__(self, key, value):
-            """The item for the requested key.
+            """Record the setitem call on `_ArrayWriter` for later assertions.
 
-            Inputs: `key`, `value`. Output: None. Raises on invalid or unavailable
-            state.
-
-            state.
+            Inputs: `key` lookup key, `value` input value. Output: None. Raises:
+            AssertionError, RuntimeError when validation or the called operation fails.
             """
             if key != slice(None):
                 raise AssertionError(f"Unsupported write selection: {key!r}")
@@ -108,7 +104,7 @@ def test_inspect_ome_zarr_image_reads_metadata_and_physical_sizes(
 ) -> None:
     """Verify inspect ome Zarr image reads metadata and physical sizes.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in inspect ome Zarr image reads metadata and physical sizes.
     """
     store = tmp_path / "image.ome.zarr"
     _write_text(
@@ -189,9 +185,9 @@ def test_inspect_ome_zarr_image_reads_metadata_and_physical_sizes(
 
 
 def test_inspect_ome_zarr_image_rejects_plate_layout(tmp_path: Path) -> None:
-    """Verify inspect ome Zarr image rejects plate layout.
+    """Confirm inspect ome Zarr image rejects plate layout is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in inspect ome Zarr image rejects plate layout.
     """
     store = tmp_path / "plate.ome.zarr"
     _write_text(
@@ -217,7 +213,7 @@ def test_inspect_ome_zarr_image_rejects_plate_layout(tmp_path: Path) -> None:
 def test_inspect_ome_zarr_image_accepts_bioformats2raw_layout(tmp_path: Path) -> None:
     """Verify inspect ome Zarr image accepts bioformats2raw layout.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in inspect ome Zarr image accepts bioformats2raw layout.
     """
     store = tmp_path / "bf2raw.ome.zarr"
     _write_text(store / ".zattrs", {"bioformats2raw.layout": 3})
@@ -274,9 +270,9 @@ def test_inspect_ome_zarr_image_accepts_bioformats2raw_layout(tmp_path: Path) ->
 def test_inspect_ome_zarr_image_rejects_sparse_bioformats2raw_layout(
     tmp_path: Path,
 ) -> None:
-    """Verify inspect ome Zarr image rejects sparse bioformats2raw layout.
+    """Confirm inspect ome Zarr image rejects sparse bioformats2raw layout is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in inspect ome Zarr image rejects sparse bioformats2raw layout.
     """
     store = tmp_path / "bf2raw-gap.ome.zarr"
     _write_text(store / ".zattrs", {"bioformats2raw.layout": 3})
@@ -331,7 +327,7 @@ def test_inspect_ome_zarr_image_rejects_sparse_bioformats2raw_layout(
 def test_inspect_ome_zarr_image_ignores_non_ome_zarr_directory(tmp_path: Path) -> None:
     """Verify inspect ome Zarr image ignores non ome Zarr directory.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in inspect ome Zarr image ignores non ome Zarr directory.
     """
     store = tmp_path / "plain-folder.zarr"
     store.mkdir(parents=True, exist_ok=True)
@@ -347,7 +343,7 @@ def test_inspect_ome_zarr_image_ignores_non_ome_zarr_directory(tmp_path: Path) -
 def test_metadata_helpers_report_missing_and_invalid_payloads(tmp_path: Path) -> None:
     """Verify metadata helpers report missing and invalid payloads.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in metadata helpers report missing and invalid payloads.
     """
     store = tmp_path / "broken.ome.zarr"
     store.mkdir(parents=True, exist_ok=True)
@@ -405,7 +401,7 @@ def test_metadata_helpers_report_missing_and_invalid_payloads(tmp_path: Path) ->
 def test_native_gzip_level_helper_and_runtime_contract(monkeypatch) -> None:
     """Verify native gzip level helper and runtime contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in native gzip level helper and runtime contract.
     """
     monkeypatch.delenv(OME_ZARR_NATIVE_GZIP_LEVEL_ENV, raising=False)
     assert _native_ome_zarr_gzip_level() == DEFAULT_OME_ZARR_NATIVE_GZIP_LEVEL
@@ -435,7 +431,7 @@ def test_rewrite_problematic_native_image_arrays_recompresses_blosc_chunks(
 ) -> None:
     """Verify rewrite problematic native image arrays recompresses blosc chunks.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in rewrite problematic native image arrays recompresses blosc chunks.
     """
     import numcodecs
 
@@ -480,7 +476,7 @@ def test_rewrite_problematic_native_image_arrays_recompresses_blosc_chunks(
 def test_detects_and_regenerates_xy_only_pyramid(tmp_path: Path) -> None:
     """Verify detects and regenerates xy only pyramid.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in detects and regenerates xy only pyramid.
     """
     store = tmp_path / "pyramid.ome.zarr"
     store.mkdir(parents=True, exist_ok=True)
@@ -549,7 +545,7 @@ def test_detects_and_regenerates_xy_only_pyramid(tmp_path: Path) -> None:
 def test_write_zarr_v2_level_writes_metadata_and_padded_chunks(tmp_path: Path) -> None:
     """Verify write Zarr v2 level writes metadata and padded chunks.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in write Zarr v2 level writes metadata and padded chunks.
     """
     output_dir = tmp_path / "s1"
     data = np.arange(9, dtype=np.uint8).reshape(3, 3)

@@ -12,7 +12,7 @@ from omeroweb_omp_plugin.views import utils
 def test_load_json_body_and_require_non_root_user(monkeypatch):
     """Verify load JSON body and require non root user.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in load JSON body and require non root user.
     """
     request = RequestFactory().post(
         "/",
@@ -58,9 +58,9 @@ def test_load_json_body_and_require_non_root_user(monkeypatch):
 
 
 def test_resolve_omero_host_port_prefers_connection_then_settings_then_env(monkeypatch):
-    """Verify resolve OMERO host port prefers connection then settings then environment.
+    """Verify resolve OMERO host port prefers connection then settings then env.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve OMERO host port prefers connection then settings then env.
     """
     assert utils.resolve_omero_host_port(
         SimpleNamespace(host="omero", port="4064")
@@ -98,9 +98,10 @@ def test_resolve_omero_host_port_prefers_connection_then_settings_then_env(monke
 
 
 def test_validate_user_password_and_session_key_helpers(monkeypatch):
-    """Verify validate user password and session key helpers.
+    """Check that validate user password and session key helpers keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in validate user password and session key helpers.
+    when validation or the called operation fails.
     """
     assert utils.get_session_key(None) is None
 
@@ -108,27 +109,27 @@ def test_validate_user_password_and_session_key_helpers(monkeypatch):
     monkeypatch.setattr(utils, "resolve_omero_host_port", lambda conn: ("omero", 4064))
 
     class SuccessfulClient:
-        """Represent successful client."""
+        """Test double for successful client behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `SuccessfulClient` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.closed = False
             self.calls = []
 
         def createSession(self, username, password):
-            """Create Session.
+            """Create the session for `SuccessfulClient`.
 
-            Inputs: `username`, `password`. Output: None.
+            Inputs: `username` username, `password` password. Output: None.
             """
             self.calls.append((username, password))
 
         def closeSession(self):
-            """Close session.
+            """Close the session for `SuccessfulClient`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
@@ -152,22 +153,22 @@ def test_validate_user_password_and_session_key_helpers(monkeypatch):
     monkeypatch.setattr(utils, "resolve_omero_host_port", lambda conn: ("omero", 4064))
 
     class FailingClient:
-        """Represent failing client."""
+        """Test double for failing client behavior in this module."""
 
         @staticmethod
         def createSession(username, password):
-            """Create Session.
+            """Create the session for `FailingClient`.
 
-            Inputs: `username`, `password`. Output: None. Raises on invalid or
-            unavailable state.
+            Inputs: `username` username, `password` password. Output: None. Raises:
+            RuntimeError when validation or the called operation fails.
             """
             raise RuntimeError("bad password")
 
         @staticmethod
         def closeSession():
-            """Close session.
+            """Close the session for `FailingClient`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
@@ -203,9 +204,10 @@ def test_validate_user_password_and_session_key_helpers(monkeypatch):
 
 
 def test_build_omero_cli_base_command_requires_connection_metadata(monkeypatch):
-    """Verify build OMERO cli base command requires connection metadata.
+    """Verify the build OMERO CLI base command requires connection metadata execution contract.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in build OMERO CLI base command requires connection metadata integration.
+    AssertionError when validation or the called operation fails.
     """
     monkeypatch.setattr(utils, "get_session_key", lambda conn: "session-1")
     monkeypatch.setattr(utils, "resolve_omero_host_port", lambda conn: ("omero", 4064))

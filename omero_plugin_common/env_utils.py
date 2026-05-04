@@ -24,9 +24,10 @@ _T = TypeVar("_T")
 
 
 def _env_reference(env_file: str, docs_url: str | None) -> str:
-    """Env reference.
+    """Return the environment reference.
 
-    Inputs: `env_file`, `docs_url`. Output: `str`.
+    Inputs: `env_file` (str) environment file path, `docs_url` (str | None). Output:
+    `str`.
     """
     reference = f"Set it in {env_file} (referenced by docker-compose.yml)."
     return f"{reference} See {docs_url}." if docs_url else reference
@@ -39,7 +40,7 @@ def _missing_env_message(
     hint: str | None = None,
     docs_url: str | None = None,
 ) -> str:
-    """Missing env message.
+    """Build the operator-facing message for a missing environment variable.
 
     Inputs: `name`, `env_file`, `hint`, `docs_url`. Output: `str`.
     """
@@ -58,7 +59,7 @@ def _invalid_env_message(
     expected: str,
     docs_url: str | None = None,
 ) -> str:
-    """Invalid env message.
+    """Build the operator-facing message for an invalid environment value.
 
     Inputs: `name`, `value`, `env_file`, `expected`, `docs_url`. Output: `str`.
     """
@@ -69,12 +70,10 @@ def _invalid_env_message(
 
 
 def _read_env(name: str, *, env_file: str, allow_empty: bool) -> str | None:
-    """Read environment.
+    """Read the environment.
 
-    Inputs: `name`, `env_file`, `allow_empty`. Output: `str | None`. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `name` (str) name, `env_file` (str) environment file path, `allow_empty`
+    (bool). Output: `str | None`. Raises: ValueError for the exercised failure path.
     """
     if not env_file:
         raise ValueError("env_file must identify the configuration contract.")
@@ -91,10 +90,11 @@ def _coerce(
     parser: Callable[[str], _T],
     docs_url: str | None = None,
 ) -> _T:
-    """Coerce.
+    """Coerce the coerce.
 
-    Inputs: `name`, `value`, `env_file`, `expected`, `parser`, `docs_url`. Output: `_T`.
-    Raises on invalid or unavailable state.
+    Inputs: `name` (str) name, `value` (str) input value, `env_file` (str) environment
+    file path, `expected` (str), `parser` (Callable[[str], _T]), `docs_url` (str |
+    None). Output: `_T`. Raises: ValueError when validation or the called operation fails.
     """
     try:
         return parser(value)
@@ -154,8 +154,9 @@ def require_env(
 ) -> str:
     """Return a required environment variable or raise.
 
-    Inputs: `name`, `env_file`, `allow_empty`, `hint`, `docs_url`. Output: `str`. Raises
-    on invalid or unavailable state.
+    Inputs: `name` (str) name, `env_file` (str) environment file path, `allow_empty`
+    (bool), `hint` (str | None), `docs_url` (str | None). Output: `str`. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     value = _read_env(name, env_file=env_file, allow_empty=allow_empty)
     if value is None:
@@ -222,8 +223,10 @@ def get_sanitized_int_env(
 ) -> int:
     """Return a required sanitized integer environment variable with bounds.
 
-    Inputs: `name`, `env_file`, `sanitizer`, `min_value`, `max_value`, `docs_url`.
-    Output: `int`. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name, `env_file` (str) environment file path, `sanitizer`
+    (Callable[[str], str]), `min_value` (int), `max_value` (int), `docs_url` (str |
+    None). Output: `int`. Raises: ValueError when validation or external operations
+    fail.
     """
     raw = require_env(name, env_file=env_file, docs_url=docs_url)
     sanitized = sanitizer(raw)

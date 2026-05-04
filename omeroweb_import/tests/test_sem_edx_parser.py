@@ -15,14 +15,14 @@ class _FakeId:
     """Test double for fake identifier."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_FakeId` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_FakeId`'s fake OMERO value.
 
         Inputs: none. Output: `self._value`.
         """
@@ -33,7 +33,7 @@ class _FakeColumn:
     """Test double for fake column."""
 
     def __init__(self, name, description, values):
-        """Initialize the instance.
+        """Create `_FakeColumn` with `name`, `description`, and `values`.
 
         Inputs: `name`, `description`, `values`. Output: None.
         """
@@ -46,7 +46,7 @@ class _FakeOriginalFileRef:
     """Test double for fake original file ref."""
 
     def __init__(self, file_id, _loaded=False):
-        """Initialize the instance.
+        """Create `_FakeOriginalFileRef` with `file_id` and `_loaded`.
 
         Inputs: `file_id`, `_loaded`. Output: None.
         """
@@ -57,14 +57,14 @@ class _FakeOriginalFile:
     """Test double for fake original file."""
 
     def __init__(self, file_id):
-        """Initialize the instance.
+        """Create `_FakeOriginalFile` with `file_id`.
 
         Inputs: `file_id`. Output: None.
         """
         self._id = _FakeId(file_id)
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_FakeOriginalFile`'s fake OMERO identifier.
 
         Inputs: none. Output: `self._id`.
         """
@@ -75,9 +75,9 @@ class _FakeFileAnnotationI:
     """Test double for fake file annotation i."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeFileAnnotationI` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.file = None
         self.namespace = None
@@ -85,28 +85,28 @@ class _FakeFileAnnotationI:
         self._id = None
 
     def setFile(self, value):
-        """Set File.
+        """Set the file for `_FakeFileAnnotationI`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.file = value
 
     def setNs(self, value):
-        """Set Ns.
+        """Set the ns for `_FakeFileAnnotationI`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.namespace = value
 
     def setDescription(self, value):
-        """Set Description.
+        """Set the description for `_FakeFileAnnotationI`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.description = value
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_FakeFileAnnotationI`'s fake OMERO identifier.
 
         Inputs: none. Output: `_FakeId` result.
         """
@@ -117,22 +117,22 @@ class _FakeDatasetAnnotationLinkI:
     """Test double for fake dataset annotation link i."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeDatasetAnnotationLinkI` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.parent = None
         self.child = None
 
     def setParent(self, parent):
-        """Set Parent.
+        """Set the parent for `_FakeDatasetAnnotationLinkI`.
 
         Inputs: `parent`. Output: None.
         """
         self.parent = parent
 
     def setChild(self, child):
-        """Set Child.
+        """Set the child for `_FakeDatasetAnnotationLinkI`.
 
         Inputs: `child`. Output: None.
         """
@@ -143,7 +143,7 @@ class _FakeTable:
     """Test double for fake table."""
 
     def __init__(self, *, fail_add=False):
-        """Initialize the instance.
+        """Create `_FakeTable` with its default state.
 
         Inputs: `fail_add`. Output: None.
         """
@@ -153,16 +153,17 @@ class _FakeTable:
         self.closed = False
 
     def initialize(self, columns):
-        """Initialize.
+        """Initialize the initialize for `_FakeTable`.
 
         Inputs: `columns`. Output: None.
         """
         self.initialized = columns
 
     def addData(self, columns):
-        """Add data.
+        """Add the data for `_FakeTable`.
 
-        Inputs: `columns`. Output: None. Raises on invalid or unavailable state.
+        Inputs: `columns`. Output: None. Raises: RuntimeError when validation or
+        external operations fail.
         """
         if self.fail_add:
             raise RuntimeError("cannot populate table")
@@ -170,16 +171,16 @@ class _FakeTable:
 
     @staticmethod
     def getOriginalFile():
-        """Return Original File.
+        """Return `_FakeTable`'s fake original file.
 
         Inputs: none. Output: `_FakeOriginalFile` result.
         """
         return _FakeOriginalFile(123)
 
     def close(self):
-        """Close the resource.
+        """Close `_FakeTable`'s fake resource handle.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.closed = True
 
@@ -188,7 +189,7 @@ class _FakeResources:
     """Test double for fake resources."""
 
     def __init__(self, *, table):
-        """Initialize the instance.
+        """Create `_FakeResources` with its default state.
 
         Inputs: `table`. Output: None.
         """
@@ -196,7 +197,7 @@ class _FakeResources:
 
     @staticmethod
     def repositories():
-        """Repositories.
+        """Return the repositories for `_FakeResources`.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -205,9 +206,9 @@ class _FakeResources:
         )
 
     def newTable(self, _repository_id, _table_name):
-        """New table.
+        """Return the new Table for `_FakeResources`.
 
-        Inputs: `_repository_id`, `_table_name`. Output: `self._table`.
+        Inputs: `_repository_id`, `_table_name`. Output: `_table`.
         """
         return self._table
 
@@ -216,15 +217,15 @@ class _FakeUpdateService:
     """Test double for fake update service."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeUpdateService` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.saved_annotations = []
         self.saved_links = []
 
     def saveAndReturnObject(self, obj):
-        """Save and return object.
+        """Return the fake saved OMERO object from SEM-EDX tests.
 
         Inputs: `obj`. Output: `obj`.
         """
@@ -235,7 +236,7 @@ class _FakeUpdateService:
         return obj
 
     def saveObject(self, obj):
-        """Save object.
+        """Save the object for `_FakeUpdateService`.
 
         Inputs: `obj`. Output: None.
         """
@@ -246,9 +247,9 @@ class _FakeDatasetParent:
     """Test double for fake dataset parent."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeDatasetParent` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self._obj = object()
 
@@ -257,14 +258,14 @@ class _FakeImage:
     """Test double for fake image."""
 
     def __init__(self, parents):
-        """Initialize the instance.
+        """Create `_FakeImage` with `parents`.
 
         Inputs: `parents`. Output: None.
         """
         self._parents = list(parents)
 
     def listParents(self):
-        """Return list parents.
+        """Return `_FakeImage`'s fake parent listing.
 
         Inputs: none. Output: `list` result.
         """
@@ -272,9 +273,9 @@ class _FakeImage:
 
 
 def _build_label_specs(ax):
-    """Label specs.
+    """Build the label specs.
 
-    Inputs: `ax`. Output: list.
+    Inputs: `ax`. Output: `list`.
     """
     first_x, first_y = ax.transData.transform((1.0, 42.0))
     second_x, second_y = ax.transData.transform((2.5, 58.0))
@@ -301,9 +302,9 @@ def _build_label_specs(ax):
 
 
 def _install_fake_omero_table_modules(monkeypatch, *, table):
-    """Install fake OMERO table modules.
+    """Install the fake OMERO table modules.
 
-    Inputs: `monkeypatch`, `table`. Output: tuple.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `table`. Output: `tuple`.
     """
     omero_pkg = types.ModuleType("omero")
     omero_pkg.__path__ = []
@@ -339,7 +340,7 @@ def _install_fake_omero_table_modules(monkeypatch, *, table):
 def test_parse_emsa_file_extracts_metadata_elements_and_spectrum(tmp_path: Path):
     """Verify parse emsa file extracts metadata elements and spectrum.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in parse emsa file extracts metadata elements and spectrum.
     """
     txt_path = tmp_path / "spectrum.txt"
     txt_path.write_text(
@@ -381,9 +382,9 @@ def test_parse_emsa_file_extracts_metadata_elements_and_spectrum(tmp_path: Path)
 def test_sem_edx_geometry_and_genetic_label_helpers_cover_selection_mutation_and_layout(
     monkeypatch,
 ):
-    """Verify sem edx geometry and genetic label helpers cover selection mutation and layout.
+    """Verify SEM EDX geometry and genetic label helpers cover selection mutation and layout.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in SEM EDX geometry and genetic label helpers cover selection mutation and layout.
     """
     assert sem_edx_parser._nearest_spectrum_point([], 1.0) is None
     spectrum = [(0.5, 10.0), (1.0, 20.0), (2.0, 30.0)]
@@ -507,9 +508,9 @@ def test_sem_edx_plot_and_table_helpers_cover_png_generation_table_persistence_a
     monkeypatch,
     tmp_path: Path,
 ):
-    """Verify sem edx plot and table helpers cover png generation table persistence and failures.
+    """Verify SEM EDX plot and table helpers cover png generation table persistence and failures.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: `_FakeResources` result.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in SEM EDX plot and table helpers cover png generation table persistence and failures.
     """
     txt_path = tmp_path / "sample.txt"
     txt_path.write_text(
@@ -634,7 +635,7 @@ def test_sem_edx_plot_and_table_helpers_cover_png_generation_table_persistence_a
     resource_calls = []
 
     def _track_shared_resources():
-        """Track shared resources.
+        """Return the track shared resources.
 
         Inputs: none. Output: `_FakeResources` result.
         """
@@ -716,9 +717,9 @@ def test_sem_edx_parser_remaining_edges_cover_empty_layouts_and_default_plot_pat
     monkeypatch,
     tmp_path: Path,
 ):
-    """Verify sem edx parser remaining edges cover empty layouts and default plot path.
+    """Check SEM EDX parser remaining edges cover empty layouts and default plot path parsing against the documented contract.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when SEM EDX parser remaining edges cover empty layouts and default plot path accepts unsafe input.
     """
     sem_edx_parser.plt.close(None)
     assert (
@@ -761,21 +762,20 @@ def test_sem_edx_table_creation_covers_cleanup_and_attach_failure_logging(
     monkeypatch,
     tmp_path: Path,
 ):
-    """Verify sem edx table creation covers cleanup and attach failure logging.
+    """Check SEM EDX table creation covers cleanup and attach failure logging cleanup behavior.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` (Path) temporary path
+    fixture. Output: None after assertions pass. Raises: RuntimeError when validation or
+    external operations fail.
     """
 
     class _ClosingFailTable(_FakeTable):
-        """Represent closing fail table."""
+        """Test double for closing fail table behavior in this module."""
 
         def close(self):
-            """Close the resource.
+            """Close `_ClosingFailTable`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
@@ -833,9 +833,9 @@ def test_sem_edx_table_creation_covers_cleanup_and_attach_failure_logging(
 
 
 def test_sem_edx_parser_covers_remaining_parse_and_fitness_edges(tmp_path: Path):
-    """Verify sem edx parser covers remaining parse and fitness edges.
+    """Check SEM EDX parser covers remaining parse and fitness edges parsing against the documented contract.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in SEM EDX parser covers remaining parse and fitness edges.
     """
     txt_path = tmp_path / "demo.txt"
     txt_path.write_text(

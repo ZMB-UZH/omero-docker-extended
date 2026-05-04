@@ -40,7 +40,7 @@ class UserDataStoreError(Exception):
 
 @dataclass
 class _Psycopg2ModuleCache:
-    """Represent psycopg2 module cache."""
+    """Helper type for psycopg2 module cache behavior."""
 
     module: Any | None = None
     extras: Any | None = None
@@ -51,9 +51,10 @@ _PSYCOPG2_MODULES = _Psycopg2ModuleCache()
 
 
 def _load_psycopg2():
-    """Load psycopg2.
+    """Load the psycopg2.
 
-    Inputs: none. Output: tuple. Raises on invalid or unavailable state.
+    Inputs: none. Output: `tuple`. Raises: VariableStoreError when validation or
+    external operations fail.
     """
     if _PSYCOPG2_MODULES.module is not None and _PSYCOPG2_MODULES.extras is not None:
         return _PSYCOPG2_MODULES.module, _PSYCOPG2_MODULES.extras
@@ -70,12 +71,10 @@ def _load_psycopg2():
 
 
 def _load_psycopg2_sql():
-    """Load psycopg2 sql.
+    """Load the psycopg2 SQL.
 
-    Inputs: none. Output: `_PSYCOPG2_MODULES.sql`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: none. Output: load psycopg2 SQL result. Raises: VariableStoreError when validation
+    or the called operation fails.
     """
     if _PSYCOPG2_MODULES.sql is not None:
         return _PSYCOPG2_MODULES.sql
@@ -92,16 +91,17 @@ def _load_psycopg2_sql():
 def _safe_query(template, *identifiers):
     """Compose a parameterized SQL query with safe psycopg2.sql identifiers.
 
-    Inputs: `template`, `*identifiers`. Output: call result.
+    Inputs: `template`, `*identifiers`. Output: `format` result.
     """
     sql_mod = _load_psycopg2_sql()
     return sql_mod.SQL(template).format(*[sql_mod.Identifier(i) for i in identifiers])
 
 
 def _db_params():
-    """DB params.
+    """Return the db params.
 
-    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    Inputs: none. Output: db params result. Raises: VariableStoreError when validation or the
+    called operation fails.
     """
     user = get_env(ENV_USER, env_file=ENV_FILE_OMEROWEB)
     password = get_env(ENV_AUTH, env_file=ENV_FILE_OMEROWEB)
@@ -132,9 +132,10 @@ def _db_params():
 
 @contextmanager
 def _connect():
-    """Open the connection.
+    """Open the connection for `omeroweb_omp_plugin.services.data_store`.
 
-    Inputs: none. Output: yielded values. Raises on invalid or unavailable state.
+    Inputs: none. Output: iterator of yielded items. Raises: VariableStoreError when validation
+    or the called operation fails.
     """
     psycopg2, _ = _load_psycopg2()
     param_options = _db_params()
@@ -180,9 +181,9 @@ def _connect():
 
 
 def _ensure_schema(conn):
-    """Ensure schema.
+    """Ensure the schema.
 
-    Inputs: `conn`. Output: None.
+    Inputs: `conn` OMERO gateway connection. Output: None.
     """
     _load_psycopg2_sql()
     with conn.cursor() as cur:
@@ -246,9 +247,9 @@ def _ensure_ai_schema(conn):
 
 
 def _ensure_user_settings_schema(conn):
-    """Ensure user settings schema.
+    """Ensure the user settings schema.
 
-    Inputs: `conn`. Output: None.
+    Inputs: `conn` OMERO gateway connection. Output: None.
     """
     _load_psycopg2_sql()
     with conn.cursor() as cur:
@@ -279,7 +280,8 @@ def _ensure_user_settings_schema(conn):
 def list_variable_sets(username):
     """Return list variable sets.
 
-    Inputs: `username`. Output: computed value. Raises on invalid or unavailable state.
+    Inputs: `username` username. Output: `list`. Raises: VariableStoreError when validation or
+    the called operation fails.
     """
     try:
         _load_psycopg2_sql()
@@ -311,10 +313,10 @@ def list_variable_sets(username):
 
 
 def save_variable_set(username, set_name, var_names):
-    """Save variable set.
+    """Save the variable set.
 
-    Inputs: `username`, `set_name`, `var_names`. Output: None. Raises on invalid or
-    unavailable state.
+    Inputs: `username` username, `set_name`, `var_names`. Output: None. Raises:
+    VariableStoreError when validation or the called operation fails.
     """
     try:
         _, extras = _load_psycopg2()
@@ -364,8 +366,8 @@ def save_variable_set(username, set_name, var_names):
 def load_variable_set(username, set_name):
     """Return load variable set.
 
-    Inputs: `username`, `set_name`. Output: `row[0] if row else None`. Raises on invalid
-    or unavailable state.
+    Inputs: `username` username, `set_name`. Output: load variable set result. Raises:
+    VariableStoreError when validation or the called operation fails.
     """
     try:
         _load_psycopg2_sql()
@@ -397,10 +399,10 @@ def load_variable_set(username, set_name):
 
 
 def delete_variable_set(username, set_name):
-    """Delete variable set.
+    """Delete the variable set.
 
-    Inputs: `username`, `set_name`. Output: None. Raises on invalid or unavailable
-    state.
+    Inputs: `username` username, `set_name`. Output: None. Raises: VariableStoreError
+    when validation or the called operation fails.
     """
     try:
         _load_psycopg2_sql()
@@ -450,7 +452,8 @@ def delete_variable_set(username, set_name):
 def list_ai_credentials(username):
     """Return list ai credentials.
 
-    Inputs: `username`. Output: computed value. Raises on invalid or unavailable state.
+    Inputs: `username` username. Output: `list`. Raises: AiCredentialStoreError when validation
+    or the called operation fails.
     """
     try:
         _load_psycopg2_sql()
@@ -482,10 +485,10 @@ def list_ai_credentials(username):
 
 
 def get_ai_credential(username, provider):
-    """Return AI credential.
+    """Return the ai credential value exposed by this OMERO-compatible object.
 
-    Inputs: `username`, `provider`. Output: computed value. Raises on invalid or
-    unavailable state.
+    Inputs: `username` username, `provider`. Output: get ai credential result. Raises:
+    AiCredentialStoreError when validation or the called operation fails.
     """
     try:
         _load_psycopg2_sql()
@@ -517,10 +520,10 @@ def get_ai_credential(username, provider):
 
 
 def save_ai_credentials(username, provider, api_key):
-    """Save ai credentials.
+    """Save the ai credentials.
 
-    Inputs: `username`, `provider`, `api_key`. Output: None. Raises on invalid or
-    unavailable state.
+    Inputs: `username` username, `provider`, `api_key`. Output: None. Raises:
+    AiCredentialStoreError when validation or the called operation fails.
     """
     try:
         _load_psycopg2_sql()
@@ -552,10 +555,10 @@ def save_ai_credentials(username, provider, api_key):
 
 
 def save_user_settings(username, settings_payload):
-    """Save user settings.
+    """Save the user settings.
 
-    Inputs: `username`, `settings_payload`. Output: None. Raises on invalid or
-    unavailable state.
+    Inputs: `username` username, `settings_payload`. Output: None. Raises:
+    UserSettingsStoreError when validation or the called operation fails.
     """
     try:
         _, extras = _load_psycopg2()
@@ -602,9 +605,10 @@ def save_user_settings(username, settings_payload):
 
 
 def delete_all_user_settings(username):
-    """Delete all user settings.
+    """Delete the all user settings.
 
-    Inputs: `username`. Output: `deleted`. Raises on invalid or unavailable state.
+    Inputs: `username` username. Output: `deleted`. Raises: UserSettingsStoreError when
+    validation or the called operation fails.
     """
     try:
         _load_psycopg2_sql()
@@ -635,9 +639,10 @@ def delete_all_user_settings(username):
 
 
 def delete_all_variable_sets(username):
-    """Delete all variable sets.
+    """Delete the all variable sets.
 
-    Inputs: `username`. Output: `deleted`. Raises on invalid or unavailable state.
+    Inputs: `username` username. Output: `deleted`. Raises: VariableStoreError when validation
+    or the called operation fails.
     """
     try:
         _load_psycopg2_sql()
@@ -670,7 +675,8 @@ def delete_all_variable_sets(username):
 def delete_all_ai_credentials(username):
     """Delete all AI credentials.
 
-    Inputs: `username`. Output: `deleted`. Raises on invalid or unavailable state.
+    Inputs: `username` username. Output: `deleted`. Raises: AiCredentialStoreError when
+    validation or the called operation fails.
     """
     try:
         _load_psycopg2_sql()
@@ -701,12 +707,10 @@ def delete_all_ai_credentials(username):
 
 
 def delete_all_user_data(username):
-    """Delete all user data.
+    """Delete the all user data.
 
-    Inputs: `username`. Output: `deleted_counts`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `username` username. Output: `deleted_counts`. Raises: UserDataStoreError
+    when validation or the called operation fails.
     """
     try:
         with _connect() as conn:
@@ -739,9 +743,9 @@ def delete_all_user_data(username):
 
 
 def _list_user_scoped_tables(conn):
-    """List user scoped tables.
+    """Return the user scoped tables.
 
-    Inputs: `conn`. Output: `sorted` result.
+    Inputs: `conn` OMERO gateway connection. Output: `list`.
     """
     with conn.cursor() as cur:
         cur.execute(  # nosemgrep

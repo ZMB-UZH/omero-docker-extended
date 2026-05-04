@@ -14,9 +14,10 @@ TMP_PATH_ENV = "OMERO_TMP_PATH"
 
 
 def _validate_path_component(value: str, *, label: str) -> str:
-    """Validate path component.
+    """Validate the path component.
 
-    Inputs: `value`, `label`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `value` (str) input value, `label` (str). Output: `str`. Raises: ValueError
+    when validation or the called operation fails.
     """
     if value in {"", ".", ".."} or "/" in value or "\\" in value or "\x00" in value:
         raise ValueError(f"{label} must be a single safe path component.")
@@ -24,9 +25,9 @@ def _validate_path_component(value: str, *, label: str) -> str:
 
 
 def _append_components(base: Path, components: Iterable[str]) -> Path:
-    """Append components.
+    """Append the components.
 
-    Inputs: `base`, `components`. Output: `Path`.
+    Inputs: `base` (Path), `components` (Iterable[str]). Output: `Path`.
     """
     path = base
     for component in components:
@@ -37,7 +38,7 @@ def _append_components(base: Path, components: Iterable[str]) -> Path:
 def get_tmp_base() -> Path:
     """Return the configured root temporary directory.
 
-    Inputs: none. Output: `Path`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `Path`. Raises: RuntimeError for the exercised failure path.
     """
     value = os.environ.get(TMP_PATH_ENV)
     if not value or value.strip() == "":

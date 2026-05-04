@@ -54,14 +54,15 @@ def load_json_object(request):
 def require_non_root_user(view_func):
     """Non root user.
 
-    Inputs: `view_func`. Output: computed value.
+    Inputs: `view_func`. Output: `_wrapped`.
     """
 
     @wraps(view_func)
     def _wrapped(request, *args, conn=None, url=None, **kwargs):
-        """Wrapped.
+        """Call the wrapped view after resolving user and connector context.
 
-        Inputs: `request`, `conn`, `url`, `*args`, `**kwargs`. Output: computed value.
+        Inputs: `request` Django request, `*args` positional arguments, `conn` OMERO
+        gateway connection, `url` URL, `**kwargs` keyword arguments. Output: `view_func`
         """
         remaining_args = args
         if remaining_args and conn is None:
@@ -108,9 +109,9 @@ def resolve_omero_host_port(conn):
 
 
 def validate_user_password(conn, password):
-    """Validate user password.
+    """Validate the user password.
 
-    Inputs: `conn`, `password`. Output: tuple.
+    Inputs: `conn` OMERO gateway connection, `password` password. Output: `tuple`.
     """
     if not password:
         return False, "Password is required."

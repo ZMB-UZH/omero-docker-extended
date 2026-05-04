@@ -8,7 +8,7 @@ from ..constants import PROTECTED_HYPHEN_PATTERNS
 def extract_base_name(filename):
     """Extract the meaningful base name from a filename.
 
-    Inputs: `filename`. Output: computed value.
+    Inputs: `filename`. Output: name string.
     """
     match = re.search(r"\[(.+?)\]", filename)
     if match:
@@ -73,13 +73,7 @@ def detect_label_value_pairs(filenames):
 def build_hyphen_protection_pattern(detected_labels=None):
     """Comprehensive hyphen protection pattern.
 
-    Inputs: `detected_labels`. Output: computed value.
-
-    Args:
-        detected_labels: Optional set of detected label tokens for label-value pairs
-
-    Returns:
-        str: Pattern for use in re.split()
+    Inputs: `detected_labels`. Output: `base_pattern`.
     """
     # Start with base scientific protection patterns
     base_patterns = [f"(?:{p})" for p in PROTECTED_HYPHEN_PATTERNS]
@@ -102,14 +96,7 @@ def build_hyphen_protection_pattern(detected_labels=None):
 def regex_for_separators(separators, filenames=None):
     """Generate regex pattern with intelligent hyphen protection.
 
-    Inputs: `separators`, `filenames`. Output: computed value.
-
-    Args:
-        separators: Characters to use as separators (string or list)
-        filenames: Optional list of filenames for intelligent pattern detection
-
-    Returns:
-        str: Regex pattern suitable for re.split()
+    Inputs: `separators`, `filenames`. Output: regex for separators result.
     """
     tokens = []
     has_whitespace = False
@@ -143,7 +130,7 @@ def regex_for_separators(separators, filenames=None):
 
 
 def suggest_separator_regex(filenames, allowed_separators=None):
-    """Suggest separator regex.
+    """Return the suggest separator regex.
 
     Inputs: `filenames`, `allowed_separators`. Output: `regex_for_separators` result.
     """

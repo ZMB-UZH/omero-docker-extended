@@ -12,17 +12,17 @@ logger = logging.getLogger(__name__)
 
 
 def _value_or_raw(value):
-    """Value or raw.
+    """Return an OMERO wrapper value when present, otherwise the raw object.
 
-    Inputs: `value`. Output: computed value.
+    Inputs: `value` input value. Output: value or raw result.
     """
     return value.getValue() if hasattr(value, "getValue") else value
 
 
 def _call_or_none(obj, method_name: str):
-    """Call or none.
+    """Call an optional zero-argument accessor and return None when absent.
 
-    Inputs: `obj`, `method_name`. Output: `method` result or None.
+    Inputs: `obj`, `method_name` (str). Output: `method` result.
     """
     method = getattr(obj, method_name, None)
     if not callable(method):
@@ -34,9 +34,9 @@ def _call_or_none(obj, method_name: str):
 
 
 def _owner_candidates(obj):
-    """Owner candidates.
+    """Return the owner candidates.
 
-    Inputs: `obj`. Output: `tuple` result.
+    Inputs: `obj`. Output: `tuple`.
     """
     details = _call_or_none(obj, "getDetails")
     details_owner = _call_or_none(details, "getOwner") if details is not None else None
@@ -51,7 +51,7 @@ def _owner_candidates(obj):
 
 
 def _owner_from_details_or_method(obj):
-    """Owner from details or method.
+    """Return the owner from details or method.
 
     Inputs: `obj`. Output: `next` result.
     """
@@ -69,7 +69,7 @@ def _safe_debug(message: str, *values) -> None:
 def get_text(value_obj):
     """Extract text value from OMERO rtype objects.
 
-    Inputs: `value_obj`. Output: computed value.
+    Inputs: `value_obj`. Output: text string.
     """
     try:
         return (
@@ -84,7 +84,7 @@ def get_text(value_obj):
 def get_id(obj):
     """Extract ID from OMERO object.
 
-    Inputs: `obj`. Output: computed value or None.
+    Inputs: `obj`. Output: `_value_or_raw` result.
     """
     try:
         model_obj = getattr(obj, "_obj", None)
@@ -146,7 +146,7 @@ def _current_user_id(conn):
 def _get_owner_username(obj):
     """Return owner username.
 
-    Inputs: `obj`. Output: computed value.
+    Inputs: `obj`. Output: `str`.
     """
     if obj is None:
         return ""
@@ -169,7 +169,7 @@ def _get_owner_username(obj):
 def _has_read_write_permissions(obj):
     """Return whether read write permissions.
 
-    Inputs: `obj`. Output: computed value.
+    Inputs: `obj`. Output: `bool`.
     """
     if obj is None:
         return False

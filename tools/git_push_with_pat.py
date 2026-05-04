@@ -22,9 +22,10 @@ TokenReader = Callable[[str], str]
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse args.
+    """Parse command-line arguments for `tools.git_push_with_pat`.
 
-    Inputs: `argv`. Output: `argparse.Namespace`.
+    Inputs: `argv` (Sequence[str] | None) command-line arguments. Output:
+    `argparse.Namespace`.
     """
     parser = argparse.ArgumentParser(
         description=(
@@ -63,9 +64,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def _validate_git_argument(name: str, value: str) -> None:
-    """Validate git argument.
+    """Validate the git argument.
 
-    Inputs: `name`, `value`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name, `value` (str) input value. Output: None. Raises:
+    SystemExit when validation or the called operation fails.
     """
     if not value or value.startswith("-") or "\x00" in value:
         raise SystemExit(f"{name} must be a non-option Git argument")
@@ -74,9 +76,10 @@ def _validate_git_argument(name: str, value: str) -> None:
 
 
 def _validate_force_with_lease(value: str | None) -> str | None:
-    """Validate force with lease.
+    """Validate the force with lease.
 
-    Inputs: `value`. Output: `str | None`. Raises on invalid or unavailable state.
+    Inputs: `value` (str | None) input value. Output: `str | None`. Raises: SystemExit
+    when validation or the called operation fails.
     """
     if value is None:
         return None
@@ -93,12 +96,10 @@ def _validate_force_with_lease(value: str | None) -> str | None:
 
 
 def _read_token(env: Mapping[str, str], env_name: str, reader: TokenReader) -> str:
-    """Read token.
+    """Read the token.
 
-    Inputs: `env`, `env_name`, `reader`. Output: `str`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `env` (Mapping[str, str]) environment mapping, `env_name` (str), `reader`
+    (TokenReader). Output: `str`. Raises: SystemExit for the exercised failure path.
     """
     token = env.get(env_name, "").strip()
     if token:
@@ -112,9 +113,9 @@ def _read_token(env: Mapping[str, str], env_name: str, reader: TokenReader) -> s
 
 
 def _write_askpass(path: Path) -> None:
-    """Write askpass.
+    """Write the askpass.
 
-    Inputs: `path`. Output: None.
+    Inputs: `path` (Path) path. Output: None.
     """
     executable = sys.executable or "/usr/bin/env python3"
     path.write_text(
@@ -162,11 +163,9 @@ def _serve_credential_once(
     socket_path: Path,
     credential: str,
 ) -> tuple[threading.Event, threading.Thread]:
-    """Serve credential once.
+    """Return the serve credential once.
 
-    Inputs: `socket_path`, `credential`. Output: `tuple[threading.Event,
-    threading.Thread]`.
-
+    Inputs: `socket_path` (Path), `credential` (str). Output: `tuple[threading.Event,
     threading.Thread]`.
     """
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -179,9 +178,9 @@ def _serve_credential_once(
     payload = f"{credential}\n".encode("utf-8")
 
     def serve() -> None:
-        """Serve.
+        """Serve the temporary Git credential helper until the push completes.
 
-        Inputs: none. Output: None.
+        Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
         try:
             while not stop.is_set():
@@ -213,10 +212,9 @@ def run_push(
 ) -> int:
     """Push a refspec with a PAT-backed HTTPS remote.
 
-    Inputs: `args`, `env`, `token_reader`, `runner`. Output: `int`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `args` (argparse.Namespace) positional arguments, `env` (Mapping[str, str] |
+    None) environment mapping, `token_reader` (TokenReader), `runner` (RunCommand).
+    Output: `int`. Raises: SystemExit when validation or the called operation fails.
     """
     _validate_git_argument("remote", args.remote)
     _validate_git_argument("refspec", args.refspec)
@@ -271,7 +269,7 @@ def run_push(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.git_push_with_pat` command entrypoint.
 
     Inputs: `argv`. Output: `int`.
     """

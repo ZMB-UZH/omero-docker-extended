@@ -21,16 +21,16 @@ class ZarrToolbarTemplateContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `ZarrToolbarTemplateContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.template_text = TOOLBAR_TEMPLATE.read_text(encoding="utf-8")
 
     def test_toolbar_bootstraps_selection_data_via_json_script_block(self) -> None:
-        """Verify toolbar bootstraps selection data via JSON script block.
+        """Verify the toolbar bootstraps selection data via JSON script block execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in toolbar bootstraps selection data via JSON script block integration.
         """
         self.assertIn(
             '<script id="zarr-toolbar-selection-data" type="application/json">',

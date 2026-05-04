@@ -5,7 +5,7 @@ from django.apps import AppConfig
 
 
 class OmeroWebZarrAppConfig(AppConfig):
-    """Represent OMERO web Zarr app config."""
+    """Django application configuration for OMERO web Zarr app config."""
 
     name = "omero_web_zarr"
     label = "zarr"
@@ -14,7 +14,7 @@ class OmeroWebZarrAppConfig(AppConfig):
     def ready():
         """Register application startup hooks.
 
-        Inputs: none. Output: None.
+        Inputs: Django calls it after app loading. Output: registers startup hooks.
         """
         from .integration import install_webgateway_overrides
 

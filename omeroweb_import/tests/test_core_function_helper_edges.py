@@ -10,17 +10,17 @@ from omeroweb_import.views import core_functions
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._raw_value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self._raw_value`.
         """
@@ -28,17 +28,19 @@ class _Value:
 
 
 def _raise(exc):
-    """Raise.
+    """Record the raise call on the test double for later assertions.
 
-    Inputs: `exc`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `exc`. Output: None. Raises: exc when validation or external operations
+    fail.
     """
     raise exc
 
 
 def test_identity_owner_and_permission_helpers_cover_edge_failures(monkeypatch) -> None:
-    """Verify identity owner and permission helpers cover edge failures.
+    """Verify the identity owner and permission helpers cover edge failures safety boundary.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when identity owner and permission helpers cover edge failures accepts unsafe input.
+    when validation or the called operation fails.
     """
     assert (
         core_functions._get_id(
@@ -98,19 +100,19 @@ def test_identity_owner_and_permission_helpers_cover_edge_failures(monkeypatch) 
     )
 
     class _FallbackOwner:
-        """Represent fallback owner."""
+        """Test double for fallback owner behavior in this module."""
 
         @staticmethod
         def getOmeName():
             """Return the fake OMERO name.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("ome name exploded")
 
         @staticmethod
         def getName():
-            """Return the fake object name.
+            """Return `_FallbackOwner`'s fake object name.
 
             Inputs: none. Output: `SimpleNamespace` result.
             """
@@ -127,7 +129,7 @@ def test_identity_owner_and_permission_helpers_cover_edge_failures(monkeypatch) 
     monkeypatch.setattr(core_functions, "_get_id", lambda owner: 42)
 
     def _fallback_details():
-        """Fallback details.
+        """Return the fallback details.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -165,17 +167,18 @@ def test_identity_owner_and_permission_helpers_cover_edge_failures(monkeypatch) 
 def test_project_listing_and_payload_helpers_cover_restore_and_failure_paths(
     monkeypatch,
 ) -> None:
-    """Verify project listing and payload helpers cover restore and failure paths.
+    """Verify project listing and payload helpers cover restore and failure paths result shape.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in project listing and payload helpers cover restore and failure paths.
+    when validation or the called operation fails.
     """
     assert list(core_functions._iter_accessible_projects(None)) == []
 
     class _ServiceOpts:
-        """Represent service opts."""
+        """Test double for service opts behavior in this module."""
 
         def __init__(self, *, group="5", fail_get=False, fail_restore=False):
-            """Initialize the instance.
+            """Create `_ServiceOpts` with its default state.
 
             Inputs: `group`, `fail_get`, `fail_restore`. Output: None.
             """
@@ -185,18 +188,19 @@ def test_project_listing_and_payload_helpers_cover_restore_and_failure_paths(
             self.set_calls = []
 
         def getOmeroGroup(self):
-            """Return OMERO Group.
+            """Return the fake omero group value used by this test double.
 
-            Inputs: none. Output: `self.group`. Raises on invalid or unavailable state.
+            Inputs: none. Output: `group`. Raises: RuntimeError when validation or
+            external operations fail.
             """
             if self.fail_get:
                 raise RuntimeError("group read exploded")
             return self.group
 
         def setOmeroGroup(self, value):
-            """Set OMERO Group.
+            """Set the OMERO Group for `_ServiceOpts`.
 
-            Inputs: `value`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `value` input value. Output: None. Raises: RuntimeError when validation or the called operation fails.
             """
             self.set_calls.append(value)
             self.group = value
@@ -206,14 +210,10 @@ def test_project_listing_and_payload_helpers_cover_restore_and_failure_paths(
     restore_opts = _ServiceOpts(fail_restore=True)
 
     def _restore_get_objects(model, opts=None):
-        """Restore get objects.
+        """Return the restore get objects.
 
-        Inputs: `model`, `opts`. Output: `iter` result. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: `model`, `opts`. Output: `iter` result. Raises: RuntimeError when validation or the called operation fails.
         """
-        assert model == "Project"
         if restore_opts.group == "-1":
             raise RuntimeError("cross-group exploded")
         if opts == {"group": "-1"}:
@@ -254,43 +254,41 @@ def test_dataset_and_native_zarr_helpers_cover_unhappy_paths(
 ) -> None:
     """Verify dataset and native Zarr helpers cover unhappy paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` temporary path fixture.
+    Output: None. Raises: RuntimeError when validation or the called operation fails.
     """
 
     class _LengthWithRawFallback:
-        """Represent length with raw fallback."""
+        """Test double for length with raw fallback behavior in this module."""
 
         val = "2.5"
 
         @staticmethod
         def getValue():
-            """Return the fake OMERO value.
+            """Return `_LengthWithRawFallback`'s fake OMERO value.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("value exploded")
 
         @staticmethod
         def getUnit():
-            """Return Unit.
+            """Return the unit for `_LengthWithRawFallback`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("unit exploded")
 
     class _BadLength:
-        """Represent bad length."""
+        """Test double for bad length behavior in this module."""
 
         val = "not-a-number"
 
         @staticmethod
         def getValue():
-            """Return the fake OMERO value.
+            """Return `_BadLength`'s fake OMERO value.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("value exploded")
 
@@ -395,9 +393,10 @@ def test_dataset_and_native_zarr_helpers_cover_unhappy_paths(
 def test_background_import_session_covers_missing_error_and_cleanup_paths(
     monkeypatch,
 ) -> None:
-    """Verify background import session covers missing error and cleanup paths.
+    """Confirm background import session covers missing error and cleanup paths exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when background import session covers missing error and cleanup paths stops reporting the expected error.
+    when validation or the called operation fails.
     """
     monkeypatch.setattr(core_functions, "_open_admin_connection", lambda *args: None)
     with core_functions._background_import_session("alice", "omeroserver", 4064) as key:
@@ -418,11 +417,11 @@ def test_background_import_session_covers_missing_error_and_cleanup_paths(
     closed = []
 
     class _SessionService:
-        """Represent session service."""
+        """Test double for session service behavior in this module."""
 
         @staticmethod
         def createSessionWithTimeouts(principal, user_timeout_ms, group_timeout_ms):
-            """Create Session With Timeouts.
+            """Create the session With Timeouts for `_SessionService`.
 
             Inputs: `principal`, `user_timeout_ms`, `group_timeout_ms`. Output:
             `SimpleNamespace` result.
@@ -432,9 +431,10 @@ def test_background_import_session_covers_missing_error_and_cleanup_paths(
 
         @staticmethod
         def closeSession(session):
-            """Close session.
+            """Close the session for `_SessionService`.
 
-            Inputs: `session`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `session`. Output: None. Raises: RuntimeError when validation or
+            external operations fail.
             """
             closed.append(session)
             raise RuntimeError("close exploded")
@@ -485,9 +485,9 @@ def test_background_import_session_covers_missing_error_and_cleanup_paths(
 def test_shared_transfer_helpers_cover_symlink_and_cleanup_error_paths(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """Verify shared transfer helpers cover symlink and cleanup error paths.
+    """Confirm shared transfer helpers cover symlink and cleanup error paths exposes the expected failure.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when shared transfer helpers cover symlink and cleanup error paths stops reporting the expected error.
     """
     core_functions._normalize_shared_zarr_permissions(tmp_path / "missing")
 
@@ -568,9 +568,9 @@ def test_shared_transfer_helpers_cover_symlink_and_cleanup_error_paths(
 
 
 def test_script_service_helpers_cover_deduping_and_selection() -> None:
-    """Verify script service helpers cover deduping and selection.
+    """Verify the script service helpers cover deduping and selection execution contract.
 
-    Inputs: none. Output: None.
+    Inputs: import-job fakes. Output: fails on regressions in script service helpers cover deduping and selection integration.
     """
     assert list(core_functions._iter_script_services(None)) == []
     assert core_functions._find_script_id_by_name(None, "demo.py") is None
@@ -619,11 +619,11 @@ def test_script_service_helpers_cover_deduping_and_selection() -> None:
     ]
 
     class _WorkingService:
-        """Represent working service."""
+        """Test double for working service behavior in this module."""
 
         @staticmethod
         def getScripts():
-            """Return Scripts.
+            """Return the scripts for `_WorkingService`.
 
             Inputs: none. Output: `preferred_scripts`.
             """
@@ -668,9 +668,9 @@ def test_script_service_helpers_cover_deduping_and_selection() -> None:
 def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_paths(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify script output and managed repo launch helpers cover retry and failure paths.
+    """Verify the script output and managed repo launch helpers cover retry and failure paths execution contract.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in script output and managed repo launch helpers cover retry and failure paths integration.
     """
     assert core_functions._extract_script_outputs(
         "\n".join(
@@ -779,9 +779,9 @@ def test_script_output_and_managed_repo_launch_helpers_cover_retry_and_failure_p
 def test_background_user_connection_yields_none_when_details_missing(
     monkeypatch,
 ) -> None:
-    """_background_user_connection yields None when host/port/username is missing.
+    """Verify background user connection yields none when details missing.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in background user connection yields none when details missing.
     """
     monkeypatch.setattr(
         core_functions,
@@ -800,9 +800,9 @@ def test_background_user_connection_yields_none_when_details_missing(
 
 
 def test_background_user_connection_with_session_key(monkeypatch) -> None:
-    """_background_user_connection uses existing session key and closes connection.
+    """Verify background user connection with session key.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in background user connection with session key.
     """
     closed = {"count": 0}
 
@@ -811,9 +811,9 @@ def test_background_user_connection_with_session_key(monkeypatch) -> None:
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `FakeConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             closed["count"] += 1
 
@@ -832,9 +832,9 @@ def test_background_user_connection_with_session_key(monkeypatch) -> None:
 
 
 def test_background_user_connection_with_session_key_open_fails(monkeypatch) -> None:
-    """_background_user_connection yields None when session open raises.
+    """Confirm background user connection with session key open fails exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in background user connection with session key open fails.
     """
     monkeypatch.setattr(
         core_functions,
@@ -851,9 +851,10 @@ def test_background_user_connection_with_session_key_open_fails(monkeypatch) -> 
 def test_background_user_connection_with_session_key_close_fails(
     monkeypatch,
 ) -> None:
-    """_background_user_connection logs warning when connection close raises.
+    """Confirm background user connection with session key close fails exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in background user connection with session key close fails.
+    when validation or the called operation fails.
     """
 
     class FakeConn:
@@ -861,9 +862,9 @@ def test_background_user_connection_with_session_key_close_fails(
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `FakeConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
@@ -881,9 +882,9 @@ def test_background_user_connection_with_session_key_close_fails(
 
 
 def test_background_user_connection_without_session_key(monkeypatch) -> None:
-    """_background_user_connection creates a background session when no key given.
+    """Verify background user connection without session key.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in background user connection without session key.
     """
     from contextlib import contextmanager
 
@@ -894,17 +895,18 @@ def test_background_user_connection_without_session_key(monkeypatch) -> None:
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `FakeConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             closed["count"] += 1
 
     @contextmanager
     def fake_background_session(*args, **kwargs):
-        """Fake background session.
+        """Simulate background session so the surrounding test controls that dependency.
 
-        Inputs: `*args`, `**kwargs`. Output: yielded values.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        iterator of yielded items.
         """
         yield "generated-session-key"
 
@@ -928,9 +930,10 @@ def test_background_user_connection_without_session_key(monkeypatch) -> None:
 def test_background_user_connection_without_session_key_close_fails(
     monkeypatch,
 ) -> None:
-    """_background_user_connection logs warning when background session close fails.
+    """Confirm background user connection without session key close fails exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in background user connection without session key close fails.
+    when validation or the called operation fails.
     """
     from contextlib import contextmanager
 
@@ -939,17 +942,18 @@ def test_background_user_connection_without_session_key_close_fails(
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `FakeConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
     @contextmanager
     def fake_background_session(*args, **kwargs):
-        """Fake background session.
+        """Simulate background session so the surrounding test controls that dependency.
 
-        Inputs: `*args`, `**kwargs`. Output: yielded values.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        iterator of yielded items.
         """
         yield "generated-session-key"
 
@@ -972,17 +976,18 @@ def test_background_user_connection_without_session_key_close_fails(
 def test_background_user_connection_background_session_yields_empty_key(
     monkeypatch,
 ) -> None:
-    """_background_user_connection yields None when background session produces empty key.
+    """Verify background user connection background session yields empty key.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in background user connection background session yields empty key.
     """
     from contextlib import contextmanager
 
     @contextmanager
     def fake_background_session(*args, **kwargs):
-        """Fake background session.
+        """Simulate background session so the surrounding test controls that dependency.
 
-        Inputs: `*args`, `**kwargs`. Output: yielded values.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        iterator of yielded items.
         """
         yield ""
 

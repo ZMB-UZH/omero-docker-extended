@@ -15,9 +15,9 @@ from omero_web_zarr import utils
 
 
 def _write_minimal_store(root: Path) -> None:
-    """Write minimal store.
+    """Write the minimal store.
 
-    Inputs: `root`. Output: None.
+    Inputs: `root` (Path). Output: None.
     """
     root.mkdir(parents=True, exist_ok=True)
     (root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
@@ -26,9 +26,9 @@ def _write_minimal_store(root: Path) -> None:
 def test_path_and_external_lsid_helpers_cover_additional_invalid_inputs(
     tmp_path, monkeypatch
 ):
-    """Verify path and external lsid helpers cover additional invalid inputs.
+    """Verify the path and external lsid helpers cover additional invalid inputs safety boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `self`.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions when path and external lsid helpers cover additional invalid inputs accepts unsafe input.
     """
     assert utils.resolve_local_zarr_store(None) is None
     assert utils.resolve_local_zarr_store("https://example.invalid/demo.zarr") is None
@@ -50,12 +50,12 @@ def test_path_and_external_lsid_helpers_cover_additional_invalid_inputs(
         utils.resolve_local_zarr_file(store_root.resolve(), "nested")
 
     class _Params:
-        """Represent params."""
+        """Test double for params behavior in this module."""
 
         def addId(self, image_id):
-            """Add ID.
+            """Add the ID for `_Params`.
 
-            Inputs: `image_id`. Output: `self`.
+            Inputs: `image_id` OMERO image ID. Output: `self`.
             """
             self.image_id = image_id
             return self
@@ -98,9 +98,9 @@ def test_path_and_external_lsid_helpers_cover_additional_invalid_inputs(
 def test_node_and_channel_helpers_cover_cache_mismatch_and_error_paths(
     monkeypatch, tmp_path
 ):
-    """Verify node and channel helpers cover cache mismatch and error paths.
+    """Confirm node and channel helpers cover cache mismatch and error paths exposes the expected failure.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when node and channel helpers cover cache mismatch and error paths stops reporting the expected error.
     """
     image = SimpleNamespace(id=7)
     monkeypatch.setattr(
@@ -138,6 +138,32 @@ def test_node_and_channel_helpers_cover_cache_mismatch_and_error_paths(
     assert utils.get_store_backed_channel_overrides(cached_image, [object()]) == [
         {"label": "A"}
     ]
+
+
+def test_rendering_engine_and_channel_edge_helpers_cover_missing_state(
+    monkeypatch,
+) -> None:
+    """Verify rendering engine and channel edge helpers cover missing state.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in rendering engine and channel edge helpers cover missing state.
+    """
+    image = SimpleNamespace()
+
+    with pytest.raises(AttributeError, match="rendering engine preparer"):
+        utils.prepare_image_rendering_engine(image)
+    assert utils.prepare_image_rendering_engine(image, required=False) is False
+    assert utils.get_image_rendering_engine(image, initialize=True) is None
+    with pytest.raises(AttributeError, match="rendering engine"):
+        utils.require_image_rendering_engine(image)
+
+    assert utils._sequence_value(None, 0, default="fallback") == "fallback"
+    channel = SimpleNamespace(
+        getWindowStart=lambda: None,
+        getWindowMin=lambda: None,
+        getWindowEnd=lambda: None,
+        getWindowMax=lambda: None,
+    )
+    assert utils._omero_channel_window([channel], 0) is None
 
     monkeypatch.setattr(
         utils, "load_store_backed_image_node", lambda current_image: None
@@ -183,7 +209,7 @@ def test_node_and_channel_helpers_cover_cache_mismatch_and_error_paths(
 def test_plane_render_and_encoding_helpers_cover_remaining_utils_paths(monkeypatch):
     """Verify plane render and encoding helpers cover remaining utils paths.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in plane render and encoding helpers cover remaining utils paths.
     """
     original_render_store_backed_plane = utils.render_store_backed_plane
 
@@ -279,9 +305,9 @@ def test_plane_render_and_encoding_helpers_cover_remaining_utils_paths(monkeypat
 def test_store_backed_metadata_helpers_cover_symlink_resolution_and_reader_fallbacks(
     tmp_path, monkeypatch
 ):
-    """Verify store backed metadata helpers cover symlink resolution and reader fallbacks.
+    """Verify the store backed metadata helpers cover symlink resolution and reader fallbacks safety boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: list.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions when store backed metadata helpers cover symlink resolution and reader fallbacks accepts unsafe input.
     """
     store_root = tmp_path / "store.zarr"
     _write_minimal_store(store_root)
@@ -361,7 +387,7 @@ def test_store_backed_metadata_helpers_cover_symlink_resolution_and_reader_fallb
     assert utils._load_store_backed_image_node_with_reader(store_root) is None
 
     class _Reader:
-        """Represent reader."""
+        """Test double for reader behavior in this module."""
 
         def __call__(self):
             """The callable instance with.
@@ -376,9 +402,9 @@ def test_store_backed_metadata_helpers_cover_symlink_resolution_and_reader_fallb
 
 
 def test_store_metadata_file_resolution_rejects_paths_outside_store(tmp_path) -> None:
-    """Verify store metadata file resolution rejects paths outside store.
+    """Confirm store metadata file resolution rejects paths outside store is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in store metadata file resolution rejects paths outside store.
     """
     store_root = tmp_path / "secure.zarr"
     _write_minimal_store(store_root)
@@ -423,7 +449,7 @@ def test_store_metadata_file_resolution_rejects_paths_outside_store(tmp_path) ->
 def test_store_backed_axis_and_size_helpers_cover_fallback_shapes() -> None:
     """Verify store backed axis and size helpers cover fallback shapes.
 
-    Inputs: none. Output: None.
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in store backed axis and size helpers cover fallback shapes.
     """
     fallback_node = SimpleNamespace(
         data=[np.zeros((2, 3, 4), dtype=np.uint8)],
@@ -443,7 +469,7 @@ def test_store_backed_utils_cover_root_attrs_rgb_rendering_and_tile_size_fallbac
 ):
     """Verify store backed utils cover root attrs rgb rendering and tile size fallback.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in store backed utils cover root attrs rgb rendering and tile size fallback.
     """
     store_root = tmp_path / "root.zarr"
     store_root.mkdir()
@@ -475,14 +501,14 @@ def test_store_backed_utils_cover_root_attrs_rgb_rendering_and_tile_size_fallbac
     monkeypatch.setattr(utils, "_fallback_tile_size", lambda image, conn=None: (64, 32))
 
     class _FallbackImage:
-        """Represent fallback image."""
+        """Test double for fallback image behavior in this module."""
 
         _re = None
 
         def _prepareRenderingEngine(self):
-            """Prepare Rendering Engine.
+            """Prepare the rendering Engine for `_FallbackImage`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             self._re = None
 

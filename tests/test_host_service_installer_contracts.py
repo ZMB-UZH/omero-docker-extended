@@ -22,9 +22,9 @@ QUOTA_ENFORCER_UNITS = (
 
 
 def _fake_systemctl(tmp_path: Path) -> tuple[Path, Path]:
-    """Fake systemctl.
+    """Return the fake systemctl.
 
-    Inputs: `tmp_path`. Output: `tuple[Path, Path]`.
+    Inputs: `tmp_path` (Path) temporary path fixture. Output: `tuple[Path, Path]`.
     """
     log_file = tmp_path / "systemctl.log"
     systemctl = tmp_path / "systemctl"
@@ -42,9 +42,9 @@ def _fake_systemctl(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _fake_root_bin(tmp_path: Path) -> Path:
-    """Fake root bin.
+    """Return the fake root bin.
 
-    Inputs: `tmp_path`. Output: `Path`.
+    Inputs: `tmp_path` (Path) temporary path fixture. Output: `Path`.
     """
     bin_dir = tmp_path / "fake-bin"
     id_bin = bin_dir / "id"
@@ -76,9 +76,10 @@ def _fake_root_bin(tmp_path: Path) -> Path:
 
 
 def _run_bash(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    """Bash.
+    """Run the bash.
 
-    Inputs: `script`, `env`. Output: `subprocess.CompletedProcess[str]`.
+    Inputs: `script` (str), `env` (dict[str, str]) environment mapping. Output:
+    `subprocess.CompletedProcess[str]`.
     """
     return subprocess.run(
         [BASH_BIN, "-c", script],
@@ -91,17 +92,17 @@ def _run_bash(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[s
 
 
 def _sh(path: Path) -> str:
-    """Sh.
+    """Return the sh.
 
-    Inputs: `path`. Output: `str`.
+    Inputs: `path` (Path) path. Output: `str`.
     """
     return shlex.quote(str(path))
 
 
 def _systemd_escape(value: Path) -> str:
-    """Systemd escape.
+    """Return the systemd escape.
 
-    Inputs: `value`. Output: `str`.
+    Inputs: `value` (Path) input value. Output: `str`.
     """
     safe = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/._:@+-")
     return "".join(
@@ -112,9 +113,9 @@ def _systemd_escape(value: Path) -> str:
 def _write_stale_systemd_artifacts(
     systemd_dir: Path, unit_names: tuple[str, ...]
 ) -> None:
-    """Write stale systemd artifacts.
+    """Write the stale systemd artifacts.
 
-    Inputs: `systemd_dir`, `unit_names`. Output: None.
+    Inputs: `systemd_dir` (Path), `unit_names` (tuple[str, ...]). Output: None.
     """
     for dependency_dir in (
         systemd_dir / "multi-user.target.wants",
@@ -144,9 +145,9 @@ def _assert_stale_systemd_artifacts_removed(
     systemd_dir: Path,
     unit_names: tuple[str, ...],
 ) -> None:
-    """Assert stale systemd artifacts removed.
+    """Assert the stale systemd artifacts removed.
 
-    Inputs: `systemd_dir`, `unit_names`. Output: None.
+    Inputs: `systemd_dir` (Path), `unit_names` (tuple[str, ...]). Output: None.
     """
     for unit_name in unit_names:
         assert not (systemd_dir / f"{unit_name}.d").exists()
@@ -159,9 +160,9 @@ def _assert_stale_systemd_artifacts_removed(
 def test_tmp_cleaner_installer_replaces_managed_units_without_host_paths(
     tmp_path: Path,
 ) -> None:
-    """Verify temporary cleaner installer replaces managed units without host paths.
+    """Verify tmp cleaner installer replaces managed units without host paths.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in tmp cleaner installer replaces managed units without host paths.
     """
     systemctl, systemctl_log = _fake_systemctl(tmp_path)
     systemd_dir = tmp_path / "systemd system"
@@ -217,9 +218,9 @@ def test_tmp_cleaner_installer_replaces_managed_units_without_host_paths(
 def test_tmp_cleaner_full_installer_is_idempotent_and_purges_stale_artifacts(
     tmp_path: Path,
 ) -> None:
-    """Verify temporary cleaner full installer is idempotent and purges stale artifacts.
+    """Verify tmp cleaner full installer is idempotent and purges stale artifacts.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in tmp cleaner full installer is idempotent and purges stale artifacts.
     """
     systemctl, systemctl_log = _fake_systemctl(tmp_path)
     fake_bin = _fake_root_bin(tmp_path)
@@ -272,9 +273,9 @@ def test_tmp_cleaner_full_installer_is_idempotent_and_purges_stale_artifacts(
 def test_quota_installer_renders_actual_paths_and_replaces_stale_units(
     tmp_path: Path,
 ) -> None:
-    """Verify quota installer renders actual paths and replaces stale units.
+    """Check quota installer renders actual paths and replaces stale units renders the expected surface.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in quota installer renders actual paths and replaces stale units.
     """
     systemctl, systemctl_log = _fake_systemctl(tmp_path)
     systemd_dir = tmp_path / "systemd system"
@@ -344,7 +345,7 @@ def test_quota_full_installer_is_idempotent_and_purges_stale_artifacts(
 ) -> None:
     """Verify quota full installer is idempotent and purges stale artifacts.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in quota full installer is idempotent and purges stale artifacts.
     """
     systemctl, systemctl_log = _fake_systemctl(tmp_path)
     fake_bin = _fake_root_bin(tmp_path)
@@ -408,7 +409,7 @@ def test_quota_defaults_file_quotes_installation_specific_paths(
 ) -> None:
     """Verify quota defaults file quotes installation specific paths.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in quota defaults file quotes installation specific paths.
     """
     data_dir = tmp_path / 'omero data "quoted" $HOME `tick` back\\slash'
     defaults_file = tmp_path / "etc default" / "omero-quota-enforcer"

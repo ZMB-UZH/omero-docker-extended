@@ -68,9 +68,10 @@ class RootState:
 
 
 def parse_bool(value: str, *, name: str) -> bool:
-    """Parse bool.
+    """Parse an explicit boolean string for startup configuration.
 
-    Inputs: `value`, `name`. Output: `bool`. Raises on invalid or unavailable state.
+    Inputs: `value` (str) input value, `name` (str) name. Output: `bool`. Raises:
+    SyncError when validation or the called operation fails.
     """
     normalized = value.strip().lower()
     if normalized in {"1", "true", "yes", "on"}:
@@ -81,12 +82,10 @@ def parse_bool(value: str, *, name: str) -> bool:
 
 
 def parse_mode(value: str, *, allow_world_writable: bool) -> int:
-    """Parse mode.
+    """Validate the requested sync mode and return its canonical value.
 
-    Inputs: `value`, `allow_world_writable`. Output: `int`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `value` (str) input value, `allow_world_writable` (bool). Output: `int`.
+    Raises: SyncError when validation or the called operation fails.
     """
     raw = value.strip()
     if not re.fullmatch(r"[0-7]{3,4}", raw):
@@ -103,12 +102,10 @@ def parse_mode(value: str, *, allow_world_writable: bool) -> int:
 
 
 def resolve_user(value: str, *, default_uid: int) -> int:
-    """Resolve user.
+    """Resolve the user.
 
-    Inputs: `value`, `default_uid`. Output: `int`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `value` (str) input value, `default_uid` (int). Output: `int`. Raises:
+    SyncError when validation or the called operation fails.
     """
     raw = value.strip()
     if not raw:
@@ -122,12 +119,10 @@ def resolve_user(value: str, *, default_uid: int) -> int:
 
 
 def resolve_group(value: str, *, default_gid: int) -> int:
-    """Resolve group.
+    """Resolve the group.
 
-    Inputs: `value`, `default_gid`. Output: `int`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `value` (str) input value, `default_gid` (int). Output: `int`. Raises:
+    SyncError when validation or the called operation fails.
     """
     raw = value.strip()
     if not raw:
@@ -143,17 +138,17 @@ def resolve_group(value: str, *, default_gid: int) -> int:
 
 
 def sanitize_for_log(value: str) -> str:
-    """Sanitize for log.
+    """Sanitize the for log.
 
-    Inputs: `value`. Output: `str`.
+    Inputs: `value` (str) input value. Output: `str`.
     """
     return re.sub(r"[\r\n\t\x00-\x1f\x7f]+", "_", value)[:256]
 
 
 def validate_username_component(username: str) -> str | None:
-    """Validate username component.
+    """Validate the username component.
 
-    Inputs: `username`. Output: `str | None`.
+    Inputs: `username` (str) username. Output: `str | None`.
     """
     if not username:
         return "empty username"
@@ -169,9 +164,9 @@ def validate_username_component(username: str) -> str | None:
 
 
 def import_omero_gateway():
-    """Import OMERO gateway.
+    """Import the OMERO gateway.
 
-    Inputs: none. Output: `BlitzGateway`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `BlitzGateway`. Raises: SyncError for the exercised failure path.
     """
     try:
         from omero.gateway import BlitzGateway
@@ -183,9 +178,9 @@ def import_omero_gateway():
 
 
 def close_connection(conn) -> None:
-    """Close connection.
+    """Close the connection.
 
-    Inputs: `conn`. Output: None.
+    Inputs: `conn` OMERO gateway connection. Output: None.
     """
     try:
         conn.close(hard=True)
@@ -196,9 +191,10 @@ def close_connection(conn) -> None:
 
 
 def connect(config: SyncConfig):
-    """Open the connection.
+    """Open the connection for `startup.dropbox_user_dir_sync`.
 
-    Inputs: `config`. Output: `conn`. Raises on invalid or unavailable state.
+    Inputs: `config` (SyncConfig) configuration. Output: `conn`. Raises: SyncError when
+    validation or the called operation fails.
     """
     password = os.environ.get(config.password_env, "")
     if not password:
@@ -231,9 +227,10 @@ def connect(config: SyncConfig):
 
 
 def config_value(conn, name: str, default: str = "") -> str:
-    """Config value.
+    """Return the config value.
 
-    Inputs: `conn`, `name`, `default`. Output: `str`.
+    Inputs: `conn` OMERO gateway connection, `name` (str) name, `default` (str). Output:
+    `str`.
     """
     value = conn.getConfigService().getConfigValue(name)
     if value is None:
@@ -242,9 +239,10 @@ def config_value(conn, name: str, default: str = "") -> str:
 
 
 def resolve_dropbox_root(conn) -> Path:
-    """Resolve dropbox root.
+    """Resolve the dropbox root.
 
-    Inputs: `conn`. Output: `Path`. Raises on invalid or unavailable state.
+    Inputs: `conn` OMERO gateway connection. Output: `Path`. Raises: SyncError when validation
+    or the called operation fails.
     """
     import_users = config_value(conn, "omero.fs.importUsers", "default").strip()
     watch_dir_raw = config_value(conn, "omero.fs.watchDir", "").strip()
@@ -292,9 +290,9 @@ def resolve_dropbox_root(conn) -> Path:
 
 
 def list_experimenter_usernames(conn) -> list[str]:
-    """List experimenter usernames.
+    """Return the experimenter usernames.
 
-    Inputs: `conn`. Output: `list[str]`.
+    Inputs: `conn` OMERO gateway connection. Output: `list[str]`.
     """
     experimenters = conn.getAdminService().lookupExperimenters()
     usernames = [
@@ -304,9 +302,9 @@ def list_experimenter_usernames(conn) -> list[str]:
 
 
 def filter_usernames(usernames: Iterable[str]) -> tuple[list[str], int]:
-    """Filter usernames.
+    """Filter the usernames.
 
-    Inputs: `usernames`. Output: `tuple[list[str], int]`.
+    Inputs: `usernames` (Iterable[str]). Output: `tuple[list[str], int]`.
     """
     eligible: list[str] = []
     skipped = 0
@@ -324,12 +322,10 @@ def filter_usernames(usernames: Iterable[str]) -> tuple[list[str], int]:
 
 
 def ensure_root(root: Path, *, create_root: bool, mode: int) -> RootState:
-    """Ensure root.
+    """Ensure the root.
 
-    Inputs: `root`, `create_root`, `mode`. Output: `RootState`. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `root` (Path), `create_root` (bool), `mode` (int). Output: `RootState`.
+    Raises: SyncError when validation or the called operation fails.
     """
     try:
         root_lstat = root.lstat()
@@ -371,10 +367,11 @@ def ensure_user_directory(
     uid: int,
     gid: int,
 ) -> str:
-    """Ensure user directory.
+    """Ensure the user directory.
 
-    Inputs: `root`, `root_real`, `username`, `config`, `uid`, `gid`. Output: `str`.
-    Raises on invalid or unavailable state.
+    Inputs: `root` (Path), `root_real` (Path), `username` (str) username, `config`
+    (SyncConfig) configuration, `uid` (int), `gid` (int). Output: `str`. Raises:
+    SyncError when validation or the called operation fails.
     """
     target = root / username
     if target.parent.resolve(strict=True) != root_real:
@@ -407,9 +404,9 @@ def ensure_user_directory(
 
 
 def write_status(path: Path, values: dict[str, str | int]) -> None:
-    """Write status.
+    """Write the status.
 
-    Inputs: `path`, `values`. Output: None.
+    Inputs: `path` (Path) path, `values` (dict[str, str | int]). Output: None.
     """
     path.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
@@ -428,9 +425,9 @@ def write_status(path: Path, values: dict[str, str | int]) -> None:
 
 
 def sync(config: SyncConfig) -> SyncResult:
-    """Sync.
+    """Synchronize the sync.
 
-    Inputs: `config`. Output: `SyncResult`.
+    Inputs: `config` (SyncConfig) configuration. Output: `SyncResult`.
     """
     conn = connect(config)
     try:
@@ -503,9 +500,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def config_from_args(args: argparse.Namespace) -> SyncConfig:
-    """Config from args.
+    """Return the config from args.
 
-    Inputs: `args`. Output: `SyncConfig`. Raises on invalid or unavailable state.
+    Inputs: `args` (argparse.Namespace) positional arguments. Output: `SyncConfig`.
+    Raises: SyncError when validation or the called operation fails.
     """
     allow_world_writable = parse_bool(
         args.allow_world_writable, name="allow-world-writable"
@@ -532,7 +530,7 @@ def config_from_args(args: argparse.Namespace) -> SyncConfig:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Execute the command entrypoint.
+    """Run the `startup.dropbox_user_dir_sync` command entrypoint.
 
     Inputs: `argv`. Output: `int`.
     """

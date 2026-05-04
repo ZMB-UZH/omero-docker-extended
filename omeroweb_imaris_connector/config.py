@@ -108,7 +108,8 @@ def get_celery_time_limit() -> int:
 
 
 def get_celery_max_retries() -> int:
-    """Return Celery broker connection retry count.
+    """Return the celery broker connection retry count value exposed by this OMERO-compatible
+    object.
 
     Inputs: none. Output: `int`.
     """
@@ -116,7 +117,7 @@ def get_celery_max_retries() -> int:
 
 
 def get_celery_prefetch_multiplier() -> int:
-    """Return Celery prefetch multiplier.
+    """Return the celery prefetch multiplier value exposed by this OMERO-compatible object.
 
     Inputs: none. Output: `int`.
     """

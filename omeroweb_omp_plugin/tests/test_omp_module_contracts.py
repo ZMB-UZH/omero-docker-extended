@@ -13,9 +13,9 @@ from omeroweb_omp_plugin.services.jobs import job_storage
 
 
 def test_ai_provider_options_return_copy():
-    """Verify AI provider options return copy.
+    """Verify ai provider options return copy.
 
-    Inputs: none. Output: None.
+    Inputs: OMP service fakes. Output: fails on regressions in ai provider options return copy.
     """
     options = ai_providers.list_ai_provider_options()
     options.append({"value": "new", "label": "New"})
@@ -26,7 +26,7 @@ def test_ai_provider_options_return_copy():
 def test_job_storage_validates_and_roundtrips_jobs(tmp_path, monkeypatch):
     """Verify job storage validates and roundtrips jobs.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in job storage validates and roundtrips jobs.
     """
     monkeypatch.setattr(job_storage, "JOBS_DIR", str(tmp_path))
     job_id = "d" * 32
@@ -44,7 +44,7 @@ def test_job_storage_validates_and_roundtrips_jobs(tmp_path, monkeypatch):
 def test_job_storage_fsyncs_before_atomic_replace(tmp_path, monkeypatch):
     """Verify job storage fsyncs before atomic replace.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in job storage fsyncs before atomic replace.
     """
     monkeypatch.setattr(job_storage, "JOBS_DIR", str(tmp_path))
     fsynced_fds = []
@@ -58,7 +58,7 @@ def test_job_storage_fsyncs_before_atomic_replace(tmp_path, monkeypatch):
 def test_job_storage_saves_when_caller_already_holds_lock(tmp_path, monkeypatch):
     """Verify job storage saves when caller already holds lock.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in job storage saves when caller already holds lock.
     """
     monkeypatch.setattr(job_storage, "JOBS_DIR", str(tmp_path))
     job_id = "1" * 32
@@ -77,7 +77,7 @@ def test_job_storage_saves_when_caller_already_holds_lock(tmp_path, monkeypatch)
 def test_job_storage_held_lock_marker_is_thread_local(tmp_path, monkeypatch):
     """Verify job storage held lock marker is thread local.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in job storage held lock marker is thread local.
     """
     monkeypatch.setattr(job_storage, "JOBS_DIR", str(tmp_path))
     job_id = "2" * 32
@@ -85,9 +85,9 @@ def test_job_storage_held_lock_marker_is_thread_local(tmp_path, monkeypatch):
     visible_counts = []
 
     def collect_marker_count():
-        """Collect marker count.
+        """Collect the marker count.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
         """
         visible_counts.append(job_storage._held_job_locks().get(lock_key, 0))
 
@@ -102,9 +102,9 @@ def test_job_storage_held_lock_marker_is_thread_local(tmp_path, monkeypatch):
 
 
 def test_omp_module_contracts_cover_ready_hook_and_named_routes(monkeypatch):
-    """Verify omp module contracts cover ready hook and named routes.
+    """Verify OMP module contracts cover ready hook and named routes.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in OMP module contracts cover ready hook and named routes.
     """
     configured = []
     monkeypatch.setattr(
@@ -126,9 +126,10 @@ def test_omp_job_storage_edge_paths_cover_missing_files_and_tmp_cleanup(
     tmp_path,
     monkeypatch,
 ):
-    """Verify omp job storage edge paths cover missing files and temporary cleanup.
+    """Check OMP job storage edge paths cover missing files and tmp cleanup cleanup behavior.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: computed value or None.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `_TempFile` result.
     """
     monkeypatch.setattr(job_storage, "JOBS_DIR", str(tmp_path))
 
@@ -136,24 +137,24 @@ def test_omp_job_storage_edge_paths_cover_missing_files_and_tmp_cleanup(
     assert job_storage.load_job(missing_job_id) is None
 
     class _Lock:
-        """Represent lock."""
+        """Test double for lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `_Lock` with its default state.
 
             Inputs: `*_args`, `**_kwargs`. Output: None.
             """
             return None
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_Lock`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_Lock`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -165,10 +166,10 @@ def test_omp_job_storage_edge_paths_cover_missing_files_and_tmp_cleanup(
     created = {}
 
     class _TempFile:
-        """Represent temp file."""
+        """Test double for temp file behavior in this module."""
 
         def __init__(self, path: Path):
-            """Initialize the instance.
+            """Create `_TempFile` with `path`.
 
             Inputs: `path`. Output: None.
             """
@@ -197,14 +198,14 @@ def test_omp_job_storage_edge_paths_cover_missing_files_and_tmp_cleanup(
             return self._handle.fileno()
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_TempFile`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_TempFile`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -212,7 +213,7 @@ def test_omp_job_storage_edge_paths_cover_missing_files_and_tmp_cleanup(
             return False
 
     def _named_tempfile(*_args, **_kwargs):
-        """Named tempfile.
+        """Return the named tempfile.
 
         Inputs: `*_args`, `**_kwargs`. Output: `_TempFile` result.
         """
@@ -236,45 +237,43 @@ def test_omp_job_storage_edge_paths_cover_missing_files_and_tmp_cleanup(
 def test_omp_job_storage_load_job_returns_none_if_file_disappears_after_lock(
     monkeypatch,
 ):
-    """Verify omp job storage load job returns none if file disappears after lock.
+    """Verify OMP job storage load job returns none if file disappears after lock result shape.
 
-    Inputs: `monkeypatch`. Output: computed value or None. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in OMP job storage load job returns none if file disappears after lock.
+    AssertionError when validation or the called operation fails.
     """
 
     class _Lock:
-        """Represent lock."""
+        """Test double for lock behavior in this module."""
 
         def __init__(self, *_args, **_kwargs):
-            """Initialize the instance.
+            """Create `_Lock` with its default state.
 
             Inputs: `*_args`, `**_kwargs`. Output: None.
             """
             return None
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_Lock`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_Lock`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
             return False
 
     class _DisappearingPath:
-        """Represent disappearing path."""
+        """Test double for disappearing path behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_DisappearingPath` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self._exists = iter((True, False))
 
@@ -287,12 +286,9 @@ def test_omp_job_storage_load_job_returns_none_if_file_disappears_after_lock(
 
         @staticmethod
         def open(*_args, **_kwargs):
-            """Open.
+            """Open `_DisappearingPath`'s captured target.
 
-            Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `*_args`, `**_kwargs`. Output: None. Raises: AssertionError when validation or the called operation fails.
             """
             raise AssertionError("path should not be opened when the job disappears")
 

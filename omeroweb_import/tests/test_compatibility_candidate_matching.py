@@ -17,7 +17,7 @@ def test_classify_marks_incompatible_when_output_contains_unrelated_candidate(
 ):
     """Verify classify marks incompatible when output contains unrelated candidate.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in classify marks incompatible when output contains unrelated candidate.
     """
     expected_file = tmp_path / "sample.unsupported"
     stdout = f"{tmp_path / 'other-file.tiff'}\n"
@@ -35,7 +35,7 @@ def test_classify_marks_incompatible_when_output_contains_unrelated_candidate(
 def test_classify_marks_compatible_when_expected_file_is_candidate(tmp_path: Path):
     """Verify classify marks compatible when expected file is candidate.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in classify marks compatible when expected file is candidate.
     """
     expected_file = tmp_path / "image.ome.tif"
     stdout = f"{expected_file}\n"
@@ -51,9 +51,9 @@ def test_classify_marks_compatible_when_expected_file_is_candidate(tmp_path: Pat
 
 
 def test_classify_marks_incompatible_when_stdout_has_non_path_line(tmp_path: Path):
-    """Verify classify marks incompatible when stdout has non path line.
+    """Verify the classify marks incompatible when stdout has non path line safety boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when classify marks incompatible when stdout has non path line accepts unsafe input.
     """
     expected_file = tmp_path / "sample.unsupported"
     stdout = f"Using OMERODIR={tmp_path / 'compat-check-1234'}\n"
@@ -71,7 +71,7 @@ def test_classify_marks_incompatible_when_stdout_has_non_path_line(tmp_path: Pat
 def test_classify_marks_compatible_for_quoted_expected_candidate(tmp_path: Path):
     """Verify classify marks compatible for quoted expected candidate.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in classify marks compatible for quoted expected candidate.
     """
     expected_file = tmp_path / "image.ome.tif"
     stdout = f'"{expected_file}"\n'
@@ -87,9 +87,9 @@ def test_classify_marks_compatible_for_quoted_expected_candidate(tmp_path: Path)
 
 
 def test_classify_bioformats_unknown_pixel_type_as_incompatible(tmp_path: Path):
-    """Verify Bio-Formats unknown pixel type output is skippable.
+    """Verify classify bioformats unknown pixel type as incompatible.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in classify bioformats unknown pixel type as incompatible.
     """
     expected_file = tmp_path / "image.ims"
     stderr = (

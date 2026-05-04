@@ -8,9 +8,9 @@ _TOKEN_PATTERN = re.compile(r"[^\W_]+", re.UNICODE)
 
 
 def _phrase_tokens(raw_text: str) -> list[str]:
-    """Phrase tokens.
+    """Return the phrase tokens.
 
-    Inputs: `raw_text`. Output: `list[str]`.
+    Inputs: `raw_text` (str). Output: `list[str]`.
     """
     tokens: list[str] = []
     for token in _TOKEN_PATTERN.findall(str(raw_text or "")):
@@ -21,9 +21,9 @@ def _phrase_tokens(raw_text: str) -> list[str]:
 
 
 def _parsed_clauses(raw_text: str) -> list[tuple[str, list[str]]]:
-    """Parsed clauses.
+    """Return the parsed clauses.
 
-    Inputs: `raw_text`. Output: `list[tuple[str, list[str]]]`.
+    Inputs: `raw_text` (str). Output: `list[tuple[str, list[str]]]`.
     """
     clauses: list[tuple[str, list[str]]] = []
     for match in _CLAUSE_PATTERN.finditer(str(raw_text or "")):

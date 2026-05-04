@@ -1,7 +1,7 @@
 from typing import Any
 
 class Connection:
-    # Initialize the instance. Inputs: *args, **kwargs. Output: None.
+    # Create the typed stub object. Inputs: *args, **kwargs. Output: None.
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
     # Enter the context manager. Inputs: none. Output: Connection.
     def __enter__(self) -> Connection: ...

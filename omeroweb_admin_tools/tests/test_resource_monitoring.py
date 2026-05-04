@@ -40,7 +40,7 @@ def _make_headers(d: dict) -> HTTPMessage:
 
 
 class _RequestsResponse:
-    """Represent requests response."""
+    """Test double for requests response behavior in this module."""
 
     def __init__(
         self,
@@ -49,7 +49,7 @@ class _RequestsResponse:
         headers: dict[str, str] | None = None,
         payload: bytes = b"",
     ) -> None:
-        """Initialize the instance.
+        """Create `_RequestsResponse` with `status_code`.
 
         Inputs: `status_code`, `headers`, `payload`. Output: None.
         """
@@ -67,17 +67,17 @@ class _RequestsResponse:
 
     @staticmethod
     def close() -> None:
-        """Close the resource.
+        """Close `_RequestsResponse`'s fake resource handle.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         return None
 
 
 def _install_proxy_backend_stub(monkeypatch, handler) -> None:
-    """Install proxy backend stub.
+    """Install the proxy backend stub.
 
-    Inputs: `monkeypatch`, `handler`. Output: None.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `handler`. Output: None.
     """
 
     def fake_backend_request(
@@ -89,10 +89,10 @@ def _install_proxy_backend_stub(monkeypatch, handler) -> None:
         headers,
         timeout_seconds,
     ):
-        """Fake backend request.
+        """Simulate backend request so the surrounding test controls that dependency.
 
-        Inputs: `base_url`, `method`, `request_target`, `data`, `headers`,
-        `timeout_seconds`. Output: `handler` result.
+        Inputs: `base_url` base URL, `method`, `request_target`, `data` payload,
+        `headers`, `timeout_seconds`. Output: `handler` result.
         """
         return handler(
             method,
@@ -112,7 +112,7 @@ def _install_proxy_backend_stub(monkeypatch, handler) -> None:
 def test_load_compose_service_names_reads_service_block(tmp_path, monkeypatch) -> None:
     """Verify load compose service names reads service block.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in load compose service names reads service block.
     """
     compose_text = """
 services:
@@ -134,7 +134,7 @@ networks:
 def test_build_target_service_status_prefers_up() -> None:
     """Verify build target service status prefers up.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build target service status prefers up.
     """
     active_targets = [
         {"labels": {"job": "app"}, "health": "down"},
@@ -172,7 +172,7 @@ def test_build_target_service_status_prefers_up() -> None:
 def test_build_target_service_status_resolves_container_name_variants() -> None:
     """Verify build target service status resolves container name variants.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build target service status resolves container name variants.
     """
     active_targets = [
         {
@@ -211,7 +211,7 @@ def test_build_target_service_status_resolves_container_name_variants() -> None:
 def test_build_target_service_status_uses_recent_container_samples() -> None:
     """Verify build target service status uses recent container samples.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build target service status uses recent container samples.
     """
     active_targets = []
 
@@ -238,9 +238,9 @@ def test_build_target_service_status_uses_recent_container_samples() -> None:
 
 
 def test_origin_from_url_normalizes_scheme_and_host() -> None:
-    """Verify origin from URL normalizes scheme and host.
+    """Check origin from URL normalizes scheme and host parsing against the documented contract.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in origin from URL normalizes scheme and host.
     """
     assert _origin_from_url("https://grafana:3000/path?q=1") == "https://grafana:3000"
     assert _origin_from_url("https://example.org") == "https://example.org"
@@ -250,17 +250,17 @@ def test_origin_from_url_normalizes_scheme_and_host() -> None:
 def test_proxy_http_request_rewrites_origin_headers_when_enabled(monkeypatch) -> None:
     """Verify proxy HTTP request rewrites origin headers when enabled.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy HTTP request rewrites origin headers when enabled.
     """
     captured = {}
 
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
-        """Fake request.
+        """Simulate request so the surrounding test controls that dependency.
 
-        Inputs: `method`, `url`, `data`, `headers`, `timeout`, `allow_redirects`.
-        Output: `_RequestsResponse` result.
+        Inputs: `method`, `url` URL, `data` payload, `headers`, `timeout` timeout
+        seconds, `allow_redirects`. Output: `_RequestsResponse` result.
         """
         captured["method"] = method
         captured["url"] = url
@@ -300,17 +300,17 @@ def test_proxy_http_request_rewrites_origin_headers_when_enabled(monkeypatch) ->
 def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
     """Verify proxy HTTP request forwards post body.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy HTTP request forwards post body.
     """
     captured = {}
 
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
-        """Fake request.
+        """Simulate request so the surrounding test controls that dependency.
 
-        Inputs: `method`, `url`, `data`, `headers`, `timeout`, `allow_redirects`.
-        Output: `_RequestsResponse` result.
+        Inputs: `method`, `url` URL, `data` payload, `headers`, `timeout` timeout
+        seconds, `allow_redirects`. Output: `_RequestsResponse` result.
         """
         captured["method"] = method
         captured["data"] = data
@@ -350,19 +350,19 @@ def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
 
 
 def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> None:
-    """Verify proxy HTTP request forwards auth and cookie headers.
+    """Verify the proxy HTTP request forwards auth and cookie headers safety boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when proxy HTTP request forwards auth and cookie headers accepts unsafe input.
     """
     captured = {}
 
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
-        """Fake request.
+        """Simulate request so the surrounding test controls that dependency.
 
-        Inputs: `method`, `url`, `data`, `headers`, `timeout`, `allow_redirects`.
-        Output: `_RequestsResponse` result.
+        Inputs: `method`, `url` URL, `data` payload, `headers`, `timeout` timeout
+        seconds, `allow_redirects`. Output: `_RequestsResponse` result.
         """
         captured["headers"] = dict(headers or {})
         return _RequestsResponse(
@@ -408,9 +408,9 @@ def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> Non
 
 
 def test_normalize_proxy_request_target_rejects_traversal() -> None:
-    """Verify normalize proxy request target rejects traversal.
+    """Confirm normalize proxy request target rejects traversal is rejected at the boundary.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: admin-tool fixtures. Output: fails on regressions in normalize proxy request target rejects traversal.
     """
     try:
         _normalize_proxy_request_target("../api/admin")
@@ -421,9 +421,9 @@ def test_normalize_proxy_request_target_rejects_traversal() -> None:
 
 
 def test_normalize_proxy_request_target_rejects_absolute_url() -> None:
-    """Verify normalize proxy request target rejects absolute URL.
+    """Confirm normalize proxy request target rejects absolute URL is rejected at the boundary.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: admin-tool fixtures. Output: fails on regressions in normalize proxy request target rejects absolute URL.
     """
     try:
         _normalize_proxy_request_target(
@@ -436,9 +436,9 @@ def test_normalize_proxy_request_target_rejects_absolute_url() -> None:
 
 
 def test_build_proxy_target_url_rejects_query_or_fragment_in_path() -> None:
-    """Verify build proxy target URL rejects query or fragment in path.
+    """Confirm build proxy target URL rejects query or fragment in path is rejected at the boundary.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: admin-tool fixtures. Output: fails on regressions when build proxy target URL rejects query or fragment in path accepts unsafe input.
     """
     for path in ("api/search?orgId=1", "api/search#fragment"):
         try:
@@ -457,9 +457,9 @@ def test_build_proxy_target_url_rejects_query_or_fragment_in_path() -> None:
 
 
 def test_build_proxy_target_url_rejects_backend_without_hostname() -> None:
-    """Verify build proxy target URL rejects backend without hostname.
+    """Confirm build proxy target URL rejects backend without hostname is rejected at the boundary.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build proxy target URL rejects backend without hostname.
     """
     try:
         _build_proxy_target_url("https://:3000", "api/search", "")
@@ -470,9 +470,10 @@ def test_build_proxy_target_url_rejects_backend_without_hostname() -> None:
 
 
 def test_build_proxy_target_url_rejects_origin_drift(monkeypatch) -> None:
-    """Verify build proxy target URL rejects origin drift.
+    """Confirm build proxy target URL rejects origin drift is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in build proxy target URL rejects origin drift.
+    AssertionError when validation or the called operation fails.
     """
     urlunparse_results = iter(
         ("https://grafana:3000", "https://unexpected.example/api/search")
@@ -491,9 +492,9 @@ def test_build_proxy_target_url_rejects_origin_drift(monkeypatch) -> None:
 
 
 def test_build_proxy_target_url_quotes_path_and_preserves_query() -> None:
-    """Verify build proxy target URL quotes path and preserves query.
+    """Check that build proxy target URL quotes path and preserves query remains stable.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions when build proxy target URL quotes path and preserves query accepts unsafe input.
     """
     path, target_url = _build_proxy_target_url(
         "https://grafana:3000/root/",
@@ -513,9 +514,9 @@ def test_build_proxy_target_url_quotes_path_and_preserves_query() -> None:
 
 
 def test_build_proxy_request_target_rejects_control_characters() -> None:
-    """Verify build proxy request target rejects control characters.
+    """Confirm build proxy request target rejects control characters is rejected at the boundary.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build proxy request target rejects control characters.
     """
     try:
         _build_proxy_request_target("https://grafana:3000/api/search?query=up\x7f")
@@ -530,7 +531,7 @@ def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
 ) -> None:
     """Verify send proxy backend request uses validated origin and request target.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in send proxy backend request uses validated origin and request target.
     """
     captured = {}
 
@@ -540,9 +541,9 @@ def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
         status = 202
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `DummyRawResponse` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.msg = _make_headers({"Content-Type": "application/json"})
 
@@ -558,7 +559,7 @@ def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
         """Test double for dummy connection."""
 
         def __init__(self, host, *, port, timeout):
-            """Initialize the instance.
+            """Create `DummyConnection` with `host`.
 
             Inputs: `host`, `port`, `timeout`. Output: None.
             """
@@ -569,7 +570,7 @@ def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
 
         @staticmethod
         def request(method, target, *, body, headers):
-            """Request.
+            """Request the request for `DummyConnection`.
 
             Inputs: `method`, `target`, `body`, `headers`. Output: None.
             """
@@ -587,9 +588,9 @@ def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
             return DummyRawResponse()
 
         def close(self):
-            """Close the resource.
+            """Close `DummyConnection`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
             captured["closed"] = True
@@ -624,9 +625,9 @@ def test_send_proxy_backend_request_uses_validated_origin_and_request_target(
 
 
 def test_send_proxy_backend_request_rejects_backend_without_hostname() -> None:
-    """Verify send proxy backend request rejects backend without hostname.
+    """Confirm send proxy backend request rejects backend without hostname is rejected at the boundary.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: admin-tool fixtures. Output: fails on regressions in send proxy backend request rejects backend without hostname.
     """
     try:
         _send_proxy_backend_request(
@@ -646,7 +647,7 @@ def test_send_proxy_backend_request_rejects_backend_without_hostname() -> None:
 def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> None:
     """Verify proxy HTTP request rewrites relative location header.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy HTTP request rewrites relative location header.
     """
     _install_proxy_backend_stub(
         monkeypatch,
@@ -684,9 +685,9 @@ def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> No
 
 
 def test_rewrite_proxied_location_blocks_external_redirects() -> None:
-    """Verify rewrite proxied location blocks external redirects.
+    """Confirm rewrite proxied location blocks external redirects is rejected at the boundary.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in rewrite proxied location blocks external redirects.
     """
     location = _rewrite_proxied_location(
         "https://evil.example.org/steal",
@@ -702,7 +703,7 @@ def test_proxy_http_request_rewrites_non_root_relative_location_header(
 ) -> None:
     """Verify proxy HTTP request rewrites non root relative location header.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy HTTP request rewrites non root relative location header.
     """
     _install_proxy_backend_stub(
         monkeypatch,
@@ -737,9 +738,9 @@ def test_proxy_http_request_rewrites_non_root_relative_location_header(
 
 
 def test_proxy_http_request_rejects_traversal_before_backend_call(monkeypatch) -> None:
-    """Verify proxy HTTP request rejects traversal before backend call.
+    """Confirm proxy HTTP request rejects traversal before backend call is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy HTTP request rejects traversal before backend call.
     """
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._send_proxy_backend_request",
@@ -768,9 +769,9 @@ def test_proxy_http_request_rejects_traversal_before_backend_call(monkeypatch) -
 def test_grafana_proxy_home_fallback_response_sanitizes_dashboard_segments(
     monkeypatch,
 ) -> None:
-    """Verify grafana proxy home fallback response sanitizes dashboard segments.
+    """Check that grafana proxy home fallback response sanitizes dashboard segments keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in grafana proxy home fallback response sanitizes dashboard segments.
     """
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "../../bad uid")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server dashboard")
@@ -789,7 +790,7 @@ def test_grafana_proxy_home_fallback_response_sanitizes_dashboard_segments(
 def test_is_internal_hostname_handles_compose_and_local_hosts() -> None:
     """Verify is internal hostname handles compose and local hosts.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in is internal hostname handles compose and local hosts.
     """
     assert _is_internal_hostname("grafana") is True
     assert _is_internal_hostname("localhost") is True
@@ -801,7 +802,7 @@ def test_is_internal_hostname_handles_compose_and_local_hosts() -> None:
 def test_build_public_service_url_uses_request_host_and_public_port() -> None:
     """Verify build public service URL uses request host and public port.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build public service URL uses request host and public port.
     """
     built = _build_public_service_url(
         "https://grafana:3000",
@@ -814,9 +815,9 @@ def test_build_public_service_url_uses_request_host_and_public_port() -> None:
 
 
 def test_build_public_service_url_preserves_base_path() -> None:
-    """Verify build public service URL preserves base path.
+    """Check that build public service URL preserves base path remains stable.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions when build public service URL preserves base path accepts unsafe input.
     """
     built = _build_public_service_url(
         "https://grafana:3000/grafana",
@@ -833,7 +834,8 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
 ) -> None:
     """Verify resource monitoring data prefers public URLs from request host.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resource monitoring data prefers public URLs from request host.
+    AssertionError when validation or the called operation fails.
     """
     request = RequestFactory().get("/admin_tools/resource-monitoring/data/")
 
@@ -867,10 +869,10 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
     )
 
     def fake_get(url, timeout=5.0, allow_redirects=True, params=None):
-        """Fake get.
+        """Simulate get so the surrounding test controls that dependency.
 
-        Inputs: `url`, `timeout`, `allow_redirects`, `params`. Output:
-        `_RequestsResponse` result. Raises on invalid or unavailable state.
+        Inputs: `url` URL, `timeout` timeout seconds, `allow_redirects`, `params` SQL
+        parameters. Output: `_RequestsResponse` result. Raises: AssertionError when validation or the called operation fails.
         """
         if "api/v1/targets" in url:
             return _RequestsResponse(
@@ -931,9 +933,9 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
 
 
 def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> None:
-    """Verify resource monitoring data keeps external URLs optional.
+    """Check that resource monitoring data keeps external URLs optional remains stable.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resource monitoring data keeps external URLs optional.
     """
     request = RequestFactory().get("/admin_tools/resource-monitoring/data/")
 
@@ -967,10 +969,10 @@ def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> N
     )
 
     def fake_get(url, timeout=5.0, allow_redirects=True, params=None):
-        """Fake get.
+        """Simulate get so the surrounding test controls that dependency.
 
-        Inputs: `url`, `timeout`, `allow_redirects`, `params`. Output:
-        `_RequestsResponse` result.
+        Inputs: `url` URL, `timeout` timeout seconds, `allow_redirects`, `params` SQL
+        parameters. Output: `_RequestsResponse` result.
         """
         if "api/v1/targets" in url:
             return _RequestsResponse(
@@ -1020,7 +1022,7 @@ def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> N
 def test_build_target_service_status_prefers_docker_healthcheck_status() -> None:
     """Verify build target service status prefers docker healthcheck status.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build target service status prefers docker healthcheck status.
     """
     active_targets = [
         {"labels": {"job": "db"}, "health": "up"},
@@ -1063,7 +1065,7 @@ def test_build_target_service_status_uses_runtime_health_when_config_unavailable
 ):
     """Verify build target service status uses runtime health when config unavailable.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build target service status uses runtime health when config unavailable.
     """
     statuses = _build_target_service_status(
         active_targets=[{"labels": {"job": "db"}, "health": "up"}],
@@ -1094,7 +1096,7 @@ def test_build_target_service_status_uses_runtime_health_when_config_unavailable
 def test_build_target_service_status_reports_starting_healthcheck_state() -> None:
     """Verify build target service status reports starting healthcheck state.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build target service status reports starting healthcheck state.
     """
     statuses = _build_target_service_status(
         active_targets=[{"labels": {"job": "db"}, "health": "up"}],
@@ -1116,9 +1118,9 @@ def test_build_target_service_status_reports_starting_healthcheck_state() -> Non
 def test_build_target_service_status_preserves_running_up_without_runtime_health() -> (
     None
 ):
-    """Verify build target service status preserves running up without runtime health.
+    """Check that build target service status preserves running up without runtime health remains stable.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build target service status preserves running up without runtime health.
     """
     statuses = _build_target_service_status(
         active_targets=[{"labels": {"job": "db"}, "health": "up"}],
@@ -1140,7 +1142,7 @@ def test_build_target_service_status_preserves_running_up_without_runtime_health
 def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
     """Verify grafana proxy forwards subpath and query.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in grafana proxy forwards subpath and query.
     """
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure/server-infrastructure",
@@ -1168,13 +1170,11 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
     ):
-        """Fake proxy HTTP request.
+        """Simulate proxy HTTP request so the surrounding test controls that dependency.
 
-        Inputs: `django_request`, `base_url`, `path`, `query`, `proxy_prefix`,
-        `rewrite_origin_headers`, `extra_forwarded_headers`. Output: `DummyResponse`
-        result.
-
-        result.
+        Inputs: `django_request`, `base_url` base URL, `path` path, `query`,
+        `proxy_prefix`, `rewrite_origin_headers`, `extra_forwarded_headers`. Output:
+        `DummyResponse` result.
         """
         captured.update(
             {
@@ -1216,9 +1216,9 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
 
 
 def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
-    """Verify grafana proxy root path forwards empty subpath.
+    """Verify the grafana proxy root path forwards empty subpath safety boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when grafana proxy root path forwards empty subpath accepts unsafe input.
     """
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/grafana-proxy/",
@@ -1246,13 +1246,11 @@ def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
     ):
-        """Fake proxy HTTP request.
+        """Simulate proxy HTTP request so the surrounding test controls that dependency.
 
-        Inputs: `django_request`, `base_url`, `path`, `query`, `proxy_prefix`,
-        `rewrite_origin_headers`, `extra_forwarded_headers`. Output: `DummyResponse`
-        result.
-
-        result.
+        Inputs: `django_request`, `base_url` base URL, `path` path, `query`,
+        `proxy_prefix`, `rewrite_origin_headers`, `extra_forwarded_headers`. Output:
+        `DummyResponse` result.
         """
         captured.update(
             {
@@ -1285,9 +1283,9 @@ def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
 
 
 def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
-    """Verify prometheus proxy root path forwards empty subpath.
+    """Verify the prometheus proxy root path forwards empty subpath safety boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when prometheus proxy root path forwards empty subpath accepts unsafe input.
     """
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/prometheus-proxy/",
@@ -1315,13 +1313,11 @@ def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
     ):
-        """Fake proxy HTTP request.
+        """Simulate proxy HTTP request so the surrounding test controls that dependency.
 
-        Inputs: `django_request`, `base_url`, `path`, `query`, `proxy_prefix`,
-        `rewrite_origin_headers`, `extra_forwarded_headers`. Output: `DummyResponse`
-        result.
-
-        result.
+        Inputs: `django_request`, `base_url` base URL, `path` path, `query`,
+        `proxy_prefix`, `rewrite_origin_headers`, `extra_forwarded_headers`. Output:
+        `DummyResponse` result.
         """
         captured.update(
             {
@@ -1357,9 +1353,9 @@ def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
 
 
 def test_safe_request_host_falls_back_when_get_host_fails() -> None:
-    """Verify safe request host falls back when get host fails.
+    """Confirm safe request host falls back when get host fails exposes the expected failure.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: admin-tool fixtures. Output: fails on regressions in safe request host falls back when get host fails.
     """
     from omeroweb_admin_tools.views.index_view import _safe_request_host
 
@@ -1370,9 +1366,9 @@ def test_safe_request_host_falls_back_when_get_host_fails() -> None:
 
         @staticmethod
         def get_host() -> str:
-            """Return host.
+            """Return the host for `DummyRequest`.
 
-            Inputs: none. Output: `str`. Raises on invalid or unavailable state.
+            Inputs: none. Output: `str`. Raises: ValueError for the exercised failure path.
             """
             raise ValueError("invalid host header")
 
@@ -1382,7 +1378,7 @@ def test_safe_request_host_falls_back_when_get_host_fails() -> None:
 def test_build_proxy_backend_urls_prefers_internal_and_deduplicates() -> None:
     """Verify build proxy backend URLs prefers internal and deduplicates.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build proxy backend URLs prefers internal and deduplicates.
     """
     assert _build_proxy_backend_urls("https://grafana:3000", "") == [
         "https://grafana:3000"
@@ -1400,9 +1396,9 @@ def test_build_proxy_backend_urls_prefers_internal_and_deduplicates() -> None:
 
 
 def test_grafana_unavailable_response_has_actionable_metadata() -> None:
-    """Verify grafana unavailable response has actionable metadata.
+    """Verify grafana unavailable response has actionable metadata result shape.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in grafana unavailable response has actionable metadata.
     """
     from omeroweb_admin_tools.views.index_view import _grafana_unavailable_response
 
@@ -1425,7 +1421,7 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
 ) -> None:
     """Verify grafana proxy falls back to public URL on backend unreachable.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in grafana proxy falls back to public URL on backend unreachable.
     """
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure/server-infrastructure",
@@ -1449,7 +1445,7 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
         """Test double for dummy response."""
 
         def __init__(self, status_code: int):
-            """Initialize the instance.
+            """Create `DummyResponse` with `status_code`.
 
             Inputs: `status_code`. Output: None.
             """
@@ -1466,13 +1462,11 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
     ):
-        """Fake proxy HTTP request.
+        """Simulate proxy HTTP request so the surrounding test controls that dependency.
 
-        Inputs: `django_request`, `base_url`, `path`, `query`, `proxy_prefix`,
-        `rewrite_origin_headers`, `extra_forwarded_headers`. Output: `DummyResponse`
-        result.
-
-        result.
+        Inputs: `django_request`, `base_url` base URL, `path` path, `query`,
+        `proxy_prefix`, `rewrite_origin_headers`, `extra_forwarded_headers`. Output:
+        `DummyResponse` result.
         """
         attempts.append(base_url)
         if base_url == "https://grafana:3000":
@@ -1499,9 +1493,9 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
 def test_grafana_proxy_renders_custom_unavailable_page_for_gateway_errors(
     monkeypatch,
 ) -> None:
-    """Verify grafana proxy renders custom unavailable page for gateway errors.
+    """Check grafana proxy renders custom unavailable page for gateway errors renders the expected surface.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in grafana proxy renders custom unavailable page for gateway errors.
     """
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure/server-infrastructure",
@@ -1522,7 +1516,7 @@ def test_grafana_proxy_renders_custom_unavailable_page_for_gateway_errors(
         """Test double for dummy response."""
 
         def __init__(self, status_code: int):
-            """Initialize the instance.
+            """Create `DummyResponse` with `status_code`.
 
             Inputs: `status_code`. Output: None.
             """
@@ -1551,16 +1545,16 @@ def test_grafana_proxy_renders_custom_unavailable_page_for_gateway_errors(
 def test_is_behind_reverse_proxy_detects_forwarded_proto() -> None:
     """Verify is behind reverse proxy detects forwarded proto.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in is behind reverse proxy detects forwarded proto.
     """
     request = RequestFactory().get("/test/", HTTP_X_FORWARDED_PROTO="https")
     assert _is_behind_reverse_proxy(request) is True
 
 
 def test_is_behind_reverse_proxy_returns_false_for_direct_access() -> None:
-    """Verify is behind reverse proxy returns false for direct access.
+    """Verify is behind reverse proxy returns false for direct access result shape.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in is behind reverse proxy returns false for direct access.
     """
     request = RequestFactory().get("/test/")
     assert _is_behind_reverse_proxy(request) is False
@@ -1569,7 +1563,7 @@ def test_is_behind_reverse_proxy_returns_false_for_direct_access() -> None:
 def test_build_public_service_url_omits_port_when_proxied() -> None:
     """Verify build public service URL omits port when proxied.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build public service URL omits port when proxied.
     """
     built = _build_public_service_url(
         "https://grafana:3000",
@@ -1584,7 +1578,7 @@ def test_build_public_service_url_omits_port_when_proxied() -> None:
 def test_build_public_service_url_uses_forwarded_proto() -> None:
     """Verify build public service URL uses forwarded proto.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build public service URL uses forwarded proto.
     """
     built = _build_public_service_url(
         "https://grafana:3000",
@@ -1599,7 +1593,7 @@ def test_build_public_service_url_uses_forwarded_proto() -> None:
 def test_build_public_service_url_direct_access_unchanged() -> None:
     """Verify build public service URL direct access unchanged.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build public service URL direct access unchanged.
     """
     built = _build_public_service_url(
         "https://grafana:3000",
@@ -1611,9 +1605,9 @@ def test_build_public_service_url_direct_access_unchanged() -> None:
 
 
 def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
-    """The proxy should rewrite Grafana appSubUrl to the proxy prefix.
+    """Verify proxy rewrites app sub URL for grafana.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy rewrites app sub URL for grafana.
     """
     _install_proxy_backend_stub(
         monkeypatch,
@@ -1655,7 +1649,7 @@ def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
 def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:
     """Verify proxy rewrites app URL for grafana.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy rewrites app URL for grafana.
     """
     _install_proxy_backend_stub(
         monkeypatch,
@@ -1696,7 +1690,8 @@ def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:
 def test_grafana_proxy_root_redirects_to_default_dashboard(monkeypatch) -> None:
     """Verify grafana proxy root redirects to default dashboard.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in grafana proxy root redirects to default dashboard.
+    AssertionError when validation or the called operation fails.
     """
     from omeroweb_admin_tools.views.index_view import grafana_proxy
 
@@ -1714,12 +1709,10 @@ def test_grafana_proxy_root_redirects_to_default_dashboard(monkeypatch) -> None:
     )
 
     def fail_if_called(*args, **kwargs):
-        """Fail if called.
+        """Fail immediately when an unexpected branch invokes this helper.
 
-        Inputs: `*args`, `**kwargs`. Output: None. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        None. Raises: AssertionError when validation or the called operation fails.
         """
         raise AssertionError(
             "_proxy_http_request should not be called for Grafana root"
@@ -1741,7 +1734,7 @@ def test_grafana_proxy_root_redirects_to_default_dashboard(monkeypatch) -> None:
 def test_prometheus_proxy_root_redirects_to_targets(monkeypatch) -> None:
     """Verify prometheus proxy root redirects to targets.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in prometheus proxy root redirects to targets.
     """
     from omeroweb_admin_tools.views.index_view import prometheus_proxy
 
@@ -1773,9 +1766,9 @@ def test_prometheus_proxy_root_redirects_to_targets(monkeypatch) -> None:
 
 
 def test_grafana_proxy_root_redirect_sanitizes_env_segments(monkeypatch) -> None:
-    """Verify grafana proxy root redirect sanitizes environment segments.
+    """Check that grafana proxy root redirect sanitizes env segments keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in grafana proxy root redirect sanitizes env segments.
     """
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "https://evil.example")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "../escape")
@@ -1792,9 +1785,9 @@ def test_grafana_proxy_root_redirect_sanitizes_env_segments(monkeypatch) -> None
 
 
 def test_logs_data_runtime_error_is_sanitized(monkeypatch) -> None:
-    """Verify logs data runtime error is sanitized.
+    """Confirm logs data runtime error is sanitized exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when logs data runtime error is sanitized stops reporting the expected error.
     """
     request = RequestFactory().get(
         "/omeroweb_admin_tools/logs/data/",
@@ -1830,7 +1823,7 @@ def test_logs_data_runtime_error_is_sanitized(monkeypatch) -> None:
 def test_logs_data_filters_entries_and_validates_inputs(monkeypatch) -> None:
     """Verify logs data filters entries and validates inputs.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in logs data filters entries and validates inputs.
     """
     captured = {}
 
@@ -1844,10 +1837,10 @@ def test_logs_data_filters_entries_and_validates_inputs(monkeypatch) -> None:
         since_ns,
         text_query,
     ):
-        """Fake fetch.
+        """Return the fake fetch.
 
         Inputs: `log_config`, `containers`, `lookback_seconds`, `max_entries`,
-        `internal_files`, `since_ns`, `text_query`. Output: list.
+        `internal_files`, `since_ns`, `text_query`. Output: `list`.
         """
         captured.update(
             {
@@ -1941,9 +1934,9 @@ def test_logs_data_filters_entries_and_validates_inputs(monkeypatch) -> None:
 
 
 def test_logs_data_rejects_invalid_query_parameters(monkeypatch) -> None:
-    """Verify logs data rejects invalid query parameters.
+    """Confirm logs data rejects invalid query parameters is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in logs data rejects invalid query parameters.
     """
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.utils.current_username",
@@ -2020,7 +2013,8 @@ def test_logs_data_rejects_invalid_query_parameters(monkeypatch) -> None:
 def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -> None:
     """Verify resource monitoring suppresses external URL behind proxy.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resource monitoring suppresses external URL behind proxy.
+    AssertionError when validation or the called operation fails.
     """
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/data/",
@@ -2056,10 +2050,10 @@ def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -
     )
 
     def fake_get(url, timeout=5.0, allow_redirects=True, params=None):
-        """Fake get.
+        """Simulate get so the surrounding test controls that dependency.
 
-        Inputs: `url`, `timeout`, `allow_redirects`, `params`. Output:
-        `_RequestsResponse` result. Raises on invalid or unavailable state.
+        Inputs: `url` URL, `timeout` timeout seconds, `allow_redirects`, `params` SQL
+        parameters. Output: `_RequestsResponse` result. Raises: AssertionError when validation or the called operation fails.
         """
         if "api/v1/targets" in url:
             return _RequestsResponse(
@@ -2090,9 +2084,9 @@ def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -
 
 
 def test_cookie_path_for_proxy_rewrites_root_to_proxy_prefix() -> None:
-    """Verify cookie path for proxy rewrites root to proxy prefix.
+    """Verify the cookie path for proxy rewrites root to proxy prefix safety boundary.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions when cookie path for proxy rewrites root to proxy prefix accepts unsafe input.
     """
     assert (
         _cookie_path_for_proxy("/", "/admin_tools/resource-monitoring/grafana-proxy")
@@ -2101,9 +2095,9 @@ def test_cookie_path_for_proxy_rewrites_root_to_proxy_prefix() -> None:
 
 
 def test_proxy_rewrites_set_cookie_path_for_grafana(monkeypatch) -> None:
-    """Verify proxy rewrites set cookie path for grafana.
+    """Verify the proxy rewrites set cookie path for grafana safety boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when proxy rewrites set cookie path for grafana accepts unsafe input.
     """
     _install_proxy_backend_stub(
         monkeypatch,
@@ -2142,19 +2136,19 @@ def test_proxy_rewrites_set_cookie_path_for_grafana(monkeypatch) -> None:
 
 
 def test_proxy_http_request_forwards_extra_headers(monkeypatch) -> None:
-    """Extra_forwarded_headers passes backend-specific headers like X-Grafana-Csrf-Token.
+    """Verify proxy HTTP request forwards extra headers.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy HTTP request forwards extra headers.
     """
     captured = {}
 
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
-        """Fake request.
+        """Simulate request so the surrounding test controls that dependency.
 
-        Inputs: `method`, `url`, `data`, `headers`, `timeout`, `allow_redirects`.
-        Output: `_RequestsResponse` result.
+        Inputs: `method`, `url` URL, `data` payload, `headers`, `timeout` timeout
+        seconds, `allow_redirects`. Output: `_RequestsResponse` result.
         """
         captured["headers"] = dict(headers or {})
         return _RequestsResponse(200, payload=b'{"ok":true}')
@@ -2189,19 +2183,19 @@ def test_proxy_http_request_forwards_extra_headers(monkeypatch) -> None:
 
 
 def test_proxy_http_request_ignores_absent_extra_headers(monkeypatch) -> None:
-    """Extra headers that are absent in the request are silently skipped.
+    """Verify proxy HTTP request ignores absent extra headers.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in proxy HTTP request ignores absent extra headers.
     """
     captured = {}
 
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
-        """Fake request.
+        """Simulate request so the surrounding test controls that dependency.
 
-        Inputs: `method`, `url`, `data`, `headers`, `timeout`, `allow_redirects`.
-        Output: `_RequestsResponse` result.
+        Inputs: `method`, `url` URL, `data` payload, `headers`, `timeout` timeout
+        seconds, `allow_redirects`. Output: `_RequestsResponse` result.
         """
         captured["headers"] = dict(headers or {})
         return _RequestsResponse(200, payload=b'{"ok":true}')
@@ -2226,9 +2220,9 @@ def test_proxy_http_request_ignores_absent_extra_headers(monkeypatch) -> None:
 
 
 def test_grafana_proxy_post_is_protected_by_django_csrf_middleware() -> None:
-    """Grafana proxy POSTs must keep Django CSRF enforcement enabled.
+    """Verify grafana proxy post is protected by django csrf middleware.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in grafana proxy post is protected by django csrf middleware.
     """
     from omeroweb_admin_tools.views import index_view
 
@@ -2250,9 +2244,9 @@ def test_grafana_proxy_post_is_protected_by_django_csrf_middleware() -> None:
 
 
 def test_prometheus_proxy_is_not_csrf_exempt() -> None:
-    """Prometheus proxy must NOT be csrf_exempt — it only allows safe methods.
+    """Verify prometheus proxy is not csrf exempt.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in prometheus proxy is not csrf exempt.
     """
     from omeroweb_admin_tools.views import index_view
 

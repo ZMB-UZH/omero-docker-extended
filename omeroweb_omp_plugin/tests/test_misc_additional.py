@@ -15,17 +15,17 @@ from omeroweb_omp_plugin.views import help_view, user_settings_view
 
 
 def _json_payload(response):
-    """JSON payload.
+    """Return the JSON payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_http_utils_cover_response_and_stream_fallback_paths():
-    """Verify HTTP utils cover response and stream fallback paths.
+    """Verify HTTP utils cover response and stream fallback paths result shape.
 
-    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    Inputs: OMP service fakes. Output: fails on regressions in HTTP utils cover response and stream fallback paths.
     """
     nested_response = SimpleNamespace(
         json=lambda: {"message": {"message": "nested detail"}},
@@ -45,13 +45,13 @@ def test_http_utils_cover_response_and_stream_fallback_paths():
     )
 
     class _UnreadableBody:
-        """Represent unreadable body."""
+        """Test double for unreadable body behavior in this module."""
 
         @staticmethod
         def read():
             """Read data from the resource.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             raise RuntimeError("unreadable")
 
@@ -67,9 +67,9 @@ def test_http_utils_cover_response_and_stream_fallback_paths():
 def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
     monkeypatch,
 ):
-    """Verify core wrapper and filename parser paths follow runtime contracts.
+    """Check core wrapper and filename parser paths follow runtime contracts parsing against the documented contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in core wrapper and filename parser paths follow runtime contracts.
     """
     monkeypatch.setattr(
         annotation_service,
@@ -157,16 +157,17 @@ def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
 def test_core_delete_existing_annotations_supports_runtime_positional_signature(
     monkeypatch,
 ):
-    """Verify core delete existing annotations supports runtime positional signature.
+    """Check core delete existing annotations supports runtime positional signature cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: tuple.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in core delete existing annotations supports runtime positional signature.
     """
     captured = {}
 
     def fake_delete(conn, update, img, var_names, mode):
-        """Fake delete.
+        """Simulate delete so the surrounding test controls that dependency.
 
-        Inputs: `conn`, `update`, `img`, `var_names`, `mode`. Output: tuple.
+        Inputs: `conn` OMERO gateway connection, `update`, `img`, `var_names`, `mode`.
+        Output: `tuple`.
         """
         captured["args"] = (conn, update, img, var_names, mode)
         return (1, 2, 3)
@@ -188,12 +189,10 @@ def test_core_delete_existing_annotations_supports_runtime_positional_signature(
 def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
     monkeypatch,
 ):
-    """Verify core delete existing annotations falls back to ID based deletion.
+    """Check core delete existing annotations falls back to ID based deletion cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: `_Update` result or None. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in core delete existing annotations falls back to ID based deletion.
+    AssertionError when validation or the called operation fails.
     """
     deleted = []
 
@@ -201,29 +200,29 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
         """Test double for stub."""
 
         def setId(self, value):
-            """Set ID.
+            """Set the ID for `_Stub`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.id = value
 
     class _Update:
-        """Represent update."""
+        """Test double for update behavior in this module."""
 
         @staticmethod
         def deleteObject(obj):
-            """Delete Object.
+            """Delete the object for `_Update`.
 
             Inputs: `obj`. Output: None.
             """
             deleted.append(obj.id)
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         @staticmethod
         def getObject(*_args):
-            """Return Object.
+            """Return the object for `_Conn`.
 
             Inputs: `*_args`. Output: None.
             """
@@ -231,7 +230,7 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
 
         @staticmethod
         def getUpdateService():
-            """Return Update Service.
+            """Return `_Conn`'s fake update service.
 
             Inputs: none. Output: `_Update` result.
             """
@@ -239,19 +238,18 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
 
         @staticmethod
         def deleteObjects(kind, object_ids, wait=True):
-            """Delete Objects.
+            """Delete the objects for `_Conn`.
 
             Inputs: `kind`, `object_ids`, `wait`. Output: None.
             """
             deleted.extend((kind, object_id, wait) for object_id in object_ids)
 
     def fake_delete(conn, update, img, var_names, mode):
-        """Fake delete.
+        """Simulate delete so the surrounding test controls that dependency.
 
-        Inputs: `conn`, `update`, `img`, `var_names`, `mode`. Output: None. Raises on
-        invalid or unavailable state.
-
-        invalid or unavailable state.
+        Inputs: `conn` OMERO gateway connection, `update`, `img`, `var_names`, `mode`.
+        Output: None. Raises: AssertionError when validation or external operations
+        fail.
         """
         raise AssertionError("legacy id-based fallback should handle this path")
 
@@ -284,9 +282,9 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
 def test_help_page_and_user_settings_views_cover_success_and_error_paths(
     monkeypatch,
 ):
-    """Verify help page and user settings views cover success and error paths.
+    """Confirm help page and user settings views cover success and error paths exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when help page and user settings views cover success and error paths stops reporting the expected error.
     """
     factory = RequestFactory()
 
@@ -381,12 +379,10 @@ def test_help_page_and_user_settings_views_cover_success_and_error_paths(
 def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
     monkeypatch,
 ):
-    """Verify core delete helpers cover signature and argument validation edges.
+    """Check core delete helpers cover signature and argument validation edges cleanup behavior.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in core delete helpers cover signature and argument validation edges.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     monkeypatch.setattr(
         core.inspect,
@@ -407,32 +403,32 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
         """Test double for stub."""
 
         def setId(self, value):
-            """Set ID.
+            """Set the ID for `_Stub`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.id = value
 
     class _Update:
-        """Represent update."""
+        """Test double for update behavior in this module."""
 
         @staticmethod
         def deleteObject(obj):
-            """Delete Object.
+            """Delete the object for `_Update`.
 
             Inputs: `obj`. Output: None.
             """
             deleted.append(obj)
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         @staticmethod
         def getObject(object_type, object_id):
-            """Return Object.
+            """Return the object for `_Conn`.
 
-            Inputs: `object_type`, `object_id`. Output: `SimpleNamespace` result. Raises
-            on invalid or unavailable state.
+            Inputs: `object_type`, `object_id`. Output: `SimpleNamespace` result.
+            Raises: RuntimeError when validation or the called operation fails.
             """
             if object_type == "ImageAnnotationLink":
                 raise RuntimeError("lookup failed")
@@ -440,7 +436,7 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
 
         @staticmethod
         def getUpdateService():
-            """Return Update Service.
+            """Return `_Conn`'s fake update service.
 
             Inputs: none. Output: `_Update` result.
             """
@@ -448,7 +444,7 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
 
         @staticmethod
         def deleteObjects(kind, object_ids, wait=True):
-            """Delete Objects.
+            """Delete the objects for `_Conn`.
 
             Inputs: `kind`, `object_ids`, `wait`. Output: None.
             """
@@ -471,11 +467,11 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
     assert deleted[1] == ("Annotation", 7, True)
 
     class _ConnWithLoadedLink:
-        """Represent conn with loaded link."""
+        """Test double for conn with loaded link behavior in this module."""
 
         @staticmethod
         def getObject(object_type, object_id):
-            """Return Object.
+            """Return the object for `_ConnWithLoadedLink`.
 
             Inputs: `object_type`, `object_id`. Output: `SimpleNamespace` result.
             """

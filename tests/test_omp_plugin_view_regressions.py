@@ -18,9 +18,9 @@ if str(REPO_ROOT) not in sys.path:
 
 
 def _install_import_stubs() -> None:
-    """Install import stubs.
+    """Install the import stubs.
 
-    Inputs: none. Output: None.
+    Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
     """
     if "django" not in sys.modules:
         sys.modules["django"] = types.ModuleType("django")
@@ -34,16 +34,18 @@ def _install_import_stubs() -> None:
     django_http = sys.modules.setdefault("django.http", types.ModuleType("django.http"))
 
     def _json_response(payload=None, status=200, **kwargs):
-        """JSON response.
+        """Return the JSON response.
 
-        Inputs: `payload`, `status`, `**kwargs`. Output: dict.
+        Inputs: `payload` payload, `status` status, `**kwargs` keyword arguments.
+        Output: `dict`.
         """
         return {"payload": payload, "status": status, **kwargs}
 
     def _http_response(content="", status=200, **kwargs):
-        """HTTP response.
+        """Return the HTTP response.
 
-        Inputs: `content`, `status`, `**kwargs`. Output: dict.
+        Inputs: `content`, `status` status, `**kwargs` keyword arguments. Output:
+        `dict`.
         """
         return {"content": content, "status": status, **kwargs}
 
@@ -99,10 +101,10 @@ def _install_import_stubs() -> None:
     portalocker_module = types.ModuleType("portalocker")
 
     class Lock:
-        """Represent lock."""
+        """Test double for lock behavior in this module."""
 
         def __init__(self, *args, **kwargs):
-            """Initialize the instance.
+            """Create `Lock` with its default state.
 
             Inputs: `*args`, `**kwargs`. Output: None.
             """
@@ -111,22 +113,22 @@ def _install_import_stubs() -> None:
 
         @staticmethod
         def acquire():
-            """Acquire the lock.
+            """Acquire `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         @staticmethod
         def release():
-            """Release the lock.
+            """Release `Lock`'s fake lock.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
     class LockException(Exception):
-        """Represent lock exception."""
+        """Test double for lock exception behavior in this module."""
 
     portalocker_module.Lock = Lock
     portalocker_module.exceptions = types.SimpleNamespace(LockException=LockException)
@@ -140,17 +142,18 @@ def _install_import_stubs() -> None:
 
             @staticmethod
             def createSession(*args, **kwargs):
-                """Create Session.
+                """Create the session for `_DummyClient`.
 
-                Inputs: `*args`, `**kwargs`. Output: None.
+                Inputs: `*args` positional arguments, `**kwargs` keyword arguments.
+                Output: None.
                 """
                 return None
 
             @staticmethod
             def closeSession():
-                """Close session.
+                """Close the session for `_DummyClient`.
 
-                Inputs: none. Output: None.
+                Inputs: caller provides no extra arguments. Output: records the fake side effect.
                 """
                 return None
 
@@ -220,9 +223,9 @@ def _install_import_stubs() -> None:
 
 
 def _install_omp_dependency_stubs() -> None:
-    """Install OMP dependency stubs.
+    """Install the OMP dependency stubs.
 
-    Inputs: none. Output: None.
+    Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
     """
     package_module = types.ModuleType("omeroweb_omp_plugin")
     package_module.__path__ = [str(REPO_ROOT / "omeroweb_omp_plugin")]
@@ -273,7 +276,7 @@ def _install_omp_dependency_stubs() -> None:
     ai_assist_module = types.ModuleType("omeroweb_omp_plugin.services.ai_assist")
 
     class AiAssistError(Exception):
-        """Represent ai assist error."""
+        """Test double for ai assist error behavior in this module."""
 
     ai_assist_module.AiAssistError = AiAssistError
     ai_assist_module.generate_ai_regex = lambda *args, **kwargs: {
@@ -289,16 +292,16 @@ def _install_omp_dependency_stubs() -> None:
     data_store_module = types.ModuleType("omeroweb_omp_plugin.services.data_store")
 
     class VariableStoreError(Exception):
-        """Represent variable store error."""
+        """Test double for variable store error behavior in this module."""
 
     class AiCredentialStoreError(Exception):
-        """Represent ai credential store error."""
+        """Test double for ai credential store error behavior in this module."""
 
     class UserSettingsStoreError(Exception):
-        """Represent user settings store error."""
+        """Test double for user settings store error behavior in this module."""
 
     class UserDataStoreError(Exception):
-        """Represent user data store error."""
+        """Test double for user data store error behavior in this module."""
 
     data_store_module.VariableStoreError = VariableStoreError
     data_store_module.AiCredentialStoreError = AiCredentialStoreError
@@ -336,9 +339,9 @@ def _install_omp_dependency_stubs() -> None:
 
 
 def _clear_omp_modules() -> None:
-    """Clear omp modules.
+    """Remove cached OMP plugin modules before import-isolation tests.
 
-    Inputs: none. Output: None.
+    Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
     """
     for module_name in list(sys.modules):
         if module_name.startswith("omeroweb_omp_plugin"):
@@ -356,9 +359,9 @@ _STUBBED_MODULE_PREFIXES = (
 
 
 def _matches_stubbed_prefix(module_name: str) -> bool:
-    """Matches stubbed prefix.
+    """Return whether stubbed prefix.
 
-    Inputs: `module_name`. Output: `bool`.
+    Inputs: `module_name` (str). Output: `bool`.
     """
     return any(
         module_name == prefix or module_name.startswith(f"{prefix}.")
@@ -367,7 +370,7 @@ def _matches_stubbed_prefix(module_name: str) -> bool:
 
 
 def _snapshot_module_state() -> dict[str, tuple[object, dict[str, object]]]:
-    """Snapshot module state.
+    """Return the snapshot module state.
 
     Inputs: none. Output: `dict[str, tuple[object, dict[str, object]]]`.
     """
@@ -381,9 +384,9 @@ def _snapshot_module_state() -> dict[str, tuple[object, dict[str, object]]]:
 def _restore_module_state(
     snapshot: dict[str, tuple[object, dict[str, object]]],
 ) -> None:
-    """Restore module state.
+    """Record the restore module state call on the test double for later assertions.
 
-    Inputs: `snapshot`. Output: None.
+    Inputs: `snapshot` (dict[str, tuple[object, dict[str, object]]]). Output: None.
     """
     for module_name in list(sys.modules):
         if _matches_stubbed_prefix(module_name) and module_name not in snapshot:
@@ -409,16 +412,16 @@ class OmpPluginViewRegressionTests(TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `OmpPluginViewRegressionTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls._module_snapshot = _snapshot_module_state()
 
     def setUp(self) -> None:
-        """Set Up.
+        """Set the up for `OmpPluginViewRegressionTests`.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the instance. Output: prepares isolated fixtures for one check.
         """
         _restore_module_state(self._module_snapshot)
         _install_import_stubs()
@@ -426,17 +429,18 @@ class OmpPluginViewRegressionTests(TestCase):
         _install_omp_dependency_stubs()
 
     def tearDown(self) -> None:
-        """Tear down.
+        """Record the tear-down call on `OmpPluginViewRegressionTests` for later assertions.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the instance. Output: cleans isolated fixtures after one check.
         """
         _restore_module_state(self._module_snapshot)
 
     @staticmethod
     def _make_request(method: str = "POST", payload: dict | None = None):
-        """Request.
+        """Create the request for `OmpPluginViewRegressionTests`.
 
-        Inputs: `method`, `payload`. Output: `types.SimpleNamespace` result.
+        Inputs: `method` (str), `payload` (dict | None) payload. Output:
+        `SimpleNamespace` result.
         """
         body = json.dumps(payload or {}).encode("utf-8")
         return types.SimpleNamespace(
@@ -449,9 +453,9 @@ class OmpPluginViewRegressionTests(TestCase):
 
     @staticmethod
     def _make_form_request(method: str = "POST", post: dict | None = None):
-        """Form request.
+        """Create the form request for `OmpPluginViewRegressionTests`.
 
-        Inputs: `method`, `post`. Output: `types.SimpleNamespace` result.
+        Inputs: `method` (str), `post` (dict | None). Output: `SimpleNamespace` result.
         """
         return types.SimpleNamespace(
             method=method,
@@ -466,9 +470,9 @@ class OmpPluginViewRegressionTests(TestCase):
     def test_delete_plugin_view_returns_missing_password_error_without_unbound_local(
         self,
     ) -> None:
-        """Verify delete plugin view returns missing password error without unbound local.
+        """Confirm delete plugin view returns missing password error without unbound local exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when delete plugin view returns missing password error without unbound local stops reporting the expected error.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.delete_plugin_view"
@@ -485,9 +489,9 @@ class OmpPluginViewRegressionTests(TestCase):
     def test_delete_all_view_returns_missing_password_error_without_unbound_local(
         self,
     ) -> None:
-        """Verify delete all view returns missing password error without unbound local.
+        """Confirm delete all view returns missing password error without unbound local exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when delete all view returns missing password error without unbound local stops reporting the expected error.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.delete_all_view"
@@ -502,9 +506,9 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertEqual("Missing password", response["payload"]["error"])
 
     def test_job_view_password_validator_reports_missing_password(self) -> None:
-        """Verify job view password validator reports missing password.
+        """Check that job view password validator reports missing password keeps sensitive data out of output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in job view password validator reports missing password.
         """
         job_view = importlib.import_module("omeroweb_omp_plugin.views.job_view")
 
@@ -514,9 +518,9 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertEqual("Missing password", error)
 
     def test_delete_plugin_login_failure_hides_cli_output(self) -> None:
-        """Verify delete plugin login failure hides cli output.
+        """Verify the delete plugin login failure hides CLI output execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in delete plugin login failure hides CLI output.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.delete_plugin_view"
@@ -540,9 +544,9 @@ class OmpPluginViewRegressionTests(TestCase):
     def test_delete_plugin_view_uses_session_key_cli_without_passing_password(
         self,
     ) -> None:
-        """Verify delete plugin view uses session key cli without passing password.
+        """Check that delete plugin view uses session key CLI without passing password keeps sensitive data out of output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in delete plugin view uses session key CLI without passing password.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.delete_plugin_view"
@@ -555,9 +559,9 @@ class OmpPluginViewRegressionTests(TestCase):
         recorded_commands = []
 
         def _record_run(cmd, **kwargs):
-            """Record run.
+            """Record the run for `OmpPluginViewRegressionTests`.
 
-            Inputs: `cmd`, `**kwargs`. Output: `types.SimpleNamespace` result.
+            Inputs: `cmd`, `**kwargs` keyword arguments. Output: `SimpleNamespace`
             """
             recorded_commands.append(cmd)
             return types.SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -629,9 +633,9 @@ class OmpPluginViewRegressionTests(TestCase):
     def test_delete_all_view_uses_session_key_cli_without_passing_password(
         self,
     ) -> None:
-        """Verify delete all view uses session key cli without passing password.
+        """Check that delete all view uses session key CLI without passing password keeps sensitive data out of output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in delete all view uses session key CLI without passing password.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.delete_all_view"
@@ -643,9 +647,9 @@ class OmpPluginViewRegressionTests(TestCase):
         recorded_commands = []
 
         def _record_run(cmd, **kwargs):
-            """Record run.
+            """Record the run for `OmpPluginViewRegressionTests`.
 
-            Inputs: `cmd`, `**kwargs`. Output: `types.SimpleNamespace` result.
+            Inputs: `cmd`, `**kwargs` keyword arguments. Output: `SimpleNamespace`
             """
             recorded_commands.append(cmd)
             return types.SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -714,9 +718,9 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertNotIn(TEST_AUTH_HMAC_FIXTURE, recorded_commands[0])
 
     def test_delete_all_view_logs_only_output_summary_on_cli_failure(self) -> None:
-        """Verify delete all view logs only output summary on cli failure.
+        """Verify the delete all view logs only output summary on CLI failure execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in delete all view logs only output summary on CLI failure.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.delete_all_view"
@@ -766,7 +770,7 @@ class OmpPluginViewRegressionTests(TestCase):
     def test_job_view_invalid_regex_message_is_sanitized(self) -> None:
         """Verify job view invalid regex message is sanitized.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in job view invalid regex message is sanitized.
         """
         job_view = importlib.import_module("omeroweb_omp_plugin.views.job_view")
 
@@ -781,9 +785,9 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertEqual("Invalid regex pattern.", response["payload"]["error"])
 
     def test_job_view_start_job_hides_internal_exception_text(self) -> None:
-        """Verify job view start job hides internal exception text.
+        """Confirm job view start job hides internal exception text exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when job view start job hides internal exception text stops reporting the expected error.
         """
         job_view = importlib.import_module("omeroweb_omp_plugin.views.job_view")
 
@@ -804,9 +808,9 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertEqual("Unexpected error.", response["payload"]["error"])
 
     def test_job_progress_hides_exception_text_in_last_log(self) -> None:
-        """Verify job progress hides exception text in last log.
+        """Confirm job progress hides exception text in last log exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when job progress hides exception text in last log stops reporting the expected error.
         """
         job_view = importlib.import_module("omeroweb_omp_plugin.views.job_view")
         image = types.SimpleNamespace(id=1, getName=lambda: "demo.tif")
@@ -849,9 +853,9 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertNotIn("sensitive details", response["payload"]["last_log"])
 
     def test_delete_views_hide_internal_exception_text(self) -> None:
-        """Verify delete views hide internal exception text.
+        """Confirm delete views hide internal exception text exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when delete views hide internal exception text stops reporting the expected error.
         """
         cases = [
             (
@@ -909,9 +913,9 @@ class OmpPluginViewRegressionTests(TestCase):
                 self.assertEqual("Unexpected error.", response["payload"]["error"])
 
     def test_variable_set_views_hide_store_exception_details(self) -> None:
-        """Verify variable set views hide store exception details.
+        """Confirm variable set views hide store exception details exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when variable set views hide store exception details stops reporting the expected error.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.variable_set_view"
@@ -970,9 +974,9 @@ class OmpPluginViewRegressionTests(TestCase):
                 self.assertNotIn("secret", response["payload"]["error"])
 
     def test_user_data_views_hide_store_exception_details(self) -> None:
-        """Verify user data views hide store exception details.
+        """Confirm user data views hide store exception details exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when user data views hide store exception details stops reporting the expected error.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.user_data_view"
@@ -1009,9 +1013,9 @@ class OmpPluginViewRegressionTests(TestCase):
                 self.assertEqual(expected_error, response["payload"]["error"])
 
     def test_user_settings_view_hides_store_exception_details(self) -> None:
-        """Verify user settings view hides store exception details.
+        """Confirm user settings view hides store exception details exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when user settings view hides store exception details stops reporting the expected error.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.user_settings_view"
@@ -1031,9 +1035,9 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertEqual("Could not save user settings.", response["payload"]["error"])
 
     def test_ai_credentials_views_hide_store_exception_details(self) -> None:
-        """Verify AI credentials views hide store exception details.
+        """Confirm ai credentials views hide store exception details exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when ai credentials views hide store exception details stops reporting the expected error.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.ai_credentials_view"
@@ -1088,9 +1092,9 @@ class OmpPluginViewRegressionTests(TestCase):
                 self.assertEqual(expected_error, response["payload"]["error"])
 
     def test_index_view_hides_ai_store_exception_details(self) -> None:
-        """Verify index view hides AI store exception details.
+        """Confirm index view hides ai store exception details exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when index view hides ai store exception details stops reporting the expected error.
         """
         view_module = importlib.import_module("omeroweb_omp_plugin.views.index_view")
         request = self._make_form_request(
@@ -1131,9 +1135,9 @@ class OmpPluginViewRegressionTests(TestCase):
         )
 
     def test_index_view_preview_hides_ai_parse_json_error(self) -> None:
-        """Verify index view preview hides AI parse JSON error.
+        """Confirm index view preview hides ai parse JSON error exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when index view preview hides ai parse JSON error stops reporting the expected error.
         """
         view_module = importlib.import_module("omeroweb_omp_plugin.views.index_view")
         request = self._make_form_request(
@@ -1163,9 +1167,9 @@ class OmpPluginViewRegressionTests(TestCase):
         )
 
     def test_index_view_preview_hides_regex_exception_details(self) -> None:
-        """Verify index view preview hides regex exception details.
+        """Confirm index view preview hides regex exception details exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when index view preview hides regex exception details stops reporting the expected error.
         """
         view_module = importlib.import_module("omeroweb_omp_plugin.views.index_view")
         request = self._make_form_request(
@@ -1195,9 +1199,9 @@ class OmpPluginViewRegressionTests(TestCase):
         )
 
     def test_index_view_hides_top_level_exception_details(self) -> None:
-        """Verify index view hides top level exception details.
+        """Confirm index view hides top level exception details exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when index view hides top level exception details stops reporting the expected error.
         """
         view_module = importlib.import_module("omeroweb_omp_plugin.views.index_view")
 

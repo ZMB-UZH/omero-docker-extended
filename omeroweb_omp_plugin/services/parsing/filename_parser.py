@@ -8,9 +8,10 @@ _UNSAFE_SEPARATOR_REGEX_RE = re.compile(r"(\(\?(?!:)|\\[1-9]|\{\d|\*\+|\+\+)")
 
 
 def _parse_separator_fragment(separator_fragment):
-    """Parse separator fragment.
+    """Parse and validate the separator fragment input.
 
-    Inputs: `separator_fragment`. Output: tuple. Raises on invalid or unavailable state.
+    Inputs: `separator_fragment`. Output: `tuple`. Raises: ValueError when validation or
+    external operations fail.
     """
     if separator_fragment == r"\s":
         return "", True
@@ -24,9 +25,9 @@ def _parse_separator_fragment(separator_fragment):
 
 
 def _extract_separator_fragments(pattern):
-    """Extract separator fragments.
+    """Extract the separator fragments.
 
-    Inputs: `pattern`. Output: tuple. Raises on invalid or unavailable state.
+    Inputs: `pattern`. Output: `tuple`. Raises: ValueError for the exercised failure path.
     """
     if (
         not isinstance(pattern, str)
@@ -110,9 +111,9 @@ def _extract_separator_fragments(pattern):
 
 
 def _split_on_separator_fragments(value, fragments, match_whitespace):
-    """Split on separator fragments.
+    """Split the on separator fragments.
 
-    Inputs: `value`, `fragments`, `match_whitespace`. Output: `parts`.
+    Inputs: `value` input value, `fragments`, `match_whitespace`. Output: `parts`.
     """
     parts: list[str] = []
     current: list[str] = []
@@ -169,16 +170,9 @@ def is_supported_separator_pattern(sep_pattern):
 
 
 def parse_filename(filename, sep_pattern):
-    """Parse filename.
+    """Parse and validate the filename input.
 
     Inputs: `filename`, `sep_pattern`. Output: `parts`.
-
-    Args:
-        filename: Image filename to parse
-        sep_pattern: Regular expression pattern for separator
-
-    Returns:
-        List of parsed parts
     """
     m = re.search(r"\[(.+?)\]", filename)
     if m:

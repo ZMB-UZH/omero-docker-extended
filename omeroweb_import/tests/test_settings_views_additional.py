@@ -27,17 +27,17 @@ from omeroweb_import.views import (
 
 
 def _payload(response):
-    """Payload.
+    """Return the payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_import_view_utils_delegate_and_reject_root_users(monkeypatch):
-    """Verify import view utils delegate and reject root users.
+    """Confirm import view utils delegate and reject root users is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when import view utils delegate and reject root users stops reporting the expected error.
     """
     request = RequestFactory().post(
         "/omeroweb_import/settings/save/",
@@ -86,9 +86,9 @@ def test_import_view_utils_delegate_and_reject_root_users(monkeypatch):
 def test_special_method_settings_cover_non_dict_payload_and_unexpected_save_failure(
     monkeypatch,
 ):
-    """Verify special method settings cover non dict payload and unexpected save failure.
+    """Verify special method settings cover non dict payload and unexpected save failure result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in special method settings cover non dict payload and unexpected save failure.
     """
     request = RequestFactory().post(
         "/omeroweb_import/settings/special/save/",
@@ -127,7 +127,7 @@ def test_special_method_load_settings_covers_method_username_and_unexpected_erro
 ):
     """Verify special method load settings covers method username and unexpected errors.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in special method load settings covers method username and unexpected errors.
     """
     monkeypatch.setattr(
         import_view_utils,
@@ -170,9 +170,9 @@ def test_special_method_load_settings_covers_method_username_and_unexpected_erro
 
 
 def test_user_settings_view_returns_generic_error_on_unexpected_failure(monkeypatch):
-    """Verify user settings view returns generic error on unexpected failure.
+    """Confirm user settings view returns generic error on unexpected failure exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when user settings view returns generic error on unexpected failure stops reporting the expected error.
     """
     request = RequestFactory().post(
         "/omeroweb_import/settings/save/",

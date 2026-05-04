@@ -16,7 +16,8 @@ from omero_plugin_common.env_utils import (
 def _get_required_positive_int_env(name: str) -> int:
     """Return a required positive integer environment variable.
 
-    Inputs: `name`. Output: `int`. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name. Output: `int`. Raises: ValueError when validation or
+    external operations fail.
     """
     value = get_int_env(name, env_file=ENV_FILE_OMEROWEB)
     if value <= 0:
@@ -40,7 +41,7 @@ class LogConfig:
 def build_log_config() -> LogConfig:
     """And validate the log configuration from environment variables.
 
-    Inputs: none. Output: `LogConfig`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `LogConfig`. Raises: ValueError for the exercised failure path.
     """
     loki_url = require_env(
         "ADMIN_TOOLS_LOKI_URL",

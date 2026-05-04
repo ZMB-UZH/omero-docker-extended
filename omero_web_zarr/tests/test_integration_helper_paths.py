@@ -28,10 +28,10 @@ from omero_web_zarr import integration
 
 
 class _Color:
-    """Represent color."""
+    """Test double for color behavior in this module."""
 
     def __init__(self, html):
-        """Initialize the instance.
+        """Create `_Color` with `html`.
 
         Inputs: `html`. Output: None.
         """
@@ -46,7 +46,7 @@ class _Color:
 
 
 class _Channel:
-    """Represent channel."""
+    """Test double for channel behavior in this module."""
 
     def __init__(
         self,
@@ -58,7 +58,7 @@ class _Channel:
         window=(1.0, 5.0),
         raise_color=False,
     ):
-        """Initialize the instance.
+        """Create `_Channel` with its default state.
 
         Inputs: `label`, `color`, `active`, `inverted`, `window`, `raise_color`. Output:
         None.
@@ -73,44 +73,45 @@ class _Channel:
         self._raise_color = raise_color
 
     def getLabel(self):
-        """Return Label.
+        """Return the label for `_Channel`.
 
-        Inputs: none. Output: `self._label`.
+        Inputs: none. Output: `_label`.
         """
         return self._label
 
     def getColor(self):
-        """Return Color.
+        """Return the color for `_Channel`.
 
-        Inputs: none. Output: `_Color` result. Raises on invalid or unavailable state.
+        Inputs: none. Output: `_Color` result. Raises: RuntimeError when validation or
+        external operations fail.
         """
         if self._raise_color:
             raise RuntimeError("color failure")
         return _Color(self._color)
 
     def isActive(self):
-        """Return whether Active.
+        """Report the active boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: `self._active`.
         """
         return self._active
 
     def isInverted(self):
-        """Return whether Inverted.
+        """Report the inverted boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: `self._inverted`.
         """
         return self._inverted
 
     def getWindowStart(self):
-        """Return Window Start.
+        """Return the fake window start value used by this test double.
 
         Inputs: none. Output: `self._window[0]`.
         """
         return self._window[0]
 
     def getWindowEnd(self):
-        """Return Window End.
+        """Return the fake window end value used by this test double.
 
         Inputs: none. Output: `self._window[1]`.
         """
@@ -118,12 +119,12 @@ class _Channel:
 
 
 class _WellSampleParent:
-    """Represent well sample parent."""
+    """Test double for well sample parent behavior in this module."""
 
     OMERO_CLASS = "WellSample"
 
     def __init__(self, well_id):
-        """Initialize the instance.
+        """Create `_WellSampleParent` with `well_id`.
 
         Inputs: `well_id`. Output: None.
         """
@@ -131,12 +132,12 @@ class _WellSampleParent:
 
 
 class _DatasetParent:
-    """Represent dataset parent."""
+    """Test double for dataset parent behavior in this module."""
 
     OMERO_CLASS = "Dataset"
 
     def __init__(self, dataset_id, name, description):
-        """Initialize the instance.
+        """Create `_DatasetParent` with `dataset_id`, `name`, and `description`.
 
         Inputs: `dataset_id`, `name`, `description`. Output: None.
         """
@@ -146,10 +147,10 @@ class _DatasetParent:
 
 
 class _Resolution:
-    """Represent resolution."""
+    """Test double for resolution behavior in this module."""
 
     def __init__(self, size_x, size_y):
-        """Initialize the instance.
+        """Create `_Resolution` with `size_x` and `size_y`.
 
         Inputs: `size_x`, `size_y`. Output: None.
         """
@@ -158,11 +159,11 @@ class _Resolution:
 
 
 class _RenderingEngine:
-    """Represent rendering engine."""
+    """Test double for rendering engine behavior in this module."""
 
     @staticmethod
     def getResolutionLevels():
-        """Return Resolution Levels.
+        """Return the fake resolution levels value used by this test double.
 
         Inputs: none. Output: 2.
         """
@@ -170,7 +171,7 @@ class _RenderingEngine:
 
     @staticmethod
     def getResolutionDescriptions():
-        """Return Resolution Descriptions.
+        """Return the fake resolution descriptions value used by this test double.
 
         Inputs: none. Output: list.
         """
@@ -178,7 +179,7 @@ class _RenderingEngine:
 
     @staticmethod
     def getDefaultZ():
-        """Return Default Z.
+        """Return the fake default z value used by this test double.
 
         Inputs: none. Output: 3.
         """
@@ -186,19 +187,37 @@ class _RenderingEngine:
 
     @staticmethod
     def getDefaultT():
-        """Return Default T.
+        """Return the fake default t value used by this test double.
 
         Inputs: none. Output: 4.
         """
         return 4
 
 
+def test_small_integration_guard_helpers_cover_empty_and_missing_inputs() -> None:
+    """Verify small integration guard helpers cover empty and missing inputs.
+
+    Inputs: Zarr and OMERO fakes. Output: fails on regressions in small integration guard helpers cover empty and missing inputs.
+    """
+    module = SimpleNamespace(__name__="fake_webgateway", missing=None)
+    with pytest.raises(AttributeError, match="fake_webgateway.missing"):
+        integration._require_webgateway_callable(module, "missing")
+
+    assert integration._regular_max_tile_length(None) == 1024
+    response = {9: b"existing"}
+    integration._add_regular_thumbnail_entries(response, object(), [], 96)
+    assert response == {9: b"existing"}
+
+    payload = {"tiles": [1, 2, 3]}
+    assert integration._select_payload_key(payload, None) is payload
+
+
 class _ObjectiveSettings:
-    """Represent objective settings."""
+    """Test double for objective settings behavior in this module."""
 
     @staticmethod
     def getObjective():
-        """Return Objective.
+        """Return the objective for `_ObjectiveSettings`.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -206,13 +225,13 @@ class _ObjectiveSettings:
 
 
 class _MarshalImage:
-    """Represent marshal image."""
+    """Test double for marshal image behavior in this module."""
 
     description = "description"
     archived = False
 
     def __init__(self, *, prepare_result=True, prepare_exception=None):
-        """Initialize the instance.
+        """Create `_MarshalImage` with its default state.
 
         Inputs: `prepare_result`, `prepare_exception`. Output: None.
         """
@@ -224,19 +243,16 @@ class _MarshalImage:
         self._conn = object()
 
     def _prepareRenderingEngine(self):
-        """Prepare Rendering Engine.
+        """Prepare the rendering Engine for `_MarshalImage`.
 
-        Inputs: none. Output: `self._prepare_result`. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: none. Output: `_prepare_result`. Raises: _prepare_exception when validation or the called operation fails.
         """
         if self._prepare_exception is not None:
             raise self._prepare_exception
         return self._prepare_result
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_MarshalImage`'s fake object name.
 
         Inputs: none. Output: `self.name`.
         """
@@ -244,7 +260,7 @@ class _MarshalImage:
 
     @staticmethod
     def canAnnotate():
-        """Return whether Annotate.
+        """Report the annotate boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: bool.
         """
@@ -252,7 +268,7 @@ class _MarshalImage:
 
     @staticmethod
     def canEdit():
-        """Return whether Edit.
+        """Report the edit boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: bool.
         """
@@ -260,7 +276,7 @@ class _MarshalImage:
 
     @staticmethod
     def canDelete():
-        """Return whether Delete.
+        """Report the delete boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: bool.
         """
@@ -268,7 +284,7 @@ class _MarshalImage:
 
     @staticmethod
     def canLink():
-        """Return whether Link.
+        """Report the link boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: bool.
         """
@@ -276,7 +292,7 @@ class _MarshalImage:
 
     @staticmethod
     def getObjectiveSettings():
-        """Return Objective Settings.
+        """Return `_MarshalImage`'s fake objective settings.
 
         Inputs: none. Output: `_ObjectiveSettings` result.
         """
@@ -284,7 +300,7 @@ class _MarshalImage:
 
     @staticmethod
     def getSizeX():
-        """Return Size X.
+        """Return `_MarshalImage`'s fake SizeX value.
 
         Inputs: none. Output: 1024.
         """
@@ -292,7 +308,7 @@ class _MarshalImage:
 
     @staticmethod
     def getSizeY():
-        """Return Size Y.
+        """Return `_MarshalImage`'s fake SizeY value.
 
         Inputs: none. Output: 512.
         """
@@ -300,7 +316,7 @@ class _MarshalImage:
 
     @staticmethod
     def getSizeZ():
-        """Return Size Z.
+        """Return `_MarshalImage`'s fake SizeZ value.
 
         Inputs: none. Output: 4.
         """
@@ -308,7 +324,7 @@ class _MarshalImage:
 
     @staticmethod
     def getSizeT():
-        """Return Size T.
+        """Return `_MarshalImage`'s fake timepoint count.
 
         Inputs: none. Output: 2.
         """
@@ -316,7 +332,7 @@ class _MarshalImage:
 
     @staticmethod
     def getSizeC():
-        """Return Size C.
+        """Return `_MarshalImage`'s fake channel count.
 
         Inputs: none. Output: 1.
         """
@@ -324,23 +340,23 @@ class _MarshalImage:
 
     @staticmethod
     def getPixelRange():
-        """Return Pixel Range.
+        """Return the fake pixel range value used by this test double.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: returns the fake value described above.
         """
         raise TypeError("pixel range unavailable")
 
     @staticmethod
     def getChannels():
-        """Return Channels.
+        """Return the channels for `_MarshalImage`.
 
-        Inputs: none. Output: list.
+        Inputs: none. Output: `list`.
         """
         return [_Channel(label="DNA")]
 
     @staticmethod
     def splitChannelDims():
-        """Split channel dims.
+        """Return fake channel-dimension metadata for helper-path tests.
 
         Inputs: none. Output: dict.
         """
@@ -348,7 +364,7 @@ class _MarshalImage:
 
     @staticmethod
     def isGreyscaleRenderingModel():
-        """Return whether Greyscale Rendering Model.
+        """Report the greyscale rendering model boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: bool.
         """
@@ -356,15 +372,15 @@ class _MarshalImage:
 
     @staticmethod
     def getProjection():
-        """Return Projection.
+        """Return the projection for `_MarshalImage`.
 
-        Inputs: none. Output: 'normal'.
+        Inputs: none. Output: `str`.
         """
         return "normal"
 
     @staticmethod
     def isInvertedAxis():
-        """Return whether Inverted Axis.
+        """Report the inverted axis boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: bool.
         """
@@ -372,15 +388,15 @@ class _MarshalImage:
 
     @staticmethod
     def getAuthor():
-        """Return Author.
+        """Return the author for `_MarshalImage`.
 
-        Inputs: none. Output: 'Author'.
+        Inputs: none. Output: `str`.
         """
         return "Author"
 
     @staticmethod
     def getDate():
-        """Return Date.
+        """Return the date for `_MarshalImage`.
 
         Inputs: none. Output: `datetime` result.
         """
@@ -388,7 +404,7 @@ class _MarshalImage:
 
     @staticmethod
     def getPixelsType():
-        """Return Pixels Type.
+        """Return the fake pixels type value used by this test double.
 
         Inputs: none. Output: 'uint16'.
         """
@@ -396,7 +412,7 @@ class _MarshalImage:
 
     @staticmethod
     def getProject():
-        """Return Project.
+        """Return the project for `_MarshalImage`.
 
         Inputs: none. Output: `SimpleNamespace` result.
         """
@@ -404,7 +420,7 @@ class _MarshalImage:
 
     @staticmethod
     def listParents():
-        """Return list parents.
+        """Return `_MarshalImage`'s fake parent listing.
 
         Inputs: none. Output: list.
         """
@@ -415,7 +431,7 @@ class _MarshalImage:
 
     @staticmethod
     def getPixelSizeX(units=None):
-        """Return Pixel Size X.
+        """Return `_MarshalImage`'s fake physical X size.
 
         Inputs: `units`. Output: `SimpleNamespace` result.
         """
@@ -423,7 +439,7 @@ class _MarshalImage:
 
     @staticmethod
     def getPixelSizeY(units=None):
-        """Return Pixel Size Y.
+        """Return `_MarshalImage`'s fake physical Y size.
 
         Inputs: `units`. Output: `SimpleNamespace` result.
         """
@@ -431,7 +447,7 @@ class _MarshalImage:
 
     @staticmethod
     def getPixelSizeZ(units=None):
-        """Return Pixel Size Z.
+        """Return `_MarshalImage`'s fake physical Z size.
 
         Inputs: `units`. Output: `SimpleNamespace` result.
         """
@@ -439,13 +455,13 @@ class _MarshalImage:
 
 
 class _SingleLevelImage:
-    """Represent single level image."""
+    """Test double for single level image behavior in this module."""
 
     description = ""
     archived = False
 
     def __init__(self, *, objective_mode="raise", projection_mode="raise"):
-        """Initialize the instance.
+        """Create `_SingleLevelImage` with its default state.
 
         Inputs: `objective_mode`, `projection_mode`. Output: None.
         """
@@ -459,16 +475,16 @@ class _SingleLevelImage:
 
     @staticmethod
     def getChannels(noRE=False):
-        """Return Channels.
+        """Return the channels for `_SingleLevelImage`.
 
-        Inputs: `noRE`. Output: list.
+        Inputs: `noRE`. Output: `list`.
         """
         return [_Channel(label="DNA")]
 
     def getProjection(self):
-        """Return Projection.
+        """Return the projection for `_SingleLevelImage`.
 
-        Inputs: none. Output: 'maximum'. Raises on invalid or unavailable state.
+        Inputs: none. Output: `str`. Raises: RuntimeError for the exercised failure path.
         """
         if self._projection_mode == "raise":
             raise RuntimeError("projection")
@@ -476,15 +492,15 @@ class _SingleLevelImage:
 
     @staticmethod
     def getPixelSizeX(units=None):
-        """Return Pixel Size X.
+        """Return `_SingleLevelImage`'s fake physical X size.
 
-        Inputs: `units`. Output: None. Raises on invalid or unavailable state.
+        Inputs: `units`. Output: None. Raises: RuntimeError for the exercised failure path.
         """
         raise RuntimeError("x")
 
     @staticmethod
     def getPixelSizeY(units=None):
-        """Return Pixel Size Y.
+        """Return `_SingleLevelImage`'s fake physical Y size.
 
         Inputs: `units`. Output: None.
         """
@@ -492,17 +508,16 @@ class _SingleLevelImage:
 
     @staticmethod
     def getPixelSizeZ(units=None):
-        """Return Pixel Size Z.
+        """Return `_SingleLevelImage`'s fake physical Z size.
 
         Inputs: `units`. Output: `SimpleNamespace` result.
         """
         return SimpleNamespace(getValue=lambda: 1.5)
 
     def getObjectiveSettings(self):
-        """Return Objective Settings.
+        """Return `_SingleLevelImage`'s fake objective settings.
 
-        Inputs: none. Output: `SimpleNamespace` result or None. Raises on invalid or
-        unavailable state.
+        Inputs: none. Output: `SimpleNamespace` result. Raises: RuntimeError when validation or the called operation fails.
         """
         if self._objective_mode == "raise":
             raise RuntimeError("objective")
@@ -514,7 +529,7 @@ class _SingleLevelImage:
 
     @staticmethod
     def canAnnotate():
-        """Return whether Annotate.
+        """Report the annotate boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: bool.
         """
@@ -522,7 +537,7 @@ class _SingleLevelImage:
 
     @staticmethod
     def canEdit():
-        """Return whether Edit.
+        """Report the edit boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: bool.
         """
@@ -530,7 +545,7 @@ class _SingleLevelImage:
 
     @staticmethod
     def canDelete():
-        """Return whether Delete.
+        """Report the delete boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: bool.
         """
@@ -538,7 +553,7 @@ class _SingleLevelImage:
 
     @staticmethod
     def canLink():
-        """Return whether Link.
+        """Report the link boolean exposed by this OMERO-compatible object.
 
         Inputs: none. Output: bool.
         """
@@ -546,7 +561,7 @@ class _SingleLevelImage:
 
     @staticmethod
     def getSizeX():
-        """Return Size X.
+        """Return `_SingleLevelImage`'s fake SizeX value.
 
         Inputs: none. Output: 128.
         """
@@ -554,7 +569,7 @@ class _SingleLevelImage:
 
     @staticmethod
     def getSizeY():
-        """Return Size Y.
+        """Return `_SingleLevelImage`'s fake SizeY value.
 
         Inputs: none. Output: 64.
         """
@@ -562,7 +577,7 @@ class _SingleLevelImage:
 
     @staticmethod
     def getSizeZ():
-        """Return Size Z.
+        """Return `_SingleLevelImage`'s fake SizeZ value.
 
         Inputs: none. Output: 2.
         """
@@ -570,7 +585,7 @@ class _SingleLevelImage:
 
     @staticmethod
     def getSizeT():
-        """Return Size T.
+        """Return `_SingleLevelImage`'s fake timepoint count.
 
         Inputs: none. Output: 1.
         """
@@ -578,7 +593,7 @@ class _SingleLevelImage:
 
     @staticmethod
     def getSizeC():
-        """Return Size C.
+        """Return `_SingleLevelImage`'s fake channel count.
 
         Inputs: none. Output: 1.
         """
@@ -586,7 +601,7 @@ class _SingleLevelImage:
 
     @staticmethod
     def splitChannelDims():
-        """Split channel dims.
+        """Return fake channel-dimension metadata for helper-path tests.
 
         Inputs: none. Output: dict.
         """
@@ -596,7 +611,7 @@ class _SingleLevelImage:
 def test_store_backed_render_helpers_cover_metadata_ranges_and_downloads(monkeypatch):
     """Verify store backed render helpers cover metadata ranges and downloads.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in store backed render helpers cover metadata ranges and downloads.
     """
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
     assert integration._safe_rendering_enabled() is True
@@ -750,7 +765,7 @@ def test_store_backed_image_data_covers_projection_tile_and_objective_fallbacks(
 ):
     """Verify store backed image data covers projection tile and objective fallbacks.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in store backed image data covers projection tile and objective fallbacks.
     """
     monkeypatch.setattr(integration, "load_store_backed_image_node", lambda image: None)
     monkeypatch.setattr(
@@ -793,7 +808,7 @@ def test_load_metadata_preview_with_safe_rendering_covers_share_well_and_reraise
 ):
     """Verify load metadata preview with safe rendering covers share well and reraises.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in load metadata preview with safe rendering covers share well and reraises.
     """
     from omeroweb.webclient import views as webclient_views
 
@@ -854,17 +869,17 @@ def test_load_metadata_preview_with_safe_rendering_covers_share_well_and_reraise
 
 
 def test_region_helpers_cover_remaining_error_paths(monkeypatch):
-    """Verify region helpers cover remaining error paths.
+    """Confirm region helpers cover remaining error paths exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: `self._jpeg_payload` or None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when region helpers cover remaining error paths stops reporting the expected error.
     """
     from omeroweb.webgateway import views as webgateway_views
 
     class _RegularImage:
-        """Represent regular image."""
+        """Test double for regular image behavior in this module."""
 
         def __init__(self, levels=2, jpeg_payload=b"jpeg"):
-            """Initialize the instance.
+            """Create `_RegularImage` with `levels` and `jpeg_payload`.
 
             Inputs: `levels`, `jpeg_payload`. Output: None.
             """
@@ -873,9 +888,9 @@ def test_region_helpers_cover_remaining_error_paths(monkeypatch):
 
         @staticmethod
         def _prepareRenderingEngine():
-            """Prepare Rendering Engine.
+            """Prepare the rendering Engine for `_RegularImage`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
@@ -1034,7 +1049,7 @@ def test_marshal_regular_image_data_with_safe_tile_size_handles_engine_fallbacks
 ):
     """Verify marshal regular image data with safe tile size handles engine fallbacks.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in marshal regular image data with safe tile size handles engine fallbacks.
     """
     monkeypatch.setattr(
         integration, "_store_backed_metadata", lambda image: {"imageName": image.name}
@@ -1065,7 +1080,7 @@ def test_marshal_regular_image_data_with_safe_tile_size_handles_engine_fallbacks
         """Test double for fake concurrency exception."""
 
         def __init__(self, back_off):
-            """Initialize the instance.
+            """Create `_FakeConcurrencyException` with `back_off`.
 
             Inputs: `back_off`. Output: None.
             """
@@ -1119,20 +1134,18 @@ def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single
 ):
     """Verify integration helper edges cover session fallbacks idempotence and single level tiles.
 
-    Inputs: `monkeypatch`. Output: computed value or None. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in integration helper edges cover session fallbacks idempotence and single level tiles.
+    RuntimeError when validation or the called operation fails.
     """
 
     class _BrokenRequest:
-        """Represent broken request."""
+        """Test double for broken request behavior in this module."""
 
         @property
         def session(self):
-            """Session.
+            """Record the session call on `_BrokenRequest` for later assertions.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             raise RuntimeError("session unavailable")
 
@@ -1192,9 +1205,9 @@ def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single
         )
 
     def original_marshal(image, key=None, request=None):
-        """Original marshal.
+        """Return the original marshal.
 
-        Inputs: `image`, `key`, `request`. Output: 'original'.
+        Inputs: `image`, `key` lookup key, `request` Django request. Output: `str`.
         """
         return "original"
 
@@ -1210,21 +1223,21 @@ def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single
     from omeroweb.webgateway import views as webgateway_views
 
     class _SingleLevelRegularImage:
-        """Represent single level regular image."""
+        """Test double for single level regular image behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_SingleLevelRegularImage` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self._re = SimpleNamespace(getResolutionLevels=lambda: 1)
             self.level = "unset"
 
         @staticmethod
         def _prepareRenderingEngine():
-            """Prepare Rendering Engine.
+            """Prepare the rendering Engine for `_SingleLevelRegularImage`.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 

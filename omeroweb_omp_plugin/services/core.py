@@ -57,23 +57,23 @@ from .parsing.filename_parser import parse_filename
 def _get_hash_secret():
     """Return hash secret.
 
-    Inputs: none. Output: call result.
+    Inputs: none. Output: `get_hash_secret` result.
     """
     return _annotation_service.get_hash_secret()
 
 
 def _canonicalize_mapping(mapping):
-    """Canonicalize mapping.
+    """Return the canonicalize mapping.
 
-    Inputs: `mapping`. Output: call result.
+    Inputs: `mapping`. Output: `canonicalize_mapping` result.
     """
     return _annotation_service.canonicalize_mapping(mapping)
 
 
 def compute_plugin_hash(mapping):
-    """Compute plugin hash.
+    """Compute the plugin hash.
 
-    Inputs: `mapping`. Output: call result.
+    Inputs: `mapping`. Output: `compute_plugin_hash` result.
     """
     return _annotation_service.compute_plugin_hash(mapping)
 
@@ -81,15 +81,16 @@ def compute_plugin_hash(mapping):
 def is_plugin_annotation(annotation):
     """Return whether plugin annotation.
 
-    Inputs: `annotation`. Output: call result.
+    Inputs: `annotation`. Output: `is_plugin_annotation` result.
     """
     return _annotation_service.is_plugin_annotation(annotation)
 
 
 def find_plugin_annotation_ids(conn, image_id, allow_legacy=False):
-    """Find plugin annotation IDs.
+    """Find the plugin annotation IDs.
 
-    Inputs: `conn`, `image_id`, `allow_legacy`. Output: call result.
+    Inputs: `conn` OMERO gateway connection, `image_id` OMERO image ID, `allow_legacy`.
+    Output: `find_plugin_annotation_ids` result.
     """
     return _annotation_service.find_plugin_annotation_ids(
         conn, image_id, allow_legacy=allow_legacy
@@ -97,23 +98,25 @@ def find_plugin_annotation_ids(conn, image_id, allow_legacy=False):
 
 
 def find_annotation_link_ids(conn, annotation_ids):
-    """Find annotation link IDs.
+    """Find the annotation link IDs.
 
-    Inputs: `conn`, `annotation_ids`. Output: call result.
+    Inputs: `conn` OMERO gateway connection, `annotation_ids`. Output:
+    `find_annotation_link_ids` result.
     """
     return _annotation_service.find_annotation_link_ids(conn, annotation_ids)
 
 
 def find_map_annotation_ids(conn, image_id):
-    """Find map annotation IDs.
+    """Find the map annotation IDs.
 
-    Inputs: `conn`, `image_id`. Output: call result.
+    Inputs: `conn` OMERO gateway connection, `image_id` OMERO image ID. Output:
+    `find_map_annotation_ids` result.
     """
     return _annotation_service.find_map_annotation_ids(conn, image_id)
 
 
 def _supports_legacy_annotation_kwargs() -> bool:
-    """Supports legacy annotation kwargs.
+    """Return whether legacy annotation kwargs.
 
     Inputs: none. Output: `bool`.
     """
@@ -131,17 +134,18 @@ def _supports_legacy_annotation_kwargs() -> bool:
 
 
 def _legacy_annotation_delete_callable():
-    """Legacy annotation delete callable.
+    """Return the legacy annotation delete callable.
 
-    Inputs: none. Output: `_annotation_service.delete_existing_annotations`.
+    Inputs: none. Output: `delete_existing_annotations`.
     """
     return _annotation_service.delete_existing_annotations
 
 
 def _call_dynamic(callable_obj, *args, **kwargs):
-    """Call dynamic.
+    """Return the call dynamic.
 
-    Inputs: `callable_obj`, `*args`, `**kwargs`. Output: `callable_obj` result.
+    Inputs: `callable_obj`, `*args` positional arguments, `**kwargs` keyword arguments.
+    Output: `callable_obj` result.
     """
     return callable_obj(*args, **kwargs)
 
@@ -153,10 +157,10 @@ def _call_legacy_annotation_delete(
     link_ids=None,
     allow_legacy=False,
 ):
-    """Call legacy annotation delete.
+    """Return the call legacy annotation delete.
 
-    Inputs: `conn`, `image_id`, `annotation_ids`, `link_ids`, `allow_legacy`. Output:
-    `_call_dynamic` result.
+    Inputs: `conn` OMERO gateway connection, `image_id` OMERO image ID,
+    `annotation_ids`, `link_ids`, `allow_legacy`. Output: `_call_dynamic` result.
     """
     legacy_delete_existing_annotations = _legacy_annotation_delete_callable()
     legacy_kwargs = {
@@ -173,7 +177,7 @@ def _call_legacy_annotation_delete(
 
 
 def _normalize_annotation_ids(values):
-    """Normalize annotation IDs.
+    """Normalize the annotation IDs.
 
     Inputs: `values`. Output: `normalized`.
     """
@@ -191,9 +195,9 @@ def _normalize_annotation_ids(values):
 
 
 def _try_normalize_annotation_id(value):
-    """Try normalize annotation ID.
+    """Return the try normalize annotation ID.
 
-    Inputs: `value`. Output: `int` result or None.
+    Inputs: `value` input value. Output: `int`.
     """
     try:
         return int(value)
@@ -202,9 +206,10 @@ def _try_normalize_annotation_id(value):
 
 
 def _delete_object_by_id(conn, update, object_type, stub_type, object_id):
-    """Delete object by ID.
+    """Delete the object by ID.
 
-    Inputs: `conn`, `update`, `object_type`, `stub_type`, `object_id`. Output: bool.
+    Inputs: `conn` OMERO gateway connection, `update`, `object_type`, `stub_type`,
+    `object_id`. Output: `bool`.
     """
     if object_type == "MapAnnotation":
         conn.deleteObjects("Annotation", [int(object_id)], wait=True)
@@ -227,12 +232,10 @@ def _delete_object_by_id(conn, update, object_type, stub_type, object_id):
 def _delete_existing_annotations_by_ids(
     conn, image_id, *, annotation_ids=None, link_ids=None, allow_legacy=False
 ):
-    """Delete existing annotations by IDs.
+    """Delete the existing annotations by IDs.
 
-    Inputs: `conn`, `image_id`, `annotation_ids`, `link_ids`, `allow_legacy`. Output:
-    tuple.
-
-    tuple.
+    Inputs: `conn` OMERO gateway connection, `image_id` OMERO image ID,
+    `annotation_ids`, `link_ids`, `allow_legacy`. Output: `tuple`.
     """
     resolved_annotation_ids = _normalize_annotation_ids(
         annotation_ids
@@ -277,12 +280,11 @@ def _delete_existing_annotations_by_ids(
 def delete_existing_annotations(
     conn, *args, annotation_ids=None, link_ids=None, allow_legacy=False
 ):
-    """Delete existing annotations.
+    """Delete the existing annotations.
 
-    Inputs: `conn`, `annotation_ids`, `link_ids`, `allow_legacy`, `*args`. Output: call
-    result. Raises on invalid or unavailable state.
-
-    result. Raises on invalid or unavailable state.
+    Inputs: `conn` OMERO gateway connection, `*args` positional arguments,
+    `annotation_ids`, `link_ids`, `allow_legacy`. Output: `delete_existing_annotations`
+    Raises: TypeError when validation or the called operation fails.
     """
     uses_legacy_id_api = (
         annotation_ids is not None or link_ids is not None or len(args) == 1

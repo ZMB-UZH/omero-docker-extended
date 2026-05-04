@@ -19,7 +19,7 @@ _cleanup_state = {"last_cleanup_time": 0.0}
 def cleanup_old_jobs():
     """Automatically delete old job files to prevent RAM accumulation.
 
-    Inputs: none. Output: None.
+    Inputs: no caller arguments. Output: performs the documented action and returns None.
 
     This is called from the job views to ensure old jobs
     don't accumulate in memory. Since jobs are stored in tmpfs (RAM),

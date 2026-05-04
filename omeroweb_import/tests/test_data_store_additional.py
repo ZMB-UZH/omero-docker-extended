@@ -13,7 +13,7 @@ class _FakeSqlTemplate:
     """Test double for fake SQL template."""
 
     def __init__(self, query):
-        """Initialize the instance.
+        """Create `_FakeSqlTemplate` with `query`.
 
         Inputs: `query`. Output: None.
         """
@@ -32,7 +32,7 @@ class _FakeSqlModule:
 
     @staticmethod
     def SQL(query):
-        """SQL.
+        """Return the SQL for `_FakeSqlModule`.
 
         Inputs: `query`. Output: `_FakeSqlTemplate` result.
         """
@@ -40,9 +40,9 @@ class _FakeSqlModule:
 
     @staticmethod
     def Identifier(name):
-        """Identifier.
+        """Return the identifier for `_FakeSqlModule`.
 
-        Inputs: `name`. Output: `name`.
+        Inputs: `name` name. Output: `name`.
         """
         return name
 
@@ -52,20 +52,18 @@ class _FakeExtras:
 
     @staticmethod
     def Json(payload):
-        """JSON.
+        """Return the JSON for `_FakeExtras`.
 
-        Inputs: `payload`. Output: dict.
+        Inputs: `payload` payload. Output: `dict`.
         """
         return {"json": payload}
 
 
 def test_data_store_loaders_raise_repo_errors_when_psycopg2_is_missing(monkeypatch):
-    """Verify data store loaders raise repo errors when psycopg2 is missing.
+    """Confirm data store loaders raise repo errors when psycopg2 is missing exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: `original_import` result. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in data store loaders raise repo errors when psycopg2 is missing.
+    Raises: ImportError when validation or the called operation fails.
     """
     original_import = builtins.__import__
     monkeypatch.setattr(import_data_store, "_psycopg2_mod", None)
@@ -73,12 +71,11 @@ def test_data_store_loaders_raise_repo_errors_when_psycopg2_is_missing(monkeypat
     monkeypatch.setattr(import_data_store, "_psycopg2_sql", None)
 
     def _missing_import(name, *args, **kwargs):
-        """Missing import.
+        """Return the missing import.
 
-        Inputs: `name`, `*args`, `**kwargs`. Output: `original_import` result. Raises on
-        invalid or unavailable state.
-
-        invalid or unavailable state.
+        Inputs: `name` name, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: `original_import` result. Raises: ImportError when validation or
+        external operations fail.
         """
         if name == "psycopg2":
             raise ImportError("psycopg2 unavailable")
@@ -102,10 +99,8 @@ def test_data_store_loaders_raise_repo_errors_when_psycopg2_is_missing(monkeypat
 def test_data_store_connect_closes_connections_and_wraps_save_failures(monkeypatch):
     """Verify data store connect closes connections and wraps save failures.
 
-    Inputs: `monkeypatch`. Output: yielded values. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in data store connect closes connections and wraps save failures.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     monkeypatch.setenv(import_data_store.ENV_USER, "import-user")
     monkeypatch.setenv(import_data_store.ENV_AUTH, "import-pass")
@@ -114,13 +109,13 @@ def test_data_store_connect_closes_connections_and_wraps_save_failures(monkeypat
     monkeypatch.setenv(import_data_store.ENV_PORT, "5433")
 
     class _ClosingConnection:
-        """Represent closing connection."""
+        """Test double for closing connection behavior in this module."""
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_ClosingConnection`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
@@ -138,33 +133,32 @@ def test_data_store_connect_closes_connections_and_wraps_save_failures(monkeypat
         assert opened is closing_connection
 
     class _ExplodingCursor:
-        """Represent exploding cursor."""
+        """Test double for exploding cursor behavior in this module."""
 
         @staticmethod
         def execute(query, params=None):
-            """Execute the query or command.
+            """Record the execute call on `_ExplodingCursor` for later assertions.
 
-            Inputs: `query`, `params`. Output: None. Raises on invalid or unavailable
-            state.
+            Inputs: `query`, `params`. Output: None. Raises: RuntimeError when validation or the called operation fails.
             """
             raise RuntimeError("write exploded")
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_ExplodingCursor`'s context-managed fake resource.
 
             Inputs: none. Output: `self`.
             """
             return self
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_ExplodingCursor`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
             return False
 
     class _ExplodingConnection:
-        """Represent exploding connection."""
+        """Test double for exploding connection behavior in this module."""
 
         @staticmethod
         def cursor():
@@ -176,25 +170,25 @@ def test_data_store_connect_closes_connections_and_wraps_save_failures(monkeypat
 
         @staticmethod
         def commit():
-            """Commit the transaction.
+            """Commit `_ExplodingConnection`'s fake transaction.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_ExplodingConnection`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
     @contextmanager
     def _failing_connect():
-        """Failing connect.
+        """Return the failing connect.
 
-        Inputs: none. Output: yielded values.
+        Inputs: none. Output: iterator of yielded items.
         """
         yield _ExplodingConnection()
 

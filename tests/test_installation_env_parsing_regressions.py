@@ -18,9 +18,9 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `InstallationEnvParsingRegressionTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.script_path = cls.repo_root / "installation" / "installation_script.sh"
@@ -53,12 +53,11 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
     def _extract_script_block(
         cls, start_marker: str, end_marker: str | None, source_text: str
     ) -> str:
-        """Extract script block.
+        """Extract the script block for `InstallationEnvParsingRegressionTests`.
 
-        Inputs: `start_marker`, `end_marker`, `source_text`. Output: `str`. Raises on
-        invalid or unavailable state.
-
-        invalid or unavailable state.
+        Inputs: `start_marker` (str), `end_marker` (str | None), `source_text` (str).
+        Output: `str`. Raises: AssertionError when validation or external operations
+        fail.
         """
         start = source_text.find(start_marker)
         if start == -1:
@@ -75,17 +74,17 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _write_executable(path: Path, content: str) -> None:
-        """Write executable.
+        """Write the executable for `InstallationEnvParsingRegressionTests`.
 
-        Inputs: `path`, `content`. Output: None.
+        Inputs: `path` (Path) path, `content` (str). Output: None.
         """
         path.write_text(content, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
     def _run_harness(self, script_text: str) -> subprocess.CompletedProcess[str]:
-        """Harness.
+        """Run the harness for `InstallationEnvParsingRegressionTests`.
 
-        Inputs: `script_text`. Output: `subprocess.CompletedProcess[str]`.
+        Inputs: `script_text` (str). Output: `subprocess.CompletedProcess[str]`.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -100,9 +99,9 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
             )
 
     def test_installation_env_loader_resolves_safe_variable_references(self) -> None:
-        """Verify installation environment loader resolves safe variable references.
+        """Verify installation env loader resolves safe variable references.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation env loader resolves safe variable references.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -153,9 +152,9 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
     def test_installation_env_loader_rejects_command_substitution_without_executing_it(
         self,
     ) -> None:
-        """Verify installation environment loader rejects command substitution without executing it.
+        """Confirm installation env loader rejects command substitution without executing it is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation env loader rejects command substitution without executing it integration.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -184,9 +183,9 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
             self.assertIn("Refusing unsafe value", result.stderr)
 
     def test_installation_env_loader_rejects_invalid_variable_names(self) -> None:
-        """Verify installation environment loader rejects invalid variable names.
+        """Confirm installation env loader rejects invalid variable names is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation env loader rejects invalid variable names.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -212,9 +211,9 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
     def test_env_assignment_resolver_expands_safe_references_without_eval(
         self,
     ) -> None:
-        """Verify environment assignment resolver expands safe references without eval.
+        """Verify env assignment resolver expands safe references without eval.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in env assignment resolver expands safe references without eval.
         """
         result = self._run_harness(
             textwrap.dedent(
@@ -239,9 +238,9 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
     def test_env_assignment_resolver_rejects_unsupported_parameter_expansion(
         self,
     ) -> None:
-        """Verify environment assignment resolver rejects unsupported parameter expansion.
+        """Confirm env assignment resolver rejects unsupported parameter expansion is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in env assignment resolver rejects unsupported parameter expansion.
         """
         result = self._run_harness(
             textwrap.dedent(
@@ -259,9 +258,9 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
         self.assertIn("Unsupported parameter expansion", result.stderr)
 
     def test_installation_script_no_longer_re_evaluates_env_lines(self) -> None:
-        """Verify installation script no longer re evaluates environment lines.
+        """Verify the installation script no longer re evaluates env lines execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installation script no longer re evaluates env lines integration.
         """
         self.assertNotIn('eval "${env_line}"', self.script_text)
         self.assertNotIn('eval "${env_key}', self.script_text)

@@ -4,7 +4,7 @@ from omero_plugin_common.logging_utils import configure_omero_gateway_logging
 
 
 class AdminToolsPluginConfig(AppConfig):
-    """Represent admin tools plugin config."""
+    """Django application configuration for admin tools plugin config."""
 
     name = "omeroweb_admin_tools"
     label = "omeroweb_admin_tools"
@@ -13,6 +13,6 @@ class AdminToolsPluginConfig(AppConfig):
     def ready() -> None:
         """Apply plugin-wide runtime configuration.
 
-        Inputs: none. Output: None.
+        Inputs: Django calls it after app loading. Output: registers startup hooks.
         """
         configure_omero_gateway_logging()

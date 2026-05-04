@@ -303,9 +303,10 @@ def load_manifest(repo_root: Path) -> list[Path]:
 
 
 def validate_relative_manifest_path(raw_path: str) -> Path:
-    """Validate relative manifest path.
+    """Validate the relative manifest path.
 
-    Inputs: `raw_path`. Output: `Path`. Raises on invalid or unavailable state.
+    Inputs: `raw_path` (str). Output: `Path`. Raises: SystemExit when validation or
+    external operations fail.
     """
     path_text = raw_path.strip()
     raw_parts = path_text.split("/")
@@ -328,7 +329,8 @@ def validate_relative_manifest_path(raw_path: str) -> Path:
 def ensure_private_dir(path: Path) -> None:
     """Ensure private directory.
 
-    Inputs: `path`. Output: None. Raises on invalid or unavailable state.
+    Inputs: `path` (Path) path. Output: None. Raises: RuntimeError when validation or
+    external operations fail.
     """
     if path.is_symlink() or (path.exists() and not path.is_dir()):
         raise RuntimeError(f"Refusing unsafe backup directory path: {path}")
@@ -337,9 +339,10 @@ def ensure_private_dir(path: Path) -> None:
 
 
 def validate_backup_name(backup_name: str) -> str:
-    """Validate backup name.
+    """Validate the backup name.
 
-    Inputs: `backup_name`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `backup_name` (str). Output: `str`. Raises: ValueError when validation or
+    external operations fail.
     """
     candidate = PurePosixPath(backup_name.strip())
     invalid = (
@@ -401,10 +404,10 @@ def strip_env_quotes(value: str) -> str:
 
 
 def parse_active_env_assignments(env_path: Path) -> dict[str, str]:
-    """Return active env assignments in file order, failing on duplicates.
+    """Parse and validate the active env assignments input.
 
-    Inputs: `env_path`. Output: `dict[str, str]`. Raises on invalid or unavailable
-    state.
+    Inputs: `env_path` (Path). Output: `dict[str, str]`. Raises: ValueError when validation or
+    the called operation fails.
     """
     assignments: dict[str, str] = {}
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():
@@ -436,10 +439,10 @@ def parse_commented_env_assignments(env_path: Path) -> dict[str, str]:
 
 
 def resolve_env_references(value: str, assignments: dict[str, str]) -> str:
-    """Resolve environment references.
+    """Resolve the environment references.
 
-    Inputs: `value`, `assignments`. Output: `str`. Raises on invalid or unavailable
-    state.
+    Inputs: `value` (str) input value, `assignments` (dict[str, str]). Output: `str`.
+    Raises: ValueError when validation or the called operation fails.
     """
     if "$(" in value or "`" in value or "$[" in value:
         raise ValueError("unsupported shell expression")
@@ -507,9 +510,9 @@ def is_safe_omero_group_name(value: str) -> bool:
 
 
 def validate_group_list(value: str) -> list[str]:
-    """Validate group list.
+    """Validate the group list.
 
-    Inputs: `value`. Output: `list[str]`.
+    Inputs: `value` (str) input value. Output: `list[str]`.
     """
     errors: list[str] = []
     if not value:
@@ -533,9 +536,10 @@ def validate_group_list(value: str) -> list[str]:
 def validate_assignment_value(
     key: str, raw_value: str, resolved_value: str
 ) -> list[str]:
-    """Validate assignment value.
+    """Validate the assignment value.
 
-    Inputs: `key`, `raw_value`, `resolved_value`. Output: `list[str]`.
+    Inputs: `key` (str) lookup key, `raw_value` (str) raw value, `resolved_value` (str).
+    Output: `list[str]`.
     """
     errors: list[str] = []
     value = resolved_value
@@ -630,7 +634,8 @@ def derive_compose_project_name(installation_path: str | Path) -> str:
 def expected_compose_project_name(repo_root: Path) -> str:
     """Return the canonical compose project name for the declared installation.
 
-    Inputs: `repo_root`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `repo_root` (Path). Output: `str`. Raises: ValueError when validation or
+    external operations fail.
     """
     installation_env = load_env_assignments(repo_root / INSTALLATION_PATHS_ENV_NAME)
     installation_path = installation_env.get("OMERO_INSTALLATION_PATH", "").strip()
@@ -854,9 +859,10 @@ def validate_env_file_pair(
     actual_rel: str,
     context: dict[str, str],
 ) -> list[str]:
-    """Validate environment file pair.
+    """Validate the environment file pair.
 
-    Inputs: `repo_root`, `example_rel`, `actual_rel`, `context`. Output: `list[str]`.
+    Inputs: `repo_root` (Path), `example_rel` (str), `actual_rel` (str), `context`
+    (dict[str, str]). Output: `list[str]`.
     """
     errors: list[str] = []
     example_path = repo_root / example_rel
@@ -924,9 +930,9 @@ def validate_env_file_pair(
 
 
 def validate_dot_env_values(repo_root: Path, context: dict[str, str]) -> list[str]:
-    """Validate dot environment values.
+    """Validate the dot environment values.
 
-    Inputs: `repo_root`, `context`. Output: `list[str]`.
+    Inputs: `repo_root` (Path), `context` (dict[str, str]). Output: `list[str]`.
     """
     dot_env_path = repo_root / DOT_ENV_NAME
     errors: list[str] = []
@@ -1124,9 +1130,9 @@ def cmd_restore(repo_root: Path, backup_name: str | None = None) -> int:
 
 
 def cmd_list(repo_root: Path) -> int:
-    """Available backups.
+    """Return the cmd list.
 
-    Inputs: `repo_root`. Output: `int`.
+    Inputs: `repo_root` (Path). Output: `int`.
     """
     backups_root = repo_root / BACKUP_DIR_NAME
     if not backups_root.exists():
@@ -1208,7 +1214,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.env_safety_guard` command entrypoint.
 
     Inputs: `argv`. Output: `int`.
     """

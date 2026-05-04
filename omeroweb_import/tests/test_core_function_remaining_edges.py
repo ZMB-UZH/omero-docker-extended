@@ -3,6 +3,7 @@ from __future__ import annotations
 from iter_test_helpers import next_or_fail
 
 import errno
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,50 +13,65 @@ from omeroweb_import.views import core_functions
 
 
 class _Upload:
-    """Represent upload."""
+    """Test double for upload behavior in this module."""
 
     def __init__(self, *chunks: bytes):
-        """Initialize the instance.
+        """Create `_Upload` with its default state.
 
         Inputs: `*chunks`. Output: None.
         """
         self._chunks = chunks
 
     def chunks(self):
-        """Chunks.
+        """Return the chunks for `_Upload`.
 
-        Inputs: none. Output: `list` result.
+        Inputs: none. Output: `list`.
         """
         return list(self._chunks)
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._raw_value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self._raw_value`.
         """
         return self._raw_value
 
 
+def _session_context(session_key):
+    """Build a background-session context manager returning a fixed key.
+
+    Inputs: `session_key`. Output: callable context factory.
+    """
+
+    @contextmanager
+    def _context(*args, **kwargs):
+        """Yield the fixed background session key.
+
+        Inputs: `*args`, `**kwargs`. Output: context manager yield.
+        """
+        yield session_key
+
+    return _context
+
+
 def test_directory_helpers_cover_parent_creation_and_permission_failures(
     tmp_path, monkeypatch
 ):
-    """Verify directory helpers cover parent creation and permission failures.
+    """Verify the directory helpers cover parent creation and permission failures safety boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: computed value. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `original_mkdir` result. Raises: OSError for the exercised failure path.
     """
     target = tmp_path / "nested" / "file.txt"
     assert core_functions._ensure_parent_dir(target) is True
@@ -65,12 +81,11 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
     original_mkdir = Path.mkdir
 
     def failing_mkdir(self, *args, **kwargs):
-        """Failing mkdir.
+        """Return the failing mkdir.
 
-        Inputs: `*args`, `**kwargs`. Output: `original_mkdir` result. Raises on invalid
-        or unavailable state.
-
-        or unavailable state.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `original_mkdir` result. Raises: OSError when validation or external operations
+        fail.
         """
         if self == failing_target.parent:
             raise OSError("mkdir failed")
@@ -87,12 +102,9 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
     original_chmod = Path.chmod
 
     def failing_chmod(self, mode):
-        """Failing chmod.
+        """Return the failing chmod.
 
-        Inputs: `mode`. Output: `original_chmod` result. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `mode`. Output: `original_chmod` result. Raises: OSError when validation or the called operation fails.
         """
         if self == secure_dir:
             raise OSError("chmod failed")
@@ -105,12 +117,11 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
     failing_create = tmp_path / "failing-create"
 
     def mkdir_target_failure(self, *args, **kwargs):
-        """Mkdir target failure.
+        """Return the mkdir target failure.
 
-        Inputs: `*args`, `**kwargs`. Output: `original_mkdir` result. Raises on invalid
-        or unavailable state.
-
-        or unavailable state.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `original_mkdir` result. Raises: OSError when validation or external operations
+        fail.
         """
         if self == failing_create:
             raise OSError("create failed")
@@ -124,12 +135,9 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
     failing_exists = tmp_path / "failing-exists"
 
     def exists_failure(self):
-        """Exists failure.
+        """Return the exists failure.
 
-        Inputs: none. Output: `original_exists` result. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: none. Output: `original_exists` result. Raises: OSError when validation or the called operation fails.
         """
         if self == failing_exists:
             raise OSError("exists failed")
@@ -144,7 +152,7 @@ def test_staged_upload_helpers_cover_runtime_and_oserror_fallbacks(
 ):
     """Verify staged upload helpers cover runtime and oserror fallbacks.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in staged upload helpers cover runtime and oserror fallbacks.
     """
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
@@ -215,15 +223,277 @@ def test_staged_upload_helpers_cover_runtime_and_oserror_fallbacks(
     assert core_functions._is_managed_upload_internal_error(replace_error) is True
 
 
+def test_staged_upload_checksum_helpers_cover_validation_edges(tmp_path) -> None:
+    """Verify staged upload checksum helpers cover validation edges.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in staged upload checksum helpers cover validation edges.
+    """
+    upload_root = tmp_path / "uploads"
+    staged_dir = upload_root / "_staged"
+    staged_dir.mkdir(parents=True)
+    (staged_dir / "file.bin").write_bytes(b"abc")
+
+    assert core_functions._reset_staged_upload_file(
+        upload_root, "../escape"
+    ).startswith("Invalid filename")
+    invalid_path_result = core_functions._staged_upload_chunk_matches(
+        upload_root,
+        "../escape",
+        0,
+        3,
+        "0" * 64,
+    )
+    assert invalid_path_result[0] is False
+    assert "Invalid filename" in invalid_path_result[1]
+    bad_digest_result = core_functions._staged_upload_chunk_matches(
+        upload_root,
+        "_staged/file.bin",
+        0,
+        3,
+        "not-a-digest",
+    )
+    assert bad_digest_result[0] is False
+    assert "chunk_sha256" in bad_digest_result[1]
+    assert core_functions._staged_upload_chunk_matches(
+        upload_root,
+        "_staged/file.bin",
+        0,
+        10,
+        "0" * 64,
+    ) == (False, None)
+    assert core_functions._staged_upload_chunk_matches(
+        upload_root,
+        "_staged/missing.bin",
+        0,
+        3,
+        "0" * 64,
+    ) == (False, None)
+
+
+def test_staged_upload_checksum_reports_runtime_and_storage_failures(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """Verify staged upload checksum reports runtime and storage failures.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in staged upload checksum reports runtime and storage failures.
+    """
+    upload_root = tmp_path / "uploads"
+    staged_dir = upload_root / "_staged"
+    staged_dir.mkdir(parents=True)
+    (staged_dir / "file.bin").write_bytes(b"abc")
+
+    monkeypatch.setattr(
+        core_functions,
+        "_managed_parent_runtime_error",
+        lambda *args, **kwargs: "unsafe staged parent",
+    )
+    assert core_functions._staged_upload_chunk_matches(
+        upload_root,
+        "_staged/file.bin",
+        0,
+        3,
+        "0" * 64,
+    ) == (False, "unsafe staged parent")
+
+    monkeypatch.setattr(
+        core_functions,
+        "_managed_parent_runtime_error",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_managed_parent_directory_fd",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("directory fd failed")),
+    )
+    already_saved, match_error = core_functions._staged_upload_chunk_matches(
+        upload_root,
+        "_staged/file.bin",
+        0,
+        3,
+        "0" * 64,
+    )
+    assert already_saved is False
+    assert core_functions._is_managed_upload_internal_error(match_error) is True
+
+
+def test_dataset_name_and_legacy_option_helpers_cover_overrides(monkeypatch) -> None:
+    """Verify dataset name and legacy option helpers cover overrides.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in dataset name and legacy option helpers cover overrides.
+    """
+    with pytest.raises(TypeError, match="Unexpected converter option"):
+        core_functions._build_bioformats2raw_command(
+            "/in",
+            "/out",
+            {},
+            unsupported=True,
+        )
+    for raw_name in (17, " ", "bad\nname", "a" * 256):
+        normalized, error = core_functions._normalize_dataset_name_override(raw_name)
+        if raw_name == 17:
+            assert normalized == "17"
+            assert error is None
+        else:
+            assert normalized is None
+            assert error
+
+    job_dict = {"dataset_name_override": "Chosen"}
+    assert (
+        core_functions._dataset_name_for_job_entry(
+            job_dict,
+            {"relative_path": "folder/image.tif"},
+            "Orphans",
+        )
+        == "Chosen"
+    )
+    assert (
+        core_functions._dataset_name_for_job_relative_path(
+            job_dict,
+            "folder/image.tif",
+            "Orphans",
+        )
+        == "Chosen"
+    )
+    with pytest.raises(TypeError, match="Unexpected upload update"):
+        core_functions._apply_upload_updates("job-id", [], upload_errors=[], extra=True)
+
+
+def test_units_ids_and_normalization_connection_cover_fallback_paths(
+    monkeypatch,
+) -> None:
+    """Verify units IDs and normalization connection cover fallback paths.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in units IDs and normalization connection cover fallback paths.
+    """
+    units_class = SimpleNamespace(
+        _enumerators={
+            "MICROMETER": SimpleNamespace(name="MICROMETER"),
+            "NANOMETER": SimpleNamespace(name="NANOMETER"),
+        }
+    )
+    assert [
+        unit.name for unit in core_functions._iter_units_length_values(units_class)
+    ] == [
+        "MICROMETER",
+        "NANOMETER",
+    ]
+
+    obj = SimpleNamespace(
+        _obj=SimpleNamespace(),
+        getId=lambda: SimpleNamespace(getValue=lambda: 42),
+    )
+    assert core_functions._get_id(obj) == 42
+
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("offline")),
+    )
+    assert (
+        core_functions._open_import_name_normalization_connection(
+            "session",
+            "omero",
+            4064,
+            7,
+        )
+        is None
+    )
+
+    assert (
+        core_functions._iter_units_length_values(SimpleNamespace(_enumerators=())) == []
+    )
+
+
+def test_import_job_entry_dataset_override_selects_dataset_before_import(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """Verify import job entry dataset override selects dataset before import.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in import job entry dataset override selects dataset before import.
+    """
+    upload_root = tmp_path / "uploads"
+    staged_file = upload_root / "_staged" / "image.tif"
+    staged_file.parent.mkdir(parents=True)
+    staged_file.write_bytes(b"pixels")
+    captured = {}
+
+    monkeypatch.setattr(
+        core_functions,
+        "_resolve_staged_target_path",
+        lambda root, staged_path: (staged_file, None),
+    )
+
+    def build_normalization_context(entry, dataset_id, *, file_path):
+        """Capture the dataset ID considered for import-name normalization.
+
+        Inputs: `entry`, `dataset_id`, `file_path`. Output: None.
+        """
+        captured["normalization_dataset_id"] = dataset_id
+
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        build_normalization_context,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_coerce_import_name_normalization_context",
+        lambda context: context,
+    )
+    monkeypatch.setattr(
+        core_functions, "_background_import_session", _session_context("background")
+    )
+    monkeypatch.setattr(core_functions, "_get_import_timeout_seconds", lambda: 30)
+
+    def fake_import_file(**kwargs):
+        """Capture the dataset ID passed to the OMERO CLI import helper.
+
+        Inputs: `**kwargs`. Output: tuple.
+        """
+        captured["import_dataset_id"] = kwargs["dataset_id"]
+        return False, "", "import failed"
+
+    monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    monkeypatch.setattr(
+        core_functions, "_extract_imported_object_ids", lambda output: []
+    )
+    monkeypatch.setattr(
+        core_functions, "_extract_imported_image_ids", lambda output: []
+    )
+
+    result = core_functions._import_job_entry(
+        {
+            "index": 0,
+            "relative_path": "folder/image.tif",
+            "staged_path": "_staged/image.tif",
+        },
+        upload_root,
+        "session",
+        "omeroserver",
+        4064,
+        {"Override Dataset": 44},
+        "folder",
+        dataset_name_override="Override Dataset",
+        username="alice",
+        group_name="users",
+    )
+
+    assert captured == {
+        "normalization_dataset_id": 44,
+        "import_dataset_id": 44,
+    }
+    assert result["status"] == "error"
+
+
 def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(
     tmp_path, monkeypatch
 ):
-    """Verify managed runtime and job file helpers cover remaining error paths.
+    """Confirm managed runtime and job file helpers cover remaining error paths exposes the expected failure.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `original_unlink` result. Raises on
-    invalid or unavailable state.
-
-    invalid or unavailable state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `original_unlink` result. Raises: OSError for the exercised failure path.
     """
     original_os_open = core_functions.os.open
     original_os_close = core_functions.os.close
@@ -351,12 +621,11 @@ def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(
     original_unlink = Path.unlink
 
     def failing_unlink(self, *args, **kwargs):
-        """Failing unlink.
+        """Return the failing unlink.
 
-        Inputs: `*args`, `**kwargs`. Output: `original_unlink` result. Raises on invalid
-        or unavailable state.
-
-        or unavailable state.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `original_unlink` result. Raises: OSError when validation or external operations
+        fail.
         """
         if self.parent == jobs_root and self.suffix == ".tmp":
             raise OSError("unlink failed")
@@ -373,9 +642,9 @@ def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(
 def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
     tmp_path, monkeypatch
 ):
-    """Verify job update and parameter helpers cover generic dict and error paths.
+    """Confirm job update and parameter helpers cover generic dict and error paths exposes the expected failure.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions when job update and parameter helpers cover generic dict and error paths stops reporting the expected error.
     """
     jobs_root = tmp_path / "jobs"
     jobs_root.mkdir()
@@ -442,10 +711,8 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
 ):
     """Verify connection and dataset helpers cover admin and service edge cases.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in connection and dataset helpers cover admin and service edge cases.
+    RuntimeError, _connect_result when validation or the called operation fails.
     """
     monkeypatch.setattr(
         core_functions,
@@ -463,27 +730,27 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
     )
 
     class _AdminConn:
-        """Represent admin conn."""
+        """Test double for admin conn behavior in this module."""
 
         def __init__(self, conn):
-            """Initialize the instance.
+            """Create `_AdminConn` with `conn`.
 
             Inputs: `conn`. Output: None.
             """
             self._conn = conn
 
         def suConn(self, username):
-            """Su conn.
+            """Return the su Conn for `_AdminConn`.
 
-            Inputs: `username`. Output: `self._conn`.
+            Inputs: `username` username. Output: `_conn`.
             """
             return self._conn
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_AdminConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("admin close exploded")
 
@@ -505,32 +772,31 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
     group_calls = []
 
     class _UpdateService:
-        """Represent update service."""
+        """Test double for update service behavior in this module."""
 
         @staticmethod
         def saveAndReturnObject(dataset, opts):
-            """Save and return object.
+            """Save the and Return Object for `_UpdateService`.
 
-            Inputs: `dataset`, `opts`. Output: None. Raises on invalid or unavailable
-            state.
+            Inputs: `dataset`, `opts`. Output: None. Raises: RuntimeError when validation or the called operation fails.
             """
             raise RuntimeError("save failed")
 
         @staticmethod
         def saveObject(link, opts):
-            """Save object.
+            """Save the object for `_UpdateService`.
 
             Inputs: `link`, `opts`. Output: None.
             """
             group_calls.append(("linked", link, opts))
 
     class _DatasetConn:
-        """Represent dataset conn."""
+        """Test double for dataset conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_DatasetConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.SERVICE_OPTS = SimpleNamespace(
                 setOmeroGroup=lambda value: group_calls.append(("group", value))
@@ -538,7 +804,7 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
 
         @staticmethod
         def getUpdateService():
-            """Return Update Service.
+            """Return `_DatasetConn`'s fake update service.
 
             Inputs: none. Output: `_UpdateService` result.
             """
@@ -546,9 +812,9 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_DatasetConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("dataset close exploded")
 
@@ -578,10 +844,10 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
     assert core_functions._open_service_connection("omeroserver", 4064) is None
 
     class _BlitzConn:
-        """Represent blitz conn."""
+        """Test double for blitz conn behavior in this module."""
 
         def __init__(self, connect_result, *, fail_group=False):
-            """Initialize the instance.
+            """Create `_BlitzConn` with `connect_result`.
 
             Inputs: `connect_result`, `fail_group`. Output: None.
             """
@@ -590,20 +856,17 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=self._set_group)
 
         def _set_group(self, value):
-            """Set group.
+            """Set the group for `_BlitzConn`.
 
-            Inputs: `value`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `value` input value. Output: None. Raises: RuntimeError when validation or the called operation fails.
             """
             if self._fail_group:
                 raise RuntimeError("group exploded")
 
         def connect(self):
-            """Open the connection.
+            """Open the connection for `_BlitzConn`.
 
-            Inputs: none. Output: `self._connect_result`. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: none. Output: `_connect_result`. Raises: _connect_result when validation or the called operation fails.
             """
             if isinstance(self._connect_result, Exception):
                 raise self._connect_result
@@ -611,15 +874,15 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_BlitzConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close exploded")
 
         @staticmethod
         def getLastError():
-            """Return Last Error.
+            """Return `_BlitzConn`'s fake last-error text.
 
             Inputs: none. Output: 'last-error'.
             """
@@ -695,9 +958,9 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
 def test_import_candidate_and_probe_helpers_cover_remaining_path_edges(
     monkeypatch, tmp_path
 ):
-    """Verify import candidate and probe helpers cover remaining path edges.
+    """Verify the import candidate and probe helpers cover remaining path edges safety boundary.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when import candidate and probe helpers cover remaining path edges accepts unsafe input.
     """
     expected_path = SimpleNamespace(
         resolve=lambda: (_ for _ in ()).throw(OSError("resolve failed")),

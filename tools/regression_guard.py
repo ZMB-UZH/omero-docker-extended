@@ -74,7 +74,7 @@ GITHUB_PAT_RE = re.compile(rf"\bgh[{_PAT_PREFIX_CHARS}]_[A-Za-z0-9]{{36}}\b")
 
 @dataclass(frozen=True)
 class Finding:
-    """Represent finding."""
+    """Helper type for finding behavior."""
 
     rule_id: str
     severity: str
@@ -85,7 +85,7 @@ class Finding:
     excerpt: str
 
     def render(self) -> str:
-        """Render.
+        """Render the render for `Finding`.
 
         Inputs: none. Output: `str`.
         """
@@ -98,7 +98,7 @@ class Finding:
 
 @dataclass(frozen=True)
 class Rule:
-    """Represent rule."""
+    """Helper type for rule behavior."""
 
     id: str
     severity: str
@@ -116,9 +116,9 @@ class Rule:
     custom_check: Callable[[Path, str], list[tuple[int, int, str, str]]] | None = None
 
     def applies_to_path(self, rel_path: str) -> bool:
-        """Applies to path.
+        """Return the applies to path for `Rule`.
 
-        Inputs: `rel_path`. Output: `bool`.
+        Inputs: `rel_path` (str). Output: `bool`.
         """
         if not _matches_any(rel_path, self.applies_to):
             return False
@@ -135,9 +135,9 @@ class Rule:
 
 
 def _matches_any(rel_path: str, globs: Sequence[str]) -> bool:
-    """Matches any.
+    """Return whether any.
 
-    Inputs: `rel_path`, `globs`. Output: `bool`.
+    Inputs: `rel_path` (str), `globs` (Sequence[str]). Output: `bool`.
     """
     from fnmatch import fnmatch
 
@@ -174,9 +174,10 @@ def _is_test_path(rel_path: str) -> bool:
 def _iter_repo_files(
     repo_root: Path, paths: Sequence[Path] | None = None
 ) -> Iterator[Path]:
-    """Repo files.
+    """Iterate over the repo files.
 
-    Inputs: `repo_root`, `paths`. Output: `Iterator[Path]`.
+    Inputs: `repo_root` (Path), `paths` (Sequence[Path] | None). Output:
+    `Iterator[Path]`.
     """
     if paths:
         for entry in paths:
@@ -190,9 +191,9 @@ def _iter_repo_files(
 
 
 def _walk(root: Path) -> Iterator[Path]:
-    """Walk.
+    """Walk the walk.
 
-    Inputs: `root`. Output: `Iterator[Path]`.
+    Inputs: `root` (Path). Output: `Iterator[Path]`.
     """
     skip_dirs = tuple(p.rstrip("/") for p in DEFAULT_PATH_EXCLUDES if p.endswith("/"))
     for dirpath, dirnames, filenames in os.walk(root):
@@ -202,9 +203,9 @@ def _walk(root: Path) -> Iterator[Path]:
 
 
 def _read_text(path: Path) -> str | None:
-    """Read text.
+    """Read the text.
 
-    Inputs: `path`. Output: `str | None`.
+    Inputs: `path` (Path) path. Output: `str | None`.
     """
     try:
         if path.stat().st_size > 500_000:
@@ -225,9 +226,9 @@ def _read_text(path: Path) -> str | None:
 def _ast_assert_in_production(
     tree: ast.AST, src: str
 ) -> list[tuple[int, int, str, str]]:
-    """Ast assert in production.
+    """Return the ast assert in production.
 
-    Inputs: `tree`, `src`. Output: `list[tuple[int, int, str, str]]`.
+    Inputs: `tree` (ast.AST), `src` (str). Output: `list[tuple[int, int, str, str]]`.
     """
     hits: list[tuple[int, int, str, str]] = []
     for node in ast.walk(tree):
@@ -301,9 +302,9 @@ def _exception_clause_is_broad(handler: ast.ExceptHandler) -> bool:
 
 
 def _ast_silent_except(tree: ast.AST, src: str) -> list[tuple[int, int, str, str]]:
-    """Ast silent except.
+    """Return the ast silent except.
 
-    Inputs: `tree`, `src`. Output: `list[tuple[int, int, str, str]]`.
+    Inputs: `tree` (ast.AST), `src` (str). Output: `list[tuple[int, int, str, str]]`.
     """
     hits: list[tuple[int, int, str, str]] = []
     for node in ast.walk(tree):
@@ -337,9 +338,9 @@ def _ast_silent_except(tree: ast.AST, src: str) -> list[tuple[int, int, str, str
 
 
 def _ast_bare_except(tree: ast.AST, src: str) -> list[tuple[int, int, str, str]]:
-    """Ast bare except.
+    """Return the ast bare except.
 
-    Inputs: `tree`, `src`. Output: `list[tuple[int, int, str, str]]`.
+    Inputs: `tree` (ast.AST), `src` (str). Output: `list[tuple[int, int, str, str]]`.
     """
     hits: list[tuple[int, int, str, str]] = []
     for node in ast.walk(tree):
@@ -366,7 +367,7 @@ _HARDCODED_TMP_PREFIX = _HARDCODED_TMP_ROOT + "/"
 
 
 def _ast_hardcoded_tmp(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]]:
-    """Ast hardcoded tmp.
+    """Find hard-coded temporary-path literals in Python AST nodes.
 
     Inputs: `tree`, `_src`. Output: `list[tuple[int, int, str, str]]`.
     """
@@ -406,9 +407,9 @@ def _is_dynamic_string(node: ast.AST) -> bool:
 
 
 def _ast_sql_interpolation(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]]:
-    """Ast SQL interpolation.
+    """Return the ast SQL interpolation.
 
-    Inputs: `tree`, `_src`. Output: `list[tuple[int, int, str, str]]`.
+    Inputs: `tree` (ast.AST), `_src` (str). Output: `list[tuple[int, int, str, str]]`.
     """
     hits: list[tuple[int, int, str, str]] = []
     for node in ast.walk(tree):
@@ -435,9 +436,9 @@ def _ast_sql_interpolation(tree: ast.AST, _src: str) -> list[tuple[int, int, str
 
 
 def _ast_csrf_exempt(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]]:
-    """Ast CSRF exempt.
+    """Return the ast CSRF exempt.
 
-    Inputs: `tree`, `_src`. Output: `list[tuple[int, int, str, str]]`.
+    Inputs: `tree` (ast.AST), `_src` (str). Output: `list[tuple[int, int, str, str]]`.
     """
     hits: list[tuple[int, int, str, str]] = []
     for node in ast.walk(tree):
@@ -465,9 +466,9 @@ def _ast_csrf_exempt(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]
 
 
 def _ast_mark_safe(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]]:
-    """Ast mark safe.
+    """Return the ast mark safe.
 
-    Inputs: `tree`, `_src`. Output: `list[tuple[int, int, str, str]]`.
+    Inputs: `tree` (ast.AST), `_src` (str). Output: `list[tuple[int, int, str, str]]`.
     """
     hits: list[tuple[int, int, str, str]] = []
     for node in ast.walk(tree):
@@ -495,9 +496,9 @@ def _ast_mark_safe(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]]:
 
 
 def _ast_chmod(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]]:
-    """Ast chmod.
+    """Return the ast chmod.
 
-    Inputs: `tree`, `_src`. Output: `list[tuple[int, int, str, str]]`.
+    Inputs: `tree` (ast.AST), `_src` (str). Output: `list[tuple[int, int, str, str]]`.
     """
     hits: list[tuple[int, int, str, str]] = []
     flagged_modes = {0o666, 0o777, 0o644, 0o755, 0o664, 0o775, 0o646}
@@ -531,9 +532,9 @@ def _ast_chmod(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]]:
 
 
 def _ast_urllib_urlopen(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]]:
-    """Ast urllib urlopen.
+    """Return the ast urllib urlopen.
 
-    Inputs: `tree`, `_src`. Output: `list[tuple[int, int, str, str]]`.
+    Inputs: `tree` (ast.AST), `_src` (str). Output: `list[tuple[int, int, str, str]]`.
     """
     hits: list[tuple[int, int, str, str]] = []
     for node in ast.walk(tree):
@@ -557,9 +558,9 @@ def _ast_urllib_urlopen(tree: ast.AST, _src: str) -> list[tuple[int, int, str, s
 def _ast_subprocess_bare_path(
     tree: ast.AST, _src: str
 ) -> list[tuple[int, int, str, str]]:
-    """Ast subprocess bare path.
+    """Return the ast subprocess bare path.
 
-    Inputs: `tree`, `_src`. Output: `list[tuple[int, int, str, str]]`.
+    Inputs: `tree` (ast.AST), `_src` (str). Output: `list[tuple[int, int, str, str]]`.
     """
     hits: list[tuple[int, int, str, str]] = []
     api_names = {"run", "Popen", "call", "check_call", "check_output"}
@@ -600,9 +601,9 @@ def _ast_subprocess_bare_path(
 def _ast_httpresponse_dynamic_string(
     tree: ast.AST, _src: str
 ) -> list[tuple[int, int, str, str]]:
-    """Ast httpresponse dynamic string.
+    """Return the ast httpresponse dynamic string.
 
-    Inputs: `tree`, `_src`. Output: `list[tuple[int, int, str, str]]`.
+    Inputs: `tree` (ast.AST), `_src` (str). Output: `list[tuple[int, int, str, str]]`.
     """
     hits: list[tuple[int, int, str, str]] = []
     for node in ast.walk(tree):
@@ -640,9 +641,9 @@ def _ast_httpresponse_dynamic_string(
 def _custom_dockerfile_last_user_root(
     _path: Path, content: str
 ) -> list[tuple[int, int, str, str]]:
-    """Custom dockerfile last user root.
+    """Return the custom dockerfile last user root.
 
-    Inputs: `_path`, `content`. Output: `list[tuple[int, int, str, str]]`.
+    Inputs: `_path` (Path), `content` (str). Output: `list[tuple[int, int, str, str]]`.
     """
     last_user_line = -1
     last_user_value = ""
@@ -669,9 +670,9 @@ def _custom_dockerfile_last_user_root(
 
 
 def _custom_pat_in_file(_path: Path, content: str) -> list[tuple[int, int, str, str]]:
-    """Custom pat in file.
+    """Return the custom pat in file.
 
-    Inputs: `_path`, `content`. Output: `list[tuple[int, int, str, str]]`.
+    Inputs: `_path` (Path), `content` (str). Output: `list[tuple[int, int, str, str]]`.
     """
     hits: list[tuple[int, int, str, str]] = []
     for idx, raw in enumerate(content.splitlines(), start=1):
@@ -926,9 +927,9 @@ CATALOG: tuple[Rule, ...] = (
 
 
 def _python_ast_findings(rule: Rule, rel_path: str, src: str) -> list[Finding]:
-    """Python ast findings.
+    """Return the python ast findings.
 
-    Inputs: `rule`, `rel_path`, `src`. Output: `list[Finding]`.
+    Inputs: `rule` (Rule), `rel_path` (str), `src` (str). Output: `list[Finding]`.
     """
     if rule.ast_check is None:
         return []
@@ -945,9 +946,9 @@ def _python_ast_findings(rule: Rule, rel_path: str, src: str) -> list[Finding]:
 
 
 def _regex_findings(rule: Rule, rel_path: str, content: str) -> list[Finding]:
-    """Regex findings.
+    """Return the regex findings.
 
-    Inputs: `rule`, `rel_path`, `content`. Output: `list[Finding]`.
+    Inputs: `rule` (Rule), `rel_path` (str), `content` (str). Output: `list[Finding]`.
     """
     if not rule.pattern:
         return []
@@ -974,9 +975,10 @@ def _regex_findings(rule: Rule, rel_path: str, content: str) -> list[Finding]:
 def _custom_findings(
     rule: Rule, rel_path: str, path: Path, content: str
 ) -> list[Finding]:
-    """Custom findings.
+    """Return the custom findings.
 
-    Inputs: `rule`, `rel_path`, `path`, `content`. Output: `list[Finding]`.
+    Inputs: `rule` (Rule), `rel_path` (str), `path` (Path) path, `content` (str).
+    Output: `list[Finding]`.
     """
     if rule.custom_check is None:
         return []
@@ -993,9 +995,10 @@ def scan_paths(
     paths: Sequence[Path] | None,
     rules: Sequence[Rule] = CATALOG,
 ) -> list[Finding]:
-    """Scan paths.
+    """Scan the paths.
 
-    Inputs: `repo_root`, `paths`, `rules`. Output: `list[Finding]`.
+    Inputs: `repo_root` (Path), `paths` (Sequence[Path] | None), `rules`
+    (Sequence[Rule]). Output: `list[Finding]`.
     """
     findings: list[Finding] = []
     repo_resolved = repo_root.resolve()
@@ -1032,12 +1035,10 @@ def scan_paths(
 
 
 def _git_changed_files(repo_root: Path, base: str) -> list[Path]:
-    """Git changed files.
+    """Return the git changed files.
 
-    Inputs: `repo_root`, `base`. Output: `list[Path]`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `repo_root` (Path), `base` (str). Output: `list[Path]`. Raises: SystemExit
+    when validation or the called operation fails.
     """
     cmd = ["git", "-C", str(repo_root), "diff", "--name-only", f"{base}..HEAD"]
     try:
@@ -1058,7 +1059,7 @@ def _git_changed_files(repo_root: Path, base: str) -> list[Path]:
 
 
 def render_text() -> str:
-    """Render text.
+    """Render the text.
 
     Inputs: none. Output: `str`.
     """
@@ -1068,7 +1069,7 @@ def render_text() -> str:
 
 
 def render_json() -> str:
-    """Render JSON.
+    """Render the JSON.
 
     Inputs: none. Output: `str`.
     """
@@ -1091,7 +1092,7 @@ def render_json() -> str:
 
 
 def render_markdown() -> str:
-    """Render markdown.
+    """Render the markdown.
 
     Inputs: none. Output: `str`.
     """
@@ -1135,7 +1136,7 @@ def render_markdown() -> str:
 
 
 def _selfcheck_fixtures() -> dict[str, tuple[str, str]]:
-    """Selfcheck fixtures.
+    """Return the selfcheck fixtures.
 
     Inputs: none. Output: `dict[str, tuple[str, str]]`.
     """
@@ -1281,9 +1282,10 @@ def selfcheck() -> int:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse args.
+    """Parse command-line arguments for `tools.regression_guard`.
 
-    Inputs: `argv`. Output: `argparse.Namespace`.
+    Inputs: `argv` (Sequence[str] | None) command-line arguments. Output:
+    `argparse.Namespace`.
     """
     parser = argparse.ArgumentParser(
         description="Regression guard for closed-alert recurrence patterns."
@@ -1332,9 +1334,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def _filter_severity(findings: Iterable[Finding], threshold: str) -> list[Finding]:
-    """Filter severity.
+    """Filter the severity.
 
-    Inputs: `findings`, `threshold`. Output: `list[Finding]`.
+    Inputs: `findings` (Iterable[Finding]), `threshold` (str). Output: `list[Finding]`.
     """
     cutoff = SEVERITY_ORDER.index(threshold)
     out: list[Finding] = []
@@ -1348,9 +1350,10 @@ def _filter_severity(findings: Iterable[Finding], threshold: str) -> list[Findin
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.regression_guard` command entrypoint.
 
-    Inputs: `argv`. Output: `int`. Raises on invalid or unavailable state.
+    Inputs: `argv` (Sequence[str] | None) command-line arguments. Output: `int`. Raises:
+    SystemExit when validation or the called operation fails.
     """
     args = parse_args(argv)
     repo_root = args.repo_root.resolve()

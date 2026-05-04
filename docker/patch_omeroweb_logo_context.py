@@ -13,9 +13,9 @@ NEW_BLOCK = """        context[\"ome\"].setdefault(\"logo_src\", \"\")\n        
 
 
 def main() -> int:
-    """Execute the command entrypoint.
+    """Run the `docker.patch_omeroweb_logo_context` command entrypoint.
 
-    Inputs: none. Output: `int`. Raises on invalid or unavailable state.
+    Inputs: none. Output: `int`. Raises: SystemExit for the exercised failure path.
     """
     if len(sys.argv) != 2:
         raise SystemExit("usage: patch_omeroweb_logo_context.py <decorators.py>")

@@ -23,7 +23,7 @@ if not settings.configured:
 
 
 def _import_views():
-    """Import views.
+    """Import the views.
 
     Inputs: none. Output: `views`.
     """
@@ -33,9 +33,9 @@ def _import_views():
 
 
 def test_imaris_export_hides_invalid_base_url_exception_text(monkeypatch) -> None:
-    """Verify imaris export hides invalid base URL exception text.
+    """Confirm imaris export hides invalid base URL exception text exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when imaris export hides invalid base URL exception text stops reporting the expected error.
     """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
@@ -51,9 +51,9 @@ def test_imaris_export_hides_invalid_base_url_exception_text(monkeypatch) -> Non
 
 
 def test_imaris_export_hides_invalid_port_exception_text(monkeypatch) -> None:
-    """Verify imaris export hides invalid port exception text.
+    """Confirm imaris export hides invalid port exception text exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when imaris export hides invalid port exception text stops reporting the expected error.
     """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
@@ -73,9 +73,9 @@ def test_imaris_export_hides_invalid_port_exception_text(monkeypatch) -> None:
 def test_imaris_export_capabilities_reports_omero_when_script_is_available(
     monkeypatch,
 ) -> None:
-    """Verify imaris export capabilities reports OMERO when script is available.
+    """Verify the imaris export capabilities reports OMERO when script is available execution contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris export capabilities reports OMERO when script is available integration.
     """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
@@ -98,9 +98,9 @@ def test_imaris_export_capabilities_reports_omero_when_script_is_available(
 
 
 def test_imaris_export_capabilities_hides_omero_without_script(monkeypatch) -> None:
-    """Verify imaris export capabilities hides OMERO without script.
+    """Verify the imaris export capabilities hides OMERO without script execution contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris export capabilities hides OMERO without script integration.
     """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
@@ -123,9 +123,9 @@ def test_imaris_export_capabilities_hides_omero_without_script(monkeypatch) -> N
 
 
 def test_imaris_export_capabilities_hides_probe_exceptions(monkeypatch, caplog) -> None:
-    """Verify capability probes fail closed without leaking backend details.
+    """Verify imaris export capabilities hides probe exceptions.
 
-    Inputs: `monkeypatch`, `caplog`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `caplog`. Output: fails on regressions in imaris export capabilities hides probe exceptions.
     """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
@@ -156,7 +156,7 @@ def test_imaris_export_capabilities_hides_probe_exceptions(monkeypatch, caplog) 
 def test_imaris_export_hides_job_failure_details(monkeypatch) -> None:
     """Verify imaris export hides job failure details.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris export hides job failure details.
     """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
@@ -190,9 +190,9 @@ def test_imaris_export_hides_job_failure_details(monkeypatch) -> None:
 
 
 def test_imaris_export_returns_public_task_failure_messages(monkeypatch) -> None:
-    """Verify public task failures reach XT clients without backend details.
+    """Verify imaris export returns public task failure messages result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris export returns public task failure messages.
     """
     views = _import_views()
     public_error = "Could not prepare source image for IMS conversion"
@@ -251,9 +251,9 @@ def test_imaris_export_returns_public_task_failure_messages(monkeypatch) -> None
 
 
 def test_imaris_export_hides_internal_exception_text(monkeypatch) -> None:
-    """Verify imaris export hides internal exception text.
+    """Confirm imaris export hides internal exception text exposes the expected failure.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when imaris export hides internal exception text stops reporting the expected error.
     """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
@@ -282,7 +282,7 @@ def test_imaris_export_status_logs_escape_user_controlled_values(
 ) -> None:
     """Verify imaris export status logs escape user controlled values.
 
-    Inputs: `monkeypatch`, `caplog`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `caplog`. Output: fails on regressions in imaris export status logs escape user controlled values.
     """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
@@ -314,7 +314,7 @@ def test_imaris_export_start_logs_escape_wait_and_ip_values(
 ) -> None:
     """Verify imaris export start logs escape wait and ip values.
 
-    Inputs: `monkeypatch`, `caplog`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `caplog`. Output: fails on regressions in imaris export start logs escape wait and ip values.
     """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
@@ -344,7 +344,7 @@ def test_imaris_export_start_logs_escape_wait_and_ip_values(
 def test_imaris_view_helpers_cover_url_ip_port_and_session_resolution() -> None:
     """Verify imaris view helpers cover URL ip port and session resolution.
 
-    Inputs: none. Output: None.
+    Inputs: Imaris and OMERO fakes. Output: fails on regressions in imaris view helpers cover URL ip port and session resolution.
     """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
@@ -383,17 +383,18 @@ def test_imaris_view_helpers_cover_invalid_base_urls_and_status_edge_cases(
 ):
     """Verify imaris view helpers cover invalid base URLs and status edge cases.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris view helpers cover invalid base URLs and status edge cases.
+    when validation or the called operation fails.
     """
     views = _import_views()
 
     class _BrokenStr:
-        """Represent broken str."""
+        """Test double for broken str behavior in this module."""
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_BrokenStr` as test-readable text.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("bad string")
 
@@ -448,9 +449,9 @@ def test_imaris_view_helpers_cover_invalid_base_urls_and_status_edge_cases(
 def test_imaris_export_sync_paths_cover_missing_script_wait_override_and_unknown_state(
     monkeypatch,
 ) -> None:
-    """Verify imaris export sync paths cover missing script wait override and unknown state.
+    """Verify the imaris export sync paths cover missing script wait override and unknown state execution contract.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris export sync paths cover missing script wait override and unknown state integration.
     """
     views = _import_views()
 
@@ -514,12 +515,12 @@ def test_poll_celery_job_covers_pending_failure_success_revoked_and_unknown(
 ):
     """Verify poll celery job covers pending failure success revoked and unknown.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in poll celery job covers pending failure success revoked and unknown.
     """
     views = _import_views()
 
     def _set_result(state, result=None, info=None):
-        """Set result.
+        """Set the result.
 
         Inputs: `state`, `result`, `info`. Output: None.
         """
@@ -570,7 +571,7 @@ def test_poll_celery_job_covers_pending_failure_success_revoked_and_unknown(
 def test_start_celery_job_validates_connection_metadata_and_dispatches(monkeypatch):
     """Verify start celery job validates connection metadata and dispatches.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start celery job validates connection metadata and dispatches.
     """
     views = _import_views()
     dispatched = {}
@@ -613,20 +614,21 @@ def test_start_celery_job_validates_connection_metadata_and_dispatches(monkeypat
 def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
     monkeypatch,
 ) -> None:
-    """Verify imaris view helpers cover environment fallbacks and unknown status paths.
+    """Verify imaris view helpers cover env fallbacks and unknown status paths.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris view helpers cover env fallbacks and unknown status paths.
+    when validation or the called operation fails.
     """
     views = _import_views()
     original_poll_celery_job = views._poll_celery_job
 
     class _BrokenStr:
-        """Represent broken str."""
+        """Test double for broken str behavior in this module."""
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_BrokenStr` as test-readable text.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("bad string")
 
@@ -718,12 +720,12 @@ def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
     assert failed.content.decode("utf-8") == views.IMS_EXPORT_JOB_FAILED_MESSAGE
 
     class _BrokenResult:
-        """Represent broken result."""
+        """Test double for broken result behavior in this module."""
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_BrokenResult` as test-readable text.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("cannot stringify")
 
@@ -749,7 +751,7 @@ def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
 def test_imaris_export_covers_async_status_download_and_sync_success_paths(monkeypatch):
     """Verify imaris export covers async status download and sync success paths.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris export covers async status download and sync success paths.
     """
     views = _import_views()
 
@@ -838,9 +840,9 @@ def test_imaris_export_covers_async_status_download_and_sync_success_paths(monke
 def test_imaris_export_rejects_missing_image_invalid_image_no_celery_and_timeout(
     monkeypatch,
 ) -> None:
-    """Verify imaris export rejects missing image invalid image no celery and timeout.
+    """Confirm imaris export rejects missing image invalid image no celery and timeout is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris export rejects missing image invalid image no celery and timeout.
     """
     views = _import_views()
 
@@ -894,7 +896,7 @@ def test_imaris_view_failure_paths_cover_meta_errors_missing_host_port_and_port_
 ) -> None:
     """Verify imaris view failure paths cover meta errors missing host port and port validation.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris view failure paths cover meta errors missing host port and port validation.
     """
     views = _import_views()
 

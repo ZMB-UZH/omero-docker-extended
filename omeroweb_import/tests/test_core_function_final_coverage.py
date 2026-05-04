@@ -16,17 +16,17 @@ from omeroweb_import.views import core_functions
 
 
 class _Value:
-    """Represent value."""
+    """Test double for value behavior in this module."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_Value` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self.val = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_Value`'s fake OMERO value.
 
         Inputs: none. Output: `self.val`.
         """
@@ -34,42 +34,42 @@ class _Value:
 
 
 class _Params:
-    """Represent params."""
+    """Test double for params behavior in this module."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_Params` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.values = {}
 
     def add(self, key, value):
-        """Add.
+        """Add the add for `_Params`.
 
-        Inputs: `key`, `value`. Output: None.
+        Inputs: `key` lookup key, `value` input value. Output: None.
         """
         self.values[key] = value
 
     def addId(self, value):
-        """Add ID.
+        """Add the ID for `_Params`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.values["id"] = value
 
 
 def _job_state(monkeypatch, job):
-    """Job state.
+    """Return the job state.
 
-    Inputs: `monkeypatch`, `job`. Output: computed value.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `job`. Output: `state`.
     """
     state = {"job": job}
     monkeypatch.setattr(core_functions, "_load_job", lambda job_id: state["job"])
 
     def update_job(job_id, mutator):
-        """Update job.
+        """Update the job.
 
-        Inputs: `job_id`, `mutator`. Output: `state['job']`.
+        Inputs: `job_id`, `mutator`. Output: update job result.
         """
         state["job"] = mutator(state["job"])
         return state["job"]
@@ -83,7 +83,7 @@ def test_core_function_misc_edge_helpers_cover_remaining_lines(
 ):
     """Verify core function misc edge helpers cover remaining lines.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in core function misc edge helpers cover remaining lines.
     """
     fake_units = types.ModuleType("omero.model.enums")
     pixel = SimpleNamespace(name="PIXEL")
@@ -267,12 +267,10 @@ def test_core_function_misc_edge_helpers_cover_remaining_lines(
 def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
     monkeypatch, tmp_path: Path
 ):
-    """Verify load job and path size helpers cover corrupt and oserror paths.
+    """Verify the load job and path size helpers cover corrupt and oserror paths safety boundary.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: bool. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` (Path) temporary path
+    fixture. Output: None after assertions pass. Raises: LockException, OSError when validation or the called operation fails.
     """
     job_id = "a" * 32
     job_path = tmp_path / f"{job_id}.json"
@@ -287,10 +285,10 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
     monkeypatch.setattr(core_functions.time, "sleep", lambda seconds: None)
 
     class _DeletingLock:
-        """Represent deleting lock."""
+        """Test double for deleting lock behavior in this module."""
 
         def __init__(self, *args, **kwargs):
-            """Initialize the instance.
+            """Create `_DeletingLock` with its default state.
 
             Inputs: `*args`, `**kwargs`. Output: None.
             """
@@ -298,14 +296,14 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
             self.kwargs = kwargs
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_DeletingLock`'s context-managed fake resource.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             job_path.unlink()
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_DeletingLock`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -317,10 +315,10 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
     job_path.write_text("{}", encoding="utf-8")
 
     class _FailingLock:
-        """Represent failing lock."""
+        """Test double for failing lock behavior in this module."""
 
         def __init__(self, *args, **kwargs):
-            """Initialize the instance.
+            """Create `_FailingLock` with its default state.
 
             Inputs: `*args`, `**kwargs`. Output: None.
             """
@@ -328,14 +326,15 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
             self.kwargs = kwargs
 
         def __enter__(self):
-            """Enter the context manager.
+            """Enter `_FailingLock`'s context-managed fake resource.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
+            external operations fail.
             """
             raise core_functions.portalocker.exceptions.LockException("busy")
 
         def __exit__(self, exc_type, exc, tb):
-            """Exit the context manager.
+            """Exit `_FailingLock`'s context-managed fake resource.
 
             Inputs: `exc_type`, `exc`, `tb`. Output: bool.
             """
@@ -350,7 +349,7 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
     assert core_functions._load_job(job_id) is None
 
     class _BrokenFilePath:
-        """Represent broken file path."""
+        """Test double for broken file path behavior in this module."""
 
         @staticmethod
         def is_file():
@@ -362,14 +361,14 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
 
         @staticmethod
         def stat():
-            """Stat.
+            """Record the stat call on `_BrokenFilePath` for later assertions.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             raise OSError("stat failed")
 
     class _BrokenDirPath:
-        """Represent broken dir path."""
+        """Test double for broken dir path behavior in this module."""
 
         @staticmethod
         def is_file():
@@ -381,9 +380,9 @@ def test_load_job_and_path_size_helpers_cover_corrupt_and_oserror_paths(
 
         @staticmethod
         def rglob(pattern):
-            """Rglob.
+            """Record the rglob call on `_BrokenDirPath` for later assertions.
 
-            Inputs: `pattern`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `pattern`. Output: None. Raises: OSError for the exercised failure path.
             """
             raise OSError("walk failed")
 
@@ -396,10 +395,9 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
 ):
     """Verify import file find image and connection helpers cover remaining paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: computed value. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` (Path) temporary path
+    fixture. Output: `SimpleNamespace` result. Raises: RuntimeError when validation or
+    external operations fail.
     """
     target = tmp_path / "sample.ome.tif"
     target.write_text("payload", encoding="utf-8")
@@ -424,9 +422,10 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
     monkeypatch.setattr(core_functions, "_get_import_timeout_seconds", lambda: 5)
 
     def _run_streaming_zero(cmd, *, env, timeout, on_tick):
-        """Streaming zero.
+        """Run the streaming zero.
 
-        Inputs: `cmd`, `env`, `timeout`, `on_tick`. Output: `SimpleNamespace` result.
+        Inputs: `cmd`, `env` environment mapping, `timeout` timeout seconds, `on_tick`.
+        Output: `SimpleNamespace` result.
         """
         on_tick(123, 0.0)
         return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -522,10 +521,10 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
     )
 
     class _FailingRootConn:
-        """Represent failing root conn."""
+        """Test double for failing root conn behavior in this module."""
 
         def __init__(self, mode):
-            """Initialize the instance.
+            """Create `_FailingRootConn` with `mode`.
 
             Inputs: `mode`. Output: None.
             """
@@ -533,9 +532,10 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         def connect(self):
-            """Open the connection.
+            """Open the connection for `_FailingRootConn`.
 
-            Inputs: none. Output: bool. Raises on invalid or unavailable state.
+            Inputs: none. Output: `bool`. Raises: RuntimeError when validation or
+            external operations fail.
             """
             if self.mode == "raise":
                 raise RuntimeError("connect exploded")
@@ -543,17 +543,17 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
 
         @staticmethod
         def getLastError():
-            """Return Last Error.
+            """Return `_FailingRootConn`'s fake last-error text.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("no last error")
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_FailingRootConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close exploded")
 
@@ -573,10 +573,10 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
     )
 
     class _ServiceConn:
-        """Represent service conn."""
+        """Test double for service conn behavior in this module."""
 
         def __init__(self, *args, **kwargs):
-            """Initialize the instance.
+            """Create `_ServiceConn` with its default state.
 
             Inputs: `*args`, `**kwargs`. Output: None.
             """
@@ -584,7 +584,7 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
 
         @staticmethod
         def connect():
-            """Open the connection.
+            """Open the connection for `_ServiceConn`.
 
             Inputs: none. Output: bool.
             """
@@ -592,9 +592,9 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_ServiceConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close exploded")
 
@@ -612,10 +612,8 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
 ):
     """Verify normalization and attachment helpers cover remaining paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: yielded values. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` (Path) temporary path
+    fixture. Output: iterator of yielded items. Raises: OSError, RuntimeError when validation or the called operation fails.
     """
     entry = {"relative_path": "folder/image.ome.tif"}
     context = {
@@ -655,10 +653,10 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     )
 
     class _Image:
-        """Represent image."""
+        """Test double for image behavior in this module."""
 
         def __init__(self, image_id, name):
-            """Initialize the instance.
+            """Create `_Image` with `image_id` and `name`.
 
             Inputs: `image_id`, `name`. Output: None.
             """
@@ -666,29 +664,29 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
             self._name = name
 
         def getName(self):
-            """Return the fake object name.
+            """Return `_Image`'s fake object name.
 
             Inputs: none. Output: `self._name`.
             """
             return self._name
 
         def setName(self, value):
-            """Set Name.
+            """Set the name for `_Image`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self._name = value
 
         @staticmethod
         def save():
-            """Persist the object state.
+            """Persist `_Image`'s fake object state.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             return None
 
         def getId(self):
-            """Return the fake OMERO identifier.
+            """Return `_Image`'s fake OMERO identifier.
 
             Inputs: none. Output: `_Value` result.
             """
@@ -721,12 +719,12 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     )
 
     class _BrokenImage(_Image):
-        """Represent broken image."""
+        """Test double for broken image behavior in this module."""
 
         def setName(self, value):
-            """Set Name.
+            """Set the name for `_BrokenImage`.
 
-            Inputs: `value`. Output: None. Raises on invalid or unavailable state.
+            Inputs: `value` input value. Output: None. Raises: RuntimeError when validation or the called operation fails.
             """
             raise RuntimeError("rename failed")
 
@@ -753,71 +751,71 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     )
 
     class _OriginalFileI:
-        """Represent original file i."""
+        """Test double for original file i behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_OriginalFileI` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self._id = 0
 
         def setName(self, value):
-            """Set Name.
+            """Set the name for `_OriginalFileI`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.name = value
 
         def setPath(self, value):
-            """Set Path.
+            """Set the path for `_OriginalFileI`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.path = value
 
         def setSize(self, value):
-            """Set Size.
+            """Set the size for `_OriginalFileI`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.size = value
 
         def setMimetype(self, value):
-            """Set Mimetype.
+            """Set the mimetype for `_OriginalFileI`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.mimetype = value
 
         def getId(self):
-            """Return the fake OMERO identifier.
+            """Return `_OriginalFileI`'s fake OMERO identifier.
 
             Inputs: none. Output: `_Value` result.
             """
             return _Value(self._id)
 
         def proxy(self):
-            """Proxy.
+            """Return the proxy for `_OriginalFileI`.
 
             Inputs: none. Output: `self`.
             """
             return self
 
     class _FileAnnotationI:
-        """Represent file annotation i."""
+        """Test double for file annotation i behavior in this module."""
 
         def setNs(self, value):
-            """Set Ns.
+            """Set the ns for `_FileAnnotationI`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.ns = value
 
         def setFile(self, value):
-            """Set File.
+            """Set the file for `_FileAnnotationI`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.file = value
 
@@ -832,10 +830,10 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     monkeypatch.setitem(sys.modules, "omero.rtypes", omero_rtypes)
 
     class _FileAnnotationWrapper:
-        """Represent file annotation wrapper."""
+        """Test double for file annotation wrapper behavior in this module."""
 
         def __init__(self, conn, annotation):
-            """Initialize the instance.
+            """Create `_FileAnnotationWrapper` with `conn` and `annotation`.
 
             Inputs: `conn`, `annotation`. Output: None.
             """
@@ -849,7 +847,7 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     txt_path.write_text("energy,count\n1,2\n", encoding="utf-8")
 
     class _BadPath:
-        """Represent bad path."""
+        """Test double for bad path behavior in this module."""
 
         name = "bad.txt"
 
@@ -857,12 +855,12 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
         def read_bytes():
             """Return read bytes.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise OSError("read failed")
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_BadPath` as test-readable text.
 
             Inputs: none. Output: `self.name`.
             """
@@ -870,9 +868,10 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
 
     @contextmanager
     def _missing_background_user_connection(*args, **kwargs):
-        """Missing background user connection.
+        """Return the missing background user connection.
 
-        Inputs: `*args`, `**kwargs`. Output: yielded values.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        iterator of yielded items.
         """
         yield None
 
@@ -900,9 +899,10 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
 
     @contextmanager
     def _missing_image_background_user_connection(*args, **kwargs):
-        """Missing image background user connection.
+        """Return the missing image background user connection.
 
-        Inputs: `*args`, `**kwargs`. Output: yielded values.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        iterator of yielded items.
         """
         yield missing_image_conn
 
@@ -920,12 +920,12 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
         )
 
     class _RawFileStore:
-        """Represent raw file store."""
+        """Test double for raw file store behavior in this module."""
 
         def setFileId(self, value):
-            """Set File ID.
+            """Set the file ID for `_RawFileStore`.
 
-            Inputs: `value`. Output: None.
+            Inputs: `value` input value. Output: None.
             """
             self.file_id = value
 
@@ -937,32 +937,32 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
             self.payload = data[offset : offset + length]
 
         def save(self):
-            """Persist the object state.
+            """Persist `_RawFileStore`'s fake object state.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
             """
             self.saved = True
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_RawFileStore`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
     class _UpdateService:
-        """Represent update service."""
+        """Test double for update service behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_UpdateService` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self._next_id = 100
 
         def saveAndReturnObject(self, obj):
-            """Save and return object.
+            """Return the fake saved OMERO object from coverage tests.
 
             Inputs: `obj`. Output: `obj`.
             """
@@ -972,22 +972,22 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
             return obj
 
     class _ImageObj:
-        """Represent image obj."""
+        """Test double for image obj behavior in this module."""
 
         def linkAnnotation(self, wrapper):
-            """Link annotation.
+            """Record the link annotation call on `_ImageObj` for later assertions.
 
             Inputs: `wrapper`. Output: None.
             """
             self.wrapper = wrapper
 
     class _UserConn:
-        """Represent user conn."""
+        """Test double for user conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_UserConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.c = SimpleNamespace(
                 sf=SimpleNamespace(createRawFileStore=_RawFileStore)
@@ -995,7 +995,7 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
 
         @staticmethod
         def getUpdateService():
-            """Return Update Service.
+            """Return `_UserConn`'s fake update service.
 
             Inputs: none. Output: `_UpdateService` result.
             """
@@ -1003,17 +1003,17 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
 
         @staticmethod
         def getObject(kind, image_id):
-            """Return Object.
+            """Return the object for `_UserConn`.
 
-            Inputs: `kind`, `image_id`. Output: `_ImageObj` result.
+            Inputs: `kind`, `image_id` OMERO image ID. Output: `_ImageObj` result.
             """
             return _ImageObj()
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_UserConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
@@ -1029,9 +1029,10 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
 
     @contextmanager
     def _user_background_connection(*args, **kwargs):
-        """User background connection.
+        """Return the user background connection.
 
-        Inputs: `*args`, `**kwargs`. Output: yielded values.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        iterator of yielded items.
         """
         yield _UserConn()
 
@@ -1042,7 +1043,7 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
     )
 
     class _BadPlotPath:
-        """Represent bad plot path."""
+        """Test double for bad plot path behavior in this module."""
 
         name = "plot.png"
 
@@ -1058,12 +1059,12 @@ def test_normalization_and_attachment_helpers_cover_remaining_paths(
         def read_bytes():
             """Return read bytes.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise OSError("plot read failed")
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_BadPlotPath` as test-readable text.
 
             Inputs: none. Output: `self.name`.
             """
@@ -1096,26 +1097,24 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
 ):
     """Verify probe and verification helpers cover remaining paths.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: computed value. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` (Path) temporary path
+    fixture. Output: `text`. Raises: OSError, RuntimeError, ValueError when validation or the called operation fails.
     """
 
     class _Relative:
-        """Represent relative."""
+        """Test double for relative behavior in this module."""
 
         def __init__(self, text):
-            """Initialize the instance.
+            """Create `_Relative` with `text`.
 
             Inputs: `text`. Output: None.
             """
             self.text = text
 
         def as_posix(self):
-            """As posix.
+            """Return the as posix for `_Relative`.
 
-            Inputs: none. Output: `self.text`.
+            Inputs: none. Output: `text`.
             """
             return self.text
 
@@ -1130,7 +1129,7 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
             relative_error=False,
             relative_text=None,
         ):
-            """Initialize the instance.
+            """Create `_FakePath` with `text`.
 
             Inputs: `text`, `resolve_error`, `relative_error`, `relative_text`. Output:
             None.
@@ -1145,26 +1144,23 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
         def resolve(self):
             """Resolve and return the path.
 
-            Inputs: none. Output: `self`. Raises on invalid or unavailable state.
+            Inputs: none. Output: `self`. Raises: OSError for the exercised failure path.
             """
             if self.resolve_error:
                 raise OSError("resolve failed")
             return self
 
         def relative_to(self, other):
-            """Relative to.
+            """Return the relative to for `_FakePath`.
 
-            Inputs: `other`. Output: `_Relative` result. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: `other`. Output: `_Relative` result. Raises: ValueError when validation or the called operation fails.
             """
             if self.relative_error:
                 raise ValueError("outside root")
             return _Relative(self.relative_text)
 
         def __str__(self):
-            """Return the string representation.
+            """Return `_FakePath` as test-readable text.
 
             Inputs: none. Output: `self.text`.
             """
@@ -1332,18 +1328,18 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
     )
 
     class _ClosingConn:
-        """Represent closing conn."""
+        """Test double for closing conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_ClosingConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def getQueryService():
-            """Return Query Service.
+            """Return the fake query service value used by this test double.
 
             Inputs: none. Output: `SimpleNamespace` result.
             """
@@ -1355,34 +1351,34 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_ClosingConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
     class _ClosingAdmin:
-        """Represent closing admin."""
+        """Test double for closing admin behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_ClosingAdmin` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.conn = _ClosingConn()
 
         def suConn(self, username):
-            """Su conn.
+            """Return the su Conn for `_ClosingAdmin`.
 
-            Inputs: `username`. Output: `self.conn`.
+            Inputs: `username` username. Output: `conn`.
             """
             return self.conn
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_ClosingAdmin`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("admin close failed")
 
@@ -1421,47 +1417,47 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
     )
 
     class _RenderConn:
-        """Represent render conn."""
+        """Test double for render conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_RenderConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def getObject(kind, image_id):
-            """Return Object.
+            """Return the object for `_RenderConn`.
 
-            Inputs: `kind`, `image_id`. Output: `render_image`.
+            Inputs: `kind`, `image_id` OMERO image ID. Output: `render_image`.
             """
             return render_image
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_RenderConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
     class _RenderAdmin:
-        """Represent render admin."""
+        """Test double for render admin behavior in this module."""
 
         @staticmethod
         def suConn(username):
-            """Su conn.
+            """Return the su Conn for `_RenderAdmin`.
 
-            Inputs: `username`. Output: `_RenderConn` result.
+            Inputs: `username` username. Output: `_RenderConn` result.
             """
             return _RenderConn()
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_RenderAdmin`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("admin close failed")
 
@@ -1486,18 +1482,18 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
     assert errors == []
 
     class _VerifyConn:
-        """Represent verify conn."""
+        """Test double for verify conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_VerifyConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def getQueryService():
-            """Return Query Service.
+            """Return the fake query service value used by this test double.
 
             Inputs: none. Output: `SimpleNamespace` result.
             """
@@ -1507,28 +1503,28 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_VerifyConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
     class _VerifyAdmin:
-        """Represent verify admin."""
+        """Test double for verify admin behavior in this module."""
 
         @staticmethod
         def suConn(username):
-            """Su conn.
+            """Return the su Conn for `_VerifyAdmin`.
 
-            Inputs: `username`. Output: `_VerifyConn` result.
+            Inputs: `username` username. Output: `_VerifyConn` result.
             """
             return _VerifyConn()
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_VerifyAdmin`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("admin close failed")
 

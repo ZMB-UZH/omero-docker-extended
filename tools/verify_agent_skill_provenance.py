@@ -38,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Execute the command entrypoint.
+    """Run the `tools.verify_agent_skill_provenance` command entrypoint.
 
     Inputs: `argv`. Output: `int`.
     """

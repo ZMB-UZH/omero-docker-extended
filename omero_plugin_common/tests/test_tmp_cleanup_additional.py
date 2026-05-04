@@ -11,9 +11,9 @@ from omero_plugin_common import tmp_cleanup
 def test_tmp_cleanup_safe_remove_tree_returns_false_when_walk_or_delete_fails(
     tmp_path, monkeypatch
 ):
-    """Verify temporary cleanup safe remove tree returns false when walk or delete fails.
+    """Confirm tmp cleanup safe remove tree returns false when walk or delete fails exposes the expected failure.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in tmp cleanup safe remove tree returns false when walk or delete fails.
     """
     root = tmp_path / "root"
     root.mkdir()
@@ -44,9 +44,9 @@ def test_tmp_cleanup_safe_remove_tree_returns_false_when_file_unlink_fails_in_de
     tmp_path,
     monkeypatch,
 ):
-    """Verify temporary cleanup safe remove tree returns false when file unlink fails in delete pass.
+    """Confirm tmp cleanup safe remove tree returns false when file unlink fails in delete pass exposes the expected failure.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in tmp cleanup safe remove tree returns false when file unlink fails in delete pass.
     """
     root = tmp_path / "root"
     root.mkdir()
@@ -66,9 +66,9 @@ def test_tmp_cleanup_safe_remove_tree_returns_false_when_file_unlink_fails_in_de
 def test_tmp_cleanup_marker_helpers_cover_fsync_and_root_validation(
     tmp_path, monkeypatch
 ):
-    """Verify temporary cleanup marker helpers cover fsync and root validation.
+    """Check tmp cleanup marker helpers cover fsync and root validation cleanup behavior.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in tmp cleanup marker helpers cover fsync and root validation.
     """
     root = tmp_path / "root"
     root.mkdir()
@@ -99,16 +99,25 @@ def test_tmp_cleanup_marker_helpers_cover_fsync_and_root_validation(
     )
 
 
+def test_resolve_child_candidate_returns_none_when_parent_is_missing(tmp_path) -> None:
+    """Verify resolve child candidate returns none when parent is missing result shape.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in resolve child candidate returns none when parent is missing.
+    """
+    candidate = tmp_path / "missing-parent" / "artifact.txt"
+
+    assert tmp_cleanup._resolve_child_candidate(candidate) is None
+
+
 def test_tmp_cleanup_covers_symlink_directory_cleanup_and_marker_cleanup_failures(
     tmp_path,
     monkeypatch,
 ):
-    """Verify temporary cleanup covers symlink directory cleanup and marker cleanup failures.
+    """Check tmp cleanup covers symlink directory cleanup and marker cleanup failures cleanup behavior.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: `real_unlink` result. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `real_unlink` result. Raises: OSError when validation or external operations
+    fail.
     """
     root = tmp_path / "root"
     root.mkdir()
@@ -143,12 +152,11 @@ def test_tmp_cleanup_covers_symlink_directory_cleanup_and_marker_cleanup_failure
     )
 
     def _fail_tmp_unlink(self, *args, **kwargs):
-        """Fail tmp unlink.
+        """Raise the synthetic unlink failure used by tmp cleanup tests.
 
-        Inputs: `*args`, `**kwargs`. Output: `real_unlink` result. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        `real_unlink` result. Raises: OSError when validation or external operations
+        fail.
         """
         if self.suffix == ".tmp":
             raise OSError("cleanup failed")

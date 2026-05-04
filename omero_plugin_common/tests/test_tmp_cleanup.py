@@ -6,7 +6,7 @@ from omero_plugin_common import tmp_cleanup
 def test_safe_remove_tree_and_job_data_stay_within_root(tmp_path):
     """Verify safe remove tree and job data stay within root.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in safe remove tree and job data stay within root.
     """
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
@@ -25,9 +25,9 @@ def test_safe_remove_tree_and_job_data_stay_within_root(tmp_path):
 
 
 def test_safe_remove_tree_rejects_symlinked_paths(tmp_path):
-    """Verify safe remove tree rejects symlinked paths.
+    """Confirm safe remove tree rejects symlinked paths is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in safe remove tree rejects symlinked paths.
     """
     root = tmp_path / "root"
     root.mkdir()
@@ -43,9 +43,9 @@ def test_safe_remove_tree_rejects_symlinked_paths(tmp_path):
 def test_safe_mark_path_for_deferred_cleanup_writes_markers_for_files_and_dirs(
     tmp_path,
 ):
-    """Verify safe mark path for deferred cleanup writes markers for files and directories.
+    """Check safe mark path for deferred cleanup writes markers for files and dirs cleanup behavior.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when safe mark path for deferred cleanup writes markers for files and dirs accepts unsafe input.
     """
     root = tmp_path / "root"
     root.mkdir()
@@ -74,9 +74,9 @@ def test_safe_mark_path_for_deferred_cleanup_writes_markers_for_files_and_dirs(
 
 
 def test_tmp_cleanup_helpers_reject_invalid_roots_and_symlinked_children(tmp_path):
-    """Verify temporary cleanup helpers reject invalid roots and symlinked children.
+    """Confirm tmp cleanup helpers reject invalid roots and symlinked children is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when tmp cleanup helpers reject invalid roots and symlinked children stops reporting the expected error.
     """
     root = tmp_path / "root"
     root.mkdir()
@@ -94,9 +94,9 @@ def test_tmp_cleanup_helpers_reject_invalid_roots_and_symlinked_children(tmp_pat
 
 
 def test_tmp_cleanup_resolution_failures_from_symlink_loops_are_safe(tmp_path):
-    """Verify temporary cleanup resolution failures from symlink loops are safe.
+    """Check tmp cleanup resolution failures from symlink loops are safe cleanup behavior.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when tmp cleanup resolution failures from symlink loops are safe accepts unsafe input.
     """
     root = tmp_path / "root"
     root.mkdir()
@@ -109,9 +109,9 @@ def test_tmp_cleanup_resolution_failures_from_symlink_loops_are_safe(tmp_path):
 
 
 def test_tmp_cleanup_refuses_root_deletion_and_unsafe_job_ids(tmp_path):
-    """Verify temporary cleanup refuses root deletion and unsafe job IDs.
+    """Check tmp cleanup refuses root deletion and unsafe job IDs cleanup behavior.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in tmp cleanup refuses root deletion and unsafe job IDs.
     """
     root = tmp_path / "root"
     root.mkdir()
@@ -124,9 +124,9 @@ def test_tmp_cleanup_refuses_root_deletion_and_unsafe_job_ids(tmp_path):
 
 
 def test_tmp_cleanup_missing_paths_must_stay_within_root(tmp_path):
-    """Verify temporary cleanup missing paths must stay within root.
+    """Check tmp cleanup missing paths must stay within root cleanup behavior.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in tmp cleanup missing paths must stay within root.
     """
     root = tmp_path / "root"
     outside = tmp_path / "outside"
@@ -156,12 +156,10 @@ def test_tmp_cleanup_missing_paths_must_stay_within_root(tmp_path):
 def test_safe_mark_path_for_deferred_cleanup_rejects_invalid_inputs_and_cleans_temp_file(
     tmp_path, monkeypatch
 ):
-    """Verify safe mark path for deferred cleanup rejects invalid inputs and cleans temp file.
+    """Confirm safe mark path for deferred cleanup rejects invalid inputs and cleans temp file is rejected at the boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: None after assertions pass. Raises: OSError for the exercised failure path.
     """
     root = tmp_path / "root"
     root.mkdir()
@@ -191,9 +189,9 @@ def test_safe_mark_path_for_deferred_cleanup_rejects_invalid_inputs_and_cleans_t
     real_replace = tmp_cleanup.os.replace
 
     def _failing_replace(src, dst):
-        """Failing replace.
+        """Record the failing replace call on the test double for later assertions.
 
-        Inputs: `src`, `dst`. Output: None. Raises on invalid or unavailable state.
+        Inputs: `src`, `dst`. Output: None. Raises: OSError for the exercised failure path.
         """
         created_tmp["path"] = src
         raise OSError("replace failed")

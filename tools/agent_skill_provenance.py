@@ -36,7 +36,7 @@ class AgentSkillUpstreamSources:
 
     @property
     def snapshot_dir_name(self) -> str:
-        """Snapshot dir name.
+        """Return the snapshot dir name for `AgentSkillUpstreamSources`.
 
         Inputs: none. Output: `str`.
         """
@@ -44,7 +44,7 @@ class AgentSkillUpstreamSources:
 
     @property
     def repo_name(self) -> str:
-        """Repo name.
+        """Return the repo name for `AgentSkillUpstreamSources`.
 
         Inputs: none. Output: `str`.
         """
@@ -52,7 +52,7 @@ class AgentSkillUpstreamSources:
 
     @property
     def vendor_root_path(self) -> Path:
-        """Vendor root path.
+        """Return the vendor root path for `AgentSkillUpstreamSources`.
 
         Inputs: none. Output: `Path`.
         """
@@ -60,7 +60,7 @@ class AgentSkillUpstreamSources:
 
     @property
     def upstream_relative_paths(self) -> dict[str, str]:
-        """Upstream relative paths.
+        """Return the upstream relative paths for `AgentSkillUpstreamSources`.
 
         Inputs: none. Output: `dict[str, str]`.
         """
@@ -73,9 +73,9 @@ class AgentSkillUpstreamSources:
 
     @property
     def upstream_skill_root(self) -> str:
-        """Upstream skill root.
+        """Return the upstream skill root for `AgentSkillUpstreamSources`.
 
-        Inputs: none. Output: `str`. Raises on invalid or unavailable state.
+        Inputs: none. Output: `str`. Raises: RuntimeError for the exercised failure path.
         """
         relative_paths = tuple(self.upstream_relative_paths.values())
         if not relative_paths:
@@ -84,7 +84,7 @@ class AgentSkillUpstreamSources:
 
     @property
     def badge_label(self) -> str:
-        """Badge label.
+        """Return the badge label for `AgentSkillUpstreamSources`.
 
         Inputs: none. Output: `str`.
         """
@@ -92,7 +92,7 @@ class AgentSkillUpstreamSources:
 
     @property
     def badge_title(self) -> str:
-        """Badge title.
+        """Return the badge title for `AgentSkillUpstreamSources`.
 
         Inputs: none. Output: `str`.
         """
@@ -100,7 +100,7 @@ class AgentSkillUpstreamSources:
 
     @property
     def repo_url(self) -> str:
-        """Repo URL.
+        """Return the repo URL for `AgentSkillUpstreamSources`.
 
         Inputs: none. Output: `str`.
         """
@@ -108,7 +108,7 @@ class AgentSkillUpstreamSources:
 
     @property
     def skills_tree_url(self) -> str:
-        """Skills tree URL.
+        """Return the skills tree URL for `AgentSkillUpstreamSources`.
 
         Inputs: none. Output: `str`.
         """
@@ -116,7 +116,7 @@ class AgentSkillUpstreamSources:
 
     @property
     def badge_image_url(self) -> str:
-        """Badge image URL.
+        """Return the badge image URL for `AgentSkillUpstreamSources`.
 
         Inputs: none. Output: `str`.
         """
@@ -132,9 +132,9 @@ class AgentSkillUpstreamSources:
         return f"https://img.shields.io/static/v1?{query}"
 
     def raw_skill_url(self, skill_name: str) -> str:
-        """Raw skill URL.
+        """Return the raw skill URL for `AgentSkillUpstreamSources`.
 
-        Inputs: `skill_name`. Output: `str`.
+        Inputs: `skill_name` (str). Output: `str`.
         """
         relative_path = self.upstream_relative_paths[skill_name]
         return (
@@ -144,12 +144,10 @@ class AgentSkillUpstreamSources:
 
 
 def _extract_required_match(pattern: re.Pattern[str], text: str, label: str) -> str:
-    """Extract required match.
+    """Extract the required match.
 
-    Inputs: `pattern`, `text`, `label`. Output: `str`. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `pattern` (re.Pattern[str]), `text` (str), `label` (str). Output: `str`.
+    Raises: RuntimeError when validation or the called operation fails.
     """
     match = pattern.search(text)
     if match is None:
@@ -165,10 +163,10 @@ def _extract_required_match(pattern: re.Pattern[str], text: str, label: str) -> 
 
 
 def load_upstream_sources(repo_root: Path) -> AgentSkillUpstreamSources:
-    """Load upstream sources.
+    """Load the upstream sources.
 
-    Inputs: `repo_root`. Output: `AgentSkillUpstreamSources`. Raises on invalid or
-    unavailable state.
+    Inputs: `repo_root` (Path). Output: `AgentSkillUpstreamSources`. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     doc_text = (repo_root / UPSTREAM_SOURCES_DOC_PATH).read_text(encoding="utf-8")
     repo_slug = _extract_required_match(
@@ -196,9 +194,10 @@ def load_upstream_sources(repo_root: Path) -> AgentSkillUpstreamSources:
 
 
 def resolve_required_executable(name: str) -> str:
-    """Resolve required executable.
+    """Resolve the required executable.
 
-    Inputs: `name`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `name` (str) name. Output: `str`. Raises: RuntimeError when validation or
+    external operations fail.
     """
     resolved = shutil.which(name)
     if not resolved:
@@ -207,10 +206,10 @@ def resolve_required_executable(name: str) -> str:
 
 
 def resolve_remote_tag_commit(repo_slug: str, tag: str, *, cwd: Path) -> str:
-    """Resolve remote tag commit.
+    """Resolve the remote tag commit.
 
-    Inputs: `repo_slug`, `tag`, `cwd`. Output: `str`. Raises on invalid or unavailable
-    state.
+    Inputs: `repo_slug` (str), `tag` (str), `cwd` (Path) working directory. Output:
+    `str`. Raises: RuntimeError when validation or the called operation fails.
     """
     completed = subprocess.run(
         [
@@ -237,9 +236,10 @@ def resolve_remote_tag_commit(repo_slug: str, tag: str, *, cwd: Path) -> str:
 
 
 def fetch_text(url: str, *, timeout: int = 20) -> str:
-    """Fetch text.
+    """Fetch the text.
 
-    Inputs: `url`, `timeout`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `url` (str) URL, `timeout` (int) timeout seconds. Output: `str`. Raises:
+    RuntimeError, ValueError when validation or the called operation fails.
     """
     parsed = urlsplit(url)
     if parsed.scheme not in ALLOWED_FETCH_SCHEMES:

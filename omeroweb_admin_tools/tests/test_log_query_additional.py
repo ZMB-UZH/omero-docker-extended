@@ -21,7 +21,7 @@ class _DummyResponse:
     """Test double for dummy response."""
 
     def __init__(self, payload, status=200):
-        """Initialize the instance.
+        """Create `_DummyResponse` with `payload` and `status`.
 
         Inputs: `payload`, `status`. Output: None.
         """
@@ -41,7 +41,7 @@ class _DummyResponse:
 
 
 def _config():
-    """Config.
+    """Return the config.
 
     Inputs: none. Output: `LogConfig` result.
     """
@@ -57,9 +57,9 @@ def _config():
 
 
 def test_execute_loki_query_returns_json_payload(monkeypatch) -> None:
-    """Verify execute loki query returns JSON payload.
+    """Verify execute loki query returns JSON payload result shape.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in execute loki query returns JSON payload.
     """
     payload = {"status": "success", "data": {"result": []}}
     monkeypatch.setattr(
@@ -78,7 +78,7 @@ def test_execute_loki_query_wraps_non_json_http_and_timeout_errors(
 ) -> None:
     """Verify execute loki query wraps non JSON HTTP and timeout errors.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in execute loki query wraps non JSON HTTP and timeout errors.
     """
     config = _config()
 
@@ -108,9 +108,9 @@ def test_execute_loki_query_wraps_non_json_http_and_timeout_errors(
 
 
 def test_parse_entries_from_payload_handles_internal_streams_and_detected_levels():
-    """Verify parse entries from payload handles internal streams and detected levels.
+    """Verify parse entries from payload handles internal streams and detected levels result shape.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in parse entries from payload handles internal streams and detected levels.
     """
     payload = {
         "data": {
@@ -155,7 +155,7 @@ def test_parse_entries_from_payload_handles_internal_streams_and_detected_levels
 def test_build_logs_cache_key_varies_by_internal_files_and_text_query() -> None:
     """Verify build logs cache key varies by internal files and text query.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in build logs cache key varies by internal files and text query.
     """
     config = _config()
     base = _build_logs_cache_key(config, ["omeroserver"], 60, 20)
@@ -178,9 +178,9 @@ def test_build_logs_cache_key_varies_by_internal_files_and_text_query() -> None:
 
 
 def test_apply_global_cap_keeps_most_recent_entries() -> None:
-    """Verify apply global cap keeps most recent entries.
+    """Check that apply global cap keeps most recent entries remains stable.
 
-    Inputs: none. Output: None.
+    Inputs: admin-tool fixtures. Output: fails on regressions in apply global cap keeps most recent entries.
     """
     entries = [
         LogEntry(
@@ -213,7 +213,7 @@ def test_fetch_loki_logs_uncached_aggregates_jobs_and_filters_internal_batches(
 ) -> None:
     """Verify fetch loki logs uncached aggregates jobs and filters internal batches.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in fetch loki logs uncached aggregates jobs and filters internal batches.
     """
     config = _config()
     docker_job = log_query_module._QueryJob(
@@ -234,12 +234,10 @@ def test_fetch_loki_logs_uncached_aggregates_jobs_and_filters_internal_batches(
     )
 
     def fake_execute_query_job(config, job, lookback_seconds, max_entries, since_ns):
-        """Fake execute query job.
+        """Simulate execute query job so the surrounding test controls that dependency.
 
-        Inputs: `config`, `job`, `lookback_seconds`, `max_entries`, `since_ns`. Output:
-        tuple.
-
-        tuple.
+        Inputs: `config` configuration, `job`, `lookback_seconds`, `max_entries`,
+        `since_ns`. Output: `tuple`.
         """
         if job.source_type == "docker":
             return job, [
@@ -284,7 +282,8 @@ def test_fetch_loki_logs_uncached_aggregates_jobs_and_filters_internal_batches(
 def test_internal_batch_query_splits_after_failure(monkeypatch) -> None:
     """Verify internal batch query splits after failure.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in internal batch query splits after failure.
+    when validation or the called operation fails.
     """
     config = _config()
     job = log_query_module._QueryJob(
@@ -296,12 +295,10 @@ def test_internal_batch_query_splits_after_failure(monkeypatch) -> None:
     calls = []
 
     def fake_execute_query_job(config, job, lookback_seconds, max_entries, since_ns):
-        """Fake execute query job.
+        """Simulate execute query job so the surrounding test controls that dependency.
 
-        Inputs: `config`, `job`, `lookback_seconds`, `max_entries`, `since_ns`. Output:
-        tuple. Raises on invalid or unavailable state.
-
-        tuple. Raises on invalid or unavailable state.
+        Inputs: `config` configuration, `job`, `lookback_seconds`, `max_entries`,
+        `since_ns`. Output: `tuple`. Raises: RuntimeError for the exercised failure path.
         """
         calls.append(job.selected_files)
         if len(job.selected_files) > 1:
@@ -336,3 +333,101 @@ def test_internal_batch_query_splits_after_failure(monkeypatch) -> None:
         "OMEROweb.log",
         "omero-web.stderr.log",
     ]
+
+
+def test_internal_batch_query_preserves_unsplittable_failure(monkeypatch) -> None:
+    """Check that internal batch query preserves unsplittable failure remains stable.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in internal batch query preserves unsplittable failure.
+    """
+    job = log_query_module._QueryJob(
+        query='{compose_service="omeroweb", log_type="internal"}',
+        source_type="internal_batch",
+        source_name="omeroweb_internal",
+        selected_files=("OMEROweb.log",),
+    )
+    monkeypatch.setattr(
+        log_query_module,
+        "_execute_query_job",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("single file slow")),
+    )
+
+    with pytest.raises(RuntimeError, match="single file slow"):
+        log_query_module._execute_internal_batch_with_split(
+            _config(),
+            job,
+            lookback_seconds=60,
+            max_entries=10,
+            since_ns=None,
+        )
+
+
+def test_query_failure_formatter_reports_overflow_count() -> None:
+    """Verify query failure formatter reports overflow count.
+
+    Inputs: admin-tool fixtures. Output: fails on regressions in query failure formatter reports overflow count.
+    """
+    failures = [
+        log_query_module._QueryFailure(
+            job=log_query_module._QueryJob(
+                query="{}",
+                source_type="docker",
+                source_name=f"svc-{idx}",
+            ),
+            reason="offline",
+        )
+        for idx in range(5)
+    ]
+
+    assert log_query_module._format_query_failures(failures).endswith("; 2 more")
+
+
+def test_internal_entries_are_capped_per_service_after_batch_aggregation(
+    monkeypatch,
+) -> None:
+    """Verify internal entries are capped per service after batch aggregation.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in internal entries are capped per service after batch aggregation.
+    """
+    job = log_query_module._QueryJob(
+        query='{compose_service="omeroweb", log_type="internal"}',
+        source_type="internal_batch",
+        source_name="omeroweb_internal",
+        selected_files=("OMEROweb.log",),
+    )
+    monkeypatch.setattr(
+        log_query_module,
+        "_prepare_query_jobs",
+        lambda *args, **kwargs: [job],
+    )
+    monkeypatch.setattr(
+        log_query_module,
+        "_execute_query_job",
+        lambda *args, **kwargs: (
+            job,
+            [
+                LogEntry(
+                    timestamp="2026-03-09T00:00:01+00:00",
+                    container="omeroweb_internal/OMEROweb.log",
+                    level="info",
+                    message="old",
+                ),
+                LogEntry(
+                    timestamp="2026-03-09T00:00:03+00:00",
+                    container="omeroweb_internal/OMEROweb.log",
+                    level="info",
+                    message="new",
+                ),
+                LogEntry(
+                    timestamp="2026-03-09T00:00:02+00:00",
+                    container="omeroweb_internal/OMEROweb.log",
+                    level="info",
+                    message="middle",
+                ),
+            ],
+        ),
+    )
+
+    entries = _fetch_loki_logs_uncached(_config(), ["omeroweb_internal"], 60, 2)
+
+    assert [entry.message for entry in entries] == ["new", "middle"]

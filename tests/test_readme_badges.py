@@ -15,9 +15,9 @@ class ReadmeBadgeGenerationTests(TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `ReadmeBadgeGenerationTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.metadata_path = cls.repo_root / ".github" / "readme_badges.json"
@@ -28,7 +28,7 @@ class ReadmeBadgeGenerationTests(TestCase):
     def test_readme_badges_match_generated_block(self) -> None:
         """Verify readme badges match generated block.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in readme badges match generated block.
         """
         readme_text = (self.repo_root / "README.md").read_text(encoding="utf-8")
         metadata = update_readme_badges.resolve_repo_metadata(self.repo_root)
@@ -43,7 +43,7 @@ class ReadmeBadgeGenerationTests(TestCase):
     def test_generated_badges_follow_expected_order(self) -> None:
         """Verify generated badges follow expected order.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in generated badges follow expected order.
         """
         metadata = update_readme_badges.resolve_repo_metadata(self.repo_root)
         badge_block = update_readme_badges.render_badge_block(
@@ -111,7 +111,7 @@ class ReadmeBadgeGenerationTests(TestCase):
     ) -> None:
         """Verify generated commit activity badge uses repo slug and default branch.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in generated commit activity badge uses repo slug and default branch.
         """
         metadata = update_readme_badges.RepoMetadata(
             host="github.com",
@@ -247,7 +247,7 @@ class ReadmeBadgeGenerationTests(TestCase):
     def test_canonical_badge_metadata_file_exists_and_is_complete(self) -> None:
         """Verify canonical badge metadata file exists and is complete.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in canonical badge metadata file exists and is complete.
         """
         payload = json.loads(self.metadata_path.read_text(encoding="utf-8"))
         self.assertEqual(
@@ -266,7 +266,7 @@ class ReadmeBadgeGenerationTests(TestCase):
     def test_resolve_repo_metadata_prefers_canonical_metadata_file(self) -> None:
         """Verify resolve repo metadata prefers canonical metadata file.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in resolve repo metadata prefers canonical metadata file.
         """
         with mock.patch("tools.update_readme_badges._run_git") as mocked_run_git:
             metadata = update_readme_badges.resolve_repo_metadata(self.repo_root)
@@ -286,7 +286,7 @@ class ReadmeBadgeGenerationTests(TestCase):
     def test_remote_url_parsing_supports_public_and_private_clone_styles(self) -> None:
         """Verify remote URL parsing supports public and private clone styles.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in remote URL parsing supports public and private clone styles.
         """
         cases = {
             "git@github.com:ZMB-UZH/omero-docker-extended.git": (
@@ -310,7 +310,7 @@ class ReadmeBadgeGenerationTests(TestCase):
     def test_run_git_marks_repo_root_as_safe_directory(self) -> None:
         """Verify run git marks repo root as safe directory.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in run git marks repo root as safe directory.
         """
         with (
             mock.patch(

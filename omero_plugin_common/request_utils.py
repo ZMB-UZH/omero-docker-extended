@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 def current_username(request, conn):
     """Return current username.
 
-    Inputs: `request`, `conn`. Output: computed value or None.
+    Inputs: `request` Django request, `conn` OMERO gateway connection. Output:
+    `username`.
     """
     try:
         user = conn.getUser()
@@ -34,9 +35,9 @@ def current_username(request, conn):
 
 
 def load_request_data(request):
-    """Load request data.
+    """Load the request data.
 
-    Inputs: `request`. Output: computed value.
+    Inputs: `request` Django request. Output: `loads` result.
     """
     try:
         return json.loads(request.body.decode("utf-8"))
@@ -45,9 +46,9 @@ def load_request_data(request):
 
 
 def parse_json_body(request) -> Tuple[Optional[Any], Optional[str]]:
-    """Parse JSON body.
+    """Parse and validate the json body input.
 
-    Inputs: `request`. Output: `Tuple[Optional[Any], Optional[str]]`.
+    Inputs: `request` Django request. Output: `Tuple[Optional[Any], Optional[str]]`.
     """
     try:
         raw_body = request.body.decode("utf-8")

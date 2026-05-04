@@ -25,9 +25,10 @@ parse_filename = _module.parse_filename
 
 
 def _consume_text(data: atheris.FuzzedDataProvider, max_length: int) -> str:
-    """Consume text.
+    """Return the consume text.
 
-    Inputs: `data`, `max_length`. Output: `str`.
+    Inputs: `data` (atheris.FuzzedDataProvider) payload, `max_length` (int). Output:
+    `str`.
     """
     return data.ConsumeUnicodeNoSurrogates(
         min(max_length, data.ConsumeIntInRange(0, max_length))
@@ -50,9 +51,9 @@ def TestOneInput(data: bytes) -> None:
 
 
 def main() -> None:
-    """Execute the command entrypoint.
+    """Run the `fuzzing.fuzz_filename_parser` command entrypoint.
 
-    Inputs: none. Output: None.
+    Inputs: process arguments and environment. Output: runs the command entrypoint.
     """
     atheris.Setup(sys.argv, TestOneInput)
     atheris.Fuzz()

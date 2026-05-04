@@ -292,9 +292,9 @@ class ExampleEnvContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `ExampleEnvContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
@@ -322,9 +322,9 @@ class ExampleEnvContractTests(unittest.TestCase):
         return keys, malformed
 
     def parse_active_assignments(self, relative_path: str) -> dict[str, str]:
-        """Parse active assignments.
+        """Parse and validate the active assignments input.
 
-        Inputs: `relative_path`. Output: `dict[str, str]`.
+        Inputs: `relative_path` (str). Output: `dict[str, str]`.
         """
         env_path = self.repo_root / relative_path
         assignments: dict[str, str] = {}
@@ -337,9 +337,9 @@ class ExampleEnvContractTests(unittest.TestCase):
         return assignments
 
     def test_tracked_example_env_inventory_is_locked(self) -> None:
-        """Verify tracked example environment inventory is locked.
+        """Verify tracked example env inventory is locked.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in tracked example env inventory is locked.
         """
         discovered = {
             path.relative_to(self.repo_root).as_posix()
@@ -349,9 +349,9 @@ class ExampleEnvContractTests(unittest.TestCase):
         self.assertEqual(set(EXPECTED_EXAMPLE_ENV_KEYS), discovered)
 
     def test_example_env_files_have_only_assignment_or_comment_lines(self) -> None:
-        """Verify example environment files have only assignment or comment lines.
+        """Verify example env files have only assignment or comment lines.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in example env files have only assignment or comment lines.
         """
         for relative_path in EXPECTED_EXAMPLE_ENV_KEYS:
             with self.subTest(relative_path=relative_path):
@@ -363,9 +363,9 @@ class ExampleEnvContractTests(unittest.TestCase):
                 )
 
     def test_example_env_files_do_not_repeat_active_keys(self) -> None:
-        """Verify example environment files do not repeat active keys.
+        """Verify example env files do not repeat active keys.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in example env files do not repeat active keys.
         """
         for relative_path in EXPECTED_EXAMPLE_ENV_KEYS:
             with self.subTest(relative_path=relative_path):
@@ -378,9 +378,9 @@ class ExampleEnvContractTests(unittest.TestCase):
                 )
 
     def test_example_env_assignment_keys_match_locked_contract(self) -> None:
-        """Verify example environment assignment keys match locked contract.
+        """Verify example env assignment keys match locked contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in example env assignment keys match locked contract.
         """
         for relative_path, expected_keys in EXPECTED_EXAMPLE_ENV_KEYS.items():
             with self.subTest(relative_path=relative_path):
@@ -402,9 +402,9 @@ class ExampleEnvContractTests(unittest.TestCase):
                 )
 
     def test_secrets_example_has_no_placeholder_secret_values(self) -> None:
-        """Verify secrets example has no placeholder secret values.
+        """Check that secrets example has no placeholder secret values keeps sensitive data out of output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in secrets example has no placeholder secret values.
         """
         assignments = self.parse_active_assignments("env/omero_secrets_example.env")
         self.assertFalse(

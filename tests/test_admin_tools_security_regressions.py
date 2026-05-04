@@ -14,10 +14,10 @@ if str(REPO_ROOT) not in sys.path:
 
 
 class _BaseResponse:
-    """Represent base response."""
+    """Test double for base response behavior in this module."""
 
     def __init__(self, content="", status=200, content_type=None):
-        """Initialize the instance.
+        """Create `_BaseResponse` with `content`, `status`, and `content_type`.
 
         Inputs: `content`, `status`, `content_type`. Output: None.
         """
@@ -45,10 +45,10 @@ class _BaseResponse:
 
 
 class _JsonResponse(_BaseResponse):
-    """Represent JSON response."""
+    """Test double for JSON response behavior in this module."""
 
     def __init__(self, payload=None, status=200, **_kwargs):
-        """Initialize the instance.
+        """Create `_JsonResponse` with `payload` and `status`.
 
         Inputs: `payload`, `status`, `**_kwargs`. Output: None.
         """
@@ -61,14 +61,14 @@ class _JsonResponse(_BaseResponse):
 
 
 class _HttpResponse(_BaseResponse):
-    """Represent HTTP response."""
+    """Test double for HTTP response behavior in this module."""
 
 
 class _HttpResponseRedirect(_HttpResponse):
-    """Represent HTTP response redirect."""
+    """Test double for HTTP response redirect behavior in this module."""
 
     def __init__(self, location):
-        """Initialize the instance.
+        """Create `_HttpResponseRedirect` with `location`.
 
         Inputs: `location`. Output: None.
         """
@@ -77,10 +77,10 @@ class _HttpResponseRedirect(_HttpResponse):
 
 
 class _DjangoTemplates:
-    """Represent django templates."""
+    """Test double for django templates behavior in this module."""
 
     def __init__(self, config):
-        """Initialize the instance.
+        """Create `_DjangoTemplates` with `config`.
 
         Inputs: `config`. Output: None.
         """
@@ -88,10 +88,10 @@ class _DjangoTemplates:
 
 
 class _TemplateResponse(_HttpResponse):
-    """Represent template response."""
+    """Test double for template response behavior in this module."""
 
     def __init__(self, request, template, context=None, status=200, **_kwargs):
-        """Initialize the instance.
+        """Create `_TemplateResponse` with `request`, `template`, `context`, and `status`.
 
         Inputs: `request`, `template`, `context`, `status`, `**_kwargs`. Output: None.
         """
@@ -102,10 +102,10 @@ class _TemplateResponse(_HttpResponse):
 
 
 class _SimpleTemplateResponse(_HttpResponse):
-    """Represent simple template response."""
+    """Test double for simple template response behavior in this module."""
 
     def __init__(self, template, context=None, status=200, **_kwargs):
-        """Initialize the instance.
+        """Create `_SimpleTemplateResponse` with `template`, `context`, and `status`.
 
         Inputs: `template`, `context`, `status`, `**_kwargs`. Output: None.
         """
@@ -114,7 +114,7 @@ class _SimpleTemplateResponse(_HttpResponse):
         self.context_data = context or {}
 
     def render(self):
-        """Render.
+        """Render the render for `_SimpleTemplateResponse`.
 
         Inputs: none. Output: `self`.
         """
@@ -122,9 +122,9 @@ class _SimpleTemplateResponse(_HttpResponse):
 
 
 def _install_import_stubs():
-    """Install import stubs.
+    """Install the import stubs.
 
-    Inputs: none. Output: None.
+    Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
     """
     if "django.http" not in sys.modules:
         django_module = types.ModuleType("django")
@@ -191,17 +191,17 @@ class AdminToolsSecurityRegressionTests(TestCase):
     """Test cases for admin tools security regression tests."""
 
     def test_normalize_proxy_request_target_rejects_traversal(self):
-        """Verify normalize proxy request target rejects traversal.
+        """Confirm normalize proxy request target rejects traversal is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in normalize proxy request target rejects traversal.
         """
         with self.assertRaises(ValueError):
             index_view._normalize_proxy_request_target("../api/admin")
 
     def test_rewrite_proxied_location_blocks_external_redirects(self):
-        """Verify rewrite proxied location blocks external redirects.
+        """Confirm rewrite proxied location blocks external redirects is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in rewrite proxied location blocks external redirects.
         """
         location = index_view._rewrite_proxied_location(
             "https://evil.example.org/steal",
@@ -215,9 +215,9 @@ class AdminToolsSecurityRegressionTests(TestCase):
         )
 
     def test_grafana_proxy_home_fallback_response_sanitizes_segments(self):
-        """Verify grafana proxy home fallback response sanitizes segments.
+        """Check that grafana proxy home fallback response sanitizes segments keeps sensitive data out of output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in grafana proxy home fallback response sanitizes segments.
         """
         with mock.patch.dict(
             os.environ,
@@ -238,9 +238,9 @@ class AdminToolsSecurityRegressionTests(TestCase):
         )
 
     def test_storage_quota_update_hides_payload_details(self):
-        """Verify storage quota update hides payload details.
+        """Verify storage quota update hides payload details result shape.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in storage quota update hides payload details.
         """
         request = types.SimpleNamespace(
             method="POST",
@@ -264,7 +264,7 @@ class AdminToolsSecurityRegressionTests(TestCase):
     def test_write_state_temp_file_is_not_world_writable(self):
         """Verify write state temp file is not world writable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in write state temp file is not world writable.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             state_path = Path(tmpdir) / "quotas.json"
@@ -272,7 +272,7 @@ class AdminToolsSecurityRegressionTests(TestCase):
             real_replace = os.replace
 
             def _capturing_replace(src, dst):
-                """Capturing replace.
+                """Record the capturing replace call on the test double for later assertions.
 
                 Inputs: `src`, `dst`. Output: None.
                 """

@@ -32,9 +32,9 @@ CLI_TOOLS = (
 
 @pytest.mark.parametrize("tool_name", CLI_TOOLS)
 def test_cli_tool_supports_help(tool_name: str) -> None:
-    """Verify cli tool supports help.
+    """Verify the CLI tool supports help execution contract.
 
-    Inputs: `tool_name`. Output: None.
+    Inputs: pytest provides `tool_name`. Output: fails on regressions in CLI tool supports help.
     """
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / "tools" / tool_name), "--help"],

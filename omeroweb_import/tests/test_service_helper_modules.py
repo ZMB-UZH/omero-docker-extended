@@ -33,14 +33,14 @@ class _FakeValue:
     """Test double for fake value."""
 
     def __init__(self, value):
-        """Initialize the instance.
+        """Create `_FakeValue` with `value`.
 
         Inputs: `value`. Output: None.
         """
         self._value = value
 
     def getValue(self):
-        """Return the fake OMERO value.
+        """Return `_FakeValue`'s fake OMERO value.
 
         Inputs: none. Output: `self._value`.
         """
@@ -51,7 +51,7 @@ class _FakeDatasetI:
     """Test double for fake dataset i."""
 
     def __init__(self, dataset_id=None, _loaded=True):
-        """Initialize the instance.
+        """Create `_FakeDatasetI` with `dataset_id` and `_loaded`.
 
         Inputs: `dataset_id`, `_loaded`. Output: None.
         """
@@ -59,14 +59,14 @@ class _FakeDatasetI:
         self.name = None
 
     def setName(self, value):
-        """Set Name.
+        """Set the name for `_FakeDatasetI`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.name = value
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_FakeDatasetI`'s fake OMERO identifier.
 
         Inputs: none. Output: `_FakeValue` result.
         """
@@ -77,7 +77,7 @@ class _FakeProjectI:
     """Test double for fake project i."""
 
     def __init__(self, project_id, _loaded):
-        """Initialize the instance.
+        """Create `_FakeProjectI` with `project_id` and `_loaded`.
 
         Inputs: `project_id`, `_loaded`. Output: None.
         """
@@ -88,22 +88,22 @@ class _FakeProjectDatasetLinkI:
     """Test double for fake project dataset link i."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeProjectDatasetLinkI` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.parent = None
         self.child = None
 
     def setParent(self, parent):
-        """Set Parent.
+        """Set the parent for `_FakeProjectDatasetLinkI`.
 
         Inputs: `parent`. Output: None.
         """
         self.parent = parent
 
     def setChild(self, child):
-        """Set Child.
+        """Set the child for `_FakeProjectDatasetLinkI`.
 
         Inputs: `child`. Output: None.
         """
@@ -114,7 +114,7 @@ class _FakeDatasetChild:
     """Test double for fake dataset child."""
 
     def __init__(self, dataset_id, name):
-        """Initialize the instance.
+        """Create `_FakeDatasetChild` with `dataset_id` and `name`.
 
         Inputs: `dataset_id`, `name`. Output: None.
         """
@@ -122,7 +122,7 @@ class _FakeDatasetChild:
         self._name = name
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_FakeDatasetChild`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
@@ -142,7 +142,7 @@ class _FakeProject:
         owner_name=None,
         children=None,
     ):
-        """Initialize the instance.
+        """Create `_FakeProject` with `project_id` and `name`.
 
         Inputs: `project_id`, `name`, `owner_id`, `can_write`, `owner_name`, `children`.
         Output: None.
@@ -155,14 +155,14 @@ class _FakeProject:
         self._children = list(children or [])
 
     def getName(self):
-        """Return the fake object name.
+        """Return `_FakeProject`'s fake object name.
 
         Inputs: none. Output: `self._name`.
         """
         return self._name
 
     def listChildren(self):
-        """Return list children.
+        """Return `_FakeProject`'s fake child listing.
 
         Inputs: none. Output: `list` result.
         """
@@ -173,7 +173,7 @@ class _FakeExistingDataset:
     """Test double for fake existing dataset."""
 
     def __init__(self, dataset_id, *, expose_id=True):
-        """Initialize the instance.
+        """Create `_FakeExistingDataset` with `dataset_id`.
 
         Inputs: `dataset_id`, `expose_id`. Output: None.
         """
@@ -181,7 +181,7 @@ class _FakeExistingDataset:
         self._dataset_id = dataset_id
 
     def getId(self):
-        """Return the fake OMERO identifier.
+        """Return `_FakeExistingDataset`'s fake OMERO identifier.
 
         Inputs: none. Output: `_FakeValue` result.
         """
@@ -192,15 +192,15 @@ class _FakeUpdateService:
     """Test double for fake update service."""
 
     def __init__(self):
-        """Initialize the instance.
+        """Create `_FakeUpdateService` with its default state.
 
-        Inputs: none. Output: None.
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.saved_links = []
         self.saved_datasets = []
 
     def saveAndReturnObject(self, obj):
-        """Save and return object.
+        """Return the fake saved OMERO object from service-helper tests.
 
         Inputs: `obj`. Output: `obj`.
         """
@@ -217,14 +217,14 @@ class _FakeSecrets:
     """Test double for fake secrets."""
 
     def __init__(self, values):
-        """Initialize the instance.
+        """Create `_FakeSecrets` with `values`.
 
         Inputs: `values`. Output: None.
         """
         self._values = iter(values)
 
     def choice(self, _alphabet):
-        """Choice.
+        """Return the choice for `_FakeSecrets`.
 
         Inputs: `_alphabet`. Output: `next_or_fail` result.
         """
@@ -235,7 +235,7 @@ class _FakeServiceOpts:
     """Test double for fake service opts."""
 
     def __init__(self, *, group="5", fail_get=False):
-        """Initialize the instance.
+        """Create `_FakeServiceOpts` with its default state.
 
         Inputs: `group`, `fail_get`. Output: None.
         """
@@ -244,27 +244,27 @@ class _FakeServiceOpts:
         self.set_calls = []
 
     def getOmeroGroup(self):
-        """Return OMERO Group.
+        """Return the fake omero group value used by this test double.
 
-        Inputs: none. Output: `self.group`. Raises on invalid or unavailable state.
+        Inputs: none. Output: `group`. Raises: RuntimeError for the exercised failure path.
         """
         if self.fail_get:
             raise RuntimeError("cannot read group")
         return self.group
 
     def setOmeroGroup(self, value):
-        """Set OMERO Group.
+        """Set the OMERO Group for `_FakeServiceOpts`.
 
-        Inputs: `value`. Output: None.
+        Inputs: `value` input value. Output: None.
         """
         self.set_calls.append(value)
 
 
 @pytest.fixture()
 def dataset_module(monkeypatch):
-    """Dataset module.
+    """Return the dataset module.
 
-    Inputs: `monkeypatch`. Output: `dataset_service`.
+    Inputs: `monkeypatch` pytest monkeypatch fixture. Output: `dataset_service`.
     """
     monkeypatch.setattr(core_functions, "PurePosixPath", PurePosixPath, raising=False)
     monkeypatch.setattr(core_functions, "secrets", _FakeSecrets("ABCD"), raising=False)
@@ -317,9 +317,9 @@ def dataset_module(monkeypatch):
 
 
 def _write_json(path, payload) -> None:
-    """Write JSON.
+    """Write the JSON.
 
-    Inputs: `path`, `payload`. Output: None.
+    Inputs: `path` path, `payload` payload. Output: None.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(__import__("json").dumps(payload), encoding="utf-8")
@@ -328,7 +328,7 @@ def _write_json(path, payload) -> None:
 def test_import_module_contracts_and_reexports(monkeypatch):
     """Verify import module contracts and reexports.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in import module contracts and reexports.
     """
     calls = []
     monkeypatch.setattr(
@@ -405,7 +405,7 @@ def test_import_module_contracts_and_reexports(monkeypatch):
 def test_import_compatibility_facades_use_public_core_aliases():
     """Verify import compatibility facades use public core aliases.
 
-    Inputs: none. Output: None.
+    Inputs: import-job fakes. Output: fails on regressions in import compatibility facades use public core aliases.
     """
     alias_pairs = (
         (import_service, "_append_job_error", "append_job_error"),
@@ -432,7 +432,7 @@ def test_dataset_service_wrapper_uses_canonical_core_functions(
 ):
     """Verify dataset service wrapper uses canonical core functions.
 
-    Inputs: `dataset_module`, `monkeypatch`. Output: `iter` result.
+    Inputs: pytest provides `dataset_module`, `monkeypatch`. Output: fails on regressions in dataset service wrapper uses canonical core functions.
     """
     monkeypatch.setattr(
         core_functions,
@@ -471,9 +471,10 @@ def test_dataset_service_wrapper_uses_canonical_core_functions(
     update_service = _FakeUpdateService()
 
     def _get_objects(model, *args, **kwargs):
-        """Return objects.
+        """Return the objects.
 
-        Inputs: `model`, `*args`, `**kwargs`. Output: `iter` result.
+        Inputs: `model`, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: `iter` result.
         """
         if model == "Project":
             return iter([project])
@@ -532,7 +533,7 @@ def test_dataset_service_wrapper_uses_canonical_core_functions(
 def test_dataset_service_iter_accessible_projects_uses_fallback_paths(dataset_module):
     """Verify dataset service iter accessible projects uses fallback paths.
 
-    Inputs: `dataset_module`. Output: None.
+    Inputs: pytest provides `dataset_module`. Output: fails on regressions in dataset service iter accessible projects uses fallback paths.
     """
     service_opts = _FakeServiceOpts()
     conn = SimpleNamespace(
@@ -552,9 +553,9 @@ def test_core_function_helpers_cover_native_zarr_plan_and_shared_transfer_cleanu
     monkeypatch,
     caplog,
 ):
-    """Verify core function helpers cover native Zarr plan and shared transfer cleanup.
+    """Check core function helpers cover native Zarr plan and shared transfer cleanup cleanup behavior.
 
-    Inputs: `tmp_path`, `monkeypatch`, `caplog`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`, `caplog`. Output: fails on regressions in core function helpers cover native Zarr plan and shared transfer cleanup.
     """
     plan = core_functions._NativeZarrImportPlan(
         kind=support.OME_ZARR_IMPORT_KIND_BIOFORMATS2RAW,
@@ -611,7 +612,7 @@ def test_ome_zarr_support_helpers_cover_metadata_fallback_axes_sizes_and_chunk_w
 ):
     """Verify ome Zarr support helpers cover metadata fallback axes sizes and chunk writer.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in ome Zarr support helpers cover metadata fallback axes sizes and chunk writer.
     """
     store = tmp_path / "image.ome.zarr"
     expected = {"multiscales": [{"datasets": [{"path": "0"}]}]}
@@ -727,9 +728,9 @@ def test_ome_zarr_support_helpers_cover_metadata_fallback_axes_sizes_and_chunk_w
 
 
 def test_import_help_page_serves_markdown_and_404s_when_missing(monkeypatch, tmp_path):
-    """Verify import help page serves markdown and 404s when missing.
+    """Check import help page serves markdown and 404s when missing renders the expected surface.
 
-    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in import help page serves markdown and 404s when missing.
     """
     request = RequestFactory().get("/omeroweb_import/help/")
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
@@ -755,7 +756,7 @@ def test_import_help_page_serves_markdown_and_404s_when_missing(monkeypatch, tmp
 def test_import_urls_module_can_be_loaded_in_isolation_with_stubbed_views(monkeypatch):
     """Verify import URLs module can be loaded in isolation with stubbed views.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in import URLs module can be loaded in isolation with stubbed views.
     """
     package_module = types.ModuleType("omeroweb_import")
     package_module.__path__ = [str(REPO_ROOT / "omeroweb_import")]

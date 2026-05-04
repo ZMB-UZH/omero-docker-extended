@@ -15,7 +15,7 @@ class _DummyLock:
     """Test double for dummy lock."""
 
     def __init__(self, acquired=True):
-        """Initialize the instance.
+        """Create `_DummyLock` with `acquired`.
 
         Inputs: `acquired`. Output: None.
         """
@@ -24,7 +24,7 @@ class _DummyLock:
         self.released = False
 
     def acquire(self, timeout=None):
-        """Acquire the lock.
+        """Acquire `_DummyLock`'s fake lock.
 
         Inputs: `timeout`. Output: `self._acquired`.
         """
@@ -32,17 +32,17 @@ class _DummyLock:
         return self._acquired
 
     def release(self):
-        """Release the lock.
+        """Release `_DummyLock`'s fake lock.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         self.released = True
 
 
 def _job_state(monkeypatch, job):
-    """Job state.
+    """Return the job state.
 
-    Inputs: `monkeypatch`, `job`. Output: computed value.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `job`. Output: `state`.
     """
     state = {"job": job}
 
@@ -55,9 +55,9 @@ def _job_state(monkeypatch, job):
         return state["job"]
 
     def save_job(job_dict):
-        """Save job.
+        """Save the job.
 
-        Inputs: `job_dict`. Output: bool.
+        Inputs: `job_dict`. Output: `bool`.
         """
         state["job"] = job_dict
         return True
@@ -68,16 +68,16 @@ def _job_state(monkeypatch, job):
 
 
 def _job_state_with_updates(monkeypatch, job):
-    """Job state with updates.
+    """Return the job state with updates.
 
-    Inputs: `monkeypatch`, `job`. Output: computed value.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `job`. Output: `state`.
     """
     state = _job_state(monkeypatch, job)
 
     def update_job(job_id, mutator):
-        """Update job.
+        """Update the job.
 
-        Inputs: `job_id`, `mutator`. Output: `state['job']`.
+        Inputs: `job_id`, `mutator`. Output: update job result.
         """
         assert job_id == job["job_id"]
         state["job"] = mutator(state["job"])
@@ -90,12 +90,11 @@ def _job_state_with_updates(monkeypatch, job):
 def test_import_zarr_via_cli_handles_stage_exception_without_unbound_local(
     tmp_path: Path, monkeypatch
 ):
-    """Verify import Zarr via cli handles stage exception without unbound local.
+    """Confirm import Zarr via CLI handles stage exception without unbound local exposes the expected failure.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: None after assertions pass. Raises: RuntimeError when validation or
+    external operations fail.
     """
     source_path = tmp_path / "image.zarr"
     source_path.mkdir()
@@ -112,19 +111,18 @@ def test_import_zarr_via_cli_handles_stage_exception_without_unbound_local(
     )
 
     def failing_stage(*args, **kwargs):
-        """Failing stage.
+        """Record the failing stage call on the test double for later assertions.
 
-        Inputs: `*args`, `**kwargs`. Output: None. Raises on invalid or unavailable
-        state.
-
-        state.
+        Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+        None. Raises: RuntimeError when validation or the called operation fails.
         """
         raise RuntimeError("stage boom")
 
     def failing_cleanup(path):
-        """Failing cleanup.
+        """Record the failing cleanup call on the test double for later assertions.
 
-        Inputs: `path`. Output: None. Raises on invalid or unavailable state.
+        Inputs: `path` path. Output: None. Raises: RuntimeError when validation or
+        external operations fail.
         """
         cleanup_attempts.append(path)
         raise RuntimeError("cleanup boom")
@@ -162,9 +160,9 @@ def test_import_zarr_via_cli_rejects_missing_context_invalid_plans_and_prepare_f
     tmp_path: Path,
     monkeypatch,
 ):
-    """Verify import Zarr via cli rejects missing context invalid plans and prepare failures.
+    """Confirm import Zarr via CLI rejects missing context invalid plans and prepare failures is rejected at the boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in import Zarr via CLI rejects missing context invalid plans and prepare failures.
     """
     source_path = tmp_path / "image.zarr"
     source_path.mkdir()
@@ -182,14 +180,17 @@ def test_import_zarr_via_cli_rejects_missing_context_invalid_plans_and_prepare_f
         covered_relative_paths=["image.zarr"],
     )
 
+    progress_job = {"imported_bytes": 12}
     missing_context = core_functions._import_zarr_via_cli(
         username="",
         group_name="",
+        progress_job=progress_job,
         native_plan=core_functions._NativeZarrImportPlan(kind="ome-zarr"),
         **common_kwargs,
     )
     assert missing_context["status"] == "error"
     assert "Missing username or group name" in missing_context["entry_error"]
+    assert progress_job["import_progress_bytes"] == 12
 
     unsupported = core_functions._import_zarr_via_cli(
         username="alice",
@@ -230,9 +231,10 @@ def test_import_zarr_via_cli_rejects_missing_context_invalid_plans_and_prepare_f
 def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
     tmp_path: Path, monkeypatch, caplog
 ):
-    """Verify import Zarr via cli handles no objects metadata and render failures.
+    """Verify the import Zarr via CLI handles no objects metadata and render failures execution contract.
 
-    Inputs: `tmp_path`, `monkeypatch`, `caplog`. Output: computed value.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture, `caplog` pytest log capture fixture. Output: `_import_zarr_via_cli` result.
     """
     source_path = tmp_path / "image.zarr"
     source_path.mkdir()
@@ -300,7 +302,7 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
         """Exercise one native Zarr conversion case.
 
         Inputs: `returncode`, `stdout`, `stderr`, `api_ids`, `finalize_result`,
-        `render_result`, `run_error`. Output: computed value.
+        `render_result`, `run_error`. Output: `_import_zarr_via_cli` result.
         """
         cleanup_calls.clear()
         imported_image_cleanup_calls.clear()
@@ -330,9 +332,10 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
         )
 
         def verify_api(*args, **kwargs):
-            """Verify API.
+            """Verify the API.
 
-            Inputs: `*args`, `**kwargs`. Output: `list` result.
+            Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
+            `list`.
             """
             verify_calls.append(kwargs)
             return list(api_ids)
@@ -455,9 +458,9 @@ def test_import_zarr_via_cli_uses_api_verified_image_ids_for_name_normalization(
     tmp_path: Path,
     monkeypatch,
 ):
-    """Verify import Zarr via cli uses API verified image IDs for name normalization.
+    """Verify the import Zarr via CLI uses API verified image IDs for name normalization execution contract.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in import Zarr via CLI uses API verified image IDs for name normalization.
     """
     source_path = tmp_path / "image.zarr"
     source_path.mkdir()
@@ -560,9 +563,9 @@ def test_import_zarr_via_cli_handles_unexpected_cli_runner_exceptions(
     tmp_path: Path,
     monkeypatch,
 ):
-    """Verify import Zarr via cli handles unexpected cli runner exceptions.
+    """Verify the import Zarr via CLI handles unexpected CLI runner exceptions execution contract.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in import Zarr via CLI handles unexpected CLI runner exceptions.
     """
     source_path = tmp_path / "image.zarr"
     source_path.mkdir()
@@ -636,18 +639,16 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
 ):
     """Verify finalize imported Zarr image metadata records reload failures.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: computed value or None. Raises on invalid
-    or unavailable state.
-
-    or unavailable state.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: `_PixelsWrapper` result. Raises: AssertionError, RuntimeError when validation or the called operation fails.
     """
     managed_zarr = tmp_path / "managed"
 
     class _PixelsWrapper:
-        """Represent pixels wrapper."""
+        """Test double for pixels wrapper behavior in this module."""
 
         def __init__(self, storage):
-            """Initialize the instance.
+            """Create `_PixelsWrapper` with `storage`.
 
             Inputs: `storage`. Output: None.
             """
@@ -658,24 +659,24 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
 
         @staticmethod
         def getPhysicalSizeX():
-            """Return Physical Size X.
+            """Return `_PixelsWrapper`'s fake physical X size.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             return None
 
     class _Image:
-        """Represent image."""
+        """Test double for image behavior in this module."""
 
         def __init__(self, storage):
-            """Initialize the instance.
+            """Create `_Image` with `storage`.
 
             Inputs: `storage`. Output: None.
             """
             self._storage = storage
 
         def getPrimaryPixels(self):
-            """Return Primary Pixels.
+            """Return the fake primary pixels value used by this test double.
 
             Inputs: none. Output: `_PixelsWrapper` result.
             """
@@ -685,12 +686,12 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
     update_saves = []
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_Conn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.SERVICE_OPTS = types.SimpleNamespace(
                 setOmeroGroup=lambda value: setattr(self, "group", value)
@@ -700,7 +701,7 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
 
         @staticmethod
         def getUpdateService():
-            """Return Update Service.
+            """Return `_Conn`'s fake update service.
 
             Inputs: none. Output: `types.SimpleNamespace` result.
             """
@@ -709,10 +710,10 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
             )
 
         def getObject(self, object_type, image_id):
-            """Return Object.
+            """Return the object for `_Conn`.
 
-            Inputs: `object_type`, `image_id`. Output: computed value. Raises on invalid
-            or unavailable state.
+            Inputs: `object_type`, `image_id` OMERO image ID. Output: `SimpleNamespace`
+            Raises: AssertionError, RuntimeError when validation or external
             """
             assert object_type == "Image"
             self._calls[image_id] = self._calls.get(image_id, 0) + 1
@@ -732,37 +733,37 @@ def test_finalize_imported_zarr_image_metadata_records_reload_failures(
             raise AssertionError(f"Unexpected image id {image_id}")
 
         def close(self):
-            """Close the resource.
+            """Close `_Conn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
     conn = _Conn()
 
     class _AdminConn:
-        """Represent admin conn."""
+        """Test double for admin conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_AdminConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.closed = False
 
         @staticmethod
         def suConn(username):
-            """Su conn.
+            """Return the su Conn for `_AdminConn`.
 
-            Inputs: `username`. Output: `conn`.
+            Inputs: `username` username. Output: `conn`.
             """
             assert username == "alice"
             return conn
 
         def close(self):
-            """Close the resource.
+            """Close `_AdminConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
@@ -815,7 +816,7 @@ def test_import_job_entry_covers_staged_background_and_native_routing_failures(
 ):
     """Verify import job entry covers staged background and native routing failures.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in import job entry covers staged background and native routing failures.
     """
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
@@ -992,9 +993,9 @@ def test_mark_failed_job_for_deferred_cleanup_reports_partial_failures(
     tmp_path: Path,
     monkeypatch,
 ):
-    """Verify mark failed job for deferred cleanup reports partial failures.
+    """Check mark failed job for deferred cleanup reports partial failures cleanup behavior.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in mark failed job for deferred cleanup reports partial failures.
     """
     monkeypatch.setattr(
         core_functions, "_get_failed_import_retention_seconds", lambda: 3600
@@ -1018,17 +1019,15 @@ def test_open_service_connection_handles_group_override_and_connect_failures(
 ):
     """Verify open service connection handles group override and connect failures.
 
-    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in open service connection handles group override and connect failures.
+    connect_error when validation or the called operation fails.
     """
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __init__(self, *, connect_result=True, connect_error=None):
-            """Initialize the instance.
+            """Create `_Conn` with its default state.
 
             Inputs: `connect_result`, `connect_error`. Output: None.
             """
@@ -1041,27 +1040,24 @@ def test_open_service_connection_handles_group_override_and_connect_failures(
             )
 
         def connect(self):
-            """Open the connection.
+            """Open the connection for `_Conn`.
 
-            Inputs: none. Output: `self.connect_result`. Raises on invalid or
-            unavailable state.
-
-            unavailable state.
+            Inputs: none. Output: `connect_result`. Raises: connect_error when validation or the called operation fails.
             """
             if self.connect_error is not None:
                 raise self.connect_error
             return self.connect_result
 
         def close(self):
-            """Close the resource.
+            """Close `_Conn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
         @staticmethod
         def getLastError():
-            """Return Last Error.
+            """Return `_Conn`'s fake last-error text.
 
             Inputs: none. Output: 'boom'.
             """
@@ -1120,7 +1116,7 @@ def test_process_import_job_handles_missing_connection_details_upload_root_and_c
 ):
     """Verify process import job handles missing connection details upload root and crashes.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in process import job handles missing connection details upload root and crashes.
     """
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
@@ -1235,9 +1231,9 @@ def test_process_import_job_handles_missing_connection_details_upload_root_and_c
 def test_process_import_job_handles_group_resolution_preskips_and_cleanup_warnings(
     tmp_path: Path, monkeypatch
 ):
-    """Verify process import job handles group resolution preskips and cleanup warnings.
+    """Check process import job handles group resolution preskips and cleanup warnings cleanup behavior.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in process import job handles group resolution preskips and cleanup warnings.
     """
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
@@ -1301,19 +1297,19 @@ def test_process_import_job_handles_group_resolution_preskips_and_cleanup_warnin
     )
 
     class _AdminConn:
-        """Represent admin conn."""
+        """Test double for admin conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_AdminConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.closed = False
 
         def close(self):
-            """Close the resource.
+            """Close `_AdminConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
 
@@ -1402,12 +1398,11 @@ def test_process_import_job_handles_group_resolution_preskips_and_cleanup_warnin
 def test_process_import_job_ignores_sparse_result_payloads_and_worker_exceptions(
     tmp_path: Path, monkeypatch
 ):
-    """Verify process import job ignores sparse result payloads and worker exceptions.
+    """Verify process import job ignores sparse result payloads and worker exceptions result shape.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: dict. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
+    fixture. Output: None after assertions pass. Raises: RuntimeError when validation or
+    external operations fail.
     """
     jobs_root = tmp_path / "jobs"
     upload_root = tmp_path / "uploads"
@@ -1468,12 +1463,11 @@ def test_process_import_job_ignores_sparse_result_payloads_and_worker_exceptions
     )
 
     def _fake_import_job_entry(entry, *args, **kwargs):
-        """Fake import job entry.
+        """Return the fake import job entry.
 
-        Inputs: `entry`, `*args`, `**kwargs`. Output: dict. Raises on invalid or
-        unavailable state.
-
-        unavailable state.
+        Inputs: `entry`, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: `dict`. Raises: RuntimeError when validation or external operations
+        fail.
         """
         rel_path = entry["relative_path"]
         if rel_path == "raises.ome.tif":
@@ -1507,7 +1501,7 @@ def test_process_import_job_ignores_sparse_result_payloads_and_worker_exceptions
 def test_has_import_candidates_in_output_matches_directory_groups(tmp_path: Path):
     """Verify has import candidates in output matches directory groups.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in has import candidates in output matches directory groups.
     """
     package_root = tmp_path / "plate.zarr"
     package_root.mkdir()
@@ -1544,39 +1538,40 @@ def test_has_import_candidates_in_output_matches_directory_groups(tmp_path: Path
 def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions(
     monkeypatch,
 ):
-    """Verify reconnect session closes stale connections and rejects invalid sessions.
+    """Confirm reconnect session closes stale connections and rejects invalid sessions is rejected at the boundary.
 
-    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in reconnect session closes stale connections and rejects invalid sessions.
+    when validation or the called operation fails.
     """
     events = []
 
     class _OldConn:
-        """Represent old conn."""
+        """Test double for old conn behavior in this module."""
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_OldConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             events.append("old-close")
 
     class _NewConn:
-        """Represent new conn."""
+        """Test double for new conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_NewConn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.closed = False
             self.groups = []
             self.SERVICE_OPTS = types.SimpleNamespace(setOmeroGroup=self.groups.append)
 
         def close(self):
-            """Close the resource.
+            """Close `_NewConn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
             events.append("new-close")
@@ -1634,23 +1629,23 @@ def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions
     assert core_functions._reconnect_session("session", "omeroserver", 4064) is None
 
     class _ExplodingOldConn:
-        """Represent exploding old conn."""
+        """Test double for exploding old conn behavior in this module."""
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_ExplodingOldConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("stale close exploded")
 
     class _ExplodingInvalidConn(_NewConn):
-        """Represent exploding invalid conn."""
+        """Test double for exploding invalid conn behavior in this module."""
 
         def close(self):
-            """Close the resource.
+            """Close `_ExplodingInvalidConn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             self.closed = True
             raise RuntimeError("invalid close exploded")
@@ -1684,23 +1679,21 @@ def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions
 def test_session_helpers_cover_validation_open_and_detached_join_paths(monkeypatch):
     """Verify session helpers cover validation open and detached join paths.
 
-    Inputs: `monkeypatch`. Output: `object` result. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in session helpers cover validation open and detached join paths.
+    Raises: RuntimeError when validation or the called operation fails.
     """
 
     def _event_context():
-        """Event context.
+        """Return the event context.
 
         Inputs: none. Output: `object` result.
         """
         return object()
 
     def _expired_event_context():
-        """Expired event context.
+        """Record the expired event context call on the test double for later assertions.
 
-        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
         """
         raise RuntimeError("expired")
 
@@ -1760,7 +1753,7 @@ def test_prepare_job_import_datasets_handles_missing_upload_roots_and_save_failu
 ):
     """Verify prepare job import datasets handles missing upload roots and save failures.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in prepare job import datasets handles missing upload roots and save failures.
     """
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
@@ -1829,9 +1822,9 @@ def test_prepare_job_import_datasets_handles_missing_upload_roots_and_save_failu
 def test_run_compatibility_check_inner_handles_staged_path_errors_and_future_failures(
     tmp_path: Path, monkeypatch
 ):
-    """Verify run compatibility check inner handles staged path errors and future failures.
+    """Verify the run compatibility check inner handles staged path errors and future failures safety boundary.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: tuple.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions when run compatibility check inner handles staged path errors and future failures accepts unsafe input.
     """
     upload_root = tmp_path / "uploads"
     job_id = "a" * 32
@@ -1900,10 +1893,30 @@ def test_run_compatibility_check_inner_handles_staged_path_errors_and_future_fai
         "_dataset_name_for_import_entry",
         lambda unit, orphan_name: "Default",
     )
+    job["dataset_name_override"] = "Override Dataset"
+    job["dataset_map"] = {"Override Dataset": 77}
+    compatibility_dataset_ids = []
+
+    def check_import_compatibility(
+        session_key,
+        host,
+        port,
+        file_path,
+        dataset_id,
+        relative_path,
+    ):
+        """Capture dataset routing before simulating a failed compatibility scan.
+
+        Inputs: `session_key`, `host`, `port`, `file_path`, `dataset_id`,
+        `relative_path`. Output: none; always raises RuntimeError.
+        """
+        compatibility_dataset_ids.append(dataset_id)
+        raise RuntimeError("scan boom")
+
     monkeypatch.setattr(
         core_functions,
         "_check_import_compatibility",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("scan boom")),
+        check_import_compatibility,
     )
     monkeypatch.setattr(
         core_functions,
@@ -1933,21 +1946,22 @@ def test_run_compatibility_check_inner_handles_staged_path_errors_and_future_fai
     assert state["job"]["files"][1]["compatibility_details"] == "scan boom"
     assert state["job"]["compatibility_status"] == "error"
     assert state["job"]["compatibility_thread_active"] is False
+    assert compatibility_dataset_ids == [77]
 
 
 def test_start_import_thread_requires_ready_state_and_persistence(monkeypatch):
     """Verify start import thread requires ready state and persistence.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start import thread requires ready state and persistence.
     """
     events = []
     thread_targets = []
 
     class _Thread:
-        """Represent thread."""
+        """Test double for thread behavior in this module."""
 
         def __init__(self, *, target, args, daemon):
-            """Initialize the instance.
+            """Create `_Thread` with its default state.
 
             Inputs: `target`, `args`, `daemon`. Output: None.
             """
@@ -1955,9 +1969,9 @@ def test_start_import_thread_requires_ready_state_and_persistence(monkeypatch):
 
         @staticmethod
         def start():
-            """Start the operation.
+            """Start `_Thread`'s fake operation.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             events.append("thread-started")
 

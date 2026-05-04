@@ -67,7 +67,7 @@ This avoids importing ECC hooks, commands, multi-agent orchestration, or platfor
 
 This repository also carries an opt-in `caveman` communication overlay:
 
-- vendored upstream prompt reference material under `third_party/caveman-v1.6.0/`
+- vendored upstream prompt reference material under `third_party/caveman-v1.7.0/`
 - a repo-local overlay at `.agents/skills/caveman/`
 - shared-skill catalog routing in `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, and `.cursor/rules/00-omero-core.mdc`
 
@@ -80,9 +80,15 @@ Compression stays opt-in and quality-first:
 - keep `caveman` limited to internal AI communication and prompting; repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text stay in normal prose
 - keep routing, tool use, verification scope, and uncertainty handling identical to normal mode
 
-Upstream `caveman` `v1.6.0` adds hook hardening, current Codex hook configuration, natural-language activation, per-turn reinforcement, expanded intensity levels, `caveman-help`, and a compression tool surface. This repo does not import those activation, hook, configuration, or context-rewrite surfaces.
+Upstream `caveman` `v1.7.0` adds stats receipts, statusline savings,
+`caveman-shrink` MCP description compression, cavecrew subagents, a smart
+multi-agent installer, `caveman-init`, security hardening, and sharper style
+guards for code symbols and ambiguity. This repo imports only the
+prompt-reference lessons that preserve opt-in reply compression; it does not
+import those activation, hook, installer, MCP, subagent, statusline, stats,
+configuration, or context-rewrite surfaces.
 
-The upstream `caveman` hooks, plugin auto-loading, `.codex` hook config, natural-language auto-activation, and compression-tool context rewriting are not activated in this repo.
+The upstream `caveman` hooks, plugin auto-loading, `.codex` hook config, natural-language auto-activation, smart installer, cavecrew subagents, `caveman-shrink`, stats/statusline scripts, and compression-tool context rewriting are not activated in this repo.
 
 ## What is intentionally imported
 
@@ -98,7 +104,7 @@ The upstream `caveman` hooks, plugin auto-loading, `.codex` hook config, natural
 - ECC command shims
 - ECC multi-agent orchestration, delegated loops, and separate agent sessions
 - ECC MCP server configs
-- `caveman` hook runtime, plugin auto-loading, `.codex` hook config, natural-language auto-activation, per-turn reinforcement, default-mode config resolution, `off`, `caveman-help`, and `/compress` context-rewrite automation
+- `caveman` hook runtime, plugin auto-loading, `.codex` hook config, natural-language auto-activation, per-turn reinforcement, default-mode config resolution, `off`, `caveman-help`, smart installer, cavecrew subagents, `caveman-shrink`, stats/statusline scripts, `caveman-init`, and `/compress` context-rewrite automation
 - unrelated domain skills such as business-content, media-generation, or social-distribution
 
 ## Token and speed guidance

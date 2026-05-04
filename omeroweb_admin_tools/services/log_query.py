@@ -115,7 +115,8 @@ class _InMemoryTTLCache:
         max_bytes: int,
         size_estimator: Callable[[object], int],
     ):
-        """Initialize the instance.
+        """Create `_InMemoryTTLCache` with `ttl_seconds`, `max_items`, `max_bytes`, and
+        `size_estimator`.
 
         Inputs: `ttl_seconds`, `max_items`, `max_bytes`, `size_estimator`. Output: None.
         """
@@ -129,10 +130,10 @@ class _InMemoryTTLCache:
         self._lock = threading.Lock()
 
     def get_or_load(self, key: object, loader: Callable[[], object]) -> object:
-        """Return or load.
+        """Return a cached value or load it while sharing in-flight work.
 
-        Inputs: `key`, `loader`. Output: `object`. Raises on invalid or unavailable
-        state.
+        Inputs: `key` (object) lookup key, `loader` (Callable[[], object]). Output:
+        `object`.
         """
         now = time.monotonic()
         owner = False
@@ -184,9 +185,9 @@ class _InMemoryTTLCache:
         return future.result()
 
     def _prune_locked(self, now: float) -> None:
-        """Prune locked.
+        """Prune expired and oversized cache entries while holding the cache lock.
 
-        Inputs: `now`. Output: None.
+        Inputs: `now` (float). Output: None.
         """
         expired = [
             key for key, record in self._values.items() if record.expires_at <= now
@@ -310,7 +311,8 @@ def _normalize_internal_service(service: str) -> str:
 def _validated_compose_service(service: str) -> str:
     """Return a normalized compose service name for Loki labels.
 
-    Inputs: `service`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `service` (str). Output: `str`. Raises: ValueError when validation or
+    external operations fail.
     """
     normalized = _normalize_internal_service(str(service or "").strip())
     if not _COMPOSE_SERVICE_RE.fullmatch(normalized):
@@ -329,7 +331,8 @@ def validate_compose_service_name(service: str) -> str:
 def _validated_internal_log_filename(filename: str) -> str:
     """Return a safe internal log basename for Loki filepath matching.
 
-    Inputs: `filename`. Output: `str`. Raises on invalid or unavailable state.
+    Inputs: `filename` (str). Output: `str`. Raises: ValueError when validation or
+    external operations fail.
     """
     normalized = str(filename or "").strip()
     if (
@@ -365,8 +368,8 @@ def _split_internal_container(container: str) -> Optional[Tuple[str, str]]:
 def _chunks(values: Sequence[str], chunk_size: int) -> List[Tuple[str, ...]]:
     """Split a sequence into fixed-size tuples.
 
-    Inputs: `values`, `chunk_size`. Output: `List[Tuple[str, ...]]`. Raises on invalid
-    or unavailable state.
+    Inputs: `values` (Sequence[str]), `chunk_size` (int). Output: `List[Tuple[str,
+    ...]]`. Raises: ValueError when validation or the called operation fails.
     """
     if chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
@@ -398,15 +401,8 @@ def _append_text_filter(query: str, text_query: Optional[str]) -> str:
 def build_loki_query(containers: List[str]) -> str:
     """A Loki query that matches any of the selected container sources.
 
-    Inputs: `containers`. Output: `str`. Raises on invalid or unavailable state.
-
-    We intentionally query ONLY by ``compose_service`` which is guaranteed by our Alloy config:
-
-    - Docker logs: derived from Docker Compose label ``com.docker.compose.service``
-    - Internal logs: explicitly set in ``monitoring/alloy/alloy-config.alloy``
-
-    This avoids LogQL parser issues caused by combining multiple stream selectors with ``or``
-    (which is not consistently supported across Loki versions/configurations for log queries).
+    Inputs: `containers` (List[str]). Output: `str`. Raises: ValueError when validation or the
+    called operation fails.
     """
     if not containers:
         raise ValueError("At least one container must be selected for log query.")
@@ -556,9 +552,9 @@ def _infer_level_from_message(message: str) -> str:
 
 
 def _normalize_level(stream_level: str, message: str) -> str:
-    """Normalize level.
+    """Normalize the level.
 
-    Inputs: `stream_level`, `message`. Output: `str`.
+    Inputs: `stream_level` (str), `message` (str). Output: `str`.
     """
     aliases = {
         "trace": "debug",
@@ -598,10 +594,11 @@ def _execute_loki_query(
     max_entries: int,
     since_ns: Optional[int] = None,
 ) -> dict:
-    """Execute loki query.
+    """Execute one Loki query and normalize the raw JSON response.
 
-    Inputs: `config`, `query`, `lookback_seconds`, `max_entries`, `since_ns`. Output:
-    `dict`. Raises on invalid or unavailable state.
+    Inputs: `config` (LogConfig) configuration, `query` (str), `lookback_seconds` (int),
+    `max_entries` (int), `since_ns` (Optional[int]). Output: `dict`. Raises:
+    RuntimeError when validation or the called operation fails.
     """
     end_time = dt.datetime.now(tz=dt.timezone.utc)
     start_time = end_time - dt.timedelta(seconds=lookback_seconds)
@@ -722,7 +719,7 @@ def fetch_loki_logs(
     since_ns: Optional[int] = None,
     text_query: Optional[str] = None,
 ) -> List[LogEntry]:
-    """Fetch loki logs.
+    """Fetch and merge Loki log entries for selected containers and files.
 
     Inputs: `config`, `containers`, `lookback_seconds`, `max_entries`, `internal_files`,
     `since_ns`, `text_query`. Output: `List[LogEntry]`.
@@ -776,10 +773,11 @@ def _prepare_query_jobs(
     *,
     internal_file_batch_size: int,
 ) -> List[_QueryJob]:
-    """Prepare query jobs.
+    """Prepare the query jobs.
 
-    Inputs: `containers`, `internal_files`, `text_query`, `internal_file_batch_size`.
-    Output: `List[_QueryJob]`. Raises on invalid or unavailable state.
+    Inputs: `containers` (List[str]), `internal_files` (Optional[Dict[str, set[str]]]),
+    `text_query` (Optional[str]), `internal_file_batch_size` (int). Output:
+    `List[_QueryJob]`. Raises: ValueError when validation or the called operation fails.
     """
     if internal_file_batch_size <= 0:
         raise ValueError("internal_file_batch_size must be positive")
@@ -845,8 +843,6 @@ def _split_internal_query_job(job: _QueryJob) -> List[_QueryJob]:
     midpoint = max(1, len(job.selected_files) // 2)
     split_jobs: List[_QueryJob] = []
     for batch in (job.selected_files[:midpoint], job.selected_files[midpoint:]):
-        if not batch:
-            continue
         split_jobs.append(
             _QueryJob(
                 query=_append_text_filter(
@@ -871,12 +867,14 @@ def _execute_internal_batch_with_split(
     *,
     try_current_batch: bool = True,
 ) -> Tuple[_QueryJob, List[LogEntry]]:
-    """Execute internal batch with split.
+    """Run one Loki internal-log batch, recursively halving it after failure.
 
-    Inputs: `config`, `job`, `lookback_seconds`, `max_entries`, `since_ns`,
-    `try_current_batch`. Output: `Tuple[_QueryJob, List[LogEntry]]`. Raises on invalid
-    or unavailable state.
+    Inputs: `config` (LogConfig) configuration, `job` (_QueryJob), `lookback_seconds`
+    (int), `max_entries` (int), `since_ns` (Optional[int]), `try_current_batch` (bool).
+    Output: successful job and filtered internal log entries; re-raises the original
+    Loki error when a one-file batch still fails.
     """
+    split_jobs = _split_internal_query_job(job)
     if try_current_batch:
         try:
             resolved_job, entries = _execute_query_job(
@@ -887,7 +885,6 @@ def _execute_internal_batch_with_split(
                 since_ns,
             )
         except Exception:
-            split_jobs = _split_internal_query_job(job)
             if not split_jobs:
                 raise
         else:
@@ -896,30 +893,26 @@ def _execute_internal_batch_with_split(
                 resolved_job.selected_files,
                 entries,
             )
-    else:
-        split_jobs = _split_internal_query_job(job)
-        if not split_jobs:
-            raise RuntimeError("internal log query failed and cannot be split further")
+    elif not split_jobs:
+        raise RuntimeError("internal log query failed and cannot be split further")
 
-    if split_jobs:
-        logger.warning(
-            "Internal log query failed for %s/%s; retrying as %d smaller batches.",
-            sanitize_log_value(job.source_name),
-            sanitize_log_value(",".join(job.selected_files)),
-            len(split_jobs),
+    logger.warning(
+        "Internal log query failed for %s/%s; retrying as %d smaller batches.",
+        sanitize_log_value(job.source_name),
+        sanitize_log_value(",".join(job.selected_files)),
+        len(split_jobs),
+    )
+    split_entries: List[LogEntry] = []
+    for split_job in split_jobs:
+        _resolved_split_job, entries = _execute_internal_batch_with_split(
+            config,
+            split_job,
+            lookback_seconds,
+            max_entries,
+            since_ns,
         )
-        split_entries: List[LogEntry] = []
-        for split_job in split_jobs:
-            _resolved_split_job, entries = _execute_internal_batch_with_split(
-                config,
-                split_job,
-                lookback_seconds,
-                max_entries,
-                since_ns,
-            )
-            split_entries.extend(entries)
-        return job, split_entries
-    raise RuntimeError("internal log query failed before split could complete")
+        split_entries.extend(entries)
+    return job, split_entries
 
 
 def _describe_query_job(job: _QueryJob) -> str:
@@ -936,9 +929,9 @@ def _describe_query_job(job: _QueryJob) -> str:
 
 
 def _format_query_failures(failures: Sequence[_QueryFailure]) -> str:
-    """Format query failures.
+    """Format the query failures.
 
-    Inputs: `failures`. Output: `str`.
+    Inputs: `failures` (Sequence[_QueryFailure]). Output: `str`.
     """
     shown = [
         f"{failure.job.source_type}:{_describe_query_job(failure.job)}: {failure.reason}"
@@ -956,10 +949,11 @@ def _execute_query_job(
     max_entries: int,
     since_ns: Optional[int],
 ) -> Tuple[_QueryJob, List[LogEntry]]:
-    """Execute query job.
+    """Execute the query job.
 
-    Inputs: `config`, `job`, `lookback_seconds`, `max_entries`, `since_ns`. Output:
-    `Tuple[_QueryJob, List[LogEntry]]`.
+    Inputs: `config` (LogConfig) configuration, `job` (_QueryJob), `lookback_seconds`
+    (int), `max_entries` (int), `since_ns` (Optional[int]). Output: `Tuple[_QueryJob,
+    List[LogEntry]]`.
     """
     payload = _execute_loki_query(
         config,
@@ -1001,11 +995,12 @@ def _fetch_loki_logs_uncached(
     since_ns: Optional[int] = None,
     text_query: Optional[str] = None,
 ) -> List[LogEntry]:
-    """Fetch loki logs uncached.
+    """Fetch the loki logs uncached.
 
-    Inputs: `config`, `containers`, `lookback_seconds`, `max_entries`, `internal_files`,
-    `since_ns`, `text_query`. Output: `List[LogEntry]`. Raises on invalid or unavailable
-    state.
+    Inputs: `config` (LogConfig) configuration, `containers` (List[str]),
+    `lookback_seconds` (int), `max_entries` (int), `internal_files` (Optional[Dict[str,
+    set[str]]]), `since_ns` (Optional[int]), `text_query` (Optional[str]). Output:
+    `List[LogEntry]`. Raises: RuntimeError when validation or the called operation fails.
     """
     jobs = _prepare_query_jobs(
         containers,
@@ -1197,8 +1192,8 @@ def _build_internal_files_query(
 ) -> str:
     """A Loki query that matches any of the selected internal log files.
 
-    Inputs: `service`, `filenames`, `label_key`. Output: `str`. Raises on invalid or
-    unavailable state.
+    Inputs: `service` (str), `filenames` (Sequence[str]), `label_key` (str). Output:
+    `str`. Raises: ValueError when validation or the called operation fails.
     """
     if not filenames:
         raise ValueError("At least one filename is required for an internal log query.")

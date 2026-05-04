@@ -12,9 +12,9 @@ class DockerHealthcheckContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `DockerHealthcheckContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.compose_text = (REPO_ROOT / "docker-compose.yml").read_text(
             encoding="utf-8"
@@ -60,9 +60,9 @@ class DockerHealthcheckContractTests(unittest.TestCase):
 
     @staticmethod
     def _last_user(dockerfile_text: str) -> str:
-        """Last user.
+        """Return the last user for `DockerHealthcheckContractTests`.
 
-        Inputs: `dockerfile_text`. Output: `str`.
+        Inputs: `dockerfile_text` (str). Output: `str`.
         """
         users = [
             line.strip()
@@ -75,9 +75,9 @@ class DockerHealthcheckContractTests(unittest.TestCase):
 
     @staticmethod
     def _compose_service_text(compose_text: str, service_name: str) -> str:
-        """Compose service text.
+        """Compose the service text for `DockerHealthcheckContractTests`.
 
-        Inputs: `compose_text`, `service_name`. Output: `str`.
+        Inputs: `compose_text` (str), `service_name` (str). Output: `str`.
         """
         compose_lines = compose_text.splitlines(keepends=True)
         service_header = f"  {service_name}:\n"
@@ -93,7 +93,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
     def test_image_level_healthchecks_exist_for_hardened_auxiliary_images(self) -> None:
         """Verify image level healthchecks exist for hardened auxiliary images.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in image level healthchecks exist for hardened auxiliary images.
         """
         expected_checks = {
             "omero-web": "CONFIG_omero_web_application__server_port",
@@ -112,7 +112,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
     def test_omeroweb_and_compose_share_the_same_runtime_health_probe(self) -> None:
         """Verify omeroweb and compose share the same runtime health probe.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroweb and compose share the same runtime health probe.
         """
         dockerfile_text = self.dockerfiles["omero-web"]
         self.assertIn("CONFIG_omero_web_application__server_port", dockerfile_text)
@@ -125,7 +125,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
     def test_crowdsec_and_compose_share_the_same_runtime_health_probe(self) -> None:
         """Verify crowdsec and compose share the same runtime health probe.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in crowdsec and compose share the same runtime health probe.
         """
         dockerfile_text = self.dockerfiles["crowdsec"]
         probe = "wget --no-verbose --tries=1 --spider http://localhost:8080/health"
@@ -133,9 +133,9 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertIn(probe, self.compose_text)
 
     def test_omeroserver_healthcheck_uses_env_driven_helper(self) -> None:
-        """Verify omeroserver healthcheck uses environment driven helper.
+        """Verify omeroserver healthcheck uses env driven helper.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in omeroserver healthcheck uses env driven helper.
         """
         helper_text = (REPO_ROOT / "startup" / "healthcheck-omeroserver.sh").read_text(
             encoding="utf-8"
@@ -165,7 +165,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
     def test_firewall_bouncer_runs_as_non_root_placeholder_image(self) -> None:
         """Verify firewall bouncer runs as non root placeholder image.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in firewall bouncer runs as non root placeholder image.
         """
         dockerfile_text = self.dockerfiles["firewall-bouncer"]
         self.assertIn("addgroup -S firewallbouncer", dockerfile_text)
@@ -175,7 +175,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
     def test_crowdsec_image_defaults_to_named_non_root_user(self) -> None:
         """Verify crowdsec image defaults to named non root user.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in crowdsec image defaults to named non root user.
         """
         dockerfile_text = self.dockerfiles["crowdsec"]
         self.assertIn("addgroup -S crowdsec-runtime", dockerfile_text)
@@ -186,7 +186,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
     def test_pg_maintenance_image_defaults_to_postgres_user(self) -> None:
         """Verify pg maintenance image defaults to postgres user.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in pg maintenance image defaults to postgres user.
         """
         dockerfile_text = self.dockerfiles["pg-maintenance"]
         self.assertIn(
@@ -199,7 +199,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
     def test_omero_server_image_defaults_to_application_user(self) -> None:
         """Verify OMERO server image defaults to application user.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in OMERO server image defaults to application user.
         """
         dockerfile_text = self.dockerfiles["omero-server"]
         self.assertEqual("USER omero-server", self._last_user(dockerfile_text))
@@ -211,7 +211,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
     def test_omero_web_image_defaults_to_application_user(self) -> None:
         """Verify OMERO web image defaults to application user.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in OMERO web image defaults to application user.
         """
         dockerfile_text = self.dockerfiles["omero-web"]
         self.assertEqual("USER omero-web", self._last_user(dockerfile_text))
@@ -224,7 +224,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
     ) -> None:
         """Verify root required helper services are explicit compose handoffs.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in root required helper services are explicit compose handoffs.
         """
         root_required_services = (
             "crowdsec",
@@ -240,7 +240,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
     def test_redis_sysctl_init_image_defaults_to_named_non_root_user(self) -> None:
         """Verify redis sysctl init image defaults to named non root user.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in redis sysctl init image defaults to named non root user.
         """
         dockerfile_text = self.dockerfiles["redis-sysctl-init"]
         self.assertIn("addgroup -S redis-sysctl", dockerfile_text)
@@ -249,9 +249,9 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertNotIn("USER root", dockerfile_text)
 
     def test_redis_sysctl_init_script_fails_closed_on_sysctl_errors(self) -> None:
-        """Verify redis sysctl init script fails closed on sysctl errors.
+        """Confirm redis sysctl init script fails closed on sysctl errors exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in redis sysctl init script fails closed on sysctl errors integration.
         """
         self.assertIn(
             'SYSCTL_KEY="${SYSCTL_KEY:-vm.overcommit_memory}"', self.redis_sysctl_script
@@ -267,9 +267,9 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertNotIn("|| true", self.redis_sysctl_script)
 
     def test_redis_runtime_tuning_is_required_env_file_contract(self) -> None:
-        """Verify redis runtime tuning is required environment file contract.
+        """Verify redis runtime tuning is required env file contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in redis runtime tuning is required env file contract.
         """
         service_text = self._compose_service_text(self.compose_text, "redis")
         for variable in (
@@ -291,7 +291,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
     ) -> None:
         """Verify installer writes redis tuning without shell fallback expansion.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in installer writes redis tuning without shell fallback expansion.
         """
         self.assertIn("REDIS_SAVE_POLICY=\n", self.installation_script)
         self.assertIn("REDIS_APPENDONLY=no\n", self.installation_script)
@@ -319,7 +319,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
     def test_cadvisor_entrypoint_uses_safe_rootfs_iteration(self) -> None:
         """Verify cadvisor entrypoint uses safe rootfs iteration.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in cadvisor entrypoint uses safe rootfs iteration.
         """
         self.assertIn("for rootfs_entry in /rootfs/*; do", self.cadvisor_entrypoint)
         self.assertIn("d=${rootfs_entry#/rootfs/}", self.cadvisor_entrypoint)
@@ -327,9 +327,9 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertNotIn("ls -1 /rootfs", self.cadvisor_entrypoint)
 
     def test_smart_disk_monitor_is_env_driven_and_validates_df_output(self) -> None:
-        """Verify smart disk monitor is environment driven and validates df output.
+        """Verify smart disk monitor is env driven and validates df output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in smart disk monitor is env driven and validates df output.
         """
         self.assertIn("set -eu", self.smart_disk_monitor)
         self.assertIn("SMART_DISK_MONITOR_OUT_FILE", self.smart_disk_monitor)

@@ -4,13 +4,13 @@ class BaseContainer:
     image: Any
     well: Any
 
-    # Initialize the instance. Inputs: *args, **kwargs. Output: None.
+    # Create the typed stub object. Inputs: *args, **kwargs. Output: None.
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
     # Return a dynamic attribute. Inputs: name. Output: Any.
     def __getattr__(self, name: str) -> Any: ...
 
 class BaseShare:
-    # Initialize the instance. Inputs: *args, **kwargs. Output: None.
+    # Create the typed stub object. Inputs: *args, **kwargs. Output: None.
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
     # Return a dynamic attribute. Inputs: name. Output: Any.
     def __getattr__(self, name: str) -> Any: ...

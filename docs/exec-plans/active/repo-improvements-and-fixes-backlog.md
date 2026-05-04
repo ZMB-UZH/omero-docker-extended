@@ -16,9 +16,11 @@ This backlog is grounded in the current repository state and documentation:
   metrics, and secret rotation.
 - `docs/exec-plans/tech-debt-tracker.md` tracks the same remaining operational
   quality gaps without treating OMP/Import as untested packages.
-- `docs/operations/code-scanning.md` records the 2026-04-26 live snapshot: 4
-  open GitHub code-scanning alerts, all repository-level Scorecard findings
-  with no file location, and DeepSource at 3 grouped issues / 109 occurrences.
+- `docs/operations/code-scanning.md` records the historical 2026-04-27 live
+  snapshot: 4 open GitHub code-scanning alerts, all repository-level Scorecard
+  findings with no file location, and DeepSource at 3 grouped issues / 109
+  occurrences. Refresh scanner counts before using this backlog for remediation
+  decisions.
 - `README.md`, `ARCHITECTURE.md`, and plugin guides show a large,
   multi-container deployment with five plugin packages and a shared library.
 - The codebase contains very large modules, especially

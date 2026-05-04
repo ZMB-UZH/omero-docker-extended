@@ -14,9 +14,9 @@ class SecurityHardeningContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """Set Up Class.
+        """Prepare shared fixtures for `SecurityHardeningContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.server_dockerfile = SERVER_DOCKERFILE.read_text(encoding="utf-8")
         cls.web_dockerfile = WEB_DOCKERFILE.read_text(encoding="utf-8")
@@ -25,7 +25,7 @@ class SecurityHardeningContractTests(unittest.TestCase):
     def test_locale_data_is_preserved_while_other_hardening_stays_enabled(self):
         """Verify locale data is preserved while other hardening stays enabled.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in locale data is preserved while other hardening stays enabled.
         """
         self.assertNotIn("langpacks-en", self.server_dockerfile)
         self.assertNotIn("glibc-langpack-en", self.server_dockerfile)
@@ -51,9 +51,9 @@ class SecurityHardeningContractTests(unittest.TestCase):
         )
 
     def test_security_hardening_prompt_defaults_yes_while_scout_stays_opt_in(self):
-        """Verify security hardening prompt defaults yes while scout stays opt in.
+        """Verify the security hardening prompt defaults yes while scout stays opt in safety boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when security hardening prompt defaults yes while scout stays opt in accepts unsafe input.
         """
         self.assertIn(
             'APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-}"',

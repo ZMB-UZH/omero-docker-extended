@@ -79,19 +79,13 @@ def compute_plugin_hash(mapping):
 def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
     """Return True if MapAnnotation was created by this plugin.
 
-    Inputs: `map_ann_obj`, `qs`, `service_opts`. Output: computed value or None.
-
-    If map values are not preloaded on the MapAnnotation object, a QueryService
-    can be provided to fetch the pairs directly from the database.
-    The lookup path intentionally prefers preloaded values and only falls back
-    to the database when none are available, matching the merged behavior of
-    previous iterations of this function.
+    Inputs: `map_ann_obj`, `qs`, `service_opts`. Output: `compare_digest` result.
     """
 
     def _unwrap(val):
-        """Unwrap.
+        """Return the unwrap.
 
-        Inputs: `val`. Output: computed value.
+        Inputs: `val`. Output: `val`.
         """
         if callable(getattr(val, "getValue", None)):
             try:
@@ -139,9 +133,9 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
         return str(name), "" if value is None else str(value)
 
     def _load_pairs_from_qs(aid):
-        """Load pairs from qs.
+        """Load the pairs from qs.
 
-        Inputs: `aid`. Output: computed value.
+        Inputs: `aid`. Output: `list`.
         """
         if qs is None or aid is None:
             return []
@@ -203,7 +197,8 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
 def find_plugin_annotation_ids(conn, image_id, allow_legacy=False):
     """Return plugin-owned MapAnnotation IDs; legacy matching is opt-in.
 
-    Inputs: `conn`, `image_id`, `allow_legacy`. Output: computed value.
+    Inputs: `conn` OMERO gateway connection, `image_id` OMERO image ID, `allow_legacy`.
+    Output: `ann_ids`.
     """
     try:
         iid = int(image_id)
@@ -276,9 +271,11 @@ def find_plugin_annotation_ids(conn, image_id, allow_legacy=False):
 
 
 def find_annotation_link_ids(conn, annotation_id):
-    """Return ImageAnnotationLink IDs for an annotation.
+    """Return the imageannotationlink IDs for an annotation value exposed by this
+    OMERO-compatible object.
 
-    Inputs: `conn`, `annotation_id`. Output: computed value.
+    Inputs: `conn` OMERO gateway connection, `annotation_id` OMERO annotation ID.
+    Output: ID value.
     """
     try:
         aid = int(annotation_id)
@@ -304,7 +301,8 @@ def find_annotation_link_ids(conn, annotation_id):
 def find_map_annotation_ids(conn, image_id):
     """Return MapAnnotation IDs linked to an image (key-value pairs).
 
-    Inputs: `conn`, `image_id`. Output: computed value.
+    Inputs: `conn` OMERO gateway connection, `image_id` OMERO image ID. Output: ID
+    value.
     """
     try:
         iid = int(image_id)
@@ -334,17 +332,10 @@ def find_map_annotation_ids(conn, image_id):
 
 
 def delete_existing_annotations(conn, _update, img, var_names, mode):
-    """Delete existing annotations.
+    """Delete the existing annotations.
 
-    Inputs: `conn`, `_update`, `img`, `var_names`, `mode`. Output: computed value.
-
-    Modes:
-        keep    – keep everything
-        all     – delete all MapAnnotations
-        plugin  – delete ONLY MapAnnotations created by this plugin
-
-    Returns:
-        (confirmed_sets_deleted, confirmed_pairs_deleted, attempted_sets)
+    Inputs: `conn` OMERO gateway connection, `_update`, `img`, `var_names`, `mode`.
+    Output: `bool`.
     """
     _ = var_names
     if mode == "keep":
@@ -364,9 +355,9 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
     service_opts = getattr(conn, "SERVICE_OPTS", None)
 
     def _annotation_exists(aid):
-        """Annotation exists.
+        """Return the annotation exists.
 
-        Inputs: `aid`. Output: computed value.
+        Inputs: `aid`. Output: `bool`.
         """
         try:
             params = ParametersI()
@@ -381,9 +372,9 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
             return True
 
     def _delete_by_id(aid):
-        """Delete by ID.
+        """Delete the by ID.
 
-        Inputs: `aid`. Output: bool.
+        Inputs: `aid`. Output: `bool`.
         """
         try:
             conn.deleteObjects("Annotation", [int(aid)], wait=True)

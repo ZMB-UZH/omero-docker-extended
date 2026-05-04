@@ -13,9 +13,9 @@ class FuzzTargetContractTests(unittest.TestCase):
     def test_filename_parser_atheris_target_exists_and_targets_parse_filename(
         self,
     ) -> None:
-        """Verify filename parser atheris target exists and targets parse filename.
+        """Check filename parser atheris target exists and targets parse filename parsing against the documented contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in filename parser atheris target exists and targets parse filename.
         """
         fuzz_target = REPO_ROOT / "fuzzing" / "fuzz_filename_parser.py"
         fuzz_text = fuzz_target.read_text(encoding="utf-8")

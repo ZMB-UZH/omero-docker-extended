@@ -14,9 +14,9 @@ from omeroweb_omp_plugin.views import (
 
 
 def _payload(response):
-    """Payload.
+    """Return the payload.
 
-    Inputs: `response`. Output: `json.loads` result.
+    Inputs: `response` response object. Output: `loads` result.
     """
     return json.loads(response.content.decode("utf-8"))
 
@@ -24,7 +24,7 @@ def _payload(response):
 def test_variable_set_views_cover_success_and_validation_paths(monkeypatch) -> None:
     """Verify variable set views cover success and validation paths.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in variable set views cover success and validation paths.
     """
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
@@ -171,7 +171,7 @@ def test_variable_set_views_cover_success_and_validation_paths(monkeypatch) -> N
 def test_user_data_views_cover_success_and_request_guards(monkeypatch) -> None:
     """Verify user data views cover success and request guards.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in user data views cover success and request guards.
     """
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
@@ -219,7 +219,7 @@ def test_variable_and_user_data_views_cover_store_failures_and_guard_edges(
 ) -> None:
     """Verify variable and user data views cover store failures and guard edges.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in variable and user data views cover store failures and guard edges.
     """
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
@@ -501,7 +501,7 @@ def test_variable_and_user_data_views_cover_remaining_method_and_username_guards
 ) -> None:
     """Verify variable and user data views cover remaining method and username guards.
 
-    Inputs: `monkeypatch`. Output: None.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in variable and user data views cover remaining method and username guards.
     """
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(variable_set_view, "current_username", lambda request, conn: "")

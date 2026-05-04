@@ -14,16 +14,17 @@ def test_import_service_import_file_supports_optional_import_name(
 ):
     """Verify import service import file supports optional import name.
 
-    Inputs: `tmp_path`, `monkeypatch`. Output: call result.
+    Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
+    Output: `CompletedProcess` result.
     """
     sample_path = tmp_path / "sample.czi"
     sample_path.write_text("payload", encoding="utf-8")
     captured = {}
 
     def fake_run(cmd, timeout=None):
-        """Fake run.
+        """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `cmd`, `timeout`. Output: call result.
+        Inputs: `cmd`, `timeout` timeout seconds. Output: `CompletedProcess` result.
         """
         captured["cmd"] = cmd
         captured["timeout"] = timeout
@@ -59,45 +60,44 @@ def test_import_service_import_file_supports_optional_import_name(
 def test_open_service_connection_reports_connect_exceptions_without_last_error(
     monkeypatch, caplog
 ):
-    """Verify open service connection reports connect exceptions without last error.
+    """Confirm open service connection reports connect exceptions without last error exposes the expected failure.
 
-    Inputs: `monkeypatch`, `caplog`. Output: None. Raises on invalid or unavailable
-    state.
-
-    state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `caplog` pytest log capture
+    fixture. Output: None after assertions pass. Raises: RuntimeError when validation or
+    external operations fail.
     """
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_Conn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def connect():
-            """Open the connection.
+            """Open the connection for `_Conn`.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("connect failed")
 
         @staticmethod
         def getLastError():
-            """Return Last Error.
+            """Return `_Conn`'s fake last-error text.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: returns the fake value described above.
             """
             raise RuntimeError("last error unavailable")
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_Conn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
@@ -117,9 +117,9 @@ def test_open_service_connection_reports_connect_exceptions_without_last_error(
 
 
 def test_open_service_connection_requires_service_password(monkeypatch, caplog):
-    """Verify open service connection requires service password.
+    """Check that open service connection requires service password keeps sensitive data out of output.
 
-    Inputs: `monkeypatch`, `caplog`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `caplog`. Output: fails on regressions in open service connection requires service password.
     """
     monkeypatch.setattr(
         import_service,
@@ -139,25 +139,24 @@ def test_open_service_connection_suppresses_close_failure_after_false_connect(
 ):
     """Verify open service connection suppresses close failure after false connect.
 
-    Inputs: `monkeypatch`, `caplog`. Output: computed value. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `caplog` pytest log capture
+    fixture. Output: `bool`. Raises: RuntimeError when validation or external operations
+    fail.
     """
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_Conn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def connect():
-            """Open the connection.
+            """Open the connection for `_Conn`.
 
             Inputs: none. Output: bool.
             """
@@ -165,7 +164,7 @@ def test_open_service_connection_suppresses_close_failure_after_false_connect(
 
         @staticmethod
         def getLastError():
-            """Return Last Error.
+            """Return `_Conn`'s fake last-error text.
 
             Inputs: none. Output: 'gateway refused connection'.
             """
@@ -173,9 +172,9 @@ def test_open_service_connection_suppresses_close_failure_after_false_connect(
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_Conn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 
@@ -197,18 +196,18 @@ def test_open_service_connection_suppresses_close_failure_after_false_connect(
 def test_open_service_connection_logs_group_context_failures_but_keeps_connection(
     monkeypatch, caplog
 ):
-    """Verify open service connection logs group context failures but keeps connection.
+    """Check that open service connection logs group context failures but keeps connection remains stable.
 
-    Inputs: `monkeypatch`, `caplog`. Output: bool or None.
+    Inputs: pytest provides `monkeypatch`, `caplog`. Output: fails on regressions in open service connection logs group context failures but keeps connection.
     """
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_Conn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.SERVICE_OPTS = SimpleNamespace(
                 setOmeroGroup=lambda value: (_ for _ in ()).throw(
@@ -218,7 +217,7 @@ def test_open_service_connection_logs_group_context_failures_but_keeps_connectio
 
         @staticmethod
         def connect():
-            """Open the connection.
+            """Open the connection for `_Conn`.
 
             Inputs: none. Output: bool.
             """
@@ -226,9 +225,9 @@ def test_open_service_connection_logs_group_context_failures_but_keeps_connectio
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_Conn`'s fake resource handle.
 
-            Inputs: none. Output: None.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             return None
 
@@ -254,17 +253,15 @@ def test_open_service_connection_reraises_unexpected_group_id_failures(
 ):
     """Verify open service connection reraises unexpected group ID failures.
 
-    Inputs: `monkeypatch`, `caplog`. Output: computed value. Raises on invalid or
-    unavailable state.
-
-    unavailable state.
+    Inputs: `monkeypatch` pytest monkeypatch fixture, `caplog` pytest log capture
+    fixture. Output: `int`. Raises: RuntimeError, TypeError when validation or external
     """
 
     class _BadGroupId:
-        """Represent bad group identifier."""
+        """Test double for bad group identifier behavior in this module."""
 
         def __init__(self, *, fail=True):
-            """Initialize the instance.
+            """Create `_BadGroupId` with its default state.
 
             Inputs: `fail`. Output: None.
             """
@@ -273,25 +270,25 @@ def test_open_service_connection_reraises_unexpected_group_id_failures(
         def __int__(self):
             """Return the integer representation.
 
-            Inputs: none. Output: 7. Raises on invalid or unavailable state.
+            Inputs: none. Output: `int`. Raises: TypeError for the exercised failure path.
             """
             if self.fail:
                 raise TypeError("bad group id")
             return 7
 
     class _Conn:
-        """Represent conn."""
+        """Test double for conn behavior in this module."""
 
         def __init__(self):
-            """Initialize the instance.
+            """Create `_Conn` with its default state.
 
-            Inputs: none. Output: None.
+            Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def connect():
-            """Open the connection.
+            """Open the connection for `_Conn`.
 
             Inputs: none. Output: bool.
             """
@@ -299,9 +296,9 @@ def test_open_service_connection_reraises_unexpected_group_id_failures(
 
         @staticmethod
         def close():
-            """Close the resource.
+            """Close `_Conn`'s fake resource handle.
 
-            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             raise RuntimeError("close failed")
 

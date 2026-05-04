@@ -1,15 +1,15 @@
 def imported_file(path):
-    """Imported file.
+    """Return the imported file.
 
-    Inputs: `path`. Output: computed value.
+    Inputs: `path` path. Output: imported file result.
     """
     return f"Import success: {path}"
 
 
 def job_error_with_path(path, detail):
-    """Job error with path.
+    """Return the job error with path.
 
-    Inputs: `path`, `detail`. Output: computed value.
+    Inputs: `path` path, `detail`. Output: `Path` or path text.
     """
     if detail:
         return f"Import failure: {path} - {detail}"
@@ -17,33 +17,33 @@ def job_error_with_path(path, detail):
 
 
 def skipped_non_importable(path):
-    """Skipped non importable.
+    """Return the skipped non importable.
 
-    Inputs: `path`. Output: computed value.
+    Inputs: `path` path. Output: skipped non importable result.
     """
     return f"Auto-skipped (not an importable image): {path}"
 
 
 def skipped_incompatible(path):
-    """Skipped incompatible.
+    """Return the skipped incompatible.
 
-    Inputs: `path`. Output: computed value.
+    Inputs: `path` path. Output: skipped incompatible result.
     """
     return f"Auto-skipped (incompatible format): {path}"
 
 
 def confirm_irreversible_action():
-    """Confirm irreversible action.
+    """Confirm the irreversible action.
 
-    Inputs: none. Output: 'Are you absolutely sure? This action is irreversible.'.
+    Inputs: none. Output: `str`.
     """
     return "Are you absolutely sure? This action is irreversible."
 
 
 def formatting_errors():
-    """Formatting errors.
+    """Return the formatting errors.
 
-    Inputs: none. Output: 'Formatting error(s). Please try again.'.
+    Inputs: none. Output: `str`.
     """
     return "Formatting error(s). Please try again."
 
@@ -65,39 +65,39 @@ def special_method_settings_saved_db():
 
 
 def user_settings_save_error():
-    """User settings save error.
+    """Return the user settings save error.
 
-    Inputs: none. Output: 'Error saving user settings: {error}'.
+    Inputs: none. Output: `str`.
     """
     return "Error saving user settings: {error}"
 
 
 def special_method_settings_save_error():
-    """Special method settings save error.
+    """Return the special method settings save error.
 
-    Inputs: none. Output: 'Error saving special method settings: {error}'.
+    Inputs: none. Output: `str`.
     """
     return "Error saving special method settings: {error}"
 
 
 def special_method_settings_load_error():
-    """Special method settings load error.
+    """Return the special method settings load error.
 
-    Inputs: none. Output: 'Error loading special method settings: {error}'.
+    Inputs: none. Output: `str`.
     """
     return "Error loading special method settings: {error}"
 
 
 def user_settings_saved():
-    """User settings saved.
+    """Return the user settings saved.
 
-    Inputs: none. Output: 'Saved user settings.'.
+    Inputs: none. Output: `str`.
     """
     return "Saved user settings."
 
 
 def build_message_payload(names):
-    """Message payload.
+    """Build the message payload.
 
     Inputs: `names`. Output: `_build_payload` result.
     """
@@ -118,7 +118,7 @@ INDEX_MESSAGE_NAMES = (
 
 
 def index_messages():
-    """Index messages.
+    """Return the index messages.
 
     Inputs: none. Output: `build_message_payload` result.
     """

@@ -43,7 +43,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_check_passes_when_all_manifest_entries_exist(self):
         """Verify check passes when all manifest entries exist.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in check passes when all manifest entries exist.
         """
         repo = self._make_repo(
             ["env/omeroweb.env", "installation_paths.env"],
@@ -55,9 +55,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(env_safety_guard.cmd_check(repo), 0)
 
     def test_check_fails_when_manifest_entry_is_missing(self):
-        """Verify check fails when manifest entry is missing.
+        """Confirm check fails when manifest entry is missing exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in check fails when manifest entry is missing.
         """
         repo = self._make_repo(
             ["env/omeroweb.env", "env/missing.env"],
@@ -66,9 +66,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(env_safety_guard.cmd_check(repo), 1)
 
     def test_check_fails_when_manifest_entry_is_empty(self):
-        """Verify check fails when manifest entry is empty.
+        """Confirm check fails when manifest entry is empty exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in check fails when manifest entry is empty.
         """
         repo = self._make_repo(
             ["env/omeroweb.env"],
@@ -79,7 +79,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_check_ignores_comment_and_blank_lines_in_manifest(self):
         """Verify check ignores comment and blank lines in manifest.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in check ignores comment and blank lines in manifest.
         """
         repo = self._make_repo(
             ["# This is a comment", "", "env/omeroweb.env", "  "],
@@ -88,9 +88,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(env_safety_guard.cmd_check(repo), 0)
 
     def test_load_manifest_keeps_symlinked_entries_repo_relative(self):
-        """Verify load manifest keeps symlinked entries repo relative.
+        """Check that load manifest keeps symlinked entries repo relative remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in load manifest keeps symlinked entries repo relative.
         """
         repo = self._make_repo(["env/omeroweb.env"])
         external = Path(tempfile.mkdtemp())
@@ -109,9 +109,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertTrue(entries[0].exists())
 
     def test_load_manifest_rejects_absolute_or_traversal_entries(self):
-        """Verify load manifest rejects absolute or traversal entries.
+        """Confirm load manifest rejects absolute or traversal entries is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in load manifest rejects absolute or traversal entries.
         """
         for manifest_entry in (
             "/etc/passwd",
@@ -128,7 +128,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_derive_compose_project_name_uses_installation_basename(self):
         """Verify derive compose project name uses installation basename.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in derive compose project name uses installation basename.
         """
         self.assertEqual(
             env_safety_guard.derive_compose_project_name("/srv/OMERO Live"),
@@ -138,7 +138,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_compose_guard_passes_for_canonical_installation_root(self):
         """Verify compose guard passes for canonical installation root.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in compose guard passes for canonical installation root.
         """
         compose_env_files = ",".join(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES)
         repo = self._make_repo(
@@ -178,9 +178,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 0)
 
     def test_compose_guard_fails_for_non_canonical_worktree(self):
-        """Verify compose guard fails for non canonical worktree.
+        """Confirm compose guard fails for non canonical worktree exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in compose guard fails for non canonical worktree.
         """
         compose_env_files = ",".join(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES)
         repo = self._make_repo(
@@ -224,9 +224,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 1)
 
     def test_compose_guard_fails_when_dot_env_project_name_is_missing(self):
-        """Verify compose guard fails when dot environment project name is missing.
+        """Confirm compose guard fails when dot env project name is missing exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in compose guard fails when dot env project name is missing.
         """
         repo = self._make_repo(
             [
@@ -257,9 +257,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 1)
 
     def test_dot_env_check_fails_when_dot_env_uses_stale_env_file_list(self):
-        """Verify dot environment check fails when dot environment uses stale environment file list.
+        """Confirm dot env check fails when dot env uses stale env file list exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in dot env check fails when dot env uses stale env file list.
         """
         repo = self._make_repo(
             [
@@ -299,9 +299,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(env_safety_guard.cmd_dot_env_check(repo), 1)
 
     def test_dot_env_check_passes_for_complete_generated_dot_env_shape(self):
-        """Verify dot environment check passes for complete generated dot environment shape.
+        """Verify dot env check passes for complete generated dot env shape.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in dot env check passes for complete generated dot env shape.
         """
         compose_env_files = ",".join(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES)
         repo = self._make_repo(
@@ -341,9 +341,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(env_safety_guard.cmd_dot_env_check(repo), 0)
 
     def test_template_check_passes_when_env_keys_match_examples(self):
-        """Verify template check passes when environment keys match examples.
+        """Check template check passes when env keys match examples renders the expected surface.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in template check passes when env keys match examples.
         """
         files: dict[str, str] = {}
         manifest_lines = []
@@ -356,9 +356,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(env_safety_guard.cmd_template_check(repo), 0)
 
     def test_template_check_reports_missing_extra_and_reordered_keys_only(self):
-        """Verify template check reports missing extra and reordered keys only.
+        """Check template check reports missing extra and reordered keys only renders the expected surface.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in template check reports missing extra and reordered keys only.
         """
         files: dict[str, str] = {}
         manifest_lines = []
@@ -374,9 +374,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(env_safety_guard.cmd_template_check(repo), 1)
 
     def test_runtime_env_check_reports_missing_extra_and_type_errors(self):
-        """Verify runtime environment check reports missing extra and type errors.
+        """Verify runtime env check reports missing extra and type errors.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in runtime env check reports missing extra and type errors.
         """
         files: dict[str, str] = {}
         manifest_lines = []
@@ -413,9 +413,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         )
 
     def test_runtime_env_check_accepts_optional_commented_keys_and_references(self):
-        """Verify runtime environment check accepts optional commented keys and references.
+        """Verify runtime env check accepts optional commented keys and references.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in runtime env check accepts optional commented keys and references.
         """
         files: dict[str, str] = {}
         manifest_lines = []
@@ -443,7 +443,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_runtime_value_validators_cover_supported_contract_types(self):
         """Verify runtime value validators cover supported contract types.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in runtime value validators cover supported contract types.
         """
         invalid_cases = [
             ("OMERO_JOB_SERVICE_SECURE", "maybe", "maybe", "must be a boolean"),
@@ -541,9 +541,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
                 )
 
     def test_runtime_env_parsers_reject_duplicates_and_unsafe_references(self):
-        """Verify runtime environment parsers reject duplicates and unsafe references.
+        """Confirm runtime env parsers reject duplicates and unsafe references is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions when runtime env parsers reject duplicates and unsafe references stops reporting the expected error.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             env_path = Path(tmpdir) / "example.env"
@@ -581,9 +581,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_validate_env_file_pair_reports_missing_empty_duplicate_and_bad_values(
         self,
     ):
-        """Verify validate environment file pair reports missing empty duplicate and bad values.
+        """Verify validate env file pair reports missing empty duplicate and bad values.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in validate env file pair reports missing empty duplicate and bad values.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = Path(tmpdir)
@@ -647,9 +647,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_validate_env_file_pair_requires_secret_values_when_template_is_empty(
         self,
     ) -> None:
-        """Verify validate environment file pair requires secret values when template is empty.
+        """Check that validate env file pair requires secret values when template is empty keeps sensitive data out of output.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in validate env file pair requires secret values when template is empty.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = Path(tmpdir)
@@ -678,9 +678,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
             )
 
     def test_validate_dot_env_values_reports_shape_and_type_errors(self):
-        """Verify validate dot environment values reports shape and type errors.
+        """Verify validate dot env values reports shape and type errors.
 
-        Inputs: none. Output: computed value.
+        Inputs: repository fixtures. Output: fails on regressions in validate dot env values reports shape and type errors.
         """
         compose_env_files = ",".join(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES)
         repo = self._make_repo(
@@ -710,7 +710,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
         )
 
         def valid_dot_env_value(key: str) -> str:
-            """Valid dot env value.
+            """Return the value for a key from the valid test dot-env file.
 
             Inputs: `key`. Output: `str`.
             """
@@ -753,7 +753,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_backup_creates_timestamped_copy(self):
         """Verify backup creates timestamped copy.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in backup creates timestamped copy.
         """
         repo = self._make_repo(
             ["env/omeroweb.env", "installation_paths.env"],
@@ -786,7 +786,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_backup_skips_missing_files_without_failing(self):
         """Verify backup skips missing files without failing.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in backup skips missing files without failing.
         """
         repo = self._make_repo(
             ["env/omeroweb.env", "env/missing.env"],
@@ -795,9 +795,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(env_safety_guard.cmd_backup(repo), 0)
 
     def test_backup_fails_when_all_files_missing(self):
-        """Verify backup fails when all files missing.
+        """Confirm backup fails when all files missing exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in backup fails when all files missing.
         """
         repo = self._make_repo(["env/missing.env"], {})
         self.assertEqual(env_safety_guard.cmd_backup(repo), 1)
@@ -807,7 +807,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_restore_recovers_deleted_files(self):
         """Verify restore recovers deleted files.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in restore recovers deleted files.
         """
         repo = self._make_repo(
             ["env/omeroweb.env"],
@@ -830,7 +830,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_restore_specific_backup_by_name(self):
         """Verify restore specific backup by name.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in restore specific backup by name.
         """
         repo = self._make_repo(
             ["env/omeroweb.env"],
@@ -854,9 +854,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         )
 
     def test_restore_rejects_traversal_backup_name(self):
-        """Verify restore rejects traversal backup name.
+        """Confirm restore rejects traversal backup name is rejected at the boundary.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in restore rejects traversal backup name.
         """
         repo = self._make_repo(
             ["env/omeroweb.env"],
@@ -869,7 +869,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_restore_refuses_symlinked_backup_files(self):
         """Verify restore refuses symlinked backup files.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in restore refuses symlinked backup files.
         """
         repo = self._make_repo(
             ["env/omeroweb.env"],
@@ -888,9 +888,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.assertEqual(env_safety_guard.cmd_restore(repo, backup_name="manual"), 1)
 
     def test_restore_fails_when_no_backups_exist(self):
-        """Verify restore fails when no backups exist.
+        """Confirm restore fails when no backups exist exposes the expected failure.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in restore fails when no backups exist.
         """
         repo = self._make_repo(["env/omeroweb.env"], {})
         self.assertEqual(env_safety_guard.cmd_restore(repo), 1)
@@ -900,7 +900,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
     def test_list_shows_available_backups(self):
         """Verify list shows available backups.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in list shows available backups.
         """
         repo = self._make_repo(
             ["env/omeroweb.env"],
@@ -912,9 +912,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
     # ---- manifest on real repo ----
 
     def test_real_repo_manifest_exists(self):
-        """The .env_manifest file must exist in the repository root.
+        """Verify real repo manifest exists.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in real repo manifest exists.
         """
         repo_root = Path(__file__).resolve().parent.parent
         manifest = repo_root / ".env_manifest"
@@ -924,9 +924,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         )
 
     def test_real_repo_manifest_has_expected_entries(self):
-        """The manifest must list all critical deployment files.
+        """Verify real repo manifest has expected entries.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in real repo manifest has expected entries.
         """
         repo_root = Path(__file__).resolve().parent.parent
         entries = env_safety_guard.load_manifest(repo_root)
@@ -950,9 +950,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
         )
 
     def test_real_repo_manifest_entries_are_gitignored(self):
-        """Every manifest entry must be covered by .gitignore.
+        """Verify real repo manifest entries are gitignored.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in real repo manifest entries are gitignored.
         """
         repo_root = Path(__file__).resolve().parent.parent
         gitignore = (repo_root / ".gitignore").read_text(encoding="utf-8")
@@ -971,18 +971,18 @@ class EnvSafetyGuardTests(unittest.TestCase):
             )
 
     def test_real_repo_backups_dir_is_gitignored(self):
-        """The .env_backups directory must be gitignored.
+        """Verify real repo backups dir is gitignored.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in real repo backups dir is gitignored.
         """
         repo_root = Path(__file__).resolve().parent.parent
         gitignore = (repo_root / ".gitignore").read_text(encoding="utf-8")
         self.assertIn(".env_backups/", gitignore)
 
     def test_real_repo_gitignore_behavior_preserves_config_contract(self):
-        """Git must ignore local deployment config while keeping examples visible.
+        """Check that real repo gitignore behavior preserves config contract remains stable.
 
-        Inputs: none. Output: bool.
+        Inputs: repository fixtures. Output: fails on regressions in real repo gitignore behavior preserves config contract.
         """
         repo_root = Path(__file__).resolve().parent.parent
         git = shutil.which("git")

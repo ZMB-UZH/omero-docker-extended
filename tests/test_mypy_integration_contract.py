@@ -18,23 +18,23 @@ class MypyIntegrationContractTests(TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `MypyIntegrationContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def read_text(self, relative_path: str) -> str:
-        """Return read text.
+        """Return `MypyIntegrationContractTests`'s configured text fixture.
 
         Inputs: `relative_path`. Output: `str`.
         """
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
 
     def test_python_style_doc_covers_mypy_workflow_and_local_runner(self) -> None:
-        """Verify python style doc covers mypy workflow and local runner.
+        """Verify the python style doc covers mypy workflow and local runner execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in python style doc covers mypy workflow and local runner integration.
         """
         doc_text = self.read_text("docs/reference/python-style-and-linting.md")
         self.assertIn(".github/workflows/mypy.yml", doc_text)
@@ -45,7 +45,7 @@ class MypyIntegrationContractTests(TestCase):
     def test_mypy_config_enables_meaningful_repo_checks(self) -> None:
         """Verify mypy config enables meaningful repo checks.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in mypy config enables meaningful repo checks.
         """
         config = configparser.ConfigParser()
         config.read_string(self.read_text("mypy.ini"))
@@ -65,7 +65,7 @@ class MypyIntegrationContractTests(TestCase):
     def test_mypy_requirements_are_hash_pinned(self) -> None:
         """Verify mypy requirements are hash pinned.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in mypy requirements are hash pinned.
         """
         source = self.read_text(".github/requirements/mypy-ci.in")
         compiled = self.read_text(".github/requirements/mypy-ci.txt")
@@ -83,7 +83,7 @@ class MypyIntegrationContractTests(TestCase):
     def test_runtime_only_type_stubs_are_scoped_to_typings_directory(self) -> None:
         """Verify runtime only type stubs are scoped to typings directory.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in runtime only type stubs are scoped to typings directory.
         """
         required_stub_paths = (
             "typings/omero/__init__.pyi",
@@ -98,9 +98,9 @@ class MypyIntegrationContractTests(TestCase):
                 self.assertTrue((self.repo_root / relative_path).is_file())
 
     def test_mypy_workflow_is_pinned_and_uses_repo_runner(self) -> None:
-        """Verify mypy workflow is pinned and uses repo runner.
+        """Verify the mypy workflow is pinned and uses repo runner execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in mypy workflow is pinned and uses repo runner integration.
         """
         workflow = yaml.safe_load(self.read_text(".github/workflows/mypy.yml"))
         triggers = workflow[True]
@@ -158,9 +158,9 @@ class MypyIntegrationContractTests(TestCase):
         )
 
     def test_scope_keeps_only_tracked_production_python_files(self) -> None:
-        """Verify scope keeps only tracked production python files.
+        """Check that scope keeps only tracked production python files remains stable.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in scope keeps only tracked production python files.
         """
         include = (
             "tools/mypy_check.py",
@@ -172,7 +172,7 @@ class MypyIntegrationContractTests(TestCase):
             "tests/test_mypy_integration_contract.py",
             "omeroweb_import/tests/test_core_function_helpers.py",
             "docs/conf.py",
-            "third_party/caveman-v1.6.0/tools/helper.py",
+            "third_party/caveman-v1.7.0/tools/helper.py",
             ".agents/skills/caveman/agents/openai.yaml",
             ".github/scripts/helper.py",
             "omeroweb_import/conftest.py",
@@ -193,7 +193,7 @@ class MypyIntegrationContractTests(TestCase):
     def test_list_mypy_targets_uses_git_ls_files_and_safe_directory(self) -> None:
         """Verify list mypy targets uses git ls files and safe directory.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in list mypy targets uses git ls files and safe directory.
         """
         repo_root = self.repo_root
         tracked_files = "\n".join(
@@ -239,9 +239,9 @@ class MypyIntegrationContractTests(TestCase):
         )
 
     def test_build_mypy_command_uses_current_python_and_config(self) -> None:
-        """Verify build mypy command uses current python and config.
+        """Verify the build mypy command uses current python and config execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in build mypy command uses current python and config integration.
         """
         self.assertEqual(
             [

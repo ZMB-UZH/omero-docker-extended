@@ -12,17 +12,17 @@ class OmeroWebLogoPatchTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `OmeroWebLogoPatchTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.patch_script = cls.repo_root / "docker" / "patch_omeroweb_logo_context.py"
 
     def test_patch_script_updates_logo_context_block(self) -> None:
-        """Verify patch script updates logo context block.
+        """Verify the patch script updates logo context block execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in patch script updates logo context block integration.
         """
         original_text = """\
 def example(context, settings):

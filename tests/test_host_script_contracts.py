@@ -17,9 +17,10 @@ SCRIPT_DIR = REPO_ROOT / "scripts"
 def _run_bash(
     script: str, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
-    """Bash.
+    """Run the bash.
 
-    Inputs: `script`, `env`. Output: `subprocess.CompletedProcess[str]`.
+    Inputs: `script` (str), `env` (dict[str, str] | None) environment mapping. Output:
+    `subprocess.CompletedProcess[str]`.
     """
     run_env = {"PATH": os.environ["PATH"], **(env or {})}
     return subprocess.run(
@@ -33,17 +34,17 @@ def _run_bash(
 
 
 def _sh(path: Path | str) -> str:
-    """Sh.
+    """Return the sh.
 
-    Inputs: `path`. Output: `str`.
+    Inputs: `path` (Path | str) path. Output: `str`.
     """
     return shlex.quote(str(path))
 
 
 def test_public_script_and_unit_entrypoints_remain_stable() -> None:
-    """Verify public script and unit entrypoints remain stable.
+    """Check that public script and unit entrypoints remain stable remains stable.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in public script and unit entrypoints remain stable integration.
     """
     expected = {
         "install-quota-enforcer.sh",
@@ -70,7 +71,7 @@ def test_public_script_and_unit_entrypoints_remain_stable() -> None:
 def test_host_timers_reschedule_after_reinstall_activation() -> None:
     """Verify host timers reschedule after reinstall activation.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in host timers reschedule after reinstall activation.
     """
     quota_timer = (SCRIPT_DIR / "omero-quota-enforcer.timer").read_text(
         encoding="utf-8"
@@ -86,7 +87,7 @@ def test_host_timers_reschedule_after_reinstall_activation() -> None:
 def test_all_host_shell_scripts_parse_with_bash() -> None:
     """Verify all host shell scripts parse with bash.
 
-    Inputs: none. Output: None.
+    Inputs: repository fixtures. Output: fails on regressions in all host shell scripts parse with bash.
     """
     scripts = sorted(str(path) for path in SCRIPT_DIR.glob("*.sh"))
     result = subprocess.run(
@@ -100,9 +101,9 @@ def test_all_host_shell_scripts_parse_with_bash() -> None:
 
 
 def test_quota_enforcer_rejects_unexpected_cli_arguments(tmp_path: Path) -> None:
-    """Verify quota enforcer rejects unexpected cli arguments.
+    """Confirm quota enforcer rejects unexpected CLI arguments is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in quota enforcer rejects unexpected CLI arguments.
     """
     env = {"OMERO_QUOTA_DEFAULTS_FILE": str(tmp_path / "missing-defaults")}
     script = f"bash {_sh(SCRIPT_DIR / 'omero-quota-enforcer.sh')}"
@@ -120,7 +121,7 @@ def test_quota_enforcer_rejects_unexpected_cli_arguments(tmp_path: Path) -> None
 def test_systemd_renderer_escapes_spaces_quotes_and_percent(tmp_path: Path) -> None:
     """Verify systemd renderer escapes spaces quotes and percent.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in systemd renderer escapes spaces quotes and percent.
     """
     template = tmp_path / "template.service"
     rendered = tmp_path / "rendered.service"
@@ -151,9 +152,9 @@ def test_systemd_renderer_escapes_spaces_quotes_and_percent(tmp_path: Path) -> N
 def test_systemd_renderer_replaces_stale_symlink_without_following(
     tmp_path: Path,
 ) -> None:
-    """Verify systemd renderer replaces stale symlink without following.
+    """Verify the systemd renderer replaces stale symlink without following safety boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when systemd renderer replaces stale symlink without following accepts unsafe input.
     """
     template = tmp_path / "template.service"
     rendered = tmp_path / "rendered.service"
@@ -179,9 +180,9 @@ def test_systemd_renderer_replaces_stale_symlink_without_following(
 def test_install_verified_replaces_stale_symlink_without_following(
     tmp_path: Path,
 ) -> None:
-    """Verify install verified replaces stale symlink without following.
+    """Verify the install verified replaces stale symlink without following safety boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when install verified replaces stale symlink without following accepts unsafe input.
     """
     source_file = tmp_path / "source.sh"
     destination = tmp_path / "destination"
@@ -212,7 +213,7 @@ def test_environment_quote_is_safe_for_shell_sourced_defaults(
 ) -> None:
     """Verify environment quote is safe for shell sourced defaults.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in environment quote is safe for shell sourced defaults.
     """
     defaults_file = tmp_path / "defaults"
     value = '/srv/OMERO data/"quoted"/dollar$HOME/back\\slash/`tick`'
@@ -236,9 +237,9 @@ def test_environment_quote_is_safe_for_shell_sourced_defaults(
 
 
 def test_systemd_cleanup_rejects_unsafe_scope(tmp_path: Path) -> None:
-    """Verify systemd cleanup rejects unsafe scope.
+    """Confirm systemd cleanup rejects unsafe scope is rejected at the boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in systemd cleanup rejects unsafe scope.
     """
     unsafe_name = _run_bash(
         f"""
@@ -262,9 +263,9 @@ def test_systemd_cleanup_rejects_unsafe_scope(tmp_path: Path) -> None:
 
 
 def test_tmp_cleaner_unit_rendering_does_not_require_python(tmp_path: Path) -> None:
-    """Verify temporary cleaner unit rendering does not require python.
+    """Verify tmp cleaner unit rendering does not require python.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in tmp cleaner unit rendering does not require python.
     """
     template = tmp_path / "template.service"
     rendered = tmp_path / "rendered.service"
@@ -296,9 +297,9 @@ def test_tmp_cleaner_unit_rendering_does_not_require_python(tmp_path: Path) -> N
 
 
 def test_tmp_cleaner_argument_validation_and_symlink_safety(tmp_path: Path) -> None:
-    """Verify temporary cleaner argument validation and symlink safety.
+    """Verify the tmp cleaner argument validation and symlink safety safety boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when tmp cleaner argument validation and symlink safety accepts unsafe input.
     """
     tmp_root = tmp_path / "omero tmp root"
     tmp_root.mkdir()
@@ -356,7 +357,7 @@ def test_tmp_cleaner_argument_validation_and_symlink_safety(tmp_path: Path) -> N
 def test_rendered_systemd_units_verify(tmp_path: Path) -> None:
     """Verify rendered systemd units verify.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in rendered systemd units verify.
     """
     systemd_analyze = shutil.which("systemd-analyze")
     if systemd_analyze is None:
@@ -451,9 +452,9 @@ def test_rendered_systemd_units_verify(tmp_path: Path) -> None:
 def test_quota_state_parser_is_single_pass_and_validates_records(
     tmp_path: Path,
 ) -> None:
-    """Verify quota state parser is single pass and validates records.
+    """Check quota state parser is single pass and validates records parsing against the documented contract.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in quota state parser is single pass and validates records.
     """
     state_file = tmp_path / "group-quotas.json"
     records_file = tmp_path / "records.tsv"
@@ -495,9 +496,9 @@ def test_quota_state_parser_is_single_pass_and_validates_records(
 
 
 def test_quota_path_boundaries_and_mapping_files_are_strict(tmp_path: Path) -> None:
-    """Verify quota path boundaries and mapping files are strict.
+    """Verify the quota path boundaries and mapping files are strict safety boundary.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions when quota path boundaries and mapping files are strict accepts unsafe input.
     """
     root = tmp_path / "ManagedRepository"
     child = root / "group"
@@ -536,7 +537,7 @@ def test_quota_path_boundaries_and_mapping_files_are_strict(tmp_path: Path) -> N
 def test_quota_mapping_rewrites_are_exact_not_regex_based(tmp_path: Path) -> None:
     """Verify quota mapping rewrites are exact not regex based.
 
-    Inputs: `tmp_path`. Output: None.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in quota mapping rewrites are exact not regex based.
     """
     projects_file = tmp_path / "projects"
     projid_file = tmp_path / "projid"

@@ -11,31 +11,31 @@ from omeroweb_omp_plugin.views import job_view, utils as view_utils, variable_se
 
 
 class _LockStub:
-    """Represent lock stub."""
+    """Test double for lock stub behavior in this module."""
 
     @staticmethod
     def acquire():
-        """Acquire the lock.
+        """Acquire `_LockStub`'s fake lock.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
         """
         return None
 
     @staticmethod
     def release():
-        """Release the lock.
+        """Release `_LockStub`'s fake lock.
 
-        Inputs: none. Output: None.
+        Inputs: caller provides no extra arguments. Output: records the fake side effect.
         """
         return None
 
 
 class _ImageStub:
-    """Represent image stub."""
+    """Test double for image stub behavior in this module."""
 
     @staticmethod
     def getName():
-        """Return the fake object name.
+        """Return `_ImageStub`'s fake object name.
 
         Inputs: none. Output: 'image.ome.tif'.
         """
@@ -45,9 +45,9 @@ class _ImageStub:
 def test_job_progress_logs_escape_job_id_and_exception(
     monkeypatch, tmp_path: Path, caplog
 ):
-    """Verify job progress logs escape job ID and exception.
+    """Confirm job progress logs escape job ID and exception exposes the expected failure.
 
-    Inputs: `monkeypatch`, `tmp_path`, `caplog`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`, `caplog`. Output: fails on regressions when job progress logs escape job ID and exception stops reporting the expected error.
     """
     job = {
         "job_id": "bad\njob",
@@ -95,9 +95,9 @@ def test_job_progress_logs_escape_job_id_and_exception(
 
 
 def test_variable_set_view_logs_escape_exception_text(monkeypatch, caplog):
-    """Verify variable set view logs escape exception text.
+    """Confirm variable set view logs escape exception text exposes the expected failure.
 
-    Inputs: `monkeypatch`, `caplog`. Output: None.
+    Inputs: pytest provides `monkeypatch`, `caplog`. Output: fails on regressions when variable set view logs escape exception text stops reporting the expected error.
     """
     request = RequestFactory().get("/omp/sets/")
 

@@ -6,16 +6,17 @@ from omero_plugin_common.request_utils import current_username
 
 
 def require_root_user(view_func):
-    """Root user.
+    """Require the root user.
 
-    Inputs: `view_func`. Output: computed value.
+    Inputs: `view_func`. Output: `_wrapped`.
     """
 
     @wraps(view_func)
     def _wrapped(request, *args, **kwargs):
-        """Wrapped.
+        """Call the wrapped view after resolving user and connector context.
 
-        Inputs: `request`, `*args`, `**kwargs`. Output: computed value.
+        Inputs: `request` Django request, `*args` positional arguments, `**kwargs`
+        keyword arguments. Output: `view_func` result.
         """
         conn = kwargs.get("conn")
         username = current_username(request, conn)

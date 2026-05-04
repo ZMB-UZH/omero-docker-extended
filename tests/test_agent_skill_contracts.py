@@ -315,9 +315,9 @@ class AgentSkillContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Set Up Class.
+        """Prepare shared fixtures for `AgentSkillContractTests` checks.
 
-        Inputs: none. Output: None.
+        Inputs: unittest supplies the class. Output: prepares shared fixtures for these checks.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.skill_dirs = {
@@ -354,10 +354,10 @@ class AgentSkillContractTests(unittest.TestCase):
 
     @staticmethod
     def parse_frontmatter(skill_text: str) -> dict[str, object]:
-        """Parse frontmatter.
+        """Parse and validate the frontmatter input.
 
-        Inputs: `skill_text`. Output: `dict[str, object]`. Raises on invalid or
-        unavailable state.
+        Inputs: `skill_text` (str). Output: `dict[str, object]`. Raises: AssertionError
+        when validation or the called operation fails.
         """
         if not skill_text.startswith("---\n"):
             raise AssertionError("Skill file is missing frontmatter")
@@ -369,9 +369,9 @@ class AgentSkillContractTests(unittest.TestCase):
 
     @staticmethod
     def _normalize_repo_reference(token: str) -> str:
-        """Normalize repo reference.
+        """Normalize the repo reference for `AgentSkillContractTests`.
 
-        Inputs: `token`. Output: `str`.
+        Inputs: `token` (str). Output: `str`.
         """
         normalized = token.strip().strip("'\"").rstrip(".,:;)")
         if normalized.endswith("/"):
@@ -402,9 +402,9 @@ class AgentSkillContractTests(unittest.TestCase):
 
     @classmethod
     def assert_repo_reference_exists(cls, reference: str) -> None:
-        """Assert repo reference exists.
+        """Assert the repo reference exists for `AgentSkillContractTests`.
 
-        Inputs: `reference`. Output: None. Raises on invalid or unavailable state.
+        Inputs: `reference` (str). Output: None. Raises: AssertionError when validation or the called operation fails.
         """
         if reference in ALLOWED_OPTIONAL_REPO_REFERENCES:
             return
@@ -448,9 +448,9 @@ class AgentSkillContractTests(unittest.TestCase):
 
     @staticmethod
     def _resolve_smoke_command(command: tuple[str, ...]) -> tuple[str, ...]:
-        """Resolve smoke command.
+        """Resolve the smoke command for `AgentSkillContractTests`.
 
-        Inputs: `command`. Output: `tuple[str, ...]`.
+        Inputs: `command` (tuple[str, ...]). Output: `tuple[str, ...]`.
         """
         if not command or command[0] != "python3":
             return command
@@ -458,7 +458,7 @@ class AgentSkillContractTests(unittest.TestCase):
 
     @staticmethod
     def _host_python_has_plugin_runtime() -> bool:
-        """Host python has plugin runtime.
+        """Return the host python has plugin runtime for `AgentSkillContractTests`.
 
         Inputs: none. Output: `bool`.
         """
@@ -473,7 +473,7 @@ class AgentSkillContractTests(unittest.TestCase):
     def test_upstream_sources_doc_matches_adapted_skill_frontmatter(self) -> None:
         """Verify upstream sources doc matches adapted skill frontmatter.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in upstream sources doc matches adapted skill frontmatter.
         """
         adapted_skill_names = {
             name
@@ -494,7 +494,7 @@ class AgentSkillContractTests(unittest.TestCase):
     def test_adapted_overlays_are_smaller_than_vendored_upstream_sources(self) -> None:
         """Verify adapted overlays are smaller than vendored upstream sources.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in adapted overlays are smaller than vendored upstream sources.
         """
         for skill_name, frontmatter in self.frontmatters.items():
             upstream_path = frontmatter.get("upstream")
@@ -522,7 +522,7 @@ class AgentSkillContractTests(unittest.TestCase):
     def test_high_frequency_skills_stay_compact(self) -> None:
         """Verify high frequency skills stay compact.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in high frequency skills stay compact.
         """
         for skill_name, max_nonempty_lines in self.COMPACT_SKILL_LINE_BUDGETS.items():
             with self.subTest(skill_name=skill_name):
@@ -542,7 +542,7 @@ class AgentSkillContractTests(unittest.TestCase):
     ) -> None:
         """Verify active skills do not retain generic upstream harness instructions.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in active skills do not retain generic upstream harness instructions.
         """
         for skill_name, skill_text in self.skill_texts.items():
             with self.subTest(skill_name=skill_name):
@@ -557,7 +557,7 @@ class AgentSkillContractTests(unittest.TestCase):
     def test_agent_surfaces_use_only_valid_repo_references(self) -> None:
         """Verify agent surfaces use only valid repo references.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in agent surfaces use only valid repo references.
         """
         surfaces = {
             "AGENTS.md": (self.repo_root / "AGENTS.md").read_text(encoding="utf-8"),
@@ -589,7 +589,7 @@ class AgentSkillContractTests(unittest.TestCase):
     def test_claude_hooks_use_portable_repo_local_commands(self) -> None:
         """Verify claude hooks use portable repo local commands.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in claude hooks use portable repo local commands.
         """
         settings_text = (self.repo_root / ".claude" / "settings.json").read_text(
             encoding="utf-8"
@@ -609,7 +609,7 @@ class AgentSkillContractTests(unittest.TestCase):
     def test_root_test_stubs_support_importlib_discovery(self) -> None:
         """Verify root test stubs support importlib discovery.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in root test stubs support importlib discovery.
         """
         for module_name in (
             "celery",
@@ -633,7 +633,7 @@ class AgentSkillContractTests(unittest.TestCase):
     def test_agent_split_test_surfaces_cover_every_repo_suite(self) -> None:
         """Verify agent split test surfaces cover every repo suite.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in agent split test surfaces cover every repo suite.
         """
         discovered = {"tests/"}
         discovered.update(
@@ -667,7 +667,7 @@ class AgentSkillContractTests(unittest.TestCase):
     def test_agent_surfaces_avoid_host_specific_clone_paths(self) -> None:
         """Verify agent surfaces avoid host specific clone paths.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in agent surfaces avoid host specific clone paths.
         """
         surfaces = {
             ".claude/settings.json": (
@@ -711,9 +711,9 @@ class AgentSkillContractTests(unittest.TestCase):
                 self.assertNotIn("/home/itservice/", surface_text)
 
     def test_smoke_command_coverage_spans_every_skill(self) -> None:
-        """Verify smoke command coverage spans every skill.
+        """Verify the smoke command coverage spans every skill execution contract.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in smoke command coverage spans every skill integration.
         """
         expected_skills = set(self.skill_dirs)
         covered_skills: set[str] = set()
@@ -724,7 +724,7 @@ class AgentSkillContractTests(unittest.TestCase):
     def test_smoke_commands_pass(self) -> None:
         """Verify smoke commands pass.
 
-        Inputs: none. Output: None.
+        Inputs: repository fixtures. Output: fails on regressions in smoke commands pass.
         """
         for smoke_check in SMOKE_CHECKS:
             with self.subTest(

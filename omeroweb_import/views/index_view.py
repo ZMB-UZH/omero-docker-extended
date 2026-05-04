@@ -72,9 +72,10 @@ from .utils import current_username, json_error, load_json_body, require_non_roo
 @login_required()
 @ensure_csrf_cookie
 def index(request, conn=None, _url=None, **kwargs):
-    """Index.
+    """Return the index.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `render` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: rendered Django response.
     """
     user_id = _current_user_id(conn)
     upload_root = _get_upload_root()
@@ -120,9 +121,10 @@ def list_projects(request, conn=None, _url=None, **kwargs):
 
 @login_required()
 def root_status(request, conn=None, _url=None, **kwargs):
-    """Root status.
+    """Return the root status.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})
@@ -131,9 +133,10 @@ def root_status(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_upload(request, conn=None, _url=None, **kwargs):
-    """Start upload.
+    """Start the upload.
 
-    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: `_start_upload` result.
     """
     try:
         return _start_upload(request, conn)
@@ -148,16 +151,16 @@ def start_upload(request, conn=None, _url=None, **kwargs):
 def _upload_start_payload(request):
     """Return a dictionary payload for upload-start requests.
 
-    Inputs: `request`. Output: computed value.
+    Inputs: `request` Django request. Output: payload mapping.
     """
     payload = load_json_body(request)
     return payload if isinstance(payload, dict) else {}
 
 
 def _upload_start_roots_response():
-    """Upload start roots response.
+    """Upload the start roots response.
 
-    Inputs: none. Output: tuple.
+    Inputs: none. Output: `tuple`.
     """
     upload_root = _get_upload_root()
     if _ensure_dir(upload_root) and _ensure_dir(_get_jobs_root()):
@@ -167,9 +170,9 @@ def _upload_start_roots_response():
 
 
 def _upload_start_identity(payload):
-    """Upload start identity.
+    """Upload the start identity.
 
-    Inputs: `payload`. Output: tuple.
+    Inputs: `payload` payload. Output: `tuple`.
     """
     client_upload_id, client_upload_id_error = _normalize_client_upload_id(
         payload.get("client_upload_id")
@@ -201,9 +204,9 @@ def _upload_start_files_payload(payload):
 
 
 def _upload_start_options(payload):
-    """Upload start options.
+    """Upload the start options.
 
-    Inputs: `payload`. Output: tuple.
+    Inputs: `payload` payload. Output: `tuple`.
     """
     special_upload = (payload.get("special_upload") or "").strip()
     compatibility_enabled = payload.get("compatibility_enabled")
@@ -235,7 +238,7 @@ def _upload_start_options(payload):
 def _upload_start_batch_size(payload):
     """Return the normalized upload-start job batch size.
 
-    Inputs: `payload`. Output: call result.
+    Inputs: `payload` payload. Output: `_normalize_job_batch_size` result.
     """
     default_batch_size = _get_env_int(
         UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10
@@ -263,9 +266,9 @@ def _upload_path_conflict(rel_path, seen_relative_paths, seen_parent_paths):
 
 
 def _upload_start_file_path(entry, seen_relative_paths, seen_parent_paths):
-    """Upload start file path.
+    """Upload the start file path.
 
-    Inputs: `entry`, `seen_relative_paths`, `seen_parent_paths`. Output: tuple.
+    Inputs: `entry`, `seen_relative_paths`, `seen_parent_paths`. Output: `tuple`.
     """
     raw_name = entry.get("relative_path") or entry.get("name")
     rel_path, rel_error = _normalize_upload_relative_path(raw_name or "")
@@ -288,9 +291,10 @@ def _upload_start_file_path(entry, seen_relative_paths, seen_parent_paths):
 
 
 def _upload_start_file_size(raw_size):
-    """Upload start file size.
+    """Upload the start file size.
 
-    Inputs: `raw_size`. Output: `max` result. Raises on invalid or unavailable state.
+    Inputs: `raw_size`. Output: `int` size. Raises: ValueError when validation or
+    external operations fail.
     """
     try:
         if raw_size is None:
@@ -327,10 +331,10 @@ def _normalize_upload_start_file(
     seen_relative_paths,
     seen_parent_paths,
 ):
-    """Normalize upload start file.
+    """Normalize the upload start file.
 
     Inputs: `entry`, `upload_root`, `special_upload`, `seen_relative_paths`,
-    `seen_parent_paths`. Output: tuple.
+    `seen_parent_paths`. Output: `tuple`.
     """
     if not isinstance(entry, dict):
         return None, str(entry)
@@ -369,9 +373,10 @@ def _normalize_upload_start_file(
 
 
 def _normalize_upload_start_files(request, conn, upload_root, files, special_upload):
-    """Normalize upload start files.
+    """Normalize the upload start files.
 
-    Inputs: `request`, `conn`, `upload_root`, `files`, `special_upload`. Output: tuple.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `upload_root`,
+    `files`, `special_upload`. Output: `tuple`.
     """
     normalized = []
     total_bytes = 0
@@ -420,10 +425,10 @@ def _upload_start_special_settings(
     raw_ngff_converter_settings,
     normalized_files,
 ):
-    """Upload start special settings.
+    """Upload the start special settings.
 
     Inputs: `special_upload`, `raw_sem_edx_associations`, `raw_sem_edx_settings`,
-    `raw_ngff_converter_settings`, `normalized_files`. Output: tuple.
+    `raw_ngff_converter_settings`, `normalized_files`. Output: `tuple`.
     """
     sem_edx_associations = _normalize_sem_edx_associations(
         raw_sem_edx_associations, normalized_files
@@ -444,7 +449,7 @@ def _upload_start_special_settings(
 def _upload_start_orphan_dataset_name(dataset_name_override, normalized_files):
     """Return a generated orphan dataset name when upload paths need one.
 
-    Inputs: `dataset_name_override`, `normalized_files`. Output: computed value or None.
+    Inputs: `dataset_name_override`, `normalized_files`. Output: name string.
     """
     if dataset_name_override:
         return None
@@ -456,9 +461,9 @@ def _upload_start_orphan_dataset_name(dataset_name_override, normalized_files):
 
 
 def _upload_start_group_name(conn, current_group_id):
-    """Upload start group name.
+    """Upload the start group name.
 
-    Inputs: `conn`, `current_group_id`. Output: bool or None.
+    Inputs: `conn` OMERO gateway connection, `current_group_id`. Output: `bool`.
     """
     try:
         group_obj = conn.getObject("ExperimenterGroup", int(current_group_id))
@@ -498,9 +503,10 @@ def _upload_start_group_context(conn, username):
 
 
 def _start_upload(request, conn):
-    """Start upload.
+    """Start the upload.
 
-    Inputs: `request`, `conn`. Output: computed value.
+    Inputs: `request` Django request, `conn` OMERO gateway connection. Output: Django
+    `JsonResponse`.
     """
     if request.method != "POST":
         return json_error(errors.upload_start_post_required())
@@ -633,9 +639,10 @@ def _start_upload(request, conn):
 @login_required()
 @require_non_root_user
 def upload_files(request, job_id, conn=None, _url=None, **kwargs):
-    """Upload files.
+    """Upload the files.
 
-    Inputs: `request`, `job_id`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `job_id`, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: `_upload_files` result.
     """
     try:
         return _upload_files(request, job_id, conn)
@@ -649,9 +656,9 @@ def upload_files(request, job_id, conn=None, _url=None, **kwargs):
 
 
 def _find_job_upload_entry(job, rel_path, statuses=("pending", "error")):
-    """Find job upload entry.
+    """Find the job upload entry.
 
-    Inputs: `job`, `rel_path`, `statuses`. Output: `entry` or None.
+    Inputs: `job`, `rel_path`, `statuses`. Output: `entry`.
     """
     allowed_statuses = set(statuses or ())
     for entry in job.get("files", []):
@@ -664,9 +671,10 @@ def _find_job_upload_entry(job, rel_path, statuses=("pending", "error")):
 
 
 def _job_owned_by_request(job, request, conn):
-    """Job owned by request.
+    """Return the job owned by request.
 
-    Inputs: `job`, `request`, `conn`. Output: computed value.
+    Inputs: `job`, `request` Django request, `conn` OMERO gateway connection. Output:
+    `bool`.
     """
     if not isinstance(job, dict):
         return False
@@ -676,9 +684,10 @@ def _job_owned_by_request(job, request, conn):
 
 
 def _load_owned_job(request, conn, job_id, missing_error):
-    """Load owned job.
+    """Load the owned job.
 
-    Inputs: `request`, `conn`, `job_id`, `missing_error`. Output: tuple.
+    Inputs: `request` Django request, `conn` OMERO gateway connection, `job_id`,
+    `missing_error`. Output: `tuple`.
     """
     if not _safe_job_id(job_id):
         return None, json_error(missing_error)
@@ -689,9 +698,9 @@ def _load_owned_job(request, conn, job_id, missing_error):
 
 
 def _prepare_ready_job_for_import_start(job_id, job, conn):
-    """Prepare ready job for import start.
+    """Prepare the ready job for import start.
 
-    Inputs: `job_id`, `job`, `conn`. Output: tuple.
+    Inputs: `job_id`, `job`, `conn` OMERO gateway connection. Output: `tuple`.
     """
     prepared_job, prep_error = _prepare_uploaded_job_dataset_targets(job_id, job, conn)
     if prep_error:
@@ -705,9 +714,10 @@ def _prepare_ready_job_for_import_start(job_id, job, conn):
 
 
 def _prepare_uploaded_job_dataset_targets(job_id, job, conn):
-    """Prepare uploaded job dataset targets.
+    """Prepare the uploaded job dataset targets.
 
-    Inputs: `job_id`, `job`, `conn`. Output: call result.
+    Inputs: `job_id`, `job`, `conn` OMERO gateway connection. Output:
+    `_prepare_uploaded_job_for_request_path_import` result.
     """
     return _prepare_uploaded_job_for_request_path_import(job_id, job, conn)
 
@@ -715,17 +725,16 @@ def _prepare_uploaded_job_dataset_targets(job_id, job, conn):
 def _prepare_job_import_datasets(job_id, job, conn):
     """Compatibility wrapper retained for tests and callers that patch this symbol.
 
-    Inputs: `job_id`, `job`, `conn`. Output: call result.
-
-    to assert request handlers do not perform heavy dataset preparation inline.
+    Inputs: `job_id`, `job`, `conn` OMERO gateway connection. Output:
+    `_prepare_uploaded_job_dataset_targets` result.
     """
     return _prepare_uploaded_job_dataset_targets(job_id, job, conn)
 
 
 def _upload_internal_error_response(job_id, detail, *, context: str):
-    """Upload internal error response.
+    """Upload the internal error response.
 
-    Inputs: `job_id`, `detail`, `context`. Output: `json_error` result.
+    Inputs: `job_id`, `detail`, `context` (str). Output: `json_error` result.
     """
     logger.warning(
         "%s for upload job %s: %s",
@@ -737,9 +746,9 @@ def _upload_internal_error_response(job_id, detail, *, context: str):
 
 
 def _import_internal_error_response(job_id, detail, *, context: str):
-    """Import internal error response.
+    """Import the internal error response.
 
-    Inputs: `job_id`, `detail`, `context`. Output: `json_error` result.
+    Inputs: `job_id`, `detail`, `context` (str). Output: `json_error` result.
     """
     logger.warning(
         "%s for import job %s: %s",
@@ -763,7 +772,8 @@ def _get_session_key(conn):
 def _get_or_create_dataset(conn, name, dataset_map, project_id=None):
     """Return or create dataset.
 
-    Inputs: `conn`, `name`, `dataset_map`, `project_id`. Output: call result.
+    Inputs: `conn` OMERO gateway connection, `name` name, `dataset_map`, `project_id`
+    OMERO project ID. Output: `_core_get_or_create_dataset` result.
     """
     from .core_functions import _get_or_create_dataset as _core_get_or_create_dataset
 
@@ -771,9 +781,9 @@ def _get_or_create_dataset(conn, name, dataset_map, project_id=None):
 
 
 def _parse_chunk_int(raw_value, field_name):
-    """Parse chunk int.
+    """Parse and validate the chunk int input.
 
-    Inputs: `raw_value`, `field_name`. Output: tuple.
+    Inputs: `raw_value` raw value, `field_name`. Output: `tuple`.
     """
     try:
         value = int(raw_value)
@@ -789,17 +799,17 @@ def _parse_chunk_int(raw_value, field_name):
 
 
 def _as_bool(raw_value):
-    """As bool.
+    """Return the as bool.
 
-    Inputs: `raw_value`. Output: bool.
+    Inputs: `raw_value` raw value. Output: `bool`.
     """
     return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _normalize_client_upload_id(raw_value):
-    """Normalize client upload ID.
+    """Normalize the client upload ID.
 
-    Inputs: `raw_value`. Output: tuple.
+    Inputs: `raw_value` raw value. Output: `tuple`.
     """
     value = str(raw_value or "").strip()
     if not value:
@@ -812,9 +822,9 @@ def _normalize_client_upload_id(raw_value):
 
 
 def _resolve_upload_project(conn, raw_project_id):
-    """Resolve upload project.
+    """Resolve the upload project.
 
-    Inputs: `conn`, `raw_project_id`. Output: tuple.
+    Inputs: `conn` OMERO gateway connection, `raw_project_id`. Output: `tuple`.
     """
     raw_project_id = (raw_project_id or "").strip()
     if not raw_project_id:
@@ -835,9 +845,9 @@ def _resolve_upload_project(conn, raw_project_id):
 
 
 def _upload_job_response(job):
-    """Upload job response.
+    """Upload the job response.
 
-    Inputs: `job`. Output: dict.
+    Inputs: `job`. Output: `dict`.
     """
     job_id = job.get("job_id")
     return {
@@ -875,9 +885,9 @@ def _same_upload_manifest(job, normalized_files, dataset_name_override, project_
 
 
 def _find_client_upload_job(username, client_upload_id):
-    """Find client upload job.
+    """Find the client upload job.
 
-    Inputs: `username`, `client_upload_id`. Output: `job` or None.
+    Inputs: `username` username, `client_upload_id`. Output: `job`.
     """
     if not username or not client_upload_id:
         return None
@@ -912,8 +922,9 @@ def _client_upload_retry_response(
 ):
     """Return an existing upload response for a matching client retry id.
 
-    Inputs: `username`, `client_upload_id`, `normalized_files`, `dataset_name_override`,
-    `project_id`. Output: computed value or None.
+    Inputs: `username` username, `client_upload_id`, `normalized_files`,
+    `dataset_name_override`, `project_id` OMERO project ID. Output: Django
+    `JsonResponse`.
     """
     if not client_upload_id:
         return None
@@ -964,7 +975,8 @@ def _is_sha256_digest(value):
 def _complete_chunk_upload_response(job_id, conn, entry, rel_path):
     """Mark an uploaded file complete and return the chunk response.
 
-    Inputs: `job_id`, `conn`, `entry`, `rel_path`. Output: computed value.
+    Inputs: `job_id`, `conn` OMERO gateway connection, `entry`, `rel_path`. Output:
+    Django `JsonResponse`.
     """
     updated_job = _apply_upload_updates(
         job_id, [{"upload_id": entry.get("upload_id"), "status": "uploaded"}], []
@@ -1045,7 +1057,7 @@ def _chunk_upload_incomplete_retry_response(rel_path, existing_size):
 def _find_chunk_upload_entry(job, rel_path):
     """Return the upload entry accepted by chunked upload handling.
 
-    Inputs: `job`, `rel_path`. Output: computed value or None.
+    Inputs: `job`, `rel_path`. Output: `entry`.
     """
     entry = _find_job_upload_entry(job, rel_path)
     if entry is not None:
@@ -1095,9 +1107,9 @@ def _chunk_upload_error_response(job_id, entry, rel_path, upload_error):
 
 
 def _validate_uploaded_chunk_checksum(upload, expected_checksum):
-    """Validate uploaded chunk checksum.
+    """Validate the uploaded chunk checksum.
 
-    Inputs: `upload`, `expected_checksum`. Output: `json_error` result or None.
+    Inputs: `upload`, `expected_checksum`. Output: `json_error` result.
     """
     if not expected_checksum:
         return None
@@ -1138,9 +1150,10 @@ def _idempotent_chunk_retry_response(
 ):
     """Return a response for a chunk retry already present in staging.
 
-    Inputs: `request`, `job_id`, `conn`, `job`, `job_root`, `entry`, `rel_path`,
-    `staged_path`, `existing_size`, `chunk_start`, `chunk_end`, `file_size`,
-    `expected_checksum`. Output: computed value or None.
+    Inputs: `request` Django request, `job_id`, `conn` OMERO gateway connection, `job`,
+    `job_root`, `entry`, `rel_path`, `staged_path`, `existing_size`, `chunk_start`,
+    `chunk_end`, `file_size`, `expected_checksum`. Output:
+    `_complete_chunk_upload_response` result.
     """
     if existing_size <= chunk_start or not expected_checksum:
         return None
@@ -1193,10 +1206,10 @@ def _prepare_staged_chunk_write(
     existing_size,
     chunk_start,
 ):
-    """Prepare staged chunk write.
+    """Prepare the staged chunk write.
 
     Inputs: `job_id`, `job_root`, `entry`, `rel_path`, `staged_path`, `existing_size`,
-    `chunk_start`. Output: computed value or None.
+    `chunk_start`. Output: `json_error` result.
     """
     if chunk_start == 0:
         return _reset_staged_chunk_upload(
@@ -1249,7 +1262,7 @@ def _chunk_write_validation_response(
     """Return a chunk write validation error, an incomplete response, or None.
 
     Inputs: `job_id`, `rel_path`, `bytes_written`, `saved_size`, `chunk_start`,
-    `chunk_end`, `file_size`, `is_last_chunk`. Output: computed value or None.
+    `chunk_end`, `file_size`, `is_last_chunk`. Output: `json_error` result.
     """
     expected_chunk_size = chunk_end - chunk_start
     if bytes_written != expected_chunk_size:
@@ -1327,9 +1340,10 @@ def _chunk_upload_request_metadata(request):
 
 
 def _handle_chunk_upload(request, job_id, conn, job, job_root):
-    """Handle chunk upload.
+    """Return the handle chunk upload.
 
-    Inputs: `request`, `job_id`, `conn`, `job`, `job_root`. Output: computed value.
+    Inputs: `request` Django request, `job_id`, `conn` OMERO gateway connection, `job`,
+    `job_root`. Output: `_complete_chunk_upload_response` result.
     """
     metadata, metadata_error = _chunk_upload_request_metadata(request)
     if metadata_error is not None:
@@ -1406,9 +1420,10 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
 
 
 def _upload_files(request, job_id, conn):
-    """Upload files.
+    """Upload the files.
 
-    Inputs: `request`, `job_id`, `conn`. Output: computed value.
+    Inputs: `request` Django request, `job_id`, `conn` OMERO gateway connection. Output:
+    Django `JsonResponse`.
     """
     safe_job_id = sanitize_log_value(job_id)
     if request.method != "POST":
@@ -1583,9 +1598,10 @@ def _upload_files(request, job_id, conn):
 @login_required()
 @require_non_root_user
 def import_step(request, job_id, conn=None, _url=None, **kwargs):
-    """Import step.
+    """Import the step.
 
-    Inputs: `request`, `job_id`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `job_id`, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: `_import_step` result.
     """
     try:
         return _import_step(request, job_id, conn)
@@ -1599,9 +1615,10 @@ def import_step(request, job_id, conn=None, _url=None, **kwargs):
 
 
 def _import_step(request, job_id, conn):
-    """Import step.
+    """Import the step.
 
-    Inputs: `request`, `job_id`, `conn`. Output: computed value.
+    Inputs: `request` Django request, `job_id`, `conn` OMERO gateway connection. Output:
+    Django `JsonResponse`.
     """
     safe_job_id = sanitize_log_value(job_id)
     if request.method != "POST":
@@ -1643,9 +1660,10 @@ def _import_step(request, job_id, conn):
 @login_required()
 @require_non_root_user
 def confirm_import(request, job_id, conn=None, _url=None, **kwargs):
-    """Confirm import.
+    """Confirm the import.
 
-    Inputs: `request`, `job_id`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `job_id`, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     if request.method != "POST":
         return json_error(errors.method_post_required())
@@ -1687,9 +1705,10 @@ def confirm_import(request, job_id, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def prune_upload(request, job_id, conn=None, _url=None, **kwargs):
-    """Prune upload.
+    """Return the prune upload.
 
-    Inputs: `request`, `job_id`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `job_id`, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     if request.method != "POST":
         return json_error(errors.method_post_required())
@@ -1720,7 +1739,7 @@ def prune_upload(request, job_id, conn=None, _url=None, **kwargs):
     upload_root = _get_upload_root() / job_id
 
     def apply_prune(job_dict):
-        """Apply prune.
+        """Apply the prune.
 
         Inputs: `job_dict`. Output: `job_dict`.
         """
@@ -1806,9 +1825,10 @@ def prune_upload(request, job_id, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def job_status(request, job_id, conn=None, _url=None, **kwargs):
-    """Job status.
+    """Return the job status.
 
-    Inputs: `request`, `job_id`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    Inputs: `request` Django request, `job_id`, `conn` OMERO gateway connection, `_url`,
+    `**kwargs` keyword arguments. Output: Django `JsonResponse`.
     """
     job, error_response = _load_owned_job(
         request,
