@@ -18,7 +18,10 @@ TEST_AUTH_SERVER = "server-fixture-auth"
 def test_use_celery_reads_boolean_flag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test use celery reads boolean flag."""
+    """Verify use celery reads boolean flag.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setenv("OMERO_IMS_USE_CELERY", "true")
     assert config.use_celery() is True
 
@@ -26,7 +29,10 @@ def test_use_celery_reads_boolean_flag(
 def test_use_job_service_session_requires_explicit_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test use job service session requires explici behavior."""
+    """Verify use job service session requires explicit value.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.delenv("OMERO_IMS_USE_JOB_SERVICE_SESSION", raising=False)
     with pytest.raises(RuntimeError):
         config.use_job_service_session()
@@ -48,7 +54,10 @@ def test_use_job_service_session_requires_explicit_value(
 def test_use_job_service_session_parsing(
     monkeypatch: pytest.MonkeyPatch, value: str, expected: bool
 ) -> None:
-    """Verify test use job service session parsing."""
+    """Verify use job service session parsing.
+
+    Inputs: `monkeypatch`, `value`, `expected`. Output: None.
+    """
     monkeypatch.setenv("OMERO_IMS_USE_JOB_SERVICE_SESSION", value)
     assert config.use_job_service_session() is expected
 
@@ -56,7 +65,10 @@ def test_use_job_service_session_parsing(
 def test_use_job_service_session_rejects_invalid_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test use job service session rejects invalid behavior."""
+    """Verify use job service session rejects invalid value.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setenv("OMERO_IMS_USE_JOB_SERVICE_SESSION", "unexpected")
     with pytest.raises(ValueError):
         config.use_job_service_session()
@@ -65,7 +77,10 @@ def test_use_job_service_session_rejects_invalid_value(
 def test_get_job_service_credentials_prefers_web_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test get job service credentials prefers web env."""
+    """Verify get job service credentials prefers web environment.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setenv("OMERO_WEB_JOB_SERVICE_USERNAME", "web-user")
     monkeypatch.setenv("OMERO_WEB_JOB_SERVICE_PASS", TEST_AUTH_WEB)
     monkeypatch.setenv("OMERO_JOB_SERVICE_USERNAME", "server-user")
@@ -80,7 +95,10 @@ def test_get_job_service_credentials_prefers_web_env(
 def test_get_job_service_credentials_falls_back_to_server_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test get job service credentials falls back t behavior."""
+    """Verify get job service credentials falls back to server environment.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.delenv("OMERO_WEB_JOB_SERVICE_USERNAME", raising=False)
     monkeypatch.delenv("OMERO_WEB_JOB_SERVICE_PASS", raising=False)
     monkeypatch.setenv("OMERO_JOB_SERVICE_USERNAME", "server-user")
@@ -95,7 +113,10 @@ def test_get_job_service_credentials_falls_back_to_server_env(
 def test_get_job_service_credentials_missing_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test get job service credentials missing retu behavior."""
+    """Verify get job service credentials missing returns none.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.delenv("OMERO_WEB_JOB_SERVICE_USERNAME", raising=False)
     monkeypatch.delenv("OMERO_WEB_JOB_SERVICE_PASS", raising=False)
     monkeypatch.delenv("OMERO_JOB_SERVICE_USERNAME", raising=False)

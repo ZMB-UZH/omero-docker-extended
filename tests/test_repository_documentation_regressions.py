@@ -17,7 +17,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Load repository fixtures shared by documentation contract checks."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.compose_data = yaml.safe_load(
             (cls.repo_root / "docker-compose.yml").read_text(encoding="utf-8")
@@ -25,11 +28,17 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         cls.services = cls.compose_data["services"]
 
     def read_text(self, relative_path: str) -> str:
-        """Read a repository-relative UTF-8 text file for assertions."""
+        """Read text.
+
+        Inputs: `relative_path`. Output: `str`.
+        """
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
 
     def git_files(self, *patterns: str) -> list[str]:
-        """Return repository paths that match the supplied git patterns."""
+        """Return repository paths that match the supplied git patterns.
+
+        Inputs: `*patterns`. Output: `list[str]`.
+        """
         git_path = shutil.which("git")
         self.assertIsNotNone(git_path)
         output = subprocess.check_output(
@@ -47,11 +56,18 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         return [line for line in output.splitlines() if line]
 
     def git_file_count(self, *patterns: str) -> int:
-        """Count repository paths that match the supplied git patterns."""
+        """Count repository paths that match the supplied git patterns.
+
+        Inputs: `*patterns`. Output: `int`.
+        """
         return len(self.git_files(*patterns))
 
     def literal_assignment(self, relative_path: str, name: str) -> object:
-        """Return a literal module-level assignment from a Python file."""
+        """Return a literal module-level assignment from a Python file.
+
+        Inputs: `relative_path`, `name`. Output: `object`. Raises on invalid or
+        unavailable state.
+        """
         module = ast.parse(self.read_text(relative_path))
         for node in module.body:
             if (
@@ -64,7 +80,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         raise AssertionError(f"{relative_path} is missing {name}")
 
     def test_root_security_policy_exists_and_points_to_canonical_docs(self) -> None:
-        """Verify Root security policy exists and points to canonical docs."""
+        """Verify Root security policy exists and points to canonical docs.
+
+        Inputs: none. Output: None.
+        """
         root_security = self.repo_root / "SECURITY.md"
         github_security = self.repo_root / ".github" / "SECURITY.md"
         self.assertTrue(
@@ -84,7 +103,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertTrue((self.repo_root / "docs" / "SECURITY.md").exists())
 
     def test_github_community_standard_files_exist(self) -> None:
-        """Verify GitHub community standard files exist."""
+        """Verify GitHub community standard files exist.
+
+        Inputs: none. Output: None.
+        """
         expected_paths = (
             "CODE_OF_CONDUCT.md",
             "CONTRIBUTING.md",
@@ -118,7 +140,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("## Verification", pr_template)
 
     def test_current_branch_history_uses_exact_ai_agent_identity(self) -> None:
-        """Reject AI/tool commit identities that map to third-party accounts."""
+        """Reject AI/tool commit identities that map to third-party accounts.
+
+        Inputs: none. Output: None.
+        """
         git_path = shutil.which("git")
         self.assertIsNotNone(git_path)
         output = subprocess.check_output(
@@ -168,7 +193,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertEqual([], bad_identities)
 
     def test_docs_do_not_imply_multiple_project_maintainers(self) -> None:
-        """Verify Docs do not imply multiple project maintainers."""
+        """Verify Docs do not imply multiple project maintainers.
+
+        Inputs: none. Output: None.
+        """
         plural_voice_patterns = {
             "plural pronoun": re.compile(
                 r"\b(we|we're|we’ve|we've|we’ll|we'll|we’d|we'd|our|ours|"
@@ -230,7 +258,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
     def test_code_scanning_runbook_records_current_root_security_state(
         self,
     ) -> None:
-        """Verify Code scanning runbook records current root security state."""
+        """Verify Code scanning runbook records current root security state.
+
+        Inputs: none. Output: None.
+        """
         runbook_text = self.read_text("docs/operations/code-scanning.md")
         normalized_runbook_text = " ".join(runbook_text.split())
         self.assertIn(
@@ -279,7 +310,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertNotIn("remain open", resolved_text)
 
     def test_docs_match_supervisord_program_topology(self) -> None:
-        """Verify Docs match supervisord program topology."""
+        """Verify Docs match supervisord program topology.
+
+        Inputs: none. Output: None.
+        """
         supervisord_text = self.read_text("supervisord.conf")
         programs = sorted(re.findall(r"^\[program:([^\]]+)\]", supervisord_text, re.M))
         self.assertEqual(
@@ -304,7 +338,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn(phrase, self.read_text(relative_path))
 
     def test_docs_planning_uses_default_branch_change_records(self) -> None:
-        """Verify Docs planning uses default branch change records."""
+        """Verify Docs planning uses default branch change records.
+
+        Inputs: none. Output: None.
+        """
         planning_paths = (
             "docs/PLANS.md",
             "docs/index.md",
@@ -339,7 +376,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn("default-branch", self.read_text(relative_path))
 
     def test_completed_knowledge_base_plan_is_not_active(self) -> None:
-        """Verify Completed knowledge base plan is not active."""
+        """Verify Completed knowledge base plan is not active.
+
+        Inputs: none. Output: None.
+        """
         active_plan = (
             self.repo_root / "docs/exec-plans/active/knowledge-base-bootstrap.md"
         )
@@ -357,7 +397,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("tools/lint_docs_structure.py", completed_text)
 
     def test_quality_docs_reflect_current_plugin_test_baseline(self) -> None:
-        """Verify Quality docs reflect current plugin test baseline."""
+        """Verify Quality docs reflect current plugin test baseline.
+
+        Inputs: none. Output: None.
+        """
         quality_text = self.read_text("docs/QUALITY_SCORE.md")
         tracker_text = self.read_text("docs/exec-plans/tech-debt-tracker.md")
         backlog_text = self.read_text(
@@ -373,7 +416,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("33,000 test-source lines", backlog_text)
 
     def test_generated_schema_docs_match_plugin_data_stores(self) -> None:
-        """Verify Generated schema docs match plugin data stores."""
+        """Verify Generated schema docs match plugin data stores.
+
+        Inputs: none. Output: None.
+        """
         schema_text = self.read_text("docs/generated/db-schema.md")
         self.assertIn("OMP, Import, and Tools enhanced search", schema_text)
         self.assertIn("omeroweb_tools/services/enhanced_search_store.py", schema_text)
@@ -391,7 +437,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 )
 
     def test_ollama_and_ai_provider_docs_match_code_and_compose(self) -> None:
-        """Verify Ollama and AI provider docs match code and compose."""
+        """Verify Ollama and AI provider docs match code and compose.
+
+        Inputs: none. Output: None.
+        """
         compose_text = self.read_text("docker-compose.yml")
         provider_options = self.literal_assignment(
             "omeroweb_omp_plugin/services/ai_providers.py",
@@ -431,7 +480,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn(phrase, self.read_text(relative_path))
 
     def test_doc_compaction_requires_objective_meaning_preservation(self) -> None:
-        """Verify Doc compaction requires objective meaning preservation."""
+        """Verify Doc compaction requires objective meaning preservation.
+
+        Inputs: none. Output: None.
+        """
         agents_text = self.read_text("AGENTS.md")
         runtime_text = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
         docs_skill_text = self.read_text(
@@ -462,7 +514,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
     def test_agent_instructions_close_proven_retry_loops_after_verification(
         self,
     ) -> None:
-        """Verify Agent instructions close proven retry loops after verification."""
+        """Verify Agent instructions close proven retry loops after verification.
+
+        Inputs: none. Output: None.
+        """
         agents_text = self.read_text("AGENTS.md")
         runtime_text = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
         runbook_text = self.read_text("docs/operations/code-scanning.md")
@@ -494,7 +549,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
     def test_agent_instructions_require_fresh_code_live_runtime_verification(
         self,
     ) -> None:
-        """Verify Agent instructions require fresh code live runtime verification."""
+        """Verify Agent instructions require fresh code live runtime verification.
+
+        Inputs: none. Output: None.
+        """
         runtime_text = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
         verifier_text = self.read_text(".agents/skills/omero-runtime-verifier/SKILL.md")
         verification_text = self.read_text(".agents/skills/verification-loop/SKILL.md")
@@ -522,7 +580,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn("rebuild", adapter_text)
 
     def test_deepsource_repo_file_is_retired_from_agent_routing(self) -> None:
-        """Verify Deepsource repo file is retired from agent routing."""
+        """Verify Deepsource repo file is retired from agent routing.
+
+        Inputs: none. Output: None.
+        """
         expected_phrase = (
             "Do not search for, create, restore, or edit `.deepsource.toml`"
         )
@@ -667,7 +728,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("against the pre-push baseline", prevention_text)
 
     def test_codeql_file_count_coverage_is_explained(self) -> None:
-        """Verify CodeQL file count coverage is explained."""
+        """Verify CodeQL file count coverage is explained.
+
+        Inputs: none. Output: None.
+        """
         runbook_text = self.read_text("docs/operations/code-scanning.md")
         normalized_runbook_text = " ".join(runbook_text.split())
         workflow_text = self.read_text(".github/workflows/security-code-scanning.yml")
@@ -695,7 +759,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("git ls-files '*.js' '*.jsx' '*.mjs'", workflow_text)
 
     def test_python_acceleration_doc_counts_match_current_tree(self) -> None:
-        """Verify Python acceleration doc counts match current tree."""
+        """Verify Python acceleration doc counts match current tree.
+
+        Inputs: none. Output: None.
+        """
         doc_text = self.read_text("docs/design-docs/python-acceleration-options.md")
         production_paths = self.git_files(
             "*.py",
@@ -732,7 +799,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
     def test_agent_instructions_require_current_default_branch_development(
         self,
     ) -> None:
-        """Verify Agent instructions require current default branch development."""
+        """Verify Agent instructions require current default branch development.
+
+        Inputs: none. Output: None.
+        """
         entrypoints = (
             "AGENTS.md",
             "CLAUDE.md",
@@ -770,7 +840,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
 
     def test_markdownlint_command_is_pinned(self) -> None:
-        """Verify Markdownlint command is pinned."""
+        """Verify Markdownlint command is pinned.
+
+        Inputs: none. Output: None.
+        """
         expected = "npx --yes markdownlint-cli2@0.17.2"
         self.assertIn(expected, self.read_text("AGENTS.md"))
         self.assertIn(
@@ -783,7 +856,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
 
     def test_missing_host_pytest_dependencies_route_to_workflow_venv(self) -> None:
-        """Verify Missing host pytest dependencies route to workflow venv."""
+        """Verify Missing host pytest dependencies route to workflow venv.
+
+        Inputs: none. Output: None.
+        """
         troubleshooting_text = self.read_text("docs/troubleshooting/common.md")
         normalized_troubleshooting_text = " ".join(troubleshooting_text.split())
 
@@ -810,7 +886,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
     def test_explicit_manual_compose_examples_include_required_env_files(
         self,
     ) -> None:
-        """Verify Explicit manual compose examples include required env files."""
+        """Verify Explicit manual compose examples include required env files.
+
+        Inputs: none. Output: None.
+        """
         tracked_docs = [
             "README.md",
             "CLAUDE.md",
@@ -840,7 +919,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
 
     def test_quickstart_missing_dot_env_exports_full_compose_contract(self) -> None:
-        """Verify Quickstart missing dot env exports full compose contract."""
+        """Verify Quickstart missing dot env exports full compose contract.
+
+        Inputs: none. Output: None.
+        """
         quickstart = self.read_text("docs/deployment/quickstart.md")
         for env_file in (
             "installation_paths.env",
@@ -853,7 +935,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             self.assertIn(f"source {env_file}", quickstart)
 
     def test_onboarding_creates_required_runtime_env_files(self) -> None:
-        """Verify Onboarding creates required runtime env files."""
+        """Verify Onboarding creates required runtime env files.
+
+        Inputs: none. Output: None.
+        """
         onboarding = self.read_text("docs/product-specs/new-user-onboarding.md")
         for template, runtime in (
             ("installation_paths_example.env", "installation_paths.env"),
@@ -868,7 +953,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
     def test_import_plugin_docs_match_current_temp_and_upload_env_contract(
         self,
     ) -> None:
-        """Verify Import plugin docs match current temp and upload env contract."""
+        """Verify Import plugin docs match current temp and upload env contract.
+
+        Inputs: none. Output: None.
+        """
         import_doc = self.read_text("docs/plugins/import-plugin.md")
         import_core = self.read_text("omeroweb_import/views/core_functions.py")
         file_helpers = self.read_text("omeroweb_import/utils/file_helpers.py")
@@ -893,7 +981,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertNotIn("${OMERO_IMPORT_PATH}/.omero-cli-home", import_doc)
 
     def test_frontend_docs_cover_current_template_packages(self) -> None:
-        """Verify Frontend docs cover current template packages."""
+        """Verify Frontend docs cover current template packages.
+
+        Inputs: none. Output: None.
+        """
         frontend_text = self.read_text("docs/FRONTEND.md")
         self.assertIn("<plugin_package>/templates/<plugin_package>/", frontend_text)
         self.assertIn("OMERO.web Zarr", frontend_text)
@@ -910,7 +1001,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertTrue((self.repo_root / relative_path).exists())
 
     def test_service_topology_docs_match_compose_terms(self) -> None:
-        """Verify Service topology docs match compose terms."""
+        """Verify Service topology docs match compose terms.
+
+        Inputs: none. Output: None.
+        """
         self.assertEqual(21, len(self.services))
         self.assertIn("redis-sysctl-init", self.services)
         self.assertEqual("no", str(self.services["redis-sysctl-init"].get("restart")))
@@ -940,7 +1034,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn(phrase, text, f"{relative_path} is missing: {phrase}")
 
     def test_service_endpoint_health_table_covers_compose_healthchecks(self) -> None:
-        """Verify Service endpoint health table covers compose healthchecks."""
+        """Verify Service endpoint health table covers compose healthchecks.
+
+        Inputs: none. Output: None.
+        """
         endpoint_text = self.read_text("docs/reference/service-endpoints.md")
         expected_services = sorted(
             service_name
@@ -953,7 +1050,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn(f"`{service_name}`", endpoint_text)
 
     def test_monitoring_docs_match_prometheus_probe_counts(self) -> None:
-        """Verify Monitoring docs match prometheus probe counts."""
+        """Verify Monitoring docs match prometheus probe counts.
+
+        Inputs: none. Output: None.
+        """
         prometheus_data = yaml.safe_load(
             (self.repo_root / "monitoring/prometheus/prometheus.yml").read_text(
                 encoding="utf-8"
@@ -988,7 +1088,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn(phrase, self.read_text(relative_path))
 
     def test_plugin_help_pages_are_concise_user_help(self) -> None:
-        """Verify Plugin help pages are concise user help."""
+        """Verify Plugin help pages are concise user help.
+
+        Inputs: none. Output: None.
+        """
         expected_phrases = {
             "docs/help/omeroweb_omp_plugin_help.md": [
                 "Select and Prepare",
@@ -1034,7 +1137,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 )
 
     def test_tools_help_is_canonical_html_help(self) -> None:
-        """Verify Tools help is canonical HTML help."""
+        """Verify Tools help is canonical HTML help.
+
+        Inputs: none. Output: None.
+        """
         stale_markdown = self.repo_root / "docs/help/omeroweb_tools_help.md"
         self.assertFalse(
             stale_markdown.exists(),
@@ -1052,7 +1158,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertNotIn("Open Enhanced search", template_text)
 
     def test_plugin_help_style_guide_is_agent_routed(self) -> None:
-        """Verify Plugin help style guide is agent routed."""
+        """Verify Plugin help style guide is agent routed.
+
+        Inputs: none. Output: None.
+        """
         guide_path = self.repo_root / "docs/reference/plugin-help-page-style-guide.md"
         self.assertTrue(guide_path.exists(), "Plugin help style guide is missing")
 

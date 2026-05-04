@@ -10,7 +10,10 @@ from omeroweb_omp_plugin.views import utils
 
 
 def test_load_json_body_and_require_non_root_user(monkeypatch):
-    """Verify test load JSON body and require non root user."""
+    """Verify load JSON body and require non root user.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().post(
         "/",
         data=json.dumps({"value": 1}),
@@ -55,7 +58,10 @@ def test_load_json_body_and_require_non_root_user(monkeypatch):
 
 
 def test_resolve_omero_host_port_prefers_connection_then_settings_then_env(monkeypatch):
-    """Verify test resolve OMERO host port prefers connecti behavior."""
+    """Verify resolve OMERO host port prefers connection then settings then environment.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     assert utils.resolve_omero_host_port(
         SimpleNamespace(host="omero", port="4064")
     ) == (
@@ -92,7 +98,10 @@ def test_resolve_omero_host_port_prefers_connection_then_settings_then_env(monke
 
 
 def test_validate_user_password_and_session_key_helpers(monkeypatch):
-    """Verify test validate user password and session key h behavior."""
+    """Verify validate user password and session key helpers.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     assert utils.get_session_key(None) is None
 
     monkeypatch.setattr(utils, "current_username", lambda request, conn: "alice")
@@ -102,15 +111,25 @@ def test_validate_user_password_and_session_key_helpers(monkeypatch):
         """Represent successful client."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.closed = False
             self.calls = []
 
         def createSession(self, username, password):
-            """Build create session."""
+            """Create Session.
+
+            Inputs: `username`, `password`. Output: None.
+            """
             self.calls.append((username, password))
 
         def closeSession(self):
-            """Handle close session."""
+            """Close session.
+
+            Inputs: none. Output: None.
+            """
             self.closed = True
 
     client = SuccessfulClient()
@@ -137,12 +156,19 @@ def test_validate_user_password_and_session_key_helpers(monkeypatch):
 
         @staticmethod
         def createSession(username, password):
-            """Build create session."""
+            """Create Session.
+
+            Inputs: `username`, `password`. Output: None. Raises on invalid or
+            unavailable state.
+            """
             raise RuntimeError("bad password")
 
         @staticmethod
         def closeSession():
-            """Handle close session."""
+            """Close session.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("close failed")
 
     monkeypatch.setattr(utils.omero, "client", lambda host, port: FailingClient())
@@ -177,7 +203,10 @@ def test_validate_user_password_and_session_key_helpers(monkeypatch):
 
 
 def test_build_omero_cli_base_command_requires_connection_metadata(monkeypatch):
-    """Verify test build OMERO cli base command requires co behavior."""
+    """Verify build OMERO cli base command requires connection metadata.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     monkeypatch.setattr(utils, "get_session_key", lambda conn: "session-1")
     monkeypatch.setattr(utils, "resolve_omero_host_port", lambda conn: ("omero", 4064))
     assert utils.build_omero_cli_base_command(SimpleNamespace()) == [

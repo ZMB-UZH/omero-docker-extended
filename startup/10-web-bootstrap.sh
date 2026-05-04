@@ -28,10 +28,12 @@ declare -A prepared_runtime_files=()
 
 echo "[web-bootstrap] Checking OMERO.web log directory: ${log_dir}"
 
+# Perform runtime user exists. Inputs: shell arguments and environment. Output: command status and side effects.
 runtime_user_exists() {
     id -u "${runtime_user}" >/dev/null 2>&1
 }
 
+# Ensure runtime identity. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_runtime_identity() {
     if ! runtime_user_exists; then
         echo "[web-bootstrap] ERROR: Runtime user does not exist: ${runtime_user}" >&2
@@ -44,6 +46,7 @@ ensure_runtime_identity() {
     fi
 }
 
+# Trim whitespace. Inputs: shell arguments and environment. Output: command status and side effects.
 trim_whitespace() {
     local value="${1:-}"
     value="${value#"${value%%[![:space:]]*}"}"
@@ -51,6 +54,7 @@ trim_whitespace() {
     printf '%s' "${value}"
 }
 
+# Log mount status. Inputs: shell arguments and environment. Output: command status and side effects.
 log_mount_status() {
     local path="${1:?BUG: log_mount_status requires a path}"
     local label="${2:?BUG: log_mount_status requires a label}"
@@ -62,6 +66,7 @@ log_mount_status() {
     fi
 }
 
+# Ensure runtime directory. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_runtime_directory() {
     local path="${1:?BUG: ensure_runtime_directory requires a path}"
     local label="${2:?BUG: ensure_runtime_directory requires a label}"
@@ -103,6 +108,7 @@ ensure_runtime_directory() {
     echo "[web-bootstrap] ✓ ${label} is ready and writable for ${runtime_user}: ${path}"
 }
 
+# Ensure runtime file. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_runtime_file() {
     local path="${1:?BUG: ensure_runtime_file requires a path}"
     local label="${2:?BUG: ensure_runtime_file requires a label}"
@@ -141,6 +147,7 @@ ensure_runtime_file() {
     fi
 }
 
+# Prepare supervisor logs from config. Inputs: shell arguments and environment. Output: command status and side effects.
 prepare_supervisor_logs_from_config() {
     local config_path="${1:?BUG: prepare_supervisor_logs_from_config requires a config path}"
     local raw_line=""
@@ -186,6 +193,7 @@ prepare_supervisor_logs_from_config() {
 
 ensure_runtime_identity
 
+# Repair plugin temporary layout. Inputs: shell arguments and environment. Output: command status and side effects.
 repair_plugin_tmp_layout() {
     local tmp_root="${OMERO_TMP_PATH:-}"
     local server_runtime_user="${OMERO_SERVER_RUNTIME_USER:-omero-server}"
@@ -228,6 +236,7 @@ repair_plugin_tmp_layout() {
     done < <(find "${tmp_root}" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
 }
 
+# Configure docker socket access. Inputs: shell arguments and environment. Output: command status and side effects.
 configure_docker_socket_access() {
     local docker_socket="${ADMIN_TOOLS_DOCKER_SOCKET:-/var/run/docker.sock}"
     local target_user="${runtime_user}"
@@ -268,6 +277,7 @@ configure_docker_socket_access() {
     fi
 }
 
+# Ensure web variable layout. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_web_var_layout() {
     local var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
     local run_dir="${var_dir}/run"
@@ -336,6 +346,7 @@ quota_marker_path="${ADMIN_TOOLS_QUOTA_ENFORCER_MARKER_PATH:-${admin_tools_dir}/
 quota_runtime_user="${runtime_user}"
 quota_runtime_group="${runtime_group}"
 
+# Normalize quota path. Inputs: shell arguments and environment. Output: command status and side effects.
 normalize_quota_path() {
     local target_path="$1"
     local target_dir
@@ -373,6 +384,7 @@ normalize_quota_path "${quota_marker_path}"
 
 configure_docker_socket_access
 
+# Repair branding logo permissions. Inputs: shell arguments and environment. Output: command status and side effects.
 repair_branding_logo_permissions() {
     local logo_path="${1:?BUG: repair_branding_logo_permissions requires a logo path}"
     local runtime_user="${2:-omero-web}"
@@ -398,6 +410,7 @@ repair_branding_logo_permissions() {
     return 0
 }
 
+# Perform branding logo is known generated fallback. Inputs: shell arguments and environment. Output: command status and side effects.
 branding_logo_is_known_generated_fallback() {
     local logo_path="${1:?BUG: branding_logo_is_known_generated_fallback requires a logo path}"
     local logo_sha=""
@@ -418,6 +431,7 @@ branding_logo_is_known_generated_fallback() {
     return 1
 }
 
+# Perform branding logo uses generated fallback. Inputs: shell arguments and environment. Output: command status and side effects.
 branding_logo_uses_generated_fallback() {
     local logo_path="${1:?BUG: branding_logo_uses_generated_fallback requires a logo path}"
     local marker_path="${2:?BUG: branding_logo_uses_generated_fallback requires a marker path}"
@@ -448,11 +462,13 @@ branding_logo_uses_generated_fallback() {
     return 1
 }
 
+# Perform branding logo fallback enabled. Inputs: shell arguments and environment. Output: command status and side effects.
 branding_logo_fallback_enabled() {
     local configured_login_logo="${CONFIG_omero_web_login__logo:-}"
     [[ "${configured_login_logo}" = "/static/branding/logo.png" ]]
 }
 
+# Install branding logo fallback. Inputs: shell arguments and environment. Output: command status and side effects.
 install_branding_logo_fallback() {
     local logo_path="${1:?BUG: install_branding_logo_fallback requires a logo path}"
     local marker_path="${2:?BUG: install_branding_logo_fallback requires a marker path}"
@@ -484,6 +500,7 @@ install_branding_logo_fallback() {
     return 0
 }
 
+# Sync static assets. Inputs: shell arguments and environment. Output: command status and side effects.
 sync_static_assets() {
     local var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
     local static_dir="${var_dir}/static"
@@ -569,7 +586,7 @@ sync_static_assets
 # ── Upgrade OMEZarrReader + JZarr in OMERO CLI JAR cache ──────────────────────
 # The OMERO CLI downloads OMERO.java JARs into the bind-mounted var/ directory
 # on first use.  The bundled OMEZarrReader and JZarr are outdated; replace them
-# with the versions staged by the Dockerfile at /opt/omero/web/zarr-jar-upgrade/.
+# Perform upgrade Zarr jars. Inputs: shell arguments and environment. Output: command status and side effects.
 upgrade_zarr_jars() {
     local staged_dir="/opt/omero/web/zarr-jar-upgrade"
     local var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"

@@ -115,6 +115,10 @@ class _InMemoryTTLCache:
         max_bytes: int,
         size_estimator: Callable[[object], int],
     ):
+        """Initialize the instance.
+
+        Inputs: `ttl_seconds`, `max_items`, `max_bytes`, `size_estimator`. Output: None.
+        """
         self._ttl_seconds = ttl_seconds
         self._max_items = max_items
         self._max_bytes = max_bytes
@@ -125,7 +129,11 @@ class _InMemoryTTLCache:
         self._lock = threading.Lock()
 
     def get_or_load(self, key: object, loader: Callable[[], object]) -> object:
-        """Return get or load."""
+        """Return or load.
+
+        Inputs: `key`, `loader`. Output: `object`. Raises on invalid or unavailable
+        state.
+        """
         now = time.monotonic()
         owner = False
 
@@ -176,7 +184,10 @@ class _InMemoryTTLCache:
         return future.result()
 
     def _prune_locked(self, now: float) -> None:
-        """Handle prune locked."""
+        """Prune locked.
+
+        Inputs: `now`. Output: None.
+        """
         expired = [
             key for key, record in self._values.items() if record.expires_at <= now
         ]
@@ -212,7 +223,10 @@ class _InMemoryTTLCache:
                 break
 
     def reconfigure(self, *, max_bytes: Optional[int] = None) -> None:
-        """Update cache sizing without discarding live entries."""
+        """Cache sizing without discarding live entries.
+
+        Inputs: `max_bytes`. Output: None.
+        """
         with self._lock:
             if max_bytes is not None and max_bytes > 0:
                 self._max_bytes = max_bytes
@@ -220,7 +234,10 @@ class _InMemoryTTLCache:
 
 
 def _estimate_log_entries_size(value: object) -> int:
-    """Estimate cache size for a sequence of LogEntry values."""
+    """Estimate cache size for a sequence of LogEntry values.
+
+    Inputs: `value`. Output: `int`.
+    """
     if not isinstance(value, tuple):
         return 0
     total = 0
@@ -238,7 +255,10 @@ def _estimate_log_entries_size(value: object) -> int:
 
 
 def _estimate_label_cache_size(value: object) -> int:
-    """Estimate cache size for filesystem-discovered label tuples."""
+    """Estimate cache size for filesystem-discovered label tuples.
+
+    Inputs: `value`. Output: `int`.
+    """
     if not isinstance(value, tuple) or len(value) != 2:
         return 0
     labels, label_key = value
@@ -275,8 +295,10 @@ class LogEntry:
 
 
 def _normalize_internal_service(service: str) -> str:
-    """
-    UI uses service keys like 'omeroserver_internal' and 'omeroweb_internal'.
+    """UI uses service keys like 'omeroserver_internal' and 'omeroweb_internal'.
+
+    Inputs: `service`. Output: `str`.
+
     Loki streams in this project are labeled with compose_service='omeroserver'/'omeroweb'
     and log_type='internal'.  Normalize keys so queries match what Loki actually stores.
     """
@@ -286,7 +308,10 @@ def _normalize_internal_service(service: str) -> str:
 
 
 def _validated_compose_service(service: str) -> str:
-    """Return a normalized compose service name for Loki labels."""
+    """Return a normalized compose service name for Loki labels.
+
+    Inputs: `service`. Output: `str`. Raises on invalid or unavailable state.
+    """
     normalized = _normalize_internal_service(str(service or "").strip())
     if not _COMPOSE_SERVICE_RE.fullmatch(normalized):
         raise ValueError("Invalid compose service name")
@@ -294,12 +319,18 @@ def _validated_compose_service(service: str) -> str:
 
 
 def validate_compose_service_name(service: str) -> str:
-    """Return a safe compose service name accepted by Loki query helpers."""
+    """Return a safe compose service name accepted by Loki query helpers.
+
+    Inputs: `service`. Output: `str`.
+    """
     return _validated_compose_service(service)
 
 
 def _validated_internal_log_filename(filename: str) -> str:
-    """Return a safe internal log basename for Loki filepath matching."""
+    """Return a safe internal log basename for Loki filepath matching.
+
+    Inputs: `filename`. Output: `str`. Raises on invalid or unavailable state.
+    """
     normalized = str(filename or "").strip()
     if (
         not _INTERNAL_LOG_FILENAME_RE.fullmatch(normalized)
@@ -311,12 +342,18 @@ def _validated_internal_log_filename(filename: str) -> str:
 
 
 def validate_internal_log_filename(filename: str) -> str:
-    """Return a safe internal log basename accepted by Loki query helpers."""
+    """Return a safe internal log basename accepted by Loki query helpers.
+
+    Inputs: `filename`. Output: `str`.
+    """
     return _validated_internal_log_filename(filename)
 
 
 def _split_internal_container(container: str) -> Optional[Tuple[str, str]]:
-    """Split a container string like 'omeroserver_internal/Blitz-0.log'."""
+    """Split a container string like 'omeroserver_internal/Blitz-0.log'.
+
+    Inputs: `container`. Output: `Optional[Tuple[str, str]]`.
+    """
     if "_internal/" not in container:
         return None
     service, filename = container.split("/", 1)
@@ -326,7 +363,11 @@ def _split_internal_container(container: str) -> Optional[Tuple[str, str]]:
 
 
 def _chunks(values: Sequence[str], chunk_size: int) -> List[Tuple[str, ...]]:
-    """Split a sequence into fixed-size tuples."""
+    """Split a sequence into fixed-size tuples.
+
+    Inputs: `values`, `chunk_size`. Output: `List[Tuple[str, ...]]`. Raises on invalid
+    or unavailable state.
+    """
     if chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
     return [
@@ -336,12 +377,18 @@ def _chunks(values: Sequence[str], chunk_size: int) -> List[Tuple[str, ...]]:
 
 
 def _escape_logql_string(value: str) -> str:
-    """Escape a string for safe inclusion inside a LogQL double-quoted literal."""
+    """Escape a string for safe inclusion inside a LogQL double-quoted literal.
+
+    Inputs: `value`. Output: `str`.
+    """
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _append_text_filter(query: str, text_query: Optional[str]) -> str:
-    """Append a case-insensitive literal text filter to a LogQL query."""
+    """Append a case-insensitive literal text filter to a LogQL query.
+
+    Inputs: `query`, `text_query`. Output: `str`.
+    """
     if not text_query:
         return query
     pattern = f"(?i){re.escape(text_query)}"
@@ -349,7 +396,9 @@ def _append_text_filter(query: str, text_query: Optional[str]) -> str:
 
 
 def build_loki_query(containers: List[str]) -> str:
-    """Build a Loki query that matches any of the selected container sources.
+    """A Loki query that matches any of the selected container sources.
+
+    Inputs: `containers`. Output: `str`. Raises on invalid or unavailable state.
 
     We intentionally query ONLY by ``compose_service`` which is guaranteed by our Alloy config:
 
@@ -370,13 +419,18 @@ def build_loki_query(containers: List[str]) -> str:
 
 
 def _format_timestamp(value_ns: str) -> str:
-    """Convert a Loki nanosecond timestamp to an ISO string."""
+    """Convert a Loki nanosecond timestamp to an ISO string.
+
+    Inputs: `value_ns`. Output: `str`.
+    """
     timestamp = dt.datetime.fromtimestamp(int(value_ns) / 1e9, tz=dt.timezone.utc)
     return timestamp.isoformat()
 
 
 def _parse_level_from_message(message: str) -> Optional[str]:
     """Try to extract a log level from the message text.
+
+    Inputs: `message`. Output: `Optional[str]`.
 
     OMERO log lines typically contain level keywords such as DEBUG, INFO, WARN,
     WARNING, ERROR, FATAL, CRITICAL, SEVERE, or TRACE either as standalone
@@ -416,7 +470,10 @@ _EXCEPTION_LINE_RE = re.compile(
 
 
 def _is_traceback_continuation(message: str) -> bool:
-    """Return True for traceback frame/continuation lines (not the start or exception line)."""
+    """Return True for traceback frame/continuation lines (not the start or exception line).
+
+    Inputs: `message`. Output: `bool`.
+    """
     if not message:
         return False
     lowered = message.strip().lower()
@@ -424,7 +481,10 @@ def _is_traceback_continuation(message: str) -> bool:
 
 
 def _is_django_template_lookup_noise(message: str) -> bool:
-    """Return True for Django template lookup diagnostics that are not runtime failures."""
+    """Return True for Django template lookup diagnostics that are not runtime failures.
+
+    Inputs: `message`. Output: `bool`.
+    """
     if not message:
         return False
     lowered = message.strip().lower()
@@ -436,7 +496,10 @@ def _is_django_template_lookup_noise(message: str) -> bool:
 
 
 def _is_redis_bloom_info(message: str) -> bool:
-    """Return True for RedisBloom informational lines containing bf-error-rate."""
+    """Return True for RedisBloom informational lines containing bf-error-rate.
+
+    Inputs: `message`. Output: `bool`.
+    """
     if not message:
         return False
     lowered = message.lower()
@@ -444,7 +507,10 @@ def _is_redis_bloom_info(message: str) -> bool:
 
 
 def _infer_level_from_message(message: str) -> str:
-    """Infer a severity when stream labels do not provide a trusted level."""
+    """Infer a severity when stream labels do not provide a trusted level.
+
+    Inputs: `message`. Output: `str`.
+    """
     if not message:
         return "info"
 
@@ -490,7 +556,10 @@ def _infer_level_from_message(message: str) -> str:
 
 
 def _normalize_level(stream_level: str, message: str) -> str:
-    """Normalize Loki stream level labels to canonical UI values."""
+    """Normalize level.
+
+    Inputs: `stream_level`, `message`. Output: `str`.
+    """
     aliases = {
         "trace": "debug",
         "debug": "debug",
@@ -529,7 +598,11 @@ def _execute_loki_query(
     max_entries: int,
     since_ns: Optional[int] = None,
 ) -> dict:
-    """Execute a single Loki query_range request and return the parsed JSON payload."""
+    """Execute loki query.
+
+    Inputs: `config`, `query`, `lookback_seconds`, `max_entries`, `since_ns`. Output:
+    `dict`. Raises on invalid or unavailable state.
+    """
     end_time = dt.datetime.now(tz=dt.timezone.utc)
     start_time = end_time - dt.timedelta(seconds=lookback_seconds)
     start_ns = int(start_time.timestamp() * 1e9)
@@ -581,7 +654,10 @@ def _execute_loki_query(
 
 
 def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
-    """Extract LogEntry objects from a Loki query_range response payload."""
+    """Extract LogEntry objects from a Loki query_range response payload.
+
+    Inputs: `payload`. Output: `List[LogEntry]`.
+    """
     entries: List[LogEntry] = []
     for stream in payload.get("data", {}).get("result", []):
         stream_labels = stream.get("stream", {})
@@ -646,7 +722,11 @@ def fetch_loki_logs(
     since_ns: Optional[int] = None,
     text_query: Optional[str] = None,
 ) -> List[LogEntry]:
-    """Fetch logs from Loki for the selected containers and time window."""
+    """Fetch loki logs.
+
+    Inputs: `config`, `containers`, `lookback_seconds`, `max_entries`, `internal_files`,
+    `since_ns`, `text_query`. Output: `List[LogEntry]`.
+    """
     _LOG_RESULT_CACHE.reconfigure(max_bytes=config.cache_max_bytes)
     cache_key = _build_logs_cache_key(
         config,
@@ -678,7 +758,10 @@ def fetch_loki_logs(
 
 
 def _build_docker_query(container: str) -> str:
-    """Build a Loki selector for a Docker container stream."""
+    """A Loki selector for a Docker container stream.
+
+    Inputs: `container`. Output: `str`.
+    """
     service = _validated_compose_service(container)
     escaped_service = _escape_logql_string(service)
     if service in {"omeroserver", "omeroweb"}:
@@ -693,7 +776,11 @@ def _prepare_query_jobs(
     *,
     internal_file_batch_size: int,
 ) -> List[_QueryJob]:
-    """Build the minimal set of Loki queries required for the request."""
+    """Prepare query jobs.
+
+    Inputs: `containers`, `internal_files`, `text_query`, `internal_file_batch_size`.
+    Output: `List[_QueryJob]`. Raises on invalid or unavailable state.
+    """
     if internal_file_batch_size <= 0:
         raise ValueError("internal_file_batch_size must be positive")
     docker_containers = [c for c in containers if not c.endswith("_internal")]
@@ -749,7 +836,10 @@ def _prepare_query_jobs(
 
 
 def _split_internal_query_job(job: _QueryJob) -> List[_QueryJob]:
-    """Split an internal batch job into two smaller jobs preserving filters."""
+    """Split an internal batch job into two smaller jobs preserving filters.
+
+    Inputs: `job`. Output: `List[_QueryJob]`.
+    """
     if job.source_type != "internal_batch" or len(job.selected_files) <= 1:
         return []
     midpoint = max(1, len(job.selected_files) // 2)
@@ -781,7 +871,12 @@ def _execute_internal_batch_with_split(
     *,
     try_current_batch: bool = True,
 ) -> Tuple[_QueryJob, List[LogEntry]]:
-    """Run an internal file query and recursively split timed-out batches."""
+    """Execute internal batch with split.
+
+    Inputs: `config`, `job`, `lookback_seconds`, `max_entries`, `since_ns`,
+    `try_current_batch`. Output: `Tuple[_QueryJob, List[LogEntry]]`. Raises on invalid
+    or unavailable state.
+    """
     if try_current_batch:
         try:
             resolved_job, entries = _execute_query_job(
@@ -828,7 +923,10 @@ def _execute_internal_batch_with_split(
 
 
 def _describe_query_job(job: _QueryJob) -> str:
-    """Return a sanitized human-readable source description for errors."""
+    """Return a sanitized human-readable source description for errors.
+
+    Inputs: `job`. Output: `str`.
+    """
     if job.source_type == "internal_batch" and job.selected_files:
         return (
             f"{job.source_name}/"
@@ -838,7 +936,10 @@ def _describe_query_job(job: _QueryJob) -> str:
 
 
 def _format_query_failures(failures: Sequence[_QueryFailure]) -> str:
-    """Build a bounded error message for failed Loki source queries."""
+    """Format query failures.
+
+    Inputs: `failures`. Output: `str`.
+    """
     shown = [
         f"{failure.job.source_type}:{_describe_query_job(failure.job)}: {failure.reason}"
         for failure in failures[:3]
@@ -855,7 +956,11 @@ def _execute_query_job(
     max_entries: int,
     since_ns: Optional[int],
 ) -> Tuple[_QueryJob, List[LogEntry]]:
-    """Run a single Loki query job and parse the payload."""
+    """Execute query job.
+
+    Inputs: `config`, `job`, `lookback_seconds`, `max_entries`, `since_ns`. Output:
+    `Tuple[_QueryJob, List[LogEntry]]`.
+    """
     payload = _execute_loki_query(
         config,
         job.query,
@@ -871,7 +976,10 @@ def _filter_internal_batch_entries(
     selected_files: Sequence[str],
     entries: List[LogEntry],
 ) -> List[LogEntry]:
-    """Keep only entries that belong to the requested internal files."""
+    """Keep only entries that belong to the requested internal files.
+
+    Inputs: `service`, `selected_files`, `entries`. Output: `List[LogEntry]`.
+    """
     selected = set(selected_files)
     filtered: List[LogEntry] = []
     for entry in entries:
@@ -893,7 +1001,12 @@ def _fetch_loki_logs_uncached(
     since_ns: Optional[int] = None,
     text_query: Optional[str] = None,
 ) -> List[LogEntry]:
-    """Fetch logs without using the process-local cache."""
+    """Fetch loki logs uncached.
+
+    Inputs: `config`, `containers`, `lookback_seconds`, `max_entries`, `internal_files`,
+    `since_ns`, `text_query`. Output: `List[LogEntry]`. Raises on invalid or unavailable
+    state.
+    """
     jobs = _prepare_query_jobs(
         containers,
         internal_files=internal_files,
@@ -1023,7 +1136,10 @@ def _fetch_loki_logs_uncached(
 
 
 def _strip_message_prefix(message: str) -> str:
-    """Remove duplicate timestamp/level prefixes from a log message."""
+    """Duplicate timestamp/level prefixes from a log message.
+
+    Inputs: `message`. Output: `str`.
+    """
     if not message:
         return message
 
@@ -1047,7 +1163,10 @@ def _strip_message_prefix(message: str) -> str:
 
 
 def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
-    """Extract the filename label for internal OMERO log streams."""
+    """Extract the filename label for internal OMERO log streams.
+
+    Inputs: `stream_labels`. Output: `Optional[str]`.
+    """
     for key in ("filename", "filepath", "__path__", "path", "file"):
         value = stream_labels.get(key)
         if value:
@@ -1058,7 +1177,10 @@ def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
 def _build_internal_file_query(
     service: str, filename: str, label_key: str = "filepath"
 ) -> str:
-    """Build a Loki query for a specific internal log file."""
+    """A Loki query for a specific internal log file.
+
+    Inputs: `service`, `filename`, `label_key`. Output: `str`.
+    """
     normalized = _validated_compose_service(service)
     filename = _validated_internal_log_filename(filename)
     # LogQL string parsing consumes backslashes before the regex engine sees
@@ -1073,7 +1195,11 @@ def _build_internal_file_query(
 def _build_internal_files_query(
     service: str, filenames: Sequence[str], label_key: str = "filepath"
 ) -> str:
-    """Build a Loki query that matches any of the selected internal log files."""
+    """A Loki query that matches any of the selected internal log files.
+
+    Inputs: `service`, `filenames`, `label_key`. Output: `str`. Raises on invalid or
+    unavailable state.
+    """
     if not filenames:
         raise ValueError("At least one filename is required for an internal log query.")
     normalized = _validated_compose_service(service)
@@ -1091,7 +1217,10 @@ def _build_internal_files_query(
 def _discover_internal_log_labels_from_filesystem(
     compose_service: str,
 ) -> Optional[Tuple[List[str], str]]:
-    """Discover internal log filenames from the locally mounted log directories."""
+    """Discover internal log filenames from the locally mounted log directories.
+
+    Inputs: `compose_service`. Output: `Optional[Tuple[List[str], str]]`.
+    """
     normalized = _normalize_internal_service(compose_service)
     patterns = _INTERNAL_LOG_GLOB_PATTERNS.get(normalized)
     if not patterns:
@@ -1114,7 +1243,11 @@ def _build_logs_cache_key(
     since_ns: Optional[int] = None,
     text_query: Optional[str] = None,
 ) -> str:
-    """Build a stable cache key for log result caching."""
+    """A stable cache key for log result caching.
+
+    Inputs: `config`, `containers`, `lookback_seconds`, `max_entries`, `internal_files`,
+    `since_ns`, `text_query`. Output: `str`.
+    """
     normalized_internal = tuple(
         (service, tuple(sorted(files)))
         for service, files in sorted((internal_files or {}).items())
@@ -1139,7 +1272,10 @@ def _build_logs_cache_key(
 
 
 def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogEntry]:
-    """Limit entries per container/file to the most recent `limit` items."""
+    """Limit entries per container/file to the most recent `limit` items.
+
+    Inputs: `entries`, `limit`. Output: `List[LogEntry]`.
+    """
     if limit <= 0:
         return []
     buckets: Dict[str, List[LogEntry]] = {}
@@ -1154,7 +1290,10 @@ def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogE
 
 
 def _apply_global_cap(entries: List[LogEntry], limit: int) -> List[LogEntry]:
-    """Apply a global cap on total entries, keeping the most recent ones."""
+    """Apply a global cap on total entries, keeping the most recent ones.
+
+    Inputs: `entries`, `limit`. Output: `List[LogEntry]`.
+    """
     if limit <= 0:
         return []
     if len(entries) <= limit:
@@ -1165,7 +1304,10 @@ def _apply_global_cap(entries: List[LogEntry], limit: int) -> List[LogEntry]:
 
 
 def _entry_sort_key(entry: LogEntry) -> Tuple[int, str]:
-    """Sort key for log entries based on timestamp."""
+    """Sort key for log entries based on timestamp.
+
+    Inputs: `entry`. Output: `Tuple[int, str]`.
+    """
     try:
         timestamp = dt.datetime.fromisoformat(entry.timestamp)
         return int(timestamp.timestamp()), entry.timestamp
@@ -1178,6 +1320,8 @@ def fetch_internal_log_labels(
     compose_service: str,
 ) -> Tuple[List[str], str]:
     """Query Loki for distinct filenames collected under a compose_service label.
+
+    Inputs: `_config`, `compose_service`. Output: `Tuple[List[str], str]`.
 
     Returns a sorted list of base filenames (e.g. ``["Blitz-0.log", "master.err"]``).
     """
@@ -1196,7 +1340,10 @@ def fetch_internal_log_labels(
 def _fetch_internal_log_labels_uncached(
     compose_service: str,
 ) -> Tuple[Tuple[str, ...], str]:
-    """Discover internal log filenames from the mounted filesystem."""
+    """Discover internal log filenames from the mounted filesystem.
+
+    Inputs: `compose_service`. Output: `Tuple[Tuple[str, ...], str]`.
+    """
     discovered = _discover_internal_log_labels_from_filesystem(compose_service)
     if discovered is None:
         return (), "filepath"
@@ -1218,7 +1365,10 @@ def _fetch_internal_log_labels_uncached(
 
 
 def serialize_entries(entries: List[LogEntry]) -> List[Dict[str, str]]:
-    """Serialize LogEntry objects for JSON responses."""
+    """Serialize LogEntry objects for JSON responses.
+
+    Inputs: `entries`. Output: `List[Dict[str, str]]`.
+    """
     return [
         {
             "timestamp": entry.timestamp,

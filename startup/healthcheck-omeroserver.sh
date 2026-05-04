@@ -21,6 +21,7 @@ if (( OMERO_CLI_PORT < 1 || OMERO_CLI_PORT > 65535 )); then
     exit 1
 fi
 
+# Resolve OMERO bin. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_omero_bin() {
     local candidate=""
     local server_root=""
@@ -45,6 +46,7 @@ resolve_omero_bin() {
     return 127
 }
 
+# Resolve cli home. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_cli_home() {
     local cli_home=""
 
@@ -57,6 +59,7 @@ resolve_cli_home() {
     printf "%s\n" "${cli_home}"
 }
 
+# Normalize directory path. Inputs: shell arguments and environment. Output: command status and side effects.
 normalize_dir_path() {
     local path="${1:?normalize_dir_path requires a path}"
 
@@ -70,6 +73,7 @@ omero_bin="$(resolve_omero_bin)"
 cli_home="$(resolve_cli_home)"
 server_root="$(dirname "${OMERODIR}")"
 
+# Execute OMERO cli. Inputs: shell arguments and environment. Output: command status and side effects.
 run_omero_cli() {
     local -a env_args=(
         HOME="${cli_home}"

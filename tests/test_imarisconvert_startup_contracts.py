@@ -14,20 +14,29 @@ SHA256SUM_BIN = shutil.which("sha256sum") or "/usr/bin/sha256sum"
 
 
 def _write_executable(path: Path, content: str = "#!/bin/sh\nexit 0\n") -> None:
-    """Handle write executable."""
+    """Write executable.
+
+    Inputs: `path`, `content`. Output: None.
+    """
     path.write_text(content, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
 def _write_large_jar(path: Path) -> None:
-    """Handle write large jar."""
+    """Write large jar.
+
+    Inputs: `path`. Output: None.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as handle:
         handle.truncate(10_000_000)
 
 
 def _write_sha256_manifest(jar_path: Path) -> None:
-    """Handle write sha256 manifest."""
+    """Write sha256 manifest.
+
+    Inputs: `jar_path`. Output: None.
+    """
     digest = subprocess.check_output(
         [SHA256SUM_BIN, str(jar_path)],
         text=True,
@@ -39,7 +48,10 @@ def _write_sha256_manifest(jar_path: Path) -> None:
 
 
 def _prepare_valid_install(tmp_path: Path) -> tuple[Path, Path]:
-    """Handle prepare valid install."""
+    """Prepare valid install.
+
+    Inputs: `tmp_path`. Output: `tuple[Path, Path]`.
+    """
     install_dir = tmp_path / "imarisconvert"
     wrapper_path = tmp_path / "bin" / "imarisconvert"
     wrapper_path.parent.mkdir(parents=True)
@@ -58,7 +70,10 @@ def _prepare_valid_install(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _script_env(install_dir: Path, wrapper_path: Path) -> dict[str, str]:
-    """Handle script env."""
+    """Script env.
+
+    Inputs: `install_dir`, `wrapper_path`. Output: `dict[str, str]`.
+    """
     return {
         **os.environ,
         "BIOFORMATS_VERSION": "8.5.0",
@@ -68,7 +83,10 @@ def _script_env(install_dir: Path, wrapper_path: Path) -> dict[str, str]:
 
 
 def test_imarisconvert_startup_default_verifies_existing_install(tmp_path):
-    """Verify test imarisconvert startup default verifies e behavior."""
+    """Verify imarisconvert startup default verifies existing install.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     install_dir, wrapper_path = _prepare_valid_install(tmp_path)
 
     result = subprocess.run(
@@ -84,7 +102,10 @@ def test_imarisconvert_startup_default_verifies_existing_install(tmp_path):
 
 
 def test_imarisconvert_startup_ignores_entrypoint_arguments_in_verify_mode(tmp_path):
-    """Verify test imarisconvert startup ignores entrypoint behavior."""
+    """Verify imarisconvert startup ignores entrypoint arguments in verify mode.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     install_dir, wrapper_path = _prepare_valid_install(tmp_path)
 
     result = subprocess.run(
@@ -100,7 +121,10 @@ def test_imarisconvert_startup_ignores_entrypoint_arguments_in_verify_mode(tmp_p
 
 
 def test_imarisconvert_startup_fails_fast_when_runtime_artifacts_are_missing(tmp_path):
-    """Verify test imarisconvert startup fails fast when ru behavior."""
+    """Verify imarisconvert startup fails fast when runtime artifacts are missing.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     install_dir, wrapper_path = _prepare_valid_install(tmp_path)
     (install_dir / "artifacts" / "bioformats" / "bioformats_package.jar").unlink()
 
@@ -119,7 +143,10 @@ def test_imarisconvert_startup_fails_fast_when_runtime_artifacts_are_missing(tmp
 def test_imarisconvert_build_time_mode_repairs_wrapper_and_cache_without_network(
     tmp_path,
 ):
-    """Verify test imarisconvert build time mode repairs wr behavior."""
+    """Verify imarisconvert build time mode repairs wrapper and cache without network.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     install_dir, wrapper_path = _prepare_valid_install(tmp_path)
     wrapper_path.unlink()
     cache_dir = install_dir / "artifacts" / "bioformats"

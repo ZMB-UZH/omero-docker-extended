@@ -37,19 +37,28 @@ from .import_management.workflow_service import (
 
 # Wrapper functions that inject jobs_root parameter
 def _job_path(job_id: str):
-    """Get job path without needing to pass jobs_root."""
+    """Job path without needing to pass jobs_root.
+
+    Inputs: `job_id`. Output: `_get_job_path_internal` result.
+    """
     return _get_job_path_internal(job_id, get_jobs_root())
 
 
 def _load_job(job_id: str):
-    """Load job without needing to pass jobs_root."""
+    """Load job.
+
+    Inputs: `job_id`. Output: `_load_job_internal` result.
+    """
     return _load_job_internal(job_id, get_jobs_root())
 
 
 def _save_job(
     job_dict, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS
 ):
-    """Save job without needing to pass jobs_root."""
+    """Save job without needing to pass jobs_root.
+
+    Inputs: `job_dict`, `retries`, `timeout`. Output: `_save_job_internal` result.
+    """
     return _save_job_internal(job_dict, get_jobs_root(), retries, timeout)
 
 
@@ -59,7 +68,10 @@ def _robust_update_job(
     retries: int = JOB_LOCK_RETRIES,
     timeout: float = JOB_LOCK_TIMEOUT_SECONDS,
 ):
-    """Update job without needing to pass jobs_root."""
+    """Job without needing to pass jobs_root.
+
+    Inputs: `job_id`, `update_fn`, `retries`, `timeout`. Output: call result.
+    """
     return _robust_update_job_internal(
         job_id, update_fn, get_jobs_root(), retries, timeout
     )

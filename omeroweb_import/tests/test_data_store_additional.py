@@ -13,10 +13,17 @@ class _FakeSqlTemplate:
     """Test double for fake SQL template."""
 
     def __init__(self, query):
+        """Initialize the instance.
+
+        Inputs: `query`. Output: None.
+        """
         self.query = str(query)
 
     def format(self, *args, **kwargs):
-        """Build format."""
+        """Return formatted representation.
+
+        Inputs: `*args`, `**kwargs`. Output: `self.query`.
+        """
         return self.query
 
 
@@ -25,12 +32,18 @@ class _FakeSqlModule:
 
     @staticmethod
     def SQL(query):
-        """Handle SQL."""
+        """SQL.
+
+        Inputs: `query`. Output: `_FakeSqlTemplate` result.
+        """
         return _FakeSqlTemplate(query)
 
     @staticmethod
     def Identifier(name):
-        """Handle identifier."""
+        """Identifier.
+
+        Inputs: `name`. Output: `name`.
+        """
         return name
 
 
@@ -39,19 +52,34 @@ class _FakeExtras:
 
     @staticmethod
     def Json(payload):
-        """Handle JSON."""
+        """JSON.
+
+        Inputs: `payload`. Output: dict.
+        """
         return {"json": payload}
 
 
 def test_data_store_loaders_raise_repo_errors_when_psycopg2_is_missing(monkeypatch):
-    """Verify test data store loaders raise repo errors whe behavior."""
+    """Verify data store loaders raise repo errors when psycopg2 is missing.
+
+    Inputs: `monkeypatch`. Output: `original_import` result. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     original_import = builtins.__import__
     monkeypatch.setattr(import_data_store, "_psycopg2_mod", None)
     monkeypatch.setattr(import_data_store, "_psycopg2_extras", None)
     monkeypatch.setattr(import_data_store, "_psycopg2_sql", None)
 
     def _missing_import(name, *args, **kwargs):
-        """Handle missing import."""
+        """Missing import.
+
+        Inputs: `name`, `*args`, `**kwargs`. Output: `original_import` result. Raises on
+        invalid or unavailable state.
+
+        invalid or unavailable state.
+        """
         if name == "psycopg2":
             raise ImportError("psycopg2 unavailable")
         return original_import(name, *args, **kwargs)
@@ -72,7 +100,13 @@ def test_data_store_loaders_raise_repo_errors_when_psycopg2_is_missing(monkeypat
 
 
 def test_data_store_connect_closes_connections_and_wraps_save_failures(monkeypatch):
-    """Verify test data store connect closes connections an behavior."""
+    """Verify data store connect closes connections and wraps save failures.
+
+    Inputs: `monkeypatch`. Output: yielded values. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     monkeypatch.setenv(import_data_store.ENV_USER, "import-user")
     monkeypatch.setenv(import_data_store.ENV_AUTH, "import-pass")
     monkeypatch.setenv(import_data_store.ENV_HOST, "database-plugin")
@@ -84,7 +118,10 @@ def test_data_store_connect_closes_connections_and_wraps_save_failures(monkeypat
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("close failed")
 
     closing_connection = _ClosingConnection()
@@ -105,13 +142,25 @@ def test_data_store_connect_closes_connections_and_wraps_save_failures(monkeypat
 
         @staticmethod
         def execute(query, params=None):
-            """Run execute."""
+            """Execute the query or command.
+
+            Inputs: `query`, `params`. Output: None. Raises on invalid or unavailable
+            state.
+            """
             raise RuntimeError("write exploded")
 
         def __enter__(self):
+            """Enter the context manager.
+
+            Inputs: none. Output: `self`.
+            """
             return self
 
         def __exit__(self, exc_type, exc, tb):
+            """Exit the context manager.
+
+            Inputs: `exc_type`, `exc`, `tb`. Output: bool.
+            """
             return False
 
     class _ExplodingConnection:
@@ -119,22 +168,34 @@ def test_data_store_connect_closes_connections_and_wraps_save_failures(monkeypat
 
         @staticmethod
         def cursor():
-            """Handle cursor."""
+            """Return a database cursor.
+
+            Inputs: none. Output: `_ExplodingCursor` result.
+            """
             return _ExplodingCursor()
 
         @staticmethod
         def commit():
-            """Handle commit."""
+            """Commit the transaction.
+
+            Inputs: none. Output: None.
+            """
             return None
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None.
+            """
             return None
 
     @contextmanager
     def _failing_connect():
-        """Handle failing connect."""
+        """Failing connect.
+
+        Inputs: none. Output: yielded values.
+        """
         yield _ExplodingConnection()
 
     monkeypatch.setattr(import_data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)

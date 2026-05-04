@@ -19,12 +19,18 @@ from omeroweb_admin_tools.views import index_view, utils as view_utils
 
 
 def _json_payload(response):
-    """Handle JSON payload."""
+    """JSON payload.
+
+    Inputs: `response`. Output: `json.loads` result.
+    """
     return json.loads(response.content.decode("utf-8"))
 
 
 def _unwrap_view(func):
-    """Handle unwrap view."""
+    """Unwrap view.
+
+    Inputs: `func`. Output: `func`.
+    """
     while hasattr(func, "__wrapped__"):
         func = func.__wrapped__
     return func
@@ -34,10 +40,17 @@ class _Value:
     """Represent value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self._raw_value = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self._raw_value`.
+        """
         return self._raw_value
 
 
@@ -45,15 +58,25 @@ class _User:
     """Represent user."""
 
     def __init__(self, user_id, username):
+        """Initialize the instance.
+
+        Inputs: `user_id`, `username`. Output: None.
+        """
         self.id = _Value(user_id)
         self.omeName = _Value(username)
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `self.id`.
+        """
         return self.id
 
     def getOmeName(self):
-        """Return get ome name."""
+        """Return the fake OMERO name.
+
+        Inputs: none. Output: `self.omeName`.
+        """
         return self.omeName
 
 
@@ -61,27 +84,43 @@ class _Group:
     """Represent group."""
 
     def __init__(self, group_id, name):
+        """Initialize the instance.
+
+        Inputs: `group_id`, `name`. Output: None.
+        """
         self.id = _Value(group_id)
         self.name = _Value(name)
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `self.id`.
+        """
         return self.id
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self.name`.
+        """
         return self.name
 
     @staticmethod
     def getDetails():
-        """Return get details."""
+        """Return Details.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(getPermissions=lambda: "rw----")
 
 
 def test_admin_config_and_root_user_decorator_cover_remaining_validation_edges(
     monkeypatch,
 ):
-    """Verify test admin config and root user decorator cov behavior."""
+    """Verify admin config and root user decorator cover remaining validation edges.
+
+    Inputs: `monkeypatch`. Output: `HttpResponse` result.
+    """
     monkeypatch.setattr(
         admin_config,
         "require_env",
@@ -125,7 +164,10 @@ def test_admin_config_and_root_user_decorator_cover_remaining_validation_edges(
 
     @view_utils.require_root_user
     def _sentinel(_request, *args, **kwargs):
-        """Handle sentinel."""
+        """Sentinel.
+
+        Inputs: `_request`, `*args`, `**kwargs`. Output: `HttpResponse` result.
+        """
         return HttpResponse("ok")
 
     response = _sentinel(RequestFactory().get("/admin/"), conn=None)
@@ -139,7 +181,13 @@ def test_storage_quota_and_cache_helpers_cover_cleanup_and_type_guard_edges(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ):
-    """Verify test storage quota and cache helpers cover cl behavior."""
+    """Verify storage quota and cache helpers cover cleanup and type guard edges.
+
+    Inputs: `monkeypatch`, `tmp_path`, `caplog`. Output: computed value. Raises on
+    invalid or unavailable state.
+
+    invalid or unavailable state.
+    """
     monkeypatch.setenv(storage_quotas.MIN_GROUP_QUOTA_ENV, "0.10")
     monkeypatch.setenv(storage_quotas.DEFAULT_GROUP_QUOTA_ENV, "0.25")
     monkeypatch.setenv(storage_quotas.AUTO_GROUP_QUOTA_ENV, "false")
@@ -149,7 +197,13 @@ def test_storage_quota_and_cache_helpers_cover_cleanup_and_type_guard_edges(
     real_unlink = Path.unlink
 
     def _patched_unlink(self, missing_ok=False):
-        """Handle patched unlink."""
+        """Patched unlink.
+
+        Inputs: `missing_ok`. Output: `real_unlink` result. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         if self == legacy_tmp:
             raise OSError("legacy cleanup blocked")
         return real_unlink(self, missing_ok=missing_ok)
@@ -196,7 +250,10 @@ def test_storage_quota_and_cache_helpers_cover_cleanup_and_type_guard_edges(
     )
 
     def _loader():
-        """Handle loader."""
+        """Loader.
+
+        Inputs: none. Output: 'new'.
+        """
         cache._values["key"] = log_query._CacheRecord(
             value="old",
             expires_at=999.0,
@@ -213,7 +270,13 @@ def test_storage_quota_and_cache_helpers_cover_cleanup_and_type_guard_edges(
 def test_admin_index_helpers_and_views_cover_remaining_proxy_compose_and_quota_edges(
     monkeypatch,
 ):
-    """Verify test admin index helpers and views cover rema behavior."""
+    """Verify admin index helpers and views cover remaining proxy compose and quota edges.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     headers = HTTPMessage()
     headers.add_header("Content-Type", "text/html; charset=utf-8")
     headers.add_header("Cache-Control", "no-store")
@@ -242,23 +305,35 @@ def test_admin_index_helpers_and_views_cover_remaining_proxy_compose_and_quota_e
 
         @staticmethod
         def lookupExperimenters():
-            """Handle lookup experimenters."""
+            """Lookup experimenters.
+
+            Inputs: none. Output: list.
+            """
             return [user]
 
         @staticmethod
         def lookupGroups():
-            """Handle lookup groups."""
+            """Lookup groups.
+
+            Inputs: none. Output: list.
+            """
             return [blank_group, valid_group]
 
         @staticmethod
         def containedGroups(*args):
-            """Handle contained groups."""
+            """Contained groups.
+
+            Inputs: `*args`. Output: computed value.
+            """
             identifier = args[0] if args else None
             return [blank_group] if identifier is not None else [valid_group]
 
         @staticmethod
         def containedExperimenters(*args):
-            """Handle contained experimenters."""
+            """Contained experimenters.
+
+            Inputs: `*args`. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("enumeration failed")
 
     principals = index_view._list_all_users_and_groups(
@@ -421,7 +496,10 @@ def test_admin_index_helpers_and_views_cover_remaining_proxy_compose_and_quota_e
 def test_system_diagnostics_import_success_path_caches_psycopg2_module(
     monkeypatch,
 ):
-    """Verify test system diagnostics import success path c behavior."""
+    """Verify system diagnostics import success path caches psycopg2 module.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     from omeroweb_admin_tools.services import system_diagnostics
 
     fake_psycopg2 = SimpleNamespace(connect=lambda *args, **kwargs: None)

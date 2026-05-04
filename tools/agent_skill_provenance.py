@@ -36,18 +36,34 @@ class AgentSkillUpstreamSources:
 
     @property
     def snapshot_dir_name(self) -> str:
+        """Snapshot dir name.
+
+        Inputs: none. Output: `str`.
+        """
         return Path(self.vendor_path.rstrip("/")).name
 
     @property
     def repo_name(self) -> str:
+        """Repo name.
+
+        Inputs: none. Output: `str`.
+        """
         return self.repo_slug.rsplit("/", 1)[-1]
 
     @property
     def vendor_root_path(self) -> Path:
+        """Vendor root path.
+
+        Inputs: none. Output: `Path`.
+        """
         return Path(self.vendor_path.rstrip("/"))
 
     @property
     def upstream_relative_paths(self) -> dict[str, str]:
+        """Upstream relative paths.
+
+        Inputs: none. Output: `dict[str, str]`.
+        """
         relative_paths: dict[str, str] = {}
         for skill_name, vendor_path in self.skill_vendor_paths.items():
             relative_paths[skill_name] = str(
@@ -57,6 +73,10 @@ class AgentSkillUpstreamSources:
 
     @property
     def upstream_skill_root(self) -> str:
+        """Upstream skill root.
+
+        Inputs: none. Output: `str`. Raises on invalid or unavailable state.
+        """
         relative_paths = tuple(self.upstream_relative_paths.values())
         if not relative_paths:
             raise RuntimeError("No upstream skill paths were loaded.")
@@ -64,22 +84,42 @@ class AgentSkillUpstreamSources:
 
     @property
     def badge_label(self) -> str:
+        """Badge label.
+
+        Inputs: none. Output: `str`.
+        """
         return self.repo_name
 
     @property
     def badge_title(self) -> str:
+        """Badge title.
+
+        Inputs: none. Output: `str`.
+        """
         return self.repo_name
 
     @property
     def repo_url(self) -> str:
+        """Repo URL.
+
+        Inputs: none. Output: `str`.
+        """
         return f"https://github.com/{self.repo_slug}"
 
     @property
     def skills_tree_url(self) -> str:
+        """Skills tree URL.
+
+        Inputs: none. Output: `str`.
+        """
         return f"{self.repo_url}/tree/{self.tag}/{self.upstream_skill_root}"
 
     @property
     def badge_image_url(self) -> str:
+        """Badge image URL.
+
+        Inputs: none. Output: `str`.
+        """
         query = urlencode(
             {
                 "label": "",
@@ -92,7 +132,10 @@ class AgentSkillUpstreamSources:
         return f"https://img.shields.io/static/v1?{query}"
 
     def raw_skill_url(self, skill_name: str) -> str:
-        """Handle raw skill URL."""
+        """Raw skill URL.
+
+        Inputs: `skill_name`. Output: `str`.
+        """
         relative_path = self.upstream_relative_paths[skill_name]
         return (
             "https://raw.githubusercontent.com/"
@@ -101,7 +144,13 @@ class AgentSkillUpstreamSources:
 
 
 def _extract_required_match(pattern: re.Pattern[str], text: str, label: str) -> str:
-    """Handle extract required match."""
+    """Extract required match.
+
+    Inputs: `pattern`, `text`, `label`. Output: `str`. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     match = pattern.search(text)
     if match is None:
         raise RuntimeError(
@@ -116,7 +165,11 @@ def _extract_required_match(pattern: re.Pattern[str], text: str, label: str) -> 
 
 
 def load_upstream_sources(repo_root: Path) -> AgentSkillUpstreamSources:
-    """Parse the pinned upstream skill provenance document."""
+    """Load upstream sources.
+
+    Inputs: `repo_root`. Output: `AgentSkillUpstreamSources`. Raises on invalid or
+    unavailable state.
+    """
     doc_text = (repo_root / UPSTREAM_SOURCES_DOC_PATH).read_text(encoding="utf-8")
     repo_slug = _extract_required_match(
         UPSTREAM_REPOSITORY_RE, doc_text, "Upstream repository"
@@ -143,7 +196,10 @@ def load_upstream_sources(repo_root: Path) -> AgentSkillUpstreamSources:
 
 
 def resolve_required_executable(name: str) -> str:
-    """Resolve an executable to an absolute path."""
+    """Resolve required executable.
+
+    Inputs: `name`. Output: `str`. Raises on invalid or unavailable state.
+    """
     resolved = shutil.which(name)
     if not resolved:
         raise RuntimeError(f"Required executable `{name}` is not available in PATH.")
@@ -151,7 +207,11 @@ def resolve_required_executable(name: str) -> str:
 
 
 def resolve_remote_tag_commit(repo_slug: str, tag: str, *, cwd: Path) -> str:
-    """Resolve the exact commit currently referenced by a remote Git tag."""
+    """Resolve remote tag commit.
+
+    Inputs: `repo_slug`, `tag`, `cwd`. Output: `str`. Raises on invalid or unavailable
+    state.
+    """
     completed = subprocess.run(
         [
             resolve_required_executable("git"),
@@ -177,7 +237,10 @@ def resolve_remote_tag_commit(repo_slug: str, tag: str, *, cwd: Path) -> str:
 
 
 def fetch_text(url: str, *, timeout: int = 20) -> str:
-    """Fetch UTF-8 text from a URL."""
+    """Fetch text.
+
+    Inputs: `url`, `timeout`. Output: `str`. Raises on invalid or unavailable state.
+    """
     parsed = urlsplit(url)
     if parsed.scheme not in ALLOWED_FETCH_SCHEMES:
         raise ValueError(f"Unsupported fetch scheme: {parsed.scheme!r}")

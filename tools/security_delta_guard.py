@@ -37,7 +37,10 @@ class EvaluationResult:
 
 
 def parse_args() -> argparse.Namespace:
-    """Validate parse args."""
+    """Parse args.
+
+    Inputs: none. Output: `argparse.Namespace`.
+    """
     parser = argparse.ArgumentParser(
         description="Block workflow runs that add new GitHub code scanning alerts."
     )
@@ -87,7 +90,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def parse_iso8601(timestamp: str | None) -> datetime | None:
-    """Validate parse iso8601."""
+    """Parse iso8601.
+
+    Inputs: `timestamp`. Output: `datetime | None`.
+    """
     if not timestamp:
         return None
     normalized = timestamp.strip()
@@ -99,7 +105,10 @@ def parse_iso8601(timestamp: str | None) -> datetime | None:
 
 
 def _first_non_empty(*values: Any) -> str:
-    """Handle first non empty."""
+    """First non empty.
+
+    Inputs: `*values`. Output: `str`.
+    """
     for value in values:
         normalized = str(value or "").strip()
         if normalized:
@@ -108,7 +117,10 @@ def _first_non_empty(*values: Any) -> str:
 
 
 def validate_repository_component(value: str) -> bool:
-    """Return True when a repository path component is safe for API paths."""
+    """Return True when a repository path component is safe for API paths.
+
+    Inputs: `value`. Output: `bool`.
+    """
     return (
         bool(value)
         and value not in {".", ".."}
@@ -117,7 +129,10 @@ def validate_repository_component(value: str) -> bool:
 
 
 def validate_github_repository(repository: str) -> str:
-    """Return a validated GitHub OWNER/REPO identifier."""
+    """Return a validated GitHub OWNER/REPO identifier.
+
+    Inputs: `repository`. Output: `str`. Raises on invalid or unavailable state.
+    """
     parts = repository.split("/")
     if (
         len(parts) != 2
@@ -131,7 +146,10 @@ def validate_github_repository(repository: str) -> str:
 
 
 def payload_repository_full_name(event_payload: dict[str, Any]) -> str:
-    """Handle payload repository full name."""
+    """Payload repository full name.
+
+    Inputs: `event_payload`. Output: `str`.
+    """
     workflow_run = event_payload.get("workflow_run") or {}
     for candidate in (
         workflow_run.get("head_repository"),
@@ -146,7 +164,10 @@ def payload_repository_full_name(event_payload: dict[str, Any]) -> str:
 
 
 def payload_default_branch(event_payload: dict[str, Any]) -> str:
-    """Handle payload default branch."""
+    """Payload default branch.
+
+    Inputs: `event_payload`. Output: `str`.
+    """
     workflow_run = event_payload.get("workflow_run") or {}
     for candidate in (
         workflow_run.get("repository"),
@@ -161,7 +182,10 @@ def payload_default_branch(event_payload: dict[str, Any]) -> str:
 
 
 def payload_pull_request_number(event_payload: dict[str, Any]) -> int | None:
-    """Handle payload pull request number."""
+    """Payload pull request number.
+
+    Inputs: `event_payload`. Output: `int | None`.
+    """
     pull_request = event_payload.get("pull_request") or {}
     if isinstance(pull_request, dict) and pull_request.get("number") is not None:
         return int(pull_request["number"])
@@ -169,12 +193,18 @@ def payload_pull_request_number(event_payload: dict[str, Any]) -> int | None:
 
 
 def payload_ref(event_payload: dict[str, Any]) -> str:
-    """Handle payload ref."""
+    """Payload ref.
+
+    Inputs: `event_payload`. Output: `str`.
+    """
     return _first_non_empty(event_payload.get("ref"))
 
 
 def normalize_severity(alert: dict[str, Any]) -> str:
-    """Validate normalize severity."""
+    """Normalize severity.
+
+    Inputs: `alert`. Output: `str`.
+    """
     rule = alert.get("rule") or {}
     for candidate in (
         alert.get("severity"),
@@ -187,7 +217,10 @@ def normalize_severity(alert: dict[str, Any]) -> str:
 
 
 def summarize_alerts(alerts: list[dict[str, Any]]) -> str:
-    """Handle summarize alerts."""
+    """Summarize alerts.
+
+    Inputs: `alerts`. Output: `str`.
+    """
     counts = Counter(normalize_severity(alert) for alert in alerts)
     if not counts:
         return "no open alerts"
@@ -203,26 +236,38 @@ def summarize_alerts(alerts: list[dict[str, Any]]) -> str:
 
 
 def alert_path(alert: dict[str, Any]) -> str:
-    """Handle alert path."""
+    """Alert path.
+
+    Inputs: `alert`. Output: `str`.
+    """
     instance = alert.get("most_recent_instance") or {}
     location = instance.get("location") or {}
     return str(location.get("path") or "").strip() or "<unknown>"
 
 
 def alert_rule(alert: dict[str, Any]) -> str:
-    """Handle alert rule."""
+    """Alert rule.
+
+    Inputs: `alert`. Output: `str`.
+    """
     rule = alert.get("rule") or {}
     return str(rule.get("id") or rule.get("name") or "<unknown>").strip()
 
 
 def alert_tool(alert: dict[str, Any]) -> str:
-    """Handle alert tool."""
+    """Alert tool.
+
+    Inputs: `alert`. Output: `str`.
+    """
     tool = alert.get("tool") or {}
     return str(tool.get("name") or "<unknown>").strip()
 
 
 def format_alert(alert: dict[str, Any]) -> str:
-    """Build format alert."""
+    """Format alert.
+
+    Inputs: `alert`. Output: `str`.
+    """
     return (
         f"#{alert.get('number', '?')} "
         f"[{normalize_severity(alert)}] "
@@ -232,7 +277,10 @@ def format_alert(alert: dict[str, Any]) -> str:
 
 
 def render_failure_message(prefix: str, alerts: list[dict[str, Any]]) -> str:
-    """Build render failure message."""
+    """Render failure message.
+
+    Inputs: `prefix`, `alerts`. Output: `str`.
+    """
     details = "\n".join(f"- {format_alert(alert)}" for alert in alerts[:10])
     truncated = ""
     if len(alerts) > 10:
@@ -251,7 +299,11 @@ def wait_for_stable_snapshot(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> list[dict[str, Any]]:
-    """Handle wait for stable snapshot."""
+    """Wait for stable snapshot.
+
+    Inputs: `fetch_snapshot`, `settle_timeout_seconds`, `poll_interval_seconds`,
+    `monotonic`, `sleep`. Output: `list[dict[str, Any]]`.
+    """
     deadline = monotonic() + max(settle_timeout_seconds, 0)
     previous_numbers: tuple[int, ...] | None = None
     while True:
@@ -268,7 +320,10 @@ def wait_for_stable_snapshot(
 def select_push_delta_alerts(
     alerts: list[dict[str, Any]], workflow_started_at: datetime | None
 ) -> list[dict[str, Any]]:
-    """Handle select push delta alerts."""
+    """Select push delta alerts.
+
+    Inputs: `alerts`, `workflow_started_at`. Output: `list[dict[str, Any]]`.
+    """
     if workflow_started_at is None:
         return []
     delta_alerts = []
@@ -283,7 +338,10 @@ def select_pull_request_delta_alerts(
     pull_request_alerts: list[dict[str, Any]],
     base_branch_alerts: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Keep only alerts that are absent from the base branch snapshot."""
+    """Keep only alerts that are absent from the base branch snapshot.
+
+    Inputs: `pull_request_alerts`, `base_branch_alerts`. Output: `list[dict[str, Any]]`.
+    """
     base_numbers = {int(alert.get("number", 0)) for alert in base_branch_alerts}
     return [
         alert
@@ -304,7 +362,12 @@ def evaluate_default_branch_alerts(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> EvaluationResult:
-    """Handle evaluate default branch alerts."""
+    """Evaluate default branch alerts.
+
+    Inputs: `ref`, `workflow_started_at`, `fetch_alerts`, `failure_prefix`,
+    `success_prefix`, `settle_timeout_seconds`, `poll_interval_seconds`, `monotonic`,
+    `sleep`. Output: `EvaluationResult`.
+    """
     if workflow_started_at is None:
         return EvaluationResult(
             status="fail",
@@ -346,7 +409,11 @@ def evaluate_pull_request_alerts(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> EvaluationResult:
-    """Handle evaluate pull request alerts."""
+    """Evaluate pull request alerts.
+
+    Inputs: `pr_number`, `fetch_alerts`, `base_ref`, `settle_timeout_seconds`,
+    `poll_interval_seconds`, `monotonic`, `sleep`. Output: `EvaluationResult`.
+    """
     alerts = wait_for_stable_snapshot(
         lambda: fetch_alerts(pr=pr_number),
         settle_timeout_seconds=settle_timeout_seconds,
@@ -388,7 +455,11 @@ def evaluate_push_alerts(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> EvaluationResult:
-    """Handle evaluate push alerts."""
+    """Evaluate push alerts.
+
+    Inputs: `ref`, `workflow_started_at`, `fetch_alerts`, `settle_timeout_seconds`,
+    `poll_interval_seconds`, `monotonic`, `sleep`. Output: `EvaluationResult`.
+    """
     return evaluate_default_branch_alerts(
         ref,
         workflow_started_at,
@@ -412,7 +483,12 @@ def evaluate_workflow_run(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> EvaluationResult:
-    """Handle evaluate workflow run."""
+    """Evaluate workflow run.
+
+    Inputs: `event_payload`, `fetch_alerts`, `settle_timeout_seconds`,
+    `poll_interval_seconds`, `resolve_default_branch`, `monotonic`, `sleep`. Output:
+    `EvaluationResult`.
+    """
     workflow_run = event_payload.get("workflow_run") or {}
     conclusion = str(workflow_run.get("conclusion") or "").strip().lower()
     if conclusion != "success":
@@ -501,7 +577,10 @@ def evaluate_workflow_run(
 
 
 def event_scan_label(event_name: str) -> str:
-    """Handle event scan label."""
+    """Event scan label.
+
+    Inputs: `event_name`. Output: `str`.
+    """
     normalized_event = str(event_name or "").strip().lower()
     labels = {
         "push": "Push scan",
@@ -526,7 +605,13 @@ def evaluate_direct_event(
     monotonic: ClockFn = time.monotonic,
     sleep: SleepFn = time.sleep,
 ) -> EvaluationResult:
-    """Handle evaluate direct event."""
+    """Evaluate direct event.
+
+    Inputs: `event_name`, `event_payload`, `repository`, `ref`, `run_id`,
+    `fetch_alerts`, `settle_timeout_seconds`, `poll_interval_seconds`,
+    `resolve_default_branch`, `resolve_run_started_at`, `monotonic`, `sleep`. Output:
+    `EvaluationResult`.
+    """
     normalized_event = _first_non_empty(event_name).lower()
     if normalized_event == "pull_request":
         pr_number = payload_pull_request_number(event_payload)
@@ -614,7 +699,11 @@ def list_code_scanning_alerts(
     ref: str | None = None,
     pr: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Return list code scanning alerts."""
+    """Return list code scanning alerts.
+
+    Inputs: `repository`, `token`, `ref`, `pr`. Output: `list[dict[str, Any]]`. Raises
+    on invalid or unavailable state.
+    """
     repository = validate_github_repository(repository)
     query = {
         "state": "open",
@@ -653,7 +742,10 @@ _GITHUB_API_VERSION_CACHE = _GitHubApiVersionCache()
 
 
 def latest_github_api_version(token: str) -> str:
-    """Handle latest github API version."""
+    """Latest github API version.
+
+    Inputs: `token`. Output: `str`. Raises on invalid or unavailable state.
+    """
     if _GITHUB_API_VERSION_CACHE.value is not None:
         return _GITHUB_API_VERSION_CACHE.value
 
@@ -669,13 +761,22 @@ def latest_github_api_version(token: str) -> str:
 
 
 def github_api_get_json(api_path: str, token: str) -> Any:
-    """Handle github API get JSON."""
+    """Github API get JSON.
+
+    Inputs: `api_path`, `token`. Output: `Any`.
+    """
     api_version = latest_github_api_version(token)
     return _github_api_get_json(api_path, token, api_version=api_version)
 
 
 def _github_api_get_json(api_path: str, token: str, *, api_version: str | None) -> Any:
-    """Handle github API get JSON."""
+    """Github API get JSON.
+
+    Inputs: `api_path`, `token`, `api_version`. Output: `Any`. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     if not api_path.startswith("/"):
         raise ValueError(f"GitHub API path must start with '/': {api_path!r}")
 
@@ -723,7 +824,10 @@ def _github_api_get_json(api_path: str, token: str, *, api_version: str | None) 
 
 
 def _curl_config_quote(value: str) -> str:
-    """Handle curl config quote."""
+    """Curl config quote.
+
+    Inputs: `value`. Output: `str`.
+    """
     escaped = (
         value.replace("\\", "\\\\")
         .replace('"', '\\"')
@@ -734,7 +838,11 @@ def _curl_config_quote(value: str) -> str:
 
 
 def get_default_branch(repository: str, token: str) -> str | None:
-    """Return get default branch."""
+    """Return default branch.
+
+    Inputs: `repository`, `token`. Output: `str | None`. Raises on invalid or
+    unavailable state.
+    """
     repository = validate_github_repository(repository)
     payload = github_api_get_json(f"/repos/{repository}", token)
     if not isinstance(payload, dict):
@@ -745,7 +853,11 @@ def get_default_branch(repository: str, token: str) -> str | None:
 def get_workflow_run_started_at(
     repository: str, token: str, run_id: str
 ) -> datetime | None:
-    """Return get workflow run started at."""
+    """Return workflow run started at.
+
+    Inputs: `repository`, `token`, `run_id`. Output: `datetime | None`. Raises on
+    invalid or unavailable state.
+    """
     repository = validate_github_repository(repository)
     normalized_run_id = _first_non_empty(run_id)
     if not normalized_run_id:
@@ -771,7 +883,10 @@ def get_workflow_run_started_at(
 
 
 def load_event_payload(path: str) -> dict[str, Any]:
-    """Return load event payload."""
+    """Return load event payload.
+
+    Inputs: `path`. Output: `dict[str, Any]`. Raises on invalid or unavailable state.
+    """
     try:
         payload_path = Path(path).resolve(strict=True)
     except (OSError, RuntimeError) as exc:
@@ -786,7 +901,10 @@ def load_event_payload(path: str) -> dict[str, Any]:
 
 
 def main() -> int:
-    """Run the command-line entry point."""
+    """Execute the command entrypoint.
+
+    Inputs: none. Output: `int`.
+    """
     args = parse_args()
     if not args.event_path:
         print("ERROR: --event-path is required.", file=sys.stderr)
@@ -812,7 +930,10 @@ def main() -> int:
         event_payload = load_event_payload(args.event_path)
 
         def fetch_alerts(**kwargs: Any) -> list[dict[str, Any]]:
-            """Handle fetch alerts."""
+            """Fetch alerts.
+
+            Inputs: `**kwargs`. Output: `list[dict[str, Any]]`.
+            """
             return list_code_scanning_alerts(
                 repository,
                 token,
@@ -820,11 +941,17 @@ def main() -> int:
             )
 
         def resolve_default_branch(repository: str) -> str | None:
-            """Return resolve default branch."""
+            """Return resolve default branch.
+
+            Inputs: `repository`. Output: `str | None`.
+            """
             return get_default_branch(repository, token)
 
         def resolve_run_started_at(repository: str, run_id: str) -> datetime | None:
-            """Return resolve run started at."""
+            """Return resolve run started at.
+
+            Inputs: `repository`, `run_id`. Output: `datetime | None`.
+            """
             return get_workflow_run_started_at(
                 repository,
                 token,

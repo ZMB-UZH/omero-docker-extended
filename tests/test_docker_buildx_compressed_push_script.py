@@ -15,7 +15,10 @@ class DockerBuildxCompressedPushScriptTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.script_path = (
             cls.repo_root / "installation" / "docker_buildx_compressed_push.sh"
@@ -23,7 +26,10 @@ class DockerBuildxCompressedPushScriptTests(unittest.TestCase):
 
     @staticmethod
     def _create_fake_docker(bin_dir: Path, log_path: Path) -> None:
-        """Handle create fake docker."""
+        """Create fake docker.
+
+        Inputs: `bin_dir`, `log_path`. Output: None.
+        """
         fake_docker_path = bin_dir / "docker"
         fake_docker_path.write_text(
             """#!/usr/bin/env bash
@@ -115,7 +121,10 @@ exit 0
         fake_docker_path.chmod(fake_docker_path.stat().st_mode | stat.S_IXUSR)
 
     def test_script_fails_when_registry_prefix_missing(self) -> None:
-        """Verify test script fails when registry prefix missing."""
+        """Verify script fails when registry prefix missing.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin_dir = temp_path / "bin"
@@ -151,7 +160,10 @@ exit 0
             )
 
     def test_script_allows_local_build_without_registry_prefix(self) -> None:
-        """Verify test script allows local build without regist behavior."""
+        """Verify script allows local build without registry prefix.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin_dir = temp_path / "bin"
@@ -191,7 +203,10 @@ exit 0
             self.assertIn("Flatten final image  : 0", result.stdout)
 
     def test_script_builds_expected_bake_arguments(self) -> None:
-        """Verify test script builds expected bake arguments."""
+        """Verify script builds expected bake arguments.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin_dir = temp_path / "bin"
@@ -250,7 +265,10 @@ exit 0
             )
 
     def test_script_runs_flatten_flow_with_metadata_restore(self) -> None:
-        """Verify test script runs flatten flow with metadata r behavior."""
+        """Verify script runs flatten flow with metadata restore.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin_dir = temp_path / "bin"
@@ -363,7 +381,10 @@ exit 0
             )
 
     def test_script_runs_flatten_only_flow_for_compose_built_images(self) -> None:
-        """Verify test script runs flatten only flow for compos behavior."""
+        """Verify script runs flatten only flow for compose built images.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin_dir = temp_path / "bin"
@@ -443,7 +464,10 @@ exit 0
             self.assertIn("image import", joined_log)
 
     def test_script_fails_when_flatten_metadata_inspect_fails(self) -> None:
-        """Verify test script fails when flatten metadata inspe behavior."""
+        """Verify script fails when flatten metadata inspect fails.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin_dir = temp_path / "bin"
@@ -492,7 +516,10 @@ exit 0
             self.assertNotIn("image import", joined_log)
 
     def test_script_discovers_only_active_compose_build_targets(self) -> None:
-        """Verify test script discovers only active compose bui behavior."""
+        """Verify script discovers only active compose build targets.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin_dir = temp_path / "bin"
@@ -565,7 +592,10 @@ exit 0
             self.assertNotIn("image inspect redis-sysctl-init:custom", joined_log)
 
     def test_script_removes_builder_volumes_when_cleanup_enabled(self) -> None:
-        """Verify test script removes builder volumes when clea behavior."""
+        """Verify script removes builder volumes when cleanup enabled.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin_dir = temp_path / "bin"
@@ -611,7 +641,10 @@ exit 0
             )
 
     def test_script_buildx_uses_compose_declared_local_image_name(self) -> None:
-        """Verify test script buildx uses compose declared loca behavior."""
+        """Verify script buildx uses compose declared local image name.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin_dir = temp_path / "bin"

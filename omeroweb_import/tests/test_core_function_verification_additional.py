@@ -9,14 +9,24 @@ class _Params:
     """Represent params."""
 
     def __init__(self):
+        """Initialize the instance.
+
+        Inputs: none. Output: None.
+        """
         self.values = {}
 
     def add(self, key, value):
-        """Handle add."""
+        """Add.
+
+        Inputs: `key`, `value`. Output: None.
+        """
         self.values[key] = value
 
     def addId(self, value):
-        """Handle add identifier."""
+        """Add ID.
+
+        Inputs: `value`. Output: None.
+        """
         self.values["id"] = value
 
 
@@ -24,10 +34,17 @@ class _ServiceOpts:
     """Represent service opts."""
 
     def __init__(self):
+        """Initialize the instance.
+
+        Inputs: none. Output: None.
+        """
         self.group = None
 
     def setOmeroGroup(self, value):
-        """Store set OMERO group."""
+        """Set OMERO Group.
+
+        Inputs: `value`. Output: None.
+        """
         self.group = value
 
 
@@ -35,6 +52,10 @@ class _ProjectionValue:
     """Represent projection value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self.val = value
 
 
@@ -49,6 +70,13 @@ class _RenderImage:
         external_info=True,
         thumbnail_behavior="bytes",
     ):
+        """Initialize the instance.
+
+        Inputs: `image_id`, `sizes`, `external_info`, `thumbnail_behavior`. Output:
+        None.
+
+        None.
+        """
         self.id = image_id
         self._sizes = sizes
         external = object() if external_info else None
@@ -58,27 +86,46 @@ class _RenderImage:
         self._thumbnail_behavior = thumbnail_behavior
 
     def getSizeX(self):
-        """Return get size x."""
+        """Return Size X.
+
+        Inputs: none. Output: `self._sizes[0]`.
+        """
         return self._sizes[0]
 
     def getSizeY(self):
-        """Return get size y."""
+        """Return Size Y.
+
+        Inputs: none. Output: `self._sizes[1]`.
+        """
         return self._sizes[1]
 
     def getSizeZ(self):
-        """Return get size z."""
+        """Return Size Z.
+
+        Inputs: none. Output: `self._sizes[2]`.
+        """
         return self._sizes[2]
 
     def getSizeC(self):
-        """Return get size c."""
+        """Return Size C.
+
+        Inputs: none. Output: `self._sizes[3]`.
+        """
         return self._sizes[3]
 
     def getSizeT(self):
-        """Return get size t."""
+        """Return Size T.
+
+        Inputs: none. Output: `self._sizes[4]`.
+        """
         return self._sizes[4]
 
     def getThumbnail(self, size=None, direct=None):
-        """Return get thumbnail."""
+        """Return Thumbnail.
+
+        Inputs: `size`, `direct`. Output: computed value. Raises on invalid or
+        unavailable state.
+        """
         if self._thumbnail_behavior == "raise":
             raise RuntimeError("thumbnail failed")
         if self._thumbnail_behavior == "empty":
@@ -89,7 +136,10 @@ class _RenderImage:
 def test_verify_import_via_api_covers_missing_prerequisites_and_query_failures(
     monkeypatch,
 ) -> None:
-    """Verify test verify import via API covers missing pre behavior."""
+    """Verify verify import via API covers missing prerequisites and query failures.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         core_functions,
         "_params_add_string",
@@ -203,7 +253,10 @@ def test_verify_import_via_api_covers_missing_prerequisites_and_query_failures(
 def test_verify_zarr_import_via_api_and_cleanup_imported_images_cover_edge_cases(
     monkeypatch,
 ) -> None:
-    """Verify test verify Zarr import via API and cleanup i behavior."""
+    """Verify verify Zarr import via API and cleanup imported images cover edge cases.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         core_functions.omero,
         "sys",
@@ -310,7 +363,10 @@ def test_verify_zarr_import_via_api_and_cleanup_imported_images_cover_edge_cases
 def test_verify_imported_zarr_images_renderable_reports_remaining_failures(
     monkeypatch,
 ) -> None:
-    """Verify test verify imported Zarr images renderable r behavior."""
+    """Verify verify imported Zarr images renderable reports remaining failures.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     assert core_functions._verify_imported_zarr_images_renderable(
         "",
         "omeroserver",
@@ -369,7 +425,13 @@ def test_verify_imported_zarr_images_renderable_reports_remaining_failures(
     state = {"conn_closed": False, "admin_closed": False}
 
     def _get_object(_kind, image_id):
-        """Handle get object."""
+        """Return object.
+
+        Inputs: `_kind`, `image_id`. Output: `payload`. Raises on invalid or unavailable
+        state.
+
+        state.
+        """
         payload = failures[image_id]
         if isinstance(payload, Exception):
             raise payload
@@ -422,7 +484,10 @@ def test_run_zarr_managed_repo_script_and_cleanup_helpers_cover_error_paths(
     monkeypatch,
     tmp_path,
 ) -> None:
-    """Verify test run Zarr managed repo script and cleanup behavior."""
+    """Verify run Zarr managed repo script and cleanup helpers cover error paths.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     monkeypatch.setattr(
         core_functions, "_open_admin_connection", lambda host, port: None
     )

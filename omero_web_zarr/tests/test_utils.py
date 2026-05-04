@@ -42,7 +42,10 @@ from omero_web_zarr.utils import select_store_backed_viewer_level
 
 
 def _write_minimal_zarr_group(root):
-    """Handle write minimal Zarr group."""
+    """Write minimal Zarr group.
+
+    Inputs: `root`. Output: None.
+    """
     root.mkdir(parents=True, exist_ok=True)
     (root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
     (root / ".zattrs").write_text('{"multiscales": []}', encoding="utf-8")
@@ -52,6 +55,10 @@ class _FakeNode:
     """Test double for fake node."""
 
     def __init__(self, data, metadata):
+        """Initialize the instance.
+
+        Inputs: `data`, `metadata`. Output: None.
+        """
         self.data = data
         self.metadata = metadata
 
@@ -60,6 +67,10 @@ class _FakeValue:
     """Test double for fake value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self.val = value
 
 
@@ -67,6 +78,10 @@ class _FakeExternalInfo:
     """Test double for fake external info."""
 
     def __init__(self, lsid):
+        """Initialize the instance.
+
+        Inputs: `lsid`. Output: None.
+        """
         self.lsid = _FakeValue(lsid)
 
 
@@ -74,6 +89,10 @@ class _FakeDetails:
     """Test double for fake details."""
 
     def __init__(self, lsid):
+        """Initialize the instance.
+
+        Inputs: `lsid`. Output: None.
+        """
         self.externalInfo = _FakeExternalInfo(lsid)
 
 
@@ -81,6 +100,10 @@ class _FakeImage:
     """Test double for fake image."""
 
     def __init__(self, lsid, name="store.zarr", *, query_lsid=None):
+        """Initialize the instance.
+
+        Inputs: `lsid`, `name`, `query_lsid`. Output: None.
+        """
         self._details = _FakeDetails(lsid)
         self._name = name
         self._size_c = 1
@@ -91,15 +114,24 @@ class _FakeImage:
             self._conn = _FakeConnForExternalInfo(query_lsid)
 
     def getDetails(self):
-        """Return get details."""
+        """Return Details.
+
+        Inputs: none. Output: `self._details`.
+        """
         return self._details
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
     def getSizeC(self):
-        """Return get size c."""
+        """Return Size C.
+
+        Inputs: none. Output: `self._size_c`.
+        """
         return self._size_c
 
 
@@ -107,6 +139,10 @@ class _FakeProjectionValue:
     """Test double for fake projection value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self.val = value
 
 
@@ -114,10 +150,17 @@ class _FakeQueryService:
     """Test double for fake query service."""
 
     def __init__(self, lsid):
+        """Initialize the instance.
+
+        Inputs: `lsid`. Output: None.
+        """
         self._lsid = lsid
 
     def projection(self, query, params, service_opts):
-        """Handle projection."""
+        """Projection.
+
+        Inputs: `query`, `params`, `service_opts`. Output: list.
+        """
         assert "externalInfo.lsid" in query
         return [[_FakeProjectionValue(self._lsid)]]
 
@@ -126,11 +169,18 @@ class _FakeConnForExternalInfo:
     """Test double for fake conn for external info."""
 
     def __init__(self, lsid):
+        """Initialize the instance.
+
+        Inputs: `lsid`. Output: None.
+        """
         self.SERVICE_OPTS = object()
         self._query_service = _FakeQueryService(lsid)
 
     def getQueryService(self):
-        """Return get query service."""
+        """Return Query Service.
+
+        Inputs: none. Output: `self._query_service`.
+        """
         return self._query_service
 
 
@@ -138,10 +188,17 @@ class _FakeConfigService:
     """Test double for fake config service."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self._value = value
 
     def getConfigValue(self, key):
-        """Return get config value."""
+        """Return Config Value.
+
+        Inputs: `key`. Output: `str` result.
+        """
         assert key == "omero.pixeldata.max_tile_length"
         return str(self._value)
 
@@ -150,10 +207,17 @@ class _FakeConnForTileSize:
     """Test double for fake conn for tile size."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self._config = _FakeConfigService(value)
 
     def getConfigService(self):
-        """Return get config service."""
+        """Return Config Service.
+
+        Inputs: none. Output: `self._config`.
+        """
         return self._config
 
 
@@ -162,7 +226,13 @@ class _BrokenQueryService:
 
     @staticmethod
     def projection(*args, **kwargs):
-        """Handle projection."""
+        """Projection.
+
+        Inputs: `*args`, `**kwargs`. Output: None. Raises on invalid or unavailable
+        state.
+
+        state.
+        """
         raise RuntimeError("boom")
 
 
@@ -171,7 +241,10 @@ class _EmptyQueryService:
 
     @staticmethod
     def projection(*args, **kwargs):
-        """Handle projection."""
+        """Projection.
+
+        Inputs: `*args`, `**kwargs`. Output: list.
+        """
         return []
 
 
@@ -181,25 +254,41 @@ class _FakeChannel:
     def __init__(
         self, *, window_start=None, window_end=None, window_min=0.0, window_max=1.0
     ):
+        """Initialize the instance.
+
+        Inputs: `window_start`, `window_end`, `window_min`, `window_max`. Output: None.
+        """
         self._window_start = window_start
         self._window_end = window_end
         self._window_min = window_min
         self._window_max = window_max
 
     def getWindowStart(self):
-        """Return get window start."""
+        """Return Window Start.
+
+        Inputs: none. Output: `self._window_start`.
+        """
         return self._window_start
 
     def getWindowEnd(self):
-        """Return get window end."""
+        """Return Window End.
+
+        Inputs: none. Output: `self._window_end`.
+        """
         return self._window_end
 
     def getWindowMin(self):
-        """Return get window min."""
+        """Return Window Min.
+
+        Inputs: none. Output: `self._window_min`.
+        """
         return self._window_min
 
     def getWindowMax(self):
-        """Return get window max."""
+        """Return Window Max.
+
+        Inputs: none. Output: `self._window_max`.
+        """
         return self._window_max
 
 
@@ -208,7 +297,10 @@ class _TileFailureRenderingEngine:
 
     @staticmethod
     def getTileSize():
-        """Return get tile size."""
+        """Return Tile Size.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
 
 
@@ -216,6 +308,10 @@ class _TileFailureImage:
     """Represent tile failure image."""
 
     def __init__(self, *, size_x, size_y, max_tile_length):
+        """Initialize the instance.
+
+        Inputs: `size_x`, `size_y`, `max_tile_length`. Output: None.
+        """
         self.id = 99
         self._size_x = size_x
         self._size_y = size_y
@@ -223,16 +319,25 @@ class _TileFailureImage:
         self._re = _TileFailureRenderingEngine()
 
     def getSizeX(self):
-        """Return get size x."""
+        """Return Size X.
+
+        Inputs: none. Output: `self._size_x`.
+        """
         return self._size_x
 
     def getSizeY(self):
-        """Return get size y."""
+        """Return Size Y.
+
+        Inputs: none. Output: `self._size_y`.
+        """
         return self._size_y
 
 
 def _write_multiscale_store(root, *, attrs=None):
-    """Handle write multiscale store."""
+    """Write multiscale store.
+
+    Inputs: `root`, `attrs`. Output: None.
+    """
     root.mkdir(parents=True, exist_ok=True)
     (root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
     payload = {
@@ -245,12 +350,18 @@ def _write_multiscale_store(root, *, attrs=None):
 
 
 def test_open_compat_array_requests_v2_layout_by_default(tmp_path, monkeypatch):
-    """Verify test open compat array requests v2 layout by behavior."""
+    """Verify open compat array requests v2 layout by default.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `sentinel`.
+    """
     calls = []
     sentinel = object()
 
     def fake_open_array(path, **kwargs):
-        """Handle fake open array."""
+        """Fake open array.
+
+        Inputs: `path`, `**kwargs`. Output: `sentinel`.
+        """
         calls.append((Path(path), kwargs.copy()))
         Path(path).mkdir(parents=True, exist_ok=True)
         (Path(path) / ".zarray").write_text("{}", encoding="utf-8")
@@ -286,11 +397,23 @@ def test_open_compat_array_requests_v2_layout_by_default(tmp_path, monkeypatch):
 def test_open_compat_array_retries_without_zarr_format_when_unsupported(
     tmp_path, monkeypatch
 ):
-    """Verify test open compat array retries without Zarr f behavior."""
+    """Verify open compat array retries without Zarr format when unsupported.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `object` result. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     calls = []
 
     def fake_open_array(path, **kwargs):
-        """Handle fake open array."""
+        """Fake open array.
+
+        Inputs: `path`, `**kwargs`. Output: `object` result. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         calls.append(kwargs.copy())
         if "zarr_format" in kwargs:
             raise TypeError(
@@ -317,11 +440,23 @@ def test_open_compat_array_retries_without_zarr_format_when_unsupported(
 def test_open_compat_array_retries_without_zarr_format_when_runtime_warns(
     tmp_path, monkeypatch
 ):
-    """Verify test open compat array retries without Zarr f behavior."""
+    """Verify open compat array retries without Zarr format when runtime warns.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `object` result. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     calls = []
 
     def fake_open_array(path, **kwargs):
-        """Handle fake open array."""
+        """Fake open array.
+
+        Inputs: `path`, `**kwargs`. Output: `object` result. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         calls.append(kwargs.copy())
         if "zarr_format" in kwargs:
             raise UserWarning("ignoring keyword argument 'zarr_format'")
@@ -344,10 +479,22 @@ def test_open_compat_array_retries_without_zarr_format_when_runtime_warns(
 
 
 def test_open_compat_array_does_not_hide_other_type_errors(tmp_path, monkeypatch):
-    """Verify test open compat array does not hide other ty behavior."""
+    """Verify open compat array does not hide other type errors.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
 
     def fake_open_array(path, **kwargs):
-        """Handle fake open array."""
+        """Fake open array.
+
+        Inputs: `path`, `**kwargs`. Output: None. Raises on invalid or unavailable
+        state.
+
+        state.
+        """
         raise TypeError("different failure")
 
     monkeypatch.setattr("omero_web_zarr.utils.zarr.open_array", fake_open_array)
@@ -363,21 +510,30 @@ def test_open_compat_array_does_not_hide_other_type_errors(tmp_path, monkeypatch
 
 
 def test_resolve_local_zarr_store_accepts_absolute_path(tmp_path):
-    """Verify test resolve local Zarr store accepts absolut behavior."""
+    """Verify resolve local Zarr store accepts absolute path.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     _write_minimal_zarr_group(tmp_path)
 
     assert resolve_local_zarr_store(str(tmp_path)) == tmp_path.resolve()
 
 
 def test_resolve_local_zarr_store_accepts_file_uri(tmp_path):
-    """Verify test resolve local Zarr store accepts file uri."""
+    """Verify resolve local Zarr store accepts file uri.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     _write_minimal_zarr_group(tmp_path)
 
     assert resolve_local_zarr_store(tmp_path.resolve().as_uri()) == tmp_path.resolve()
 
 
 def test_resolve_local_zarr_store_rejects_non_group_path(tmp_path):
-    """Verify test resolve local Zarr store rejects non gro behavior."""
+    """Verify resolve local Zarr store rejects non group path.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     tmp_path.mkdir(parents=True, exist_ok=True)
 
     assert resolve_local_zarr_store(str(tmp_path)) is None
@@ -386,13 +542,19 @@ def test_resolve_local_zarr_store_rejects_non_group_path(tmp_path):
 def test_resolve_image_backing_zarr_store_queries_lsid_when_wrapper_details_are_incomplete(
     tmp_path, monkeypatch
 ):
-    """Verify test resolve image backing Zarr store queries behavior."""
+    """Verify resolve image backing Zarr store queries lsid when wrapper details are incomplete.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `self`.
+    """
 
     class _FakeParametersI:
         """Test double for fake parameters i."""
 
         def addId(self, image_id):
-            """Handle add identifier."""
+            """Add ID.
+
+            Inputs: `image_id`. Output: `self`.
+            """
             self.image_id = image_id
             return self
 
@@ -409,7 +571,10 @@ def test_resolve_image_backing_zarr_store_queries_lsid_when_wrapper_details_are_
 
 
 def test_resolve_local_zarr_file_rejects_parent_traversal(tmp_path):
-    """Verify test resolve local Zarr file rejects parent t behavior."""
+    """Verify resolve local Zarr file rejects parent traversal.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     _write_minimal_zarr_group(tmp_path)
 
     with pytest.raises(Http404, match="zarr path not found"):
@@ -417,7 +582,10 @@ def test_resolve_local_zarr_file_rejects_parent_traversal(tmp_path):
 
 
 def test_resolve_local_zarr_file_accepts_nested_dataset_paths(tmp_path):
-    """Verify test resolve local Zarr file accepts nested d behavior."""
+    """Verify resolve local Zarr file accepts nested dataset paths.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     _write_minimal_zarr_group(tmp_path)
     nested = tmp_path / "s0" / ".zarray"
     nested.parent.mkdir(parents=True, exist_ok=True)
@@ -429,7 +597,10 @@ def test_resolve_local_zarr_file_accepts_nested_dataset_paths(tmp_path):
 
 
 def test_is_store_metadata_path_identifies_supported_metadata_files(tmp_path):
-    """Verify test is store metadata path identifies suppor behavior."""
+    """Verify is store metadata path identifies supported metadata files.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     assert is_store_metadata_path(tmp_path / ".zattrs")
     assert is_store_metadata_path(tmp_path / ".zgroup")
     assert is_store_metadata_path(tmp_path / ".zarray")
@@ -438,7 +609,10 @@ def test_is_store_metadata_path_identifies_supported_metadata_files(tmp_path):
 
 
 def test_collect_store_metadata_documents_includes_nested_metadata(tmp_path):
-    """Verify test collect store metadata documents include behavior."""
+    """Verify collect store metadata documents includes nested metadata.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     _write_minimal_zarr_group(tmp_path)
     nested = tmp_path / "tables" / "features" / ".zattrs"
     nested.parent.mkdir(parents=True, exist_ok=True)
@@ -453,7 +627,10 @@ def test_collect_store_metadata_documents_includes_nested_metadata(tmp_path):
 
 
 def test_get_store_backed_channel_overrides_prefers_zarr_display_metadata(monkeypatch):
-    """Verify test get store backed channel overrides prefe behavior."""
+    """Verify get store backed channel overrides prefers Zarr display metadata.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     image = _FakeImage(str(Path(tempfile.gettempdir()) / "fake.zarr"))
     image._size_c = 2
     node = _FakeNode(
@@ -495,7 +672,10 @@ def test_get_store_backed_channel_overrides_prefers_zarr_display_metadata(monkey
 
 
 def test_get_store_backed_channel_overrides_falls_back_to_channel_windows(monkeypatch):
-    """Verify test get store backed channel overrides falls behavior."""
+    """Verify get store backed channel overrides falls back to channel windows.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     image = _FakeImage(str(Path(tempfile.gettempdir()) / "fake.zarr"))
     image._size_c = 1
     monkeypatch.setattr(
@@ -524,7 +704,10 @@ def test_get_store_backed_channel_overrides_falls_back_to_channel_windows(monkey
 def test_load_store_backed_image_node_preserves_partial_channel_metadata_alignment(
     tmp_path, monkeypatch
 ):
-    """Verify test load store backed image node preserves p behavior."""
+    """Verify load store backed image node preserves partial channel metadata alignment.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     _write_multiscale_store(
         tmp_path,
         attrs={
@@ -559,14 +742,20 @@ def test_load_store_backed_image_node_preserves_partial_channel_metadata_alignme
 
 
 def test_get_safe_image_tile_size_falls_back_to_configured_maximum():
-    """Verify test get safe image tile size falls back to c behavior."""
+    """Verify get safe image tile size falls back to configured maximum.
+
+    Inputs: none. Output: None.
+    """
     image = _TileFailureImage(size_x=2048, size_y=512, max_tile_length=1024)
 
     assert get_safe_image_tile_size(image) == (1024, 512)
 
 
 def test_sanitize_download_basename_normalizes_empty_and_path_like_names():
-    """Verify test sanitize download basename normalizes em behavior."""
+    """Verify sanitize download basename normalizes empty and path like names.
+
+    Inputs: none. Output: None.
+    """
     assert sanitize_download_basename("", default="fallback") == "fallback"
     assert (
         sanitize_download_basename("dir/name, with spaces.zarr")
@@ -575,7 +764,10 @@ def test_sanitize_download_basename_normalizes_empty_and_path_like_names():
 
 
 def test_select_store_backed_level_prefers_smallest_sufficient_level():
-    """Verify test select store backed level prefers smalle behavior."""
+    """Verify select store backed level prefers smallest sufficient level.
+
+    Inputs: none. Output: None.
+    """
     node = _FakeNode(
         [
             np.zeros((1, 1024, 1024), dtype=np.uint8),
@@ -590,7 +782,10 @@ def test_select_store_backed_level_prefers_smallest_sufficient_level():
 
 
 def test_read_store_backed_plane_maps_full_resolution_z_to_subresolution():
-    """Verify test read store backed plane maps full resolu behavior."""
+    """Verify read store backed plane maps full resolution z to subresolution.
+
+    Inputs: none. Output: None.
+    """
     node = _FakeNode(
         [
             np.arange(12, dtype=np.uint16).reshape(4, 1, 3),
@@ -606,7 +801,10 @@ def test_read_store_backed_plane_maps_full_resolution_z_to_subresolution():
 
 
 def test_render_store_backed_plane_composites_visible_channels():
-    """Verify test render store backed plane composites vis behavior."""
+    """Verify render store backed plane composites visible channels.
+
+    Inputs: none. Output: None.
+    """
     node = _FakeNode(
         [
             np.array(
@@ -636,7 +834,10 @@ def test_render_store_backed_plane_composites_visible_channels():
 
 
 def test_render_store_backed_thumbnail_bytes_uses_helper_node(monkeypatch):
-    """Verify test render store backed thumbnail bytes uses behavior."""
+    """Verify render store backed thumbnail bytes uses helper node.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     node = _FakeNode(
         [np.arange(256, dtype=np.uint16).reshape(1, 16, 16)],
         {"axes": [{"name": "z"}, {"name": "y"}, {"name": "x"}]},
@@ -654,7 +855,10 @@ def test_render_store_backed_thumbnail_bytes_uses_helper_node(monkeypatch):
 
 
 def test_render_store_backed_pil_image_respects_requested_level(monkeypatch):
-    """Verify test render store backed pil image respects r behavior."""
+    """Verify render store backed pil image respects requested level.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     node = _FakeNode(
         [
             np.full((1, 32, 32), 5, dtype=np.uint16),
@@ -674,7 +878,10 @@ def test_render_store_backed_pil_image_respects_requested_level(monkeypatch):
 
 
 def test_store_backed_level_metadata_uses_multiscale_shapes_and_chunks():
-    """Verify test store backed level metadata uses multisc behavior."""
+    """Verify store backed level metadata uses multiscale shapes and chunks.
+
+    Inputs: none. Output: None.
+    """
     array0 = type(
         "FakeArray",
         (),
@@ -704,7 +911,10 @@ def test_store_backed_level_metadata_uses_multiscale_shapes_and_chunks():
 
 
 def test_render_store_backed_region_pil_image_crops_requested_level(monkeypatch):
-    """Verify test render store backed region pil image cro behavior."""
+    """Verify render store backed region pil image crops requested level.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     node = _FakeNode(
         [
             np.arange(16, dtype=np.uint8).reshape(1, 4, 4),
@@ -742,7 +952,10 @@ def test_render_store_backed_region_pil_image_crops_requested_level(monkeypatch)
 
 
 def test_encode_store_backed_pil_image_supports_png_and_tiff():
-    """Verify test encode store backed pil image supports p behavior."""
+    """Verify encode store backed pil image supports png and tiff.
+
+    Inputs: none. Output: None.
+    """
     pil_image = Image.fromarray(np.full((4, 4), 255, dtype=np.uint8), mode="L")
 
     png_payload, png_content_type, png_suffix = encode_store_backed_pil_image(
@@ -763,7 +976,10 @@ def test_encode_store_backed_pil_image_supports_png_and_tiff():
 
 
 def test_generate_coordinate_transformations_computes_scales():
-    """Verify scale factors for a two-level pyramid."""
+    """Verify scale factors for a two-level pyramid.
+
+    Inputs: none. Output: None.
+    """
     shapes = [(1, 1, 100, 200), (1, 1, 50, 100)]
     result = generate_coordinate_transformations(shapes)
     assert len(result) == 2
@@ -772,28 +988,44 @@ def test_generate_coordinate_transformations_computes_scales():
 
 
 def test_generate_coordinate_transformations_rejects_dimension_mismatch():
-    """Shapes with differing number of dimensions must raise ValueError."""
+    """Shapes with differing number of dimensions must raise ValueError.
+
+    Inputs: none. Output: None.
+    """
     shapes = [(1, 1, 100, 200), (1, 50, 100)]
     with pytest.raises(ValueError, match="Shape dimension mismatch"):
         generate_coordinate_transformations(shapes)
 
 
 def test_marshal_axes_and_pixel_sizes_cover_supported_and_invalid_versions():
-    """Verify test marshal axes and pixel sizes cover suppo behavior."""
+    """Verify marshal axes and pixel sizes cover supported and invalid versions.
+
+    Inputs: none. Output: computed value.
+    """
 
     class _PixelSize:
         """Represent pixel size."""
 
         def __init__(self, value, unit):
+            """Initialize the instance.
+
+            Inputs: `value`, `unit`. Output: None.
+            """
             self._value = value
             self._unit = unit
 
         def getUnit(self):
-            """Return get unit."""
+            """Return Unit.
+
+            Inputs: none. Output: `self._unit`.
+            """
             return self._unit
 
         def getValue(self):
-            """Return get value."""
+            """Return the fake OMERO value.
+
+            Inputs: none. Output: `self._value`.
+            """
             return self._value
 
     image = type(
@@ -830,7 +1062,10 @@ def test_marshal_axes_and_pixel_sizes_cover_supported_and_invalid_versions():
 
 
 def test_resolve_image_external_lsid_covers_missing_ids_and_query_failures(monkeypatch):
-    """Verify test resolve image external lsid covers missi behavior."""
+    """Verify resolve image external lsid covers missing IDs and query failures.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     image_without_conn = _FakeImage(None)
     assert _resolve_image_external_lsid(image_without_conn) is None
 
@@ -846,7 +1081,10 @@ def test_resolve_image_external_lsid_covers_missing_ids_and_query_failures(monke
 def test_read_store_attrs_and_format_resolution_support_zarr_json_and_v04(
     tmp_path, monkeypatch
 ):
-    """Verify test read store attrs and format resolution s behavior."""
+    """Verify read store attrs and format resolution support Zarr JSON and v04.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     payload = {
         "attributes": {
             "multiscales": [{"version": "0.4", "datasets": [{"path": "0"}]}],
@@ -871,7 +1109,10 @@ def test_read_store_attrs_and_format_resolution_support_zarr_json_and_v04(
 
 
 def test_load_store_backed_image_node_reader_and_cache_fallbacks(tmp_path, monkeypatch):
-    """Verify test load store backed image node reader and behavior."""
+    """Verify load store backed image node reader and cache fallbacks.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     _write_minimal_zarr_group(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()))
     sentinel_node = _FakeNode(
@@ -910,7 +1151,10 @@ def test_load_store_backed_image_node_reader_and_cache_fallbacks(tmp_path, monke
 
 
 def test_store_backed_dataset_and_render_helpers_cover_fallback_paths():
-    """Verify test store backed dataset and render helpers behavior."""
+    """Verify store backed dataset and render helpers cover fallback paths.
+
+    Inputs: none. Output: None.
+    """
     node = _FakeNode(
         [
             np.full((1, 2, 2), 5, dtype=np.uint16),
@@ -954,34 +1198,53 @@ def test_store_backed_dataset_and_render_helpers_cover_fallback_paths():
 
 
 def test_get_safe_image_tile_size_prepares_rendering_engine_and_falls_back():
-    """Verify test get safe image tile size prepares render behavior."""
+    """Verify get safe image tile size prepares rendering engine and falls back.
+
+    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    """
 
     class _PreparedEngine:
         """Represent prepared engine."""
 
         @staticmethod
         def getTileSize():
-            """Return get tile size."""
+            """Return Tile Size.
+
+            Inputs: none. Output: tuple.
+            """
             return (64, 32)
 
     class _PreparedImage:
         """Represent prepared image."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self._re = None
 
         def _prepareRenderingEngine(self):
-            """Handle prepare rendering engine."""
+            """Prepare Rendering Engine.
+
+            Inputs: none. Output: None.
+            """
             self._re = _PreparedEngine()
 
         @staticmethod
         def getSizeX():
-            """Return get size x."""
+            """Return Size X.
+
+            Inputs: none. Output: 512.
+            """
             return 512
 
         @staticmethod
         def getSizeY():
-            """Return get size y."""
+            """Return Size Y.
+
+            Inputs: none. Output: 256.
+            """
             return 256
 
     assert get_safe_image_tile_size(_PreparedImage()) == (64, 32)
@@ -991,7 +1254,10 @@ def test_get_safe_image_tile_size_prepares_rendering_engine_and_falls_back():
 
         @staticmethod
         def getTileSize():
-            """Return get tile size."""
+            """Return Tile Size.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("not a tile-size failure")
 
     class _BrokenImage:
@@ -1001,12 +1267,18 @@ def test_get_safe_image_tile_size_prepares_rendering_engine_and_falls_back():
 
         @staticmethod
         def getSizeX():
-            """Return get size x."""
+            """Return Size X.
+
+            Inputs: none. Output: 512.
+            """
             return 512
 
         @staticmethod
         def getSizeY():
-            """Return get size y."""
+            """Return Size Y.
+
+            Inputs: none. Output: 256.
+            """
             return 256
 
     with pytest.raises(RuntimeError, match="not a tile-size failure"):

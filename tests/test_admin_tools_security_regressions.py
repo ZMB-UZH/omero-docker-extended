@@ -17,6 +17,10 @@ class _BaseResponse:
     """Represent base response."""
 
     def __init__(self, content="", status=200, content_type=None):
+        """Initialize the instance.
+
+        Inputs: `content`, `status`, `content_type`. Output: None.
+        """
         self.status_code = status
         self.content_type = content_type
         self.headers = {}
@@ -26,9 +30,17 @@ class _BaseResponse:
             self.content = str(content).encode("utf-8")
 
     def __setitem__(self, key, value):
+        """The item for the requested key.
+
+        Inputs: `key`, `value`. Output: None.
+        """
         self.headers[key] = value
 
     def __getitem__(self, key):
+        """Return the item for the requested key.
+
+        Inputs: `key`. Output: `self.headers[key]`.
+        """
         return self.headers[key]
 
 
@@ -36,6 +48,10 @@ class _JsonResponse(_BaseResponse):
     """Represent JSON response."""
 
     def __init__(self, payload=None, status=200, **_kwargs):
+        """Initialize the instance.
+
+        Inputs: `payload`, `status`, `**_kwargs`. Output: None.
+        """
         self.payload = payload
         super().__init__(
             json.dumps(payload or {}).encode("utf-8"),
@@ -52,6 +68,10 @@ class _HttpResponseRedirect(_HttpResponse):
     """Represent HTTP response redirect."""
 
     def __init__(self, location):
+        """Initialize the instance.
+
+        Inputs: `location`. Output: None.
+        """
         super().__init__("", status=302)
         self["Location"] = location
 
@@ -60,6 +80,10 @@ class _DjangoTemplates:
     """Represent django templates."""
 
     def __init__(self, config):
+        """Initialize the instance.
+
+        Inputs: `config`. Output: None.
+        """
         self.config = config
 
 
@@ -67,6 +91,10 @@ class _TemplateResponse(_HttpResponse):
     """Represent template response."""
 
     def __init__(self, request, template, context=None, status=200, **_kwargs):
+        """Initialize the instance.
+
+        Inputs: `request`, `template`, `context`, `status`, `**_kwargs`. Output: None.
+        """
         super().__init__("", status=status)
         self.request = request
         self.template_name = template
@@ -77,17 +105,27 @@ class _SimpleTemplateResponse(_HttpResponse):
     """Represent simple template response."""
 
     def __init__(self, template, context=None, status=200, **_kwargs):
+        """Initialize the instance.
+
+        Inputs: `template`, `context`, `status`, `**_kwargs`. Output: None.
+        """
         super().__init__("", status=status)
         self.template_name = template
         self.context_data = context or {}
 
     def render(self):
-        """Build render."""
+        """Render.
+
+        Inputs: none. Output: `self`.
+        """
         return self
 
 
 def _install_import_stubs():
-    """Handle install import stubs."""
+    """Install import stubs.
+
+    Inputs: none. Output: None.
+    """
     if "django.http" not in sys.modules:
         django_module = types.ModuleType("django")
         django_module.__path__ = []
@@ -153,12 +191,18 @@ class AdminToolsSecurityRegressionTests(TestCase):
     """Test cases for admin tools security regression tests."""
 
     def test_normalize_proxy_request_target_rejects_traversal(self):
-        """Verify test normalize proxy request target rejects t behavior."""
+        """Verify normalize proxy request target rejects traversal.
+
+        Inputs: none. Output: None.
+        """
         with self.assertRaises(ValueError):
             index_view._normalize_proxy_request_target("../api/admin")
 
     def test_rewrite_proxied_location_blocks_external_redirects(self):
-        """Verify test rewrite proxied location blocks external behavior."""
+        """Verify rewrite proxied location blocks external redirects.
+
+        Inputs: none. Output: None.
+        """
         location = index_view._rewrite_proxied_location(
             "https://evil.example.org/steal",
             "https://grafana:3000",
@@ -171,7 +215,10 @@ class AdminToolsSecurityRegressionTests(TestCase):
         )
 
     def test_grafana_proxy_home_fallback_response_sanitizes_segments(self):
-        """Verify test grafana proxy home fallback response san behavior."""
+        """Verify grafana proxy home fallback response sanitizes segments.
+
+        Inputs: none. Output: None.
+        """
         with mock.patch.dict(
             os.environ,
             {
@@ -191,7 +238,10 @@ class AdminToolsSecurityRegressionTests(TestCase):
         )
 
     def test_storage_quota_update_hides_payload_details(self):
-        """Verify test storage quota update hides payload details."""
+        """Verify storage quota update hides payload details.
+
+        Inputs: none. Output: None.
+        """
         request = types.SimpleNamespace(
             method="POST",
             body=b'{"updates":"bad"}',
@@ -212,14 +262,20 @@ class AdminToolsSecurityRegressionTests(TestCase):
         )
 
     def test_write_state_temp_file_is_not_world_writable(self):
-        """Verify test write state temp file is not world writable."""
+        """Verify write state temp file is not world writable.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             state_path = Path(tmpdir) / "quotas.json"
             seen_modes = []
             real_replace = os.replace
 
             def _capturing_replace(src, dst):
-                """Handle capturing replace."""
+                """Capturing replace.
+
+                Inputs: `src`, `dst`. Output: None.
+                """
                 seen_modes.append(stat.S_IMODE(Path(src).stat().st_mode))
                 real_replace(src, dst)
 

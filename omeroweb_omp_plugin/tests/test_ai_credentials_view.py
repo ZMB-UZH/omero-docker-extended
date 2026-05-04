@@ -14,12 +14,18 @@ TEST_API_CREDENTIAL = "fixture-api-credential"
 
 
 def _json_payload(response):
-    """Handle JSON payload."""
+    """JSON payload.
+
+    Inputs: `response`. Output: `json.loads` result.
+    """
     return json.loads(response.content.decode("utf-8"))
 
 
 def _json_post(payload):
-    """Handle JSON post."""
+    """JSON post.
+
+    Inputs: `payload`. Output: `RequestFactory().post` result.
+    """
     return RequestFactory().post(
         "/",
         data=json.dumps(payload),
@@ -38,6 +44,10 @@ class _Response:
         headers=None,
         url="https://api.example.test/models",
     ):
+        """Initialize the instance.
+
+        Inputs: `payload`, `status`, `headers`, `url`. Output: None.
+        """
         self._payload = payload
         self.status_code = status
         self.headers = headers or {}
@@ -45,21 +55,30 @@ class _Response:
         self.text = payload if isinstance(payload, str) else json.dumps(payload)
 
     def json(self):
-        """Handle JSON."""
+        """Return the JSON payload.
+
+        Inputs: none. Output: `self._payload`. Raises on invalid or unavailable state.
+        """
         if isinstance(self._payload, str):
             raise ValueError("not json")
         return self._payload
 
 
 def _http_error(url="https://api.example.test/models", code=401, body="forbidden"):
-    """Handle HTTP error."""
+    """HTTP error.
+
+    Inputs: `url`, `code`, `body`. Output: `exc`.
+    """
     exc = ai_credentials_view.requests.HTTPError("failure")
     exc.response = _Response(body, status=code, url=url)
     return exc
 
 
 def test_list_credentials_and_test_save_paths(monkeypatch):
-    """Verify test list credentials and test save paths."""
+    """Verify list credentials and test save paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().get("/")
     request.user = SimpleNamespace(username="alice")
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "alice")
@@ -113,7 +132,10 @@ def test_list_credentials_and_test_save_paths(monkeypatch):
 
 
 def test_list_credentials_handles_method_user_and_store_failures(monkeypatch):
-    """Verify test list credentials handles method user and behavior."""
+    """Verify list credentials handles method user and store failures.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     method_response = inspect.unwrap(ai_credentials_view.list_credentials)(
         RequestFactory().post("/"),
         conn=None,
@@ -152,7 +174,10 @@ def test_list_credentials_handles_method_user_and_store_failures(monkeypatch):
 
 
 def test_test_credentials_reuses_saved_key_and_handles_failures(monkeypatch):
-    """Verify test test credentials reuses saved key and ha behavior."""
+    """Verify credential checks reuse saved keys and report failures.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "alice")
     monkeypatch.setattr(
         ai_credentials_view,
@@ -205,7 +230,10 @@ def test_test_credentials_reuses_saved_key_and_handles_failures(monkeypatch):
 def test_save_credentials_handles_missing_username_failed_validation_and_store_error(
     monkeypatch,
 ):
-    """Verify test save credentials handles missing usernam behavior."""
+    """Verify save credentials handles missing username failed validation and store error.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "")
     missing_user = inspect.unwrap(ai_credentials_view.save_credentials)(
         _json_post({"provider": "groq", "api_key": TEST_API_CREDENTIAL}),
@@ -258,7 +286,10 @@ def test_save_credentials_handles_missing_username_failed_validation_and_store_e
 def test_list_models_supports_provider_specific_payloads_and_default_selection(
     monkeypatch,
 ):
-    """Verify test list models supports provider specific p behavior."""
+    """Verify list models supports provider specific payloads and default selection.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().get("/", data={"provider": "groq"})
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "alice")
     monkeypatch.setattr(
@@ -351,7 +382,10 @@ def test_list_models_supports_provider_specific_payloads_and_default_selection(
 def test_list_models_handles_missing_inputs_http_errors_and_unknown_providers(
     monkeypatch,
 ):
-    """Verify test list models handles missing inputs HTTP behavior."""
+    """Verify list models handles missing inputs HTTP errors and unknown providers.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "alice")
     monkeypatch.setattr(
         ai_credentials_view,
@@ -466,7 +500,10 @@ def test_list_models_handles_missing_inputs_http_errors_and_unknown_providers(
 
 
 def test_perform_connection_test_covers_success_http_error_and_exception(monkeypatch):
-    """Verify test perform connection test covers success H behavior."""
+    """Verify perform connection test covers success HTTP error and exception.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     seen = {}
     monkeypatch.setattr(
         ai_credentials_view.requests,
@@ -537,7 +574,10 @@ def test_perform_connection_test_covers_success_http_error_and_exception(monkeyp
 def test_ai_credentials_helper_edges_cover_parser_and_transport_failures(
     monkeypatch,
 ):
-    """Verify test ai credentials helper edges cover parser behavior."""
+    """Verify AI credentials helper edges cover parser and transport failures.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     assert (
         ai_credentials_view._validated_provider_url("https://api.example.test/models#x")
         == "https://api.example.test/models"

@@ -15,7 +15,10 @@ logger = logging.getLogger(__name__)
 @login_required()
 @require_non_root_user
 def save_settings(request, conn=None, _url=None, **kwargs):
-    """Store save settings."""
+    """Save settings.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 

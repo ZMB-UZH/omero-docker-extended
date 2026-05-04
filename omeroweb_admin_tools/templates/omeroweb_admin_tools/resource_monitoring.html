@@ -96,6 +96,7 @@ const hostDiskEl = document.getElementById('host_disk');
 const diagnosticsCard = document.getElementById('diagnostics_card');
 const diagnosticsSummary = document.getElementById('diagnostics_summary');
 const diagnosticsDetail = document.getElementById('diagnostics_detail');
+// Return storage. Inputs: none. Output: return value.
 const storage = (() => {
     try {
         const testKey = '__admin_tools_resource_monitoring_state_test__';
@@ -107,6 +108,7 @@ const storage = (() => {
     }
 })();
 const monitoringStateStorageKey = 'omeroweb_admin_tools_resource_monitoring_state_v1';
+// Parse Stored State. Inputs: raw. Output: return value.
 const parseStoredState = (raw) => {
     if (!raw) {
         return null;
@@ -119,6 +121,7 @@ const parseStoredState = (raw) => {
 };
 let autoRefreshTimer = null;
 
+// Return persist State. Inputs: none. Output: return value.
 function persistState() {
     if (!storage) {
         return;
@@ -128,6 +131,7 @@ function persistState() {
     }));
 }
 
+// Apply Stored State. Inputs: none. Output: return value.
 function applyStoredState() {
     const storedState = parseStoredState(storage?.getItem(monitoringStateStorageKey));
     if (!storedState) {
@@ -138,6 +142,7 @@ function applyStoredState() {
     }
 }
 
+// Clear Auto Refresh Timer. Inputs: none. Output: return value.
 function clearAutoRefreshTimer() {
     if (autoRefreshTimer !== null) {
         window.clearInterval(autoRefreshTimer);
@@ -145,6 +150,7 @@ function clearAutoRefreshTimer() {
     }
 }
 
+// Sync Auto Refresh. Inputs: none. Output: return value.
 function syncAutoRefresh() {
     clearAutoRefreshTimer();
     persistState();
@@ -157,6 +163,7 @@ function syncAutoRefresh() {
     }, 30000);
 }
 
+// Probe Label. Inputs: probe. Output: return value.
 function probeLabel(probe) {
     if (!probe || !probe.ok) {
         return `Unreachable${probe && probe.error ? ` (${probe.error})` : ''}`;
@@ -166,6 +173,7 @@ function probeLabel(probe) {
 
 
 
+// Format Percent. Inputs: value. Output: return value.
 function formatPercent(value) {
     if (typeof value !== 'number' || Number.isNaN(value)) {
         return 'n/a';
@@ -173,6 +181,7 @@ function formatPercent(value) {
     return `${value.toFixed(1)}%`;
 }
 
+// Normalize Service Health. Inputs: rawHealth. Output: return value.
 function normalizeServiceHealth(rawHealth) {
     const normalized = String(rawHealth || 'unknown').toLowerCase().trim();
     if (!normalized) {
@@ -196,6 +205,7 @@ function normalizeServiceHealth(rawHealth) {
     return 'unknown';
 }
 
+// Return service Health Class. Inputs: health. Output: return value.
 function serviceHealthClass(health) {
     if (health === 'healthy' || health === 'up') {
         return 'monitoring-pill--healthy';
@@ -212,6 +222,7 @@ function serviceHealthClass(health) {
     return 'monitoring-pill--unknown';
 }
 
+// Render Service Health. Inputs: services. Output: return value.
 function renderServiceHealth(services) {
     if (!services.length) {
         targetsServiceHealthEl.textContent = 'No service health data available.';
@@ -224,6 +235,7 @@ function renderServiceHealth(services) {
 }
 
 
+// Format Timestamp. Inputs: rawTimestamp. Output: return value.
 function formatTimestamp(rawTimestamp) {
     const ts = new Date(rawTimestamp);
     if (Number.isNaN(ts.getTime())) {
@@ -240,6 +252,7 @@ function formatTimestamp(rawTimestamp) {
     return `${day}/${month}/${year}, ${hours12}:${minutes}:${seconds} ${suffix}`;
 }
 
+// Render Diagnostics. Inputs: diag, services. Output: return value.
 function renderDiagnostics(diag, services) {
     if (!diag) {
         diagnosticsCard.style.display = 'none';
@@ -302,6 +315,7 @@ function renderDiagnostics(diag, services) {
 }
 
 
+// Load Data. Inputs: none. Output: Promise result.
 async function loadData() {
     statusEl.textContent = 'Loading resource dashboard...';
     try {

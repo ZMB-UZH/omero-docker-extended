@@ -43,12 +43,19 @@ class OMEZarrImageInspection:
 
     @property
     def supported(self) -> bool:
+        """Supported.
+
+        Inputs: none. Output: `bool`.
+        """
         return self.recognized and self.support_error is None and bool(self.kind)
 
 
 @lru_cache(maxsize=1)
 def ome_zarr_package_version() -> str:
-    """Handle ome Zarr package version."""
+    """Ome Zarr package version.
+
+    Inputs: none. Output: `str`.
+    """
     try:
         return importlib_metadata.version("ome-zarr")
     except importlib_metadata.PackageNotFoundError:
@@ -57,6 +64,8 @@ def ome_zarr_package_version() -> str:
 
 def inspect_ome_zarr_image(store_root: Path) -> OMEZarrImageInspection:
     """Inspect *store_root* as a native ``omero zarr import`` source.
+
+    Inputs: `store_root`. Output: `OMEZarrImageInspection`.
 
     This keeps the plugin's native branch grounded in the upstream
     ``ome-zarr`` reader model rather than hand-parsing NGFF metadata.
@@ -78,7 +87,9 @@ def inspect_ome_zarr_image(store_root: Path) -> OMEZarrImageInspection:
 
 
 def normalize_native_ome_zarr_copy(store_root: Path) -> Optional[str]:
-    """Normalize an ephemeral native-import copy in place.
+    """Normalize native OME Zarr copy.
+
+    Inputs: `store_root`. Output: `Optional[str]`.
 
     The installed OMERO render stack can import some valid OME-Zarr stores but
     later fail to render thumbnails when image arrays are backed by large
@@ -120,7 +131,13 @@ def normalize_native_ome_zarr_copy(store_root: Path) -> Optional[str]:
 def _load_root_ome_zarr_metadata(
     store_root: Path,
 ) -> tuple[Optional[dict[str, Any]], Optional[OMEZarrImageInspection]]:
-    """Handle load root ome Zarr metadata."""
+    """Load root OME Zarr metadata.
+
+    Inputs: `store_root`. Output: `tuple[Optional[dict[str, Any]],
+    Optional[OMEZarrImageInspection]]`.
+
+    Optional[OMEZarrImageInspection]]`.
+    """
     if not store_root.is_dir():
         return None, OMEZarrImageInspection()
 
@@ -162,7 +179,10 @@ def _inspect_single_ome_zarr_image(
     store_root: Path,
     metadata_payload: dict,
 ) -> OMEZarrImageInspection:
-    """Handle inspect single ome Zarr image."""
+    """Inspect single ome Zarr image.
+
+    Inputs: `store_root`, `metadata_payload`. Output: `OMEZarrImageInspection`.
+    """
     multiscales = metadata_payload.get("multiscales")
     if not isinstance(multiscales, list) or not multiscales:
         return OMEZarrImageInspection(
@@ -303,7 +323,10 @@ def _inspect_single_ome_zarr_image(
 
 
 def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
-    """Handle inspect bioformats2raw layout."""
+    """Inspect bioformats2raw layout.
+
+    Inputs: `store_root`. Output: `OMEZarrImageInspection`.
+    """
     series_dirs = sorted(
         child
         for child in store_root.iterdir()
@@ -400,7 +423,10 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
 def _read_store_metadata_payload(
     store_root: Path,
 ) -> tuple[object | None, Optional[str]]:
-    """Handle read store metadata payload."""
+    """Read store metadata payload.
+
+    Inputs: `store_root`. Output: `tuple[object | None, Optional[str]]`.
+    """
     metadata_path = None
     for candidate_name in (".zattrs", "zarr.json"):
         candidate = store_root / candidate_name
@@ -424,7 +450,10 @@ def _read_store_metadata_payload(
 def _read_zarr_format_metadata(
     store_root: Path, metadata_payload: dict
 ) -> Optional[int]:
-    """Handle read Zarr format metadata."""
+    """Read Zarr format metadata.
+
+    Inputs: `store_root`, `metadata_payload`. Output: `Optional[int]`.
+    """
     raw_value = metadata_payload.get("zarr_format")
     if isinstance(raw_value, int):
         return raw_value
@@ -446,7 +475,13 @@ def _read_zarr_format_metadata(
 def _read_array_metadata_payload(
     store_root: Path, relative_path: str
 ) -> tuple[Optional[dict], Optional[str]]:
-    """Handle read array metadata payload."""
+    """Read array metadata payload.
+
+    Inputs: `store_root`, `relative_path`. Output: `tuple[Optional[dict],
+    Optional[str]]`.
+
+    Optional[str]]`.
+    """
     array_root = store_root / relative_path
     metadata_path = None
     for candidate_name in (".zarray", "zarr.json"):
@@ -479,7 +514,10 @@ def _read_array_metadata_payload(
 
 
 def _extract_axes(axes_payload) -> tuple[list[str], dict[str, str], Optional[str]]:
-    """Handle extract axes."""
+    """Extract axes.
+
+    Inputs: `axes_payload`. Output: `tuple[list[str], dict[str, str], Optional[str]]`.
+    """
     if not isinstance(axes_payload, list) or not axes_payload:
         return [], {}, "OME-Zarr metadata is missing multiscale axes information."
 
@@ -499,7 +537,10 @@ def _extract_axes(axes_payload) -> tuple[list[str], dict[str, str], Optional[str
 
 
 def _extract_dataset_relative_paths(metadata_payload: dict) -> tuple[str, ...]:
-    """Handle extract dataset relative paths."""
+    """Extract dataset relative paths.
+
+    Inputs: `metadata_payload`. Output: `tuple[str, ...]`.
+    """
     paths = []
     for multiscale_entry in metadata_payload.get("multiscales") or []:
         if not isinstance(multiscale_entry, dict):
@@ -518,7 +559,13 @@ def _extract_physical_sizes(
     axis_units: dict[str, str],
     transforms_payload,
 ) -> tuple[dict[str, tuple[float, str]], Optional[str]]:
-    """Handle extract physical sizes."""
+    """Extract physical sizes.
+
+    Inputs: `axis_names`, `axis_units`, `transforms_payload`. Output: `tuple[dict[str,
+    tuple[float, str]], Optional[str]]`.
+
+    tuple[float, str]], Optional[str]]`.
+    """
     if not isinstance(transforms_payload, list) or not transforms_payload:
         return (
             {},
@@ -559,7 +606,10 @@ def _extract_physical_sizes(
 
 
 def _normalize_dtype_name(raw_dtype) -> str:
-    """Handle normalize dtype name."""
+    """Normalize dtype name.
+
+    Inputs: `raw_dtype`. Output: `str`.
+    """
     try:
         import numpy as np
 
@@ -569,7 +619,10 @@ def _normalize_dtype_name(raw_dtype) -> str:
 
 
 def _native_ome_zarr_gzip_level() -> int:
-    """Handle native ome Zarr gzip level."""
+    """Native ome Zarr gzip level.
+
+    Inputs: none. Output: `int`.
+    """
     raw_value = str(os.environ.get(OME_ZARR_NATIVE_GZIP_LEVEL_ENV) or "").strip()
     if not raw_value:
         return DEFAULT_OME_ZARR_NATIVE_GZIP_LEVEL
@@ -586,7 +639,10 @@ def _rewrite_problematic_native_image_arrays(
     store_root: Path,
     inspection: OMEZarrImageInspection,
 ) -> Optional[str]:
-    """Handle rewrite problematic native image arrays."""
+    """Rewrite problematic native image arrays.
+
+    Inputs: `store_root`, `inspection`. Output: `Optional[str]`.
+    """
     if not inspection.image_relative_paths:
         return None
 
@@ -643,7 +699,10 @@ def _rewrite_problematic_native_image_arrays(
 
 
 def _iter_zarr_chunk_files(array_dir: Path):
-    """Handle iter Zarr chunk files."""
+    """Zarr chunk files.
+
+    Inputs: `array_dir`. Output: yielded values.
+    """
     for path in sorted(array_dir.rglob("*")):
         if path.is_dir():
             continue
@@ -654,6 +713,8 @@ def _iter_zarr_chunk_files(array_dir: Path):
 
 def _has_3d_pyramid_downsampling(store_root: Path) -> Optional[dict]:
     """Detect if a zarr store downsamples the z-axis between pyramid levels.
+
+    Inputs: `store_root`. Output: `Optional[dict]`.
 
     3D-downsampled pyramids cause blurry z-slices in 2D viewers (Vizarr)
     that select resolution level based on XY viewport zoom.  Returns a
@@ -725,7 +786,10 @@ def _has_3d_pyramid_downsampling(store_root: Path) -> Optional[dict]:
 
 
 def _downscale_local_mean_fallback(data, factors):
-    """Handle downscale local mean fallback."""
+    """Downscale local mean fallback.
+
+    Inputs: `data`, `factors`. Output: `result`. Raises on invalid or unavailable state.
+    """
     import numpy as np
 
     result = np.asarray(data, dtype=np.float64)
@@ -756,7 +820,10 @@ def _downscale_local_mean_fallback(data, factors):
 
 
 def _downscale_local_mean(data, factors):
-    """Handle downscale local mean."""
+    """Downscale local mean.
+
+    Inputs: `data`, `factors`. Output: call result.
+    """
     try:
         from skimage.transform import (
             downscale_local_mean as _skimage_downscale_local_mean,
@@ -767,7 +834,13 @@ def _downscale_local_mean(data, factors):
 
 
 def _read_zarr_v2_array(array_dir: Path, metadata: dict):
-    """Handle read Zarr v2 array."""
+    """Read Zarr v2 array.
+
+    Inputs: `array_dir`, `metadata`. Output: `data`. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     import numpy as np
 
     try:
@@ -828,6 +901,8 @@ def _regenerate_xy_only_pyramid(
     store_root: Path, downscale_factor: int = 2
 ) -> Optional[str]:
     """Regenerate pyramid levels so only YX axes are downsampled.
+
+    Inputs: `store_root`, `downscale_factor`. Output: `Optional[str]`.
 
     Preserves ``s0`` (full resolution) unchanged.  Removes old
     downsampled levels and writes new ones using ``local_mean``
@@ -967,7 +1042,11 @@ def _write_zarr_v2_level(
     filters_spec,
     codec,
 ) -> Optional[str]:
-    """Write a numpy array as zarr v2 chunk files."""
+    """Write Zarr v2 level.
+
+    Inputs: `output_dir`, `data`, `chunks`, `compressor_spec`, `filters_spec`, `codec`.
+    Output: `Optional[str]`.
+    """
     import numpy as np
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1031,7 +1110,10 @@ def _write_zarr_v2_level(
 
 @lru_cache(maxsize=1)
 def _ome_zarr_runtime() -> tuple[Optional[dict[str, object]], Optional[str]]:
-    """Handle ome Zarr runtime."""
+    """Ome Zarr runtime.
+
+    Inputs: none. Output: `tuple[Optional[dict[str, object]], Optional[str]]`.
+    """
     try:
         from ome_zarr.format import CurrentFormat, detect_format
         from ome_zarr.io import parse_url

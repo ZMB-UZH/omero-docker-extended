@@ -11,20 +11,27 @@ logger = logging.getLogger(__name__)
 
 
 def _long_value_marker(key, *, stored):
-    """Handle long value marker."""
+    """Long value marker.
+
+    Inputs: `key`, `stored`. Output: computed value.
+    """
     status = "STORED_IN_FILEANNOTATION" if stored else "NOT_STORED"
     return f"[LONG_VALUE_{status} key={key}]"
 
 
 def _set_long_value_markers(cleaned, long_values, *, stored):
-    """Handle set long value markers."""
+    """Set long value markers.
+
+    Inputs: `cleaned`, `long_values`, `stored`. Output: None.
+    """
     for key in long_values:
         cleaned[key] = _long_value_marker(key, stored=stored)
 
 
 def extract_acquisition_metadata(img):
-    """
-    Extract acquisition metadata from an OMERO image.
+    """Extract acquisition metadata.
+
+    Inputs: `img`. Output: `cleaned`.
 
     Returns dict of metadata key-value pairs suitable for MapAnnotation.
     Long values are stored separately as FileAnnotation.

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Print usage text. Inputs: shell arguments and environment. Output: command status and side effects.
 usage() {
   cat <<'USAGE'
 Usage: enforce-ext4-project-quota.sh --group <name> --group-path <path> --quota-gb <gb> --mount-point <path>
@@ -17,6 +18,7 @@ project_id_min="${ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN:-200000}"
 minimum_quota_gb="${ADMIN_TOOLS_MIN_QUOTA_GB:-0.10}"
 lock_path="${ADMIN_TOOLS_QUOTA_LOCK_PATH:-/tmp/omero-ext4-quota.lock}"
 
+# Return whether non negative integer. Inputs: shell arguments and environment. Output: success or failure status.
 is_non_negative_integer() {
   case "${1:-}" in
     ""|*[!0-9]*) return 1 ;;
@@ -24,6 +26,7 @@ is_non_negative_integer() {
   esac
 }
 
+# Return whether safe group name. Inputs: shell arguments and environment. Output: success or failure status.
 is_safe_group_name() {
   case "${1:-}" in
     ""|*[!A-Za-z0-9._-]*) return 1 ;;

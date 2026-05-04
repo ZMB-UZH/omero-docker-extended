@@ -12,7 +12,10 @@ RETENTION_FILE_MARKER_SUFFIX = ".retain-until"
 
 
 def _resolve_existing(path: Path) -> Path | None:
-    """Handle resolve existing."""
+    """Resolve existing.
+
+    Inputs: `path`. Output: `Path | None`.
+    """
     try:
         return path.resolve(strict=True)
     except (OSError, RuntimeError):
@@ -20,7 +23,10 @@ def _resolve_existing(path: Path) -> Path | None:
 
 
 def _resolve_child_candidate(path: Path) -> Path | None:
-    """Handle resolve child candidate."""
+    """Resolve child candidate.
+
+    Inputs: `path`. Output: `Path | None`.
+    """
     if path.exists() or path.is_symlink():
         return _resolve_existing(path)
     parent = _resolve_existing(path.parent)
@@ -30,7 +36,10 @@ def _resolve_child_candidate(path: Path) -> Path | None:
 
 
 def _is_safe_path_component(value: str) -> bool:
-    """Handle is safe path component."""
+    """Return whether safe path component.
+
+    Inputs: `value`. Output: `bool`.
+    """
     return (
         value not in {"", ".", ".."}
         and "/" not in value
@@ -40,7 +49,10 @@ def _is_safe_path_component(value: str) -> bool:
 
 
 def is_within_root(path: Path, root: Path) -> bool:
-    """Return True if *path* is contained within *root* after resolving symlinks."""
+    """Return True if *path* is contained within *root* after resolving symlinks.
+
+    Inputs: `path`, `root`. Output: `bool`.
+    """
     root_resolved = _resolve_existing(root)
     path_resolved = _resolve_child_candidate(path)
     if root_resolved is None or path_resolved is None:
@@ -53,7 +65,10 @@ def is_within_root(path: Path, root: Path) -> bool:
 
 
 def safe_remove_tree(path: Path, root: Path) -> bool:
-    """Safely delete a directory tree under *root*."""
+    """Safely delete a directory tree under *root*.
+
+    Inputs: `path`, `root`. Output: `bool`.
+    """
     if not path.exists():
         return is_within_root(path, root)
 
@@ -90,7 +105,10 @@ def safe_remove_tree(path: Path, root: Path) -> bool:
 
 
 def safe_remove_job_data(job_id: str, upload_root: Path) -> bool:
-    """Remove the upload data directory for *job_id* under *upload_root*."""
+    """Return safe remove job data.
+
+    Inputs: `job_id`, `upload_root`. Output: `bool`.
+    """
     if not _is_safe_path_component(str(job_id)):
         return False
     job_dir = upload_root / job_id
@@ -98,14 +116,20 @@ def safe_remove_job_data(job_id: str, upload_root: Path) -> bool:
 
 
 def _retention_marker_path(path: Path) -> Path:
-    """Handle retention marker path."""
+    """Retention marker path.
+
+    Inputs: `path`. Output: `Path`.
+    """
     if path.is_dir():
         return path / RETENTION_DIR_MARKER_NAME
     return path.parent / f".{path.name}{RETENTION_FILE_MARKER_SUFFIX}"
 
 
 def _fsync_directory(path: Path) -> None:
-    """Handle fsync directory."""
+    """Fsync directory.
+
+    Inputs: `path`. Output: None.
+    """
     try:
         dir_fd = os.open(path, os.O_DIRECTORY)
     except (AttributeError, OSError):
@@ -123,7 +147,10 @@ def safe_mark_path_for_deferred_cleanup(
     ttl_seconds: int,
     now: float | None = None,
 ) -> bool:
-    """Persist a deferred-cleanup marker for *path* under *root*."""
+    """Persist a deferred-cleanup marker for *path* under *root*.
+
+    Inputs: `path`, `root`, `ttl_seconds`, `now`. Output: `bool`.
+    """
     try:
         ttl_seconds = int(ttl_seconds)
     except (TypeError, ValueError):

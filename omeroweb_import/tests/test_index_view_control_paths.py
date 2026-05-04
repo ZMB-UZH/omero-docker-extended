@@ -21,18 +21,27 @@ from omeroweb_import.views import (
 
 
 def _test_job_id(suffix: str) -> str:
-    """Build a fake job ID at runtime so static scanners do not flag it as a token."""
+    """Verify job ID.
+
+    Inputs: `suffix`. Output: `str`.
+    """
     return "dead" + "0" * 26 + suffix
 
 
 def _payload(response):
-    """Handle payload."""
+    """Payload.
+
+    Inputs: `response`. Output: `json.loads` result.
+    """
     return json.loads(response.content.decode("utf-8"))
 
 
 @pytest.fixture(autouse=True)
 def _regular_wrapper_user(monkeypatch):
-    """Handle regular wrapper user."""
+    """Regular wrapper user.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         import_view_utils,
         "current_username",
@@ -44,10 +53,17 @@ class _NamedObject:
     """Represent named object."""
 
     def __init__(self, name: str):
+        """Initialize the instance.
+
+        Inputs: `name`. Output: None.
+        """
         self._name = name
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
 
@@ -66,13 +82,21 @@ class _Conn:
         event_context=None,
         event_error: Exception | None = None,
     ):
+        """Initialize the instance.
+
+        Inputs: `project`, `group`, `event_context`, `event_error`. Output: None.
+        """
         self._project = project
         self._group = group
         self._event_context = event_context
         self._event_error = event_error
 
     def getObject(self, kind, obj_id):
-        """Return get object."""
+        """Return Object.
+
+        Inputs: `kind`, `obj_id`. Output: computed value. Raises on invalid or
+        unavailable state.
+        """
         if kind == "Project":
             return self._project
         if kind == "ExperimenterGroup":
@@ -80,14 +104,21 @@ class _Conn:
         raise AssertionError(f"unexpected object lookup: {kind!r} {obj_id!r}")
 
     def getEventContext(self):
-        """Return get event context."""
+        """Return Event Context.
+
+        Inputs: none. Output: `self._event_context`. Raises on invalid or unavailable
+        state.
+        """
         if self._event_error is not None:
             raise self._event_error
         return self._event_context
 
 
 def test_index_list_projects_and_root_status_surface_runtime_context(monkeypatch):
-    """Verify test index list projects and root status surf behavior."""
+    """Verify index list projects and root status surface runtime context.
+
+    Inputs: `monkeypatch`. Output: `HttpResponse` result.
+    """
     upload_root = Path(tempfile.gettempdir()) / "import-upload-root"
     request = RequestFactory().get("/omeroweb_import/")
 
@@ -120,7 +151,10 @@ def test_index_list_projects_and_root_status_surface_runtime_context(monkeypatch
     monkeypatch.setattr(index_view, "reverse", lambda name, kwargs=None: f"/{name}/")
 
     def fake_render(_request, _template, context):
-        """Handle fake render."""
+        """Fake render.
+
+        Inputs: `_request`, `_template`, `context`. Output: `HttpResponse` result.
+        """
         return HttpResponse(
             json.dumps(context, sort_keys=True),
             content_type="application/json",
@@ -149,7 +183,10 @@ def test_index_list_projects_and_root_status_surface_runtime_context(monkeypatch
 
 
 def test_start_upload_wrapper_returns_sanitized_server_error(monkeypatch):
-    """Verify test start upload wrapper returns sanitized s behavior."""
+    """Verify start upload wrapper returns sanitized server error.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().post("/omeroweb_import/start/")
 
     monkeypatch.setattr(
@@ -172,7 +209,10 @@ def test_start_upload_wrapper_returns_sanitized_server_error(monkeypatch):
 def test_start_upload_success_normalizes_entries_and_captures_group_context(
     tmp_path, monkeypatch
 ):
-    """Verify test start upload success normalizes entries behavior."""
+    """Verify start upload success normalizes entries and captures group context.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: bool.
+    """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
     saved = {}
@@ -247,7 +287,10 @@ def test_start_upload_success_normalizes_entries_and_captures_group_context(
     )
 
     def save_job(job):
-        """Store save job."""
+        """Save job.
+
+        Inputs: `job`. Output: bool.
+        """
         saved["job"] = json.loads(json.dumps(job))
         return True
 
@@ -294,7 +337,10 @@ def test_start_upload_success_normalizes_entries_and_captures_group_context(
 
 
 def test_start_upload_uses_client_retry_id_idempotently(tmp_path, monkeypatch):
-    """Verify client upload retry IDs return existing matching jobs."""
+    """Verify client upload retry IDs return existing matching jobs.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
     existing_job = {
@@ -375,7 +421,10 @@ def test_start_upload_uses_client_retry_id_idempotently(tmp_path, monkeypatch):
 def test_start_upload_handles_disabled_special_methods_event_context_failures_and_save_errors(
     tmp_path, monkeypatch
 ):
-    """Verify test start upload handles disabled special me behavior."""
+    """Verify start upload handles disabled special methods event context failures and save errors.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: bool.
+    """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
     captured = {}
@@ -416,7 +465,10 @@ def test_start_upload_handles_disabled_special_methods_event_context_failures_an
     )
 
     def save_job(job):
-        """Store save job."""
+        """Save job.
+
+        Inputs: `job`. Output: bool.
+        """
         captured["job"] = json.loads(json.dumps(job))
         return False
 
@@ -439,7 +491,10 @@ def test_start_upload_handles_disabled_special_methods_event_context_failures_an
 def test_start_upload_accepts_dataset_name_override_for_root_dataset(
     tmp_path, monkeypatch
 ):
-    """Verify test start upload accepts dataset name overri behavior."""
+    """Verify start upload accepts dataset name override for root dataset.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: bool.
+    """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
     captured = {}
@@ -478,7 +533,10 @@ def test_start_upload_accepts_dataset_name_override_for_root_dataset(
     )
 
     def save_job(job):
-        """Store save job."""
+        """Save job.
+
+        Inputs: `job`. Output: bool.
+        """
         captured["job"] = json.loads(json.dumps(job))
         return True
 
@@ -495,7 +553,10 @@ def test_start_upload_accepts_dataset_name_override_for_root_dataset(
 def test_start_upload_rejects_invalid_project_payloads_paths_and_batch_limits(
     tmp_path, monkeypatch
 ):
-    """Verify test start upload rejects invalid project pay behavior."""
+    """Verify start upload rejects invalid project payloads paths and batch limits.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: 'Unsafe staged target' or None.
+    """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
 
@@ -621,7 +682,10 @@ def test_start_upload_rejects_invalid_project_payloads_paths_and_batch_limits(
     )
 
     def staged_error(upload_root, staged_path):
-        """Handle staged error."""
+        """Staged error.
+
+        Inputs: `upload_root`, `staged_path`. Output: 'Unsafe staged target' or None.
+        """
         if "blocked" in staged_path:
             return "Unsafe staged target"
         return None
@@ -673,7 +737,10 @@ def test_start_upload_rejects_invalid_project_payloads_paths_and_batch_limits(
 
 
 def test_upload_helpers_non_chunked_paths_and_preparation_errors(tmp_path, monkeypatch):
-    """Verify test upload helpers non chunked paths and pre behavior."""
+    """Verify upload helpers non chunked paths and preparation errors.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("b2")
     upload_root.mkdir()
@@ -956,7 +1023,10 @@ def test_upload_helpers_non_chunked_paths_and_preparation_errors(tmp_path, monke
 
 
 def test_chunk_import_confirm_prune_and_status_control_paths(tmp_path, monkeypatch):
-    """Verify test chunk import confirm prune and status co behavior."""
+    """Verify chunk import confirm prune and status control paths.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("c2")
     job_root = upload_root / job_id
@@ -1342,7 +1412,10 @@ def test_chunk_import_confirm_prune_and_status_control_paths(tmp_path, monkeypat
 def test_index_view_wrapper_and_chunk_error_edges_cover_persisted_state_failures(
     tmp_path, monkeypatch
 ):
-    """Verify test index view wrapper and chunk error edges behavior."""
+    """Verify index view wrapper and chunk error edges cover persisted state failures.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     job_id = _test_job_id("d3")
     upload_root = tmp_path / "upload-root"
     job_root = upload_root / job_id
@@ -1531,7 +1604,10 @@ def test_index_view_wrapper_and_chunk_error_edges_cover_persisted_state_failures
 def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     tmp_path, monkeypatch
 ):
-    """Verify test prune upload edge paths cover payload no behavior."""
+    """Verify prune upload edge paths cover payload normalization and error states.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `updated`.
+    """
     upload_root = tmp_path / "upload-root"
     jobs_root = tmp_path / "jobs-root"
     job_id = _test_job_id("e4")
@@ -1591,7 +1667,10 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     monkeypatch.setattr(index_view, "load_json_body", lambda request: [])
 
     def update_job_none(current_job_id, updater):
-        """Handle update job none."""
+        """Update job none.
+
+        Inputs: `current_job_id`, `updater`. Output: None.
+        """
         assert current_job_id == job_id
 
     monkeypatch.setattr(index_view, "_update_job", update_job_none)
@@ -1611,7 +1690,10 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     normalized_keep_paths = []
 
     def update_job_capture(current_job_id, updater):
-        """Handle update job capture."""
+        """Update job capture.
+
+        Inputs: `current_job_id`, `updater`. Output: `updated`.
+        """
         job_copy = json.loads(json.dumps(base_job))
         updated = updater(job_copy)
         normalized_keep_paths.append(updated["compatibility_status"])
@@ -1629,7 +1711,10 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     statuses = []
 
     def update_job_status(current_job_id, updater):
-        """Handle update job status."""
+        """Update job status.
+
+        Inputs: `current_job_id`, `updater`. Output: `updated`.
+        """
         job_copy = json.loads(json.dumps(base_job))
         updated = updater(job_copy)
         statuses.append(updated["compatibility_status"])
@@ -1807,7 +1892,10 @@ def test_index_view_additional_chunk_and_prune_error_paths_cover_remaining_retur
     tmp_path,
     monkeypatch,
 ):
-    """Verify test index view additional chunk and prune er behavior."""
+    """Verify index view additional chunk and prune error paths cover remaining returns.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: computed value.
+    """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("f5")
     job_root = upload_root / job_id
@@ -1842,7 +1930,10 @@ def test_index_view_additional_chunk_and_prune_error_paths_cover_remaining_retur
     )
 
     def _chunk_request():
-        """Handle chunk request."""
+        """Chunk request.
+
+        Inputs: none. Output: `RequestFactory().post` result.
+        """
         return RequestFactory().post(
             f"/omeroweb_import/upload/{job_id}/",
             data={
@@ -2083,7 +2174,10 @@ def test_index_view_additional_chunk_and_prune_error_paths_cover_remaining_retur
     )
 
     def update_job(current_job_id, updater):
-        """Handle update job."""
+        """Update job.
+
+        Inputs: `current_job_id`, `updater`. Output: `updater` result.
+        """
         assert current_job_id == job_id
         return updater(keep_job)
 

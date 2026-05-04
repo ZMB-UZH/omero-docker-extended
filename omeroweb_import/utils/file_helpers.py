@@ -22,17 +22,26 @@ _DIRECTORY_CACHE = _DirectoryCache()
 
 
 def resolve_upload_root() -> Path:
-    """Return the upload data directory under OMERO_TMP_PATH."""
+    """Return the upload data directory under OMERO_TMP_PATH.
+
+    Inputs: none. Output: `Path`.
+    """
     return get_plugin_tmp_dir("data")
 
 
 def resolve_jobs_root() -> Path:
-    """Return the upload jobs directory under OMERO_TMP_PATH."""
+    """Return the upload jobs directory under OMERO_TMP_PATH.
+
+    Inputs: none. Output: `Path`.
+    """
     return get_plugin_tmp_dir("jobs")
 
 
 def ensure_parent_dir(path: Path) -> bool:
-    """Ensure parent directory exists with proper permissions."""
+    """Ensure parent directory.
+
+    Inputs: `path`. Output: `bool`.
+    """
     try:
         parent = path.parent
         if not parent.exists():
@@ -48,7 +57,10 @@ def ensure_parent_dir(path: Path) -> bool:
 
 
 def initialize_directories() -> None:
-    """Initialize upload and jobs directories."""
+    """Initialize upload and jobs directories.
+
+    Inputs: none. Output: None.
+    """
     if (
         _DIRECTORY_CACHE.upload_root is not None
         and _DIRECTORY_CACHE.jobs_root is not None
@@ -82,7 +94,10 @@ def initialize_directories() -> None:
 
 
 def get_upload_root() -> Path:
-    """Get cached upload root, initializing if needed."""
+    """Return upload root.
+
+    Inputs: none. Output: `Path`. Raises on invalid or unavailable state.
+    """
     if _DIRECTORY_CACHE.upload_root is None:
         initialize_directories()
     if _DIRECTORY_CACHE.upload_root is None:
@@ -91,7 +106,10 @@ def get_upload_root() -> Path:
 
 
 def get_jobs_root() -> Path:
-    """Get cached jobs root, initializing if needed."""
+    """Return jobs root.
+
+    Inputs: none. Output: `Path`. Raises on invalid or unavailable state.
+    """
     if _DIRECTORY_CACHE.jobs_root is None:
         initialize_directories()
     if _DIRECTORY_CACHE.jobs_root is None:
@@ -100,7 +118,10 @@ def get_jobs_root() -> Path:
 
 
 def ensure_dir(path: Path) -> bool:
-    """Ensure directory exists."""
+    """Ensure directory.
+
+    Inputs: `path`. Output: `bool`.
+    """
     try:
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
@@ -115,7 +136,10 @@ def ensure_dir(path: Path) -> bool:
 
 
 def ensure_dir_with_permissions(path: Path, mode: int) -> bool:
-    """Ensure directory exists with specific permissions."""
+    """Ensure directory with permissions.
+
+    Inputs: `path`, `mode`. Output: `bool`.
+    """
     try:
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True, mode=mode)
@@ -138,7 +162,10 @@ def ensure_dir_with_permissions(path: Path, mode: int) -> bool:
 
 
 def safe_relative_path(raw_name: str):
-    """Sanitize filename to safe relative path."""
+    """Sanitize filename to safe relative path.
+
+    Inputs: `raw_name`. Output: computed value.
+    """
     import re
 
     name = raw_name.strip()
@@ -149,7 +176,10 @@ def safe_relative_path(raw_name: str):
 
 
 def is_within_root(path: Path, root: Path) -> bool:
-    """Check if path is within root directory."""
+    """Return whether within root.
+
+    Inputs: `path`, `root`. Output: `bool`.
+    """
     try:
         path.resolve().relative_to(root.resolve())
         return True
@@ -158,7 +188,10 @@ def is_within_root(path: Path, root: Path) -> bool:
 
 
 def safe_remove_tree(path: Path, root: Path):
-    """Safely remove directory tree if within root."""
+    """Safely remove directory tree if within root.
+
+    Inputs: `path`, `root`. Output: None.
+    """
     import shutil
 
     if not is_within_root(path, root):

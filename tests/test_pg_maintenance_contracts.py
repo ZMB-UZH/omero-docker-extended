@@ -17,7 +17,10 @@ PLUGIN_DB_AUTH_ENV = "PLUGIN_DB_" + "PASS"
 
 
 def _maintenance_env(**overrides: str) -> dict[str, str]:
-    """Handle maintenance env."""
+    """Maintenance env.
+
+    Inputs: `**overrides`. Output: `dict[str, str]`.
+    """
     env = {
         "PATH": os.environ["PATH"],
         "OMERO_DB_HOST": "database",
@@ -36,7 +39,10 @@ def _maintenance_env(**overrides: str) -> dict[str, str]:
 
 
 def _run_bash(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    """Handle run bash."""
+    """Bash.
+
+    Inputs: `script`, `env`. Output: `subprocess.CompletedProcess[str]`.
+    """
     return subprocess.run(
         [BASH_BIN, "-c", script],
         check=False,
@@ -48,7 +54,10 @@ def _run_bash(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[s
 
 
 def test_entrypoint_writes_private_shell_quoted_cron_env(tmp_path: Path) -> None:
-    """Verify test entrypoint writes private shell quoted c behavior."""
+    """Verify entrypoint writes private shell quoted cron environment.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     env_file = tmp_path / "pg-maintenance-env"
     marker = tmp_path / "command-substitution-ran"
     omero_auth_value = f"space value $(touch {marker}) 'quote' \"double\""
@@ -89,7 +98,10 @@ def test_entrypoint_writes_private_shell_quoted_cron_env(tmp_path: Path) -> None
 def test_entrypoint_fails_before_cron_when_required_env_is_missing(
     tmp_path: Path,
 ) -> None:
-    """Verify test entrypoint fails before cron when requir behavior."""
+    """Verify entrypoint fails before cron when required environment is missing.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     env_file = tmp_path / "pg-maintenance-env"
     env = _maintenance_env(PG_MAINTENANCE_ENV_FILE=str(env_file))
     del env[PLUGIN_DB_AUTH_ENV]
@@ -111,7 +123,10 @@ def test_entrypoint_fails_before_cron_when_required_env_is_missing(
 def test_entrypoint_derives_plugin_database_auth_from_compose_secret_name(
     tmp_path: Path,
 ) -> None:
-    """Verify test entrypoint derives plugin database auth behavior."""
+    """Verify entrypoint derives plugin database auth from compose secret name.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     env_file = tmp_path / "pg-maintenance-env"
     expected_plugin_auth = "plugin-auth-from-env-file"
     env = _maintenance_env(
@@ -135,7 +150,10 @@ def test_entrypoint_derives_plugin_database_auth_from_compose_secret_name(
 
 
 def test_cron_schedule_uses_runner_without_self_rewriting_or_guard_leak() -> None:
-    """Verify test cron schedule uses runner without self r behavior."""
+    """Verify cron schedule uses runner without self rewriting or guard leak.
+
+    Inputs: none. Output: None.
+    """
     cron_text = CRON.read_text(encoding="utf-8")
 
     assert "/usr/local/bin/pg-maintenance-cron-runner vacuum_analyze" in cron_text
@@ -148,7 +166,10 @@ def test_cron_schedule_uses_runner_without_self_rewriting_or_guard_leak() -> Non
 
 
 def test_cron_runner_sources_private_env_before_exec(tmp_path: Path) -> None:
-    """Verify test cron runner sources private env before exec."""
+    """Verify cron runner sources private environment before exec.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     env_file = tmp_path / "pg-maintenance-env"
     output_file = tmp_path / "runner-output"
     fake_script = tmp_path / "fake-maintenance.sh"
@@ -200,7 +221,10 @@ def test_cron_runner_sources_private_env_before_exec(tmp_path: Path) -> None:
 
 
 def test_pg_maintenance_fails_when_database_command_fails(tmp_path: Path) -> None:
-    """Verify test pg maintenance fails when database comma behavior."""
+    """Verify pg maintenance fails when database command fails.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     stub_bin = tmp_path / "bin"
     stub_bin.mkdir()
     capture_file = tmp_path / "pgoptions"

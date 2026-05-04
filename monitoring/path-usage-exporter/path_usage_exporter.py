@@ -26,7 +26,10 @@ TEXTFILE_METRIC_MODE = stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH
 
 
 def env_int(name: str, default: int, minimum: int = 1) -> int:
-    """Return a bounded integer from the environment."""
+    """Return a bounded integer from the environment.
+
+    Inputs: `name`, `default`, `minimum`. Output: `int`.
+    """
     raw_value = os.environ.get(name)
     if raw_value is None or raw_value.strip() == "":
         return default
@@ -55,7 +58,10 @@ TARGETS: list[tuple[str, str]] = [
 
 
 def parse_env_file(env_file_path: str) -> dict[str, str]:
-    """Parse a simple KEY=VALUE env file into a dictionary."""
+    """Parse environment file.
+
+    Inputs: `env_file_path`. Output: `dict[str, str]`.
+    """
     result: dict[str, str] = {}
     if not os.path.exists(env_file_path):
         return result
@@ -71,7 +77,11 @@ def parse_env_file(env_file_path: str) -> dict[str, str]:
 
 
 def host_path_for_df(path_value: str, host_root: str = HOST_ROOT) -> str:
-    """Translate a host path to the same location under the host-root mount."""
+    """Translate a host path to the same location under the host-root mount.
+
+    Inputs: `path_value`, `host_root`. Output: `str`. Raises on invalid or unavailable
+    state.
+    """
     stripped_path = path_value.strip()
     if not stripped_path.startswith("/"):
         raise ValueError(f"Path must be absolute: {path_value}")
@@ -82,7 +92,11 @@ def host_path_for_df(path_value: str, host_root: str = HOST_ROOT) -> str:
 def df_usage(
     path_for_df: str, timeout_seconds: int = DF_TIMEOUT_SECONDS
 ) -> tuple[str, int, int, float] | None:
-    """Return mountpoint and byte usage from portable `df -kP` output."""
+    """Return mountpoint and byte usage from portable `df -kP` output.
+
+    Inputs: `path_for_df`, `timeout_seconds`. Output: `tuple[str, int, int, float] |
+    None`.
+    """
     command = ["df", "-kP", path_for_df]
     try:
         completed = subprocess.run(
@@ -116,19 +130,28 @@ def df_usage(
 
 
 def escape_label_value(value: str) -> str:
-    """Escape Prometheus text-format label values."""
+    """Escape Prometheus text-format label values.
+
+    Inputs: `value`. Output: `str`.
+    """
     return value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
 
 
 def render_labels(labels: dict[str, str]) -> str:
-    """Render Prometheus labels in insertion order."""
+    """Render labels.
+
+    Inputs: `labels`. Output: `str`.
+    """
     return ",".join(
         f'{name}="{escape_label_value(value)}"' for name, value in labels.items()
     )
 
 
 def render_metrics(env_values: dict[str, str]) -> str:
-    """Render Prometheus metrics text for configured targets."""
+    """Render metrics.
+
+    Inputs: `env_values`. Output: `str`.
+    """
     lines: list[str] = [
         "# HELP omero_path_used_ratio Filesystem used ratio for OMERO-related host paths",
         "# TYPE omero_path_used_ratio gauge",
@@ -172,7 +195,10 @@ def render_metrics(env_values: dict[str, str]) -> str:
 
 
 def write_metrics(content: str) -> None:
-    """Write metrics atomically to textfile collector output."""
+    """Write metrics.
+
+    Inputs: `content`. Output: None. Raises on invalid or unavailable state.
+    """
     output_dir = os.path.dirname(OUT) or "."
     os.makedirs(output_dir, exist_ok=True)
 
@@ -200,7 +226,10 @@ def write_metrics(content: str) -> None:
 
 
 def main() -> None:
-    """Collect and export OMERO host path usage metrics forever."""
+    """Execute the command entrypoint.
+
+    Inputs: none. Output: None.
+    """
     while True:
         try:
             env_values = parse_env_file(PATHS_ENV_FILE)

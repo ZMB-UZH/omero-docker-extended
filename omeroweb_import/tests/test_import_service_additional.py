@@ -12,13 +12,19 @@ from omeroweb_import.services.omero import import_service
 def test_import_service_import_file_supports_optional_import_name(
     tmp_path, monkeypatch
 ):
-    """Verify test import service import file supports opti behavior."""
+    """Verify import service import file supports optional import name.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: call result.
+    """
     sample_path = tmp_path / "sample.czi"
     sample_path.write_text("payload", encoding="utf-8")
     captured = {}
 
     def fake_run(cmd, timeout=None):
-        """Handle fake run."""
+        """Fake run.
+
+        Inputs: `cmd`, `timeout`. Output: call result.
+        """
         captured["cmd"] = cmd
         captured["timeout"] = timeout
         return subprocess.CompletedProcess(
@@ -53,27 +59,46 @@ def test_import_service_import_file_supports_optional_import_name(
 def test_open_service_connection_reports_connect_exceptions_without_last_error(
     monkeypatch, caplog
 ):
-    """Verify test open service connection reports connect behavior."""
+    """Verify open service connection reports connect exceptions without last error.
+
+    Inputs: `monkeypatch`, `caplog`. Output: None. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
 
     class _Conn:
         """Represent conn."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def connect():
-            """Handle connect."""
+            """Open the connection.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("connect failed")
 
         @staticmethod
         def getLastError():
-            """Return get last error."""
+            """Return Last Error.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("last error unavailable")
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("close failed")
 
     conn = _Conn()
@@ -92,7 +117,10 @@ def test_open_service_connection_reports_connect_exceptions_without_last_error(
 
 
 def test_open_service_connection_requires_service_password(monkeypatch, caplog):
-    """Verify test open service connection requires service behavior."""
+    """Verify open service connection requires service password.
+
+    Inputs: `monkeypatch`, `caplog`. Output: None.
+    """
     monkeypatch.setattr(
         import_service,
         "_get_job_service_credentials",
@@ -109,27 +137,46 @@ def test_open_service_connection_requires_service_password(monkeypatch, caplog):
 def test_open_service_connection_suppresses_close_failure_after_false_connect(
     monkeypatch, caplog
 ):
-    """Verify test open service connection suppresses close behavior."""
+    """Verify open service connection suppresses close failure after false connect.
+
+    Inputs: `monkeypatch`, `caplog`. Output: computed value. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
 
     class _Conn:
         """Represent conn."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def connect():
-            """Handle connect."""
+            """Open the connection.
+
+            Inputs: none. Output: bool.
+            """
             return False
 
         @staticmethod
         def getLastError():
-            """Return get last error."""
+            """Return Last Error.
+
+            Inputs: none. Output: 'gateway refused connection'.
+            """
             return "gateway refused connection"
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("close failed")
 
     conn = _Conn()
@@ -150,12 +197,19 @@ def test_open_service_connection_suppresses_close_failure_after_false_connect(
 def test_open_service_connection_logs_group_context_failures_but_keeps_connection(
     monkeypatch, caplog
 ):
-    """Verify test open service connection logs group conte behavior."""
+    """Verify open service connection logs group context failures but keeps connection.
+
+    Inputs: `monkeypatch`, `caplog`. Output: bool or None.
+    """
 
     class _Conn:
         """Represent conn."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.SERVICE_OPTS = SimpleNamespace(
                 setOmeroGroup=lambda value: (_ for _ in ()).throw(
                     RuntimeError("group context unavailable")
@@ -164,12 +218,18 @@ def test_open_service_connection_logs_group_context_failures_but_keeps_connectio
 
         @staticmethod
         def connect():
-            """Handle connect."""
+            """Open the connection.
+
+            Inputs: none. Output: bool.
+            """
             return True
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None.
+            """
             return None
 
     conn = _Conn()
@@ -192,15 +252,29 @@ def test_open_service_connection_logs_group_context_failures_but_keeps_connectio
 def test_open_service_connection_reraises_unexpected_group_id_failures(
     monkeypatch, caplog
 ):
-    """Verify test open service connection reraises unexpec behavior."""
+    """Verify open service connection reraises unexpected group ID failures.
+
+    Inputs: `monkeypatch`, `caplog`. Output: computed value. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
 
     class _BadGroupId:
         """Represent bad group identifier."""
 
         def __init__(self, *, fail=True):
+            """Initialize the instance.
+
+            Inputs: `fail`. Output: None.
+            """
             self.fail = fail
 
         def __int__(self):
+            """Return the integer representation.
+
+            Inputs: none. Output: 7. Raises on invalid or unavailable state.
+            """
             if self.fail:
                 raise TypeError("bad group id")
             return 7
@@ -209,16 +283,26 @@ def test_open_service_connection_reraises_unexpected_group_id_failures(
         """Represent conn."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def connect():
-            """Handle connect."""
+            """Open the connection.
+
+            Inputs: none. Output: bool.
+            """
             return True
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("close failed")
 
     conn = _Conn()

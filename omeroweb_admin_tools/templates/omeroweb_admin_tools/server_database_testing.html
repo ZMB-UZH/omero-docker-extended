@@ -43,6 +43,7 @@ const scriptsEl = document.getElementById('diag_scripts');
 const runBtn = document.getElementById('diag_run_btn');
 const scriptsById = new Map(scripts.map((script) => [script.script_id, script]));
 
+// Escape HTML. Inputs: value. Output: return value.
 function escapeHtml(value) {
     return String(value)
         .replace(/&/g, '&amp;')
@@ -52,12 +53,14 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+// Return status Badge. Inputs: status. Output: return value.
 function statusBadge(status) {
     const normalized = String(status || 'warn').toLowerCase();
     const label = normalized === 'pass' ? 'PASS' : normalized === 'fail' ? 'FAIL' : 'WARN';
     return `<span class="diag-badge diag-badge--${normalized}">${label}</span>`;
 }
 
+// Set Request Info. Inputs: requestId, responseStatus. Output: return value.
 function setRequestInfo(requestId, responseStatus) {
     if (!requestId) {
         requestInfoEl.style.display = 'none';
@@ -68,7 +71,7 @@ function setRequestInfo(requestId, responseStatus) {
     requestInfoEl.textContent = `Request ID: ${requestId}${responseStatus ? ` · HTTP ${responseStatus}` : ''}`;
 }
 
-// --- localStorage persistence (per-user, per-browser, same mechanism as upload/omp plugins) ---
+// Load Saved Selection. Inputs: none. Output: return value.
 
 function loadSavedSelection() {
     try {
@@ -80,12 +83,14 @@ function loadSavedSelection() {
     return null;
 }
 
+// Save Selection. Inputs: selectedSet. Output: return value.
 function saveSelection(selectedSet) {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify([...selectedSet]));
     } catch (_) { /* ignore quota errors */ }
 }
 
+// Render Scripts. Inputs: none. Output: return value.
 function renderScripts() {
     const saved = loadSavedSelection();
     // For a brand-new user (no saved state) nothing is pre-selected.
@@ -115,10 +120,12 @@ function renderScripts() {
     });
 }
 
+// Return selected Scripts. Inputs: none. Output: return value.
 function selectedScripts() {
     return Array.from(document.querySelectorAll('.diag-script-checkbox:checked')).map((input) => input.value);
 }
 
+// Render Results. Inputs: payload. Output: return value.
 function renderResults(payload) {
     const rendered = payload.results.map((result) => {
         const script = scriptsById.get(result.script_id) || {};
@@ -181,6 +188,7 @@ function renderResults(payload) {
     resultsEl.innerHTML = rendered;
 }
 
+// Parse JSON Response. Inputs: response. Output: Promise result.
 async function parseJsonResponse(response) {
     const body = await response.text();
     if (!body) {
@@ -193,6 +201,7 @@ async function parseJsonResponse(response) {
     }
 }
 
+// Execute Diagnostics. Inputs: none. Output: Promise result.
 async function runDiagnostics() {
     const selected = selectedScripts();
     if (!selected.length) {

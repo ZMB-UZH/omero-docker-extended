@@ -31,10 +31,17 @@ class _Color:
     """Represent color."""
 
     def __init__(self, html):
+        """Initialize the instance.
+
+        Inputs: `html`. Output: None.
+        """
         self._html = html
 
     def getHtml(self):
-        """Return get HTML."""
+        """Return the HTML color value.
+
+        Inputs: none. Output: `self._html`.
+        """
         return self._html
 
 
@@ -51,6 +58,13 @@ class _Channel:
         window=(1.0, 5.0),
         raise_color=False,
     ):
+        """Initialize the instance.
+
+        Inputs: `label`, `color`, `active`, `inverted`, `window`, `raise_color`. Output:
+        None.
+
+        None.
+        """
         self._label = label
         self._color = color
         self._active = active
@@ -59,29 +73,47 @@ class _Channel:
         self._raise_color = raise_color
 
     def getLabel(self):
-        """Return get label."""
+        """Return Label.
+
+        Inputs: none. Output: `self._label`.
+        """
         return self._label
 
     def getColor(self):
-        """Return get color."""
+        """Return Color.
+
+        Inputs: none. Output: `_Color` result. Raises on invalid or unavailable state.
+        """
         if self._raise_color:
             raise RuntimeError("color failure")
         return _Color(self._color)
 
     def isActive(self):
-        """Handle is active."""
+        """Return whether Active.
+
+        Inputs: none. Output: `self._active`.
+        """
         return self._active
 
     def isInverted(self):
-        """Handle is inverted."""
+        """Return whether Inverted.
+
+        Inputs: none. Output: `self._inverted`.
+        """
         return self._inverted
 
     def getWindowStart(self):
-        """Return get window start."""
+        """Return Window Start.
+
+        Inputs: none. Output: `self._window[0]`.
+        """
         return self._window[0]
 
     def getWindowEnd(self):
-        """Return get window end."""
+        """Return Window End.
+
+        Inputs: none. Output: `self._window[1]`.
+        """
         return self._window[1]
 
 
@@ -91,6 +123,10 @@ class _WellSampleParent:
     OMERO_CLASS = "WellSample"
 
     def __init__(self, well_id):
+        """Initialize the instance.
+
+        Inputs: `well_id`. Output: None.
+        """
         self.well = SimpleNamespace(id=SimpleNamespace(val=well_id))
 
 
@@ -100,6 +136,10 @@ class _DatasetParent:
     OMERO_CLASS = "Dataset"
 
     def __init__(self, dataset_id, name, description):
+        """Initialize the instance.
+
+        Inputs: `dataset_id`, `name`, `description`. Output: None.
+        """
         self.id = dataset_id
         self.name = name
         self.description = description
@@ -109,6 +149,10 @@ class _Resolution:
     """Represent resolution."""
 
     def __init__(self, size_x, size_y):
+        """Initialize the instance.
+
+        Inputs: `size_x`, `size_y`. Output: None.
+        """
         self.sizeX = size_x
         self.sizeY = size_y
 
@@ -118,22 +162,34 @@ class _RenderingEngine:
 
     @staticmethod
     def getResolutionLevels():
-        """Return get resolution levels."""
+        """Return Resolution Levels.
+
+        Inputs: none. Output: 2.
+        """
         return 2
 
     @staticmethod
     def getResolutionDescriptions():
-        """Return get resolution descriptions."""
+        """Return Resolution Descriptions.
+
+        Inputs: none. Output: list.
+        """
         return [_Resolution(1024, 512), _Resolution(512, 256)]
 
     @staticmethod
     def getDefaultZ():
-        """Return get default z."""
+        """Return Default Z.
+
+        Inputs: none. Output: 3.
+        """
         return 3
 
     @staticmethod
     def getDefaultT():
-        """Return get default t."""
+        """Return Default T.
+
+        Inputs: none. Output: 4.
+        """
         return 4
 
 
@@ -142,7 +198,10 @@ class _ObjectiveSettings:
 
     @staticmethod
     def getObjective():
-        """Return get objective."""
+        """Return Objective.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(getNominalMagnification=lambda: 40)
 
 
@@ -153,6 +212,10 @@ class _MarshalImage:
     archived = False
 
     def __init__(self, *, prepare_result=True, prepare_exception=None):
+        """Initialize the instance.
+
+        Inputs: `prepare_result`, `prepare_exception`. Output: None.
+        """
         self.id = 7
         self.name = "demo.zarr"
         self._prepare_result = prepare_result
@@ -161,118 +224,190 @@ class _MarshalImage:
         self._conn = object()
 
     def _prepareRenderingEngine(self):
-        """Handle prepare rendering engine."""
+        """Prepare Rendering Engine.
+
+        Inputs: none. Output: `self._prepare_result`. Raises on invalid or unavailable
+        state.
+
+        state.
+        """
         if self._prepare_exception is not None:
             raise self._prepare_exception
         return self._prepare_result
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self.name`.
+        """
         return self.name
 
     @staticmethod
     def canAnnotate():
-        """Handle can annotate."""
+        """Return whether Annotate.
+
+        Inputs: none. Output: bool.
+        """
         return False
 
     @staticmethod
     def canEdit():
-        """Handle can edit."""
+        """Return whether Edit.
+
+        Inputs: none. Output: bool.
+        """
         return True
 
     @staticmethod
     def canDelete():
-        """Handle can delete."""
+        """Return whether Delete.
+
+        Inputs: none. Output: bool.
+        """
         return True
 
     @staticmethod
     def canLink():
-        """Handle can link."""
+        """Return whether Link.
+
+        Inputs: none. Output: bool.
+        """
         return False
 
     @staticmethod
     def getObjectiveSettings():
-        """Return get objective settings."""
+        """Return Objective Settings.
+
+        Inputs: none. Output: `_ObjectiveSettings` result.
+        """
         return _ObjectiveSettings()
 
     @staticmethod
     def getSizeX():
-        """Return get size x."""
+        """Return Size X.
+
+        Inputs: none. Output: 1024.
+        """
         return 1024
 
     @staticmethod
     def getSizeY():
-        """Return get size y."""
+        """Return Size Y.
+
+        Inputs: none. Output: 512.
+        """
         return 512
 
     @staticmethod
     def getSizeZ():
-        """Return get size z."""
+        """Return Size Z.
+
+        Inputs: none. Output: 4.
+        """
         return 4
 
     @staticmethod
     def getSizeT():
-        """Return get size t."""
+        """Return Size T.
+
+        Inputs: none. Output: 2.
+        """
         return 2
 
     @staticmethod
     def getSizeC():
-        """Return get size c."""
+        """Return Size C.
+
+        Inputs: none. Output: 1.
+        """
         return 1
 
     @staticmethod
     def getPixelRange():
-        """Return get pixel range."""
+        """Return Pixel Range.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise TypeError("pixel range unavailable")
 
     @staticmethod
     def getChannels():
-        """Return get channels."""
+        """Return Channels.
+
+        Inputs: none. Output: list.
+        """
         return [_Channel(label="DNA")]
 
     @staticmethod
     def splitChannelDims():
-        """Handle split channel dims."""
+        """Split channel dims.
+
+        Inputs: none. Output: dict.
+        """
         return {"g": {"width": 1024, "height": 512}}
 
     @staticmethod
     def isGreyscaleRenderingModel():
-        """Handle is greyscale rendering model."""
+        """Return whether Greyscale Rendering Model.
+
+        Inputs: none. Output: bool.
+        """
         return False
 
     @staticmethod
     def getProjection():
-        """Return get projection."""
+        """Return Projection.
+
+        Inputs: none. Output: 'normal'.
+        """
         return "normal"
 
     @staticmethod
     def isInvertedAxis():
-        """Handle is inverted axis."""
+        """Return whether Inverted Axis.
+
+        Inputs: none. Output: bool.
+        """
         return False
 
     @staticmethod
     def getAuthor():
-        """Return get author."""
+        """Return Author.
+
+        Inputs: none. Output: 'Author'.
+        """
         return "Author"
 
     @staticmethod
     def getDate():
-        """Return get date."""
+        """Return Date.
+
+        Inputs: none. Output: `datetime` result.
+        """
         return datetime(2026, 3, 30, 12, 0, 0)
 
     @staticmethod
     def getPixelsType():
-        """Return get pixels type."""
+        """Return Pixels Type.
+
+        Inputs: none. Output: 'uint16'.
+        """
         return "uint16"
 
     @staticmethod
     def getProject():
-        """Return get project."""
+        """Return Project.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(id=11, name="Project", description="Project description")
 
     @staticmethod
     def listParents():
-        """Return list parents."""
+        """Return list parents.
+
+        Inputs: none. Output: list.
+        """
         return [
             _DatasetParent(12, "Dataset", "Dataset description"),
             _WellSampleParent(13),
@@ -280,17 +415,26 @@ class _MarshalImage:
 
     @staticmethod
     def getPixelSizeX(units=None):
-        """Return get pixel size x."""
+        """Return Pixel Size X.
+
+        Inputs: `units`. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(getValue=lambda: 0.5)
 
     @staticmethod
     def getPixelSizeY(units=None):
-        """Return get pixel size y."""
+        """Return Pixel Size Y.
+
+        Inputs: `units`. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(getValue=lambda: 0.75)
 
     @staticmethod
     def getPixelSizeZ(units=None):
-        """Return get pixel size z."""
+        """Return Pixel Size Z.
+
+        Inputs: `units`. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(getValue=lambda: 1.25)
 
 
@@ -301,6 +445,10 @@ class _SingleLevelImage:
     archived = False
 
     def __init__(self, *, objective_mode="raise", projection_mode="raise"):
+        """Initialize the instance.
+
+        Inputs: `objective_mode`, `projection_mode`. Output: None.
+        """
         self.id = 9
         self.name = "single.zarr"
         self._objective_mode = objective_mode
@@ -311,32 +459,51 @@ class _SingleLevelImage:
 
     @staticmethod
     def getChannels(noRE=False):
-        """Return get channels."""
+        """Return Channels.
+
+        Inputs: `noRE`. Output: list.
+        """
         return [_Channel(label="DNA")]
 
     def getProjection(self):
-        """Return get projection."""
+        """Return Projection.
+
+        Inputs: none. Output: 'maximum'. Raises on invalid or unavailable state.
+        """
         if self._projection_mode == "raise":
             raise RuntimeError("projection")
         return "maximum"
 
     @staticmethod
     def getPixelSizeX(units=None):
-        """Return get pixel size x."""
+        """Return Pixel Size X.
+
+        Inputs: `units`. Output: None. Raises on invalid or unavailable state.
+        """
         raise RuntimeError("x")
 
     @staticmethod
     def getPixelSizeY(units=None):
-        """Return get pixel size y."""
+        """Return Pixel Size Y.
+
+        Inputs: `units`. Output: None.
+        """
         return None
 
     @staticmethod
     def getPixelSizeZ(units=None):
-        """Return get pixel size z."""
+        """Return Pixel Size Z.
+
+        Inputs: `units`. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(getValue=lambda: 1.5)
 
     def getObjectiveSettings(self):
-        """Return get objective settings."""
+        """Return Objective Settings.
+
+        Inputs: none. Output: `SimpleNamespace` result or None. Raises on invalid or
+        unavailable state.
+        """
         if self._objective_mode == "raise":
             raise RuntimeError("objective")
         if self._objective_mode == "none":
@@ -347,57 +514,90 @@ class _SingleLevelImage:
 
     @staticmethod
     def canAnnotate():
-        """Handle can annotate."""
+        """Return whether Annotate.
+
+        Inputs: none. Output: bool.
+        """
         return True
 
     @staticmethod
     def canEdit():
-        """Handle can edit."""
+        """Return whether Edit.
+
+        Inputs: none. Output: bool.
+        """
         return False
 
     @staticmethod
     def canDelete():
-        """Handle can delete."""
+        """Return whether Delete.
+
+        Inputs: none. Output: bool.
+        """
         return False
 
     @staticmethod
     def canLink():
-        """Handle can link."""
+        """Return whether Link.
+
+        Inputs: none. Output: bool.
+        """
         return True
 
     @staticmethod
     def getSizeX():
-        """Return get size x."""
+        """Return Size X.
+
+        Inputs: none. Output: 128.
+        """
         return 128
 
     @staticmethod
     def getSizeY():
-        """Return get size y."""
+        """Return Size Y.
+
+        Inputs: none. Output: 64.
+        """
         return 64
 
     @staticmethod
     def getSizeZ():
-        """Return get size z."""
+        """Return Size Z.
+
+        Inputs: none. Output: 2.
+        """
         return 2
 
     @staticmethod
     def getSizeT():
-        """Return get size t."""
+        """Return Size T.
+
+        Inputs: none. Output: 1.
+        """
         return 1
 
     @staticmethod
     def getSizeC():
-        """Return get size c."""
+        """Return Size C.
+
+        Inputs: none. Output: 1.
+        """
         return 1
 
     @staticmethod
     def splitChannelDims():
-        """Handle split channel dims."""
+        """Split channel dims.
+
+        Inputs: none. Output: dict.
+        """
         return {"g": {"width": 128, "height": 64}}
 
 
 def test_store_backed_render_helpers_cover_metadata_ranges_and_downloads(monkeypatch):
-    """Verify test store backed render helpers cover metada behavior."""
+    """Verify store backed render helpers cover metadata ranges and downloads.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
     assert integration._safe_rendering_enabled() is True
 
@@ -548,7 +748,10 @@ def test_store_backed_render_helpers_cover_metadata_ranges_and_downloads(monkeyp
 def test_store_backed_image_data_covers_projection_tile_and_objective_fallbacks(
     monkeypatch,
 ):
-    """Verify test store backed image data covers projectio behavior."""
+    """Verify store backed image data covers projection tile and objective fallbacks.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(integration, "load_store_backed_image_node", lambda image: None)
     monkeypatch.setattr(
         integration,
@@ -588,7 +791,10 @@ def test_store_backed_image_data_covers_projection_tile_and_objective_fallbacks(
 def test_load_metadata_preview_with_safe_rendering_covers_share_well_and_reraises(
     monkeypatch,
 ):
-    """Verify test load metadata preview with safe renderin behavior."""
+    """Verify load metadata preview with safe rendering covers share well and reraises.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     from omeroweb.webclient import views as webclient_views
 
     preview_image = SimpleNamespace(
@@ -648,23 +854,36 @@ def test_load_metadata_preview_with_safe_rendering_covers_share_well_and_reraise
 
 
 def test_region_helpers_cover_remaining_error_paths(monkeypatch):
-    """Verify test region helpers cover remaining error paths."""
+    """Verify region helpers cover remaining error paths.
+
+    Inputs: `monkeypatch`. Output: `self._jpeg_payload` or None.
+    """
     from omeroweb.webgateway import views as webgateway_views
 
     class _RegularImage:
         """Represent regular image."""
 
         def __init__(self, levels=2, jpeg_payload=b"jpeg"):
+            """Initialize the instance.
+
+            Inputs: `levels`, `jpeg_payload`. Output: None.
+            """
             self._re = SimpleNamespace(getResolutionLevels=lambda: levels)
             self._jpeg_payload = jpeg_payload
 
         @staticmethod
         def _prepareRenderingEngine():
-            """Handle prepare rendering engine."""
+            """Prepare Rendering Engine.
+
+            Inputs: none. Output: None.
+            """
             return None
 
         def renderJpegRegion(self, *args, **kwargs):
-            """Build render jpeg region."""
+            """Render JPEG Region.
+
+            Inputs: `*args`, `**kwargs`. Output: `self._jpeg_payload`.
+            """
             return self._jpeg_payload
 
     monkeypatch.setattr(
@@ -813,7 +1032,10 @@ def test_region_helpers_cover_remaining_error_paths(monkeypatch):
 def test_marshal_regular_image_data_with_safe_tile_size_handles_engine_fallbacks(
     monkeypatch,
 ):
-    """Verify test marshal regular image data with safe til behavior."""
+    """Verify marshal regular image data with safe tile size handles engine fallbacks.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         integration, "_store_backed_metadata", lambda image: {"imageName": image.name}
     )
@@ -843,6 +1065,10 @@ def test_marshal_regular_image_data_with_safe_tile_size_handles_engine_fallbacks
         """Test double for fake concurrency exception."""
 
         def __init__(self, back_off):
+            """Initialize the instance.
+
+            Inputs: `back_off`. Output: None.
+            """
             super().__init__("busy")
             self.backOff = back_off
 
@@ -891,13 +1117,23 @@ def test_marshal_regular_image_data_with_safe_tile_size_handles_engine_fallbacks
 def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single_level_tiles(
     monkeypatch,
 ):
-    """Verify test integration helper edges cover session f behavior."""
+    """Verify integration helper edges cover session fallbacks idempotence and single level tiles.
+
+    Inputs: `monkeypatch`. Output: computed value or None. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
 
     class _BrokenRequest:
         """Represent broken request."""
 
         @property
         def session(self):
+            """Session.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("session unavailable")
 
     monkeypatch.setattr(
@@ -956,7 +1192,10 @@ def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single
         )
 
     def original_marshal(image, key=None, request=None):
-        """Handle original marshal."""
+        """Original marshal.
+
+        Inputs: `image`, `key`, `request`. Output: 'original'.
+        """
         return "original"
 
     marshal_module = SimpleNamespace(
@@ -974,16 +1213,26 @@ def test_integration_helper_edges_cover_session_fallbacks_idempotence_and_single
         """Represent single level regular image."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self._re = SimpleNamespace(getResolutionLevels=lambda: 1)
             self.level = "unset"
 
         @staticmethod
         def _prepareRenderingEngine():
-            """Handle prepare rendering engine."""
+            """Prepare Rendering Engine.
+
+            Inputs: none. Output: None.
+            """
             return None
 
         def renderJpegRegion(self, *args, **kwargs):
-            """Build render jpeg region."""
+            """Render JPEG Region.
+
+            Inputs: `*args`, `**kwargs`. Output: b'jpeg'.
+            """
             self.level = kwargs.get("level")
             return b"jpeg"
 

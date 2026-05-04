@@ -37,7 +37,10 @@ _validate_session = _core.validate_session
 
 
 def _import_file(conn, session_key: str, host: str, port: int, path, dataset_id=None):  # pylint: disable=unused-argument
-    """Run the CLI import path while preserving legacy patch points."""
+    """The CLI import path while preserving legacy patch points.
+
+    Inputs: `conn`, `session_key`, `host`, `port`, `path`, `dataset_id`. Output: tuple.
+    """
     cmd = _build_omero_cli_command(["import"], session_key, host, port)
     cmd.extend(["--depth", str(OMERO_IMPORT_SCAN_DEPTH)])
     if dataset_id:

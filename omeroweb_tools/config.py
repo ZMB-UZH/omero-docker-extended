@@ -61,10 +61,17 @@ class EnhancedSearchScope:
 
     @property
     def scope_key(self) -> str:
+        """Scope key.
+
+        Inputs: none. Output: `str`.
+        """
         return f"{self.scope_type}:{self.scope_id}"
 
     def to_dict(self) -> dict[str, Any]:
-        """Handle to dict."""
+        """To dict.
+
+        Inputs: none. Output: `dict[str, Any]`.
+        """
         return {
             "scope_type": self.scope_type,
             "scope_id": self.scope_id,
@@ -102,7 +109,10 @@ class EnhancedSearchCeleryConfig:
 def _bounded_int(
     raw_value: str | None, default: int, minimum: int, maximum: int
 ) -> int:
-    """Handle bounded int."""
+    """Bounded int.
+
+    Inputs: `raw_value`, `default`, `minimum`, `maximum`. Output: `int`.
+    """
     if raw_value is None or str(raw_value).strip() == "":
         return default
     try:
@@ -118,7 +128,10 @@ def _bounded_int(
 
 
 def _optional_bool(raw_value: str | None, default: bool) -> bool:
-    """Handle optional bool."""
+    """Optional bool.
+
+    Inputs: `raw_value`, `default`. Output: `bool`.
+    """
     if raw_value is None or str(raw_value).strip() == "":
         return default
     normalized = str(raw_value).strip().lower()
@@ -141,7 +154,10 @@ def _env_text(
     fallback_env: str | None = None,
     default: str = "",
 ) -> str:
-    """Handle env text."""
+    """Env text.
+
+    Inputs: `primary_env`, `env_file`, `fallback_env`, `default`. Output: `str`.
+    """
     raw_value = get_optional_env(primary_env, env_file=env_file)
     text_value = str(raw_value or "").strip()
     if text_value:
@@ -155,7 +171,10 @@ def _env_text(
 
 
 def build_enhanced_search_config() -> EnhancedSearchRuntimeConfig:
-    """Build build enhanced search config."""
+    """Enhanced search config.
+
+    Inputs: none. Output: `EnhancedSearchRuntimeConfig`.
+    """
     return EnhancedSearchRuntimeConfig(
         batch_size=_bounded_int(
             get_optional_env(
@@ -197,7 +216,10 @@ def build_enhanced_search_config() -> EnhancedSearchRuntimeConfig:
 
 
 def build_enhanced_search_celery_config() -> EnhancedSearchCeleryConfig:
-    """Build build enhanced search celery config."""
+    """Enhanced search celery config.
+
+    Inputs: none. Output: `EnhancedSearchCeleryConfig`.
+    """
     return EnhancedSearchCeleryConfig(
         enabled=_optional_bool(
             get_optional_env(

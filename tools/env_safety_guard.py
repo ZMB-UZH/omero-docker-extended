@@ -280,7 +280,10 @@ OMERO_GROUP_PERMISSIONS = frozenset(
 
 
 def load_manifest(repo_root: Path) -> list[Path]:
-    """Return manifest entry paths anchored under the supplied repository root."""
+    """Return manifest entry paths anchored under the supplied repository root.
+
+    Inputs: `repo_root`. Output: `list[Path]`.
+    """
     manifest_path = repo_root / MANIFEST_NAME
     if not manifest_path.exists():
         print(f"ERROR: Manifest file not found: {manifest_path}", file=sys.stderr)
@@ -300,7 +303,10 @@ def load_manifest(repo_root: Path) -> list[Path]:
 
 
 def validate_relative_manifest_path(raw_path: str) -> Path:
-    """Validate and return a repo-relative manifest path."""
+    """Validate relative manifest path.
+
+    Inputs: `raw_path`. Output: `Path`. Raises on invalid or unavailable state.
+    """
     path_text = raw_path.strip()
     raw_parts = path_text.split("/")
     relative_path = PurePosixPath(path_text)
@@ -320,7 +326,10 @@ def validate_relative_manifest_path(raw_path: str) -> Path:
 
 
 def ensure_private_dir(path: Path) -> None:
-    """Create a private directory or tighten an existing one."""
+    """Ensure private directory.
+
+    Inputs: `path`. Output: None. Raises on invalid or unavailable state.
+    """
     if path.is_symlink() or (path.exists() and not path.is_dir()):
         raise RuntimeError(f"Refusing unsafe backup directory path: {path}")
     path.mkdir(parents=True, exist_ok=True)
@@ -328,7 +337,10 @@ def ensure_private_dir(path: Path) -> None:
 
 
 def validate_backup_name(backup_name: str) -> str:
-    """Validate a backup directory name supplied by the operator."""
+    """Validate backup name.
+
+    Inputs: `backup_name`. Output: `str`. Raises on invalid or unavailable state.
+    """
     candidate = PurePosixPath(backup_name.strip())
     invalid = (
         not str(candidate)
@@ -344,7 +356,10 @@ def validate_backup_name(backup_name: str) -> str:
 
 
 def load_env_assignments(env_path: Path) -> dict[str, str]:
-    """Return simple KEY=VALUE assignments from an env-style file."""
+    """Return simple KEY=VALUE assignments from an env-style file.
+
+    Inputs: `env_path`. Output: `dict[str, str]`.
+    """
     if not env_path.exists():
         return {}
 
@@ -360,7 +375,10 @@ def load_env_assignments(env_path: Path) -> dict[str, str]:
 
 
 def parse_env_keys(env_path: Path) -> list[str]:
-    """Return env assignment keys in file order without exposing values."""
+    """Return env assignment keys in file order without exposing values.
+
+    Inputs: `env_path`. Output: `list[str]`.
+    """
     keys: list[str] = []
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
@@ -373,14 +391,21 @@ def parse_env_keys(env_path: Path) -> list[str]:
 
 
 def strip_env_quotes(value: str) -> str:
-    """Remove one balanced shell-style quote pair from a simple env value."""
+    """One balanced shell-style quote pair from a simple env value.
+
+    Inputs: `value`. Output: `str`.
+    """
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         return value[1:-1]
     return value
 
 
 def parse_active_env_assignments(env_path: Path) -> dict[str, str]:
-    """Return active env assignments in file order, failing on duplicates."""
+    """Return active env assignments in file order, failing on duplicates.
+
+    Inputs: `env_path`. Output: `dict[str, str]`. Raises on invalid or unavailable
+    state.
+    """
     assignments: dict[str, str] = {}
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
@@ -395,7 +420,10 @@ def parse_active_env_assignments(env_path: Path) -> dict[str, str]:
 
 
 def parse_commented_env_assignments(env_path: Path) -> dict[str, str]:
-    """Return commented-out example assignments, used as optional known keys."""
+    """Return commented-out example assignments, used as optional known keys.
+
+    Inputs: `env_path`. Output: `dict[str, str]`.
+    """
     assignments: dict[str, str] = {}
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
@@ -408,7 +436,11 @@ def parse_commented_env_assignments(env_path: Path) -> dict[str, str]:
 
 
 def resolve_env_references(value: str, assignments: dict[str, str]) -> str:
-    """Resolve simple $NAME and ${NAME} references without shell evaluation."""
+    """Resolve environment references.
+
+    Inputs: `value`, `assignments`. Output: `str`. Raises on invalid or unavailable
+    state.
+    """
     if "$(" in value or "`" in value or "$[" in value:
         raise ValueError("unsupported shell expression")
 
@@ -427,37 +459,58 @@ def resolve_env_references(value: str, assignments: dict[str, str]) -> str:
 
 
 def is_bool_value(value: str) -> bool:
-    """Return whether is bool value."""
+    """Return whether bool value.
+
+    Inputs: `value`. Output: `bool`.
+    """
     return value.lower() in {"0", "1", "true", "false", "yes", "no", "on", "off"}
 
 
 def is_non_negative_integer_text(value: str) -> bool:
-    """Return whether is non negative integer text."""
+    """Return whether non negative integer text.
+
+    Inputs: `value`. Output: `bool`.
+    """
     return bool(re.fullmatch(r"[0-9]+", value))
 
 
 def is_positive_integer_text(value: str) -> bool:
-    """Return whether is positive integer text."""
+    """Return whether positive integer text.
+
+    Inputs: `value`. Output: `bool`.
+    """
     return is_non_negative_integer_text(value) and int(value) > 0
 
 
 def is_float_text(value: str) -> bool:
-    """Return whether is float text."""
+    """Return whether float text.
+
+    Inputs: `value`. Output: `bool`.
+    """
     return bool(re.fullmatch(r"(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)", value))
 
 
 def is_size_text(value: str) -> bool:
-    """Return whether is size text."""
+    """Return whether size text.
+
+    Inputs: `value`. Output: `bool`.
+    """
     return bool(re.fullmatch(r"[1-9][0-9]*(?:[kKmMgGtT]?[bB]?)?", value))
 
 
 def is_safe_omero_group_name(value: str) -> bool:
-    """Return whether is safe OMERO group name."""
+    """Return whether safe OMERO group name.
+
+    Inputs: `value`. Output: `bool`.
+    """
     return bool(re.fullmatch(r"[A-Za-z0-9_.-]+", value))
 
 
 def validate_group_list(value: str) -> list[str]:
-    """Validate validate group list."""
+    """Validate group list.
+
+    Inputs: `value`. Output: `list[str]`.
+    """
     errors: list[str] = []
     if not value:
         return errors
@@ -480,7 +533,10 @@ def validate_group_list(value: str) -> list[str]:
 def validate_assignment_value(
     key: str, raw_value: str, resolved_value: str
 ) -> list[str]:
-    """Validate one env assignment's type without exposing the value."""
+    """Validate assignment value.
+
+    Inputs: `key`, `raw_value`, `resolved_value`. Output: `list[str]`.
+    """
     errors: list[str] = []
     value = resolved_value
 
@@ -549,12 +605,18 @@ def validate_assignment_value(
 
 
 def parse_compose_env_files(raw_value: str) -> list[str]:
-    """Return normalized COMPOSE_ENV_FILES entries."""
+    """Return normalized COMPOSE_ENV_FILES entries.
+
+    Inputs: `raw_value`. Output: `list[str]`.
+    """
     return [part.strip() for part in raw_value.split(",") if part.strip()]
 
 
 def derive_compose_project_name(installation_path: str | Path) -> str:
-    """Return a deterministic compose project name for an installation path."""
+    """Return a deterministic compose project name for an installation path.
+
+    Inputs: `installation_path`. Output: `str`.
+    """
     install_root = Path(str(installation_path).strip() or ".")
     stem = install_root.name.strip() or "omero"
     normalized = re.sub(r"[^a-z0-9_-]+", "-", stem.lower()).strip("-_")
@@ -566,7 +628,10 @@ def derive_compose_project_name(installation_path: str | Path) -> str:
 
 
 def expected_compose_project_name(repo_root: Path) -> str:
-    """Return the canonical compose project name for the declared installation."""
+    """Return the canonical compose project name for the declared installation.
+
+    Inputs: `repo_root`. Output: `str`. Raises on invalid or unavailable state.
+    """
     installation_env = load_env_assignments(repo_root / INSTALLATION_PATHS_ENV_NAME)
     installation_path = installation_env.get("OMERO_INSTALLATION_PATH", "").strip()
     if not installation_path:
@@ -582,7 +647,10 @@ def expected_compose_project_name(repo_root: Path) -> str:
 
 
 def cmd_check(repo_root: Path) -> int:
-    """Verify every manifest entry exists and is non-empty."""
+    """Verify every manifest entry exists and is non-empty.
+
+    Inputs: `repo_root`. Output: `int`.
+    """
     entries = load_manifest(repo_root)
     if not entries:
         print("WARNING: Manifest is empty — nothing to check.", file=sys.stderr)
@@ -620,7 +688,10 @@ def cmd_check(repo_root: Path) -> int:
 
 
 def cmd_compose_guard(repo_root: Path) -> int:
-    """Refuse compose operations from non-canonical worktrees."""
+    """Refuse compose operations from non-canonical worktrees.
+
+    Inputs: `repo_root`. Output: `int`.
+    """
     if cmd_check(repo_root) != 0:
         return 1
 
@@ -674,7 +745,10 @@ def cmd_compose_guard(repo_root: Path) -> int:
 
 
 def cmd_dot_env_check(repo_root: Path) -> int:
-    """Verify generated .env shape without printing deployment values."""
+    """Verify generated .env shape without printing deployment values.
+
+    Inputs: `repo_root`. Output: `int`.
+    """
     dot_env_path = repo_root / DOT_ENV_NAME
     if not dot_env_path.exists():
         print(f"ERROR: Missing {DOT_ENV_NAME}.", file=sys.stderr)
@@ -724,7 +798,10 @@ def cmd_dot_env_check(repo_root: Path) -> int:
 
 
 def cmd_template_check(repo_root: Path) -> int:
-    """Verify deployment env files keep the same assignment keys as templates."""
+    """Verify deployment env files keep the same assignment keys as templates.
+
+    Inputs: `repo_root`. Output: `int`.
+    """
     failures = 0
     for example_rel, actual_rel in ENV_TEMPLATE_PAIRS:
         example_path = repo_root / example_rel
@@ -777,7 +854,10 @@ def validate_env_file_pair(
     actual_rel: str,
     context: dict[str, str],
 ) -> list[str]:
-    """Validate one deployment env file against its tracked example template."""
+    """Validate environment file pair.
+
+    Inputs: `repo_root`, `example_rel`, `actual_rel`, `context`. Output: `list[str]`.
+    """
     errors: list[str] = []
     example_path = repo_root / example_rel
     actual_path = repo_root / actual_rel
@@ -844,7 +924,10 @@ def validate_env_file_pair(
 
 
 def validate_dot_env_values(repo_root: Path, context: dict[str, str]) -> list[str]:
-    """Validate generated .env keys and value types without printing values."""
+    """Validate dot environment values.
+
+    Inputs: `repo_root`, `context`. Output: `list[str]`.
+    """
     dot_env_path = repo_root / DOT_ENV_NAME
     errors: list[str] = []
 
@@ -908,7 +991,10 @@ def validate_dot_env_values(repo_root: Path, context: dict[str, str]) -> list[st
 
 
 def cmd_runtime_env_check(repo_root: Path, include_dot_env: bool = True) -> int:
-    """Validate all deployment env files against templates and type contracts."""
+    """All deployment env files against templates and type contracts.
+
+    Inputs: `repo_root`, `include_dot_env`. Output: `int`.
+    """
     context: dict[str, str] = {}
     errors: list[str] = []
 
@@ -933,7 +1019,10 @@ def cmd_runtime_env_check(repo_root: Path, include_dot_env: bool = True) -> int:
 
 
 def cmd_backup(repo_root: Path) -> int:
-    """Create a timestamped backup of all manifest entries."""
+    """A timestamped backup of all manifest entries.
+
+    Inputs: `repo_root`. Output: `int`.
+    """
     entries = load_manifest(repo_root)
     if not entries:
         print("WARNING: Manifest is empty — nothing to back up.", file=sys.stderr)
@@ -981,7 +1070,10 @@ def cmd_backup(repo_root: Path) -> int:
 
 
 def cmd_restore(repo_root: Path, backup_name: str | None = None) -> int:
-    """Restore from a backup."""
+    """Restore from a backup.
+
+    Inputs: `repo_root`, `backup_name`. Output: `int`.
+    """
     backups_root = repo_root / BACKUP_DIR_NAME
     if not backups_root.exists():
         print("ERROR: No backups directory found.", file=sys.stderr)
@@ -1032,7 +1124,10 @@ def cmd_restore(repo_root: Path, backup_name: str | None = None) -> int:
 
 
 def cmd_list(repo_root: Path) -> int:
-    """List available backups."""
+    """Available backups.
+
+    Inputs: `repo_root`. Output: `int`.
+    """
     backups_root = repo_root / BACKUP_DIR_NAME
     if not backups_root.exists():
         print("No backups directory found.")
@@ -1060,7 +1155,10 @@ def cmd_list(repo_root: Path) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build build parser."""
+    """Build the command-line parser.
+
+    Inputs: none. Output: `argparse.ArgumentParser`.
+    """
     parser = argparse.ArgumentParser(
         description="Guard against accidental deletion of untracked deployment config files."
     )
@@ -1110,7 +1208,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the command-line entry point."""
+    """Execute the command entrypoint.
+
+    Inputs: `argv`. Output: `int`.
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
     repo_root = Path(args.repo_root).resolve()

@@ -18,11 +18,17 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Resolve the repository root for build workflow contract checks."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def test_installation_script_references_compressed_helper(self) -> None:
-        """Verify Installation script references compressed helper."""
+        """Verify Installation script references compressed helper.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -47,7 +53,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_script_checks_build_and_flatten_helper_failures_explicitly(
         self,
     ) -> None:
-        """Verify Installation script checks build and flatten helper failures explicitly."""
+        """Verify Installation script checks build and flatten helper failures explicitly.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -60,7 +69,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("ERROR: Buildx compressed build workflow failed.", script_text)
 
     def test_installation_script_runs_env_contract_check_before_workflow(self) -> None:
-        """Verify Installation script runs env contract check before workflow."""
+        """Verify Installation script runs env contract check before workflow.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -91,7 +103,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_script_propagates_omero_data_dir_into_generated_compose_env(
         self,
     ) -> None:
-        """Verify Installation script propagates OMERO data dir into generated compose env."""
+        """Verify Installation script propagates OMERO data dir into generated compose env.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -109,7 +124,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_installation_script_does_not_inject_top_logo_defaults(self) -> None:
-        """Verify Installation script does not inject top logo defaults."""
+        """Verify Installation script does not inject top logo defaults.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -118,7 +136,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("CONFIG_omero_web_top__logo__link=/webclient/", script_text)
 
     def test_omeroweb_example_env_defines_only_login_logo_default(self) -> None:
-        """Verify OMERO.web example env defines only login logo default."""
+        """Verify OMERO.web example env defines only login logo default.
+
+        Inputs: none. Output: None.
+        """
         env_text = (self.repo_root / "env" / "omeroweb_example.env").read_text(
             encoding="utf-8"
         )
@@ -129,7 +150,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("CONFIG_omero_web_top__logo__link=", env_text)
 
     def test_omeroweb_dockerfile_applies_logo_context_patch(self) -> None:
-        """Verify OMERO.web dockerfile applies logo context patch."""
+        """Verify OMERO.web dockerfile applies logo context patch.
+
+        Inputs: none. Output: None.
+        """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-web.Dockerfile"
         ).read_text(encoding="utf-8")
@@ -138,7 +162,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_group_bootstrap_uses_dynamic_omero_cli_discovery(
         self,
     ) -> None:
-        """Verify Installation group bootstrap uses dynamic OMERO CLI discovery."""
+        """Verify Installation group bootstrap uses dynamic OMERO CLI discovery.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -156,7 +183,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_server_bootstrap_job_service_uses_python_api_helper_and_configured_port(
         self,
     ) -> None:
-        """Verify Server bootstrap job service uses Python API helper and configured port."""
+        """Verify Server bootstrap job service uses Python API helper and configured port.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
@@ -189,7 +219,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_server_bootstrap_normalizes_managed_repo_shared_prefixes_for_runtime_groups(
         self,
     ) -> None:
-        """Verify Server bootstrap normalizes managed repo shared prefixes for runtime groups."""
+        """Verify Server bootstrap normalizes managed repo shared prefixes for runtime groups.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
@@ -226,7 +259,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_server_bootstrap_python_helpers_use_dynamic_server_paths_and_cli_home(
         self,
     ) -> None:
-        """Verify Server bootstrap Python helpers use dynamic server paths and CLI home."""
+        """Verify Server bootstrap Python helpers use dynamic server paths and CLI home.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
@@ -244,7 +280,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("repo-root-lookup.XXXXXX.py", script_text)
 
     def test_server_bootstrap_keeps_omero_tmpdir_for_service_user_cli(self) -> None:
-        """Verify Server bootstrap keeps OMERO tmpdir for service user CLI."""
+        """Verify Server bootstrap keeps OMERO tmpdir for service user CLI.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
@@ -276,7 +315,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn('OMERO_TEMPDIR="${TMPDIR:-/tmp}"', script_text)
 
     def test_omeroserver_image_copies_repo_root_sync_helper(self) -> None:
-        """Verify Omeroserver image copies repo root sync helper."""
+        """Verify Omeroserver image copies repo root sync helper.
+
+        Inputs: none. Output: None.
+        """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-server.Dockerfile"
         ).read_text(encoding="utf-8")
@@ -289,7 +331,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn(f"/startup/{helper_name}", dockerfile_text)
 
     def test_omeroserver_image_copies_dropbox_user_dir_sync_helper(self) -> None:
-        """Verify Omeroserver image copies dropbox user dir sync helper."""
+        """Verify Omeroserver image copies dropbox user dir sync helper.
+
+        Inputs: none. Output: None.
+        """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-server.Dockerfile"
         ).read_text(encoding="utf-8")
@@ -302,7 +347,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn(f"/startup/{helper_name}", dockerfile_text)
 
     def test_omeroserver_image_copies_healthcheck_helper(self) -> None:
-        """Verify Omeroserver image copies healthcheck helper."""
+        """Verify Omeroserver image copies healthcheck helper.
+
+        Inputs: none. Output: None.
+        """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-server.Dockerfile"
         ).read_text(encoding="utf-8")
@@ -313,7 +361,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("/startup/healthcheck-omeroserver.sh", dockerfile_text)
 
     def test_omeroserver_image_replaces_inherited_config_loader(self) -> None:
-        """Verify Omeroserver image replaces inherited config loader."""
+        """Verify Omeroserver image replaces inherited config loader.
+
+        Inputs: none. Output: None.
+        """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-server.Dockerfile"
         ).read_text(encoding="utf-8")
@@ -330,7 +381,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("/opt/omero/server/venv3/bin/omero", config_script_text)
 
     def test_server_bootstrap_schedules_dropbox_user_dir_sync(self) -> None:
-        """Verify Server bootstrap schedules dropbox user dir sync."""
+        """Verify Server bootstrap schedules dropbox user dir sync.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
@@ -384,7 +438,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("/opt/omero/omero_data", script_text)
 
     def test_server_bootstrap_schedules_dropbox_ice_after_server_start(self) -> None:
-        """Verify Server bootstrap schedules dropbox ice after server start."""
+        """Verify Server bootstrap schedules dropbox ice after server start.
+
+        Inputs: none. Output: None.
+        """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-server.Dockerfile"
         ).read_text(encoding="utf-8")
@@ -464,7 +521,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_dropbox_readiness_waits_do_not_use_hidden_defaults(
         self,
     ) -> None:
-        """Verify Installation dropbox readiness waits do not use hidden defaults."""
+        """Verify Installation dropbox readiness waits do not use hidden defaults.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -525,7 +585,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_runs_job_service_group_sync_before_dropbox_waits(
         self,
     ) -> None:
-        """Verify Installation runs job service group sync before dropbox waits."""
+        """Verify Installation runs job service group sync before dropbox waits.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -546,7 +609,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("dropbox_user_dir_wait_rc=$?", script_text)
 
     def test_server_bootstrap_uses_dedicated_runtime_tmp_slot(self) -> None:
-        """Verify Server bootstrap uses dedicated runtime tmp slot."""
+        """Verify Server bootstrap uses dedicated runtime tmp slot.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
@@ -565,7 +631,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_server_bootstrap_schedules_binary_repository_cleanse_with_keepalive(
         self,
     ) -> None:
-        """Verify Server bootstrap schedules binary repository cleanse with keepalive."""
+        """Verify Server bootstrap schedules binary repository cleanse with keepalive.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
@@ -584,7 +653,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_script_preserves_server_temp_namespace_ownership(
         self,
     ) -> None:
-        """Verify Installation script preserves server temp namespace ownership."""
+        """Verify Installation script preserves server temp namespace ownership.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -602,7 +674,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_script_reports_binary_repository_cleanse_runtime_hook(
         self,
     ) -> None:
-        """Verify Installation script reports binary repository cleanse runtime hook."""
+        """Verify Installation script reports binary repository cleanse runtime hook.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -619,7 +694,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_omeroserver_example_env_defines_binary_repository_cleanse_defaults(
         self,
     ) -> None:
-        """Verify Omeroserver example env defines binary repository cleanse defaults."""
+        """Verify Omeroserver example env defines binary repository cleanse defaults.
+
+        Inputs: none. Output: None.
+        """
         env_text = (self.repo_root / "env" / "omeroserver_example.env").read_text(
             encoding="utf-8"
         )
@@ -630,7 +708,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("CONFIG_omero_managed_dir=/OMERO/ManagedRepository", env_text)
 
     def test_omeroserver_runtime_does_not_force_server_tree_cwd(self) -> None:
-        """Verify Omeroserver runtime does not force server tree cwd."""
+        """Verify Omeroserver runtime does not force server tree cwd.
+
+        Inputs: none. Output: None.
+        """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-server.Dockerfile"
         ).read_text(encoding="utf-8")
@@ -643,7 +724,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_database_secret_values_are_not_compose_interpolation_inputs(
         self,
     ) -> None:
-        """Verify Database secret values are not compose interpolation inputs."""
+        """Verify Database secret values are not compose interpolation inputs.
+
+        Inputs: none. Output: None.
+        """
         compose_text = (self.repo_root / "docker-compose.yml").read_text(
             encoding="utf-8"
         )
@@ -676,7 +760,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_secret_derivation_entrypoints_are_tracked_and_executable(self) -> None:
-        """Verify Secret derivation entrypoints are tracked and executable."""
+        """Verify Secret derivation entrypoints are tracked and executable.
+
+        Inputs: none. Output: None.
+        """
         for relative_path in (
             "docker/postgres-entrypoint-from-env.sh",
             "monitoring/postgres-exporter/entrypoint.sh",
@@ -689,7 +776,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 self.assertIn("Missing required environment variable", script_text)
 
     def test_supervisord_sets_writable_gunicorn_chdir_by_default(self) -> None:
-        """Verify Supervisord sets writable gunicorn chdir by default."""
+        """Verify Supervisord sets writable gunicorn chdir by default.
+
+        Inputs: none. Output: None.
+        """
         supervisord_text = (self.repo_root / "supervisord.conf").read_text(
             encoding="utf-8"
         )
@@ -724,7 +814,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_supervisord_uses_private_socket_without_checked_in_auth(self) -> None:
-        """Verify Supervisord uses private socket without checked in auth."""
+        """Verify Supervisord uses private socket without checked in auth.
+
+        Inputs: none. Output: None.
+        """
         supervisord_text = (self.repo_root / "supervisord.conf").read_text(
             encoding="utf-8"
         )
@@ -734,7 +827,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("password=%(ENV_SUPERVISOR_", supervisord_text)
 
     def test_github_pull_script_exports_compressed_build_env(self) -> None:
-        """Verify GitHub pull script exports compressed build env."""
+        """Verify GitHub pull script exports compressed build env.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
             encoding="utf-8"
         )
@@ -753,7 +849,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_pull_scripts_enable_transcript_capture(self) -> None:
-        """Verify Pull scripts enable transcript capture."""
+        """Verify Pull scripts enable transcript capture.
+
+        Inputs: none. Output: None.
+        """
         scripts = [self.repo_root / "github_pull_project_bash_example"]
 
         for script in scripts:
@@ -770,7 +869,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_script_publishes_transcript_destination_after_path_resolution(
         self,
     ) -> None:
-        """Verify Installation script publishes transcript destination after path resolution."""
+        """Verify Installation script publishes transcript destination after path resolution.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -788,7 +890,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("tty_read_line()", script_text)
 
     def test_public_pull_script_defaults_to_public_repo(self) -> None:
-        """Verify Public pull script defaults to public repo."""
+        """Verify Public pull script defaults to public repo.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
             encoding="utf-8"
         )
@@ -799,7 +904,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('REPO_BRANCH="${REPO_BRANCH:-main}"', script_text)
 
     def test_public_pull_script_is_https_only(self) -> None:
-        """Verify Public pull script is HTTPS only."""
+        """Verify Public pull script is HTTPS only.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
             encoding="utf-8"
         )
@@ -807,7 +915,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("supports only HTTP(S) repository URLs", script_text)
 
     def test_public_pull_script_protects_runtime_pull_helper(self) -> None:
-        """Verify Public pull script protects runtime pull helper."""
+        """Verify Public pull script protects runtime pull helper.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
             encoding="utf-8"
         )
@@ -818,7 +929,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_prometheus_yml_contains_crowdsec_probe_marker(self) -> None:
-        """Require the CrowdSec probe marker comment.
+        """Verify prometheus yml contains crowdsec probe marker.
+
+        Inputs: none. Output: None.
 
         The installation script uses the marker as the injection point. The actual
         CrowdSec probe line may or may not be present — the installation script
@@ -831,7 +944,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("# CROWDSEC_PROBE_MARKER", prom_text)
 
     def test_installation_script_injects_crowdsec_probe_conditionally(self) -> None:
-        """Verify Installation script injects crowdsec probe conditionally."""
+        """Verify Installation script injects crowdsec probe conditionally.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -841,7 +957,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("Removed CrowdSec health probe from prometheus.yml", script_text)
 
     def test_is_crowdsec_enabled_rejects_both_placeholder_values(self) -> None:
-        """Verify Is crowdsec enabled rejects both placeholder values."""
+        """Verify Is crowdsec enabled rejects both placeholder values.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -852,7 +971,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_installation_script_schedules_one_shot_crowdsec_restart_only_when_needed(
         self,
     ) -> None:
-        """Verify Installation script schedules one shot crowdsec restart only when needed."""
+        """Verify Installation script schedules one shot crowdsec restart only when needed.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -873,7 +995,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("Scheduled one-time CrowdSec install auto-restart", script_text)
 
     def test_installation_script_prints_crowdsec_banner_before_compose_up(self) -> None:
-        """Verify Installation script prints crowdsec banner before compose up."""
+        """Verify Installation script prints crowdsec banner before compose up.
+
+        Inputs: none. Output: None.
+        """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
@@ -890,7 +1015,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_crowdsec_restart_helper_is_single_shot(self) -> None:
-        """Verify Crowdsec restart helper is single shot."""
+        """Verify Crowdsec restart helper is single shot.
+
+        Inputs: none. Output: None.
+        """
         helper_text = (
             self.repo_root / "installation" / "crowdsec_install_auto_restart.sh"
         ).read_text(encoding="utf-8")
@@ -901,7 +1029,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_crowdsec_entrypoint_enrolls_only_when_install_bootstrap_is_armed(
         self,
     ) -> None:
-        """Verify Crowdsec entrypoint enrolls only when install bootstrap is armed."""
+        """Verify Crowdsec entrypoint enrolls only when install bootstrap is armed.
+
+        Inputs: none. Output: None.
+        """
         entrypoint_text = (
             self.repo_root / "docker" / "crowdsec-entrypoint.sh"
         ).read_text(encoding="utf-8")
@@ -921,7 +1052,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("--overwrite", entrypoint_text)
 
     def test_crowdsec_forward_chains_wait_for_bouncer_sets(self) -> None:
-        """Verify Crowdsec forward chains wait for bouncer sets."""
+        """Verify Crowdsec forward chains wait for bouncer sets.
+
+        Inputs: none. Output: None.
+        """
         entrypoint_text = (
             self.repo_root / "docker" / "crowdsec-entrypoint.sh"
         ).read_text(encoding="utf-8")
@@ -946,7 +1080,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_docker_compose_defaults_crowdsec_install_bootstrap_enroll_to_disabled(
         self,
     ) -> None:
-        """Verify Docker compose defaults crowdsec install bootstrap enroll to disabled."""
+        """Verify Docker compose defaults crowdsec install bootstrap enroll to disabled.
+
+        Inputs: none. Output: None.
+        """
         compose_text = (self.repo_root / "docker-compose.yml").read_text(
             encoding="utf-8"
         )
@@ -962,7 +1099,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_docker_compose_omeroserver_passes_omero_data_dir_and_omero_dir(
         self,
     ) -> None:
-        """Require OMERO data path environment in the server container.
+        """Verify docker compose omeroserver passes OMERO data directory and OMERO directory.
+
+        Inputs: none. Output: None.
 
         The server must receive OMERO_DATA_DIR and OMERO_DIR so it resolves
         managed repository paths against the bind-mounted data volume, not the
@@ -982,7 +1121,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_server_bootstrap_validates_managed_repository_before_startup(self) -> None:
-        """Verify Server bootstrap validates managed repository before startup."""
+        """Verify Server bootstrap validates managed repository before startup.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
@@ -995,7 +1137,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_omeroserver_example_env_uses_absolute_managed_dir(self) -> None:
-        """Require an absolute managed repository path in the env template.
+        """Verify omeroserver example environment uses absolute managed directory.
+
+        Inputs: none. Output: None.
 
         CONFIG_omero_managed_dir must be absolute so OMERO never resolves it
         against the server install directory. A relative value causes silent data
@@ -1019,6 +1163,8 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_server_bootstrap_rejects_managed_dir_outside_omero_dir(self) -> None:
         """Reject managed repository paths outside OMERO_DIR.
 
+        Inputs: none. Output: None.
+
         The managed-repository guard must check that the configured path lives
         inside OMERO_DIR and must produce a clear error when it does not, so the
         container refuses to start with a misconfigured path.
@@ -1037,7 +1183,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_coveragerc_tracks_all_python_source_directories(self) -> None:
-        """Require coverage tracing for every Python source directory.
+        """Verify coveragerc tracks all python source directories.
+
+        Inputs: none. Output: None.
 
         Every plugin/library directory that contains Python source must appear in
         .coveragerc [run] source so coverage.py traces it.
@@ -1060,7 +1208,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             )
 
     def test_ci_workflow_runs_all_test_suites(self) -> None:
-        """Require a separate coverage invocation for every test suite.
+        """Verify ci workflow runs all test suites.
+
+        Inputs: none. Output: None.
 
         The CI workflow must run every test suite as a separate coverage
         invocation so the conftest mock stubs do not interfere.
@@ -1086,7 +1236,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             )
 
     def test_all_workflow_checkout_steps_use_verified_v6_pin(self) -> None:
-        """Verify All workflow checkout steps use verified v6 pin."""
+        """Verify All workflow checkout steps use verified v6 pin.
+
+        Inputs: none. Output: None.
+        """
         expected_checkout = "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd"
         workflow_dir = self.repo_root / ".github" / "workflows"
         for workflow_path in workflow_dir.glob("*.yml"):
@@ -1106,7 +1259,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_security_code_scanning_workflow_includes_zero_delta_alert_gate(
         self,
     ) -> None:
-        """Verify Security code scanning workflow includes zero delta alert gate."""
+        """Verify Security code scanning workflow includes zero delta alert gate.
+
+        Inputs: none. Output: None.
+        """
         import yaml  # noqa: F811  — available in CI
 
         workflow_path = (
@@ -1151,13 +1307,18 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("GITHUB_TOKEN: ${{ github.token }}", workflow_text)
 
     def test_standalone_security_delta_workflow_is_not_present(self) -> None:
-        """Verify Standalone security delta workflow is not present."""
+        """Verify Standalone security delta workflow is not present.
+
+        Inputs: none. Output: None.
+        """
         self.assertFalse(
             (self.repo_root / ".github" / "workflows" / "security-delta.yml").exists()
         )
 
     def test_codecov_yml_has_component_for_each_source_directory(self) -> None:
-        """Require Codecov components for every covered source directory.
+        """Verify codecov yml has component for each source directory.
+
+        Inputs: none. Output: None.
 
         Each plugin/library tracked in .coveragerc must have a matching Codecov
         project component so per-module coverage is reported.
@@ -1195,7 +1356,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             )
 
     def test_ci_workflows_install_from_pinned_requirement_manifests(self) -> None:
-        """Verify CI workflows install from pinned requirement manifests."""
+        """Verify CI workflows install from pinned requirement manifests.
+
+        Inputs: none. Output: None.
+        """
         tests_workflow = (
             self.repo_root / ".github" / "workflows" / "tests.yml"
         ).read_text(encoding="utf-8")
@@ -1213,7 +1377,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_python_backed_ci_workflows_pin_exact_setup_python_runtime(self) -> None:
-        """Verify Python backed CI workflows pin exact setup Python runtime."""
+        """Verify Python backed CI workflows pin exact setup Python runtime.
+
+        Inputs: none. Output: None.
+        """
         import yaml  # noqa: F811  — available in CI
 
         expected_versions = {
@@ -1239,7 +1406,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 self.assertEqual(expected, actual)
 
     def test_python_dependency_jobs_enable_setup_python_pip_cache(self) -> None:
-        """Verify Python dependency jobs enable setup Python pip cache."""
+        """Verify Python dependency jobs enable setup Python pip cache.
+
+        Inputs: none. Output: None.
+        """
         import yaml  # noqa: F811  — available in CI
 
         expected_cache_paths = {
@@ -1281,7 +1451,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 )
 
     def test_security_codeql_uses_build_free_interpreted_language_mode(self) -> None:
-        """Verify Security CodeQL uses build free interpreted language mode."""
+        """Verify Security CodeQL uses build free interpreted language mode.
+
+        Inputs: none. Output: None.
+        """
         import yaml  # noqa: F811  — available in CI
 
         workflow_path = (
@@ -1332,7 +1505,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_super_linter_workflow_is_pinned_and_covers_repo_hygiene_surfaces(
         self,
     ) -> None:
-        """Verify Super linter workflow is pinned and covers repo hygiene surfaces."""
+        """Verify Super linter workflow is pinned and covers repo hygiene surfaces.
+
+        Inputs: none. Output: None.
+        """
         import yaml  # noqa: F811  — available in CI
 
         workflow_path = self.repo_root / ".github" / "workflows" / "super-linter.yml"
@@ -1427,7 +1603,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_tests_workflow_uploads_codecov_via_oidc_without_environment_or_secret(
         self,
     ) -> None:
-        """Verify Tests workflow uploads Codecov via OIDC without environment or secret."""
+        """Verify Tests workflow uploads Codecov via OIDC without environment or secret.
+
+        Inputs: none. Output: None.
+        """
         import yaml  # noqa: F811  — available in CI
 
         workflow_path = self.repo_root / ".github" / "workflows" / "tests.yml"
@@ -1464,7 +1643,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_security_workflow_avoids_unpinned_container_and_template_injection(
         self,
     ) -> None:
-        """Verify Security workflow avoids unpinned container and template injection."""
+        """Verify Security workflow avoids unpinned container and template injection.
+
+        Inputs: none. Output: None.
+        """
         import yaml  # noqa: F811  — available in CI
 
         workflow_path = (
@@ -1565,7 +1747,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
     def test_workflow_scanner_scope_exclusions_are_limited_and_audited(
         self,
     ) -> None:
-        """Verify Workflow scanner scope exclusions are limited and audited."""
+        """Verify Workflow scanner scope exclusions are limited and audited.
+
+        Inputs: none. Output: None.
+        """
         import yaml  # noqa: F811 - available in CI
 
         workflow_paths = sorted(
@@ -1652,7 +1837,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("DevSkim `DS162092`", docs_text)
 
     def test_security_sarif_upload_jobs_can_read_workflow_run_metadata(self) -> None:
-        """Verify Security SARIF upload jobs can read workflow run metadata."""
+        """Verify Security SARIF upload jobs can read workflow run metadata.
+
+        Inputs: none. Output: None.
+        """
         import yaml  # noqa: F811  — available in CI
 
         workflow_path = (
@@ -1675,7 +1863,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             )
 
     def test_all_workflow_checkouts_disable_persisted_credentials(self) -> None:
-        """Verify All workflow checkouts disable persisted credentials."""
+        """Verify All workflow checkouts disable persisted credentials.
+
+        Inputs: none. Output: None.
+        """
         import yaml  # noqa: F811  — available in CI
 
         workflows_dir = self.repo_root / ".github" / "workflows"
@@ -1691,7 +1882,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                         )
 
     def test_all_workflow_jobs_gate_runner_execution_to_default_branch(self) -> None:
-        """Verify All workflow jobs gate runner execution to default branch."""
+        """Verify All workflow jobs gate runner execution to default branch.
+
+        Inputs: none. Output: None.
+        """
         import yaml  # noqa: F811  — available in CI
 
         workflows_dir = self.repo_root / ".github" / "workflows"
@@ -1711,7 +1905,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                     )
 
     def test_dependabot_updates_define_cooldown_windows(self) -> None:
-        """Verify Dependabot updates define cooldown windows."""
+        """Verify Dependabot updates define cooldown windows.
+
+        Inputs: none. Output: None.
+        """
         import yaml  # noqa: F811  — available in CI
 
         dependabot_path = self.repo_root / ".github" / "dependabot.yml"
@@ -1722,7 +1919,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.assertGreaterEqual(update["cooldown"]["default-days"], 7)
 
     def test_ci_requirement_manifests_pin_every_dependency(self) -> None:
-        """Verify CI requirement manifests pin every dependency."""
+        """Verify CI requirement manifests pin every dependency.
+
+        Inputs: none. Output: None.
+        """
         requirement_paths = [
             self.repo_root / ".github" / "requirements" / "tests-ci.txt",
             self.repo_root / ".github" / "requirements" / "security-code-scanning.txt",
@@ -1779,7 +1979,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                     )
 
     def test_ci_requirement_source_manifests_exist(self) -> None:
-        """Verify CI requirement source manifests exist."""
+        """Verify CI requirement source manifests exist.
+
+        Inputs: none. Output: None.
+        """
         source_paths = [
             self.repo_root / ".github" / "requirements" / "tests-ci.in",
             self.repo_root / ".github" / "requirements" / "security-code-scanning.in",
@@ -1788,7 +1991,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.assertTrue(source_path.exists(), f"{source_path.name} is missing")
 
     def test_shell_helpers_avoid_global_ifs_mutation(self) -> None:
-        """Verify Shell helpers avoid global IFS mutation."""
+        """Verify Shell helpers avoid global IFS mutation.
+
+        Inputs: none. Output: None.
+        """
         extra_packages_script = (
             self.repo_root
             / "helper_scripts_debian"
@@ -1810,7 +2016,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
     def test_server_bootstrap_avoids_bash_operator_portability_findings(self) -> None:
-        """Verify Server bootstrap avoids bash operator portability findings."""
+        """Verify Server bootstrap avoids bash operator portability findings.
+
+        Inputs: none. Output: None.
+        """
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )

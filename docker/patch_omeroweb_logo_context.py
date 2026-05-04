@@ -13,6 +13,10 @@ NEW_BLOCK = """        context[\"ome\"].setdefault(\"logo_src\", \"\")\n        
 
 
 def main() -> int:
+    """Execute the command entrypoint.
+
+    Inputs: none. Output: `int`. Raises on invalid or unavailable state.
+    """
     if len(sys.argv) != 2:
         raise SystemExit("usage: patch_omeroweb_logo_context.py <decorators.py>")
 

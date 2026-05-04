@@ -15,10 +15,17 @@ class _Upload:
     """Represent upload."""
 
     def __init__(self, *chunks: bytes):
+        """Initialize the instance.
+
+        Inputs: `*chunks`. Output: None.
+        """
         self._chunks = chunks
 
     def chunks(self):
-        """Handle chunks."""
+        """Chunks.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self._chunks)
 
 
@@ -26,17 +33,30 @@ class _Value:
     """Represent value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self._raw_value = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self._raw_value`.
+        """
         return self._raw_value
 
 
 def test_directory_helpers_cover_parent_creation_and_permission_failures(
     tmp_path, monkeypatch
 ):
-    """Verify test directory helpers cover parent creation behavior."""
+    """Verify directory helpers cover parent creation and permission failures.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: computed value. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     target = tmp_path / "nested" / "file.txt"
     assert core_functions._ensure_parent_dir(target) is True
     assert target.parent.exists()
@@ -45,7 +65,13 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
     original_mkdir = Path.mkdir
 
     def failing_mkdir(self, *args, **kwargs):
-        """Handle failing mkdir."""
+        """Failing mkdir.
+
+        Inputs: `*args`, `**kwargs`. Output: `original_mkdir` result. Raises on invalid
+        or unavailable state.
+
+        or unavailable state.
+        """
         if self == failing_target.parent:
             raise OSError("mkdir failed")
         return original_mkdir(self, *args, **kwargs)
@@ -61,7 +87,13 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
     original_chmod = Path.chmod
 
     def failing_chmod(self, mode):
-        """Handle failing chmod."""
+        """Failing chmod.
+
+        Inputs: `mode`. Output: `original_chmod` result. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         if self == secure_dir:
             raise OSError("chmod failed")
         return original_chmod(self, mode)
@@ -73,7 +105,13 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
     failing_create = tmp_path / "failing-create"
 
     def mkdir_target_failure(self, *args, **kwargs):
-        """Handle mkdir target failure."""
+        """Mkdir target failure.
+
+        Inputs: `*args`, `**kwargs`. Output: `original_mkdir` result. Raises on invalid
+        or unavailable state.
+
+        or unavailable state.
+        """
         if self == failing_create:
             raise OSError("create failed")
         return original_mkdir(self, *args, **kwargs)
@@ -86,7 +124,13 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
     failing_exists = tmp_path / "failing-exists"
 
     def exists_failure(self):
-        """Handle exists failure."""
+        """Exists failure.
+
+        Inputs: none. Output: `original_exists` result. Raises on invalid or unavailable
+        state.
+
+        state.
+        """
         if self == failing_exists:
             raise OSError("exists failed")
         return original_exists(self)
@@ -98,7 +142,10 @@ def test_directory_helpers_cover_parent_creation_and_permission_failures(
 def test_staged_upload_helpers_cover_runtime_and_oserror_fallbacks(
     tmp_path, monkeypatch
 ):
-    """Verify test staged upload helpers cover runtime and behavior."""
+    """Verify staged upload helpers cover runtime and oserror fallbacks.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
 
@@ -171,7 +218,13 @@ def test_staged_upload_helpers_cover_runtime_and_oserror_fallbacks(
 def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(
     tmp_path, monkeypatch
 ):
-    """Verify test managed runtime and job file helpers cov behavior."""
+    """Verify managed runtime and job file helpers cover remaining error paths.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `original_unlink` result. Raises on
+    invalid or unavailable state.
+
+    invalid or unavailable state.
+    """
     original_os_open = core_functions.os.open
     original_os_close = core_functions.os.close
     upload_root = tmp_path / "uploads"
@@ -298,7 +351,13 @@ def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(
     original_unlink = Path.unlink
 
     def failing_unlink(self, *args, **kwargs):
-        """Handle failing unlink."""
+        """Failing unlink.
+
+        Inputs: `*args`, `**kwargs`. Output: `original_unlink` result. Raises on invalid
+        or unavailable state.
+
+        or unavailable state.
+        """
         if self.parent == jobs_root and self.suffix == ".tmp":
             raise OSError("unlink failed")
         return original_unlink(self, *args, **kwargs)
@@ -314,7 +373,10 @@ def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(
 def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
     tmp_path, monkeypatch
 ):
-    """Verify test job update and parameter helpers cover g behavior."""
+    """Verify job update and parameter helpers cover generic dict and error paths.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     jobs_root = tmp_path / "jobs"
     jobs_root.mkdir()
     monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: jobs_root)
@@ -378,7 +440,13 @@ def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
 def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
     monkeypatch,
 ):
-    """Verify test connection and dataset helpers cover adm behavior."""
+    """Verify connection and dataset helpers cover admin and service edge cases.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     monkeypatch.setattr(
         core_functions,
         "_open_admin_connection",
@@ -398,15 +466,25 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
         """Represent admin conn."""
 
         def __init__(self, conn):
+            """Initialize the instance.
+
+            Inputs: `conn`. Output: None.
+            """
             self._conn = conn
 
         def suConn(self, username):
-            """Handle su conn."""
+            """Su conn.
+
+            Inputs: `username`. Output: `self._conn`.
+            """
             return self._conn
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("admin close exploded")
 
     monkeypatch.setattr(
@@ -431,30 +509,47 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
 
         @staticmethod
         def saveAndReturnObject(dataset, opts):
-            """Store save and return object."""
+            """Save and return object.
+
+            Inputs: `dataset`, `opts`. Output: None. Raises on invalid or unavailable
+            state.
+            """
             raise RuntimeError("save failed")
 
         @staticmethod
         def saveObject(link, opts):
-            """Store save object."""
+            """Save object.
+
+            Inputs: `link`, `opts`. Output: None.
+            """
             group_calls.append(("linked", link, opts))
 
     class _DatasetConn:
         """Represent dataset conn."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.SERVICE_OPTS = SimpleNamespace(
                 setOmeroGroup=lambda value: group_calls.append(("group", value))
             )
 
         @staticmethod
         def getUpdateService():
-            """Return get update service."""
+            """Return Update Service.
+
+            Inputs: none. Output: `_UpdateService` result.
+            """
             return _UpdateService()
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("dataset close exploded")
 
     monkeypatch.setattr(
@@ -486,29 +581,48 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
         """Represent blitz conn."""
 
         def __init__(self, connect_result, *, fail_group=False):
+            """Initialize the instance.
+
+            Inputs: `connect_result`, `fail_group`. Output: None.
+            """
             self._connect_result = connect_result
             self._fail_group = fail_group
             self.SERVICE_OPTS = SimpleNamespace(setOmeroGroup=self._set_group)
 
         def _set_group(self, value):
-            """Handle set group."""
+            """Set group.
+
+            Inputs: `value`. Output: None. Raises on invalid or unavailable state.
+            """
             if self._fail_group:
                 raise RuntimeError("group exploded")
 
         def connect(self):
-            """Handle connect."""
+            """Open the connection.
+
+            Inputs: none. Output: `self._connect_result`. Raises on invalid or
+            unavailable state.
+
+            unavailable state.
+            """
             if isinstance(self._connect_result, Exception):
                 raise self._connect_result
             return self._connect_result
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("close exploded")
 
         @staticmethod
         def getLastError():
-            """Return get last error."""
+            """Return Last Error.
+
+            Inputs: none. Output: 'last-error'.
+            """
             return "last-error"
 
     connect_attempts = iter(
@@ -581,7 +695,10 @@ def test_connection_and_dataset_helpers_cover_admin_and_service_edge_cases(
 def test_import_candidate_and_probe_helpers_cover_remaining_path_edges(
     monkeypatch, tmp_path
 ):
-    """Verify test import candidate and probe helpers cover behavior."""
+    """Verify import candidate and probe helpers cover remaining path edges.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     expected_path = SimpleNamespace(
         resolve=lambda: (_ for _ in ()).throw(OSError("resolve failed")),
         is_dir=lambda: False,

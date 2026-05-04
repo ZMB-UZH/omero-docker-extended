@@ -10,7 +10,13 @@ from ..strings import errors
 @login_required()
 @require_non_root_user
 def help_page(request, **kwargs):
-    """Handle help page."""
+    """Help page.
+
+    Inputs: `request`, `**kwargs`. Output: `FileResponse` result. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     help_path = (
         Path(__file__).resolve().parents[2]
         / "docs"

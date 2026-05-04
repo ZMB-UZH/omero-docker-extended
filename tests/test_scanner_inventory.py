@@ -19,7 +19,10 @@ SPEC.loader.exec_module(scanner_inventory)
 
 
 def test_parse_deepsource_repository_accepts_only_github_repository_ids() -> None:
-    """Verify test parse deepsource repository accepts only behavior."""
+    """Verify parse deepsource repository accepts only github repository IDs.
+
+    Inputs: none. Output: None.
+    """
     assert scanner_inventory.parse_deepsource_repository(
         "gh/ZMB-UZH/omero-docker-extended"
     ) == ("GITHUB", "ZMB-UZH", "omero-docker-extended")
@@ -34,7 +37,10 @@ def test_parse_deepsource_repository_accepts_only_github_repository_ids() -> Non
 
 
 def test_parse_github_repository_rejects_unsafe_api_path_components() -> None:
-    """Verify test parse github repository rejects unsafe A behavior."""
+    """Verify parse github repository rejects unsafe API path components.
+
+    Inputs: none. Output: None.
+    """
     assert scanner_inventory.parse_github_repository(
         "ZMB-UZH/omero-docker-extended"
     ) == ("ZMB-UZH", "omero-docker-extended")
@@ -50,14 +56,20 @@ def test_parse_github_repository_rejects_unsafe_api_path_components() -> None:
 
 
 def test_fetch_json_keeps_authorization_out_of_curl_argv(monkeypatch) -> None:
-    """Verify test fetch JSON keeps authorization out of cu behavior."""
+    """Verify fetch JSON keeps authorization out of curl argv.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     calls = []
     monkeypatch.setattr(
         scanner_inventory.shutil, "which", lambda command: f"/usr/bin/{command}"
     )
 
     def fake_run(command: list[str], **kwargs):
-        """Handle fake run."""
+        """Fake run.
+
+        Inputs: `command`, `**kwargs`. Output: call result.
+        """
         calls.append({"command": command, "kwargs": kwargs})
         return scanner_inventory.subprocess.CompletedProcess(
             args=command,
@@ -99,7 +111,10 @@ def test_fetch_json_keeps_authorization_out_of_curl_argv(monkeypatch) -> None:
 def test_summarize_github_code_scanning_paginates_and_counts_tools(
     monkeypatch,
 ) -> None:
-    """Verify test summarize github code scanning paginates behavior."""
+    """Verify summarize github code scanning paginates and counts tools.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(scanner_inventory, "read_token", lambda *_args: "token")
     monkeypatch.setattr(
         scanner_inventory,
@@ -120,7 +135,11 @@ def test_summarize_github_code_scanning_paginates_and_counts_tools(
         service: str,
         timeout_seconds: int = scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
     ) -> Any:
-        """Handle fake fetch JSON."""
+        """Fake fetch JSON.
+
+        Inputs: `url`, `headers`, `data`, `method`, `service`, `timeout_seconds`.
+        Output: `Any`.
+        """
         requested_urls.append(url)
         requested_headers.append(headers)
         assert data is None
@@ -158,7 +177,10 @@ def test_summarize_github_code_scanning_paginates_and_counts_tools(
 
 
 def test_summarize_deepsource_reports_group_and_occurrence_counts(monkeypatch) -> None:
-    """Verify test summarize deepsource reports group and o behavior."""
+    """Verify summarize deepsource reports group and occurrence counts.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(scanner_inventory, "read_token", lambda *_args: "token")
     requested_payloads: list[bytes | None] = []
 
@@ -171,7 +193,11 @@ def test_summarize_deepsource_reports_group_and_occurrence_counts(monkeypatch) -
         service: str,
         timeout_seconds: int = scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
     ) -> Any:
-        """Handle fake fetch JSON."""
+        """Fake fetch JSON.
+
+        Inputs: `url`, `headers`, `data`, `method`, `service`, `timeout_seconds`.
+        Output: `Any`.
+        """
         requested_payloads.append(data)
         assert url == "https://api.deepsource.com/graphql/"
         assert headers["Authorization"] == "Bearer token"
@@ -215,7 +241,10 @@ def test_summarize_deepsource_reports_group_and_occurrence_counts(monkeypatch) -
 def test_summarize_deepsource_issues_reports_grouped_issue_details(
     monkeypatch,
 ) -> None:
-    """Verify test summarize deepsource issues reports grou behavior."""
+    """Verify summarize deepsource issues reports grouped issue details.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(scanner_inventory, "read_token", lambda *_args: "token")
     requested_payloads: list[bytes | None] = []
 
@@ -228,7 +257,11 @@ def test_summarize_deepsource_issues_reports_grouped_issue_details(
         service: str,
         timeout_seconds: int = scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
     ) -> Any:
-        """Handle fake fetch JSON."""
+        """Fake fetch JSON.
+
+        Inputs: `url`, `headers`, `data`, `method`, `service`, `timeout_seconds`.
+        Output: `Any`.
+        """
         requested_payloads.append(data)
         assert url == "https://api.deepsource.com/graphql/"
         assert headers["Authorization"] == "Bearer token"

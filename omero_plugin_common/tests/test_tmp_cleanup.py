@@ -4,7 +4,10 @@ from omero_plugin_common import tmp_cleanup
 
 
 def test_safe_remove_tree_and_job_data_stay_within_root(tmp_path):
-    """Verify test safe remove tree and job data stay withi behavior."""
+    """Verify safe remove tree and job data stay within root.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     upload_root = tmp_path / "uploads"
     upload_root.mkdir()
     job_dir = upload_root / "job-1" / "nested"
@@ -22,7 +25,10 @@ def test_safe_remove_tree_and_job_data_stay_within_root(tmp_path):
 
 
 def test_safe_remove_tree_rejects_symlinked_paths(tmp_path):
-    """Verify test safe remove tree rejects symlinked paths."""
+    """Verify safe remove tree rejects symlinked paths.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     root = tmp_path / "root"
     root.mkdir()
     real_dir = root / "real"
@@ -37,7 +43,10 @@ def test_safe_remove_tree_rejects_symlinked_paths(tmp_path):
 def test_safe_mark_path_for_deferred_cleanup_writes_markers_for_files_and_dirs(
     tmp_path,
 ):
-    """Verify test safe mark path for deferred cleanup writ behavior."""
+    """Verify safe mark path for deferred cleanup writes markers for files and directories.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     root = tmp_path / "root"
     root.mkdir()
     dir_path = root / "dir"
@@ -65,7 +74,10 @@ def test_safe_mark_path_for_deferred_cleanup_writes_markers_for_files_and_dirs(
 
 
 def test_tmp_cleanup_helpers_reject_invalid_roots_and_symlinked_children(tmp_path):
-    """Verify test tmp cleanup helpers reject invalid roots behavior."""
+    """Verify temporary cleanup helpers reject invalid roots and symlinked children.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     root = tmp_path / "root"
     root.mkdir()
     outside = tmp_path / "outside"
@@ -82,7 +94,10 @@ def test_tmp_cleanup_helpers_reject_invalid_roots_and_symlinked_children(tmp_pat
 
 
 def test_tmp_cleanup_resolution_failures_from_symlink_loops_are_safe(tmp_path):
-    """Verify test tmp cleanup resolution failures from sym behavior."""
+    """Verify temporary cleanup resolution failures from symlink loops are safe.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     root = tmp_path / "root"
     root.mkdir()
     loop = root / "loop"
@@ -94,7 +109,10 @@ def test_tmp_cleanup_resolution_failures_from_symlink_loops_are_safe(tmp_path):
 
 
 def test_tmp_cleanup_refuses_root_deletion_and_unsafe_job_ids(tmp_path):
-    """Verify test tmp cleanup refuses root deletion and un behavior."""
+    """Verify temporary cleanup refuses root deletion and unsafe job IDs.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     root = tmp_path / "root"
     root.mkdir()
     (root / "payload.txt").write_text("payload", encoding="utf-8")
@@ -106,7 +124,10 @@ def test_tmp_cleanup_refuses_root_deletion_and_unsafe_job_ids(tmp_path):
 
 
 def test_tmp_cleanup_missing_paths_must_stay_within_root(tmp_path):
-    """Verify test tmp cleanup missing paths must stay with behavior."""
+    """Verify temporary cleanup missing paths must stay within root.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     root = tmp_path / "root"
     outside = tmp_path / "outside"
     root.mkdir()
@@ -135,7 +156,13 @@ def test_tmp_cleanup_missing_paths_must_stay_within_root(tmp_path):
 def test_safe_mark_path_for_deferred_cleanup_rejects_invalid_inputs_and_cleans_temp_file(
     tmp_path, monkeypatch
 ):
-    """Verify test safe mark path for deferred cleanup reje behavior."""
+    """Verify safe mark path for deferred cleanup rejects invalid inputs and cleans temp file.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     root = tmp_path / "root"
     root.mkdir()
     target = root / "artifact.txt"
@@ -164,7 +191,10 @@ def test_safe_mark_path_for_deferred_cleanup_rejects_invalid_inputs_and_cleans_t
     real_replace = tmp_cleanup.os.replace
 
     def _failing_replace(src, dst):
-        """Handle failing replace."""
+        """Failing replace.
+
+        Inputs: `src`, `dst`. Output: None. Raises on invalid or unavailable state.
+        """
         created_tmp["path"] = src
         raise OSError("replace failed")
 

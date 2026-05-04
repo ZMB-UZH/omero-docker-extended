@@ -21,6 +21,7 @@ FIXED_IMAGES=(
   "redis-sysctl-init:custom"
 )
 
+# Require root. Inputs: shell arguments and environment. Output: command status and side effects.
 require_root() {
   if [ "$(id -u)" -ne 0 ]; then
     echo "ERROR (${SCRIPT_NAME}): Must run as root." >&2
@@ -28,22 +29,26 @@ require_root() {
   fi
 }
 
+# Perform container exists. Inputs: shell arguments and environment. Output: command status and side effects.
 container_exists() {
   local name="$1"
   docker container inspect "${name}" >/dev/null 2>&1
 }
 
+# Perform container state. Inputs: shell arguments and environment. Output: command status and side effects.
 container_state() {
   local name="$1"
   docker container inspect -f '{{.State.Status}}' "${name}" 2>/dev/null || true
 }
 
+# Stop container best effort. Inputs: shell arguments and environment. Output: command status and side effects.
 stop_container_best_effort() {
   local name="$1"
   container_exists "${name}" || return 0
   docker stop -t 20 "${name}" >/dev/null 2>&1 || true
 }
 
+# Wait container stopped. Inputs: shell arguments and environment. Output: command status and side effects.
 wait_container_stopped() {
   local name="$1"
   local timeout_seconds="${2:-30}"
@@ -74,34 +79,40 @@ wait_container_stopped() {
   return 0
 }
 
+# Remove container force. Inputs: shell arguments and environment. Output: command status and side effects.
 remove_container_force() {
   local name="$1"
   container_exists "${name}" || return 0
   docker rm -f "${name}" >/dev/null 2>&1 || true
 }
 
+# Discover container image ID. Inputs: shell arguments and environment. Output: command status and side effects.
 discover_container_image_id() {
   local name="$1"
   docker container inspect -f '{{.Image}}' "${name}" 2>/dev/null || true
 }
 
+# Discover container volume names. Inputs: shell arguments and environment. Output: command status and side effects.
 discover_container_volume_names() {
   local name="$1"
   docker container inspect -f '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{"\n"}}{{end}}{{end}}' "${name}" 2>/dev/null || true
 }
 
+# Remove image force. Inputs: shell arguments and environment. Output: command status and side effects.
 remove_image_force() {
   local image_ref="$1"
   [ -z "${image_ref}" ] && return 0
   docker rmi -f "${image_ref}" >/dev/null 2>&1 || true
 }
 
+# Remove volume force. Inputs: shell arguments and environment. Output: command status and side effects.
 remove_volume_force() {
   local volume_name="$1"
   [ -z "${volume_name}" ] && return 0
   docker volume rm -f "${volume_name}" >/dev/null 2>&1 || true
 }
 
+# Cleanup one container. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_one_container() {
   local name="$1"
 
@@ -132,6 +143,7 @@ cleanup_one_container() {
   fi
 }
 
+# Cleanup buildx builder. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_buildx_builder() {
   local builder_name="$1"
 
@@ -210,6 +222,7 @@ cleanup_buildx_builder() {
   fi
 }
 
+# Cleanup probe containers. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_probe_containers() {
   echo "Cleaning up probe containers..."
   local c
@@ -220,6 +233,7 @@ cleanup_probe_containers() {
   done < <(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E '^omero-install-probe-' || true)
 }
 
+# Execute the command entrypoint. Inputs: shell arguments and environment. Output: command status and side effects.
 main() {
   require_root
 

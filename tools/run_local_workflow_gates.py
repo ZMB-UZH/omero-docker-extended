@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the locally reproducible GitHub workflow gates.
+"""Execute the locally reproducible GitHub workflow gates.
 
 The GitHub workflow remains the source of truth for hosted-only behavior such
 as SARIF upload, CodeQL analysis services, OIDC publishing, and Scorecard
@@ -50,7 +50,10 @@ class GateError(RuntimeError):
 
 
 def _require_executable(name: str, context: GateContext | None = None) -> str:
-    """Handle require executable."""
+    """Executable.
+
+    Inputs: `name`, `context`. Output: `str`. Raises on invalid or unavailable state.
+    """
     if context is not None:
         venv_executable = context.tool_venv / "bin" / name
         if venv_executable.is_file():
@@ -75,7 +78,11 @@ def _run(
     label: str,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    """Handle run."""
+    """A labeled command and optionally enforce success.
+
+    Inputs: `command`, `cwd`, `env`, `label`, `check`. Output:
+    `subprocess.CompletedProcess[str]`. Raises on invalid or unavailable state.
+    """
     print(f"\n==> {label}", flush=True)
     print("+ " + " ".join(command), flush=True)
     result = subprocess.run(
@@ -91,7 +98,10 @@ def _run(
 
 
 def _git_stdout(repo_root: Path, *args: str) -> str | None:
-    """Handle git stdout."""
+    """Git stdout.
+
+    Inputs: `repo_root`, `*args`. Output: `str | None`.
+    """
     git = _require_executable("git")
     result = subprocess.run(
         (git, *args),
@@ -106,7 +116,10 @@ def _git_stdout(repo_root: Path, *args: str) -> str | None:
 
 
 def _upstream_remote(repo_root: Path) -> str:
-    """Handle upstream remote."""
+    """Upstream remote.
+
+    Inputs: `repo_root`. Output: `str`.
+    """
     stdout = _git_stdout(
         repo_root,
         "rev-parse",
@@ -121,7 +134,10 @@ def _upstream_remote(repo_root: Path) -> str:
 
 
 def _configured_remotes(repo_root: Path) -> tuple[str, ...]:
-    """Handle configured remotes."""
+    """Configured remotes.
+
+    Inputs: `repo_root`. Output: `tuple[str, ...]`.
+    """
     stdout = _git_stdout(repo_root, "remote")
     if not stdout:
         return ()
@@ -129,7 +145,10 @@ def _configured_remotes(repo_root: Path) -> tuple[str, ...]:
 
 
 def _preferred_remotes(repo_root: Path) -> tuple[str, ...]:
-    """Handle preferred remotes."""
+    """Preferred remotes.
+
+    Inputs: `repo_root`. Output: `tuple[str, ...]`.
+    """
     preferred_remotes: list[str] = []
     upstream_remote = _upstream_remote(repo_root)
     if upstream_remote:
@@ -141,7 +160,10 @@ def _preferred_remotes(repo_root: Path) -> tuple[str, ...]:
 
 
 def _remote_head_branch(repo_root: Path, remote_name: str) -> str:
-    """Handle remote head branch."""
+    """Remote head branch.
+
+    Inputs: `repo_root`, `remote_name`. Output: `str`.
+    """
     stdout = _git_stdout(repo_root, "remote", "show", remote_name)
     if not stdout:
         return ""
@@ -153,7 +175,10 @@ def _remote_head_branch(repo_root: Path, remote_name: str) -> str:
 
 
 def _symbolic_remote_head_branch(repo_root: Path, remote_name: str) -> str:
-    """Handle symbolic remote head branch."""
+    """Symbolic remote head branch.
+
+    Inputs: `repo_root`, `remote_name`. Output: `str`.
+    """
     stdout = _git_stdout(
         repo_root,
         "symbolic-ref",
@@ -168,7 +193,10 @@ def _symbolic_remote_head_branch(repo_root: Path, remote_name: str) -> str:
 
 
 def _first_default_branch_candidate(repo_root: Path) -> str:
-    """Handle first default branch candidate."""
+    """First default branch candidate.
+
+    Inputs: `repo_root`. Output: `str`.
+    """
     preferred_remotes = _preferred_remotes(repo_root)
     for remote_name in preferred_remotes:
         branch = _remote_head_branch(repo_root, remote_name)
@@ -184,7 +212,10 @@ def _first_default_branch_candidate(repo_root: Path) -> str:
 
 
 def _default_branch(repo_root: Path) -> str:
-    """Handle default branch."""
+    """Default branch.
+
+    Inputs: `repo_root`. Output: `str`. Raises on invalid or unavailable state.
+    """
     configured = os.environ.get("DEFAULT_BRANCH")
     if configured:
         return configured
@@ -200,7 +231,10 @@ def _default_branch(repo_root: Path) -> str:
 
 
 def _run_many(context: GateContext, steps: Sequence[tuple[str, Sequence[str]]]) -> None:
-    """Handle run many."""
+    """Many.
+
+    Inputs: `context`, `steps`. Output: None. Raises on invalid or unavailable state.
+    """
     failures: list[str] = []
     for label, command in steps:
         try:
@@ -215,7 +249,10 @@ def _run_many(context: GateContext, steps: Sequence[tuple[str, Sequence[str]]]) 
 
 
 def _install_python_workflow_dependencies(context: GateContext) -> None:
-    """Handle install python workflow dependencies."""
+    """Install python workflow dependencies.
+
+    Inputs: `context`. Output: None.
+    """
     if not (context.tool_venv / "bin" / "python").is_file():
         _run(
             (sys.executable, "-m", "venv", str(context.tool_venv)),
@@ -254,7 +291,10 @@ def _install_python_workflow_dependencies(context: GateContext) -> None:
 
 
 def _read_required_ruff_version(repo_root: Path) -> str:
-    """Handle read required ruff version."""
+    """Read required ruff version.
+
+    Inputs: `repo_root`. Output: `str`. Raises on invalid or unavailable state.
+    """
     for line in (repo_root / ".ruff.toml").read_text(encoding="utf-8").splitlines():
         key, separator, raw_value = line.partition("=")
         if separator and key.strip() == "required-version":
@@ -266,7 +306,10 @@ def _read_required_ruff_version(repo_root: Path) -> str:
 
 
 def _read_super_linter_image(repo_root: Path) -> str:
-    """Handle read super linter image."""
+    """Read super linter image.
+
+    Inputs: `repo_root`. Output: `str`. Raises on invalid or unavailable state.
+    """
     workflow_text = (
         repo_root / ".github" / "workflows" / "super-linter.yml"
     ).read_text(encoding="utf-8")
@@ -286,7 +329,10 @@ def _read_super_linter_image(repo_root: Path) -> str:
 
 
 def run_docs(context: GateContext) -> None:
-    """Run run docs."""
+    """Local documentation gates.
+
+    Inputs: `context`. Output: None.
+    """
     python = context.python
     _run_many(
         context,
@@ -301,7 +347,10 @@ def run_docs(context: GateContext) -> None:
 
 
 def run_regression_guard(context: GateContext) -> None:
-    """Run run regression guard."""
+    """Regression-guard scan and selfcheck.
+
+    Inputs: `context`. Output: None.
+    """
     _run(
         (context.python, "tools/regression_guard.py", "scan", "--fail-on", "info"),
         cwd=context.repo_root,
@@ -315,7 +364,10 @@ def run_regression_guard(context: GateContext) -> None:
 
 
 def run_ruff(context: GateContext) -> None:
-    """Run run ruff."""
+    """Ruff lint and format checks.
+
+    Inputs: `context`. Output: None.
+    """
     ruff = _require_executable("ruff", context)
     _run_many(
         context,
@@ -327,12 +379,18 @@ def run_ruff(context: GateContext) -> None:
 
 
 def run_mypy(context: GateContext) -> None:
-    """Run run mypy."""
+    """The local mypy gate.
+
+    Inputs: `context`. Output: None.
+    """
     _run((context.python, "tools/mypy_check.py"), cwd=context.repo_root, label="mypy")
 
 
 def run_vulture(context: GateContext) -> None:
-    """Run run vulture."""
+    """The local Vulture gate.
+
+    Inputs: `context`. Output: None.
+    """
     _run(
         (context.python, "tools/vulture_check.py"),
         cwd=context.repo_root,
@@ -341,7 +399,10 @@ def run_vulture(context: GateContext) -> None:
 
 
 def run_tests(context: GateContext) -> None:
-    """Run run tests."""
+    """Split pytest suites with coverage.
+
+    Inputs: `context`. Output: None. Raises on invalid or unavailable state.
+    """
     python = context.python
     suites = (
         (".coverage.root", "tests/", "tests/"),
@@ -431,7 +492,10 @@ def run_tests(context: GateContext) -> None:
 
 
 def discover_bandit_targets(repo_root: Path) -> BanditTargets:
-    """Handle discover bandit targets."""
+    """Discover bandit targets.
+
+    Inputs: `repo_root`. Output: `BanditTargets`.
+    """
     scan_dirs = tuple(
         sorted(
             path.name
@@ -463,14 +527,20 @@ def discover_bandit_targets(repo_root: Path) -> BanditTargets:
 
 
 def _sarif_result_count(path: Path) -> int:
-    """Handle sarif result count."""
+    """Sarif result count.
+
+    Inputs: `path`. Output: `int`.
+    """
     with path.open(encoding="utf-8") as handle:
         data = json.load(handle)
     return sum(len(run.get("results", [])) for run in data.get("runs", []))
 
 
 def run_bandit(context: GateContext) -> None:
-    """Run run bandit."""
+    """Bandit scans and fail on SARIF findings.
+
+    Inputs: `context`. Output: None. Raises on invalid or unavailable state.
+    """
     bandit = _require_executable("bandit", context)
     context.artifact_dir.mkdir(parents=True, exist_ok=True)
     targets = discover_bandit_targets(context.repo_root)
@@ -530,7 +600,10 @@ def run_bandit(context: GateContext) -> None:
 
 
 def run_super_linter(context: GateContext) -> None:
-    """Run run super linter."""
+    """The pinned Super-Linter container locally.
+
+    Inputs: `context`. Output: None.
+    """
     docker = _require_executable("docker", context)
     default_branch = _default_branch(context.repo_root)
     super_linter_image = _read_super_linter_image(context.repo_root)
@@ -630,7 +703,10 @@ PROFILES: dict[str, tuple[GateRunner, ...]] = {
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    """Validate parse args."""
+    """Parse args.
+
+    Inputs: `argv`. Output: `argparse.Namespace`.
+    """
     parser = argparse.ArgumentParser(
         description="Run locally reproducible gates from the GitHub workflows."
     )
@@ -679,7 +755,10 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the command-line entry point."""
+    """Execute the command entrypoint.
+
+    Inputs: `argv`. Output: `int`.
+    """
     args = parse_args(sys.argv[1:] if argv is None else argv)
     artifact_dir = args.artifact_dir.resolve()
     tool_venv = (

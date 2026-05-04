@@ -21,17 +21,26 @@ logger = logging.getLogger(__name__)
 
 
 def current_username(request, conn):
-    """Handle current username."""
+    """Return current username.
+
+    Inputs: `request`, `conn`. Output: `_current_username` result.
+    """
     return _current_username(request, conn)
 
 
 def load_request_data(request):
-    """Return load request data."""
+    """Return load request data.
+
+    Inputs: `request`. Output: `_load_request_data` result.
+    """
     return _load_request_data(request)
 
 
 def load_json_body(request):
-    """Return load JSON body."""
+    """Return load JSON body.
+
+    Inputs: `request`. Output: tuple.
+    """
     payload, error = parse_json_body(request)
     if error:
         return None, errors.invalid_json_body()
@@ -39,7 +48,10 @@ def load_json_body(request):
 
 
 def resolve_omero_host_port(conn):
-    """Resolve OMERO host/port from the active connection or environment."""
+    """Resolve OMERO host port.
+
+    Inputs: `conn`. Output: tuple.
+    """
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
     port = getattr(conn, "port", None) or getattr(conn, "_port", None)
 
@@ -64,7 +76,10 @@ def resolve_omero_host_port(conn):
 
 
 def validate_user_password(conn, password):
-    """Re-authenticate the current user without exposing the password to a shell."""
+    """Re-authenticate the current user without exposing the password to a shell.
+
+    Inputs: `conn`, `password`. Output: tuple.
+    """
     if not password:
         return False, errors.missing_password()
 
@@ -100,7 +115,10 @@ def validate_user_password(conn, password):
 
 
 def get_session_key(conn):
-    """Return the active OMERO session key for CLI reuse."""
+    """Return the active OMERO session key for CLI reuse.
+
+    Inputs: `conn`. Output: computed value or None.
+    """
     if conn is None:
         return None
 
@@ -129,7 +147,10 @@ def get_session_key(conn):
 
 
 def build_omero_cli_base_command(conn):
-    """Build a session-key-based OMERO CLI prefix for authenticated commands."""
+    """A session-key-based OMERO CLI prefix for authenticated commands.
+
+    Inputs: `conn`. Output: list. Raises on invalid or unavailable state.
+    """
     session_key = get_session_key(conn)
     host, port = resolve_omero_host_port(conn)
     if not session_key or not host or not port:
@@ -138,10 +159,17 @@ def build_omero_cli_base_command(conn):
 
 
 def require_non_root_user(view_func):
-    """Handle require non root user."""
+    """Non root user.
+
+    Inputs: `view_func`. Output: computed value.
+    """
 
     @wraps(view_func)
     def _wrapped(request, *args, conn=None, url=None, **kwargs):
+        """Wrapped.
+
+        Inputs: `request`, `conn`, `url`, `*args`, `**kwargs`. Output: computed value.
+        """
         remaining_args = args
         if remaining_args and conn is None:
             conn = remaining_args[0]

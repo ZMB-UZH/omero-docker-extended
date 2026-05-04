@@ -35,14 +35,20 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_none_returns_defaults():
-        """Verify test none returns defaults."""
+        """Verify none returns defaults.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings(None) == NGFF_CONVERTER_SETTINGS_DEFAULTS
         )
 
     @staticmethod
     def test_string_returns_defaults():
-        """Verify test string returns defaults."""
+        """Verify string returns defaults.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings("garbage")
             == NGFF_CONVERTER_SETTINGS_DEFAULTS
@@ -50,7 +56,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_list_returns_defaults():
-        """Verify test list returns defaults."""
+        """Verify list returns defaults.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings([1, 2, 3])
             == NGFF_CONVERTER_SETTINGS_DEFAULTS
@@ -58,7 +67,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_empty_dict_returns_defaults():
-        """Verify test empty dict returns defaults."""
+        """Verify empty dict returns defaults.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({}) == NGFF_CONVERTER_SETTINGS_DEFAULTS
         )
@@ -67,7 +79,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_compression_blosc():
-        """Verify test compression blosc."""
+        """Verify compression blosc.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"compression": "blosc"})["compression"]
             == "blosc"
@@ -75,7 +90,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_compression_zlib():
-        """Verify test compression zlib."""
+        """Verify compression zlib.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"compression": "zlib"})["compression"]
             == "zlib"
@@ -83,7 +101,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_compression_null():
-        """Verify test compression null."""
+        """Verify compression null.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"compression": "null"})["compression"]
             == "null"
@@ -91,7 +112,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_compression_case_insensitive():
-        """Verify test compression case insensitive."""
+        """Verify compression case insensitive.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"compression": "BLOSC"})["compression"]
             == "blosc"
@@ -103,7 +127,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_compression_invalid_defaults_to_blosc():
-        """Verify test compression invalid defaults to blosc."""
+        """Verify compression invalid defaults to blosc.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"compression": "lz4"})["compression"]
             == "blosc"
@@ -121,14 +148,20 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_downsampling_all_valid_values():
-        """Verify test downsampling all valid values."""
+        """Verify downsampling all valid values.
+
+        Inputs: none. Output: None.
+        """
         for ds in ("SIMPLE", "GAUSSIAN", "AREA", "LINEAR", "CUBIC", "LANCZOS"):
             result = _normalize_ngff_converter_settings({"downsampling": ds})
             assert result["downsampling"] == ds, f"Failed for {ds}"
 
     @staticmethod
     def test_downsampling_case_insensitive():
-        """Verify test downsampling case insensitive."""
+        """Verify downsampling case insensitive.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"downsampling": "gaussian"})[
                 "downsampling"
@@ -138,7 +171,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_downsampling_invalid_defaults_to_simple():
-        """Verify test downsampling invalid defaults to simple."""
+        """Verify downsampling invalid defaults to simple.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"downsampling": "BICUBIC"})[
                 "downsampling"
@@ -154,12 +190,18 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_tile_width_clamped_low():
-        """Verify test tile width clamped low."""
+        """Verify tile width clamped low.
+
+        Inputs: none. Output: None.
+        """
         assert _normalize_ngff_converter_settings({"tile_width": 1})["tile_width"] == 64
 
     @staticmethod
     def test_tile_width_clamped_high():
-        """Verify test tile width clamped high."""
+        """Verify tile width clamped high.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"tile_width": 99999})["tile_width"]
             == 8192
@@ -167,14 +209,20 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_tile_width_valid():
-        """Verify test tile width valid."""
+        """Verify tile width valid.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"tile_width": 512})["tile_width"] == 512
         )
 
     @staticmethod
     def test_tile_height_bounds():
-        """Verify test tile height bounds."""
+        """Verify tile height bounds.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"tile_height": 0})["tile_height"] == 64
         )
@@ -185,7 +233,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_resolutions_bounds():
-        """Verify test resolutions bounds."""
+        """Verify resolutions bounds.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"resolutions": -1})["resolutions"] == 0
         )
@@ -198,7 +249,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_max_workers_bounds():
-        """Verify test max workers bounds."""
+        """Verify max workers bounds.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"max_workers": 0})["max_workers"] == 1
         )
@@ -209,7 +263,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_chunk_depth_bounds():
-        """Verify test chunk depth bounds."""
+        """Verify chunk depth bounds.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"chunk_depth": 0})["chunk_depth"] == 1
         )
@@ -220,7 +277,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_fill_value_bounds():
-        """Verify test fill value bounds."""
+        """Verify fill value bounds.
+
+        Inputs: none. Output: None.
+        """
         assert _normalize_ngff_converter_settings({"fill_value": -1})["fill_value"] == 0
         assert (
             _normalize_ngff_converter_settings({"fill_value": 999})["fill_value"] == 255
@@ -228,7 +288,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_max_cached_tiles_bounds():
-        """Verify test max cached tiles bounds."""
+        """Verify max cached tiles bounds.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"max_cached_tiles": 0})[
                 "max_cached_tiles"
@@ -244,7 +307,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_target_min_size_bounds():
-        """Verify test target min size bounds."""
+        """Verify target min size bounds.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"target_min_size": 0})[
                 "target_min_size"
@@ -260,13 +326,19 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_integer_field_with_non_numeric_value_uses_default():
-        """Verify test integer field with non numeric value use behavior."""
+        """Verify integer field with non numeric value uses default.
+
+        Inputs: none. Output: None.
+        """
         result = _normalize_ngff_converter_settings({"tile_width": "abc"})
         assert result["tile_width"] == 1024
 
     @staticmethod
     def test_integer_field_with_none_uses_default():
-        """Verify test integer field with none uses default."""
+        """Verify integer field with none uses default.
+
+        Inputs: none. Output: None.
+        """
         result = _normalize_ngff_converter_settings({"tile_width": None})
         assert result["tile_width"] == 1024
 
@@ -274,21 +346,30 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_boolean_fields_true():
-        """Verify test boolean fields true."""
+        """Verify boolean fields true.
+
+        Inputs: none. Output: None.
+        """
         for field in ("min_max", "nested", "hcs", "overwrite", "progress"):
             result = _normalize_ngff_converter_settings({field: True})
             assert result[field] is True, f"{field} should be True"
 
     @staticmethod
     def test_boolean_fields_false():
-        """Verify test boolean fields false."""
+        """Verify boolean fields false.
+
+        Inputs: none. Output: None.
+        """
         for field in ("min_max", "nested", "hcs", "overwrite", "progress"):
             result = _normalize_ngff_converter_settings({field: False})
             assert result[field] is False, f"{field} should be False"
 
     @staticmethod
     def test_boolean_fields_truthy_coercion():
-        """Verify test boolean fields truthy coercion."""
+        """Verify boolean fields truthy coercion.
+
+        Inputs: none. Output: None.
+        """
         result = _normalize_ngff_converter_settings({"min_max": 1})
         assert result["min_max"] is True
         result = _normalize_ngff_converter_settings({"min_max": 0})
@@ -298,26 +379,38 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_series_valid():
-        """Verify test series valid."""
+        """Verify series valid.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"series": "0,1,3"})["series"] == "0,1,3"
         )
 
     @staticmethod
     def test_series_empty():
-        """Verify test series empty."""
+        """Verify series empty.
+
+        Inputs: none. Output: None.
+        """
         assert _normalize_ngff_converter_settings({"series": ""})["series"] == ""
 
     @staticmethod
     def test_series_strips_non_digits():
-        """Verify test series strips non digits."""
+        """Verify series strips non digits.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"series": "0,abc,2"})["series"] == "0,2"
         )
 
     @staticmethod
     def test_series_injection_attack():
-        """Semicolons, pipes, backticks etc. must be stripped."""
+        """Semicolons, pipes, backticks etc. must be stripped.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"series": "; rm -rf /"})["series"] == ""
         )
@@ -336,7 +429,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_series_with_spaces():
-        """Verify test series with spaces."""
+        """Verify series with spaces.
+
+        Inputs: none. Output: None.
+        """
         assert (
             _normalize_ngff_converter_settings({"series": " 0 , 1 , 2 "})["series"]
             == "0,1,2"
@@ -344,7 +440,10 @@ class TestNormalizeNgffConverterSettings(unittest.TestCase):
 
     @staticmethod
     def test_series_none():
-        """Verify test series none."""
+        """Verify series none.
+
+        Inputs: none. Output: None.
+        """
         assert _normalize_ngff_converter_settings({"series": None})["series"] == ""
 
 
@@ -353,18 +452,27 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
 
     @staticmethod
     def _defaults(**overrides):
-        """Handle defaults."""
+        """Defaults.
+
+        Inputs: `**overrides`. Output: `s`.
+        """
         s = dict(NGFF_CONVERTER_SETTINGS_DEFAULTS)
         s.update(overrides)
         return s
 
     def test_binary_path_is_first(self):
-        """Verify test binary path is first."""
+        """Verify binary path is first.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults())
         assert cmd[0] == BIOFORMATS2RAW_CLI
 
     def test_input_output_paths_are_last(self):
-        """Verify test input output paths are last."""
+        """Verify input output paths are last.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in/f.czi", "/out/f.zarr", self._defaults()
         )
@@ -372,7 +480,10 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
         assert cmd[-1] == "/out/f.zarr"
 
     def test_compression_blosc(self):
-        """Verify test compression blosc."""
+        """Verify compression blosc.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(compression="blosc")
         )
@@ -380,7 +491,10 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
         assert cmd[idx + 1] == "blosc"
 
     def test_compression_null(self):
-        """Verify test compression null."""
+        """Verify compression null.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(compression="null")
         )
@@ -388,7 +502,10 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
         assert cmd[idx + 1] == "null"
 
     def test_tile_dimensions(self):
-        """Verify test tile dimensions."""
+        """Verify tile dimensions.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(tile_width=512, tile_height=256)
         )
@@ -396,148 +513,217 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
         assert cmd[cmd.index("--tile-height") + 1] == "256"
 
     def test_resolutions_zero_omitted(self):
-        """Verify test resolutions zero omitted."""
+        """Verify resolutions zero omitted.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(resolutions=0)
         )
         assert "--resolutions" not in cmd
 
     def test_invalid_resolutions_are_omitted(self):
-        """Verify test invalid resolutions are omitted."""
+        """Verify invalid resolutions are omitted.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(resolutions="not-an-int")
         )
         assert "--resolutions" not in cmd
 
     def test_resolutions_nonzero_included(self):
-        """Verify test resolutions nonzero included."""
+        """Verify resolutions nonzero included.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(resolutions=5)
         )
         assert cmd[cmd.index("--resolutions") + 1] == "5"
 
     def test_max_workers(self):
-        """Verify test max workers."""
+        """Verify max workers.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(max_workers=8)
         )
         assert cmd[cmd.index("--max-workers") + 1] == "8"
 
     def test_chunk_depth(self):
-        """Verify test chunk depth."""
+        """Verify chunk depth.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(chunk_depth=16)
         )
         assert cmd[cmd.index("--chunk-depth") + 1] == "16"
 
     def test_downsample_type(self):
-        """Verify test downsample type."""
+        """Verify downsample type.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(downsampling="LANCZOS")
         )
         assert cmd[cmd.index("--downsample-type") + 1] == "LANCZOS"
 
     def test_fill_value(self):
-        """Verify test fill value."""
+        """Verify fill value.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(fill_value=128)
         )
         assert cmd[cmd.index("--fill-value") + 1] == "128"
 
     def test_max_cached_tiles(self):
-        """Verify test max cached tiles."""
+        """Verify max cached tiles.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(max_cached_tiles=32)
         )
         assert cmd[cmd.index("--max-cached-tiles") + 1] == "32"
 
     def test_target_min_size(self):
-        """Verify test target min size."""
+        """Verify target min size.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(target_min_size=512)
         )
         assert cmd[cmd.index("--target-min-size") + 1] == "512"
 
     def test_no_minmax_when_disabled(self):
-        """Verify test no minmax when disabled."""
+        """Verify no minmax when disabled.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(min_max=False)
         )
         assert "--no-minmax" in cmd
 
     def test_no_minmax_absent_when_enabled(self):
-        """Verify test no minmax absent when enabled."""
+        """Verify no minmax absent when enabled.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(min_max=True))
         assert "--no-minmax" not in cmd
 
     def test_no_nested_when_disabled(self):
-        """Verify test no nested when disabled."""
+        """Verify no nested when disabled.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(nested=False))
         assert "--no-nested" in cmd
 
     def test_no_nested_absent_when_enabled(self):
-        """Verify test no nested absent when enabled."""
+        """Verify no nested absent when enabled.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(nested=True))
         assert "--no-nested" not in cmd
 
     def test_no_hcs_when_disabled(self):
-        """Verify test no hcs when disabled."""
+        """Verify no hcs when disabled.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(hcs=False))
         assert "--no-hcs" in cmd
 
     def test_no_hcs_absent_when_enabled(self):
-        """Verify test no hcs absent when enabled."""
+        """Verify no hcs absent when enabled.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(hcs=True))
         assert "--no-hcs" not in cmd
 
     def test_overwrite_present_when_true(self):
-        """Verify test overwrite present when true."""
+        """Verify overwrite present when true.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(overwrite=True)
         )
         assert "--overwrite" in cmd
 
     def test_overwrite_absent_when_false(self):
-        """Verify test overwrite absent when false."""
+        """Verify overwrite absent when false.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(overwrite=False)
         )
         assert "--overwrite" not in cmd
 
     def test_progress_present_when_true(self):
-        """Verify test progress present when true."""
+        """Verify progress present when true.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(progress=True)
         )
         assert "--progress" in cmd
 
     def test_progress_absent_when_false(self):
-        """Verify test progress absent when false."""
+        """Verify progress absent when false.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in", "/out", self._defaults(progress=False)
         )
         assert "--progress" not in cmd
 
     def test_series_included_when_nonempty(self):
-        """Verify test series included when nonempty."""
+        """Verify series included when nonempty.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(series="0,1"))
         assert cmd[cmd.index("--series") + 1] == "0,1"
 
     def test_series_omitted_when_empty(self):
-        """Verify test series omitted when empty."""
+        """Verify series omitted when empty.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command("/in", "/out", self._defaults(series=""))
         assert "--series" not in cmd
 
     @staticmethod
     def test_none_settings_uses_defaults():
-        """Verify test none settings uses defaults."""
+        """Verify none settings uses defaults.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command("/in", "/out", None)
         assert cmd[0] == BIOFORMATS2RAW_CLI
         assert "--overwrite" in cmd
         assert "--progress" in cmd
 
     def test_legacy_settings_keyword_uses_converter_settings(self):
-        """Verify test legacy settings keyword uses converter s behavior."""
+        """Verify legacy settings keyword uses converter settings.
+
+        Inputs: none. Output: None.
+        """
         cmd = _build_bioformats2raw_command(
             "/in",
             "/out",
@@ -546,7 +732,10 @@ class TestBuildBioformats2rawCommand(unittest.TestCase):
         assert "--overwrite" not in cmd
 
     def test_all_flags_combined(self):
-        """A single run with all non-default options to verify no clashes."""
+        """A single run with all non-default options to verify no clashes.
+
+        Inputs: none. Output: None.
+        """
         s = self._defaults(
             compression="zlib",
             tile_width=512,
@@ -589,22 +778,34 @@ class TestSemEdxSettingsUnchanged(unittest.TestCase):
 
     @staticmethod
     def test_defaults():
-        """Verify test defaults."""
+        """Verify defaults.
+
+        Inputs: none. Output: None.
+        """
         assert _normalize_sem_edx_settings({}) == SEM_EDX_SETTINGS_DEFAULTS
 
     @staticmethod
     def test_none_returns_defaults():
-        """Verify test none returns defaults."""
+        """Verify none returns defaults.
+
+        Inputs: none. Output: None.
+        """
         assert _normalize_sem_edx_settings(None) == SEM_EDX_SETTINGS_DEFAULTS
 
     @staticmethod
     def test_string_returns_defaults():
-        """Verify test string returns defaults."""
+        """Verify string returns defaults.
+
+        Inputs: none. Output: None.
+        """
         assert _normalize_sem_edx_settings("x") == SEM_EDX_SETTINGS_DEFAULTS
 
     @staticmethod
     def test_partial_override():
-        """Verify test partial override."""
+        """Verify partial override.
+
+        Inputs: none. Output: None.
+        """
         result = _normalize_sem_edx_settings({"create_tables": False})
         assert result["create_tables"] is False
         assert result["create_figures_attachments"] is True
@@ -612,7 +813,10 @@ class TestSemEdxSettingsUnchanged(unittest.TestCase):
 
     @staticmethod
     def test_all_false():
-        """Verify test all false."""
+        """Verify all false.
+
+        Inputs: none. Output: None.
+        """
         result = _normalize_sem_edx_settings(
             {
                 "create_tables": False,
@@ -624,7 +828,10 @@ class TestSemEdxSettingsUnchanged(unittest.TestCase):
 
     @staticmethod
     def test_truthy_coercion():
-        """Verify test truthy coercion."""
+        """Verify truthy coercion.
+
+        Inputs: none. Output: None.
+        """
         result = _normalize_sem_edx_settings(
             {"create_tables": 1, "create_figures_attachments": ""}
         )
@@ -633,7 +840,10 @@ class TestSemEdxSettingsUnchanged(unittest.TestCase):
 
     @staticmethod
     def test_unknown_keys_ignored():
-        """Verify test unknown keys ignored."""
+        """Verify unknown keys ignored.
+
+        Inputs: none. Output: None.
+        """
         result = _normalize_sem_edx_settings(
             {"unknown_key": True, "create_tables": False}
         )
@@ -646,7 +856,10 @@ class TestSpecialMethodSettingsViewNormalization(unittest.TestCase):
 
     @staticmethod
     def test_preserves_string_int_bool():
-        """Verify test preserves string int bool."""
+        """Verify preserves string int bool.
+
+        Inputs: none. Output: None.
+        """
         from omeroweb_import.views.special_method_settings_view import (
             _normalize_special_method_settings,
         )
@@ -665,7 +878,10 @@ class TestSpecialMethodSettingsViewNormalization(unittest.TestCase):
 
     @staticmethod
     def test_non_dict_returns_empty():
-        """Verify test non dict returns empty."""
+        """Verify non dict returns empty.
+
+        Inputs: none. Output: None.
+        """
         from omeroweb_import.views.special_method_settings_view import (
             _normalize_special_method_settings,
         )
@@ -676,7 +892,10 @@ class TestSpecialMethodSettingsViewNormalization(unittest.TestCase):
 
     @staticmethod
     def test_unknown_types_coerced_to_bool():
-        """Verify test unknown types coerced to bool."""
+        """Verify unknown types coerced to bool.
+
+        Inputs: none. Output: None.
+        """
         from omeroweb_import.views.special_method_settings_view import (
             _normalize_special_method_settings,
         )
@@ -686,7 +905,10 @@ class TestSpecialMethodSettingsViewNormalization(unittest.TestCase):
 
     @staticmethod
     def test_float_preserved():
-        """Verify test float preserved."""
+        """Verify float preserved.
+
+        Inputs: none. Output: None.
+        """
         from omeroweb_import.views.special_method_settings_view import (
             _normalize_special_method_settings,
         )
@@ -700,7 +922,10 @@ class TestNgffConverterInStartUpload(unittest.TestCase):
 
     @staticmethod
     def test_ngff_settings_stored_in_job_when_ngff_selected():
-        """Verify test NGFF settings stored in job when NGFF se behavior."""
+        """Verify NGFF settings stored in job when NGFF selected.
+
+        Inputs: none. Output: None.
+        """
         raw = {"compression": "zlib", "tile_width": 2048, "series": "0,1"}
         normalized = _normalize_ngff_converter_settings(raw)
         assert normalized["compression"] == "zlib"
@@ -715,7 +940,10 @@ class TestNgffConverterInStartUpload(unittest.TestCase):
 
     @staticmethod
     def test_ngff_settings_empty_when_sem_selected():
-        """Verify test NGFF settings empty when sem selected."""
+        """Verify NGFF settings empty when sem selected.
+
+        Inputs: none. Output: None.
+        """
         raw = {"compression": "zlib"}
         # When special_upload != ngff_converter, settings should be empty
         # This mimics the logic in index_view.py

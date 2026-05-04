@@ -26,11 +26,13 @@ TMP_CLEANER_BIN="${TMP_CLEANER_BIN:-${LOCAL_SBIN_DIR%/}/omero-tmp-cleaner}"
 # shellcheck source=scripts/omero-host-service-lib.sh
 source "${SCRIPT_DIR}/omero-host-service-lib.sh"
 
+# Print usage text. Inputs: shell arguments and environment. Output: command status and side effects.
 usage() {
     echo "Usage: $0 <OMERO_TMP_PATH>" >&2
     echo "  OMERO_TMP_PATH: Path to the OMERO temporary directory on the host" >&2
 }
 
+# Render unit. Inputs: shell arguments and environment. Output: stdout text and command status.
 render_unit() {
     local source_file="$1"
     local dest_file="$2"
@@ -42,6 +44,7 @@ render_unit() {
         OMERO_TMP_PATH "${OMERO_TMP_DIR}"
 }
 
+# Replace managed units. Inputs: shell arguments and environment. Output: command status and side effects.
 replace_managed_units() {
     omero_replace_systemd_units \
         "${SYSTEMCTL_BIN}" \
@@ -50,6 +53,7 @@ replace_managed_units() {
         omero-tmp-cleaner.service
 }
 
+# Install cleaner script. Inputs: shell arguments and environment. Output: command status and side effects.
 install_cleaner_script() {
     local installed_sha
 
@@ -62,6 +66,7 @@ install_cleaner_script() {
     echo "  Installed: ${TMP_CLEANER_BIN} (sha256=${installed_sha})"
 }
 
+# Install systemd units. Inputs: shell arguments and environment. Output: command status and side effects.
 install_systemd_units() {
     local service_dst timer_dst
 
@@ -77,6 +82,7 @@ install_systemd_units() {
     echo "  Installed: ${timer_dst}"
 }
 
+# Enable timer. Inputs: shell arguments and environment. Output: command status and side effects.
 enable_timer() {
     "${SYSTEMCTL_BIN}" reset-failed \
         omero-tmp-cleaner.service \
@@ -86,6 +92,7 @@ enable_timer() {
     echo "  Enabled: omero-tmp-cleaner.timer"
 }
 
+# Execute the command entrypoint. Inputs: shell arguments and environment. Output: command status and side effects.
 main() {
 omero_require_root
 

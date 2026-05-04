@@ -15,7 +15,10 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.crowdsec_entrypoint = (
             cls.repo_root / "docker" / "crowdsec-entrypoint.sh"
@@ -30,7 +33,10 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
     def test_console_enrollment_still_runs_when_only_capi_credentials_exist(
         self,
     ) -> None:
-        """Verify test console enrollment still runs when only behavior."""
+        """Verify console enrollment still runs when only capi credentials exist.
+
+        Inputs: none. Output: None.
+        """
         helper_block = self._slice_between(
             self.crowdsec_entrypoint,
             "is_true() {",
@@ -81,7 +87,10 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
             )
 
     def test_console_enrollment_skips_reenroll_when_done_marker_exists(self) -> None:
-        """Verify test console enrollment skips reenroll when d behavior."""
+        """Verify console enrollment skips reenroll when done marker exists.
+
+        Inputs: none. Output: None.
+        """
         helper_block = self._slice_between(
             self.crowdsec_entrypoint,
             "is_true() {",
@@ -134,7 +143,10 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
             )
 
     def test_console_enrollment_uses_engine_name_on_first_install(self) -> None:
-        """Verify test console enrollment uses engine name on f behavior."""
+        """Verify console enrollment uses engine name on first install.
+
+        Inputs: none. Output: None.
+        """
         helper_block = self._slice_between(
             self.crowdsec_entrypoint,
             "is_true() {",
@@ -182,7 +194,10 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
             )
 
     def test_console_enrollment_disables_when_key_is_placeholder(self) -> None:
-        """Verify test console enrollment disables when key is behavior."""
+        """Verify console enrollment disables when key is placeholder.
+
+        Inputs: none. Output: None.
+        """
         helper_block = self._slice_between(
             self.crowdsec_entrypoint,
             "is_true() {",
@@ -229,7 +244,10 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
     def test_console_enrollment_is_never_attempted_on_regular_restart_without_install_arm(
         self,
     ) -> None:
-        """Verify test console enrollment is never attempted on behavior."""
+        """Verify console enrollment is never attempted on regular restart without install arm.
+
+        Inputs: none. Output: None.
+        """
         helper_block = self._slice_between(
             self.crowdsec_entrypoint,
             "is_true() {",
@@ -279,7 +297,10 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
     def test_restart_helper_restarts_running_container_once_and_removes_marker(
         self,
     ) -> None:
-        """Verify test restart helper restarts running containe behavior."""
+        """Verify restart helper restarts running container once and removes marker.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
             bin_dir = tmpdir_path / "bin"
@@ -338,7 +359,10 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
             )
 
     def test_restart_helper_skips_restart_when_container_is_not_running(self) -> None:
-        """Verify test restart helper skips restart when contai behavior."""
+        """Verify restart helper skips restart when container is not running.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
             bin_dir = tmpdir_path / "bin"
@@ -401,7 +425,10 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
     def test_installation_arms_bootstrap_even_when_runtime_state_already_exists(
         self,
     ) -> None:
-        """Verify test installation arms bootstrap even when ru behavior."""
+        """Verify installation arms bootstrap even when runtime state already exists.
+
+        Inputs: none. Output: None.
+        """
         install_block = self._slice_between(
             self.installation_script,
             "is_crowdsec_enabled() {",
@@ -448,7 +475,10 @@ EOF
     def test_installation_reports_existing_crowdsec_runtime_state_in_transcript(
         self,
     ) -> None:
-        """Verify test installation reports existing crowdsec r behavior."""
+        """Verify installation reports existing crowdsec runtime state in transcript.
+
+        Inputs: none. Output: None.
+        """
         install_block = self._slice_between(
             self.installation_script,
             "is_crowdsec_enabled() {",
@@ -489,7 +519,10 @@ EOF
             self.assertIn("flags=1,1", result.stdout)
 
     def test_installation_clears_done_marker_before_rearming_enrollment(self) -> None:
-        """Verify test installation clears done marker before r behavior."""
+        """Verify installation clears done marker before rearming enrollment.
+
+        Inputs: none. Output: None.
+        """
         install_block = self._slice_between(
             self.installation_script,
             "is_crowdsec_enabled() {",
@@ -535,7 +568,10 @@ EOF
 
     @staticmethod
     def _run_bash(script: str) -> subprocess.CompletedProcess[str]:
-        """Handle run bash."""
+        """Bash.
+
+        Inputs: `script`. Output: `subprocess.CompletedProcess[str]`.
+        """
         return subprocess.run(
             [BASH_BIN, "-lc", script],
             check=True,
@@ -546,7 +582,10 @@ EOF
 
     @staticmethod
     def _slice_between(content: str, start_marker: str, end_marker: str) -> str:
-        """Handle slice between."""
+        """Slice between.
+
+        Inputs: `content`, `start_marker`, `end_marker`. Output: `str`.
+        """
         start = content.index(start_marker)
         end = content.index(end_marker, start)
         return content[start:end].rstrip()

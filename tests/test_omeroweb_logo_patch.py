@@ -12,12 +12,18 @@ class OmeroWebLogoPatchTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.patch_script = cls.repo_root / "docker" / "patch_omeroweb_logo_context.py"
 
     def test_patch_script_updates_logo_context_block(self) -> None:
-        """Verify test patch script updates logo context block."""
+        """Verify patch script updates logo context block.
+
+        Inputs: none. Output: None.
+        """
         original_text = """\
 def example(context, settings):
         if settings.TOP_LOGO:

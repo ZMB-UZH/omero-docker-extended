@@ -15,12 +15,18 @@ class _LockStub:
 
     @staticmethod
     def acquire():
-        """Handle acquire."""
+        """Acquire the lock.
+
+        Inputs: none. Output: None.
+        """
         return None
 
     @staticmethod
     def release():
-        """Handle release."""
+        """Release the lock.
+
+        Inputs: none. Output: None.
+        """
         return None
 
 
@@ -29,14 +35,20 @@ class _ImageStub:
 
     @staticmethod
     def getName():
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: 'image.ome.tif'.
+        """
         return "image.ome.tif"
 
 
 def test_job_progress_logs_escape_job_id_and_exception(
     monkeypatch, tmp_path: Path, caplog
 ):
-    """Verify test job progress logs escape job identifier behavior."""
+    """Verify job progress logs escape job ID and exception.
+
+    Inputs: `monkeypatch`, `tmp_path`, `caplog`. Output: None.
+    """
     job = {
         "job_id": "bad\njob",
         "project_id": 1,
@@ -83,7 +95,10 @@ def test_job_progress_logs_escape_job_id_and_exception(
 
 
 def test_variable_set_view_logs_escape_exception_text(monkeypatch, caplog):
-    """Verify test variable set view logs escape exception behavior."""
+    """Verify variable set view logs escape exception text.
+
+    Inputs: `monkeypatch`, `caplog`. Output: None.
+    """
     request = RequestFactory().get("/omp/sets/")
 
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")

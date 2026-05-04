@@ -22,13 +22,18 @@ logger = logging.getLogger(__name__)
 
 
 def get_hash_secret():
-    """Return secret used to compute/verify plugin hash marker."""
+    """Return secret used to compute/verify plugin hash marker.
+
+    Inputs: none. Output: `get_env` result.
+    """
     return get_env(HASH_HMAC_KEY_ENV, env_file=ENV_FILE_OMEROWEB)
 
 
 def canonicalize_mapping(mapping):
-    """
-    Return deterministic JSON payload for hashing.
+    """Return deterministic JSON payload for hashing.
+
+    Inputs: `mapping`. Output: `json.dumps` result.
+
     HASH_KEY itself is excluded to avoid recursion.
     """
     data = {}
@@ -52,7 +57,10 @@ def canonicalize_mapping(mapping):
 
 
 def compute_plugin_hash(mapping):
-    """Compute the value stored under HASH_KEY."""
+    """Compute the value stored under HASH_KEY.
+
+    Inputs: `mapping`. Output: `f'{HASH_PREFIX}{digest}'`.
+    """
     payload = canonicalize_mapping(mapping)
     secret = get_hash_secret()
 
@@ -69,8 +77,9 @@ def compute_plugin_hash(mapping):
 
 
 def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
-    """
-    Return True if MapAnnotation was created by this plugin.
+    """Return True if MapAnnotation was created by this plugin.
+
+    Inputs: `map_ann_obj`, `qs`, `service_opts`. Output: computed value or None.
 
     If map values are not preloaded on the MapAnnotation object, a QueryService
     can be provided to fetch the pairs directly from the database.
@@ -80,7 +89,10 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
     """
 
     def _unwrap(val):
-        """Handle unwrap."""
+        """Unwrap.
+
+        Inputs: `val`. Output: computed value.
+        """
         if callable(getattr(val, "getValue", None)):
             try:
                 return val.getValue()
@@ -94,7 +106,10 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
         return val
 
     def _extract_pair(nv):
-        """Return (name, value) tuple from a NamedValue or (name, value) pair."""
+        """Return (name, value) tuple from a NamedValue or (name, value) pair.
+
+        Inputs: `nv`. Output: tuple or None.
+        """
         # NamedValue-like object
         name = getattr(nv, "name", None)
         if name is None and callable(getattr(nv, "getName", None)):
@@ -124,7 +139,10 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
         return str(name), "" if value is None else str(value)
 
     def _load_pairs_from_qs(aid):
-        """Handle load pairs from qs."""
+        """Load pairs from qs.
+
+        Inputs: `aid`. Output: computed value.
+        """
         if qs is None or aid is None:
             return []
 
@@ -183,7 +201,10 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
 
 
 def find_plugin_annotation_ids(conn, image_id, allow_legacy=False):
-    """Return plugin-owned MapAnnotation IDs; legacy matching is opt-in."""
+    """Return plugin-owned MapAnnotation IDs; legacy matching is opt-in.
+
+    Inputs: `conn`, `image_id`, `allow_legacy`. Output: computed value.
+    """
     try:
         iid = int(image_id)
     except Exception:
@@ -255,7 +276,10 @@ def find_plugin_annotation_ids(conn, image_id, allow_legacy=False):
 
 
 def find_annotation_link_ids(conn, annotation_id):
-    """Return ImageAnnotationLink IDs for an annotation."""
+    """Return ImageAnnotationLink IDs for an annotation.
+
+    Inputs: `conn`, `annotation_id`. Output: computed value.
+    """
     try:
         aid = int(annotation_id)
     except Exception:
@@ -278,7 +302,10 @@ def find_annotation_link_ids(conn, annotation_id):
 
 
 def find_map_annotation_ids(conn, image_id):
-    """Return MapAnnotation IDs linked to an image (key-value pairs)."""
+    """Return MapAnnotation IDs linked to an image (key-value pairs).
+
+    Inputs: `conn`, `image_id`. Output: computed value.
+    """
     try:
         iid = int(image_id)
     except Exception:
@@ -307,8 +334,9 @@ def find_map_annotation_ids(conn, image_id):
 
 
 def delete_existing_annotations(conn, _update, img, var_names, mode):
-    """
-    Delete MapAnnotations depending on deletion mode.
+    """Delete existing annotations.
+
+    Inputs: `conn`, `_update`, `img`, `var_names`, `mode`. Output: computed value.
 
     Modes:
         keep    – keep everything
@@ -336,7 +364,10 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
     service_opts = getattr(conn, "SERVICE_OPTS", None)
 
     def _annotation_exists(aid):
-        """Handle annotation exists."""
+        """Annotation exists.
+
+        Inputs: `aid`. Output: computed value.
+        """
         try:
             params = ParametersI()
             params.add("aid", rlong(int(aid)))
@@ -350,7 +381,10 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
             return True
 
     def _delete_by_id(aid):
-        """Handle delete by identifier."""
+        """Delete by ID.
+
+        Inputs: `aid`. Output: bool.
+        """
         try:
             conn.deleteObjects("Annotation", [int(aid)], wait=True)
         except Exception as e:

@@ -28,7 +28,10 @@ _psycopg2_sql: Any | None = None
 
 
 def _load_psycopg2():
-    """Handle load psycopg2."""
+    """Load psycopg2.
+
+    Inputs: none. Output: tuple. Raises on invalid or unavailable state.
+    """
     if _psycopg2_mod is not None and _psycopg2_extras is not None:
         return _psycopg2_mod, _psycopg2_extras
 
@@ -42,7 +45,10 @@ def _load_psycopg2():
 
 
 def _load_psycopg2_sql():
-    """Handle load psycopg2 SQL."""
+    """Load psycopg2 sql.
+
+    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    """
     if _psycopg2_sql is not None:
         return _psycopg2_sql
 
@@ -55,13 +61,19 @@ def _load_psycopg2_sql():
 
 
 def _safe_query(template, *identifiers):
-    """Compose a parameterized SQL query with safe psycopg2.sql identifiers."""
+    """Compose a parameterized SQL query with safe psycopg2.sql identifiers.
+
+    Inputs: `template`, `*identifiers`. Output: call result.
+    """
     sql_mod = _load_psycopg2_sql()
     return sql_mod.SQL(template).format(*[sql_mod.Identifier(i) for i in identifiers])
 
 
 def _db_params():
-    """Handle database params."""
+    """DB params.
+
+    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    """
     user = os.environ.get(ENV_USER)
     password = os.environ.get(ENV_AUTH)
     host = os.environ.get(ENV_HOST)
@@ -107,7 +119,10 @@ def _db_params():
 
 @contextmanager
 def _connect():
-    """Handle connect."""
+    """Open the connection.
+
+    Inputs: none. Output: yielded values. Raises on invalid or unavailable state.
+    """
     psycopg2, _ = _load_psycopg2()
     param_options = _db_params()
     conn = None
@@ -152,7 +167,10 @@ def _connect():
 
 
 def _ensure_user_settings_schema(conn):
-    """Handle ensure user settings schema."""
+    """Ensure user settings schema.
+
+    Inputs: `conn`. Output: None.
+    """
     _load_psycopg2_sql()
     with conn.cursor() as cur:
         stmt = _safe_query(
@@ -180,7 +198,10 @@ def _ensure_user_settings_schema(conn):
 
 
 def _ensure_special_method_settings_schema(conn):
-    """Handle ensure special method settings schema."""
+    """Ensure special method settings schema.
+
+    Inputs: `conn`. Output: None.
+    """
     _load_psycopg2_sql()
     with conn.cursor() as cur:
         stmt = _safe_query(
@@ -218,7 +239,11 @@ def _ensure_special_method_settings_schema(conn):
 
 
 def save_user_settings(username, settings_payload):
-    """Store save user settings."""
+    """Save user settings.
+
+    Inputs: `username`, `settings_payload`. Output: None. Raises on invalid or
+    unavailable state.
+    """
     try:
         _, extras = _load_psycopg2()
         _load_psycopg2_sql()
@@ -264,7 +289,11 @@ def save_user_settings(username, settings_payload):
 
 
 def save_special_method_settings(username, method_key, settings_payload):
-    """Store save special method settings."""
+    """Save special method settings.
+
+    Inputs: `username`, `method_key`, `settings_payload`. Output: None. Raises on
+    invalid or unavailable state.
+    """
     try:
         _, extras = _load_psycopg2()
         _load_psycopg2_sql()
@@ -312,7 +341,11 @@ def save_special_method_settings(username, method_key, settings_payload):
 
 
 def load_special_method_settings(username, method_key):
-    """Return load special method settings."""
+    """Return load special method settings.
+
+    Inputs: `username`, `method_key`. Output: `row[0]` or None. Raises on invalid or
+    unavailable state.
+    """
     try:
         _load_psycopg2_sql()
         with _connect() as conn:

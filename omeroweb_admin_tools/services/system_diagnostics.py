@@ -39,12 +39,18 @@ _PSYCOPG2_CACHE = _ModuleCache()
 
 
 def _get_cached_psycopg2_module():
-    """Handle get cached psycopg2 module."""
+    """Return cached psycopg2 module.
+
+    Inputs: none. Output: `_PSYCOPG2_CACHE.value`.
+    """
     return _PSYCOPG2_CACHE.value
 
 
 def _set_cached_psycopg2_module(module) -> None:
-    """Handle set cached psycopg2 module."""
+    """Set cached psycopg2 module.
+
+    Inputs: `module`. Output: None.
+    """
     _PSYCOPG2_CACHE.value = module
 
 
@@ -82,13 +88,19 @@ class DatabaseRuntimeProfile:
 
 
 def _get_env(name: str, default: str) -> str:
-    """Handle get env."""
+    """Return environment.
+
+    Inputs: `name`, `default`. Output: `str`.
+    """
     value = os.environ.get(name, default)
     return str(value).strip() or default
 
 
 def _to_float_env(name: str, default: float) -> float:
-    """Handle to float env."""
+    """To float env.
+
+    Inputs: `name`, `default`. Output: `float`.
+    """
     raw_value = _get_env(name, str(default))
     try:
         return float(raw_value)
@@ -97,7 +109,10 @@ def _to_float_env(name: str, default: float) -> float:
 
 
 def _first_present_env(names: Sequence[str], default: str = "") -> str:
-    """Handle first present env."""
+    """First present env.
+
+    Inputs: `names`, `default`. Output: `str`.
+    """
     for name in names:
         raw_value = os.environ.get(name)
         if raw_value is None:
@@ -109,7 +124,10 @@ def _first_present_env(names: Sequence[str], default: str = "") -> str:
 
 
 def _config_failure(summary: str, details: str, start: float) -> DiagnosticCheckResult:
-    """Handle config failure."""
+    """Config failure.
+
+    Inputs: `summary`, `details`, `start`. Output: `DiagnosticCheckResult`.
+    """
     return DiagnosticCheckResult(
         check_id="omero_runtime_config",
         label="Validate OMERO runtime diagnostic configuration",
@@ -121,7 +139,13 @@ def _config_failure(summary: str, details: str, start: float) -> DiagnosticCheck
 
 
 def _parse_runtime_port(raw_value: str, env_names: Sequence[str]) -> int:
-    """Handle parse runtime port."""
+    """Parse runtime port.
+
+    Inputs: `raw_value`, `env_names`. Output: `int`. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     try:
         port = int(raw_value)
     except ValueError as exc:
@@ -140,12 +164,18 @@ def _parse_runtime_port(raw_value: str, env_names: Sequence[str]) -> int:
 
 
 def _elapsed_ms(start: float) -> int:
-    """Handle elapsed ms."""
+    """Elapsed ms.
+
+    Inputs: `start`. Output: `int`.
+    """
     return int(max(0.0, (time.monotonic() - start) * 1000.0))
 
 
 def _load_psycopg2():
-    """Handle load psycopg2."""
+    """Load psycopg2.
+
+    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    """
     cached_module = _get_cached_psycopg2_module()
     if cached_module is None:
         raise RuntimeError("psycopg2-binary is not installed in the OMERO.web runtime.")
@@ -175,7 +205,12 @@ def _resolve_db_profile(
     default_user: str,
     default_dbname: str,
 ) -> DatabaseRuntimeProfile:
-    """Handle resolve database profile."""
+    """Resolve database profile.
+
+    Inputs: `host_names`, `port_names`, `user_names`, `password_names`, `db_names`,
+    `default_host`, `default_port`, `default_user`, `default_dbname`. Output:
+    `DatabaseRuntimeProfile`. Raises on invalid or unavailable state.
+    """
     host = _first_present_env(host_names, default_host)
     user = _first_present_env(user_names, default_user)
     password = _first_present_env(password_names, "")
@@ -201,7 +236,10 @@ def _resolve_db_profile(
 
 
 def _omero_database_profile() -> DatabaseRuntimeProfile:
-    """Handle OMERO database profile."""
+    """OMERO database profile.
+
+    Inputs: none. Output: `DatabaseRuntimeProfile`.
+    """
     return _resolve_db_profile(
         host_names=("ADMIN_TOOLS_OMERO_DB_HOST", "CONFIG_omero_db_host"),
         port_names=("ADMIN_TOOLS_OMERO_DB_PORT", "CONFIG_omero_db_port"),
@@ -216,7 +254,10 @@ def _omero_database_profile() -> DatabaseRuntimeProfile:
 
 
 def _plugin_database_profile() -> DatabaseRuntimeProfile:
-    """Handle plugin database profile."""
+    """Plugin database profile.
+
+    Inputs: none. Output: `DatabaseRuntimeProfile`.
+    """
     return _resolve_db_profile(
         host_names=(
             "ADMIN_TOOLS_PLUGIN_DB_HOST",
@@ -251,18 +292,28 @@ class _UnixSocketHTTPConnection(HTTPConnection):
     """HTTPConnection implementation for Docker Engine unix sockets."""
 
     def __init__(self, unix_socket_path: str, timeout: float = 3.0):
+        """Initialize the instance.
+
+        Inputs: `unix_socket_path`, `timeout`. Output: None.
+        """
         super().__init__("localhost", timeout=timeout)
         self.unix_socket_path = unix_socket_path
 
     def connect(self) -> None:
-        """Handle connect."""
+        """Open the connection.
+
+        Inputs: none. Output: None.
+        """
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.settimeout(self.timeout)
         self.sock.connect(self.unix_socket_path)
 
 
 def _docker_api_json(path: str, timeout_seconds: float = 4.0) -> Tuple[bool, Any, str]:
-    """Handle docker API JSON."""
+    """Docker API JSON.
+
+    Inputs: `path`, `timeout_seconds`. Output: `Tuple[bool, Any, str]`.
+    """
     docker_socket = _get_env("ADMIN_TOOLS_DOCKER_SOCKET", "/var/run/docker.sock")
     if not os.path.exists(docker_socket):
         return (
@@ -310,7 +361,10 @@ def _docker_api_json(path: str, timeout_seconds: float = 4.0) -> Tuple[bool, Any
 def _inspect_docker_service_runtime(
     service: str,
 ) -> Tuple[Optional[Dict[str, str]], str]:
-    """Handle inspect docker service runtime."""
+    """Inspect docker service runtime.
+
+    Inputs: `service`. Output: `Tuple[Optional[Dict[str, str]], str]`.
+    """
     project_name = _get_env("ADMIN_TOOLS_COMPOSE_PROJECT_NAME", "omero")
     filters = json.dumps(
         {
@@ -340,7 +394,10 @@ def _inspect_docker_service_runtime(
         )
 
     def _created_key(item: dict[str, object]) -> int:
-        """Handle created key."""
+        """Created key.
+
+        Inputs: `item`. Output: `int`.
+        """
         created = item.get("Created")
         if not isinstance(created, (str, int, float)):
             return 0
@@ -390,7 +447,10 @@ def _inspect_docker_service_runtime(
 def _execute_sql_sanity_query(
     profile: DatabaseRuntimeProfile,
 ) -> Tuple[Optional[int], str]:
-    """Handle execute SQL sanity query."""
+    """Execute sql sanity query.
+
+    Inputs: `profile`. Output: `Tuple[Optional[int], str]`.
+    """
     psycopg2 = _load_psycopg2()
     conn = None
     try:
@@ -426,7 +486,10 @@ def _execute_sql_sanity_query(
 
 
 def _resolve_hostname(check_id: str, label: str, host: str) -> DiagnosticCheckResult:
-    """Handle resolve hostname."""
+    """Resolve hostname.
+
+    Inputs: `check_id`, `label`, `host`. Output: `DiagnosticCheckResult`.
+    """
     start = time.monotonic()
     try:
         addresses = socket.getaddrinfo(host, None)
@@ -458,7 +521,11 @@ def _resolve_hostname(check_id: str, label: str, host: str) -> DiagnosticCheckRe
 def _tcp_connect(
     check_id: str, label: str, host: str, port: int, timeout_s: float
 ) -> DiagnosticCheckResult:
-    """Handle tcp connect."""
+    """Tcp connect.
+
+    Inputs: `check_id`, `label`, `host`, `port`, `timeout_s`. Output:
+    `DiagnosticCheckResult`.
+    """
     start = time.monotonic()
     try:
         with socket.create_connection((host, port), timeout=timeout_s):
@@ -490,7 +557,10 @@ def _tcp_connect(
 def _http_probe(
     check_id: str, label: str, url: str, timeout_s: float
 ) -> DiagnosticCheckResult:
-    """Handle HTTP probe."""
+    """HTTP probe.
+
+    Inputs: `check_id`, `label`, `url`, `timeout_s`. Output: `DiagnosticCheckResult`.
+    """
     start = time.monotonic()
     parsed = urllib.parse.urlsplit(str(url or "").strip())
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -545,7 +615,10 @@ def _http_probe(
 def _compose_ps_health(
     check_id: str, label: str, service: str
 ) -> DiagnosticCheckResult:
-    """Handle compose ps health."""
+    """Compose ps health.
+
+    Inputs: `check_id`, `label`, `service`. Output: `DiagnosticCheckResult`.
+    """
     start = time.monotonic()
     runtime_state, error = _inspect_docker_service_runtime(service)
     if runtime_state is None:
@@ -582,7 +655,11 @@ def _direct_pg_test(
     label: str,
     profile_loader: Callable[[], DatabaseRuntimeProfile],
 ) -> DiagnosticCheckResult:
-    """Handle direct pg test."""
+    """Direct pg test.
+
+    Inputs: `check_id`, `label`, `profile_loader`. Output: `DiagnosticCheckResult`.
+    Raises on invalid or unavailable state.
+    """
     start = time.monotonic()
     try:
         profile = profile_loader()
@@ -625,7 +702,10 @@ def _direct_pg_test(
 
 
 def list_diagnostic_scripts() -> List[DiagnosticScript]:
-    """Return list diagnostic scripts."""
+    """Return list diagnostic scripts.
+
+    Inputs: none. Output: `List[DiagnosticScript]`.
+    """
     return [
         DiagnosticScript(
             script_id="omero_server_core",
@@ -664,7 +744,10 @@ def list_diagnostic_scripts() -> List[DiagnosticScript]:
 
 
 def _run_omero_server_core() -> List[DiagnosticCheckResult]:
-    """Handle run OMERO server core."""
+    """OMERO server core.
+
+    Inputs: none. Output: `List[DiagnosticCheckResult]`.
+    """
     config_start = time.monotonic()
     host = _first_present_env(
         ("ADMIN_TOOLS_OMERO_SERVER_HOST", "OMEROHOST", "CONFIG_omero_host")
@@ -757,7 +840,11 @@ def _run_database_checks(
     service: str,
     profile_loader: Callable[[], DatabaseRuntimeProfile],
 ) -> List[DiagnosticCheckResult]:
-    """Handle run database checks."""
+    """Database checks.
+
+    Inputs: `script_prefix`, `label_prefix`, `service`, `profile_loader`. Output:
+    `List[DiagnosticCheckResult]`.
+    """
     profile = profile_loader()
     timeout_s = _to_float_env("ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS", 3.5)
 
@@ -786,7 +873,10 @@ def _run_database_checks(
 
 
 def run_diagnostic_script(script_id: str) -> Dict[str, object]:
-    """Run run diagnostic script."""
+    """A configured diagnostic script.
+
+    Inputs: `script_id`. Output: `Dict[str, object]`.
+    """
     scripts = list_diagnostic_scripts()
     script_lookup = {script.script_id: script for script in scripts}
     script_map: Dict[str, Callable[[], List[DiagnosticCheckResult]]] = {
@@ -861,5 +951,8 @@ def run_diagnostic_script(script_id: str) -> Dict[str, object]:
 
 
 def serialize_scripts() -> List[Dict[str, str]]:
-    """Handle serialize scripts."""
+    """Serialize scripts.
+
+    Inputs: none. Output: `List[Dict[str, str]]`.
+    """
     return [asdict(item) for item in list_diagnostic_scripts()]

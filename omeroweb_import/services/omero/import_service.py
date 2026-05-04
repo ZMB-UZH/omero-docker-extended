@@ -68,7 +68,11 @@ def _import_file(
     import_name=None,
     progress_job=None,
 ):  # pylint: disable=unused-argument
-    """Run the CLI import path while preserving legacy patch points."""
+    """The CLI import path while preserving legacy patch points.
+
+    Inputs: `conn`, `session_key`, `host`, `port`, `path`, `dataset_id`, `import_name`,
+    `progress_job`. Output: tuple.
+    """
     cmd = _build_omero_cli_command(["import"], session_key, host, port)
     cmd.extend(["--depth", str(OMERO_IMPORT_SCAN_DEPTH)])
     if dataset_id:
@@ -81,7 +85,10 @@ def _import_file(
 
 
 def _connection_has_last_error(conn) -> bool:
-    """Handle connection has last error."""
+    """Connection has last error.
+
+    Inputs: `conn`. Output: `bool`.
+    """
     try:
         return bool(conn.getLastError())
     except Exception:
@@ -89,7 +96,11 @@ def _connection_has_last_error(conn) -> bool:
 
 
 def _open_service_connection(host: str, port: int, group_id=None):
-    """Login as the async service user without leaking credentials in logs."""
+    """Login as the async service user without leaking credentials in logs.
+
+    Inputs: `host`, `port`, `group_id`. Output: `conn` or None. Raises on invalid or
+    unavailable state.
+    """
     credentials = _normalize_job_service_credentials(_get_job_service_credentials())
 
     if not credentials.password:

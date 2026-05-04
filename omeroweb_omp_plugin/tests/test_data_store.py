@@ -15,10 +15,17 @@ class _FakeSqlTemplate:
     """Test double for fake SQL template."""
 
     def __init__(self, query):
+        """Initialize the instance.
+
+        Inputs: `query`. Output: None.
+        """
         self.query = str(query)
 
     def format(self, *args, **kwargs):
-        """Build format."""
+        """Return formatted representation.
+
+        Inputs: `*args`, `**kwargs`. Output: `self.query`.
+        """
         return self.query
 
 
@@ -27,12 +34,18 @@ class _FakeSqlModule:
 
     @staticmethod
     def SQL(query):
-        """Handle SQL."""
+        """SQL.
+
+        Inputs: `query`. Output: `_FakeSqlTemplate` result.
+        """
         return _FakeSqlTemplate(query)
 
     @staticmethod
     def Identifier(name):
-        """Handle identifier."""
+        """Identifier.
+
+        Inputs: `name`. Output: `name`.
+        """
         return name
 
 
@@ -41,7 +54,10 @@ class _FakeExtras:
 
     @staticmethod
     def Json(payload):
-        """Handle JSON."""
+        """JSON.
+
+        Inputs: `payload`. Output: dict.
+        """
         return {"json": payload}
 
 
@@ -49,6 +65,10 @@ class _FakeCursor:
     """Test double for fake cursor."""
 
     def __init__(self, *, fetchone=None, fetchall=None, rowcount=0, rowcounts=None):
+        """Initialize the instance.
+
+        Inputs: `fetchone`, `fetchall`, `rowcount`, `rowcounts`. Output: None.
+        """
         self.fetchone_value = fetchone
         self.fetchall_value = fetchall or []
         self.rowcount = rowcount
@@ -56,23 +76,40 @@ class _FakeCursor:
         self.executed = []
 
     def execute(self, query, params=None):
-        """Run execute."""
+        """Execute the query or command.
+
+        Inputs: `query`, `params`. Output: None.
+        """
         self.executed.append((str(query), params))
         if self.rowcounts:
             self.rowcount = self.rowcounts.pop(0)
 
     def fetchone(self):
-        """Handle fetchone."""
+        """Return one result row.
+
+        Inputs: none. Output: `self.fetchone_value`.
+        """
         return self.fetchone_value
 
     def fetchall(self):
-        """Handle fetchall."""
+        """Return all result rows.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self.fetchall_value)
 
     def __enter__(self):
+        """Enter the context manager.
+
+        Inputs: none. Output: `self`.
+        """
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        """Exit the context manager.
+
+        Inputs: `exc_type`, `exc`, `tb`. Output: bool.
+        """
         return False
 
 
@@ -80,22 +117,35 @@ class _FakeConnection:
     """Test double for fake connection."""
 
     def __init__(self, cursors):
+        """Initialize the instance.
+
+        Inputs: `cursors`. Output: None.
+        """
         self._cursors = list(cursors)
         self.commits = 0
         self.closed = False
 
     def cursor(self):
-        """Handle cursor."""
+        """Return a database cursor.
+
+        Inputs: none. Output: `self._cursors.pop` result.
+        """
         if not self._cursors:
             self._cursors.append(_FakeCursor())
         return self._cursors.pop(0)
 
     def commit(self):
-        """Handle commit."""
+        """Commit the transaction.
+
+        Inputs: none. Output: None.
+        """
         self.commits += 1
 
     def close(self):
-        """Handle close."""
+        """Close the resource.
+
+        Inputs: none. Output: None.
+        """
         self.closed = True
 
 
@@ -103,29 +153,50 @@ class _RaisingContext:
     """Represent raising context."""
 
     def __init__(self, error):
+        """Initialize the instance.
+
+        Inputs: `error`. Output: None.
+        """
         self.error = error
 
     def __enter__(self):
+        """Enter the context manager.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise self.error
 
     def __exit__(self, exc_type, exc, tb):
+        """Exit the context manager.
+
+        Inputs: `exc_type`, `exc`, `tb`. Output: bool.
+        """
         return False
 
 
 def _patch_connection_queue(monkeypatch, connections):
-    """Handle patch connection queue."""
+    """Patch connection queue.
+
+    Inputs: `monkeypatch`, `connections`. Output: yielded values.
+    """
     queue = list(connections)
 
     @contextmanager
     def fake_connect():
-        """Handle fake connect."""
+        """Fake connect.
+
+        Inputs: none. Output: yielded values.
+        """
         yield queue.pop(0)
 
     monkeypatch.setattr(data_store, "_connect", fake_connect)
 
 
 def test_connection_and_schema_helpers_cover_env_validation_and_cleanup(monkeypatch):
-    """Verify test connection and schema helpers cover env behavior."""
+    """Verify connection and schema helpers cover environment validation and cleanup.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     env_values = {
         data_store.ENV_USER: "plugin-user",
         data_store.ENV_AUTH: TEST_DB_AUTH_VALUE,
@@ -180,7 +251,10 @@ def test_connection_and_schema_helpers_cover_env_validation_and_cleanup(monkeypa
 
 
 def test_crud_helpers_cover_variable_sets_credentials_and_user_cleanup(monkeypatch):
-    """Verify test crud helpers cover variable sets credent behavior."""
+    """Verify crud helpers cover variable sets credentials and user cleanup.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
         data_store,
@@ -230,7 +304,10 @@ def test_crud_helpers_cover_variable_sets_credentials_and_user_cleanup(monkeypat
 
 
 def test_delete_validation_and_table_listing_reject_unconfirmed_removals(monkeypatch):
-    """Verify test delete validation and table listing reje behavior."""
+    """Verify delete validation and table listing reject unconfirmed removals.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(data_store, "_ensure_schema", lambda conn: None)
 
@@ -261,11 +338,21 @@ def test_delete_validation_and_table_listing_reject_unconfirmed_removals(monkeyp
 def test_import_and_connection_helpers_raise_store_errors_on_backend_failures(
     monkeypatch,
 ):
-    """Verify test import and connection helpers raise stor behavior."""
+    """Verify import and connection helpers raise store errors on backend failures.
+
+    Inputs: `monkeypatch`. Output: `original_import` result. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     original_import = builtins.__import__
 
     def failing_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):
-        """Handle failing import."""
+        """Failing import.
+
+        Inputs: `name`, `global_vars`, `local_vars`, `fromlist`, `level`. Output:
+        `original_import` result. Raises on invalid or unavailable state.
+        """
         if name == "psycopg2" or name.startswith("psycopg2"):
             raise ImportError("psycopg2 missing")
         return original_import(name, global_vars, local_vars, fromlist, level)
@@ -371,7 +458,10 @@ def test_import_and_connection_helpers_raise_store_errors_on_backend_failures(
 def test_crud_operations_wrap_unexpected_backend_failures(
     monkeypatch, operation, args, error_type
 ):
-    """Verify test crud operations wrap unexpected backend behavior."""
+    """Verify crud operations wrap unexpected backend failures.
+
+    Inputs: `monkeypatch`, `operation`, `args`, `error_type`. Output: None.
+    """
     monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
         data_store,
@@ -392,7 +482,10 @@ def test_crud_operations_wrap_unexpected_backend_failures(
 def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
     monkeypatch,
 ):
-    """Verify test cached import helpers and connection cle behavior."""
+    """Verify cached import helpers and connection cleanup cover remaining branches.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     sentinel_mod = object()
     sentinel_extras = object()
     sentinel_sql = object()
@@ -437,7 +530,10 @@ def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
         """Represent closing connection."""
 
         def close(self):
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("close exploded")
 
     closing_conn = _ClosingConnection([_FakeCursor()])
@@ -466,7 +562,10 @@ def test_cached_import_helpers_and_connection_cleanup_cover_remaining_branches(
 def test_specific_store_error_paths_and_confirmation_failures_are_propagated(
     monkeypatch,
 ):
-    """Verify test specific store error paths and confirmat behavior."""
+    """Verify specific store error paths and confirmation failures are propagated.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
         data_store,
@@ -538,7 +637,10 @@ def test_specific_store_error_paths_and_confirmation_failures_are_propagated(
 
 
 def test_real_psycopg2_loader_paths_cover_success_imports(monkeypatch):
-    """Verify test real psycopg2 loader paths cover success behavior."""
+    """Verify real psycopg2 loader paths cover success imports.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     data_store._PSYCOPG2_MODULES.module = None
     data_store._PSYCOPG2_MODULES.extras = None
     data_store._PSYCOPG2_MODULES.sql = None
@@ -552,7 +654,10 @@ def test_real_psycopg2_loader_paths_cover_success_imports(monkeypatch):
 
 
 def test_connect_re_raises_variable_store_errors_from_backend(monkeypatch):
-    """Verify test connect re raises variable store errors behavior."""
+    """Verify connect re raises variable store errors from backend.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         data_store,
         "_load_psycopg2",

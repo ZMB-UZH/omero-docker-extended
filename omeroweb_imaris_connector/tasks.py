@@ -35,13 +35,19 @@ class IMSExportTaskError(RuntimeError):
     """Error whose public message is safe to return to the XT client."""
 
     def __init__(self, message: str, public_message: str | None = None) -> None:
-        """Initialize the error with an optional sanitized public message."""
+        """Initialize the error with an optional sanitized public message.
+
+        Inputs: `message`, `public_message`. Output: None.
+        """
         super().__init__(message)
         self.public_message = public_message
 
 
 def _public_script_message(message: str | None) -> str | None:
-    """Return a safe public message from script-controlled output."""
+    """Return a safe public message from script-controlled output.
+
+    Inputs: `message`. Output: `str | None`.
+    """
     if message is None:
         return None
     cleaned = str(message).strip()
@@ -57,14 +63,20 @@ def _public_script_message(message: str | None) -> str | None:
 
 
 def _public_failure_message(exc: Exception) -> str:
-    """Return the public failure message for a task exception."""
+    """Return the public failure message for a task exception.
+
+    Inputs: `exc`. Output: `str`.
+    """
     if isinstance(exc, IMSExportTaskError):
         return exc.public_message or _GENERIC_EXPORT_ERROR
     return _GENERIC_EXPORT_ERROR
 
 
 def _build_failure_meta(exc: Exception) -> dict[str, Any]:
-    """Build metadata dictionary for failed tasks."""
+    """Metadata dictionary for failed tasks.
+
+    Inputs: `exc`. Output: `dict[str, Any]`.
+    """
     public_message = _public_failure_message(exc)
     return {
         "exc_type": exc.__class__.__name__,
@@ -76,7 +88,10 @@ def _build_failure_meta(exc: Exception) -> dict[str, Any]:
 
 
 def _resolve_omero_cli() -> str:
-    """Resolve OMERO CLI path inside the OMERO.web container."""
+    """Resolve OMERO cli.
+
+    Inputs: none. Output: `str`. Raises on invalid or unavailable state.
+    """
     candidates = [
         "/opt/omero/web/venv-3.12/bin/omero",
         "/opt/omero/web/venv/bin/omero",
@@ -89,7 +104,10 @@ def _resolve_omero_cli() -> str:
 
 
 def _extract_cli_outputs(text: str) -> dict[str, str]:
-    """Extract key output parameters from `omero script launch` text output."""
+    """Extract key output parameters from `omero script launch` text output.
+
+    Inputs: `text`. Output: `dict[str, str]`.
+    """
     allowed = {"Message", "Export_Path", "Export_Name", "File_Annotation_Id"}
     outputs: dict[str, str] = {}
     for line in text.splitlines():
@@ -106,7 +124,10 @@ def _extract_cli_outputs(text: str) -> dict[str, str]:
 
 
 def _get_connection_session_key(conn) -> str | None:
-    """Return the current OMERO session key from a connected gateway."""
+    """Return the current OMERO session key from a connected gateway.
+
+    Inputs: `conn`. Output: `str | None`.
+    """
     if conn is None:
         return None
     for attr_name in ("getSessionId",):
@@ -137,7 +158,11 @@ def _run_script_via_omero_cli(
     port: int,
     session_key: str | None = None,
 ) -> dict[str, str]:
-    """Launch IMS export with OMERO CLI inside the OMERO.web container."""
+    """Launch IMS export with OMERO CLI inside the OMERO.web container.
+
+    Inputs: `script_id`, `image_id`, `host`, `port`, `session_key`. Output: `dict[str,
+    str]`. Raises on invalid or unavailable state.
+    """
     omero_cli = _resolve_omero_cli()
 
     cmd = [
@@ -221,7 +246,10 @@ def _run_script_via_omero_cli(
 
 
 def _open_session_connection(session_key, host, port, secure=None):
-    """Open an OMERO connection using an existing session key.
+    """Open session connection.
+
+    Inputs: `session_key`, `host`, `port`, `secure`. Output: `conn`. Raises on invalid
+    or unavailable state.
 
     This creates a new BlitzGateway connection by joining an existing
     OMERO session, allowing background tasks to work with the user's
@@ -278,7 +306,11 @@ def _open_session_connection(session_key, host, port, secure=None):
 
 
 def _open_job_service_connection(host, port, secure=None):
-    """Open an OMERO connection using the job-service account."""
+    """Open job service connection.
+
+    Inputs: `host`, `port`, `secure`. Output: `conn`. Raises on invalid or unavailable
+    state.
+    """
     logger.debug(
         "Opening OMERO job-service session host=%s port=%s secure=%s",
         host,
@@ -323,7 +355,10 @@ def _open_job_service_connection(host, port, secure=None):
 
 @app.task(bind=True, name="omeroweb_imaris_connector.run_ims_export_task")
 def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
-    """Execute an IMS export task.
+    """An IMS export task.
+
+    Inputs: `image_id`, `session_key`, `host`, `port`, `secure`. Output: dict. Raises on
+    invalid or unavailable state.
 
     This task runs in the Celery worker and performs the actual OMERO
     script execution for IMS conversion.
@@ -335,7 +370,10 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
     def _update_task_state(
         status: str, extra_meta: dict[str, Any] | None = None
     ) -> None:
-        """Handle update task state."""
+        """Update task state.
+
+        Inputs: `status`, `extra_meta`. Output: None.
+        """
         meta = {
             "image_id": image_id,
             "status": status,

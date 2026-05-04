@@ -40,13 +40,20 @@ class InMemoryCache:
     """
 
     def __init__(self):
+        """Initialize the instance.
+
+        Inputs: none. Output: None.
+        """
         self._store = {}
         self._lock = threading.Lock()
         self._last_cleanup = time.time()
         self._cleanup_interval = 60  # Clean up expired entries every 60 seconds
 
     def _cleanup_expired(self):
-        """Remove expired entries to prevent memory bloat."""
+        """Expired entries to prevent memory bloat.
+
+        Inputs: none. Output: None.
+        """
         now = time.time()
 
         # Only clean up periodically to avoid overhead
@@ -68,7 +75,10 @@ class InMemoryCache:
             logger.debug("Cleaned up %s expired cache entries", len(expired_keys))
 
     def get(self, key):
-        """Get a value from cache, returns None if not found or expired."""
+        """Return the requested value.
+
+        Inputs: `key`. Output: `value` or None.
+        """
         with self._lock:
             self._cleanup_expired()
 
@@ -85,7 +95,10 @@ class InMemoryCache:
             return value
 
     def set(self, key, value, timeout=None):
-        """Set a value in cache with optional timeout in seconds."""
+        """Store the provided value.
+
+        Inputs: `key`, `value`, `timeout`. Output: bool.
+        """
         with self._lock:
             expires_at = time.time() + timeout if timeout else None
             self._store[key] = (expires_at, value)
@@ -96,7 +109,10 @@ class InMemoryCache:
             return True
 
     def delete(self, key):
-        """Delete a key from cache."""
+        """Delete.
+
+        Inputs: `key`. Output: bool.
+        """
         with self._lock:
             if key in self._store:
                 del self._store[key]
@@ -104,7 +120,10 @@ class InMemoryCache:
             return False
 
     def clear(self):
-        """Clear all cache entries."""
+        """Clear.
+
+        Inputs: none. Output: None.
+        """
         with self._lock:
             self._store.clear()
             self._last_cleanup = time.time()
@@ -115,13 +134,18 @@ _memory_cache = InMemoryCache()
 
 
 def _is_dummy_cache():
-    """Check if Django is using the DummyCache (no-op cache)."""
+    """Return whether dummy cache.
+
+    Inputs: none. Output: bool.
+    """
     return DummyCache is not None and isinstance(cache, DummyCache)
 
 
 def _cache_get(key):
-    """
-    Get value from cache, using Django cache if available,
+    """Value from cache,.
+
+    Inputs: `key`. Output: computed value.
+
     otherwise fall back to in-memory cache.
     """
     if _is_dummy_cache():
@@ -130,8 +154,10 @@ def _cache_get(key):
 
 
 def _cache_set(key, value, timeout):
-    """
-    Set value in cache, using Django cache if available,
+    """Value in cache,.
+
+    Inputs: `key`, `value`, `timeout`. Output: computed value.
+
     otherwise fall back to in-memory cache.
     """
     if _is_dummy_cache():
@@ -141,7 +167,10 @@ def _cache_set(key, value, timeout):
 
 
 def _cache_delete(key):
-    """Delete a key from cache."""
+    """A key from cache.
+
+    Inputs: `key`. Output: computed value.
+    """
     if _is_dummy_cache():
         return _memory_cache.delete(key)
     cache.delete(key)
@@ -149,13 +178,18 @@ def _cache_delete(key):
 
 
 def _cache_timeout_seconds():
-    """Calculate cache timeout - should be longer than rate limit window."""
+    """Calculate cache timeout - should be longer than rate limit window.
+
+    Inputs: none. Output: computed value.
+    """
     return max(MAJOR_ACTION_WINDOW_SECONDS, MAJOR_ACTION_BLOCK_SECONDS) * 2
 
 
 def _get_user_key(request, conn=None):
-    """
-    Generate a unique, collision-resistant cache key for rate limiting.
+    """Generate a unique, collision-resistant cache key for rate limiting.
+
+    Inputs: `request`, `conn`. Output: `':'.join` result.
+
     ALL major actions share the SAME rate limit counter.
 
     Priority order:
@@ -211,8 +245,9 @@ def _get_user_key(request, conn=None):
 
 
 def build_rate_limit_message(remaining_seconds):
-    """
-    Build a user-friendly rate limit error message.
+    """A user-friendly rate limit error message.
+
+    Inputs: `remaining_seconds`. Output: call result.
 
     Args:
         remaining_seconds: Time until the user can make requests again
@@ -237,8 +272,9 @@ def build_rate_limit_message(remaining_seconds):
 
 
 def check_major_action_rate_limit(request, conn=None):
-    """
-    Check if the user has exceeded the rate limit for major actions.
+    """Check major action rate limit.
+
+    Inputs: `request`, `conn`. Output: tuple.
 
     This function implements a sliding window rate limiter:
     - Tracks timestamps of recent actions
@@ -372,8 +408,9 @@ def check_major_action_rate_limit(request, conn=None):
 
 
 def reset_rate_limit(request, conn=None):
-    """
-    Reset rate limit for a specific user (admin function).
+    """Reset rate limit for a specific user (admin function).
+
+    Inputs: `request`, `conn`. Output: bool.
 
     Args:
         request: Django HttpRequest object
@@ -397,8 +434,9 @@ def reset_rate_limit(request, conn=None):
 
 
 def get_rate_limit_status(request, conn=None):
-    """
-    Get current rate limit status for a user (debugging/monitoring function).
+    """Return rate limit status.
+
+    Inputs: `request`, `conn`. Output: dict.
 
     Args:
         request: Django HttpRequest object

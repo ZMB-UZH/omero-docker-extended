@@ -49,6 +49,7 @@ const MIME_TYPES = new Map([
   ['.webp', 'image/webp'],
 ]);
 
+// Return whether a path stays inside its parent. Inputs: candidate, parent. Output: return value.
 const pathIsInside = (candidate, parent) => {
   const resolvedCandidate = resolve(candidate);
   const resolvedParent = resolve(parent);
@@ -57,12 +58,14 @@ const pathIsInside = (candidate, parent) => {
   );
 };
 
+// Resolve Template Path. Inputs: requestPath. Output: return value.
 const resolveTemplatePath = (requestPath) => {
   const relativePath = requestPath === '/' ? PREVIEW_TEMPLATE : requestPath.replace(/^\/+/, '');
   const candidate = resolve(TEMPLATE_ROOT, relativePath);
   return pathIsInside(candidate, TEMPLATE_ROOT) ? candidate : null;
 };
 
+// Resolve Static Asset Path. Inputs: assetPath. Output: return value.
 const resolveStaticAssetPath = (assetPath) => {
   const relativePath = assetPath.replace(/^\/+/, '');
   if (!relativePath) {
@@ -83,9 +86,11 @@ const resolveStaticAssetPath = (assetPath) => {
   return pathIsInside(candidate, REPO_ROOT) ? candidate : null;
 };
 
+// Replace JSON Script. Inputs: _match, scriptId. Output: return value.
 const replaceJsonScript = (_match, scriptId) =>
   `<script id="${scriptId}" type="application/json">{}</script>`;
 
+// Transform Template HTML. Inputs: html. Output: return value.
 const transformTemplateHtml = (html) =>
   html
     .replace(/\{%\s*load\s+static\s*%}/g, '')
@@ -102,6 +107,7 @@ const transformTemplateHtml = (html) =>
     .replace(/\{%[^%]*%\}/g, '')
     .replace(/\sclass="root-user-blocked"/g, '');
 
+// Send File. Inputs: response, filePath. Output: Promise result.
 const sendFile = async (response, filePath) => {
   const fileBuffer = await fs.readFile(filePath);
   const contentType = MIME_TYPES.get(extname(filePath).toLowerCase()) || 'application/octet-stream';

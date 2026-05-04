@@ -15,7 +15,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_manage_script_module():
-    """Handle load manage script module."""
+    """Load manage script module.
+
+    Inputs: none. Output: `module`.
+    """
     omero_module = types.ModuleType("omero")
     omero_module.scripts = types.SimpleNamespace(client=lambda *args, **kwargs: None)
 
@@ -55,7 +58,10 @@ def _load_manage_script_module():
 
 
 def _server_config(tmp_path: Path) -> dict[str, str]:
-    """Handle server config."""
+    """Server config.
+
+    Inputs: `tmp_path`. Output: `dict[str, str]`.
+    """
     return {
         "omero.data.dir": str(tmp_path / "data"),
         "omero.managed.dir": str(tmp_path / "data" / "ManagedRepository"),
@@ -65,19 +71,32 @@ def _server_config(tmp_path: Path) -> dict[str, str]:
 
 
 def _managed_repo_conn(managed_root: Path, *, proxies_shape: str = "mapping"):
-    """Handle managed repo conn."""
+    """Managed repo conn.
+
+    Inputs: `managed_root`, `proxies_shape`. Output: computed value. Raises on invalid
+    or unavailable state.
+
+    or unavailable state.
+    """
 
     class _RepoProxy:
         """Represent repo proxy."""
 
         def __init__(self, root: Path):
+            """Initialize the instance.
+
+            Inputs: `root`. Output: None.
+            """
             self.root = root
             self.make_dir_calls = []
             self.delete_calls = []
             self.registered_paths = set()
 
         def makeDir(self, path, parents):
-            """Build make dir."""
+            """Make dir.
+
+            Inputs: `path`, `parents`. Output: None.
+            """
             self.make_dir_calls.append((path, parents))
             target = self.root / path.strip("/")
             target.mkdir(parents=parents, exist_ok=True)
@@ -87,12 +106,18 @@ def _managed_repo_conn(managed_root: Path, *, proxies_shape: str = "mapping"):
                 self.registered_paths.add(current.resolve(strict=False))
 
         def fileExists(self, path):
-            """Handle file exists."""
+            """File exists.
+
+            Inputs: `path`. Output: bool.
+            """
             target = (self.root / path.strip("/")).resolve(strict=False)
             return target in self.registered_paths
 
         def deletePaths(self, paths, recursively, force):
-            """Handle delete paths."""
+            """Delete Paths.
+
+            Inputs: `paths`, `recursively`, `force`. Output: 'delete-handle'.
+            """
             self.delete_calls.append((list(paths), recursively, force))
             for raw_path in paths:
                 target = (self.root / raw_path.strip("/")).resolve(strict=False)
@@ -152,7 +177,10 @@ def _managed_repo_conn(managed_root: Path, *, proxies_shape: str = "mapping"):
 
 
 def _register_repo_path(repo_proxy, managed_root: Path, target: Path) -> None:
-    """Handle register repo path."""
+    """Register repo path.
+
+    Inputs: `repo_proxy`, `managed_root`, `target`. Output: None.
+    """
     current = managed_root.resolve(strict=False)
     for part in target.resolve(strict=False).relative_to(managed_root).parts:
         current = (current / part).resolve(strict=False)
@@ -163,7 +191,10 @@ def test_manage_script_config_and_runtime_helpers_cover_remaining_guards(
     monkeypatch,
     tmp_path: Path,
 ):
-    """Verify test manage script config and runtime helpers behavior."""
+    """Verify manage script config and runtime helpers cover remaining guards.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     module = _load_manage_script_module()
 
     with pytest.raises(RuntimeError, match="Missing OMERO connection"):
@@ -219,7 +250,10 @@ def test_manage_script_config_and_runtime_helpers_cover_remaining_guards(
 def test_manage_script_path_validation_and_template_guards_cover_remaining_edges(
     tmp_path: Path,
 ):
-    """Verify test manage script path validation and templa behavior."""
+    """Verify manage script path validation and template guards cover remaining edges.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
 
@@ -271,7 +305,10 @@ def test_manage_script_prefix_suffix_cleanup_and_symlink_guards_cover_remaining_
     monkeypatch,
     tmp_path: Path,
 ):
-    """Verify test manage script prefix suffix cleanup and behavior."""
+    """Verify manage script prefix suffix cleanup and symlink guards cover remaining paths.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
     managed_root = tmp_path / "data" / "ManagedRepository"
@@ -334,7 +371,10 @@ def test_manage_script_prefix_suffix_cleanup_and_symlink_guards_cover_remaining_
 
 
 def test_manage_script_stage_permissions_allow_service_read_access(tmp_path: Path):
-    """Verify test manage script stage permissions allow se behavior."""
+    """Verify manage script stage permissions allow service read access.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
     managed_root = tmp_path / "data" / "ManagedRepository"
@@ -378,7 +418,10 @@ def test_manage_script_stage_permissions_allow_service_read_access(tmp_path: Pat
 
 
 def test_manage_script_resolves_sequence_style_repository_maps(tmp_path: Path):
-    """Verify test manage script resolves sequence style re behavior."""
+    """Verify manage script resolves sequence style repository maps.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
     managed_root = tmp_path / "data" / "ManagedRepository"
@@ -394,7 +437,10 @@ def test_manage_script_resolves_sequence_style_repository_maps(tmp_path: Path):
 
 
 def test_manage_script_rejects_unregistered_existing_suffix_dirs(tmp_path: Path):
-    """Verify test manage script rejects unregistered exist behavior."""
+    """Verify manage script rejects unregistered existing suffix directories.
+
+    Inputs: `tmp_path`. Output: `fixed_now`.
+    """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
     managed_root = tmp_path / "data" / "ManagedRepository"
@@ -416,7 +462,10 @@ def test_manage_script_rejects_unregistered_existing_suffix_dirs(tmp_path: Path)
 
         @staticmethod
         def now():
-            """Handle now."""
+            """Now.
+
+            Inputs: none. Output: `fixed_now`.
+            """
             return fixed_now
 
     original_datetime = module.datetime
@@ -439,7 +488,10 @@ def test_manage_script_rejects_unregistered_existing_suffix_dirs(tmp_path: Path)
 def test_manage_script_stages_from_generic_template_without_user_anchor(
     tmp_path: Path,
 ):
-    """Verify test manage script stages from generic templa behavior."""
+    """Verify manage script stages from generic template without user anchor.
+
+    Inputs: `tmp_path`. Output: `fixed_now`.
+    """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
     config["omero.fs.repo.path"] = "shared/%year%/%group%/%time%"
@@ -458,7 +510,10 @@ def test_manage_script_stages_from_generic_template_without_user_anchor(
 
         @staticmethod
         def now():
-            """Handle now."""
+            """Now.
+
+            Inputs: none. Output: `fixed_now`.
+            """
             return fixed_now
 
     original_datetime = module.datetime
@@ -486,7 +541,10 @@ def test_manage_script_stages_from_generic_template_without_user_anchor(
 def test_manage_script_cleanup_restricts_deletion_to_staged_leaf(
     tmp_path: Path,
 ):
-    """Verify test manage script cleanup restricts deletion behavior."""
+    """Verify manage script cleanup restricts deletion to staged leaf.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
     config["omero.fs.repo.path"] = "shared/%year%/%group%/%time%"
@@ -530,7 +588,10 @@ def test_manage_script_handles_prefix_not_directory_and_main_entrypoint(
     monkeypatch,
     tmp_path: Path,
 ):
-    """Verify test manage script handles prefix not directo behavior."""
+    """Verify manage script handles prefix not directory and main entrypoint.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: dict.
+    """
     module = _load_manage_script_module()
     managed_root = tmp_path / "data" / "ManagedRepository"
     managed_root.mkdir(parents=True)
@@ -551,17 +612,26 @@ def test_manage_script_handles_prefix_not_directory_and_main_entrypoint(
 
         @staticmethod
         def getInputs(unwrap=True):
-            """Return get inputs."""
+            """Return Inputs.
+
+            Inputs: `unwrap`. Output: dict.
+            """
             return {}
 
         @staticmethod
         def setOutput(key, value):
-            """Store set output."""
+            """Set Output.
+
+            Inputs: `key`, `value`. Output: None.
+            """
             output_calls.append((key, value))
 
         @staticmethod
         def closeSession():
-            """Handle close session."""
+            """Close session.
+
+            Inputs: none. Output: None.
+            """
             output_calls.append(("closed", True))
 
     omero_module = types.ModuleType("omero")
@@ -605,7 +675,10 @@ def test_manage_script_handles_prefix_not_directory_and_main_entrypoint(
 def test_manage_script_repository_helper_edges_cover_proxy_and_cleanup_failures(
     tmp_path: Path,
 ):
-    """Verify test manage script repository helper edges co behavior."""
+    """Verify manage script repository helper edges cover proxy and cleanup failures.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
     managed_root = tmp_path / "data" / "ManagedRepository"
@@ -793,7 +866,10 @@ def test_manage_script_repository_helper_edges_cover_proxy_and_cleanup_failures(
 def test_manage_script_relative_path_and_cleanup_root_guards_cover_remaining_edges(
     tmp_path: Path,
 ):
-    """Verify test manage script relative path and cleanup behavior."""
+    """Verify manage script relative path and cleanup root guards cover remaining edges.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
     managed_root = tmp_path / "data" / "ManagedRepository"
@@ -839,7 +915,10 @@ def test_manage_script_relative_path_and_cleanup_root_guards_cover_remaining_edg
 def test_manage_script_stage_and_cleanup_cover_remaining_registered_path_guards(
     tmp_path: Path,
 ):
-    """Verify test manage script stage and cleanup cover re behavior."""
+    """Verify manage script stage and cleanup cover remaining registered path guards.
+
+    Inputs: `tmp_path`. Output: `fixed_now`.
+    """
     module = _load_manage_script_module()
     config = _server_config(tmp_path)
     managed_root = tmp_path / "data" / "ManagedRepository"
@@ -856,7 +935,10 @@ def test_manage_script_stage_and_cleanup_cover_remaining_registered_path_guards(
 
         @staticmethod
         def now():
-            """Handle now."""
+            """Now.
+
+            Inputs: none. Output: `fixed_now`.
+            """
             return fixed_now
 
     original_datetime = module.datetime

@@ -23,17 +23,32 @@ class _HttpResponseStub:
     """Represent HTTP response stub."""
 
     def __init__(self, status: int, payload: bytes):
+        """Initialize the instance.
+
+        Inputs: `status`, `payload`. Output: None.
+        """
         self.status = status
         self._payload = payload
 
     def __enter__(self):
+        """Enter the context manager.
+
+        Inputs: none. Output: `self`.
+        """
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        """Exit the context manager.
+
+        Inputs: `exc_type`, `exc`, `tb`. Output: bool.
+        """
         return False
 
     def read(self):
-        """Return read."""
+        """Read data from the resource.
+
+        Inputs: none. Output: `self._payload`.
+        """
         return self._payload
 
 
@@ -47,6 +62,10 @@ class _RequestsResponseStub:
         payload: bytes = b"",
         headers: dict[str, str] | None = None,
     ):
+        """Initialize the instance.
+
+        Inputs: `status_code`, `payload`, `headers`. Output: None.
+        """
         self.status_code = status_code
         self.content = payload
         self.headers = headers or {}
@@ -56,7 +75,10 @@ class _RequestsResponseStub:
         self.raw = SimpleNamespace(headers=raw_headers)
 
     def json(self):
-        """Handle JSON."""
+        """Return the JSON payload.
+
+        Inputs: none. Output: `json.loads` result.
+        """
         return json.loads(self.content.decode("utf-8"))
 
 
@@ -64,33 +86,52 @@ class _DockerConnection:
     """Represent docker connection."""
 
     def __init__(self, response=None, request_error: Exception | None = None):
+        """Initialize the instance.
+
+        Inputs: `response`, `request_error`. Output: None.
+        """
         self._response = response
         self._request_error = request_error
         self.requested = None
         self.closed = False
 
     def request(self, method, path):
-        """Handle request."""
+        """Request.
+
+        Inputs: `method`, `path`. Output: None. Raises on invalid or unavailable state.
+        """
         if self._request_error is not None:
             raise self._request_error
         self.requested = (method, path)
 
     def getresponse(self):
-        """Return getresponse."""
+        """Return the HTTP response.
+
+        Inputs: none. Output: `self._response`.
+        """
         return self._response
 
     def close(self):
-        """Handle close."""
+        """Close the resource.
+
+        Inputs: none. Output: None.
+        """
         self.closed = True
 
 
 def _payload(response):
-    """Handle payload."""
+    """Payload.
+
+    Inputs: `response`. Output: `json.loads` result.
+    """
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) -> None:
-    """Verify test env probe and prometheus helpers cover r behavior."""
+    """Verify environment probe and prometheus helpers cover runtime failures.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     monkeypatch.setenv("ADMIN_TOOLS_SAMPLE_INT", "12")
     assert index_view._to_int_env("ADMIN_TOOLS_SAMPLE_INT", 5) == 12
     monkeypatch.setenv("ADMIN_TOOLS_SAMPLE_INT", "bad")
@@ -153,7 +194,13 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
     seen = []
 
     def _query_metric(_base_url, expr):
-        """Handle query metric."""
+        """Query metric.
+
+        Inputs: `_base_url`, `expr`. Output: 7.0. Raises on invalid or unavailable
+        state.
+
+        state.
+        """
         seen.append(expr)
         if "network_receive" in expr:
             raise RuntimeError("probe failed")
@@ -168,7 +215,10 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
 
 
 def test_internal_service_base_url_builds_valid_defaults(monkeypatch) -> None:
-    """Verify test internal service base URL builds valid d behavior."""
+    """Verify internal service base URL builds valid defaults.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.delenv("ADMIN_TOOLS_GRAFANA_URL", raising=False)
     monkeypatch.delenv("ADMIN_TOOLS_PROMETHEUS_URL", raising=False)
     monkeypatch.delenv("ADMIN_TOOLS_INTERNAL_SERVICE_SCHEME", raising=False)
@@ -203,7 +253,10 @@ def test_internal_service_base_url_builds_valid_defaults(monkeypatch) -> None:
 
 
 def test_collect_recently_seen_services_and_parse_since_ns() -> None:
-    """Verify test collect recently seen services and parse behavior."""
+    """Verify collect recently seen services and parse since ns.
+
+    Inputs: none. Output: None.
+    """
     response = _RequestsResponseStub(
         200,
         payload=json.dumps(
@@ -245,7 +298,10 @@ def test_collect_recently_seen_services_and_parse_since_ns() -> None:
 def test_logs_view_and_internal_log_labels_cover_configuration_paths(
     monkeypatch,
 ) -> None:
-    """Verify test logs view and internal log labels cover behavior."""
+    """Verify logs view and internal log labels cover configuration paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().get("/admin_tools/logs/")
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.utils.current_username",
@@ -325,7 +381,10 @@ def test_docker_compose_and_api_helpers_cover_json_and_socket_errors(
     monkeypatch,
     tmp_path,
 ) -> None:
-    """Verify test docker compose and API helpers cover JSO behavior."""
+    """Verify docker compose and API helpers cover JSON and socket errors.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     monkeypatch.setattr(
         index_view.subprocess,
         "run",
@@ -388,7 +447,10 @@ def test_docker_compose_and_api_helpers_cover_json_and_socket_errors(
 def test_docker_diagnostics_and_compose_health_helpers_cover_inspection_paths(
     monkeypatch,
 ) -> None:
-    """Verify test docker diagnostics and compose health he behavior."""
+    """Verify docker diagnostics and compose health helpers cover inspection paths.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     monkeypatch.setenv("ADMIN_TOOLS_DOCKER_SOCKET", "/var/run/docker.sock")
     monkeypatch.setattr(index_view.os.path, "exists", lambda path: True)
     monkeypatch.setattr(index_view.os, "access", lambda path, mode: True)
@@ -401,7 +463,13 @@ def test_docker_diagnostics_and_compose_health_helpers_cover_inspection_paths(
     )
 
     def _docker_api(path, timeout_seconds=3.0):
-        """Handle docker API."""
+        """Docker API.
+
+        Inputs: `path`, `timeout_seconds`. Output: computed value. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         if path == "/containers/json?all=1":
             return [
                 {
@@ -459,7 +527,13 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
     monkeypatch,
     tmp_path,
 ) -> None:
-    """Verify test unix socket connection and docker runtim behavior."""
+    """Verify unix socket connection and docker runtime helpers cover remaining edges.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     events = {}
     socket_path = tmp_path / "docker.sock"
 
@@ -467,16 +541,26 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
         """Represent socket stub."""
 
         def __init__(self, family, sock_type):
+            """Initialize the instance.
+
+            Inputs: `family`, `sock_type`. Output: None.
+            """
             events["created"] = (family, sock_type)
 
         @staticmethod
         def settimeout(timeout):
-            """Store settimeout."""
+            """Set the socket timeout.
+
+            Inputs: `timeout`. Output: None.
+            """
             events["timeout"] = timeout
 
         @staticmethod
         def connect(path):
-            """Handle connect."""
+            """Open the connection.
+
+            Inputs: `path`. Output: None.
+            """
             events["path"] = path
 
     monkeypatch.setattr(index_view.socket, "socket", _SocketStub)
@@ -523,7 +607,13 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
     assert diagnostics["api_error"] == "Docker API request failed"
 
     def docker_api(path, timeout_seconds=3.0):
-        """Handle docker API."""
+        """Docker API.
+
+        Inputs: `path`, `timeout_seconds`. Output: list. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         if path == "/containers/json?all=1":
             return [
                 42,
@@ -581,7 +671,10 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
 def test_index_helper_functions_cover_render_permissions_and_time_parsing(
     monkeypatch,
 ) -> None:
-    """Verify test index helper functions cover render perm behavior."""
+    """Verify index helper functions cover render permissions and time parsing.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         index_view,
         "render",
@@ -609,21 +702,33 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
 
         @staticmethod
         def isGroupRead():
-            """Handle is group read."""
+            """Return whether Group Read.
+
+            Inputs: none. Output: bool.
+            """
             return True
 
         @staticmethod
         def isGroupWrite():
-            """Handle is group write."""
+            """Return whether Group Write.
+
+            Inputs: none. Output: bool.
+            """
             return True
 
         @staticmethod
         def isGroupAnnotate():
-            """Handle is group annotate."""
+            """Return whether Group Annotate.
+
+            Inputs: none. Output: bool.
+            """
             return False
 
     def _read_write_group_details():
-        """Handle read write group details."""
+        """Read write group details.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(getPermissions=_Permissions)
 
     read_write_group = SimpleNamespace(getDetails=_read_write_group_details)
@@ -642,7 +747,10 @@ def test_index_helper_functions_cover_render_permissions_and_time_parsing(
 def test_refactored_monitoring_helpers_preserve_guard_branch_contracts(
     monkeypatch,
 ) -> None:
-    """Verify test refactored monitoring helpers preserve g behavior."""
+    """Verify refactored monitoring helpers preserve guard branch contracts.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     headers = {"Origin": "https://omero.example.org"}
     index_view._rewrite_origin_headers(headers, "not-a-url")
     assert headers == {"Origin": "https://omero.example.org"}
@@ -676,7 +784,10 @@ def test_refactored_monitoring_helpers_preserve_guard_branch_contracts(
     calls = []
 
     def _docker_api(path, timeout_seconds=3.0):
-        """Handle docker API."""
+        """Docker API.
+
+        Inputs: `path`, `timeout_seconds`. Output: dict.
+        """
         calls.append((path, timeout_seconds))
         return {"Config": {}, "State": {"Health": {"Status": "healthy"}}}
 
@@ -710,7 +821,10 @@ def test_logs_compose_prometheus_and_proxy_helpers_cover_remaining_runtime_guard
     monkeypatch,
     tmp_path,
 ) -> None:
-    """Verify test logs compose prometheus and proxy helper behavior."""
+    """Verify logs compose prometheus and proxy helpers cover remaining runtime guards.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     root_error = HttpResponse("root-only", status=403)
     monkeypatch.setattr(
         index_view, "_require_root_user", lambda request, conn: root_error
@@ -841,21 +955,30 @@ def test_logs_compose_prometheus_and_proxy_helpers_cover_remaining_runtime_guard
 def test_docker_api_json_returns_none_when_socket_missing(
     monkeypatch, tmp_path
 ) -> None:
-    """_docker_api_json returns None when the Docker socket does not exist."""
+    """_docker_api_json returns None when the Docker socket does not exist.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     monkeypatch.setenv("ADMIN_TOOLS_DOCKER_SOCKET", str(tmp_path / "missing.sock"))
     result = index_view._docker_api_json("/containers/json")
     assert result is None
 
 
 def test_diagnose_docker_health_reports_api_none(monkeypatch) -> None:
-    """_diagnose_docker_health sets api_error when _docker_api_json returns None."""
+    """_diagnose_docker_health sets api_error when _docker_api_json returns None.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(index_view, "_docker_api_json", lambda *a, **kw: None)
     diag = index_view._diagnose_docker_health()
     assert diag["api_error"] == "API returned None (connection or permission error)"
 
 
 def test_diagnose_docker_health_handles_unknown_uid(monkeypatch) -> None:
-    """_diagnose_docker_health reports uid when pwd.getpwuid raises KeyError."""
+    """_diagnose_docker_health reports uid when pwd.getpwuid raises KeyError.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     import pwd
 
     monkeypatch.setattr(

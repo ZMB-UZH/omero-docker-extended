@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Report failure and exit. Inputs: shell arguments and environment. Output: command status and side effects.
 fail() {
     local message="$1"
     echo "ERROR: ${message}" >&2
@@ -27,11 +28,13 @@ BIOFORMATS_CACHE_DIR="${INSTALL_DIR}/artifacts/${BIOFORMATS_SUBDIR}"
 BIOFORMATS_CACHE_JAR="${BIOFORMATS_CACHE_DIR}/${BIOFORMATS_JAR_NAME}"
 BIOFORMATS_CACHE_SHA256="${BIOFORMATS_CACHE_JAR}.sha256"
 
+# Return whether valid bioformats jar. Inputs: shell arguments and environment. Output: success or failure status.
 is_valid_bioformats_jar() {
     local jar_path="$1"
     [[ -s "${jar_path}" ]] && [[ "$(stat -c%s "${jar_path}")" -ge "${BIOFORMATS_MIN_SIZE_BYTES}" ]]
 }
 
+# Return whether lowercase sha256 hex. Inputs: shell arguments and environment. Output: success or failure status.
 is_lowercase_sha256_hex() {
     local value="${1:-}"
 
@@ -45,6 +48,7 @@ is_lowercase_sha256_hex() {
     esac
 }
 
+# Perform sha256 matches manifest. Inputs: shell arguments and environment. Output: command status and side effects.
 sha256_matches_manifest() {
     local source_path="$1"
     local sha_path="$2"
@@ -64,11 +68,13 @@ sha256_matches_manifest() {
     [[ "${actual_sha}" = "${expected_sha}" ]]
 }
 
+# Return whether valid bioformats cache. Inputs: shell arguments and environment. Output: success or failure status.
 is_valid_bioformats_cache() {
     is_valid_bioformats_jar "${BIOFORMATS_CACHE_JAR}" && \
         sha256_matches_manifest "${BIOFORMATS_CACHE_JAR}" "${BIOFORMATS_CACHE_SHA256}"
 }
 
+# Write bioformats sha256. Inputs: shell arguments and environment. Output: command status and side effects.
 write_bioformats_sha256() {
     local source_path="$1"
     local sha_path="$2"
@@ -80,6 +86,7 @@ write_bioformats_sha256() {
     mv -f "${tmp_path}" "${sha_path}"
 }
 
+# Copy bioformats jar. Inputs: shell arguments and environment. Output: command status and side effects.
 copy_bioformats_jar() {
     local source_path="$1"
     local destination_path="$2"
@@ -99,6 +106,7 @@ copy_bioformats_jar() {
     mv -f "${tmp_path}" "${destination_path}"
 }
 
+# Install imarisconvert wrapper. Inputs: shell arguments and environment. Output: command status and side effects.
 install_imarisconvert_wrapper() {
     local escaped_default_install_dir=""
     printf -v escaped_default_install_dir "%q" "${INSTALL_DIR}"
@@ -113,6 +121,7 @@ SH
     chmod 0755 "${WRAPPER_PATH}"
 }
 
+# Verify imarisconvert installation. Inputs: shell arguments and environment. Output: command status and side effects.
 verify_imarisconvert_installation() {
     local installed_version=""
 
@@ -134,12 +143,14 @@ verify_imarisconvert_installation() {
     echo "ImarisConvertBioformats ${TARGET_VERSION} verified (binary + runtime jar + local cache)."
 }
 
+# Perform seed bioformats cache from runtime. Inputs: shell arguments and environment. Output: command status and side effects.
 seed_bioformats_cache_from_runtime() {
     mkdir -p "${BIOFORMATS_CACHE_DIR}"
     copy_bioformats_jar "${BIOFORMATS_JAR}" "${BIOFORMATS_CACHE_JAR}" 0644
     write_bioformats_sha256 "${BIOFORMATS_CACHE_JAR}" "${BIOFORMATS_CACHE_SHA256}"
 }
 
+# Restore runtime jar from cache. Inputs: shell arguments and environment. Output: command status and side effects.
 restore_runtime_jar_from_cache() {
     mkdir -p "${INSTALL_DIR}/${BIOFORMATS_SUBDIR}"
     copy_bioformats_jar "${BIOFORMATS_CACHE_JAR}" "${BIOFORMATS_JAR}" 0644

@@ -21,6 +21,10 @@ LEGACY_CONFIG_ALIASES = {
 
 
 def resolve_omero_bin() -> str:
+    """Resolve OMERO bin.
+
+    Inputs: none. Output: `str`. Raises on invalid or unavailable state.
+    """
     explicit = os.environ.get("OMERO_WEB_OMERO_BIN") or os.environ.get("OMERO_BIN")
     if explicit:
         return explicit
@@ -45,6 +49,10 @@ def resolve_omero_bin() -> str:
 
 
 def resolve_python_bin(omero_bin: str) -> str:
+    """Resolve python bin.
+
+    Inputs: `omero_bin`. Output: `str`. Raises on invalid or unavailable state.
+    """
     explicit = os.environ.get("OMERO_WEB_PYTHON_BIN") or os.environ.get("PYTHON_BIN")
     if explicit:
         return explicit
@@ -73,6 +81,10 @@ def resolve_python_bin(omero_bin: str) -> str:
 
 
 def resolve_config_glob(omero_bin: str) -> str:
+    """Resolve config glob.
+
+    Inputs: `omero_bin`. Output: `str`.
+    """
     explicit = os.environ.get("OMERO_CONFIG_GLOB") or os.environ.get(
         "OMERO_WEB_CONFIG_GLOB"
     )
@@ -88,6 +100,10 @@ def resolve_config_glob(omero_bin: str) -> str:
 
 
 def config_env_to_property(env_name: str) -> str:
+    """Config env to property.
+
+    Inputs: `env_name`. Output: `str`.
+    """
     prop = env_name[7:]
     prop = re.sub(r"([^_])_([^_])", r"\1.\2", prop)
     prop = re.sub(r"__", "_", prop)
@@ -95,10 +111,18 @@ def config_env_to_property(env_name: str) -> str:
 
 
 def run_omero_command(omero_bin: str, *args: str) -> None:
+    """OMERO command.
+
+    Inputs: `omero_bin`, `*args`. Output: None.
+    """
     subprocess.run([omero_bin, *args], check=True)
 
 
 def run_omero_config_set(omero_bin: str, property_name: str, value: str) -> None:
+    """OMERO config set.
+
+    Inputs: `omero_bin`, `property_name`, `value`. Output: None.
+    """
     if value == "":
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as empty_value:
             empty_value.flush()
@@ -123,6 +147,10 @@ def run_omero_config_set(omero_bin: str, property_name: str, value: str) -> None
 
 
 def _normalize_aliases(value: object) -> object:
+    """Normalize aliases.
+
+    Inputs: `value`. Output: `object`.
+    """
     if isinstance(value, str):
         return LEGACY_CONFIG_ALIASES.get(value, value)
     if isinstance(value, list):
@@ -133,6 +161,10 @@ def _normalize_aliases(value: object) -> object:
 
 
 def normalize_config_value(env_name: str, raw_value: str) -> str:
+    """Normalize config value.
+
+    Inputs: `env_name`, `raw_value`. Output: `str`.
+    """
     normalized_scalar = LEGACY_CONFIG_ALIASES.get(raw_value)
     if normalized_scalar is not None:
         return normalized_scalar
@@ -158,6 +190,10 @@ def normalize_config_value(env_name: str, raw_value: str) -> str:
 
 
 def parse_additional_apps(raw_value: str) -> list[str]:
+    """Parse additional apps.
+
+    Inputs: `raw_value`. Output: `list[str]`. Raises on invalid or unavailable state.
+    """
     try:
         parsed = json.loads(raw_value)
     except json.JSONDecodeError as exc:
@@ -176,6 +212,10 @@ def parse_additional_apps(raw_value: str) -> list[str]:
 
 
 def validate_additional_apps(python_bin: str, app_modules: list[str]) -> None:
+    """Validate additional apps.
+
+    Inputs: `python_bin`, `app_modules`. Output: None.
+    """
     if not app_modules:
         return
 
@@ -205,6 +245,10 @@ if missing:
 
 
 def main() -> int:
+    """Execute the command entrypoint.
+
+    Inputs: none. Output: `int`.
+    """
     omero_bin = resolve_omero_bin()
     python_bin = resolve_python_bin(omero_bin)
     config_glob = resolve_config_glob(omero_bin)

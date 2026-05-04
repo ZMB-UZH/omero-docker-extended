@@ -9,10 +9,17 @@ class _Value:
     """Represent value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self._raw_value = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self._raw_value`.
+        """
         return self._raw_value
 
 
@@ -20,20 +27,33 @@ class _Image:
     """Represent image."""
 
     def __init__(self, image_id, name, *, fileset=None):
+        """Initialize the instance.
+
+        Inputs: `image_id`, `name`, `fileset`. Output: None.
+        """
         self.id = image_id
         self._name = name
         self._fileset = fileset
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self.id)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
     def getFileset(self):
-        """Return get fileset."""
+        """Return Fileset.
+
+        Inputs: none. Output: computed value.
+        """
         if callable(self._fileset):
             return self._fileset()
         return self._fileset
@@ -43,21 +63,34 @@ class _Dataset:
     """Represent dataset."""
 
     def __init__(self, dataset_id, name, images, *, owned=True):
+        """Initialize the instance.
+
+        Inputs: `dataset_id`, `name`, `images`, `owned`. Output: None.
+        """
         self.id = dataset_id
         self._name = name
         self._images = list(images)
         self.owned = owned
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self.id)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
     def listChildren(self):
-        """Return list children."""
+        """Return list children.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self._images)
 
 
@@ -65,22 +98,39 @@ class _Project:
     """Represent project."""
 
     def __init__(self, datasets):
+        """Initialize the instance.
+
+        Inputs: `datasets`. Output: None.
+        """
         self._datasets = list(datasets)
 
     def listChildren(self):
-        """Return list children."""
+        """Return list children.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self._datasets)
 
 
 def test_image_service_fetch_and_collectors_cover_bulk_and_fallback_paths(monkeypatch):
-    """Verify test image service fetch and collectors cover behavior."""
+    """Verify image service fetch and collectors cover bulk and fallback paths.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
 
     class _BulkConn:
         """Represent bulk conn."""
 
         @staticmethod
         def getObjects(object_type, ids=None, obj_ids=None):
-            """Return get objects."""
+            """Return Objects.
+
+            Inputs: `object_type`, `ids`, `obj_ids`. Output: list. Raises on invalid or
+            unavailable state.
+            """
             assert object_type == "Image"
             if ids is not None:
                 raise TypeError("legacy signature")
@@ -95,12 +145,19 @@ def test_image_service_fetch_and_collectors_cover_bulk_and_fallback_paths(monkey
 
         @staticmethod
         def getObjects(object_type, ids=None, obj_ids=None):
-            """Return get objects."""
+            """Return Objects.
+
+            Inputs: `object_type`, `ids`, `obj_ids`. Output: None. Raises on invalid or
+            unavailable state.
+            """
             raise RuntimeError("bulk load unavailable")
 
         @staticmethod
         def getObject(object_type, image_id):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `object_type`, `image_id`. Output: computed value.
+            """
             assert object_type == "Image"
             return _Image(image_id, f"image-{image_id}.tif") if image_id == 3 else None
 
@@ -164,7 +221,10 @@ def test_image_service_fetch_and_collectors_cover_bulk_and_fallback_paths(monkey
 
         @staticmethod
         def listChildren():
-            """Return list children."""
+            """Return list children.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("selected datasets unavailable")
 
     assert (
@@ -181,41 +241,71 @@ def test_image_service_fetch_and_collectors_cover_bulk_and_fallback_paths(monkey
 def test_collect_dataset_summaries_detects_formats_across_metadata_fallbacks(
     monkeypatch,
 ):
-    """Verify test collect dataset summaries detects format behavior."""
+    """Verify collect dataset summaries detects formats across metadata fallbacks.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
 
     class _OriginalFile:
         """Represent original file."""
 
         def __init__(self, *, format_value=None, name=None):
+            """Initialize the instance.
+
+            Inputs: `format_value`, `name`. Output: None.
+            """
             self._format_value = format_value
             self._name = name
 
         def getFormat(self):
-            """Return get format."""
+            """Return Format.
+
+            Inputs: none. Output: computed value.
+            """
             return None if self._format_value is None else _Value(self._format_value)
 
         def getName(self):
-            """Return get name."""
+            """Return the fake object name.
+
+            Inputs: none. Output: `self._name`.
+            """
             return self._name
 
     class _UsedFile:
         """Represent used file."""
 
         def __init__(self, original_file):
+            """Initialize the instance.
+
+            Inputs: `original_file`. Output: None.
+            """
             self._original_file = original_file
 
         def getOriginalFile(self):
-            """Return get original file."""
+            """Return Original File.
+
+            Inputs: none. Output: `self._original_file`.
+            """
             return self._original_file
 
     class _Fileset:
         """Represent fileset."""
 
         def __init__(self, used_files):
+            """Initialize the instance.
+
+            Inputs: `used_files`. Output: None.
+            """
             self._used_files = list(used_files)
 
         def copyUsedFiles(self):
-            """Handle copy used files."""
+            """Copy Used Files.
+
+            Inputs: none. Output: `list` result.
+            """
             return list(self._used_files)
 
     image_from_format = _Image(
@@ -245,7 +335,10 @@ def test_collect_dataset_summaries_detects_formats_across_metadata_fallbacks(
         """Represent broken dataset."""
 
         def listChildren(self):
-            """Return list children."""
+            """Return list children.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("images unavailable")
 
     dataset_unknown = _BrokenDataset(22, "Unknown", [])
@@ -272,24 +365,36 @@ def test_collect_dataset_summaries_detects_formats_across_metadata_fallbacks(
 
 
 def test_extract_acquisition_metadata_handles_partial_failures_without_long_values():
-    """Verify test extract acquisition metadata handles par behavior."""
+    """Verify extract acquisition metadata handles partial failures without long values.
+
+    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    """
 
     class _Image:
         """Represent image."""
 
         @staticmethod
         def getId():
-            """Return get identifier."""
+            """Return the fake OMERO identifier.
+
+            Inputs: none. Output: 7.
+            """
             return 7
 
         @staticmethod
         def getAcquisitionDate():
-            """Return get acquisition date."""
+            """Return Acquisition Date.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("missing acquisition date")
 
         @staticmethod
         def getObjectiveSettings():
-            """Return get objective settings."""
+            """Return Objective Settings.
+
+            Inputs: none. Output: `SimpleNamespace` result.
+            """
             return SimpleNamespace(
                 getID=lambda: "objective-1",
                 getCorrectionCollar=lambda: 0.15,
@@ -297,7 +402,10 @@ def test_extract_acquisition_metadata_handles_partial_failures_without_long_valu
 
         @staticmethod
         def getChannels():
-            """Return get channels."""
+            """Return Channels.
+
+            Inputs: none. Output: list.
+            """
             return [
                 SimpleNamespace(
                     getIndex=lambda: (_ for _ in ()).throw(RuntimeError("no index")),
@@ -309,7 +417,10 @@ def test_extract_acquisition_metadata_handles_partial_failures_without_long_valu
 
         @staticmethod
         def getDetectorSettings():
-            """Return get detector settings."""
+            """Return Detector Settings.
+
+            Inputs: none. Output: list.
+            """
             return [
                 SimpleNamespace(
                     getID=lambda: (_ for _ in ()).throw(RuntimeError("no id")),
@@ -320,7 +431,10 @@ def test_extract_acquisition_metadata_handles_partial_failures_without_long_valu
 
         @staticmethod
         def loadOriginalMetadata():
-            """Return load original metadata."""
+            """Return load original metadata.
+
+            Inputs: none. Output: tuple.
+            """
             return (
                 1,
                 [("Exposure", "100ms"), ("broken",), ("Title", "short note")],
@@ -342,37 +456,79 @@ def test_extract_acquisition_metadata_handles_partial_failures_without_long_valu
 
 
 def test_image_and_metadata_services_cover_remaining_runtime_failure_paths(monkeypatch):
-    """Verify test image and metadata services cover remain behavior."""
+    """Verify image and metadata services cover remaining runtime failure paths.
+
+    Inputs: `monkeypatch`. Output: computed value or None. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
 
     class _BrokenMetadataTuple:
         """Represent broken metadata tuple."""
 
         def __len__(self):
+            """Return the instance length.
+
+            Inputs: none. Output: 3.
+            """
             return 3
 
         def __getitem__(self, index):
+            """Return the item for the requested key.
+
+            Inputs: `index`. Output: None. Raises on invalid or unavailable state.
+            """
             raise IndexError(index)
 
         def __bool__(self):
+            """Return the truth value for the instance.
+
+            Inputs: none. Output: bool.
+            """
             return True
 
     class _BrokenDetectorList:
         """Represent broken detector list."""
 
         def __bool__(self):
+            """Return the truth value for the instance.
+
+            Inputs: none. Output: bool.
+            """
             return True
 
         def __iter__(self):
+            """Return an iterator for the instance.
+
+            Inputs: none. Output: computed value. Raises on invalid or unavailable
+            state.
+
+            state.
+            """
+
             class _BrokenDetectorIterator:
                 """Represent broken detector iterator."""
 
                 def __init__(self):
+                    """Initialize the instance.
+
+                    Inputs: none. Output: None.
+                    """
                     self._message = "detectors unavailable"
 
                 def __iter__(self):
+                    """Return an iterator for the instance.
+
+                    Inputs: none. Output: `self`.
+                    """
                     return self
 
                 def __next__(self):
+                    """Return the next iterator value.
+
+                    Inputs: none. Output: None. Raises on invalid or unavailable state.
+                    """
                     raise RuntimeError(self._message)
 
             return _BrokenDetectorIterator()
@@ -382,32 +538,50 @@ def test_image_and_metadata_services_cover_remaining_runtime_failure_paths(monke
 
         @staticmethod
         def getId():
-            """Return get identifier."""
+            """Return the fake OMERO identifier.
+
+            Inputs: none. Output: 1.
+            """
             return 1
 
         @staticmethod
         def getAcquisitionDate():
-            """Return get acquisition date."""
+            """Return Acquisition Date.
+
+            Inputs: none. Output: None.
+            """
             return None
 
         @staticmethod
         def getObjectiveSettings():
-            """Return get objective settings."""
+            """Return Objective Settings.
+
+            Inputs: none. Output: None.
+            """
             return None
 
         @staticmethod
         def getChannels():
-            """Return get channels."""
+            """Return Channels.
+
+            Inputs: none. Output: list.
+            """
             return []
 
         @staticmethod
         def getDetectorSettings():
-            """Return get detector settings."""
+            """Return Detector Settings.
+
+            Inputs: none. Output: `_BrokenDetectorList` result.
+            """
             return _BrokenDetectorList()
 
         @staticmethod
         def loadOriginalMetadata():
-            """Return load original metadata."""
+            """Return load original metadata.
+
+            Inputs: none. Output: `_BrokenMetadataTuple` result.
+            """
             return _BrokenMetadataTuple()
 
     assert metadata_service.extract_acquisition_metadata(_BrokenMetadataImage()) == {}
@@ -416,7 +590,10 @@ def test_image_and_metadata_services_cover_remaining_runtime_failure_paths(monke
         """Represent broken metadata image without identifier."""
 
         def getId(self):
-            """Return get identifier."""
+            """Return the fake OMERO identifier.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("missing id")
 
     assert (

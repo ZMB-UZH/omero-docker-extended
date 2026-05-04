@@ -10,4 +10,5 @@ PixelsTypeuint16: Any
 PixelsTypeuint32: Any
 UnitsLength: Any
 
+# Return a dynamic attribute. Inputs: name. Output: Any.
 def __getattr__(name: str) -> Any: ...

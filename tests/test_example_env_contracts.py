@@ -292,13 +292,19 @@ class ExampleEnvContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def parse_assignment_keys(
         self, relative_path: str
     ) -> tuple[list[str], list[tuple[int, str]]]:
-        """Return active assignment keys plus malformed non-comment lines."""
+        """Return active assignment keys plus malformed non-comment lines.
+
+        Inputs: `relative_path`. Output: `tuple[list[str], list[tuple[int, str]]]`.
+        """
         keys: list[str] = []
         malformed: list[tuple[int, str]] = []
         env_path = self.repo_root / relative_path
@@ -316,7 +322,10 @@ class ExampleEnvContractTests(unittest.TestCase):
         return keys, malformed
 
     def parse_active_assignments(self, relative_path: str) -> dict[str, str]:
-        """Validate parse active assignments."""
+        """Parse active assignments.
+
+        Inputs: `relative_path`. Output: `dict[str, str]`.
+        """
         env_path = self.repo_root / relative_path
         assignments: dict[str, str] = {}
         for raw_line in env_path.read_text(encoding="utf-8").splitlines():
@@ -328,7 +337,10 @@ class ExampleEnvContractTests(unittest.TestCase):
         return assignments
 
     def test_tracked_example_env_inventory_is_locked(self) -> None:
-        """Verify test tracked example env inventory is locked."""
+        """Verify tracked example environment inventory is locked.
+
+        Inputs: none. Output: None.
+        """
         discovered = {
             path.relative_to(self.repo_root).as_posix()
             for path in (self.repo_root / "env").glob("*_example.env")
@@ -337,7 +349,10 @@ class ExampleEnvContractTests(unittest.TestCase):
         self.assertEqual(set(EXPECTED_EXAMPLE_ENV_KEYS), discovered)
 
     def test_example_env_files_have_only_assignment_or_comment_lines(self) -> None:
-        """Verify test example env files have only assignment o behavior."""
+        """Verify example environment files have only assignment or comment lines.
+
+        Inputs: none. Output: None.
+        """
         for relative_path in EXPECTED_EXAMPLE_ENV_KEYS:
             with self.subTest(relative_path=relative_path):
                 _, malformed = self.parse_assignment_keys(relative_path)
@@ -348,7 +363,10 @@ class ExampleEnvContractTests(unittest.TestCase):
                 )
 
     def test_example_env_files_do_not_repeat_active_keys(self) -> None:
-        """Verify test example env files do not repeat active keys."""
+        """Verify example environment files do not repeat active keys.
+
+        Inputs: none. Output: None.
+        """
         for relative_path in EXPECTED_EXAMPLE_ENV_KEYS:
             with self.subTest(relative_path=relative_path):
                 keys, _ = self.parse_assignment_keys(relative_path)
@@ -360,7 +378,10 @@ class ExampleEnvContractTests(unittest.TestCase):
                 )
 
     def test_example_env_assignment_keys_match_locked_contract(self) -> None:
-        """Verify test example env assignment keys match locked behavior."""
+        """Verify example environment assignment keys match locked contract.
+
+        Inputs: none. Output: None.
+        """
         for relative_path, expected_keys in EXPECTED_EXAMPLE_ENV_KEYS.items():
             with self.subTest(relative_path=relative_path):
                 actual_keys, _ = self.parse_assignment_keys(relative_path)
@@ -381,7 +402,10 @@ class ExampleEnvContractTests(unittest.TestCase):
                 )
 
     def test_secrets_example_has_no_placeholder_secret_values(self) -> None:
-        """Verify test secrets example has no placeholder secre behavior."""
+        """Verify secrets example has no placeholder secret values.
+
+        Inputs: none. Output: None.
+        """
         assignments = self.parse_active_assignments("env/omero_secrets_example.env")
         self.assertFalse(
             any(value for value in assignments.values()),

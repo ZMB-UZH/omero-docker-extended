@@ -473,7 +473,10 @@ class AgentSkillCatalogTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.catalog_text = (
             cls.repo_root / "docs" / "reference" / "ai-agent-skills.md"
@@ -501,7 +504,10 @@ class AgentSkillCatalogTests(unittest.TestCase):
         }
 
     def parse_frontmatter(self, skill_markdown: str) -> dict[str, object]:
-        """Validate parse frontmatter."""
+        """Parse frontmatter.
+
+        Inputs: `skill_markdown`. Output: `dict[str, object]`.
+        """
         self.assertTrue(
             skill_markdown.startswith("---\n"), "Skill file is missing frontmatter"
         )
@@ -513,7 +519,11 @@ class AgentSkillCatalogTests(unittest.TestCase):
     def load_skill(
         self, skill_name: str
     ) -> tuple[dict[str, object], str, dict[str, object]]:
-        """Return load skill."""
+        """Return load skill.
+
+        Inputs: `skill_name`. Output: `tuple[dict[str, object], str, dict[str,
+        object]]`.
+        """
         skill_dir = self.skill_dirs[skill_name]
         skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
         adapter = yaml.safe_load(
@@ -523,11 +533,17 @@ class AgentSkillCatalogTests(unittest.TestCase):
 
     @staticmethod
     def normalize_text(value: str) -> str:
-        """Validate normalize text."""
+        """Normalize text.
+
+        Inputs: `value`. Output: `str`.
+        """
         return re.sub(r"\s+", " ", value.lower().replace("`", "")).strip()
 
     def assertNonEmptyString(self, value: object, msg: str) -> str:
-        """Handle assert non empty string."""
+        """Assert non empty string.
+
+        Inputs: `value`, `msg`. Output: `str`.
+        """
         self.assertIsInstance(value, str, msg)
         self.assertNotEqual("", value.strip(), msg)
         return value
@@ -535,7 +551,10 @@ class AgentSkillCatalogTests(unittest.TestCase):
     def assertContainsAll(
         self, haystack: str, phrases: tuple[Concept, ...], msg: str
     ) -> None:
-        """Handle assert contains all."""
+        """Assert contains all.
+
+        Inputs: `haystack`, `phrases`, `msg`. Output: None.
+        """
         normalized_haystack = self.normalize_text(haystack)
         missing: list[str] = []
         for phrase in phrases:
@@ -552,7 +571,10 @@ class AgentSkillCatalogTests(unittest.TestCase):
             self.fail(f"{msg}; missing phrases: {missing}")
 
     def test_catalog_doc_is_linked_from_all_supported_agent_entrypoints(self) -> None:
-        """Verify test catalog doc is linked from all supported behavior."""
+        """Verify catalog doc is linked from all supported agent entrypoints.
+
+        Inputs: none. Output: None.
+        """
         self.assertIn("docs/reference/ai-agent-skills.md", self.agents_text)
         self.assertIn("docs/reference/ai-agent-skills.md", self.claude_text)
         self.assertIn("docs/reference/ai-agent-skills.md", self.gemini_text)
@@ -564,7 +586,10 @@ class AgentSkillCatalogTests(unittest.TestCase):
         self.assertIn(".agents/skills/", self.catalog_text)
 
     def test_supported_agent_entrypoints_keep_the_same_core_contract(self) -> None:
-        """Verify test supported agent entrypoints keep the sam behavior."""
+        """Verify supported agent entrypoints keep the same core contract.
+
+        Inputs: none. Output: None.
+        """
         entrypoints = {
             "CLAUDE.md": self.claude_text,
             "GEMINI.md": self.gemini_text,
@@ -589,7 +614,10 @@ class AgentSkillCatalogTests(unittest.TestCase):
                 )
 
     def test_ai_commit_identity_is_fixed_on_all_agent_entrypoints(self) -> None:
-        """Verify test ai commit identity is fixed on all agent behavior."""
+        """Verify AI commit identity is fixed on all agent entrypoints.
+
+        Inputs: none. Output: None.
+        """
         entrypoints = {
             "AGENTS.md": self.agents_text,
             "CLAUDE.md": self.claude_text,
@@ -615,7 +643,10 @@ class AgentSkillCatalogTests(unittest.TestCase):
                 )
 
     def test_agent_entrypoints_do_not_allow_subagent_escape_hatches(self) -> None:
-        """Verify test agent entrypoints do not allow subagent behavior."""
+        """Verify agent entrypoints do not allow subagent escape hatches.
+
+        Inputs: none. Output: None.
+        """
         forbidden_phrases = (
             "Never use background agents or subagents unless the user explicitly asks for them.",
             "Do not use background agents or subagents unless the user explicitly asks for them.",
@@ -636,13 +667,19 @@ class AgentSkillCatalogTests(unittest.TestCase):
     def test_all_skill_directories_are_present_and_match_expected_inventory(
         self,
     ) -> None:
-        """Verify test all skill directories are present and ma behavior."""
+        """Verify all skill directories are present and match expected inventory.
+
+        Inputs: none. Output: None.
+        """
         self.assertEqual(set(ALL_SKILLS), set(self.skill_dirs))
         self.assertEqual(len(ALL_SKILLS), len(self.skill_dirs))
         self.assertEqual(set(ALL_SKILLS), set(SKILL_SCENARIOS))
 
     def test_every_skill_has_frontmatter_adapter_and_catalog_entry(self) -> None:
-        """Verify test every skill has frontmatter adapter and behavior."""
+        """Verify every skill has frontmatter adapter and catalog entry.
+
+        Inputs: none. Output: None.
+        """
         for skill_name in ALL_SKILLS:
             with self.subTest(skill_name=skill_name):
                 skill_dir = self.skill_dirs[skill_name]
@@ -714,7 +751,10 @@ class AgentSkillCatalogTests(unittest.TestCase):
                 )
 
     def test_repo_native_skills_and_overlays_follow_expected_structure(self) -> None:
-        """Verify test repo native skills and overlays follow e behavior."""
+        """Verify repo native skills and overlays follow expected structure.
+
+        Inputs: none. Output: None.
+        """
         for skill_name in ALL_SKILLS:
             frontmatter, skill_text, _ = self.load_skill(skill_name)
             with self.subTest(skill_name=skill_name):
@@ -728,7 +768,10 @@ class AgentSkillCatalogTests(unittest.TestCase):
                     self.assertIn("third_party/ecc-v1.10.0/", skill_text)
 
     def test_each_skill_supports_a_realistic_repo_scenario(self) -> None:
-        """Verify test each skill supports a realistic repo sce behavior."""
+        """Verify each skill supports a realistic repo scenario.
+
+        Inputs: none. Output: None.
+        """
         for skill_name, scenario in SKILL_SCENARIOS.items():
             with self.subTest(skill_name=skill_name, scenario=scenario.scenario):
                 _, skill_text, adapter = self.load_skill(skill_name)
@@ -753,7 +796,10 @@ class AgentSkillCatalogTests(unittest.TestCase):
                 )
 
     def test_security_and_verification_skills_point_to_repo_contracts(self) -> None:
-        """Verify test security and verification skills point t behavior."""
+        """Verify security and verification skills point to repo contracts.
+
+        Inputs: none. Output: None.
+        """
         security_text = (
             self.skill_dirs["security-finding-triager"] / "SKILL.md"
         ).read_text(encoding="utf-8")
@@ -773,7 +819,10 @@ class AgentSkillCatalogTests(unittest.TestCase):
         self.assertIn("never run omero cli as `root`", runtime_text.lower())
 
     def test_catalog_contains_exactly_the_expected_skill_paths(self) -> None:
-        """Verify test catalog contains exactly the expected sk behavior."""
+        """Verify catalog contains exactly the expected skill paths.
+
+        Inputs: none. Output: None.
+        """
         listed_paths = {
             match.group(1)
             for match in re.finditer(

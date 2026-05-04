@@ -1,4 +1,4 @@
-"""Run composite smoke checks for agent-surface contract tests."""
+"""Execute composite smoke checks for agent-surface contract tests."""
 
 from __future__ import annotations
 
@@ -13,13 +13,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _run_command(command: list[str]) -> int:
-    """Handle run command."""
+    """Command.
+
+    Inputs: `command`. Output: `int`.
+    """
     completed = subprocess.run(command, cwd=REPO_ROOT, check=False)
     return completed.returncode
 
 
 def _plugin_suite_fallback() -> int:
-    """Handle plugin suite fallback."""
+    """Plugin suite fallback.
+
+    Inputs: none. Output: `int`.
+    """
     smoke_commands = [
         [
             sys.executable,
@@ -54,7 +60,10 @@ def _plugin_suite_fallback() -> int:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Validate parse args."""
+    """Parse args.
+
+    Inputs: `argv`. Output: `argparse.Namespace`.
+    """
     parser = argparse.ArgumentParser(
         description="Run a named composite smoke profile for agent-surface tests."
     )
@@ -63,7 +72,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the command-line entry point."""
+    """Execute the command entrypoint.
+
+    Inputs: `argv`. Output: `int`.
+    """
     args = parse_args(argv)
     profile = args.profile
     if profile == "plugin-suite-fallback":

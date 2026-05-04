@@ -6,6 +6,7 @@ marker_path="${CROWDSEC_AUTO_RESTART_MARKER:?Set CROWDSEC_AUTO_RESTART_MARKER}"
 delay_seconds="${CROWDSEC_AUTO_RESTART_DELAY_SECONDS:-0}"
 container_name="${CROWDSEC_AUTO_RESTART_CONTAINER_NAME:-crowdsec}"
 
+# Return whether non negative integer. Inputs: shell arguments and environment. Output: success or failure status.
 is_non_negative_integer() {
     case "${1:-}" in
         ""|*[!0-9]*) return 1 ;;
@@ -18,6 +19,7 @@ if ! is_non_negative_integer "${delay_seconds}"; then
     exit 1
 fi
 
+# Cleanup marker. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_marker() {
     rm -f "${marker_path}" 2>/dev/null || true
 }

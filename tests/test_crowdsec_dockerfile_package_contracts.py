@@ -12,13 +12,19 @@ class CrowdSecDockerfilePackageContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.dockerfile_text = (REPO_ROOT / "docker" / "crowdsec.Dockerfile").read_text(
             encoding="utf-8"
         )
 
     def test_crowdsec_installs_required_firewall_packages(self) -> None:
-        """Verify test crowdsec installs required firewall pack behavior."""
+        """Verify crowdsec installs required firewall packages.
+
+        Inputs: none. Output: None.
+        """
         for package_name in (
             "cs-firewall-bouncer",
             "nftables",
@@ -31,7 +37,10 @@ class CrowdSecDockerfilePackageContractTests(unittest.TestCase):
             )
 
     def test_crowdsec_does_not_pin_nonexistent_ip6tables_package(self) -> None:
-        """Verify test crowdsec does not pin nonexistent ip6tab behavior."""
+        """Verify crowdsec does not pin nonexistent ip6tables package.
+
+        Inputs: none. Output: None.
+        """
         self.assertNotIn(
             '"ip6tables=$(require_apk_version ip6tables)"',
             self.dockerfile_text,

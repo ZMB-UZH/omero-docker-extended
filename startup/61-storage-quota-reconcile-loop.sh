@@ -3,6 +3,7 @@ set -euo pipefail
 
 interval_seconds="${ADMIN_TOOLS_QUOTA_RECONCILE_INTERVAL_SECONDS:-60}"
 
+# Return whether non negative integer. Inputs: shell arguments and environment. Output: success or failure status.
 is_non_negative_integer() {
   case "${1:-}" in
     ""|*[!0-9]*) return 1 ;;

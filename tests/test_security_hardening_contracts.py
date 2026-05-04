@@ -14,13 +14,19 @@ class SecurityHardeningContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.server_dockerfile = SERVER_DOCKERFILE.read_text(encoding="utf-8")
         cls.web_dockerfile = WEB_DOCKERFILE.read_text(encoding="utf-8")
         cls.installation_script = INSTALLATION_SCRIPT.read_text(encoding="utf-8")
 
     def test_locale_data_is_preserved_while_other_hardening_stays_enabled(self):
-        """Verify test locale data is preserved while other har behavior."""
+        """Verify locale data is preserved while other hardening stays enabled.
+
+        Inputs: none. Output: None.
+        """
         self.assertNotIn("langpacks-en", self.server_dockerfile)
         self.assertNotIn("glibc-langpack-en", self.server_dockerfile)
         self.assertNotIn("localedef --list-archive", self.server_dockerfile)
@@ -45,7 +51,10 @@ class SecurityHardeningContractTests(unittest.TestCase):
         )
 
     def test_security_hardening_prompt_defaults_yes_while_scout_stays_opt_in(self):
-        """Verify test security hardening prompt defaults yes w behavior."""
+        """Verify security hardening prompt defaults yes while scout stays opt in.
+
+        Inputs: none. Output: None.
+        """
         self.assertIn(
             'APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-}"',
             self.installation_script,

@@ -68,6 +68,10 @@ class RootState:
 
 
 def parse_bool(value: str, *, name: str) -> bool:
+    """Parse bool.
+
+    Inputs: `value`, `name`. Output: `bool`. Raises on invalid or unavailable state.
+    """
     normalized = value.strip().lower()
     if normalized in {"1", "true", "yes", "on"}:
         return True
@@ -77,6 +81,13 @@ def parse_bool(value: str, *, name: str) -> bool:
 
 
 def parse_mode(value: str, *, allow_world_writable: bool) -> int:
+    """Parse mode.
+
+    Inputs: `value`, `allow_world_writable`. Output: `int`. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     raw = value.strip()
     if not re.fullmatch(r"[0-7]{3,4}", raw):
         raise SyncError(
@@ -92,6 +103,13 @@ def parse_mode(value: str, *, allow_world_writable: bool) -> int:
 
 
 def resolve_user(value: str, *, default_uid: int) -> int:
+    """Resolve user.
+
+    Inputs: `value`, `default_uid`. Output: `int`. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     raw = value.strip()
     if not raw:
         return default_uid
@@ -104,6 +122,13 @@ def resolve_user(value: str, *, default_uid: int) -> int:
 
 
 def resolve_group(value: str, *, default_gid: int) -> int:
+    """Resolve group.
+
+    Inputs: `value`, `default_gid`. Output: `int`. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     raw = value.strip()
     if not raw:
         return default_gid
@@ -118,10 +143,18 @@ def resolve_group(value: str, *, default_gid: int) -> int:
 
 
 def sanitize_for_log(value: str) -> str:
+    """Sanitize for log.
+
+    Inputs: `value`. Output: `str`.
+    """
     return re.sub(r"[\r\n\t\x00-\x1f\x7f]+", "_", value)[:256]
 
 
 def validate_username_component(username: str) -> str | None:
+    """Validate username component.
+
+    Inputs: `username`. Output: `str | None`.
+    """
     if not username:
         return "empty username"
     if username in {".", ".."}:
@@ -136,6 +169,10 @@ def validate_username_component(username: str) -> str | None:
 
 
 def import_omero_gateway():
+    """Import OMERO gateway.
+
+    Inputs: none. Output: `BlitzGateway`. Raises on invalid or unavailable state.
+    """
     try:
         from omero.gateway import BlitzGateway
     except ImportError as exc:  # pragma: no cover - exercised in image/runtime
@@ -146,6 +183,10 @@ def import_omero_gateway():
 
 
 def close_connection(conn) -> None:
+    """Close connection.
+
+    Inputs: `conn`. Output: None.
+    """
     try:
         conn.close(hard=True)
     except TypeError:  # pragma: no cover - compatibility with older gateways
@@ -155,6 +196,10 @@ def close_connection(conn) -> None:
 
 
 def connect(config: SyncConfig):
+    """Open the connection.
+
+    Inputs: `config`. Output: `conn`. Raises on invalid or unavailable state.
+    """
     password = os.environ.get(config.password_env, "")
     if not password:
         raise SyncError(
@@ -186,6 +231,10 @@ def connect(config: SyncConfig):
 
 
 def config_value(conn, name: str, default: str = "") -> str:
+    """Config value.
+
+    Inputs: `conn`, `name`, `default`. Output: `str`.
+    """
     value = conn.getConfigService().getConfigValue(name)
     if value is None:
         return default
@@ -193,6 +242,10 @@ def config_value(conn, name: str, default: str = "") -> str:
 
 
 def resolve_dropbox_root(conn) -> Path:
+    """Resolve dropbox root.
+
+    Inputs: `conn`. Output: `Path`. Raises on invalid or unavailable state.
+    """
     import_users = config_value(conn, "omero.fs.importUsers", "default").strip()
     watch_dir_raw = config_value(conn, "omero.fs.watchDir", "").strip()
     nonempty_watch_dirs = [
@@ -239,6 +292,10 @@ def resolve_dropbox_root(conn) -> Path:
 
 
 def list_experimenter_usernames(conn) -> list[str]:
+    """List experimenter usernames.
+
+    Inputs: `conn`. Output: `list[str]`.
+    """
     experimenters = conn.getAdminService().lookupExperimenters()
     usernames = [
         str(exp.omeName.val) for exp in experimenters if exp.omeName and exp.omeName.val
@@ -247,6 +304,10 @@ def list_experimenter_usernames(conn) -> list[str]:
 
 
 def filter_usernames(usernames: Iterable[str]) -> tuple[list[str], int]:
+    """Filter usernames.
+
+    Inputs: `usernames`. Output: `tuple[list[str], int]`.
+    """
     eligible: list[str] = []
     skipped = 0
     for username in usernames:
@@ -263,6 +324,13 @@ def filter_usernames(usernames: Iterable[str]) -> tuple[list[str], int]:
 
 
 def ensure_root(root: Path, *, create_root: bool, mode: int) -> RootState:
+    """Ensure root.
+
+    Inputs: `root`, `create_root`, `mode`. Output: `RootState`. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     try:
         root_lstat = root.lstat()
     except FileNotFoundError:
@@ -303,6 +371,11 @@ def ensure_user_directory(
     uid: int,
     gid: int,
 ) -> str:
+    """Ensure user directory.
+
+    Inputs: `root`, `root_real`, `username`, `config`, `uid`, `gid`. Output: `str`.
+    Raises on invalid or unavailable state.
+    """
     target = root / username
     if target.parent.resolve(strict=True) != root_real:
         raise SyncError(
@@ -334,6 +407,10 @@ def ensure_user_directory(
 
 
 def write_status(path: Path, values: dict[str, str | int]) -> None:
+    """Write status.
+
+    Inputs: `path`, `values`. Output: None.
+    """
     path.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         mode="w",
@@ -351,6 +428,10 @@ def write_status(path: Path, values: dict[str, str | int]) -> None:
 
 
 def sync(config: SyncConfig) -> SyncResult:
+    """Sync.
+
+    Inputs: `config`. Output: `SyncResult`.
+    """
     conn = connect(config)
     try:
         root = resolve_dropbox_root(conn)
@@ -393,6 +474,10 @@ def sync(config: SyncConfig) -> SyncResult:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser.
+
+    Inputs: none. Output: `argparse.ArgumentParser`.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -418,6 +503,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def config_from_args(args: argparse.Namespace) -> SyncConfig:
+    """Config from args.
+
+    Inputs: `args`. Output: `SyncConfig`. Raises on invalid or unavailable state.
+    """
     allow_world_writable = parse_bool(
         args.allow_world_writable, name="allow-world-writable"
     )
@@ -443,6 +532,10 @@ def config_from_args(args: argparse.Namespace) -> SyncConfig:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Execute the command entrypoint.
+
+    Inputs: `argv`. Output: `int`.
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

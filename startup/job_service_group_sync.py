@@ -17,6 +17,10 @@ EXCLUDED_GROUP_NAMES = frozenset({"root", "system", "user"})
 
 
 def _required_env(name: str) -> str:
+    """Required env.
+
+    Inputs: `name`. Output: `str`. Raises on invalid or unavailable state.
+    """
     value = os.environ.get(name, "")
     if not value:
         raise ValueError(f"{name} is required")
@@ -24,6 +28,10 @@ def _required_env(name: str) -> str:
 
 
 def _parse_bool(value: str) -> bool:
+    """Parse bool.
+
+    Inputs: `value`. Output: `bool`. Raises on invalid or unavailable state.
+    """
     normalized = value.strip().lower()
     if normalized in {"1", "true", "yes", "on"}:
         return True
@@ -33,22 +41,42 @@ def _parse_bool(value: str) -> bool:
 
 
 def _value(obj) -> object:
+    """Return value.
+
+    Inputs: `obj`. Output: `object`.
+    """
     return getattr(obj, "val", obj)
 
 
 def _group_name(group) -> str:
+    """Group name.
+
+    Inputs: `group`. Output: `str`.
+    """
     return str(_value(group.name))
 
 
 def _group_id(group) -> int:
+    """Group ID.
+
+    Inputs: `group`. Output: `int`.
+    """
     return int(str(_value(group.id)))
 
 
 def _eligible_groups(groups: Iterable) -> list:
+    """Eligible groups.
+
+    Inputs: `groups`. Output: `list`.
+    """
     return [group for group in groups if _group_name(group) not in EXCLUDED_GROUP_NAMES]
 
 
 def _new_job_experimenter(job_user: str):
+    """New job experimenter.
+
+    Inputs: `job_user`. Output: `experimenter`.
+    """
     experimenter = ExperimenterI()
     experimenter.omeName = rstring(job_user)
     experimenter.firstName = rstring("Job")
@@ -58,6 +86,11 @@ def _new_job_experimenter(job_user: str):
 
 
 def ensure_job_user(admin, job_user: str, job_pass: str, retries: int):
+    """Ensure job user.
+
+    Inputs: `admin`, `job_user`, `job_pass`, `retries`. Output:
+    `admin.lookupExperimenter` result. Raises on invalid or unavailable state.
+    """
     last_error: Exception | None = None
     for attempt in range(1, retries + 1):
         try:
@@ -86,6 +119,10 @@ def ensure_job_user(admin, job_user: str, job_pass: str, retries: int):
 
 
 def sync_memberships(args: argparse.Namespace) -> int:
+    """Sync memberships.
+
+    Inputs: `args`. Output: `int`. Raises on invalid or unavailable state.
+    """
     root_pass = _required_env("ROOTPASS")
     job_pass = _required_env("OMERO_JOB_SERVICE_PASS")
     secure = _parse_bool(args.secure)
@@ -130,6 +167,10 @@ def sync_memberships(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser.
+
+    Inputs: none. Output: `argparse.ArgumentParser`.
+    """
     parser = argparse.ArgumentParser(
         description="Ensure the OMERO job-service user exists and belongs to all eligible groups.",
     )
@@ -143,6 +184,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str]) -> int:
+    """Execute the command entrypoint.
+
+    Inputs: `argv`. Output: `int`.
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.port <= 0:

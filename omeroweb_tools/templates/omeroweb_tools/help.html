@@ -139,6 +139,7 @@
                 return;
             }
 
+            // Update Body Height. Inputs: none. Output: side effects.
             const updateBodyHeight = () => {
                 body.style.setProperty(
                     "--tools-help-section-height",
@@ -146,6 +147,7 @@
                 );
             };
 
+            // Set Expanded. Inputs: expanded. Output: side effects.
             const setExpanded = (expanded) => {
                 updateBodyHeight();
                 section.classList.toggle(

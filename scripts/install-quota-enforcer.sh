@@ -21,12 +21,14 @@ DEFAULTS_FILE="${OMERO_QUOTA_DEFAULTS_FILE:-/etc/default/omero-quota-enforcer}"
 # shellcheck source=scripts/omero-host-service-lib.sh
 source "${SCRIPT_DIR}/omero-host-service-lib.sh"
 
+# Print usage text. Inputs: shell arguments and environment. Output: command status and side effects.
 usage() {
     echo "Usage: $0 <OMERO_DATA_DIR>" >&2
     echo "  OMERO_DATA_DIR: Path to the OMERO data directory on the host" >&2
     echo "                  (same as OMERO_USER_DATA_PATH in installation_paths.env)" >&2
 }
 
+# Render unit. Inputs: shell arguments and environment. Output: stdout text and command status.
 render_unit() {
     local source_file="$1"
     local dest_file="$2"
@@ -40,6 +42,7 @@ render_unit() {
         QUOTA_STATE_FILE "${state_file}"
 }
 
+# Replace managed units. Inputs: shell arguments and environment. Output: command status and side effects.
 replace_managed_units() {
     omero_replace_systemd_units \
         "${SYSTEMCTL_BIN}" \
@@ -49,10 +52,12 @@ replace_managed_units() {
         omero-quota-enforcer.service
 }
 
+# Install required packages. Inputs: shell arguments and environment. Output: command status and side effects.
 install_required_packages() {
     omero_install_missing_deb_packages e2fsprogs quota python3 util-linux
 }
 
+# Verify project quota support. Inputs: shell arguments and environment. Output: command status and side effects.
 verify_project_quota_support() {
     local fs_type mount_point block_device mount_options
 
@@ -85,6 +90,7 @@ verify_project_quota_support() {
     fi
 }
 
+# Install enforcer script. Inputs: shell arguments and environment. Output: command status and side effects.
 install_enforcer_script() {
     local enforcer_src src_sha256
 
@@ -97,6 +103,7 @@ install_enforcer_script() {
     echo "  Installed: ${enforcer_dst} (sha256=${src_sha256})"
 }
 
+# Write defaults file. Inputs: shell arguments and environment. Output: command status and side effects.
 write_defaults_file() {
     local quoted_data_dir quoted_managed_root quoted_min_quota
     local quoted_project_id_min quoted_projects_file quoted_projid_file quoted_state_file
@@ -140,6 +147,7 @@ DEFAULTS
     echo "  Created: ${defaults_file}"
 }
 
+# Prepare admin tools directory. Inputs: shell arguments and environment. Output: command status and side effects.
 prepare_admin_tools_dir() {
     mkdir -p "${OMERO_DATA_DIR}/.admin-tools/quota"
     # The .admin-tools directory must be writable by both:
@@ -165,6 +173,7 @@ prepare_admin_tools_dir() {
     echo "  Ensured writable quota state: ${state_file} (mode 0666)"
 }
 
+# Install systemd units. Inputs: shell arguments and environment. Output: command status and side effects.
 install_systemd_units() {
     local service_dst timer_dst path_dst
 
@@ -191,6 +200,7 @@ install_systemd_units() {
     echo "  Installed and enabled: omero-quota-enforcer.path  (inotify-triggered updates)"
 }
 
+# Write marker file. Inputs: shell arguments and environment. Output: command status and side effects.
 write_marker_file() {
     local marker_file
 
@@ -206,6 +216,7 @@ MARKER
     echo "  Written: ${marker_file}"
 }
 
+# Execute the command entrypoint. Inputs: shell arguments and environment. Output: command status and side effects.
 main() {
 omero_require_root
 

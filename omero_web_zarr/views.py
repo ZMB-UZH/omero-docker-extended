@@ -60,18 +60,32 @@ class _UnlinkOnCloseFile:
     """Represent unlink on close file."""
 
     def __init__(self, stream: Any, path: Path) -> None:
+        """Initialize the instance.
+
+        Inputs: `stream`, `path`. Output: None.
+        """
         self._stream = stream
         self._path = path
 
     def __getattr__(self, name: str) -> Any:
+        """Return a dynamic attribute value by name.
+
+        Inputs: `name`. Output: `Any`.
+        """
         return getattr(self._stream, name)
 
     def read(self, *args: Any, **kwargs: Any) -> Any:
-        """Return read."""
+        """Read data from the resource.
+
+        Inputs: `*args`, `**kwargs`. Output: `Any`.
+        """
         return self._stream.read(*args, **kwargs)
 
     def close(self) -> None:
-        """Handle close."""
+        """Close the resource.
+
+        Inputs: none. Output: None.
+        """
         try:
             self._stream.close()
         finally:
@@ -97,7 +111,10 @@ PIXEL_TYPES = {
 
 
 def _runtime_generated_zarray_metadata(shape, chunks, dtype) -> dict[str, object]:
-    """Handle runtime generated zarray metadata."""
+    """Runtime-generated zarray metadata from shape, chunks, and dtype.
+
+    Inputs: `shape`, `chunks`, `dtype`. Output: `dict[str, object]`.
+    """
     return {
         "zarr_format": 2,
         "shape": list(shape),
@@ -112,7 +129,10 @@ def _runtime_generated_zarray_metadata(shape, chunks, dtype) -> dict[str, object
 
 
 def _store_backed_response(image, version, *parts):
-    """Handle store backed response."""
+    """Backed response.
+
+    Inputs: `image`, `version`, `*parts`. Output: computed value or None.
+    """
     if version != "0.4":
         return None
 
@@ -135,7 +155,13 @@ def _store_backed_response(image, version, *parts):
 
 
 def _store_backed_json_response(image, version, *parts):
-    """Handle store backed JSON response."""
+    """Backed JSON response.
+
+    Inputs: `image`, `version`, `*parts`. Output: `response` or None. Raises on invalid
+    or unavailable state.
+
+    or unavailable state.
+    """
     response = _store_backed_response(image, version, *parts)
     if response is None:
         return None
@@ -145,7 +171,10 @@ def _store_backed_json_response(image, version, *parts):
 
 
 def _store_backed_chunk_response(image, version, level, chunk):
-    """Handle store backed chunk response."""
+    """Backed chunk response.
+
+    Inputs: `image`, `version`, `level`, `chunk`. Output: `response` or None.
+    """
     response = _store_backed_response(image, version, str(level), *chunk.split("/"))
     if response is None:
         return None
@@ -155,7 +184,10 @@ def _store_backed_chunk_response(image, version, level, chunk):
 
 
 def _build_store_backed_preview_context(request, image):
-    """Handle build store backed preview context."""
+    """Backed preview context.
+
+    Inputs: `request`, `image`. Output: dict.
+    """
     zarr_root = f"{reverse('omero_web_zarr_index')}v0.4/preview/image/{image.id}.zarr"
     validator_root = f"{reverse('omero_web_zarr_index')}v0.4/image/{image.id}.zarr"
     return {
@@ -169,7 +201,10 @@ def _build_store_backed_preview_context(request, image):
 
 @login_required()
 def index(request, _conn=None, **kwargs):
-    """Handle index."""
+    """Index.
+
+    Inputs: `request`, `_conn`, `**kwargs`. Output: `StreamingHttpResponse` result.
+    """
     home = reverse("omero_web_zarr_index")
     vizarr = reverse("zarr_app", kwargs={"app": "vizarr", "url": ""})
     instruction = (
@@ -184,7 +219,11 @@ def index(request, _conn=None, **kwargs):
 
 @login_required()
 def image_zattrs(request, iid, version, conn=None, **kwargs):
-    """Handle image zattrs."""
+    """Image zattrs.
+
+    Inputs: `request`, `iid`, `version`, `conn`, `**kwargs`. Output: computed value.
+    Raises on invalid or unavailable state.
+    """
     if version not in ("0.3", "0.4"):
         raise Http404("version not supported")
 
@@ -231,7 +270,10 @@ def image_zattrs(request, iid, version, conn=None, **kwargs):
 
 
 def image_zgroup(request, **kwargs):
-    """Handle image zgroup."""
+    """Image zgroup.
+
+    Inputs: `request`, `**kwargs`. Output: computed value.
+    """
     image = kwargs.get("conn") and kwargs["conn"].getObject("Image", kwargs["iid"])
     if image is not None:
         store_rsp = _store_backed_json_response(image, kwargs["version"], ".zgroup")
@@ -241,7 +283,11 @@ def image_zgroup(request, **kwargs):
 
 
 def get_image_shape(image, level):
-    """Return get image shape."""
+    """Return image shape.
+
+    Inputs: `image`, `level`. Output: `shapes[level]`. Raises on invalid or unavailable
+    state.
+    """
     shapes = get_image_shapes(image)
     if level >= len(shapes):
         raise Exception(
@@ -251,7 +297,10 @@ def get_image_shape(image, level):
 
 
 def get_image_shapes(image):
-    """Return get image shapes."""
+    """Return image shapes.
+
+    Inputs: `image`. Output: `shapes`.
+    """
     shape = [getattr(image, "getSize" + dim)() for dim in ("TCZYX")]
     base_shape = [size for size in shape if size > 1]
     shapes = [base_shape]
@@ -267,7 +316,10 @@ def get_image_shapes(image):
 
 
 def get_chunk_shape(image):
-    """Return get chunk shape."""
+    """Return chunk shape.
+
+    Inputs: `image`. Output: `chunks`.
+    """
     chunks = []
     for dim in "TCZ":
         if getattr(image, "getSize" + dim)() > 1:
@@ -294,7 +346,14 @@ def _read_lower_pyramid_plane(
     tile_h,
     np_type,
 ):
-    """Handle read lower pyramid plane."""
+    """Read lower pyramid plane.
+
+    Inputs: `image`, `level`, `z`, `c`, `t`, `tile_x`, `tile_y`, `tile_w`, `tile_h`,
+    `np_type`. Output: `tile_array.reshape` result. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     image_connection = get_image_connection(image)
     if image_connection is None:
         raise Http404("image connection unavailable")
@@ -313,7 +372,10 @@ def _read_lower_pyramid_plane(
 
 
 def _read_runtime_chunk_plane(image, level, z, c, t, tile, np_type):
-    """Handle read runtime chunk plane."""
+    """Read runtime chunk plane.
+
+    Inputs: `image`, `level`, `z`, `c`, `t`, `tile`, `np_type`. Output: call result.
+    """
     tile_x, tile_y, tile_w, tile_h = tile
     if image.requiresPixelsPyramid() and level > 0:
         return _read_lower_pyramid_plane(
@@ -333,7 +395,10 @@ def _read_runtime_chunk_plane(image, level, z, c, t, tile, np_type):
 
 @login_required()
 def image_zarray(request, iid, level, conn=None, **kwargs):
-    """Handle image zarray."""
+    """Image zarray.
+
+    Inputs: `request`, `iid`, `level`, `conn`, `**kwargs`. Output: computed value.
+    """
     level = int(level)
     image = conn.getObject("Image", iid)
     store_rsp = _store_backed_json_response(image, "0.4", str(level), ".zarray")
@@ -350,7 +415,13 @@ def image_zarray(request, iid, level, conn=None, **kwargs):
 
 @login_required()
 def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
-    """Handle image chunk."""
+    """Image chunk.
+
+    Inputs: `request`, `iid`, `level`, `chunk`, `conn`, `**kwargs`. Output: computed
+    value. Raises on invalid or unavailable state.
+
+    value. Raises on invalid or unavailable state.
+    """
     dims = [int(dim) for dim in chunk.split("/")]
 
     image = conn.getObject("Image", iid)
@@ -424,7 +495,11 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
 
 @login_required()
 def image_store_path(request, iid, version, store_path, conn=None, **kwargs):
-    """Handle image store path."""
+    """Image store path.
+
+    Inputs: `request`, `iid`, `version`, `store_path`, `conn`, `**kwargs`. Output:
+    `store_rsp`. Raises on invalid or unavailable state.
+    """
     image = conn.getObject("Image", iid)
     store_rsp = _store_backed_response(image, version, *store_path.split("/"))
     if store_rsp is None:
@@ -434,25 +509,47 @@ def image_store_path(request, iid, version, store_path, conn=None, **kwargs):
 
 @login_required()
 def preview_image_zattrs(request, iid, version="0.4", conn=None, **kwargs):
-    """Handle preview image zattrs."""
+    """Preview image zattrs.
+
+    Inputs: `request`, `iid`, `version`, `conn`, `**kwargs`. Output: `image_zattrs`
+    result.
+
+    result.
+    """
     return image_zattrs(request, iid, version, conn=conn, **kwargs)
 
 
 @login_required()
 def preview_image_zgroup(request, iid, version="0.4", conn=None, **kwargs):
-    """Handle preview image zgroup."""
+    """Preview image zgroup.
+
+    Inputs: `request`, `iid`, `version`, `conn`, `**kwargs`. Output: `image_zgroup`
+    result.
+
+    result.
+    """
     return image_zgroup(request, iid=iid, version=version, conn=conn, **kwargs)
 
 
 @login_required()
 def preview_image_zarray(request, iid, level, conn=None, **kwargs):
-    """Handle preview image zarray."""
+    """Preview image zarray.
+
+    Inputs: `request`, `iid`, `level`, `conn`, `**kwargs`. Output: `image_zarray`
+    result.
+
+    result.
+    """
     return image_zarray(request, iid, level, conn=conn, **kwargs)
 
 
 @login_required()
 def preview_image_chunk(request, iid, level, chunk, conn=None, **kwargs):
-    """Handle preview image chunk."""
+    """Preview image chunk.
+
+    Inputs: `request`, `iid`, `level`, `chunk`, `conn`, `**kwargs`. Output:
+    `image_chunk` result.
+    """
     return image_chunk(request, iid, level, chunk, conn=conn, **kwargs)
 
 
@@ -460,7 +557,11 @@ def preview_image_chunk(request, iid, level, chunk, conn=None, **kwargs):
 def preview_image_store_path(
     request, iid, version="0.4", store_path=None, conn=None, **kwargs
 ):
-    """Handle preview image store path."""
+    """Preview image store path.
+
+    Inputs: `request`, `iid`, `version`, `store_path`, `conn`, `**kwargs`. Output:
+    `image_store_path` result.
+    """
     return image_store_path(
         request,
         iid,
@@ -473,7 +574,13 @@ def preview_image_store_path(
 
 @login_required()
 def image_preview(request, iid, conn=None, **kwargs):
-    """Handle image preview."""
+    """Image preview.
+
+    Inputs: `request`, `iid`, `conn`, `**kwargs`. Output: computed value. Raises on
+    invalid or unavailable state.
+
+    invalid or unavailable state.
+    """
     image = conn.getObject("Image", iid)
     if image is None:
         raise Http404("image not found")
@@ -488,13 +595,19 @@ def image_preview(request, iid, conn=None, **kwargs):
 
 
 def _store_backed_download_name(image, suffix):
-    """Handle store backed download name."""
+    """Backed download name.
+
+    Inputs: `image`, `suffix`. Output: `f'{base_name}{suffix}'`.
+    """
     base_name = sanitize_download_basename(image.getName(), default=f"Image-{image.id}")
     return f"{base_name}{suffix}"
 
 
 def _store_backed_ome_axes_and_array(node):
-    """Handle store backed ome axes and array."""
+    """Backed ome axes and array.
+
+    Inputs: `node`. Output: tuple. Raises on invalid or unavailable state.
+    """
     array = node.data[0]
     axis_names = get_store_backed_axis_names(node, level=0)
     supported_axes = {"t", "c", "z", "y", "x"}
@@ -510,7 +623,10 @@ def _store_backed_ome_axes_and_array(node):
 
 
 def _iter_store_backed_ome_tiff_planes(array):
-    """Handle iter store backed ome tiff planes."""
+    """Backed ome tiff planes.
+
+    Inputs: `array`. Output: yielded values.
+    """
     plane_shape = array.shape[-2:]
     leading_shape = array.shape[:-2]
     if not leading_shape:
@@ -522,7 +638,10 @@ def _iter_store_backed_ome_tiff_planes(array):
 
 
 def _store_backed_ome_tiff_metadata(image, node, axes):
-    """Handle store backed ome tiff metadata."""
+    """Backed ome tiff metadata.
+
+    Inputs: `image`, `node`, `axes`. Output: `metadata`.
+    """
     metadata = {
         "axes": axes,
         "Name": image.getName(),
@@ -547,7 +666,13 @@ def _store_backed_ome_tiff_metadata(image, node, axes):
 
 @login_required()
 def download_store_original(request, iid, conn=None, **kwargs):
-    """Handle download store original."""
+    """Download store original.
+
+    Inputs: `request`, `iid`, `conn`, `**kwargs`. Output: `FileResponse` result. Raises
+    on invalid or unavailable state.
+
+    on invalid or unavailable state.
+    """
     image = conn.getObject("Image", iid)
     if image is None:
         raise Http404("store-backed image not found")
@@ -579,7 +704,13 @@ def download_store_original(request, iid, conn=None, **kwargs):
 
 @login_required()
 def download_store_metadata(request, iid, conn=None, **kwargs):
-    """Handle download store metadata."""
+    """Download store metadata.
+
+    Inputs: `request`, `iid`, `conn`, `**kwargs`. Output: `response`. Raises on invalid
+    or unavailable state.
+
+    or unavailable state.
+    """
     image = conn.getObject("Image", iid)
     if image is None:
         raise Http404("store-backed image not found")
@@ -605,7 +736,13 @@ def download_store_metadata(request, iid, conn=None, **kwargs):
 
 @login_required()
 def download_store_ome_tiff(request, iid, conn=None, **kwargs):
-    """Handle download store ome tiff."""
+    """Download store OME tiff.
+
+    Inputs: `request`, `iid`, `conn`, `**kwargs`. Output: `response`. Raises on invalid
+    or unavailable state.
+
+    or unavailable state.
+    """
     image = conn.getObject("Image", iid)
     if image is None or resolve_image_backing_zarr_store(image) is None:
         raise Http404("store-backed image not found")
@@ -647,7 +784,10 @@ def download_store_ome_tiff(request, iid, conn=None, **kwargs):
 
 
 def _sanitize_app_asset_path(url):
-    """Handle sanitize app asset path."""
+    """Sanitize app asset path.
+
+    Inputs: `url`. Output: computed value. Raises on invalid or unavailable state.
+    """
     raw = (url or "").strip()
     if not raw:
         return ""
@@ -663,7 +803,10 @@ def _sanitize_app_asset_path(url):
 
 
 def _build_app_launch_url(app, source):
-    """Handle build app launch URL."""
+    """App launch URL.
+
+    Inputs: `app`, `source`. Output: computed value.
+    """
     return (
         f"{reverse('zarr_app', kwargs={'app': app, 'url': ''})}"
         f"?source={quote(source, safe='/:?=&')}"
@@ -671,7 +814,10 @@ def _build_app_launch_url(app, source):
 
 
 def _inject_launcher_head(html, base_url):
-    """Handle inject launcher head."""
+    """Inject launcher head.
+
+    Inputs: `html`, `base_url`. Output: computed value.
+    """
     head_fragment = (
         f'<base href="{base_url}">'
         "<script>"
@@ -703,14 +849,23 @@ def _inject_launcher_head(html, base_url):
 
 @lru_cache(maxsize=16)
 def _fetch_remote_app_shell(base_url, _cache_bucket):
-    """Handle fetch remote app shell."""
+    """Fetch remote app shell.
+
+    Inputs: `base_url`, `_cache_bucket`. Output: `response.text`.
+    """
     response = requests.get(base_url, timeout=20)
     response.raise_for_status()
     return response.text
 
 
 def apps(request, app, url):
-    """Handle apps."""
+    """Apps.
+
+    Inputs: `request`, `app`, `url`. Output: computed value. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     if app not in _APP_BASE_URLS:
         raise Http404(f"App: {app} not found")
 

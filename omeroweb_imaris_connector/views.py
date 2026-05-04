@@ -33,7 +33,13 @@ TEXT_PLAIN_CONTENT_TYPE = "text/plain; charset=utf-8"
 
 
 def _parse_base_url(value):
-    """Handle parse base URL."""
+    """Parse base URL.
+
+    Inputs: `value`. Output: computed value or None. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     if not value:
         return None
     try:
@@ -53,7 +59,10 @@ def _parse_base_url(value):
 
 
 def _build_absolute_url(request, path, base_url_override=None):
-    """Handle build absolute URL."""
+    """Absolute URL.
+
+    Inputs: `request`, `path`, `base_url_override`. Output: computed value.
+    """
     if base_url_override:
         base = base_url_override.rstrip("/") + "/"
         return urllib.parse.urljoin(base, path.lstrip("/"))
@@ -61,22 +70,31 @@ def _build_absolute_url(request, path, base_url_override=None):
 
 
 def _get_client_ip(request):
-    """Extract client IP for logging purposes."""
+    """Extract client IP for logging purposes.
+
+    Inputs: `request`. Output: computed value.
+    """
     x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if x_forwarded_for:
         return x_forwarded_for.split(",")[0].strip()
     return request.META.get("REMOTE_ADDR", "unknown")
 
 
-def _job_error_message(error, meta):
-    """Return the public error message for a polled job result."""
+def _job_error_message(meta):
+    """Return the public error message for a polled job result.
+
+    Inputs: `meta`. Output: computed value.
+    """
     if meta and meta.get("public_error") and meta.get("error"):
         return str(meta.get("error"))
     return IMS_EXPORT_JOB_FAILED_MESSAGE
 
 
 def _text_response(message, status):
-    """Return plain-text response content without HTML interpretation."""
+    """Return plain-text response content without HTML interpretation.
+
+    Inputs: `message`, `status`. Output: `response`.
+    """
     response = HttpResponse(status=status, content_type=TEXT_PLAIN_CONTENT_TYPE)
     response.write(str(message))
     return response
@@ -84,7 +102,10 @@ def _text_response(message, status):
 
 @login_required()
 def imaris_export(request, conn=None, **kwargs):
-    """Handle IMS export requests - both starting exports and polling status."""
+    """Imaris export.
+
+    Inputs: `request`, `conn`, `**kwargs`. Output: computed value.
+    """
     client_ip = _get_client_ip(request)
     safe_client_ip = sanitize_log_value(client_ip)
     safe_query = sanitize_log_value(request.GET.urlencode())
@@ -183,7 +204,7 @@ def imaris_export(request, conn=None, **kwargs):
             )
             payload["download_url"] = download_url
         if is_failed:
-            payload["error"] = _job_error_message(_error, meta)
+            payload["error"] = _job_error_message(meta)
         return JsonResponse(payload)
 
     image_id = request.GET.get("image") or request.GET.get("image_id")
@@ -266,7 +287,7 @@ def imaris_export(request, conn=None, **kwargs):
                     image_id,
                     sanitize_log_value(last_error or "unknown error"),
                 )
-                return _text_response(_job_error_message(error, meta), status=500)
+                return _text_response(_job_error_message(meta), status=500)
             time.sleep(EXPORT_POLL_INTERVAL)
 
         if not last_state:
@@ -290,7 +311,10 @@ def imaris_export(request, conn=None, **kwargs):
 
 
 def _poll_celery_job(job_id):
-    """Poll a Celery job for its current state and results."""
+    """Poll a Celery job for its current state and results.
+
+    Inputs: `job_id`. Output: tuple.
+    """
     task_id = job_id[len(CELERY_JOB_PREFIX) :]
     async_result = celery_app.AsyncResult(task_id)
     logger.debug(
@@ -341,7 +365,11 @@ def _start_celery_job(
     conn,
     image_id,
 ):
-    """Start a Celery task for IMS export."""
+    """Start celery job.
+
+    Inputs: `conn`, `image_id`. Output: computed value. Raises on invalid or unavailable
+    state.
+    """
     session_key = _get_session_key(conn)
     host, port = _resolve_omero_host_port(conn)
     secure = _resolve_omero_secure(conn)
@@ -389,7 +417,10 @@ def _start_celery_job(
 
 
 def _parse_port_param(value):
-    """Parse a port parameter value."""
+    """Parse port param.
+
+    Inputs: `value`. Output: `port` or None. Raises on invalid or unavailable state.
+    """
     try:
         port_text = str(value).strip()
     except Exception:
@@ -405,7 +436,10 @@ def _parse_port_param(value):
 
 
 def _get_session_key(conn):
-    """Get the OMERO session key from the connection."""
+    """Return session key.
+
+    Inputs: `conn`. Output: computed value or None.
+    """
     if conn is None:
         return None
 
@@ -437,7 +471,10 @@ def _get_session_key(conn):
 
 
 def _resolve_omero_host_port(conn):
-    """Resolve the OMERO server host and port from the connection or environment."""
+    """Resolve OMERO host port.
+
+    Inputs: `conn`. Output: tuple.
+    """
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
     port = getattr(conn, "port", None) or getattr(conn, "_port", None)
 
@@ -459,7 +496,10 @@ def _resolve_omero_host_port(conn):
 
 
 def _resolve_omero_secure(conn):
-    """Resolve whether to use secure connection from connection or environment."""
+    """Resolve OMERO secure.
+
+    Inputs: `conn`. Output: `secure`.
+    """
     secure = getattr(conn, "secure", None)
     if secure is None:
         env_val = get_env("CONFIG_omero_security_ssl", env_file=ENV_FILE_OMEROWEB)

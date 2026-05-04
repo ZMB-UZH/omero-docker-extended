@@ -61,12 +61,18 @@ _PROCESSOR_CONFIG_CACHE: _ProcessorConfigCache = {"value": None, "checked_at": 0
 
 
 def _process_job_path(job_id):
-    """Handle process job path."""
+    """Process job path.
+
+    Inputs: `job_id`. Output: `os.path.join` result.
+    """
     return os.path.join(PROCESS_JOB_DIR, f"{job_id}.json")
 
 
 def _ensure_process_job_dir():
-    """Handle ensure process job dir."""
+    """Ensure process job directory.
+
+    Inputs: none. Output: None.
+    """
     try:
         os.makedirs(PROCESS_JOB_DIR, exist_ok=True)
     except Exception:
@@ -74,7 +80,10 @@ def _ensure_process_job_dir():
 
 
 def _write_process_job_file(job_id, payload):
-    """Handle write process job file."""
+    """Write process job file.
+
+    Inputs: `job_id`, `payload`. Output: None.
+    """
     _ensure_process_job_dir()
     path = _process_job_path(job_id)
     tmp_path = f"{path}.tmp"
@@ -94,7 +103,10 @@ def _write_process_job_file(job_id, payload):
 
 
 def _read_process_job_file(job_id):
-    """Handle read process job file."""
+    """Read process job file.
+
+    Inputs: `job_id`. Output: `json.load` result or None.
+    """
     path = _process_job_path(job_id)
     if not os.path.exists(path):
         return None
@@ -107,7 +119,10 @@ def _read_process_job_file(job_id):
 
 
 def _serialize_outputs(outputs):
-    """Handle serialize outputs."""
+    """Serialize outputs.
+
+    Inputs: `outputs`. Output: `serialized` or None.
+    """
     if not isinstance(outputs, dict):
         return None
     serialized = {}
@@ -117,7 +132,10 @@ def _serialize_outputs(outputs):
 
 
 def _monitor_process_job(job_id, proc):
-    """Handle monitor process job."""
+    """Monitor process job.
+
+    Inputs: `job_id`, `proc`. Output: None.
+    """
     state, outputs = _wait_for_process(proc, EXPORT_TIMEOUT)
     normalized_state = _normalize_job_state(state) if state else "TIMEOUT"
     error = None
@@ -135,7 +153,10 @@ def _monitor_process_job(job_id, proc):
 
 
 def _register_process_job(proc):
-    """Handle register process job."""
+    """Register process job.
+
+    Inputs: `proc`. Output: `job_id`.
+    """
     job_id = f"proc-{uuid.uuid4().hex}"
     logger.debug("Registering IMS process job %s", job_id)
     with _PROCESS_JOBS_LOCK:
@@ -163,19 +184,28 @@ def _register_process_job(proc):
 
 
 def _get_process_job(job_id):
-    """Handle get process job."""
+    """Return process job.
+
+    Inputs: `job_id`. Output: `_PROCESS_JOBS.get` result.
+    """
     with _PROCESS_JOBS_LOCK:
         return _PROCESS_JOBS.get(job_id)
 
 
 def _forget_process_job(job_id):
-    """Handle forget process job."""
+    """Forget process job.
+
+    Inputs: `job_id`. Output: None.
+    """
     with _PROCESS_JOBS_LOCK:
         _PROCESS_JOBS.pop(job_id, None)
 
 
 def _poll_process_job(job_id):
-    """Handle poll process job."""
+    """Poll process job.
+
+    Inputs: `job_id`. Output: tuple.
+    """
     logger.debug("Polling process job %s", job_id)
     record = _get_process_job(job_id)
     if not record:
@@ -238,7 +268,10 @@ def _poll_process_job(job_id):
 
 def _unwrap_rtype(v):
     # OMERO.rtypes: rstring/rlong/etc have .val
-    """Handle unwrap rtype."""
+    """Unwrap rtype.
+
+    Inputs: `v`. Output: computed value.
+    """
     if hasattr(v, "val"):
         return v.val
     getter = getattr(v, "getValue", None)
@@ -251,7 +284,10 @@ def _unwrap_rtype(v):
 
 
 def _get_script_services(conn):
-    """Handle get script services."""
+    """Return script services.
+
+    Inputs: `conn`. Output: `services`.
+    """
     services: list[Any] = []
     if conn is None:
         return services
@@ -271,7 +307,10 @@ def _get_script_services(conn):
 
 
 def _find_script_id(conn):
-    """Handle find script identifier."""
+    """Find script ID.
+
+    Inputs: `conn`. Output: `best_sid`.
+    """
     best_sid = None
     best_is_official = False
     for svc in _get_script_services(conn):
@@ -329,12 +368,18 @@ def _find_script_id(conn):
 
 
 def _is_process_handle(job):
-    """Handle is process handle."""
+    """Return whether process handle.
+
+    Inputs: `job`. Output: bool.
+    """
     return hasattr(job, "poll") and hasattr(job, "getResults")
 
 
 def _is_async_result(job):
-    """Handle is async result."""
+    """Return whether async result.
+
+    Inputs: `job`. Output: bool.
+    """
     if job is None:
         return False
     return hasattr(job, "waitForCompleted") and (
@@ -346,7 +391,10 @@ def _is_async_result(job):
 
 
 def _resolve_async_result(svc, meth_name, async_result):
-    """Handle resolve async result."""
+    """Resolve async result.
+
+    Inputs: `svc`, `meth_name`, `async_result`. Output: computed value or None.
+    """
     if async_result is None:
         return None
     if not _is_async_result(async_result):
@@ -385,7 +433,10 @@ def _resolve_async_result(svc, meth_name, async_result):
 
 
 def _iter_script_methods(svc):
-    """Handle iter script methods."""
+    """Script methods.
+
+    Inputs: `svc`. Output: yielded values.
+    """
     preferred = [
         "runScriptAsync",
         "runScript",
@@ -432,7 +483,13 @@ def _iter_script_methods(svc):
 
 
 def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
-    """Handle call script method."""
+    """Call script method.
+
+    Inputs: `meth`, `meth_name`, `script_id`, `inputs`, `wait_secs`. Output: `meth`
+    result. Raises on invalid or unavailable state.
+
+    result. Raises on invalid or unavailable state.
+    """
     args_to_try = []
     lowered = meth_name.lower()
     is_async = "async" in lowered or lowered.startswith("begin_")
@@ -512,7 +569,11 @@ def _run_script(
     status_callback: Callable[[str, dict], None] | None = None,
 ):
     # Build inputs
-    """Handle run script."""
+    """Script.
+
+    Inputs: `conn`, `script_id`, `image_id`, `wait_secs`, `status_callback`. Output:
+    `proc`. Raises on invalid or unavailable state.
+    """
     try:
         from omero.rtypes import rlong
 
@@ -621,7 +682,10 @@ def _run_script(
 
 
 def _get_script_processor_config(conn):
-    """Handle get script processor config."""
+    """Return script processor config.
+
+    Inputs: `conn`. Output: computed value or None.
+    """
     if conn is None:
         return None
     if not _can_read_script_config(conn):
@@ -656,7 +720,10 @@ def _get_script_processor_config(conn):
 
 
 def _can_read_script_config(conn) -> bool:
-    """Handle can read script config."""
+    """Return whether read script config.
+
+    Inputs: `conn`. Output: `bool`.
+    """
     if conn is None:
         return False
     is_admin = getattr(conn, "isAdmin", None)
@@ -670,7 +737,10 @@ def _can_read_script_config(conn) -> bool:
 
 
 def _get_node_descriptors_config(conn):
-    """Handle get node descriptors config."""
+    """Return node descriptors config.
+
+    Inputs: `conn`. Output: `value` or None.
+    """
     if conn is None:
         return None
     if not _can_read_script_config(conn):
@@ -703,7 +773,10 @@ def _get_node_descriptors_config(conn):
 
 
 def _format_script_exception(exc: Exception) -> str:
-    """Handle format script exception."""
+    """Format script exception.
+
+    Inputs: `exc`. Output: `str`.
+    """
     if _is_no_processor_available(exc):
         return (
             "No OMERO script processor is available to run IMS export. "
@@ -713,7 +786,10 @@ def _format_script_exception(exc: Exception) -> str:
 
 
 def _is_security_violation(exc: Exception) -> bool:
-    """Handle is security violation."""
+    """Return whether security violation.
+
+    Inputs: `exc`. Output: `bool`.
+    """
     for err in _iter_exception_chain(exc):
         name = err.__class__.__name__
         if name == "SecurityViolation":
@@ -725,7 +801,10 @@ def _is_security_violation(exc: Exception) -> bool:
 
 
 def _collect_exception_types(candidate: object) -> tuple[type[BaseException], ...]:
-    """Handle collect exception types."""
+    """Collect exception types.
+
+    Inputs: `candidate`. Output: `tuple[type[BaseException], ...]`.
+    """
     if isinstance(candidate, type):
         if issubclass(candidate, BaseException):
             return (candidate,)
@@ -741,7 +820,10 @@ def _collect_exception_types(candidate: object) -> tuple[type[BaseException], ..
 
 
 def _is_no_processor_available(exc: Exception) -> bool:
-    """Handle is no processor available."""
+    """Return whether no processor available.
+
+    Inputs: `exc`. Output: `bool`.
+    """
     no_processor_types = _collect_exception_types(
         getattr(omero, "NoProcessorAvailable", None)
     )
@@ -760,7 +842,10 @@ def _is_no_processor_available(exc: Exception) -> bool:
 
 
 def _iter_exception_chain(exc: Exception) -> Iterator[BaseException]:
-    """Handle iter exception chain."""
+    """Exception chain.
+
+    Inputs: `exc`. Output: `Iterator[BaseException]`.
+    """
     seen = set()
     current: BaseException | None = exc
     while current and id(current) not in seen:
@@ -773,7 +858,10 @@ def _iter_exception_chain(exc: Exception) -> Iterator[BaseException]:
 
 
 def _extract_job_id(job):
-    """Handle extract job identifier."""
+    """Extract job ID.
+
+    Inputs: `job`. Output: computed value or None.
+    """
     if job is None:
         return None
     job_id = _unwrap_rtype(job)
@@ -799,7 +887,10 @@ def _extract_job_id(job):
                 continue
 
     def _get_attr_value(obj, attr_name):
-        """Handle get attr value."""
+        """Return attr value.
+
+        Inputs: `obj`, `attr_name`. Output: computed value or None.
+        """
         attr = getattr(obj, attr_name, None)
         if attr is None:
             return None
@@ -830,8 +921,10 @@ def _extract_job_id(job):
 
 
 def _get_job_state_and_outputs(conn, job_id):
-    """
-    Try several ways to get job state/outputs across OMERO versions.
+    """Try several ways to get job state/outputs across OMERO versions.
+
+    Inputs: `conn`, `job_id`. Output: tuple.
+
     Returns (state, outputs_dict_or_None).
     """
     for svc in _get_script_services(conn):
@@ -924,7 +1017,10 @@ def _get_job_state_and_outputs(conn, job_id):
 
 
 def _wait_for_process(proc, timeout):
-    """Handle wait for process."""
+    """Wait for process.
+
+    Inputs: `proc`, `timeout`. Output: tuple.
+    """
     deadline = time.time() + timeout
     last_state = None
     try:
@@ -953,7 +1049,10 @@ def _wait_for_process(proc, timeout):
 
 
 def _normalize_job_state(state):
-    """Handle normalize job state."""
+    """Normalize job state.
+
+    Inputs: `state`. Output: `state.upper` result or None.
+    """
     if state is None:
         return None
     try:
@@ -987,7 +1086,10 @@ def _normalize_job_state(state):
 
 
 def _detach_script_process(proc, reason=""):
-    """Handle detach script process."""
+    """Detach script process.
+
+    Inputs: `proc`, `reason`. Output: None.
+    """
     if proc is None:
         return
     close = getattr(proc, "close", None)
@@ -1015,7 +1117,10 @@ def _detach_script_process(proc, reason=""):
 
 
 def _extract_output_value(outputs, key):
-    """Handle extract output value."""
+    """Extract output value.
+
+    Inputs: `outputs`, `key`. Output: `_unwrap_rtype` result or None.
+    """
     if outputs is None:
         return None
     v = outputs.get(key) if isinstance(outputs, dict) else None
@@ -1025,7 +1130,10 @@ def _extract_output_value(outputs, key):
 
 
 def _infer_finished_from_outputs(outputs):
-    """Handle infer finished from outputs."""
+    """Infer finished from outputs.
+
+    Inputs: `outputs`. Output: bool.
+    """
     if not isinstance(outputs, dict):
         return False
     for key in ("Export_Path", "File_Annotation_Id", "Export_Name"):
@@ -1035,7 +1143,10 @@ def _infer_finished_from_outputs(outputs):
 
 
 def _raw_file_generator(store, size, chunk_size=8 * 1024 * 1024):
-    """Handle raw file generator."""
+    """Raw file generator.
+
+    Inputs: `store`, `size`, `chunk_size`. Output: yielded values.
+    """
     offset = 0
     try:
         while True:
@@ -1059,7 +1170,10 @@ def _raw_file_generator(store, size, chunk_size=8 * 1024 * 1024):
 
 
 def _sanitize_filename(filename, fallback="export.ims"):
-    """Handle sanitize filename."""
+    """Sanitize filename.
+
+    Inputs: `filename`, `fallback`. Output: computed value.
+    """
     if not filename:
         return fallback
     safe_name = os.path.basename(str(filename))
@@ -1074,7 +1188,10 @@ def _sanitize_filename(filename, fallback="export.ims"):
 
 
 def _response_from_file_annotation(conn, file_ann_id, filename_fallback=None):
-    """Handle response from file annotation."""
+    """Response from file annotation.
+
+    Inputs: `conn`, `file_ann_id`, `filename_fallback`. Output: `response` or None.
+    """
     try:
         file_ann_id = int(file_ann_id)
     except (TypeError, ValueError):
@@ -1123,14 +1240,20 @@ def _response_from_file_annotation(conn, file_ann_id, filename_fallback=None):
 
 
 def _bool_from_request(value):
-    """Handle bool from request."""
+    """Bool from request.
+
+    Inputs: `value`. Output: bool or None.
+    """
     if value is None:
         return None
     return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _build_download_response(conn, outputs, export_name=None):
-    """Handle build download response."""
+    """Download response.
+
+    Inputs: `conn`, `outputs`, `export_name`. Output: computed value.
+    """
     from django.http import FileResponse, HttpResponse
 
     export_path = _extract_output_value(outputs or {}, "Export_Path")

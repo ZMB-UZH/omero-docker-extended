@@ -21,7 +21,10 @@ TEST_AUTH_VALUE = "unused-auth-value"
 
 
 def load_helper():
-    """Return load helper."""
+    """Return load helper.
+
+    Inputs: none. Output: `module`. Raises on invalid or unavailable state.
+    """
     spec = importlib.util.spec_from_file_location("dropbox_user_dir_sync", HELPER_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError("Could not load dropbox_user_dir_sync helper")
@@ -38,10 +41,17 @@ class _ConfigService:
     """Represent config service."""
 
     def __init__(self, values: dict[str, str]) -> None:
+        """Initialize the instance.
+
+        Inputs: `values`. Output: None.
+        """
         self.values = values
 
     def getConfigValue(self, name: str) -> str | None:
-        """Return get config value."""
+        """Return Config Value.
+
+        Inputs: `name`. Output: `str | None`.
+        """
         return self.values.get(name)
 
 
@@ -49,10 +59,17 @@ class _AdminService:
     """Represent admin service."""
 
     def __init__(self, usernames: list[str]) -> None:
+        """Initialize the instance.
+
+        Inputs: `usernames`. Output: None.
+        """
         self.usernames = usernames
 
     def lookupExperimenters(self) -> list[types.SimpleNamespace]:
-        """Handle lookup experimenters."""
+        """Lookup experimenters.
+
+        Inputs: none. Output: `list[types.SimpleNamespace]`.
+        """
         return [
             types.SimpleNamespace(omeName=types.SimpleNamespace(val=username))
             for username in self.usernames
@@ -63,25 +80,41 @@ class _Conn:
     """Represent conn."""
 
     def __init__(self, values: dict[str, str], usernames: list[str]) -> None:
+        """Initialize the instance.
+
+        Inputs: `values`, `usernames`. Output: None.
+        """
         self.config_service = _ConfigService(values)
         self.admin_service = _AdminService(usernames)
         self.closed = False
 
     def getConfigService(self) -> _ConfigService:
-        """Return get config service."""
+        """Return Config Service.
+
+        Inputs: none. Output: `_ConfigService`.
+        """
         return self.config_service
 
     def getAdminService(self) -> _AdminService:
-        """Return get admin service."""
+        """Return Admin Service.
+
+        Inputs: none. Output: `_AdminService`.
+        """
         return self.admin_service
 
     def close(self) -> None:
-        """Handle close."""
+        """Close the resource.
+
+        Inputs: none. Output: None.
+        """
         self.closed = True
 
 
 def _config(**overrides: object):
-    """Handle config."""
+    """Config.
+
+    Inputs: `**overrides`. Output: `replace` result.
+    """
     config = helper.SyncConfig(
         host="unused",
         port=4064,
@@ -104,7 +137,10 @@ class DropBoxUserDirSyncTests(TestCase):
     """Test cases for drop box user dir sync tests."""
 
     def test_resolves_default_root_from_omero_config(self) -> None:
-        """Verify test resolves default root from OMERO config."""
+        """Verify resolves default root from OMERO config.
+
+        Inputs: none. Output: None.
+        """
         conn = _Conn(
             {
                 "omero.fs.importUsers": "default",
@@ -120,7 +156,10 @@ class DropBoxUserDirSyncTests(TestCase):
         )
 
     def test_resolves_single_watch_dir_from_omero_config(self) -> None:
-        """Verify test resolves single watch dir from OMERO config."""
+        """Verify resolves single watch directory from OMERO config.
+
+        Inputs: none. Output: None.
+        """
         conn = _Conn(
             {
                 "omero.fs.importUsers": "default",
@@ -132,7 +171,10 @@ class DropBoxUserDirSyncTests(TestCase):
         self.assertEqual(Path("/dropbox-acceptor"), helper.resolve_dropbox_root(conn))
 
     def test_rejects_multiple_watch_dirs_for_username_root_convention(self) -> None:
-        """Verify test rejects multiple watch dirs for username behavior."""
+        """Verify rejects multiple watch directories for username root convention.
+
+        Inputs: none. Output: None.
+        """
         conn = _Conn(
             {
                 "omero.fs.importUsers": "default",
@@ -145,7 +187,10 @@ class DropBoxUserDirSyncTests(TestCase):
             helper.resolve_dropbox_root(conn)
 
     def test_sync_creates_only_safe_first_level_username_directories(self) -> None:
-        """Verify test sync creates only safe first level usern behavior."""
+        """Verify sync creates only safe first level username directories.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "dropbox"
             conn = _Conn(
@@ -170,7 +215,10 @@ class DropBoxUserDirSyncTests(TestCase):
             )
 
     def test_new_dropbox_root_inherits_parent_owner_group_and_mode(self) -> None:
-        """Verify test new dropbox root inherits parent owner g behavior."""
+        """Verify new dropbox root inherits parent owner group and mode.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             parent = Path(tmpdir) / "data"
             parent.mkdir()
@@ -194,7 +242,10 @@ class DropBoxUserDirSyncTests(TestCase):
             )
 
     def test_new_dropbox_root_requires_existing_parent(self) -> None:
-        """Verify test new dropbox root requires existing parent."""
+        """Verify new dropbox root requires existing parent.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "missing" / "DropBox"
 
@@ -206,7 +257,10 @@ class DropBoxUserDirSyncTests(TestCase):
                 )
 
     def test_sync_rejects_existing_username_symlink(self) -> None:
-        """Verify test sync rejects existing username symlink."""
+        """Verify sync rejects existing username symlink.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "dropbox"
             root.mkdir()
@@ -227,14 +281,20 @@ class DropBoxUserDirSyncTests(TestCase):
             self.assertTrue((root / "alice").is_symlink())
 
     def test_empty_owner_and_group_inherit_dropbox_root_ids(self) -> None:
-        """Verify test empty owner and group inherit dropbox ro behavior."""
+        """Verify empty owner and group inherit dropbox root IDs.
+
+        Inputs: none. Output: None.
+        """
         self.assertEqual(123, helper.resolve_user("", default_uid=123))
         self.assertEqual(456, helper.resolve_group("", default_gid=456))
 
     def test_sync_does_not_touch_existing_directory_permissions_when_matching(
         self,
     ) -> None:
-        """Verify test sync does not touch existing directory p behavior."""
+        """Verify sync does not touch existing directory permissions when matching.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "dropbox"
             root.mkdir()
@@ -268,12 +328,18 @@ class DropBoxUserDirSyncTests(TestCase):
             chmod_mock.assert_not_called()
 
     def test_mode_validation_rejects_world_writable_by_default(self) -> None:
-        """Verify test mode validation rejects world writable b behavior."""
+        """Verify mode validation rejects world writable by default.
+
+        Inputs: none. Output: None.
+        """
         with self.assertRaisesRegex(helper.SyncError, "world-write"):
             helper.parse_mode("0777", allow_world_writable=False)
 
     def test_status_file_records_success_counts(self) -> None:
-        """Verify test status file records success counts."""
+        """Verify status file records success counts.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "dropbox"
             status_file = Path(tmpdir) / "status" / "dropbox.status"
@@ -308,7 +374,10 @@ class DropBoxUserDirSyncTests(TestCase):
             self.assertIn("created_count=1", status_text)
 
     def test_failed_connection_attempts_are_closed_before_retry(self) -> None:
-        """Verify test failed connection attempts are closed be behavior."""
+        """Verify failed connection attempts are closed before retry.
+
+        Inputs: none. Output: None.
+        """
 
         class FakeGateway:
             """Test double for fake gateway."""
@@ -316,16 +385,26 @@ class DropBoxUserDirSyncTests(TestCase):
             instances: list["FakeGateway"] = []
 
             def __init__(self, *args: object, **kwargs: object) -> None:
+                """Initialize the instance.
+
+                Inputs: `*args`, `**kwargs`. Output: None.
+                """
                 self.closed_with: bool | None = None
                 FakeGateway.instances.append(self)
 
             @staticmethod
             def connect() -> bool:
-                """Handle connect."""
+                """Open the connection.
+
+                Inputs: none. Output: `bool`.
+                """
                 return False
 
             def close(self, hard: bool = True) -> None:
-                """Handle close."""
+                """Close the resource.
+
+                Inputs: `hard`. Output: None.
+                """
                 self.closed_with = hard
 
         config = _config(connect_retries=2)
@@ -343,14 +422,20 @@ class DropBoxUserDirSyncTests(TestCase):
         )
 
     def test_close_connection_logs_unexpected_close_failures(self) -> None:
-        """Verify test close connection logs unexpected close f behavior."""
+        """Verify close connection logs unexpected close failures.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
 
         class FailingClose:
             """Represent failing close."""
 
             @staticmethod
             def close(hard: bool = True) -> None:
-                """Handle close."""
+                """Close the resource.
+
+                Inputs: `hard`. Output: None. Raises on invalid or unavailable state.
+                """
                 raise RuntimeError("close failed")
 
         with self.assertLogs(helper.LOGGER, level="DEBUG") as captured:
@@ -364,7 +449,10 @@ class DropBoxUserDirSyncTests(TestCase):
         )
 
     def test_helper_does_not_encode_installation_specific_ids_or_paths(self) -> None:
-        """Verify test helper does not encode installation spec behavior."""
+        """Verify helper does not encode installation specific IDs or paths.
+
+        Inputs: none. Output: None.
+        """
         helper_text = HELPER_PATH.read_text(encoding="utf-8")
         self.assertNotIn("65534", helper_text)
         self.assertNotIn("/opt/omero/omero_data", helper_text)

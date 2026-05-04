@@ -21,11 +21,17 @@ class ZarrToolbarTemplateContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.template_text = TOOLBAR_TEMPLATE.read_text(encoding="utf-8")
 
     def test_toolbar_bootstraps_selection_data_via_json_script_block(self) -> None:
-        """Verify test toolbar bootstraps selection data via JS behavior."""
+        """Verify toolbar bootstraps selection data via JSON script block.
+
+        Inputs: none. Output: None.
+        """
         self.assertIn(
             '<script id="zarr-toolbar-selection-data" type="application/json">',
             self.template_text,

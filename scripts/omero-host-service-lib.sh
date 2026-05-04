@@ -2,19 +2,21 @@
 # Common installer helpers for OMERO host-side systemd services.
 #
 # This file is installer-only. Runtime service scripts remain standalone after
-# installation so systemd does not depend on repository helper files.
+# Perform OMERO die. Inputs: shell arguments and environment. Output: command status and side effects.
 
 omero_die() {
     echo "ERROR: $*" >&2
     exit 1
 }
 
+# Perform OMERO require root. Inputs: shell arguments and environment. Output: command status and side effects.
 omero_require_root() {
     if [[ "$(id -u)" -ne 0 ]]; then
         omero_die "This script must run as root (use sudo)."
     fi
 }
 
+# Perform OMERO canonical existing directory. Inputs: shell arguments and environment. Output: command status and side effects.
 omero_canonical_existing_dir() {
     local raw_path="$1"
     local label="$2"
@@ -30,6 +32,7 @@ omero_canonical_existing_dir() {
     printf '%s\n' "${resolved_path}"
 }
 
+# Perform OMERO systemd escape. Inputs: shell arguments and environment. Output: command status and side effects.
 omero_systemd_escape() {
     local LC_ALL=C
     local value="$1"
@@ -52,6 +55,7 @@ omero_systemd_escape() {
     printf '%s' "${escaped}"
 }
 
+# Perform OMERO environment quote. Inputs: shell arguments and environment. Output: command status and side effects.
 omero_environment_quote() {
     local LC_ALL=C
     local value="$1"
@@ -85,6 +89,7 @@ omero_environment_quote() {
     printf '"%s"' "${quoted}"
 }
 
+# Perform OMERO render systemd unit. Inputs: shell arguments and environment. Output: command status and side effects.
 omero_render_systemd_unit() {
     local source_file="$1"
     local dest_file="$2"
@@ -114,6 +119,7 @@ omero_render_systemd_unit() {
     rm -f -- "${tmp_file}"
 }
 
+# Perform OMERO replace systemd units. Inputs: shell arguments and environment. Output: command status and side effects.
 omero_replace_systemd_units() {
     local systemctl_bin="$1"
     local systemd_system_dir="$2"
@@ -128,6 +134,7 @@ omero_replace_systemd_units() {
     done
 }
 
+# Perform OMERO validate systemd unit name. Inputs: shell arguments and environment. Output: command status and side effects.
 omero_validate_systemd_unit_name() {
     local unit_name="$1"
 
@@ -142,6 +149,7 @@ omero_validate_systemd_unit_name() {
     esac
 }
 
+# Perform OMERO remove systemd unit artifacts. Inputs: shell arguments and environment. Output: command status and side effects.
 omero_remove_systemd_unit_artifacts() {
     local systemd_system_dir="$1"
     local unit_name="$2"
@@ -171,6 +179,7 @@ omero_remove_systemd_unit_artifacts() {
     fi
 }
 
+# Perform OMERO install verified. Inputs: shell arguments and environment. Output: command status and side effects.
 omero_install_verified() {
     local source_file="$1"
     local dest_file="$2"
@@ -201,6 +210,7 @@ omero_install_verified() {
     printf '%s\n' "${source_sha}"
 }
 
+# Perform OMERO install missing deb packages. Inputs: shell arguments and environment. Output: command status and side effects.
 omero_install_missing_deb_packages() {
     local missing_packages=()
     local package_name
@@ -230,6 +240,7 @@ omero_install_missing_deb_packages() {
         --no-install-recommends -y -qq "${missing_packages[@]}"
 }
 
+# Perform OMERO mount context. Inputs: shell arguments and environment. Output: command status and side effects.
 omero_mount_context() {
     local target_path="$1"
 
@@ -285,6 +296,7 @@ else:
 PY
 }
 
+# Perform OMERO mount options include. Inputs: shell arguments and environment. Output: command status and side effects.
 omero_mount_options_include() {
     local options="$1"
     local wanted="$2"

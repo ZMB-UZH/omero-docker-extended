@@ -465,6 +465,7 @@
 <script defer>
 const BASE_URL = "/omeroweb_omp_plugin";
 const messages = {{ messages_json|safe }};
+// Format Message. Inputs: template, values. Output: return value.
 const formatMessage = (template, values = {}) => {
     const source = String(template || '');
     return source.replace(/\{(\w+)\}/g, (match, key) => (
@@ -509,6 +510,7 @@ let activeVariableSetIndex = -1;
 let variableSetFilterTimeout = null;
 const previewSortState = { key: null, direction: 'asc', userSet: false };
 
+// Load User Settings. Inputs: none. Output: return value.
 function loadUserSettings() {
     try {
         const stored = window.localStorage?.getItem(USER_SETTINGS_STORAGE_KEY);
@@ -533,6 +535,7 @@ if (storedUserSettings) {
     }
 }
 
+// Set Preview Sort Indicator. Inputs: key, direction. Output: return value.
 function setPreviewSortIndicator(key, direction) {
     if (!previewTable) return;
     const headers = previewTable.querySelectorAll('.sortable-header[data-sort-key]');
@@ -549,6 +552,7 @@ function setPreviewSortIndicator(key, direction) {
     });
 }
 
+// Return Preview Row Value. Inputs: row, key. Output: return value.
 function getPreviewRowValue(row, key) {
     const cells = row?.cells;
     if (!cells) return '';
@@ -558,6 +562,7 @@ function getPreviewRowValue(row, key) {
     return '';
 }
 
+// Compare Preview Values. Inputs: a, b, type. Output: return value.
 function comparePreviewValues(a, b, type) {
     if (type === 'number') {
         const numA = Number.isFinite(a) ? a : Number.NaN;
@@ -570,6 +575,7 @@ function comparePreviewValues(a, b, type) {
     return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
 }
 
+// Sort Preview Rows. Inputs: key, direction. Output: return value.
 function sortPreviewRows(key, direction) {
     if (!previewTableBody) return;
     const header = previewTable.querySelector(`.sortable-header[data-sort-key="${key}"]`);
@@ -590,6 +596,7 @@ function sortPreviewRows(key, direction) {
     sorted.forEach((row) => previewTableBody.appendChild(row));
 }
 
+// Apply Preview Sort. Inputs: key. Output: return value.
 function applyPreviewSort(key) {
     if (!previewTableBody) return;
     const nextDirection = previewSortState.key === key && previewSortState.direction === 'asc' ? 'desc' : 'asc';
@@ -601,6 +608,7 @@ function applyPreviewSort(key) {
     updateImageSelectAllState();
 }
 
+// Return init Preview Sorting. Inputs: none. Output: return value.
 function initPreviewSorting() {
     if (!previewTable) return;
     const headers = previewTable.querySelectorAll('.sortable-header[data-sort-key]');
@@ -633,7 +641,7 @@ if (VARS_LIMIT_EXCEEDED) {
 
 // ============================================================================
 // EDIT MODE & DRAG-AND-DROP FUNCTIONALITY
-// ============================================================================
+// Toggle Edit Mode. Inputs: none. Output: side effects.
 
 function toggleEditMode() {
     isEditMode = !isEditMode;
@@ -684,6 +692,7 @@ function toggleEditMode() {
     updateVarRowControls();
 }
 
+// Setup Drag And Drop. Inputs: none. Output: return value.
 function setupDragAndDrop() {
     if (!varNameInputs) return;
     
@@ -699,6 +708,7 @@ function setupDragAndDrop() {
     });
 }
 
+// Cleanup Drag And Drop. Inputs: none. Output: return value.
 function cleanupDragAndDrop() {
     if (!varNameInputs) return;
     
@@ -714,6 +724,7 @@ function cleanupDragAndDrop() {
     });
 }
 
+// Return handle Drag Start. Inputs: e. Output: return value.
 function handleDragStart(e) {
     draggedElement = this;
     const rows = Array.from(varNameInputs.children);
@@ -724,6 +735,7 @@ function handleDragStart(e) {
     e.dataTransfer.setData('text/html', this.innerHTML);
 }
 
+// Return handle Drag End. Inputs: e. Output: return value.
 function handleDragEnd(e) {
     this.classList.remove('dragging');
     
@@ -737,6 +749,7 @@ function handleDragEnd(e) {
     draggedIndex = null;
 }
 
+// Return handle Drag Over. Inputs: e. Output: return value.
 function handleDragOver(e) {
     if (e.preventDefault) {
         e.preventDefault();
@@ -781,15 +794,18 @@ function handleDragOver(e) {
     return false;
 }
 
+// Return handle Drag Enter. Inputs: e. Output: return value.
 function handleDragEnter(e) {
     // Most logic moved to handleDragOver for smoother center-based positioning
     if (this === draggedElement) return;
 }
 
+// Perform handle Drag Leave. Inputs: e. Output: side effects.
 function handleDragLeave(e) {
     this.classList.remove('drag-over-top', 'drag-over-bottom');
 }
 
+// Perform handle Drop. Inputs: e. Output: side effects.
 function handleDrop(e) {
     if (e.stopPropagation) {
         e.stopPropagation();
@@ -823,19 +839,23 @@ function handleDrop(e) {
     return false;
 }
 
+// Go Back. Inputs: none. Output: return value.
 function goBack() {
     window.location.href = BASE_URL + "/";
 }
 
+// Scroll To Bottom. Inputs: none. Output: return value.
 function scrollToBottom() {
     const target = document.documentElement.scrollHeight;
     window.scrollTo({ top: target, behavior: "smooth" });
 }
 
+// Scroll To Top. Inputs: none. Output: return value.
 function scrollToTop() {
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+// Set variable Set Controls Disabled. Inputs: disabled. Output: return value.
 function setVarSetControlsDisabled(disabled) {
     const select = document.getElementById('variable_set_select');
     const input = document.getElementById('variable_set_input');
@@ -858,6 +878,7 @@ function setVarSetControlsDisabled(disabled) {
     }
 }
 
+// Toggle variable Name Inputs. Inputs: none. Output: return value.
 function toggleVarNameInputs() {
     // Check if in edit mode
     if (isEditMode) {
@@ -886,10 +907,12 @@ function toggleVarNameInputs() {
     updateVarRowControls();
 }
 
+// Return variable Row Count. Inputs: none. Output: return value.
 function getVarRowCount() {
     return varNameInputs ? varNameInputs.querySelectorAll('.var-row').length : 0;
 }
 
+// Update variable Row Controls. Inputs: none. Output: return value.
 function updateVarRowControls() {
     if (!varNameInputs) return;
     const useDefaults = document.getElementById('use_defaults').checked;
@@ -925,6 +948,7 @@ function updateVarRowControls() {
     }
 }
 
+// Refresh variable Row Indices. Inputs: none. Output: return value.
 function refreshVarRowIndices() {
     if (!varNameInputs) return;
     const rows = Array.from(varNameInputs.querySelectorAll('.var-row'));
@@ -946,6 +970,7 @@ function refreshVarRowIndices() {
     updateVarRowControls();
 }
 
+// Create variable Row. Inputs: index, presetValue. Output: side effects.
 function createVarRow(index, presetValue = '') {
     const row = document.createElement('div');
     row.className = 'var-row';
@@ -982,6 +1007,7 @@ function createVarRow(index, presetValue = '') {
     return row;
 }
 
+// Add Variable Row. Inputs: none. Output: return value.
 function addVariableRow() {
     if (!varNameInputs) return;
     
@@ -1027,6 +1053,7 @@ function addVariableRow() {
     updateVarRowControls();
 }
 
+// Ensure variable Rows. Inputs: count. Output: return value.
 function ensureVarRows(count) {
     if (!varNameInputs) return;
     
@@ -1073,6 +1100,7 @@ if (varNameInputs) {
     });
 }
 
+// Populate Variable Set Dropdown. Inputs: sets. Output: return value.
 function populateVariableSetDropdown(sets) {
     availableVariableSets = sets || [];
 
@@ -1096,12 +1124,14 @@ function populateVariableSetDropdown(sets) {
     renderVariableSetOptions(variableSetInput.value || "");
 }
 
+// Return Variable Set Options. Inputs: none. Output: return value.
 function getVariableSetOptions() {
     return variableSetDropdown
         ? Array.from(variableSetDropdown.querySelectorAll('.varset-option'))
         : [];
 }
 
+// Set Active Variable Set Index. Inputs: index, useKeyboard. Output: return value.
 function setActiveVariableSetIndex(index, useKeyboard = false) {
     const options = getVariableSetOptions();
     if (options.length === 0) {
@@ -1127,6 +1157,7 @@ function setActiveVariableSetIndex(index, useKeyboard = false) {
     activeVariableSetIndex = clamped;
 }
 
+// Select Variable Set Option. Inputs: option. Output: return value.
 function selectVariableSetOption(option) {
     if (!option || !variableSetInput || !variableSetSelect) return;
     const name = option.dataset.setName || option.textContent || '';
@@ -1136,6 +1167,7 @@ function selectVariableSetOption(option) {
     closeVariableSetDropdown(true);
 }
 
+// Render Variable Set Options. Inputs: query. Output: return value.
 function renderVariableSetOptions(query) {
     if (!variableSetDropdown) return;
     const normalizedQuery = query.trim().toLowerCase();
@@ -1179,6 +1211,7 @@ function renderVariableSetOptions(query) {
     setActiveVariableSetIndex(0);
 }
 
+// Open Variable Set Dropdown. Inputs: none. Output: return value.
 function openVariableSetDropdown() {
     if (!variableSetDropdown || !variableSetInput) return;
     variableSetDropdown.style.display = 'block';
@@ -1188,6 +1221,7 @@ function openVariableSetDropdown() {
     renderVariableSetOptions(variableSetInput.value || "");
 }
 
+// Close Variable Set Dropdown. Inputs: restoreSelection. Output: return value.
 function closeVariableSetDropdown(restoreSelection = true) {
     if (!variableSetDropdown || !variableSetInput) return;
     variableSetDropdown.style.display = 'none';
@@ -1199,6 +1233,7 @@ function closeVariableSetDropdown(restoreSelection = true) {
     variableSetInput.placeholder = 'Select a saved set…';
 }
 
+// Filter Variable Set Options. Inputs: query. Output: return value.
 function filterVariableSetOptions(query) {
     if (variableSetFilterTimeout) {
         window.clearTimeout(variableSetFilterTimeout);
@@ -1267,6 +1302,7 @@ if (variableSetWrapper) {
     });
 }
 
+// Fetch Variable Sets. Inputs: none. Output: return value.
 function fetchVariableSets() {
     fetch(BASE_URL + "/varsets/", {
         method: "GET",
@@ -1289,6 +1325,7 @@ function fetchVariableSets() {
     });
 }
 
+// Save Variable Set. Inputs: none. Output: return value.
 function saveVariableSet() {
     const useDefaults = document.getElementById('use_defaults').checked;
     if (useDefaults) return;
@@ -1358,6 +1395,7 @@ function saveVariableSet() {
     });
 }
 
+// Show Non Blocking Modal. Inputs: message. Output: return value.
 function showNonBlockingModal(message) {
     const overlay = document.getElementById("nb-modal-overlay");
     const msg = document.getElementById("nb-modal-message");
@@ -1376,6 +1414,7 @@ function showNonBlockingModal(message) {
     }
 }
 
+// Hide Non Blocking Modal. Inputs: none. Output: return value.
 function hideNonBlockingModal() {
     const overlay = document.getElementById("nb-modal-overlay");
     if (overlay) {
@@ -1392,6 +1431,7 @@ document.addEventListener('keydown', (event) => {
     }
 });
 
+// Return Selected Image IDs. Inputs: none. Output: return value.
 function getSelectedImageIds() {
     const checked = document.querySelectorAll('input[type="checkbox"][data-image-id]:checked');
     return Array.from(checked)
@@ -1399,6 +1439,7 @@ function getSelectedImageIds() {
         .filter((val) => Number.isFinite(val));
 }
 
+// Update Image Select All State. Inputs: none. Output: return value.
 function updateImageSelectAllState() {
     const selectAll = document.getElementById('images_select_all');
     if (!selectAll) {
@@ -1409,6 +1450,7 @@ function updateImageSelectAllState() {
     selectAll.checked = allBoxes.length > 0 && checked.length === allBoxes.length;
 }
 
+// Return init Image Selection Controls. Inputs: none. Output: return value.
 function initImageSelectionControls() {
     const selectAll = document.getElementById('images_select_all');
     const imageBoxes = document.querySelectorAll('input[type="checkbox"][data-image-id]');
@@ -1430,6 +1472,7 @@ function initImageSelectionControls() {
     updateImageSelectAllState();
 }
 
+// Load Variable Set. Inputs: none. Output: return value.
 function loadVariableSet() {
     const useDefaults = document.getElementById('use_defaults').checked;
     if (useDefaults) return;
@@ -1481,7 +1524,7 @@ function loadVariableSet() {
 
 // -------------------------
 // DELETE VARIABLE SET FROM DATABASE
-// -------------------------
+// Delete Variable Set. Inputs: none. Output: return value.
 function deleteVariableSet() {
     const useDefaults = document.getElementById('use_defaults').checked;
     if (useDefaults) {
@@ -1535,6 +1578,7 @@ initPreviewSorting();
 
 const JOB_START_MIN_MS = 2000;
 
+// Start Polling After Minimum Delay. Inputs: jobStartMessage. Output: return value.
 function startPollingAfterMinimumDelay(jobStartMessage) {
     const progressText = document.getElementById("progress-text");
     progressText.innerText = jobStartMessage;
@@ -1544,6 +1588,7 @@ function startPollingAfterMinimumDelay(jobStartMessage) {
     }, JOB_START_MIN_MS);
 }
 
+// Start Delete Job. Inputs: endpoint, passwordPrompt, progressMessage, jobStartLabel. Output: return value.
 function startDeleteJob(endpoint, passwordPrompt, progressMessage, jobStartLabel) {
     if (currentJobId) {
         showNonBlockingModal(messages.jobAlreadyRunning);
@@ -1613,7 +1658,7 @@ function startDeleteJob(endpoint, passwordPrompt, progressMessage, jobStartLabel
 
 // -------------------------
 // DELETE ALL KEY-VALUE PAIRS
-// -------------------------
+// Delete All Keyvaluepairs. Inputs: none. Output: return value.
 function deleteAllKeyvaluepairs() {
     startDeleteJob(
         "/start_delete_all_job/",
@@ -1626,7 +1671,7 @@ function deleteAllKeyvaluepairs() {
 
 // -------------------------
 // DELETE ONLY PLUGIN KEY-VALUE PAIRS
-// -------------------------
+// Delete Plugin Keyvaluepairs. Inputs: none. Output: return value.
 function deletePluginKeyvaluepairs() {
     startDeleteJob(
         "/start_delete_plugin_job/",
@@ -1637,7 +1682,7 @@ function deletePluginKeyvaluepairs() {
 }
 // -------------------------
 // START SAVE JOB (FIXED)
-// -------------------------
+// Start Save Job. Inputs: none. Output: return value.
 function startSaveJob() {
     if (currentJobId) {
         showNonBlockingModal(messages.jobAlreadyRunning);
@@ -1724,7 +1769,7 @@ function startSaveJob() {
 
 // -------------------------
 // START ACQUISITION JOB
-// -------------------------
+// Start Acquisition Metadata Job. Inputs: none. Output: return value.
 function startAcquisitionMetadataJob() {
     if (currentJobId) {
         showNonBlockingModal(messages.jobAlreadyRunning);
@@ -1773,6 +1818,7 @@ function startAcquisitionMetadataJob() {
     });
 }
 
+// Poll Progress. Inputs: none. Output: return value.
 function pollProgress() {
     if (!currentJobId) return;
 

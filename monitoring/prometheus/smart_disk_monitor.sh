@@ -14,6 +14,7 @@ echo "Starting smart disk monitor..."
 mkdir -p "$OUT_DIR"
 trap 'rm -f "$TMP_FILE"' EXIT
 
+# Return whether uint. Inputs: shell arguments and environment. Output: success or failure status.
 is_uint() {
     case "$1" in
         "" | *[!0-9]*)
@@ -29,6 +30,7 @@ if ! is_uint "$INTERVAL" || [ "$INTERVAL" -lt 1 ]; then
     INTERVAL=30
 fi
 
+# Check path. Inputs: shell arguments and environment. Output: command status and side effects.
 check_path() {
     name=$1
     target_path=$2

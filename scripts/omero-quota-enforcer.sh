@@ -36,20 +36,24 @@ applied=0
 failed=0
 SETQUOTA_ERR=""
 
+# Print an error and exit. Inputs: shell arguments and environment. Output: command status and side effects.
 die() {
     echo "ERROR: $*" >&2
     exit 1
 }
 
+# Write a warning message. Inputs: shell arguments and environment. Output: command status and side effects.
 warn() {
     echo "WARNING: $*" >&2
 }
 
+# Print usage text. Inputs: shell arguments and environment. Output: command status and side effects.
 usage() {
     echo "Usage: $0" >&2
     echo "Runs one OMERO project-quota reconciliation pass using environment/defaults configuration." >&2
 }
 
+# Parse args. Inputs: shell arguments and environment. Output: command status and side effects.
 parse_args() {
     if [[ "$#" -eq 0 ]]; then
         return 0
@@ -68,10 +72,12 @@ parse_args() {
     esac
 }
 
+# Require root. Inputs: shell arguments and environment. Output: command status and side effects.
 require_root() {
     [[ "$(id -u)" -eq 0 ]] || die "This script must run as root."
 }
 
+# Require command. Inputs: shell arguments and environment. Output: command status and side effects.
 require_command() {
     local command_name="$1"
     command -v "${command_name}" >/dev/null 2>&1 || {
@@ -79,6 +85,7 @@ require_command() {
     }
 }
 
+# Return whether unsigned integer. Inputs: shell arguments and environment. Output: success or failure status.
 is_unsigned_integer() {
     case "${1:-}" in
         "" | *[!0-9]*) return 1 ;;
@@ -86,6 +93,7 @@ is_unsigned_integer() {
     esac
 }
 
+# Return whether safe group name. Inputs: shell arguments and environment. Output: success or failure status.
 is_safe_group_name() {
     case "${1:-}" in
         "" | *[!A-Za-z0-9._-]*) return 1 ;;
@@ -93,6 +101,7 @@ is_safe_group_name() {
     esac
 }
 
+# Perform canonical existing directory. Inputs: shell arguments and environment. Output: command status and side effects.
 canonical_existing_dir() {
     local raw_path="$1"
     local label="$2"
@@ -106,6 +115,7 @@ canonical_existing_dir() {
     printf '%s\n' "${resolved_path}"
 }
 
+# Perform canonical existing file. Inputs: shell arguments and environment. Output: command status and side effects.
 canonical_existing_file() {
     local raw_path="$1"
     local label="$2"
@@ -119,6 +129,7 @@ canonical_existing_file() {
     printf '%s\n' "${resolved_path}"
 }
 
+# Perform path is within. Inputs: shell arguments and environment. Output: command status and side effects.
 path_is_within() {
     local child="$1"
     local parent="$2"
@@ -134,6 +145,7 @@ path_is_within() {
     esac
 }
 
+# Perform path is strict child. Inputs: shell arguments and environment. Output: command status and side effects.
 path_is_strict_child() {
     local child="$1"
     local parent="$2"
@@ -143,6 +155,7 @@ path_is_strict_child() {
     path_is_within "${child}" "${parent_prefix}"
 }
 
+# Ensure regular or absent. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_regular_or_absent() {
     local path="$1"
     if [[ -L "${path}" || ( -e "${path}" && ! -f "${path}" ) ]]; then
@@ -150,6 +163,7 @@ ensure_regular_or_absent() {
     fi
 }
 
+# Perform mount context. Inputs: shell arguments and environment. Output: command status and side effects.
 mount_context() {
     local target_path="$1"
     python3 - "${target_path}" <<'PY'
@@ -204,6 +218,7 @@ else:
 PY
 }
 
+# Perform mount options include. Inputs: shell arguments and environment. Output: command status and side effects.
 mount_options_include() {
     local options="$1"
     local wanted="$2"
@@ -213,6 +228,7 @@ mount_options_include() {
     esac
 }
 
+# Load quota records. Inputs: shell arguments and environment. Output: command status and side effects.
 load_quota_records() {
     local records_file="$1"
     python3 - "${QUOTA_STATE_FILE}" "${MIN_QUOTA_GB}" > "${records_file}" <<'PY'
@@ -261,6 +277,7 @@ for group_name in sorted(str(group) for group in quotas):
 PY
 }
 
+# Read quota records. Inputs: shell arguments and environment. Output: command status and side effects.
 read_quota_records() {
     local records_file="$1"
     local status group_name quota_gb quota_blocks _message
@@ -290,11 +307,13 @@ read_quota_records() {
     done < "${records_file}"
 }
 
+# Return whether desired group. Inputs: shell arguments and environment. Output: success or failure status.
 is_desired_group() {
     local group_name="$1"
     [[ -n "${DESIRED_GROUPS[${group_name}]:-}" ]]
 }
 
+# Perform project ID for group. Inputs: shell arguments and environment. Output: command status and side effects.
 project_id_for_group() {
     local group_name="$1"
     awk -F: -v group="${group_name}" '
@@ -303,6 +322,7 @@ project_id_for_group() {
     ' "${PROJID_FILE}"
 }
 
+# Perform project ID for path. Inputs: shell arguments and environment. Output: command status and side effects.
 project_id_for_path() {
     local group_path="$1"
     awk -F: -v path="${group_path}" '
@@ -318,6 +338,7 @@ project_id_for_path() {
     ' "${PROJECTS_FILE}"
 }
 
+# Perform next project ID. Inputs: shell arguments and environment. Output: command status and side effects.
 next_project_id() {
     local max_existing
     max_existing="$(
@@ -333,6 +354,7 @@ next_project_id() {
     fi
 }
 
+# Rewrite without group. Inputs: shell arguments and environment. Output: command status and side effects.
 rewrite_without_group() {
     local file_path="$1"
     local group_name="$2"
@@ -343,6 +365,7 @@ rewrite_without_group() {
     mv "${tmp_file}" "${file_path}"
 }
 
+# Rewrite without project path. Inputs: shell arguments and environment. Output: command status and side effects.
 rewrite_without_project_path() {
     local file_path="$1"
     local group_path="$2"
@@ -359,6 +382,7 @@ rewrite_without_project_path() {
     mv "${tmp_file}" "${file_path}"
 }
 
+# Rewrite without project ID. Inputs: shell arguments and environment. Output: command status and side effects.
 rewrite_without_project_id() {
     local file_path="$1"
     local project_id="$2"
@@ -369,6 +393,7 @@ rewrite_without_project_id() {
     mv "${tmp_file}" "${file_path}"
 }
 
+# Write project mappings. Inputs: shell arguments and environment. Output: command status and side effects.
 write_project_mappings() {
     local group_name="$1"
     local project_id="$2"
@@ -380,6 +405,7 @@ write_project_mappings() {
     printf '%s:%s\n' "${group_name}" "${project_id}" >> "${PROJID_FILE}"
 }
 
+# Clear project quota. Inputs: shell arguments and environment. Output: command status and side effects.
 clear_project_quota() {
     local project_id="$1"
     local setquota_err=""
@@ -390,6 +416,7 @@ clear_project_quota() {
     fi
 }
 
+# Apply project quota. Inputs: shell arguments and environment. Output: command status and side effects.
 apply_project_quota() {
     local project_id="$1"
     local quota_blocks="$2"
@@ -401,6 +428,7 @@ apply_project_quota() {
     fi
 }
 
+# Clear group project attributes. Inputs: shell arguments and environment. Output: command status and side effects.
 clear_group_project_attributes() {
     local group_path="$1"
     local chattr_err=""
@@ -421,6 +449,7 @@ clear_group_project_attributes() {
     done < <(find -P "${group_path}" -xdev -type d -print0)
 }
 
+# Perform retag group tree once. Inputs: shell arguments and environment. Output: command status and side effects.
 retag_group_tree_once() {
     local group_name="$1"
     local project_id="$2"
@@ -451,6 +480,7 @@ retag_group_tree_once() {
     touch "${retag_marker_file}"
 }
 
+# Perform reconcile stale mappings. Inputs: shell arguments and environment. Output: command status and side effects.
 reconcile_stale_mappings() {
     local existing_project_mapping mapped_group mapped_project_id extra
     local group_path resolved_group_path marker_dir
@@ -501,6 +531,7 @@ reconcile_stale_mappings() {
     done
 }
 
+# Process group quota. Inputs: shell arguments and environment. Output: command status and side effects.
 process_group_quota() {
     local group_name="$1"
     local quota_gb="$2"
@@ -567,6 +598,7 @@ process_group_quota() {
     ((applied++)) || true
 }
 
+# Execute the command entrypoint. Inputs: shell arguments and environment. Output: command status and side effects.
 main() {
     parse_args "$@"
     require_root

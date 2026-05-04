@@ -14,7 +14,10 @@ from omero_plugin_common.env_utils import (
 
 
 def _get_required_positive_int_env(name: str) -> int:
-    """Return a required positive integer environment variable."""
+    """Return a required positive integer environment variable.
+
+    Inputs: `name`. Output: `int`. Raises on invalid or unavailable state.
+    """
     value = get_int_env(name, env_file=ENV_FILE_OMEROWEB)
     if value <= 0:
         raise ValueError(f"{name} must be a positive integer.")
@@ -35,7 +38,10 @@ class LogConfig:
 
 
 def build_log_config() -> LogConfig:
-    """Build and validate the log configuration from environment variables."""
+    """And validate the log configuration from environment variables.
+
+    Inputs: none. Output: `LogConfig`. Raises on invalid or unavailable state.
+    """
     loki_url = require_env(
         "ADMIN_TOOLS_LOKI_URL",
         env_file=ENV_FILE_OMEROWEB,
@@ -83,7 +89,10 @@ def build_log_config() -> LogConfig:
 
 
 def optional_log_config() -> Optional[LogConfig]:
-    """Return a LogConfig instance if configuration is valid, otherwise None."""
+    """Return a LogConfig instance if configuration is valid, otherwise None.
+
+    Inputs: none. Output: `Optional[LogConfig]`.
+    """
     try:
         return build_log_config()
     except (RuntimeError, ValueError):

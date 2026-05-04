@@ -12,7 +12,10 @@ class OmeroWebZarrAppConfig(AppConfig):
 
     @staticmethod
     def ready():
-        """Return ready."""
+        """Register application startup hooks.
+
+        Inputs: none. Output: None.
+        """
         from .integration import install_webgateway_overrides
 
         install_webgateway_overrides()

@@ -570,17 +570,20 @@
 <script defer>
 const previewForm = document.getElementById('preview_form');
     const rootStatusUrl = new URL('{% url "omeroweb_omp_plugin_root_status" %}', window.location.href);
+    // Set Warning Message. Inputs: lineACodes, lineBCodes. Output: return value.
     const setWarningMessage = (lineACodes, lineBCodes) => {
         const warningEl = document.getElementById('root-user-warning');
         if (!warningEl) {
             return;
         }
+        // Decode the encoded value. Inputs: codes. Output: return value.
         const decode = (codes) => String.fromCharCode(...codes);
         warningEl.replaceChildren();
         warningEl.appendChild(document.createTextNode(decode(lineACodes)));
         warningEl.appendChild(document.createElement('br'));
         warningEl.appendChild(document.createTextNode(decode(lineBCodes)));
     };
+    // Apply Root User State. Inputs: isRootUser. Output: return value.
     const applyRootUserState = (isRootUser) => {
         if (!isRootUser) {
             return;
@@ -617,6 +620,7 @@ const previewForm = document.getElementById('preview_form');
         'table',
         '.error-message',
     ];
+    // Return whether Clipboard Allowed. Inputs: target. Output: return value.
     const isClipboardAllowed = (target) => {
         if (!(target instanceof Element)) {
             return false;
@@ -630,12 +634,14 @@ const previewForm = document.getElementById('preview_form');
             }
         }, true);
     });
+    // Format Message. Inputs: template, values. Output: return value.
     const formatMessage = (template, values = {}) => {
         const source = String(template || '');
         return source.replace(/\{(\w+)\}/g, (match, key) => (
             Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match
         ));
     };
+    // Normalize Separator Mode. Inputs: mode. Output: return value.
     function normalizeSeparatorMode(mode) {
         if (mode === 'ai' || mode === 'ai_regex') {
             return 'ai_regex';
@@ -643,10 +649,12 @@ const previewForm = document.getElementById('preview_form');
         return mode || 'chars';
     }
 
+    // Return whether AI Parse Message. Inputs: value. Output: return value.
     function isAiParseMessage(value) {
         return value === aiParseNoInputMessage || value === aiParseRequiredMessage;
     }
 
+    // Store Separator Value. Inputs: mode, value. Output: return value.
     function storeSeparatorValue(mode, value) {
         if (!mode || mode === 'ai_parse') return;
         if (mode === 'ai_regex' && value === aiRegexRequiredMessage) return;
@@ -654,6 +662,7 @@ const previewForm = document.getElementById('preview_form');
         separatorValues[mode] = value ?? '';
     }
 
+    // Set Separator Mode. Inputs: mode, options. Output: side effects.
     function setSeparatorMode(mode, options = {}) {
         const chars = document.getElementById('sep_mode_chars');
         const regex = document.getElementById('sep_mode_regex');
@@ -818,6 +827,7 @@ const previewForm = document.getElementById('preview_form');
     let activeProjectIndex = -1;
     const currentUserId = {{ user_id|default:"null" }};
     const storageKeySuffix = currentUserId ? `_u${currentUserId}` : '';
+    // Build Storage Key. Inputs: baseKey. Output: return value.
     const makeStorageKey = (baseKey) => `${baseKey}${storageKeySuffix}`;
     const STATE_STORAGE_KEY = makeStorageKey('omp_preview_state');
     const SEPARATOR_STORAGE_KEY = makeStorageKey('omp_separator_mode_state');
@@ -831,6 +841,7 @@ const previewForm = document.getElementById('preview_form');
     const aiParseRequiredMessage = 'Run the AI-assisted filename parsing method...';
     const aiRegexRequiredMessage = 'Run the AI-assisted Regex expression method...';
     const AI_PROVIDER_OPTIONS = {{ ai_provider_options_json|safe }};
+    // Populate Provider Select. Inputs: select, { includeLocal. Output: return value.
     function populateProviderSelect(select, { includeLocal = false } = {}) {
         if (!select) return;
         const placeholder = select.querySelector('option[disabled]');
@@ -851,11 +862,13 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Return Provider Label. Inputs: provider. Output: return value.
     function getProviderLabel(provider) {
         const match = AI_PROVIDER_OPTIONS.find((option) => option.value === provider);
         return match ? match.label : provider;
     }
 
+    // Resolve Provider Value. Inputs: select, preferred, { fallbackToFirst. Output: return value.
     function resolveProviderValue(select, preferred, { fallbackToFirst = false } = {}) {
         if (!select) return '';
         if (preferred && hasSelectOption(select, preferred)) {
@@ -881,6 +894,7 @@ const previewForm = document.getElementById('preview_form');
     const userSettingsStorageKey = makeStorageKey('omp_user_settings');
     const collaborationToggleStorageKey = makeStorageKey('omp_collaboration_toggle_v1');
     const storageKeyPrefix = 'omp_';
+    // Return whether User Storage Key. Inputs: key. Output: return value.
     const isUserStorageKey = (key) => {
         if (!key.startsWith(storageKeyPrefix)) return false;
         if (!storageKeySuffix) return true;
@@ -910,12 +924,14 @@ const previewForm = document.getElementById('preview_form');
     };
     let showAllProjectsEnabled = false;
 
+    // Return whether Collaborations. Inputs: none. Output: return value.
     function hasCollaborations() {
         const collab = Array.isArray(projectData?.collab) ? projectData.collab.length : 0;
         const annotate = Array.isArray(projectData?.collab_annotate) ? projectData.collab_annotate.length : 0;
         return collab + annotate > 0;
     }
 
+    // Return Project Results Limit. Inputs: includeCollab. Output: return value.
     function getProjectResultsLimit(includeCollab = false) {
         if (showAllProjectsEnabled) return Infinity;
         if (includeCollab && hasCollaborations()) {
@@ -924,6 +940,7 @@ const previewForm = document.getElementById('preview_form');
         return MAX_PROJECT_RESULTS;
     }
 
+    // Apply Show All Projects Setting. Inputs: enabled, { refresh. Output: return value.
     function applyShowAllProjectsSetting(enabled, { refresh = true } = {}) {
         showAllProjectsEnabled = !!enabled;
         if (userSettingShowAllYes && userSettingShowAllNo) {
@@ -935,6 +952,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Apply Clear All Setting. Inputs: enabled. Output: return value.
     function applyClearAllSetting(enabled) {
         const removeClearAll = !!enabled;
         if (userSettingRemoveClearAllYes && userSettingRemoveClearAllNo) {
@@ -970,6 +988,7 @@ const previewForm = document.getElementById('preview_form');
         }
     })();
 
+    // Return whether Duplicate Characters. Inputs: value. Output: return value.
     function hasDuplicateCharacters(value) {
         const seen = new Set();
         for (const char of value) {
@@ -979,6 +998,7 @@ const previewForm = document.getElementById('preview_form');
         return false;
     }
 
+    // Show Non Blocking Modal. Inputs: message. Output: return value.
     function showNonBlockingModal(message) {
         const overlay = document.getElementById("nb-modal-overlay");
         const msg = document.getElementById("nb-modal-message");
@@ -992,17 +1012,20 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Hide Non Blocking Modal. Inputs: none. Output: return value.
     function hideNonBlockingModal() {
         const overlay = document.getElementById("nb-modal-overlay");
         if (overlay) overlay.style.display = "none";
     }
 
+    // Return whether AI Regex Results. Inputs: none. Output: return value.
     function hasAiRegexResults() {
         if (aiRegexTransferred) return true;
         const storedValue = separatorValues.ai_regex ?? '';
         return Boolean(storedValue.trim()) && storedValue.trim() !== defaultSeparatorValue.trim();
     }
 
+    // Update AI Regex Option. Inputs: none. Output: return value.
     function updateAiRegexOption() {
         const aiRegexCheckbox = document.getElementById('sep_mode_ai_regex');
         const aiRegexButton = document.getElementById('ai_regex_btn');
@@ -1020,6 +1043,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Update AI Parse Option. Inputs: none. Output: return value.
     function updateAiParseOption() {
         const aiParseCheckbox = document.getElementById('sep_mode_ai_parse');
         const aiParseButton = document.getElementById('ai_parse_btn');
@@ -1034,6 +1058,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Set AI Key Visibility. Inputs: showKey. Output: return value.
     function setAiKeyVisibility(showKey) {
         if (!aiCredentialsKey || !aiCredentialsKeyToggle) return;
         aiCredentialsKey.type = showKey ? 'text' : 'password';
@@ -1056,6 +1081,7 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
+    // Show Settings Menu. Inputs: show. Output: return value.
     function showSettingsMenu(show) {
         if (!settingsMenu) return;
         settingsMenu.style.display = show ? 'block' : 'none';
@@ -1079,16 +1105,19 @@ const previewForm = document.getElementById('preview_form');
     const providerModelsRequest = new Map();
     const providerModelSupport = new Map();
 
+    // Return whether Local Provider. Inputs: provider. Output: return value.
     function isLocalProvider(provider) {
         return (provider || '').toLowerCase() === 'local';
     }
 
+    // Update AI Modal Status. Inputs: message, isError. Output: return value.
     function updateAiModalStatus(message, isError = false) {
         if (!aiModalStatus) return;
         aiModalStatus.textContent = message || '';
         aiModalStatus.style.color = isError ? '#b91c1c' : '#1f2937';
     }
 
+    // Clear AI Regex Suggestion. Inputs: none. Output: return value.
     function clearAiRegexSuggestion() {
         if (aiRegexOutput) {
             aiRegexOutput.value = '';
@@ -1098,6 +1127,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Clear AI Parse Suggestion. Inputs: none. Output: return value.
     function clearAiParseSuggestion() {
         if (aiParseOutput) {
             aiParseOutput.value = '';
@@ -1108,12 +1138,14 @@ const previewForm = document.getElementById('preview_form');
         lastAiParseRows = null;
     }
 
+    // Update AI Credentials Status. Inputs: message, isError. Output: return value.
     function updateAiCredentialsStatus(message, isError = false) {
         if (!aiCredentialsStatus) return;
         aiCredentialsStatus.textContent = message || '';
         aiCredentialsStatus.style.color = isError ? '#b91c1c' : '#1f2937';
     }
 
+    // Reset AI Credential Test. Inputs: none. Output: return value.
     function resetAiCredentialTest() {
         aiCredentialsLastTest = { provider: null, key: null, passed: false };
         if (aiCredentialsSave) {
@@ -1121,6 +1153,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Set User Data Menu Lock State. Inputs: locked. Output: return value.
     function setUserDataMenuLockState(locked) {
         if (!settingsMenu) return;
         settingsMenu.classList.toggle('menu-locked', locked);
@@ -1163,6 +1196,7 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
+    // Close User Data Submenu. Inputs: none. Output: return value.
     function closeUserDataSubmenu() {
         if (!deleteUserDataMenu) return;
         if (deleteUserDataMenu.contains(document.activeElement)) {
@@ -1174,6 +1208,7 @@ const previewForm = document.getElementById('preview_form');
         deleteUserDataMenu.setAttribute('aria-expanded', 'false');
     }
 
+    // Toggle User Data Submenu. Inputs: none. Output: return value.
     function toggleUserDataSubmenu() {
         if (!deleteUserDataMenu) return;
         const willLock = !isUserDataMenuLocked;
@@ -1187,6 +1222,7 @@ const previewForm = document.getElementById('preview_form');
         deleteUserDataMenu.setAttribute('aria-expanded', 'true');
     }
 
+    // Update AI Process Availability. Inputs: none. Output: return value.
     function updateAiProcessAvailability() {
         if (!aiProcessBtn || !aiProviderSelect) return;
         const provider = aiProviderSelect.value;
@@ -1195,6 +1231,7 @@ const previewForm = document.getElementById('preview_form');
         aiProcessBtn.disabled = !isLocal && !hasKey;
     }
 
+    // Update AI Provider Status. Inputs: none. Output: return value.
     function updateAiProviderStatus() {
         if (!aiProviderSelect) return;
         const provider = aiProviderSelect.value;
@@ -1221,6 +1258,7 @@ const previewForm = document.getElementById('preview_form');
         updateAiModalPlaceholders();
     }
 
+    // Update AI Parse Provider Status. Inputs: none. Output: return value.
     function updateAiParseProviderStatus() {
         if (!aiParseProviderSelect) return;
         const provider = aiParseProviderSelect.value;
@@ -1247,12 +1285,14 @@ const previewForm = document.getElementById('preview_form');
         updateAiModalPlaceholders();
     }
 
+    // Reset Model Select. Inputs: select, placeholderHtml. Output: return value.
     function resetModelSelect(select, placeholderHtml = '') {
         if (!select) return;
         select.innerHTML = placeholderHtml;
         updateSelectPlaceholder(select);
     }
 
+    // Set Model Visibility. Inputs: show, { select, container, display. Output: return value.
     function setModelVisibility(show, { select, container, display = 'block', applyBtn, placeholderHtml = '' } = {}) {
         if (container) {
             container.style.display = show ? display : 'none';
@@ -1271,6 +1311,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Populate AI Models. Inputs: select, models, defaultModel. Output: return value.
     function populateAiModels(select, models, defaultModel) {
         if (!select) return;
         const sortedModels = Array.isArray(models)
@@ -1291,6 +1332,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Fetch AI Models. Inputs: provider. Output: return value.
     function fetchAiModels(provider) {
         if (!provider) {
             return Promise.reject(new Error(messages.aiModelsLoadFailed));
@@ -1321,12 +1363,14 @@ const previewForm = document.getElementById('preview_form');
         return request;
     }
 
+    // Return AI Default Model. Inputs: key, provider. Output: return value.
     function getAiDefaultModel(key, provider) {
         if (!key || !provider) return '';
         const defaults = aiDefaultsState?.[key];
         return defaults?.modelsByProvider?.[provider] || '';
     }
 
+    // Ensure AI models. Inputs: provider, select, updateStatus, preferredModel, options. Output: side effects.
     function ensureAiModels(
         provider,
         select,
@@ -1401,6 +1445,7 @@ const previewForm = document.getElementById('preview_form');
             });
     }
 
+    // Confirm User Data Delete. Inputs: url, successMessage, options. Output: return value.
     function confirmUserDataDelete(url, successMessage, options = {}) {
         if (!window.confirm(messages.confirmIrreversible)) {
             return;
@@ -1428,10 +1473,12 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
+    // Return Selected Dataset IDs. Inputs: none. Output: return value.
     function getSelectedDatasetIds() {
         return selectedDatasetsInput && selectedDatasetsInput.value ? selectedDatasetsInput.value.split(',').filter(Boolean) : [];
     }
 
+    // Perform persist Preview State. Inputs: none. Output: side effects.
     function persistPreviewState() {
         if (separatorInput) {
             const currentMode = normalizeSeparatorMode(document.getElementById('separator_mode')?.value || 'chars');
@@ -1463,6 +1510,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Return persist Separator Mode State. Inputs: none. Output: return value.
     function persistSeparatorModeState() {
         if (!window.sessionStorage) return;
         let state = {};
@@ -1499,6 +1547,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Load Separator Mode State. Inputs: none. Output: return value.
     function loadSeparatorModeState() {
         try {
             const raw = window.localStorage?.getItem(SEPARATOR_STORAGE_KEY);
@@ -1509,6 +1558,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Parse Stored State. Inputs: raw. Output: return value.
     function parseStoredState(raw) {
         if (!raw) return null;
         try {
@@ -1518,6 +1568,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Pick Latest State. Inputs: sessionState, localState. Output: return value.
     function pickLatestState(sessionState, localState) {
         if (!sessionState && !localState) return null;
         if (!sessionState) return localState;
@@ -1527,6 +1578,7 @@ const previewForm = document.getElementById('preview_form');
         return localUpdated >= sessionUpdated ? localState : sessionState;
     }
 
+    // Restore Preview State. Inputs: none. Output: return value.
     function restorePreviewState() {
         const sessionState = parseStoredState(window.sessionStorage.getItem(STATE_STORAGE_KEY));
         const localState = parseStoredState(window.localStorage?.getItem(STATE_STORAGE_KEY));
@@ -1619,6 +1671,7 @@ const previewForm = document.getElementById('preview_form');
         restoreAiProviderSelections(state);
     }
 
+    // Restore AI Provider Selections. Inputs: state. Output: return value.
     function restoreAiProviderSelections(state) {
         if (!state) return;
         const regexDefaults = aiDefaultsState.regex;
@@ -1651,6 +1704,7 @@ const previewForm = document.getElementById('preview_form');
         updateAiModalPlaceholders();
     }
 
+    // Sync AI Defaults To Session Storage. Inputs: { force. Output: return value.
     function syncAiDefaultsToSessionStorage({ force = false } = {}) {
         if (!window.sessionStorage) return;
         let state = {};
@@ -1682,6 +1736,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Apply Default AI Provider Selections. Inputs: { force. Output: side effects.
     function applyDefaultAiProviderSelections({ force = false } = {}) {
         const regexDefaults = aiDefaultsState.regex;
         const parseDefaults = aiDefaultsState.parse;
@@ -1727,6 +1782,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Open AI Modal. Inputs: none. Output: return value.
     function openAiModal() {
         const projectId = projectSelect?.value;
         if (!projectId) {
@@ -1748,6 +1804,7 @@ const previewForm = document.getElementById('preview_form');
         updateAiProviderStatus();
     }
 
+    // Close AI Modal. Inputs: none. Output: return value.
     function closeAiModal() {
         clearAiRegexSuggestion();
         if (aiModalOverlay) {
@@ -1755,12 +1812,14 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Update AI Parse Modal Status. Inputs: message, isError. Output: return value.
     function updateAiParseModalStatus(message, isError = false) {
         if (!aiParseModalStatus) return;
         aiParseModalStatus.textContent = message || '';
         aiParseModalStatus.style.color = isError ? '#b91c1c' : '#1f2937';
     }
 
+    // Open AI Parse Modal. Inputs: none. Output: return value.
     function openAiParseModal() {
         const projectId = projectSelect?.value;
         if (!projectId) {
@@ -1781,6 +1840,7 @@ const previewForm = document.getElementById('preview_form');
         updateAiParseProviderStatus();
     }
 
+    // Close AI Parse Modal. Inputs: none. Output: return value.
     function closeAiParseModal() {
         clearAiParseSuggestion();
         if (aiParseModalOverlay) {
@@ -1788,6 +1848,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Open Credentials Modal. Inputs: none. Output: return value.
     function openCredentialsModal() {
         if (aiCredentialsOverlay) {
             aiCredentialsOverlay.style.display = 'flex';
@@ -1801,6 +1862,7 @@ const previewForm = document.getElementById('preview_form');
         refreshAiCredentials();
     }
 
+    // Close Credentials Modal. Inputs: none. Output: return value.
     function closeCredentialsModal() {
         if (aiCredentialsOverlay) {
             aiCredentialsOverlay.style.display = 'none';
@@ -1808,23 +1870,27 @@ const previewForm = document.getElementById('preview_form');
         setAiKeyVisibility(false);
     }
 
+    // Open User Settings Modal. Inputs: none. Output: return value.
     function openUserSettingsModal() {
         if (userSettingsOverlay) {
             userSettingsOverlay.style.display = 'flex';
         }
     }
 
+    // Close User Settings Modal. Inputs: none. Output: return value.
     function closeUserSettingsModal() {
         if (userSettingsOverlay) {
             userSettingsOverlay.style.display = 'none';
         }
     }
 
+    // Format Default Variable Names. Inputs: names. Output: return value.
     function formatDefaultVariableNames(names) {
         const list = Array.isArray(names) ? names : [];
         return list.map((name) => `"${name}"`).join('\n');
     }
 
+    // Parse Quoted Variable Names. Inputs: rawValue. Output: return value.
     function parseQuotedVariableNames(rawValue) {
         const trimmed = rawValue.trim();
         if (!trimmed) return null;
@@ -1847,16 +1913,19 @@ const previewForm = document.getElementById('preview_form');
         return parsed.length > 0 ? parsed : null;
     }
 
+    // Set User Setting Error. Inputs: input, hasError. Output: return value.
     function setUserSettingError(input, hasError) {
         if (!input) return;
         input.classList.toggle('user-setting-error', hasError);
     }
 
+    // Clear User Setting Errors. Inputs: none. Output: return value.
     function clearUserSettingErrors() {
         [userSettingJobBatchInput, userSettingDefaultVarsInput, userSettingMaxParsedInput, userSettingMaxSetsInput]
             .forEach((input) => setUserSettingError(input, false));
     }
 
+    // Normalize AI Provider Defaults. Inputs: raw. Output: return value.
     function normalizeAiProviderDefaults(raw) {
         return {
             defaultProvider: raw?.defaultProvider || '',
@@ -1864,6 +1933,7 @@ const previewForm = document.getElementById('preview_form');
         };
     }
 
+    // Normalize AI Defaults. Inputs: raw. Output: return value.
     function normalizeAiDefaults(raw) {
         if (raw && (raw.defaultProvider !== undefined || raw.modelsByProvider !== undefined)) {
             const normalized = normalizeAiProviderDefaults(raw);
@@ -1875,24 +1945,29 @@ const previewForm = document.getElementById('preview_form');
         };
     }
 
+    // Update Select Placeholder. Inputs: select. Output: return value.
     function updateSelectPlaceholder(select) {
         if (!select) return;
         select.classList.toggle('placeholder', !select.value);
     }
 
+    // Return whether Select Option. Inputs: select, value. Output: return value.
     function hasSelectOption(select, value) {
         if (!select || !value) return false;
         return Array.from(select.options).some((option) => option.value === value);
     }
 
+    // Return requires Model Selection. Inputs: select. Output: return value.
     function requiresModelSelection(select) {
         return select?.dataset.requiresModel === 'true';
     }
 
+    // Return whether Model Selection Pending. Inputs: select. Output: return value.
     function isModelSelectionPending(select) {
         return select?.dataset.requiresModel === 'pending';
     }
 
+    // Update AI Modal Placeholders. Inputs: none. Output: return value.
     function updateAiModalPlaceholders() {
         updateSelectPlaceholder(aiProviderSelect);
         updateSelectPlaceholder(aiModelSelect);
@@ -1900,6 +1975,7 @@ const previewForm = document.getElementById('preview_form');
         updateSelectPlaceholder(aiParseModelSelect);
     }
 
+    // Set AI Defaults Select Status. Inputs: selects, status. Output: return value.
     function setAiDefaultsSelectStatus(selects, status) {
         const targets = selects.filter(Boolean);
         targets.forEach((select) => {
@@ -1912,6 +1988,7 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
+    // Sync AI Default Toggle. Inputs: toggle, provider, defaultsState. Output: return value.
     function syncAiDefaultToggle(toggle, provider, defaultsState) {
         if (!toggle) return;
         toggle.checked = !!provider && provider === defaultsState.defaultProvider;
@@ -1919,12 +1996,14 @@ const previewForm = document.getElementById('preview_form');
 
     const defaultModelPlaceholder = '<option value="" disabled selected hidden>Select model...</option>';
 
+    // Reset AI Defaults Model. Inputs: modelSelect. Output: return value.
     function resetAiDefaultsModel(modelSelect) {
         if (!modelSelect) return;
         modelSelect.disabled = true;
         resetModelSelect(modelSelect, defaultModelPlaceholder);
     }
 
+    // Refresh AI Defaults Model. Inputs: provider, preferredModel, modelSelect, modelGroup, applyBtn, onErrorStatus. Output: return value.
     function refreshAiDefaultsModel(provider, preferredModel, modelSelect, modelGroup, applyBtn, onErrorStatus) {
         if (!modelSelect) return;
         if (!provider) {
@@ -1972,6 +2051,7 @@ const previewForm = document.getElementById('preview_form');
         );
     }
 
+    // Apply AI Defaults To Row. Inputs: config. Output: return value.
     function applyAiDefaultsToRow(config) {
         const { defaults, providerSelect, modelSelect, toggle, modelGroup, applyBtn, statusTargets } = config;
         if (providerSelect) {
@@ -1986,6 +2066,7 @@ const previewForm = document.getElementById('preview_form');
         setAiDefaultsSelectStatus(statusTargets, null);
     }
 
+    // Load User Settings. Inputs: none. Output: return value.
     function loadUserSettings() {
         try {
             const stored = window.localStorage ? window.localStorage.getItem(userSettingsStorageKey) : null;
@@ -2013,6 +2094,7 @@ const previewForm = document.getElementById('preview_form');
         applyClearAllSetting(userSettingsDefaults.removeClearAll);
     }
 
+    // Clear Local User Data. Inputs: none. Output: return value.
     function clearLocalUserData() {
         try {
             if (!window.localStorage) return;
@@ -2027,6 +2109,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Apply User Settings Values. Inputs: settings. Output: return value.
     function applyUserSettingsValues(settings) {
         if (!settings) return;
         if (userSettingJobBatchInput) {
@@ -2068,6 +2151,7 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
+    // Reset User Settings To Defaults. Inputs: none. Output: return value.
     function resetUserSettingsToDefaults() {
         applyUserSettingsValues({
             jobBatchSize: userSettingsDefaults.jobBatchSize,
@@ -2082,6 +2166,7 @@ const previewForm = document.getElementById('preview_form');
         applyDefaultAiProviderSelections({ force: true });
     }
 
+    // Populate User Settings. Inputs: none. Output: return value.
     function populateUserSettings() {
         const stored = loadUserSettings();
         if (stored) {
@@ -2091,6 +2176,7 @@ const previewForm = document.getElementById('preview_form');
         resetUserSettingsToDefaults();
     }
 
+    // Validate User Settings. Inputs: none. Output: side effects.
     function validateUserSettings() {
         let hasError = false;
         const jobBatchRaw = userSettingJobBatchInput?.value?.trim() ?? '';
@@ -2137,6 +2223,7 @@ const previewForm = document.getElementById('preview_form');
         };
     }
 
+    // Save User Settings To Database. Inputs: settings, options. Output: return value.
     function saveUserSettingsToDatabase(settings, options = {}) {
         const { showSuccessMessage = true, applySettings = true, onSuccess, onError } = options;
         return fetch(userSettingsSaveUrl, {
@@ -2182,6 +2269,7 @@ const previewForm = document.getElementById('preview_form');
             });
     }
 
+    // Refresh AI Credentials. Inputs: none. Output: return value.
     function refreshAiCredentials() {
         return fetch(aiCredentialsListUrl, { method: 'GET' })
             .then((resp) => resp.json())
@@ -2202,6 +2290,7 @@ const previewForm = document.getElementById('preview_form');
             });
     }
 
+    // Update Credential Provider Status. Inputs: none. Output: return value.
     function updateCredentialProviderStatus() {
         if (!aiCredentialsProvider) return;
         const provider = aiCredentialsProvider.value;
@@ -2292,6 +2381,7 @@ const previewForm = document.getElementById('preview_form');
         showNonBlockingModal(initialErrorMessage);
     }
 
+    // Normalize Project Entry. Inputs: entry. Output: return value.
     function normalizeProjectEntry(entry) {
         if (!entry) return null;
         if (Array.isArray(entry)) {
@@ -2314,6 +2404,7 @@ const previewForm = document.getElementById('preview_form');
         return null;
     }
 
+    // Normalize Project Data. Inputs: raw. Output: return value.
     function normalizeProjectData(raw) {
         if (Array.isArray(raw)) {
             return {
@@ -2334,10 +2425,12 @@ const previewForm = document.getElementById('preview_form');
         };
     }
 
+    // Return whether Collaboration Enabled. Inputs: none. Output: return value.
     function isCollaborationEnabled() {
         return !!collaborationToggle?.checked;
     }
 
+    // Update Collaboration Visibility. Inputs: none. Output: return value.
     function updateCollaborationVisibility() {
         const hasCollaborationAccess = Boolean(projectData?.collab_available);
         if (!collaborationSection) {
@@ -2357,10 +2450,12 @@ const previewForm = document.getElementById('preview_form');
         return hasCollaborationAccess;
     }
 
+    // Return Project Label. Inputs: projectId, projectName. Output: return value.
     function getProjectLabel(projectId, projectName) {
         return String(projectName || projectId || '');
     }
 
+    // Return Project Entry Label. Inputs: entry. Output: return value.
     function getProjectEntryLabel(entry) {
         const baseLabel = getProjectLabel(entry?.id, entry?.name);
         if (entry?.owner) {
@@ -2369,26 +2464,32 @@ const previewForm = document.getElementById('preview_form');
         return baseLabel;
     }
 
+    // Return Project Entry Access. Inputs: entry. Output: return value.
     function getProjectEntryAccess(entry) {
         return entry?.access || '';
     }
 
+    // Return whether Collab Entry. Inputs: entry. Output: return value.
     function isCollabEntry(entry) {
         return getProjectEntryAccess(entry) === 'read_write';
     }
 
+    // Return whether Annotate Entry. Inputs: entry. Output: return value.
     function isAnnotateEntry(entry) {
         return getProjectEntryAccess(entry) === 'read_annotate';
     }
 
+    // Return whether Shared Entry. Inputs: entry. Output: return value.
     function isSharedEntry(entry) {
         return isCollabEntry(entry) || isAnnotateEntry(entry);
     }
 
+    // Return Numeric Sort Value. Inputs: label. Output: return value.
     function getNumericSortValue(label) {
         return /^\s*\d+\s*$/.test(label) ? Number(label.trim()) : null;
     }
 
+    // Set Dataset Sort Indicator. Inputs: key, direction. Output: return value.
     function setDatasetSortIndicator(key, direction) {
         const headers = datasetTableContainer
             ? datasetTableContainer.querySelectorAll('.sortable-header[data-sort-key]')
@@ -2406,6 +2507,7 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
+    // Return Dataset Sort Value. Inputs: dataset, key. Output: return value.
     function getDatasetSortValue(dataset, key) {
         if (!dataset) return '';
         if (key === 'id') return Number(dataset.id);
@@ -2413,6 +2515,7 @@ const previewForm = document.getElementById('preview_form');
         return String(dataset.name || '').toLowerCase();
     }
 
+    // Compare Dataset Values. Inputs: a, b, type. Output: return value.
     function compareDatasetValues(a, b, type) {
         if (type === 'number') {
             const numA = Number.isFinite(a) ? a : Number.NaN;
@@ -2425,6 +2528,7 @@ const previewForm = document.getElementById('preview_form');
         return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
     }
 
+    // Sort Datasets. Inputs: rows, key, direction. Output: return value.
     function sortDatasets(rows, key, direction) {
         const header = datasetTableContainer?.querySelector(`.sortable-header[data-sort-key="${key}"]`);
         const type = header?.dataset.sortType || 'text';
@@ -2443,6 +2547,7 @@ const previewForm = document.getElementById('preview_form');
         return sorted;
     }
 
+    // Sort Owned Entries. Inputs: entries. Output: return value.
     function sortOwnedEntries(entries) {
         return entries.sort((entryA, entryB) => {
             const labelA = getProjectLabel(entryA?.id, entryA?.name);
@@ -2460,6 +2565,7 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
+    // Sort Collab Entries. Inputs: entries. Output: return value.
     function sortCollabEntries(entries) {
         const byOwner = new Map();
         entries.forEach((entry) => {
@@ -2485,6 +2591,7 @@ const previewForm = document.getElementById('preview_form');
         return sorted;
     }
 
+    // Return Ordered Project Entries. Inputs: includeCollab. Output: return value.
     function getOrderedProjectEntries(includeCollab = false) {
         const owned = sortOwnedEntries([...(projectData?.owned || [])]);
         if (!includeCollab) {
@@ -2495,6 +2602,7 @@ const previewForm = document.getElementById('preview_form');
         return [...owned, ...collab, ...annotate];
     }
 
+    // Find Project Entry By ID. Inputs: projectId, includeCollab. Output: return value.
     function findProjectEntryById(projectId, includeCollab = false) {
         if (!projectId) return null;
         const list = includeCollab
@@ -2510,12 +2618,14 @@ const previewForm = document.getElementById('preview_form');
     projectData = normalizeProjectData(projectData);
     updateCollaborationVisibility();
 
+    // Return Project Options. Inputs: none. Output: return value.
     function getProjectOptions() {
         return projectSelectDropdown
             ? Array.from(projectSelectDropdown.querySelectorAll('.project-option'))
             : [];
     }
 
+    // Save Collaboration State. Inputs: enabled. Output: return value.
     function saveCollaborationState(enabled) {
         try {
             window.localStorage?.setItem(collaborationToggleStorageKey, JSON.stringify({ enabled: !!enabled }));
@@ -2524,6 +2634,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Load Collaboration State. Inputs: none. Output: return value.
     function loadCollaborationState() {
         try {
             const raw = window.localStorage?.getItem(collaborationToggleStorageKey);
@@ -2535,6 +2646,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Update Project Selection Display. Inputs: none. Output: return value.
     function updateProjectSelectionDisplay() {
         if (!projectSelectDisplay || !projectSelectWrapper || !projectSelectInput) return;
         const selectedName = projectSelectInput.dataset.selectedName || '';
@@ -2569,6 +2681,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Set Project Selection. Inputs: projectId, projectName, options. Output: return value.
     function setProjectSelection(projectId, projectName, options = {}) {
         const { persist = true, access = '', owner = '', baseName = '' } = options;
         const normalizedId = projectId ? String(projectId) : '';
@@ -2591,6 +2704,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Clear Project Selection. Inputs: { persist. Output: return value.
     function clearProjectSelection({ persist = true } = {}) {
         if (projectSelect) {
             projectSelect.value = '';
@@ -2609,6 +2723,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Apply Collaboration State. Inputs: enabled, options. Output: return value.
     function applyCollaborationState(enabled, options = {}) {
         const { persist = true, refresh = false } = options;
         if (collaborationToggle) {
@@ -2636,6 +2751,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Sync Project Selection With Mode. Inputs: none. Output: return value.
     function syncProjectSelectionWithMode() {
         if (!projectSelect) return;
         const selectedId = projectSelect.value;
@@ -2658,6 +2774,7 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
+    // Set Active Project Index. Inputs: index, useKeyboard. Output: return value.
     function setActiveProjectIndex(index, useKeyboard = false) {
         const options = getProjectOptions();
         if (options.length === 0) {
@@ -2688,6 +2805,7 @@ const previewForm = document.getElementById('preview_form');
         activeProjectIndex = clamped;
     }
 
+    // Select Project Option. Inputs: option. Output: return value.
     function selectProjectOption(option) {
         if (!option) return;
         const projectId = option.dataset.projectId || '';
@@ -2703,6 +2821,7 @@ const previewForm = document.getElementById('preview_form');
         closeProjectDropdown(false);
     }
 
+    // Update Project Data. Inputs: data. Output: return value.
     function updateProjectData(data) {
         projectData = normalizeProjectData(data);
         updateCollaborationVisibility();
@@ -2728,6 +2847,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Refresh Project List. Inputs: none. Output: Promise result.
     async function refreshProjectList() {
         if (!projectListUrl) return;
         if (isProjectRefreshInFlight) return;
@@ -2758,6 +2878,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Render Project Options. Inputs: query. Output: return value.
     function renderProjectOptions(query) {
         if (!projectSelectDropdown) return;
         const normalizedQuery = query.trim().toLowerCase();
@@ -2849,6 +2970,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Open Project Dropdown. Inputs: none. Output: return value.
     function openProjectDropdown() {
         if (!projectSelectDropdown || !projectSelectInput) return;
         projectSelectDropdown.style.display = 'block';
@@ -2870,6 +2992,7 @@ const previewForm = document.getElementById('preview_form');
         renderProjectOptions('');
     }
 
+    // Close Project Dropdown. Inputs: restoreSelection. Output: return value.
     function closeProjectDropdown(restoreSelection = true) {
         if (!projectSelectDropdown || !projectSelectInput) return;
         projectSelectDropdown.style.display = 'none';
@@ -2889,6 +3012,7 @@ const previewForm = document.getElementById('preview_form');
         updateProjectSelectionDisplay();
     }
 
+    // Filter Project Options. Inputs: query. Output: return value.
     function filterProjectOptions(query) {
         if (projectFilterTimeout) {
             window.clearTimeout(projectFilterTimeout);
@@ -3143,6 +3267,7 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
+    // Return persist AI Defaults. Inputs: updatedDefaults, options. Output: return value.
     function persistAiDefaults(updatedDefaults, options = {}) {
         const { onSuccess, onError, applySettings = true } = options;
         clearUserSettingErrors();
@@ -3176,6 +3301,7 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
+    // Return handle Defaults Provider Change. Inputs: config. Output: return value.
     function handleDefaultsProviderChange(config) {
         const { key, providerSelect, modelSelect, toggle, modelGroup, applyBtn, statusTargets } = config;
         setAiDefaultsSelectStatus(statusTargets, null);
@@ -3193,11 +3319,13 @@ const previewForm = document.getElementById('preview_form');
         );
     }
 
+    // Return handle Defaults Model Change. Inputs: modelSelect, statusTargets. Output: return value.
     function handleDefaultsModelChange(modelSelect, statusTargets) {
         setAiDefaultsSelectStatus(statusTargets, null);
         updateSelectPlaceholder(modelSelect);
     }
 
+    // Return handle Defaults Toggle Change. Inputs: config. Output: return value.
     function handleDefaultsToggleChange(config) {
         const { key, providerSelect, toggle, statusTargets } = config;
         setAiDefaultsSelectStatus(statusTargets, null);
@@ -3219,6 +3347,7 @@ const previewForm = document.getElementById('preview_form');
         persistAiDefaults(updatedDefaults, { applySettings: false });
     }
 
+    // Return handle Defaults Apply. Inputs: config. Output: return value.
     function handleDefaultsApply(config) {
         const { key, providerSelect, modelSelect, statusTargets } = config;
         setAiDefaultsSelectStatus(statusTargets, null);
@@ -3670,6 +3799,7 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
+    // Parse AI Parse Output. Inputs: rawOutput, expectedRows. Output: return value.
     function parseAiParseOutput(rawOutput, expectedRows) {
         if (!Array.isArray(expectedRows) || expectedRows.length === 0) return null;
         if (typeof rawOutput !== 'string') return null;
@@ -3761,6 +3891,7 @@ const previewForm = document.getElementById('preview_form');
         }
     });
 
+    // Update Selected Datasets. Inputs: none. Output: return value.
     function updateSelectedDatasets() {
         const checked = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]:checked');
         const ids = Array.from(checked).map((input) => input.dataset.datasetId);
@@ -3772,6 +3903,7 @@ const previewForm = document.getElementById('preview_form');
         persistPreviewState();
     }
 
+    // Return Selected Dataset Image Count. Inputs: none. Output: return value.
     function getSelectedDatasetImageCount() {
         const checked = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]:checked');
         return Array.from(checked).reduce((total, input) => {
@@ -3780,10 +3912,12 @@ const previewForm = document.getElementById('preview_form');
         }, 0);
     }
 
+    // Return Selected Project Name. Inputs: none. Output: return value.
     function getSelectedProjectName() {
         return projectSelectInput?.dataset.selectedName || '';
     }
 
+    // Reset Dataset Selection. Inputs: none. Output: return value.
     function resetDatasetSelection() {
         datasetSelectionOpenedInput.value = '0';
         selectedDatasetsInput.value = '';
@@ -3810,6 +3944,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Render Dataset Rows. Inputs: datasets, options. Output: return value.
     function renderDatasetRows(datasets, options = {}) {
         datasetTableBody.innerHTML = '';
         if (!datasets || datasets.length === 0) {
@@ -3862,6 +3997,7 @@ const previewForm = document.getElementById('preview_form');
         }
     }
 
+    // Apply Dataset Sort. Inputs: key. Output: return value.
     function applyDatasetSort(key) {
         if (!key || !Array.isArray(lastDatasetRows) || lastDatasetRows.length === 0) return;
         const selectedIds = getSelectedDatasetIds();
@@ -3873,6 +4009,7 @@ const previewForm = document.getElementById('preview_form');
         renderDatasetRows(sorted, { selectedIds });
     }
 
+    // Return init Dataset Sorting. Inputs: none. Output: return value.
     function initDatasetSorting() {
         if (!datasetTableContainer) return;
         const headers = datasetTableContainer.querySelectorAll('.sortable-header[data-sort-key]');
@@ -3936,6 +4073,7 @@ const previewForm = document.getElementById('preview_form');
         });
     }
 
+    // Reset All Selections. Inputs: none. Output: side effects.
     function resetAllSelections() {
         clearProjectSelection({ persist: false });
         if (separatorInput) {

@@ -40,12 +40,18 @@ logger = logging.getLogger(__name__)
 
 
 def _is_safe_separator_regex(pattern):
-    """Handle is safe separator regex."""
+    """Return whether safe separator regex.
+
+    Inputs: `pattern`. Output: call result.
+    """
     return is_supported_separator_pattern(pattern)
 
 
 def _job_owned_by_request(job, request, conn):
-    """Handle job owned by request."""
+    """Job owned by request.
+
+    Inputs: `job`, `request`, `conn`. Output: computed value.
+    """
     if not isinstance(job, dict):
         return False
     job_username = str(job.get("username") or "").strip()
@@ -56,7 +62,10 @@ def _job_owned_by_request(job, request, conn):
 
 
 def parse_image_ids(raw_ids):
-    """Validate parse image identifiers."""
+    """Parse image IDs.
+
+    Inputs: `raw_ids`. Output: computed value.
+    """
     if not raw_ids:
         return []
     image_ids = []
@@ -75,7 +84,10 @@ def parse_image_ids(raw_ids):
 
 
 def _resolve_omero_host_port(conn):
-    """Handle resolve OMERO host port."""
+    """Resolve OMERO host port.
+
+    Inputs: `conn`. Output: tuple.
+    """
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
     port = getattr(conn, "port", None) or getattr(conn, "_port", None)
 
@@ -94,7 +106,10 @@ def _resolve_omero_host_port(conn):
 
 
 def _validate_user_password(conn, password):
-    """Handle validate user password."""
+    """Validate user password.
+
+    Inputs: `conn`, `password`. Output: tuple.
+    """
     if not password:
         return False, error_messages.missing_password()
 
@@ -128,7 +143,10 @@ def _validate_user_password(conn, password):
 
 
 def _image_ids_from_objects(images):
-    """Handle image identifiers from objects."""
+    """Image ids from objects.
+
+    Inputs: `images`. Output: `image_ids`.
+    """
     seen = set()
     image_ids = []
     for img in images:
@@ -148,7 +166,10 @@ def _image_ids_from_objects(images):
 
 
 def _resolve_image_ids(conn, project_id, selected_image_ids):
-    """Handle resolve image identifiers."""
+    """Resolve image IDs.
+
+    Inputs: `conn`, `project_id`, `selected_image_ids`. Output: computed value.
+    """
     images = collect_images_in_project(conn, project_id)
     project_image_ids = _image_ids_from_objects(images)
     if selected_image_ids:
@@ -170,7 +191,10 @@ def _resolve_image_ids(conn, project_id, selected_image_ids):
 
 
 def _save_annotation_link(update, link):
-    """Handle save annotation link."""
+    """Save annotation link.
+
+    Inputs: `update`, `link`. Output: computed value.
+    """
     saved_link = update.saveAndReturnObject(link)
     if saved_link is None:
         return False
@@ -178,7 +202,10 @@ def _save_annotation_link(update, link):
 
 
 def _unique_annotation_key(existing_mapping, base_key):
-    """Handle unique annotation key."""
+    """Unique annotation key.
+
+    Inputs: `existing_mapping`, `base_key`. Output: `key`.
+    """
     key_root = str(base_key or "").strip() or "Var"
     key = key_root
     suffix = 2
@@ -189,7 +216,10 @@ def _unique_annotation_key(existing_mapping, base_key):
 
 
 def _with_plugin_hash(mapping):
-    """Handle with plugin hash."""
+    """With plugin hash.
+
+    Inputs: `mapping`. Output: `annotation_mapping`.
+    """
     annotation_mapping = dict(mapping)
     if annotation_mapping:
         annotation_mapping[HASH_KEY] = compute_plugin_hash(annotation_mapping)
@@ -197,7 +227,10 @@ def _with_plugin_hash(mapping):
 
 
 def _save_image_map_annotation(update, img, mapping):
-    """Handle save image map annotation."""
+    """Save image map annotation.
+
+    Inputs: `update`, `img`, `mapping`. Output: computed value.
+    """
     image_id = get_id(img)
     if image_id is None:
         return False
@@ -222,7 +255,10 @@ def _save_image_map_annotation(update, img, mapping):
 @login_required()
 @require_non_root_user
 def start_job(request, conn=None, _url=None, **kwargs):
-    """Run start job."""
+    """Start job.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     try:
         if request.method != "POST":
             return JsonResponse(
@@ -309,7 +345,10 @@ def start_job(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_acq_job(request, conn=None, _url=None, **kwargs):
-    """Run start acq job."""
+    """Start acq job.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     try:
         if request.method != "POST":
             return JsonResponse(
@@ -377,7 +416,10 @@ def start_acq_job(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_delete_all_job(request, conn=None, _url=None, **kwargs):
-    """Run start delete all job."""
+    """Start delete all job.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     try:
         if request.method != "POST":
             return JsonResponse(
@@ -451,7 +493,10 @@ def start_delete_all_job(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_delete_plugin_job(request, conn=None, _url=None, **kwargs):
-    """Run start delete plugin job."""
+    """Start delete plugin job.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     try:
         if request.method != "POST":
             return JsonResponse(
@@ -528,7 +573,13 @@ def start_delete_plugin_job(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def job_progress(request, job_id, conn=None, _url=None, **kwargs):
-    """Handle job progress."""
+    """Job progress.
+
+    Inputs: `request`, `job_id`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse`
+    result.
+
+    result.
+    """
     lk = None
     try:
         job = load_job(job_id)

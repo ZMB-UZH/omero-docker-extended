@@ -5,7 +5,10 @@ from django.urls import path
 
 
 def _noop_view(_request, *args, **kwargs):
-    """Handle noop view."""
+    """Noop view.
+
+    Inputs: `_request`, `*args`, `**kwargs`. Output: `HttpResponse` result.
+    """
     return HttpResponse("")
 
 

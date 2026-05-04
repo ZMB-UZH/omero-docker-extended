@@ -12,12 +12,18 @@ logger = logging.getLogger(__name__)
 
 
 def _value_or_raw(value):
-    """Handle value or raw."""
+    """Value or raw.
+
+    Inputs: `value`. Output: computed value.
+    """
     return value.getValue() if hasattr(value, "getValue") else value
 
 
 def _call_or_none(obj, method_name: str):
-    """Handle call or none."""
+    """Call or none.
+
+    Inputs: `obj`, `method_name`. Output: `method` result or None.
+    """
     method = getattr(obj, method_name, None)
     if not callable(method):
         return None
@@ -28,7 +34,10 @@ def _call_or_none(obj, method_name: str):
 
 
 def _owner_candidates(obj):
-    """Handle owner candidates."""
+    """Owner candidates.
+
+    Inputs: `obj`. Output: `tuple` result.
+    """
     details = _call_or_none(obj, "getDetails")
     details_owner = _call_or_none(details, "getOwner") if details is not None else None
     method_owner = _call_or_none(obj, "getOwner")
@@ -42,17 +51,26 @@ def _owner_candidates(obj):
 
 
 def _owner_from_details_or_method(obj):
-    """Handle owner from details or method."""
+    """Owner from details or method.
+
+    Inputs: `obj`. Output: `next` result.
+    """
     return next(iter(_owner_candidates(obj)), None)
 
 
 def _safe_debug(message: str, *values) -> None:
-    """Handle safe debug."""
+    """Return safe debug.
+
+    Inputs: `message`, `*values`. Output: None.
+    """
     logger.debug(message, *(sanitize_log_value(value) for value in values))
 
 
 def get_text(value_obj):
-    """Extract text value from OMERO rtype objects."""
+    """Extract text value from OMERO rtype objects.
+
+    Inputs: `value_obj`. Output: computed value.
+    """
     try:
         return (
             _value_or_raw(value_obj)
@@ -64,7 +82,10 @@ def get_text(value_obj):
 
 
 def get_id(obj):
-    """Extract ID from OMERO object."""
+    """Extract ID from OMERO object.
+
+    Inputs: `obj`. Output: computed value or None.
+    """
     try:
         model_obj = getattr(obj, "_obj", None)
         if model_obj is not None:
@@ -78,7 +99,10 @@ def get_id(obj):
 
 
 def get_owner_id(obj):
-    """Extract owner ID from OMERO object."""
+    """Extract owner ID from OMERO object.
+
+    Inputs: `obj`. Output: `_value_or_raw` result or None.
+    """
     if obj is None:
         return None
     for owner in _owner_candidates(obj):
@@ -90,7 +114,10 @@ def get_owner_id(obj):
 
 
 def is_owned_by_user(obj, owner_id):
-    """Check if object is owned by specified user."""
+    """Return whether owned by user.
+
+    Inputs: `obj`, `owner_id`. Output: bool.
+    """
     if owner_id is None:
         return True
     obj_owner_id = get_owner_id(obj)
@@ -103,7 +130,10 @@ def is_owned_by_user(obj, owner_id):
 
 
 def _current_user_id(conn):
-    """Handle current user identifier."""
+    """Return current user ID.
+
+    Inputs: `conn`. Output: `_value_or_raw` result or None.
+    """
     try:
         user = conn.getUser()
         if user is not None:
@@ -114,7 +144,10 @@ def _current_user_id(conn):
 
 
 def _get_owner_username(obj):
-    """Handle get owner username."""
+    """Return owner username.
+
+    Inputs: `obj`. Output: computed value.
+    """
     if obj is None:
         return ""
     for owner in _owner_candidates(obj):
@@ -134,7 +167,10 @@ def _get_owner_username(obj):
 
 
 def _has_read_write_permissions(obj):
-    """Handle has read write permissions."""
+    """Return whether read write permissions.
+
+    Inputs: `obj`. Output: computed value.
+    """
     if obj is None:
         return False
     for attr in ("canEdit", "canWrite"):

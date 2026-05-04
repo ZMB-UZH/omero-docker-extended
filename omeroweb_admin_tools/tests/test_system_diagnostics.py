@@ -8,7 +8,10 @@ from omeroweb_admin_tools.services.system_diagnostics import serialize_scripts
 
 
 def _result(check_id: str, label: str, status: str) -> DiagnosticCheckResult:
-    """Handle result."""
+    """Return result.
+
+    Inputs: `check_id`, `label`, `status`. Output: `DiagnosticCheckResult`.
+    """
     return DiagnosticCheckResult(
         check_id=check_id,
         label=label,
@@ -20,7 +23,10 @@ def _result(check_id: str, label: str, status: str) -> DiagnosticCheckResult:
 
 
 def test_serialize_scripts_exposes_operator_metadata() -> None:
-    """Verify test serialize scripts exposes operator metadata."""
+    """Verify serialize scripts exposes operator metadata.
+
+    Inputs: none. Output: None.
+    """
     payload = serialize_scripts()
 
     assert any(item["script_id"] == "omero_database" for item in payload)
@@ -29,7 +35,10 @@ def test_serialize_scripts_exposes_operator_metadata() -> None:
 
 
 def test_run_diagnostic_script_unknown_id() -> None:
-    """Verify test run diagnostic script unknown identifier."""
+    """Verify run diagnostic script unknown ID.
+
+    Inputs: none. Output: None.
+    """
     payload = run_diagnostic_script("not_a_script")
 
     assert payload["status"] == "fail"
@@ -38,7 +47,10 @@ def test_run_diagnostic_script_unknown_id() -> None:
 
 
 def test_run_diagnostic_script_end_to_end_contains_checks(monkeypatch) -> None:
-    """Verify test run diagnostic script end to end contain behavior."""
+    """Verify run diagnostic script end to end contains checks.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         system_diagnostics,
         "_run_omero_server_core",
@@ -59,7 +71,10 @@ def test_run_diagnostic_script_end_to_end_contains_checks(monkeypatch) -> None:
 
 
 def test_compose_check_reports_docker_runtime_error(monkeypatch) -> None:
-    """Verify test compose check reports docker runtime error."""
+    """Verify compose check reports docker runtime error.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         system_diagnostics,
         "_inspect_docker_service_runtime",
@@ -79,7 +94,10 @@ def test_compose_check_reports_docker_runtime_error(monkeypatch) -> None:
 
 
 def test_compose_check_passes_with_running_healthy_container(monkeypatch) -> None:
-    """Verify test compose check passes with running health behavior."""
+    """Verify compose check passes with running healthy container.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         system_diagnostics,
         "_inspect_docker_service_runtime",
@@ -104,7 +122,10 @@ def test_compose_check_passes_with_running_healthy_container(monkeypatch) -> Non
 
 
 def test_direct_pg_test_passes_with_select_one(monkeypatch) -> None:
-    """Verify test direct pg test passes with select one."""
+    """Verify direct pg test passes with select one.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     profile = DatabaseRuntimeProfile(
         host="database",
         port=5432,
@@ -128,7 +149,10 @@ def test_direct_pg_test_passes_with_select_one(monkeypatch) -> None:
 
 
 def test_direct_pg_test_fails_when_password_missing() -> None:
-    """Verify test direct pg test fails when password missing."""
+    """Verify direct pg test fails when password missing.
+
+    Inputs: none. Output: None.
+    """
     profile = DatabaseRuntimeProfile(
         host="database",
         port=5432,
@@ -147,7 +171,10 @@ def test_direct_pg_test_fails_when_password_missing() -> None:
 
 
 def test_run_diagnostic_script_includes_script_metadata(monkeypatch) -> None:
-    """Verify test run diagnostic script includes script me behavior."""
+    """Verify run diagnostic script includes script metadata.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         system_diagnostics,
         "_run_omero_server_core",
@@ -163,7 +190,10 @@ def test_run_diagnostic_script_includes_script_metadata(monkeypatch) -> None:
 
 
 def test_run_diagnostic_script_hides_internal_exception_text(monkeypatch) -> None:
-    """Verify test run diagnostic script hides internal exc behavior."""
+    """Verify run diagnostic script hides internal exception text.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         system_diagnostics,
         "_run_omero_server_core",

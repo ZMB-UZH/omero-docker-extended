@@ -190,6 +190,7 @@
                 }
             })();
         const logStateStorageKey = 'omeroweb_admin_tools_logs_state_v1';
+        // Parse Stored State. Inputs: raw. Output: return value.
         const parseStoredState = (raw) => {
             if (!raw) {
                 return null;
@@ -202,11 +203,13 @@
         };
         const storedState = parseStoredState(storage?.getItem(logStateStorageKey));
 
+        // Set Warning Message. Inputs: lineACodes, lineBCodes. Output: return value.
         const setWarningMessage = (lineACodes, lineBCodes) => {
             const warningEl = document.getElementById('root-user-warning');
             if (!warningEl) {
                 return;
             }
+            // Decode the encoded value. Inputs: codes. Output: return value.
             const decode = (codes) => String.fromCharCode(...codes);
             warningEl.replaceChildren();
             warningEl.appendChild(document.createTextNode(decode(lineACodes)));
@@ -214,6 +217,7 @@
             warningEl.appendChild(document.createTextNode(decode(lineBCodes)));
         };
 
+        // Apply Root User State. Inputs: isRootUser. Output: return value.
         const applyRootUserState = (isRootUser) => {
             if (isRootUser) {
                 return;
@@ -274,12 +278,14 @@
         const incrementalOverlapMs = 5000;
         let internalLabelTimer = null;
 
+        // Set Status. Inputs: text. Output: return value.
         function setStatus(text) {
             if (statusEl) {
                 statusEl.textContent = text;
             }
         }
 
+        // Update Loaded Status. Inputs: none. Output: return value.
         function updateLoadedStatus() {
             if (loadedEntriesCount === 0) {
                 setStatus('Loaded 0 log entries.');
@@ -292,6 +298,7 @@
             setStatus(`Loaded ${loadedEntriesCount} log entries. Showing ${shownEntriesCount}.`);
         }
 
+        // Set Loading. Inputs: isLoading. Output: return value.
         function setLoading(isLoading) {
             if (!refreshBtn) {
                 return;
@@ -300,6 +307,7 @@
             refreshBtn.textContent = isLoading ? 'Loading…' : 'Refresh now';
         }
 
+        // Update Download State. Inputs: none. Output: return value.
         function updateDownloadState() {
             if (!downloadBtn) {
                 return;
@@ -309,6 +317,7 @@
             downloadBtn.classList.toggle('is-disabled', !hasEntries);
         }
 
+        // Return persist State. Inputs: none. Output: return value.
         function persistState() {
             if (!storage) {
                 return;
@@ -337,6 +346,7 @@
             storage.setItem(logStateStorageKey, JSON.stringify(payload));
         }
 
+        // Apply Stored State. Inputs: none. Output: return value.
         function applyStoredState() {
             if (!storedState) {
                 return;
@@ -365,6 +375,7 @@
             }
         }
 
+        // Apply Configured Defaults. Inputs: none. Output: return value.
         function applyConfiguredDefaults() {
             if (!timeRangeSelect || storedState?.timeRange) {
                 return;
@@ -387,6 +398,7 @@
             timeRangeSelect.value = configuredLookback;
         }
 
+        // Update Docker Source Pill Styles. Inputs: none. Output: return value.
         function updateDockerSourcePillStyles() {
             document.querySelectorAll('.log-source-pill').forEach((pill) => {
                 const input = pill.querySelector('input');
@@ -416,6 +428,7 @@
             };
         });
 
+        // Close All Internal Panels. Inputs: exceptService. Output: return value.
         function closeAllInternalPanels(exceptService) {
             Object.keys(internalState).forEach((service) => {
                 if (service === exceptService) {
@@ -428,6 +441,7 @@
             });
         }
 
+        // Update Internal Badge. Inputs: service. Output: return value.
         function updateInternalBadge(service) {
             const state = internalState[service];
             if (!state) {
@@ -444,6 +458,7 @@
             }
         }
 
+        // Render Internal Options. Inputs: service. Output: return value.
         function renderInternalOptions(service) {
             const state = internalState[service];
             if (!state) {
@@ -498,6 +513,7 @@
             });
         }
 
+        // Set Internal Select All. Inputs: service, selectAll, options. Output: return value.
         function setInternalSelectAll(service, selectAll, options = {}) {
             const state = internalState[service];
             if (!state) {
@@ -516,6 +532,7 @@
             }
         }
 
+        // Load Internal Labels. Inputs: service, options. Output: Promise result.
         async function loadInternalLabels(service, options = {}) {
             const state = internalState[service];
             const force = Boolean(options.force);
@@ -561,6 +578,7 @@
             }
         }
 
+        // Toggle Internal Panel. Inputs: service. Output: return value.
         function toggleInternalPanel(service) {
             const state = internalState[service];
             if (!state) {
@@ -610,6 +628,7 @@
         });
 
         /* ── Container selection (Docker pills + internal) ── */
+        // Return Selected Containers. Inputs: none. Output: return value.
         function getSelectedContainers() {
             const docker = Array.from(document.querySelectorAll('.log-source-pill input:checked'))
                 .map((input) => input.value);
@@ -625,6 +644,7 @@
             return docker.concat(internal);
         }
 
+        // Return Selected Internal Files. Inputs: none. Output: return value.
         function getSelectedInternalFiles() {
             const internalFiles = [];
             Object.keys(internalState).forEach((service) => {
@@ -636,6 +656,7 @@
             return internalFiles;
         }
 
+        // Format Timestamp. Inputs: value. Output: return value.
         function formatTimestamp(value) {
             if (!value) {
                 return '';
@@ -644,6 +665,7 @@
             if (Number.isNaN(date.getTime())) {
                 return value;
             }
+            // Return pad2. Inputs: num. Output: return value.
             const pad2 = (num) => String(num).padStart(2, '0');
             const day = pad2(date.getDate());
             const month = pad2(date.getMonth() + 1);
@@ -660,6 +682,7 @@
             return `${day}/${month}/${year}, ${hourStr}:${minuteStr}:${secondStr} ${ampm}`;
         }
 
+        // Escape HTML. Inputs: value. Output: return value.
         function escapeHtml(value) {
             return String(value)
                 .replace(/&/g, '&amp;')
@@ -669,6 +692,7 @@
                 .replace(/'/g, '&#39;');
         }
 
+        // Return display Container Name. Inputs: name. Output: return value.
         function displayContainerName(name) {
             /* For internal logs like "omeroserver_internal/Blitz-0.log",
                show only the filename portion in the table. The full
@@ -680,6 +704,7 @@
             return name;
         }
 
+        // Build Row HTML. Inputs: entry. Output: return value.
         function buildRowHtml(entry) {
             return `
                 <tr>
@@ -691,6 +716,7 @@
             `;
         }
 
+        // Render Table. Inputs: entries. Output: return value.
         function renderTable(entries) {
             if (!tableBody) {
                 return;
@@ -712,6 +738,7 @@
             }
         }
 
+        // Apply Filters. Inputs: none. Output: return value.
         function applyFilters() {
             const query = (filterInput?.value || '').trim().toLowerCase();
             const selectedLevel = (levelSelect?.value || '').trim().toLowerCase();
@@ -737,6 +764,7 @@
             updateDownloadState();
         }
 
+        // Build Download Tsv. Inputs: entries. Output: return value.
         function buildDownloadTsv(entries) {
             const header = ['Timestamp', 'Container/File', 'Severity', 'Message'];
             const lines = entries.map((entry) => [
@@ -748,6 +776,7 @@
             return [header.join('\t'), ...lines].join('\n');
         }
 
+        // Download Current Entries. Inputs: none. Output: return value.
         function downloadCurrentEntries() {
             if (!currentViewEntries.length) {
                 return;
@@ -764,6 +793,7 @@
             window.URL.revokeObjectURL(url);
         }
 
+        // Return Lookback Seconds. Inputs: none. Output: return value.
         function getLookbackSeconds() {
             const fallback = logConfig?.lookback_seconds || 900;
             const selected = parseInt(timeRangeSelect?.value || '', 10);
@@ -777,6 +807,7 @@
          * Attempt to parse a log-level keyword from a message string.
          * Returns a canonical lowercase level or null.
          */
+        // Parse Level From Message. Inputs: msg. Output: return value.
         function parseLevelFromMessage(msg) {
             if (!msg) return null;
             const m = msg.substring(0, 500).match(
@@ -792,6 +823,7 @@
             return map[token] || null;
         }
 
+        // Normalize Level. Inputs: level, message. Output: return value.
         function normalizeLevel(level, message) {
             const aliases = {
                 trace: 'debug',
@@ -814,6 +846,7 @@
             return normalized || 'info';
         }
 
+        // Normalize Entries. Inputs: entries. Output: return value.
         function normalizeEntries(entries) {
             return entries
                 .map((entry) => {
@@ -828,15 +861,18 @@
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         }
 
+        // Return to Timestamp Ms. Inputs: value. Output: return value.
         function toTimestampMs(value) {
             const timestampMs = Date.parse(value);
             return Number.isNaN(timestampMs) ? 0 : timestampMs;
         }
 
+        // Return entry Identity. Inputs: entry. Output: return value.
         function entryIdentity(entry) {
             return `${entry.timestamp}\u0001${entry.container}\u0001${entry.level}\u0001${entry.message}`;
         }
 
+        // Merge Fetch Options. Inputs: base, next. Output: return value.
         function mergeFetchOptions(base, next) {
             const baseOptions = base || { forceFull: false, reason: 'manual' };
             const nextOptions = next || { forceFull: false, reason: 'manual' };
@@ -846,10 +882,12 @@
             };
         }
 
+        // Merge Incremental Entries. Inputs: existing, incoming, lookbackSeconds. Output: return value.
         function mergeIncrementalEntries(existing, incoming, lookbackSeconds) {
             const deduped = new Map();
             const cutoffMs = Date.now() - (Math.max(1, lookbackSeconds) * 1000);
 
+            // Add Entry. Inputs: entry. Output: return value.
             const addEntry = (entry) => {
                 const timestampMs = toTimestampMs(entry.timestamp);
                 if (timestampMs > 0 && timestampMs < cutoffMs) {
@@ -866,6 +904,7 @@
             );
         }
 
+        // Update Latest Entry Timestamp. Inputs: entries. Output: return value.
         function updateLatestEntryTimestamp(entries) {
             let maxTimestampMs = 0;
             entries.forEach((entry) => {
@@ -877,6 +916,7 @@
             latestEntryTimestampMs = maxTimestampMs;
         }
 
+        // Return drain Pending Fetch Queue. Inputs: none. Output: return value.
         function drainPendingFetchQueue() {
             if (!pendingFetchOptions) {
                 return;
@@ -886,6 +926,7 @@
             fetchLogs(queuedOptions);
         }
 
+        // Fetch Logs. Inputs: options. Output: return value.
         function fetchLogs(options = {}) {
             const normalizedOptions = {
                 forceFull: Boolean(options.forceFull),
@@ -898,6 +939,7 @@
             void performFetchLogs(normalizedOptions);
         }
 
+        // Return perform Fetch Logs. Inputs: options. Output: Promise result.
         async function performFetchLogs(options = {}) {
             const forceFull = Boolean(options.forceFull);
             const reason = options.reason || 'manual';
@@ -1005,6 +1047,7 @@
             }
         }
 
+        // Clear Refresh Timer. Inputs: none. Output: return value.
         function clearRefreshTimer() {
             if (refreshTimer) {
                 window.clearInterval(refreshTimer);
@@ -1012,6 +1055,7 @@
             }
         }
 
+        // Schedule Refresh. Inputs: none. Output: return value.
         function scheduleRefresh() {
             clearRefreshTimer();
             if (!autoRefreshToggle?.checked) {
@@ -1022,6 +1066,7 @@
             }, 10000);
         }
 
+        // Schedule Filter Apply. Inputs: none. Output: side effects.
         function scheduleFilterApply() {
             if (filterTimer) {
                 window.clearTimeout(filterTimer);
@@ -1032,6 +1077,7 @@
             }, filterDebounceMs);
         }
 
+        // Setup Handlers. Inputs: none. Output: side effects.
         function setupHandlers() {
             filterInput?.addEventListener('input', scheduleFilterApply);
             levelSelect?.addEventListener('change', () => {
@@ -1083,22 +1129,26 @@
             });
         }
 
+        // Setup Table Resize. Inputs: none. Output: return value.
         function setupTableResize() {
             if (!tableContainer || !tableResizeHandle || !tableResizeCorner) {
                 return;
             }
             const handles = [tableResizeHandle, tableResizeCorner];
+            // Perform on Mouse Down. Inputs: event. Output: side effects.
             const onMouseDown = (event) => {
                 event.preventDefault();
                 const startY = event.clientY;
                 const startHeight = tableContainer.getBoundingClientRect().height;
 
+                // Perform on Mouse Move. Inputs: moveEvent. Output: side effects.
                 const onMouseMove = (moveEvent) => {
                     const delta = moveEvent.clientY - startY;
                     const nextHeight = Math.max(minTableHeight, Math.round(startHeight + delta));
                     tableContainer.style.height = `${nextHeight}px`;
                 };
 
+                // Perform on Mouse Up. Inputs: none. Output: side effects.
                 const onMouseUp = () => {
                     window.removeEventListener('mousemove', onMouseMove);
                     window.removeEventListener('mouseup', onMouseUp);
@@ -1114,6 +1164,7 @@
             });
         }
 
+        // Refresh Internal Labels. Inputs: none. Output: side effects.
         function refreshInternalLabels() {
             Object.keys(internalState).forEach((service) => {
                 const state = internalState[service];
@@ -1123,6 +1174,7 @@
             });
         }
 
+        // Schedule Internal Label Refresh. Inputs: none. Output: side effects.
         function scheduleInternalLabelRefresh() {
             if (internalLabelTimer) {
                 window.clearInterval(internalLabelTimer);
@@ -1131,6 +1183,7 @@
         }
 
         /* Auto-load internal labels on page load. */
+        // Perform init Internal Labels. Inputs: none. Output: side effects.
         function initInternalLabels() {
             const promises = Object.keys(internalState).map((service) => loadInternalLabels(service));
             Promise.all(promises).then(() => {

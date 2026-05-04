@@ -11,7 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_images_by_ids(conn, image_ids):
-    """Fetch multiple images by their IDs."""
+    """Fetch images by IDs.
+
+    Inputs: `conn`, `image_ids`. Output: computed value.
+    """
     if not image_ids:
         return {}
 
@@ -49,8 +52,10 @@ def fetch_images_by_ids(conn, image_ids):
 
 
 def collect_images_by_dataset_sorted(conn, project_id, limit=None, owner_id=None):
-    """
-    Returns:
+    """Collect images by dataset sorted.
+
+    Inputs: `conn`, `project_id`, `limit`, `owner_id`. Output: `out`.
+
         [(dataset_obj, [image_obj_sorted_by_ID]), ...]
     Dataset ordering is preserved as OMERO returns it.
     Image ordering is strictly numeric ascending by image ID.
@@ -91,8 +96,10 @@ def collect_images_by_dataset_sorted(conn, project_id, limit=None, owner_id=None
 def collect_images_by_selected_datasets(
     conn, project_id, dataset_ids, limit=None, owner_id=None
 ):
-    """
-    Returns:
+    """Collect images by selected datasets.
+
+    Inputs: `conn`, `project_id`, `dataset_ids`, `limit`, `owner_id`. Output: `out`.
+
         [(dataset_obj, [image_obj_sorted_by_ID]), ...]
     Only includes datasets from dataset_ids, preserving project dataset order.
     """
@@ -155,15 +162,19 @@ def collect_images_by_selected_datasets(
 
 
 def collect_dataset_summaries(conn, project_id, owner_id=None):
-    """
-    Returns list of dataset summaries for a project.
+    """Returns list of dataset summaries for a project.
+
+    Inputs: `conn`, `project_id`, `owner_id`. Output: computed value.
+
     Each summary includes the Bio-Formats reader name.
     """
     summaries: list[dict[str, Any]] = []
 
     def _get_bioformat_from_image(img):
-        """
-        Get the Bio-Formats reader/format name for an image.
+        """Return bioformat from image.
+
+        Inputs: `img`. Output: computed value.
+
         Returns names like: "OME-TIFF", "Zeiss CZI", "Leica LIF", "PNG", etc.
         """
         # METHOD 1: Get format from original file Format object
@@ -366,7 +377,10 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
 
 
 def collect_images_in_project(conn, project_id, limit=None):
-    """Legacy collector that returns flat list of images."""
+    """Legacy collector that returns flat list of images.
+
+    Inputs: `conn`, `project_id`, `limit`. Output: `images`.
+    """
     images: list[Any] = []
     try:
         project = conn.getObject("Project", int(project_id))

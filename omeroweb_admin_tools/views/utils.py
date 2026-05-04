@@ -6,10 +6,17 @@ from omero_plugin_common.request_utils import current_username
 
 
 def require_root_user(view_func):
-    """Handle require root user."""
+    """Root user.
+
+    Inputs: `view_func`. Output: computed value.
+    """
 
     @wraps(view_func)
     def _wrapped(request, *args, **kwargs):
+        """Wrapped.
+
+        Inputs: `request`, `*args`, `**kwargs`. Output: computed value.
+        """
         conn = kwargs.get("conn")
         username = current_username(request, conn)
         if username != "root":

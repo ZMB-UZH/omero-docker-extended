@@ -23,14 +23,20 @@ if not settings.configured:
 
 
 def _import_views():
-    """Handle import views."""
+    """Import views.
+
+    Inputs: none. Output: `views`.
+    """
     from omeroweb_imaris_connector import views
 
     return views
 
 
 def test_imaris_export_hides_invalid_base_url_exception_text(monkeypatch) -> None:
-    """Verify test imaris export hides invalid base URL exc behavior."""
+    """Verify imaris export hides invalid base URL exception text.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
         data={"image": "1", "base_url": "://bad"},
@@ -45,7 +51,10 @@ def test_imaris_export_hides_invalid_base_url_exception_text(monkeypatch) -> Non
 
 
 def test_imaris_export_hides_invalid_port_exception_text(monkeypatch) -> None:
-    """Verify test imaris export hides invalid port excepti behavior."""
+    """Verify imaris export hides invalid port exception text.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
         data={"image": "1", "omero_port": "bad-port"},
@@ -64,7 +73,10 @@ def test_imaris_export_hides_invalid_port_exception_text(monkeypatch) -> None:
 def test_imaris_export_capabilities_reports_omero_when_script_is_available(
     monkeypatch,
 ) -> None:
-    """Verify test imaris export capabilities reports OMERO behavior."""
+    """Verify imaris export capabilities reports OMERO when script is available.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
         data={"capabilities": "1"},
@@ -86,7 +98,10 @@ def test_imaris_export_capabilities_reports_omero_when_script_is_available(
 
 
 def test_imaris_export_capabilities_hides_omero_without_script(monkeypatch) -> None:
-    """Verify test imaris export capabilities hides OMERO w behavior."""
+    """Verify imaris export capabilities hides OMERO without script.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
         data={"capabilities": "1"},
@@ -108,7 +123,10 @@ def test_imaris_export_capabilities_hides_omero_without_script(monkeypatch) -> N
 
 
 def test_imaris_export_capabilities_hides_probe_exceptions(monkeypatch, caplog) -> None:
-    """Verify capability probes fail closed without leaking backend details."""
+    """Verify capability probes fail closed without leaking backend details.
+
+    Inputs: `monkeypatch`, `caplog`. Output: None.
+    """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
         data={"capabilities": "1"},
@@ -136,7 +154,10 @@ def test_imaris_export_capabilities_hides_probe_exceptions(monkeypatch, caplog) 
 
 
 def test_imaris_export_hides_job_failure_details(monkeypatch) -> None:
-    """Verify test imaris export hides job failure details."""
+    """Verify imaris export hides job failure details.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
         data={"image": "1"},
@@ -169,7 +190,10 @@ def test_imaris_export_hides_job_failure_details(monkeypatch) -> None:
 
 
 def test_imaris_export_returns_public_task_failure_messages(monkeypatch) -> None:
-    """Verify public task failures reach XT clients without backend details."""
+    """Verify public task failures reach XT clients without backend details.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     views = _import_views()
     public_error = "Could not prepare source image for IMS conversion"
 
@@ -227,7 +251,10 @@ def test_imaris_export_returns_public_task_failure_messages(monkeypatch) -> None
 
 
 def test_imaris_export_hides_internal_exception_text(monkeypatch) -> None:
-    """Verify test imaris export hides internal exception text."""
+    """Verify imaris export hides internal exception text.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
         data={"image": "1"},
@@ -253,7 +280,10 @@ def test_imaris_export_hides_internal_exception_text(monkeypatch) -> None:
 def test_imaris_export_status_logs_escape_user_controlled_values(
     monkeypatch, caplog
 ) -> None:
-    """Verify test imaris export status logs escape user co behavior."""
+    """Verify imaris export status logs escape user controlled values.
+
+    Inputs: `monkeypatch`, `caplog`. Output: None.
+    """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
         data={"job": "celery-job\nforged"},
@@ -282,7 +312,10 @@ def test_imaris_export_status_logs_escape_user_controlled_values(
 def test_imaris_export_start_logs_escape_wait_and_ip_values(
     monkeypatch, caplog
 ) -> None:
-    """Verify test imaris export start logs escape wait and behavior."""
+    """Verify imaris export start logs escape wait and ip values.
+
+    Inputs: `monkeypatch`, `caplog`. Output: None.
+    """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
         data={"image": "1", "async": "1", "wait": "0\nline"},
@@ -309,7 +342,10 @@ def test_imaris_export_start_logs_escape_wait_and_ip_values(
 
 
 def test_imaris_view_helpers_cover_url_ip_port_and_session_resolution() -> None:
-    """Verify test imaris view helpers cover URL ip port an behavior."""
+    """Verify imaris view helpers cover URL ip port and session resolution.
+
+    Inputs: none. Output: None.
+    """
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
         HTTP_X_FORWARDED_FOR="203.0.113.5, 198.51.100.1",
@@ -345,13 +381,20 @@ def test_imaris_view_helpers_cover_url_ip_port_and_session_resolution() -> None:
 def test_imaris_view_helpers_cover_invalid_base_urls_and_status_edge_cases(
     monkeypatch,
 ):
-    """Verify test imaris view helpers cover invalid base U behavior."""
+    """Verify imaris view helpers cover invalid base URLs and status edge cases.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     views = _import_views()
 
     class _BrokenStr:
         """Represent broken str."""
 
         def __str__(self):
+            """Return the string representation.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("bad string")
 
     with pytest.raises(ValueError, match="Invalid base_url value"):
@@ -405,7 +448,10 @@ def test_imaris_view_helpers_cover_invalid_base_urls_and_status_edge_cases(
 def test_imaris_export_sync_paths_cover_missing_script_wait_override_and_unknown_state(
     monkeypatch,
 ) -> None:
-    """Verify test imaris export sync paths cover missing s behavior."""
+    """Verify imaris export sync paths cover missing script wait override and unknown state.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     views = _import_views()
 
     missing_script_request = RequestFactory().get(
@@ -466,11 +512,17 @@ def test_imaris_export_sync_paths_cover_missing_script_wait_override_and_unknown
 def test_poll_celery_job_covers_pending_failure_success_revoked_and_unknown(
     monkeypatch,
 ):
-    """Verify test poll celery job covers pending failure s behavior."""
+    """Verify poll celery job covers pending failure success revoked and unknown.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     views = _import_views()
 
     def _set_result(state, result=None, info=None):
-        """Handle set result."""
+        """Set result.
+
+        Inputs: `state`, `result`, `info`. Output: None.
+        """
         monkeypatch.setattr(
             views.celery_app,
             "AsyncResult",
@@ -516,7 +568,10 @@ def test_poll_celery_job_covers_pending_failure_success_revoked_and_unknown(
 
 
 def test_start_celery_job_validates_connection_metadata_and_dispatches(monkeypatch):
-    """Verify test start celery job validates connection me behavior."""
+    """Verify start celery job validates connection metadata and dispatches.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     views = _import_views()
     dispatched = {}
     monkeypatch.setattr(views, "_get_session_key", lambda conn: "session-key")
@@ -558,7 +613,10 @@ def test_start_celery_job_validates_connection_metadata_and_dispatches(monkeypat
 def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
     monkeypatch,
 ) -> None:
-    """Verify test imaris view helpers cover env fallbacks behavior."""
+    """Verify imaris view helpers cover environment fallbacks and unknown status paths.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     views = _import_views()
     original_poll_celery_job = views._poll_celery_job
 
@@ -566,6 +624,10 @@ def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
         """Represent broken str."""
 
         def __str__(self):
+            """Return the string representation.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("bad string")
 
     assert views._parse_base_url(None) is None
@@ -659,6 +721,10 @@ def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
         """Represent broken result."""
 
         def __str__(self):
+            """Return the string representation.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("cannot stringify")
 
     monkeypatch.setattr(
@@ -681,7 +747,10 @@ def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
 
 
 def test_imaris_export_covers_async_status_download_and_sync_success_paths(monkeypatch):
-    """Verify test imaris export covers async status downlo behavior."""
+    """Verify imaris export covers async status download and sync success paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     views = _import_views()
 
     async_request = RequestFactory().get(
@@ -769,7 +838,10 @@ def test_imaris_export_covers_async_status_download_and_sync_success_paths(monke
 def test_imaris_export_rejects_missing_image_invalid_image_no_celery_and_timeout(
     monkeypatch,
 ) -> None:
-    """Verify test imaris export rejects missing image inva behavior."""
+    """Verify imaris export rejects missing image invalid image no celery and timeout.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     views = _import_views()
 
     missing_request = RequestFactory().get("/omeroweb_imaris_connector/export/")
@@ -820,7 +892,10 @@ def test_imaris_export_rejects_missing_image_invalid_image_no_celery_and_timeout
 def test_imaris_view_failure_paths_cover_meta_errors_missing_host_port_and_port_validation(
     monkeypatch,
 ) -> None:
-    """Verify test imaris view failure paths cover meta err behavior."""
+    """Verify imaris view failure paths cover meta errors missing host port and port validation.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     views = _import_views()
 
     monkeypatch.setattr(

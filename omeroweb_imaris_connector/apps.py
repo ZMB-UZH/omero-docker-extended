@@ -11,5 +11,8 @@ class ImarisConnectorConfig(AppConfig):
 
     @staticmethod
     def ready() -> None:
-        """Apply plugin-wide runtime configuration."""
+        """Apply plugin-wide runtime configuration.
+
+        Inputs: none. Output: None.
+        """
         configure_omero_gateway_logging()

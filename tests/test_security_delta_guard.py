@@ -21,7 +21,10 @@ TEST_GITHUB_CREDENTIAL = "-".join(("placeholder", "credential"))
 
 
 def _alert(number: int, *, created_at: str, severity: str = "high") -> dict:
-    """Handle alert."""
+    """Alert.
+
+    Inputs: `number`, `created_at`, `severity`. Output: `dict`.
+    """
     return {
         "number": number,
         "created_at": created_at,
@@ -34,7 +37,10 @@ def _alert(number: int, *, created_at: str, severity: str = "high") -> dict:
 
 
 def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
-    """Verify test wait for stable snapshot rechecks until behavior."""
+    """Verify wait for stable snapshot rechecks until numbers repeat.
+
+    Inputs: none. Output: None.
+    """
     snapshots = iter(
         (
             [_alert(11, created_at="2026-04-02T12:00:00Z")],
@@ -44,7 +50,10 @@ def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
     calls = {"count": 0}
 
     def fetch_snapshot():
-        """Handle fetch snapshot."""
+        """Fetch snapshot.
+
+        Inputs: none. Output: `next_or_fail` result.
+        """
         calls["count"] += 1
         return next_or_fail(snapshots)
 
@@ -61,7 +70,10 @@ def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
 
 
 def test_github_api_get_json_uses_curl_config_stdin(monkeypatch) -> None:
-    """Verify test github API get JSON uses curl config stdin."""
+    """Verify github API get JSON uses curl config stdin.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     security_delta_guard._GITHUB_API_VERSION_CACHE.value = None
     calls = []
 
@@ -70,7 +82,10 @@ def test_github_api_get_json_uses_curl_config_stdin(monkeypatch) -> None:
     )
 
     def fake_run(command: list[str], **kwargs):
-        """Handle fake run."""
+        """Fake run.
+
+        Inputs: `command`, `**kwargs`. Output: call result.
+        """
         calls.append({"command": command, "kwargs": kwargs})
         config = kwargs["input"]
         stdout = (
@@ -121,7 +136,10 @@ def test_github_api_get_json_uses_curl_config_stdin(monkeypatch) -> None:
 
 
 def test_github_api_get_json_requires_absolute_api_path() -> None:
-    """Verify test github API get JSON requires absolute AP behavior."""
+    """Verify github API get JSON requires absolute API path.
+
+    Inputs: none. Output: None.
+    """
     with pytest.raises(ValueError, match="must start with '/'"):
         security_delta_guard.github_api_get_json(
             "repos/ZMB-UZH/omero-docker-extended", TEST_GITHUB_CREDENTIAL
@@ -129,7 +147,10 @@ def test_github_api_get_json_requires_absolute_api_path() -> None:
 
 
 def test_validate_github_repository_rejects_unsafe_api_path_components() -> None:
-    """Verify test validate github repository rejects unsaf behavior."""
+    """Verify validate github repository rejects unsafe API path components.
+
+    Inputs: none. Output: None.
+    """
     assert (
         security_delta_guard.validate_github_repository("ZMB-UZH/omero-docker-extended")
         == "ZMB-UZH/omero-docker-extended"
@@ -146,7 +167,10 @@ def test_validate_github_repository_rejects_unsafe_api_path_components() -> None
 
 
 def test_select_push_delta_alerts_only_keeps_alerts_created_after_run_start() -> None:
-    """Verify test select push delta alerts only keeps aler behavior."""
+    """Verify select push delta alerts only keeps alerts created after run start.
+
+    Inputs: none. Output: None.
+    """
     workflow_started_at = datetime(2026, 4, 2, 12, 0, tzinfo=UTC)
     alerts = [
         _alert(1, created_at="2026-04-02T11:59:59Z"),
@@ -160,7 +184,10 @@ def test_select_push_delta_alerts_only_keeps_alerts_created_after_run_start() ->
 
 
 def test_select_pull_request_delta_alerts_subtracts_base_branch_backlog() -> None:
-    """Verify test select pull request delta alerts subtrac behavior."""
+    """Verify select pull request delta alerts subtracts base branch backlog.
+
+    Inputs: none. Output: None.
+    """
     result = security_delta_guard.select_pull_request_delta_alerts(
         [
             _alert(7, created_at="2026-04-02T12:05:00Z"),
@@ -173,7 +200,10 @@ def test_select_pull_request_delta_alerts_subtracts_base_branch_backlog() -> Non
 
 
 def test_evaluate_push_alerts_fails_without_workflow_start_timestamp() -> None:
-    """Verify test evaluate push alerts fails without workf behavior."""
+    """Verify evaluate push alerts fails without workflow start timestamp.
+
+    Inputs: none. Output: None.
+    """
     result = security_delta_guard.evaluate_push_alerts(
         "refs/heads/main",
         None,
@@ -191,7 +221,10 @@ def test_evaluate_push_alerts_fails_without_workflow_start_timestamp() -> None:
 def test_evaluate_pull_request_alerts_fails_only_on_alerts_not_present_on_base_ref() -> (
     None
 ):
-    """Verify test evaluate pull request alerts fails only behavior."""
+    """Verify evaluate pull request alerts fails only on alerts not present on base ref.
+
+    Inputs: none. Output: None.
+    """
     result = security_delta_guard.evaluate_pull_request_alerts(
         17,
         lambda **kwargs: (
@@ -217,7 +250,10 @@ def test_evaluate_pull_request_alerts_fails_only_on_alerts_not_present_on_base_r
 def test_evaluate_pull_request_alerts_passes_when_only_base_branch_alerts_remain() -> (
     None
 ):
-    """Verify test evaluate pull request alerts passes when behavior."""
+    """Verify evaluate pull request alerts passes when only base branch alerts remain.
+
+    Inputs: none. Output: None.
+    """
     result = security_delta_guard.evaluate_pull_request_alerts(
         17,
         lambda **kwargs: [_alert(91, created_at="2026-04-02T12:30:00Z")],
@@ -233,7 +269,10 @@ def test_evaluate_pull_request_alerts_passes_when_only_base_branch_alerts_remain
 
 
 def test_evaluate_push_alerts_passes_when_only_old_backlog_remains() -> None:
-    """Verify test evaluate push alerts passes when only ol behavior."""
+    """Verify evaluate push alerts passes when only old backlog remains.
+
+    Inputs: none. Output: None.
+    """
     result = security_delta_guard.evaluate_push_alerts(
         "refs/heads/main",
         datetime(2026, 4, 2, 12, 0, tzinfo=UTC),
@@ -249,10 +288,16 @@ def test_evaluate_push_alerts_passes_when_only_old_backlog_remains() -> None:
 
 
 def test_get_workflow_run_started_at_prefers_run_started_at(monkeypatch) -> None:
-    """Verify test get workflow run started at prefers run behavior."""
+    """Verify get workflow run started at prefers run started at.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
 
     def fake_github_api_get_json(api_path: str, credential: str) -> dict:
-        """Handle fake github API get JSON."""
+        """Fake github API get JSON.
+
+        Inputs: `api_path`, `credential`. Output: `dict`.
+        """
         assert api_path == "/repos/ZMB-UZH/omero-docker-extended/actions/runs/1234"
         assert credential == TEST_GITHUB_CREDENTIAL
         return {
@@ -276,7 +321,10 @@ def test_get_workflow_run_started_at_prefers_run_started_at(monkeypatch) -> None
 
 
 def test_load_event_payload_requires_readable_json_object_file(tmp_path) -> None:
-    """Verify test load event payload requires readable JSO behavior."""
+    """Verify load event payload requires readable JSON object file.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     payload_path = tmp_path / "event.json"
     payload_path.write_text('{"ref": "refs/heads/main"}', encoding="utf-8")
 
@@ -296,11 +344,17 @@ def test_load_event_payload_requires_readable_json_object_file(tmp_path) -> None
 
 
 def test_evaluate_direct_event_pull_request_uses_payload_pr_number() -> None:
-    """Verify test evaluate direct event pull request uses behavior."""
+    """Verify evaluate direct event pull request uses payload pr number.
+
+    Inputs: none. Output: None.
+    """
     calls = []
 
     def fetch_alerts(**kwargs):
-        """Handle fetch alerts."""
+        """Fetch alerts.
+
+        Inputs: `**kwargs`. Output: list.
+        """
         calls.append(kwargs)
         return [_alert(91, created_at="2026-04-02T12:30:00Z")]
 
@@ -322,16 +376,25 @@ def test_evaluate_direct_event_pull_request_uses_payload_pr_number() -> None:
 
 
 def test_evaluate_direct_event_push_uses_run_start_resolver() -> None:
-    """Verify test evaluate direct event push uses run star behavior."""
+    """Verify evaluate direct event push uses run start resolver.
+
+    Inputs: none. Output: None.
+    """
     calls = {"alerts": None, "run_started_at": None}
 
     def fetch_alerts(**kwargs):
-        """Handle fetch alerts."""
+        """Fetch alerts.
+
+        Inputs: `**kwargs`. Output: list.
+        """
         calls["alerts"] = kwargs
         return [_alert(44, created_at="2026-04-01T09:00:00Z")]
 
     def resolve_run_started_at(repository: str, run_id: str) -> datetime:
-        """Return resolve run started at."""
+        """Return resolve run started at.
+
+        Inputs: `repository`, `run_id`. Output: `datetime`.
+        """
         calls["run_started_at"] = (repository, run_id)
         return datetime(2026, 4, 2, 12, 0, tzinfo=UTC)
 
@@ -356,11 +419,17 @@ def test_evaluate_direct_event_push_uses_run_start_resolver() -> None:
 
 
 def test_evaluate_direct_event_skips_non_default_branch_schedule() -> None:
-    """Verify test evaluate direct event skips non default behavior."""
+    """Verify evaluate direct event skips non default branch schedule.
+
+    Inputs: none. Output: None.
+    """
     called = {"value": False}
 
     def fetch_alerts(**kwargs):
-        """Handle fetch alerts."""
+        """Fetch alerts.
+
+        Inputs: `**kwargs`. Output: list.
+        """
         called["value"] = True
         return []
 
@@ -382,7 +451,10 @@ def test_evaluate_direct_event_skips_non_default_branch_schedule() -> None:
 
 
 def test_evaluate_direct_event_fails_without_pull_request_number() -> None:
-    """Verify test evaluate direct event fails without pull behavior."""
+    """Verify evaluate direct event fails without pull request number.
+
+    Inputs: none. Output: None.
+    """
     result = security_delta_guard.evaluate_direct_event(
         "pull_request",
         {"pull_request": {}},
@@ -401,11 +473,17 @@ def test_evaluate_direct_event_fails_without_pull_request_number() -> None:
 
 
 def test_evaluate_workflow_run_skips_non_default_branch_push() -> None:
-    """Verify test evaluate workflow run skips non default behavior."""
+    """Verify evaluate workflow run skips non default branch push.
+
+    Inputs: none. Output: None.
+    """
     called = {"value": False}
 
     def fetch_alerts(**kwargs):
-        """Handle fetch alerts."""
+        """Fetch alerts.
+
+        Inputs: `**kwargs`. Output: list.
+        """
         called["value"] = True
         return []
 
@@ -432,11 +510,17 @@ def test_evaluate_workflow_run_skips_non_default_branch_push() -> None:
 def test_evaluate_workflow_run_uses_head_repository_default_branch_when_present() -> (
     None
 ):
-    """Verify test evaluate workflow run uses head reposito behavior."""
+    """Verify evaluate workflow run uses head repository default branch when present.
+
+    Inputs: none. Output: None.
+    """
     calls = {"count": 0, "kwargs": None}
 
     def fetch_alerts(**kwargs):
-        """Handle fetch alerts."""
+        """Fetch alerts.
+
+        Inputs: `**kwargs`. Output: list.
+        """
         calls["count"] += 1
         calls["kwargs"] = kwargs
         return []
@@ -463,18 +547,27 @@ def test_evaluate_workflow_run_uses_head_repository_default_branch_when_present(
 
 
 def test_evaluate_workflow_run_resolves_default_branch_when_payload_omits_it() -> None:
-    """Verify test evaluate workflow run resolves default b behavior."""
+    """Verify evaluate workflow run resolves default branch when payload omits it.
+
+    Inputs: none. Output: None.
+    """
     calls = {"count": 0, "kwargs": None}
     resolved = {"repository": None}
 
     def fetch_alerts(**kwargs):
-        """Handle fetch alerts."""
+        """Fetch alerts.
+
+        Inputs: `**kwargs`. Output: list.
+        """
         calls["count"] += 1
         calls["kwargs"] = kwargs
         return []
 
     def resolve_default_branch(repository: str) -> str:
-        """Return resolve default branch."""
+        """Return resolve default branch.
+
+        Inputs: `repository`. Output: `str`.
+        """
         resolved["repository"] = repository
         return "main"
 
@@ -502,7 +595,10 @@ def test_evaluate_workflow_run_resolves_default_branch_when_payload_omits_it() -
 
 
 def test_evaluate_workflow_run_fails_when_upstream_security_scan_failed() -> None:
-    """Verify test evaluate workflow run fails when upstrea behavior."""
+    """Verify evaluate workflow run fails when upstream security scan failed.
+
+    Inputs: none. Output: None.
+    """
     result = security_delta_guard.evaluate_workflow_run(
         {
             "workflow_run": {
@@ -523,11 +619,17 @@ def test_evaluate_workflow_run_fails_when_upstream_security_scan_failed() -> Non
 
 
 def test_evaluate_workflow_run_pull_request_subtracts_base_branch_alerts() -> None:
-    """Verify test evaluate workflow run pull request subtr behavior."""
+    """Verify evaluate workflow run pull request subtracts base branch alerts.
+
+    Inputs: none. Output: None.
+    """
     calls = []
 
     def fetch_alerts(**kwargs):
-        """Handle fetch alerts."""
+        """Fetch alerts.
+
+        Inputs: `**kwargs`. Output: list.
+        """
         calls.append(kwargs)
         if kwargs.get("ref") == "refs/heads/main":
             return [_alert(44, created_at="2026-04-01T09:00:00Z")]

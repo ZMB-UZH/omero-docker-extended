@@ -7,7 +7,10 @@ _T = TypeVar("_T")
 
 
 def next_or_fail(iterator: Iterator[_T], label: str = "test iterator") -> _T:
-    """Handle next or fail."""
+    """Next or fail.
+
+    Inputs: `iterator`, `label`. Output: `_T`. Raises on invalid or unavailable state.
+    """
     try:
         return next(iterator)
     except StopIteration as exc:

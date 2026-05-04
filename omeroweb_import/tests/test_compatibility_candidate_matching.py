@@ -15,7 +15,10 @@ from omeroweb_import.views.core_functions import _classify_compatibility_output
 def test_classify_marks_incompatible_when_output_contains_unrelated_candidate(
     tmp_path: Path,
 ):
-    """Verify test classify marks incompatible when output behavior."""
+    """Verify classify marks incompatible when output contains unrelated candidate.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     expected_file = tmp_path / "sample.unsupported"
     stdout = f"{tmp_path / 'other-file.tiff'}\n"
 
@@ -30,7 +33,10 @@ def test_classify_marks_incompatible_when_output_contains_unrelated_candidate(
 
 
 def test_classify_marks_compatible_when_expected_file_is_candidate(tmp_path: Path):
-    """Verify test classify marks compatible when expected behavior."""
+    """Verify classify marks compatible when expected file is candidate.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     expected_file = tmp_path / "image.ome.tif"
     stdout = f"{expected_file}\n"
 
@@ -45,7 +51,10 @@ def test_classify_marks_compatible_when_expected_file_is_candidate(tmp_path: Pat
 
 
 def test_classify_marks_incompatible_when_stdout_has_non_path_line(tmp_path: Path):
-    """Verify test classify marks incompatible when stdout behavior."""
+    """Verify classify marks incompatible when stdout has non path line.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     expected_file = tmp_path / "sample.unsupported"
     stdout = f"Using OMERODIR={tmp_path / 'compat-check-1234'}\n"
 
@@ -60,7 +69,10 @@ def test_classify_marks_incompatible_when_stdout_has_non_path_line(tmp_path: Pat
 
 
 def test_classify_marks_compatible_for_quoted_expected_candidate(tmp_path: Path):
-    """Verify test classify marks compatible for quoted exp behavior."""
+    """Verify classify marks compatible for quoted expected candidate.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     expected_file = tmp_path / "image.ome.tif"
     stdout = f'"{expected_file}"\n'
 
@@ -75,7 +87,10 @@ def test_classify_marks_compatible_for_quoted_expected_candidate(tmp_path: Path)
 
 
 def test_classify_bioformats_unknown_pixel_type_as_incompatible(tmp_path: Path):
-    """Verify Bio-Formats unknown pixel type output is skippable."""
+    """Verify Bio-Formats unknown pixel type output is skippable.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     expected_file = tmp_path / "image.ims"
     stderr = (
         "loci.formats.FormatException: Unknown pixel type: null\n"

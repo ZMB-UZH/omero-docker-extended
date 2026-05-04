@@ -16,7 +16,10 @@ class TmpPermissionRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.installation_script = (
             cls.repo_root / "installation" / "installation_script.sh"
@@ -28,7 +31,10 @@ class TmpPermissionRegressionTests(unittest.TestCase):
     def test_installation_layout_keeps_server_namespace_owned_by_server_uid(
         self,
     ) -> None:
-        """Verify test installation layout keeps server namespa behavior."""
+        """Verify installation layout keeps server namespace owned by server uid.
+
+        Inputs: none. Output: None.
+        """
         function_text = self._slice_function(
             self.installation_script,
             "ensure_omero_tmp_layout() {",
@@ -83,7 +89,10 @@ class TmpPermissionRegressionTests(unittest.TestCase):
             )
 
     def test_installation_layout_creates_web_tmp_directory(self) -> None:
-        """ensure_omero_tmp_layout must create omero-web/tmp owned by web uid."""
+        """Ensure_omero_tmp_layout must create omero-web/tmp owned by web uid.
+
+        Inputs: none. Output: None.
+        """
         function_text = self._slice_function(
             self.installation_script,
             "ensure_omero_tmp_layout() {",
@@ -118,7 +127,10 @@ class TmpPermissionRegressionTests(unittest.TestCase):
             )
 
     def test_server_bootstrap_removes_exact_legacy_lock_namespace(self) -> None:
-        """Verify test server bootstrap removes exact legacy lo behavior."""
+        """Verify server bootstrap removes exact legacy lock namespace.
+
+        Inputs: none. Output: None.
+        """
         function_text = self._slice_function(
             self.server_bootstrap_script,
             "ensure_tmpdir_permissions() {",
@@ -152,7 +164,10 @@ class TmpPermissionRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _run_bash(script: str) -> None:
-        """Handle run bash."""
+        """Bash.
+
+        Inputs: `script`. Output: None.
+        """
         subprocess.run(
             [BASH_BIN, "-lc", script],
             check=True,
@@ -163,13 +178,19 @@ class TmpPermissionRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _ownership(path: Path) -> tuple[int, int]:
-        """Handle ownership."""
+        """Ownership.
+
+        Inputs: `path`. Output: `tuple[int, int]`.
+        """
         stat_result = path.stat()
         return stat_result.st_uid, stat_result.st_gid
 
     @staticmethod
     def _slice_function(content: str, start_marker: str, end_marker: str) -> str:
-        """Handle slice function."""
+        """Slice function.
+
+        Inputs: `content`, `start_marker`, `end_marker`. Output: `str`.
+        """
         start = content.index(start_marker)
         end = content.index(end_marker, start)
         return content[start:end].rstrip()

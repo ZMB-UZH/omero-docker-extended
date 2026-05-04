@@ -25,12 +25,20 @@ parse_filename = _module.parse_filename
 
 
 def _consume_text(data: atheris.FuzzedDataProvider, max_length: int) -> str:
+    """Consume text.
+
+    Inputs: `data`, `max_length`. Output: `str`.
+    """
     return data.ConsumeUnicodeNoSurrogates(
         min(max_length, data.ConsumeIntInRange(0, max_length))
     )
 
 
 def TestOneInput(data: bytes) -> None:
+    """Verify One Input.
+
+    Inputs: `data`. Output: None.
+    """
     provider = atheris.FuzzedDataProvider(data)
     filename = _consume_text(provider, 256)
     separator_pattern = _consume_text(provider, 32)
@@ -42,6 +50,10 @@ def TestOneInput(data: bytes) -> None:
 
 
 def main() -> None:
+    """Execute the command entrypoint.
+
+    Inputs: none. Output: None.
+    """
     atheris.Setup(sys.argv, TestOneInput)
     atheris.Fuzz()
 

@@ -13,15 +13,24 @@ class CavemanSkillContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def read_text(self, relative_path: str) -> str:
-        """Return read text."""
+        """Return read text.
+
+        Inputs: `relative_path`. Output: `str`.
+        """
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
 
     def test_vendored_caveman_reference_exists(self) -> None:
-        """Verify test vendored caveman reference exists."""
+        """Verify vendored caveman reference exists.
+
+        Inputs: none. Output: None.
+        """
         self.assertTrue(
             (self.repo_root / "third_party/caveman-v1.6.0/LICENSE").is_file()
         )
@@ -35,7 +44,10 @@ class CavemanSkillContractTests(unittest.TestCase):
         )
 
     def test_active_caveman_skill_is_guarded_and_repo_specific(self) -> None:
-        """Verify test active caveman skill is guarded and repo behavior."""
+        """Verify active caveman skill is guarded and repo specific.
+
+        Inputs: none. Output: None.
+        """
         skill_text = self.read_text(".agents/skills/caveman/SKILL.md")
         self.assertIn("Use this skill only when the user explicitly asks", skill_text)
         self.assertIn("context-budget", skill_text)
@@ -53,7 +65,10 @@ class CavemanSkillContractTests(unittest.TestCase):
         self.assertIn("third_party/caveman-v1.6.0/skills/caveman/SKILL.md", skill_text)
 
     def test_caveman_adapter_disables_implicit_invocation(self) -> None:
-        """Verify test caveman adapter disables implicit invoca behavior."""
+        """Verify caveman adapter disables implicit invocation.
+
+        Inputs: none. Output: None.
+        """
         adapter = yaml.safe_load(
             self.read_text(".agents/skills/caveman/agents/openai.yaml")
         )
@@ -66,7 +81,10 @@ class CavemanSkillContractTests(unittest.TestCase):
         self.assertIn("across agents", adapter["interface"]["default_prompt"])
 
     def test_cross_agent_surfaces_present_caveman_as_opt_in(self) -> None:
-        """Verify test cross agent surfaces present caveman as behavior."""
+        """Verify cross agent surfaces present caveman as opt in.
+
+        Inputs: none. Output: None.
+        """
         tracked_surfaces = (
             "AGENTS.md",
             "CLAUDE.md",
@@ -93,7 +111,10 @@ class CavemanSkillContractTests(unittest.TestCase):
                 )
 
     def test_supported_agent_adapters_route_to_shared_skill_catalog(self) -> None:
-        """Verify test supported agent adapters route to shared behavior."""
+        """Verify supported agent adapters route to shared skill catalog.
+
+        Inputs: none. Output: None.
+        """
         tracked_surfaces = (
             "AGENTS.md",
             "CLAUDE.md",
@@ -110,7 +131,10 @@ class CavemanSkillContractTests(unittest.TestCase):
                 )
 
     def test_public_docs_keep_caveman_prompt_only(self) -> None:
-        """Verify test public docs keep caveman prompt only."""
+        """Verify public docs keep caveman prompt only.
+
+        Inputs: none. Output: None.
+        """
         tracked_docs = (
             "README.md",
             "AGENTS.md",
@@ -134,7 +158,10 @@ class CavemanSkillContractTests(unittest.TestCase):
                 )
 
     def test_repo_does_not_activate_upstream_caveman_runtime(self) -> None:
-        """Verify test repo does not activate upstream caveman behavior."""
+        """Verify repo does not activate upstream caveman runtime.
+
+        Inputs: none. Output: None.
+        """
         integrations_text = self.read_text("docs/reference/ai-agent-integrations.md")
         self.assertIn("shared `.agents/skills/` catalog", integrations_text)
         self.assertIn("do not make it Codex-only", integrations_text)
@@ -148,7 +175,10 @@ class CavemanSkillContractTests(unittest.TestCase):
         self.assertNotIn("caveman", self.read_text(".claude/settings.json").lower())
 
     def test_upstream_reference_records_latest_reviewed_release(self) -> None:
-        """Verify test upstream reference records latest review behavior."""
+        """Verify upstream reference records latest reviewed release.
+
+        Inputs: none. Output: None.
+        """
         upstream_text = self.read_text("docs/reference/ai-agent-upstream-sources.md")
         reviewed_caveman_commit = "".join(
             (
@@ -162,7 +192,10 @@ class CavemanSkillContractTests(unittest.TestCase):
         self.assertIn("third_party/caveman-v1.6.0/", upstream_text)
 
     def test_readme_documents_opt_in_caveman_badge(self) -> None:
-        """Verify test readme documents opt in caveman badge."""
+        """Verify readme documents opt in caveman badge.
+
+        Inputs: none. Output: None.
+        """
         readme_text = self.read_text("README.md")
         self.assertIn("[![caveman](", readme_text)
         self.assertIn(

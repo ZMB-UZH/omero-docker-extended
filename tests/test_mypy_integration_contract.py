@@ -18,15 +18,24 @@ class MypyIntegrationContractTests(TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def read_text(self, relative_path: str) -> str:
-        """Return read text."""
+        """Return read text.
+
+        Inputs: `relative_path`. Output: `str`.
+        """
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
 
     def test_python_style_doc_covers_mypy_workflow_and_local_runner(self) -> None:
-        """Verify test python style doc covers mypy workflow an behavior."""
+        """Verify python style doc covers mypy workflow and local runner.
+
+        Inputs: none. Output: None.
+        """
         doc_text = self.read_text("docs/reference/python-style-and-linting.md")
         self.assertIn(".github/workflows/mypy.yml", doc_text)
         self.assertIn("python3 tools/mypy_check.py", doc_text)
@@ -34,7 +43,10 @@ class MypyIntegrationContractTests(TestCase):
         self.assertIn("tracked production Python files", doc_text)
 
     def test_mypy_config_enables_meaningful_repo_checks(self) -> None:
-        """Verify test mypy config enables meaningful repo checks."""
+        """Verify mypy config enables meaningful repo checks.
+
+        Inputs: none. Output: None.
+        """
         config = configparser.ConfigParser()
         config.read_string(self.read_text("mypy.ini"))
         mypy_config = config["mypy"]
@@ -51,7 +63,10 @@ class MypyIntegrationContractTests(TestCase):
         self.assertEqual("True", mypy_config["warn_unreachable"])
 
     def test_mypy_requirements_are_hash_pinned(self) -> None:
-        """Verify test mypy requirements are hash pinned."""
+        """Verify mypy requirements are hash pinned.
+
+        Inputs: none. Output: None.
+        """
         source = self.read_text(".github/requirements/mypy-ci.in")
         compiled = self.read_text(".github/requirements/mypy-ci.txt")
 
@@ -66,7 +81,10 @@ class MypyIntegrationContractTests(TestCase):
         self.assertIn("--hash=sha256:", compiled)
 
     def test_runtime_only_type_stubs_are_scoped_to_typings_directory(self) -> None:
-        """Verify test runtime only type stubs are scoped to ty behavior."""
+        """Verify runtime only type stubs are scoped to typings directory.
+
+        Inputs: none. Output: None.
+        """
         required_stub_paths = (
             "typings/omero/__init__.pyi",
             "typings/omero/gateway.pyi",
@@ -80,7 +98,10 @@ class MypyIntegrationContractTests(TestCase):
                 self.assertTrue((self.repo_root / relative_path).is_file())
 
     def test_mypy_workflow_is_pinned_and_uses_repo_runner(self) -> None:
-        """Verify test mypy workflow is pinned and uses repo ru behavior."""
+        """Verify mypy workflow is pinned and uses repo runner.
+
+        Inputs: none. Output: None.
+        """
         workflow = yaml.safe_load(self.read_text(".github/workflows/mypy.yml"))
         triggers = workflow[True]
         self.assertNotIn("pull_request", triggers)
@@ -137,7 +158,10 @@ class MypyIntegrationContractTests(TestCase):
         )
 
     def test_scope_keeps_only_tracked_production_python_files(self) -> None:
-        """Verify test scope keeps only tracked production pyth behavior."""
+        """Verify scope keeps only tracked production python files.
+
+        Inputs: none. Output: None.
+        """
         include = (
             "tools/mypy_check.py",
             "startup/50-config.py",
@@ -167,7 +191,10 @@ class MypyIntegrationContractTests(TestCase):
                 )
 
     def test_list_mypy_targets_uses_git_ls_files_and_safe_directory(self) -> None:
-        """Verify test list mypy targets uses git ls files and behavior."""
+        """Verify list mypy targets uses git ls files and safe directory.
+
+        Inputs: none. Output: None.
+        """
         repo_root = self.repo_root
         tracked_files = "\n".join(
             [
@@ -212,7 +239,10 @@ class MypyIntegrationContractTests(TestCase):
         )
 
     def test_build_mypy_command_uses_current_python_and_config(self) -> None:
-        """Verify test build mypy command uses current python a behavior."""
+        """Verify build mypy command uses current python and config.
+
+        Inputs: none. Output: None.
+        """
         self.assertEqual(
             [
                 mypy_check.sys.executable,

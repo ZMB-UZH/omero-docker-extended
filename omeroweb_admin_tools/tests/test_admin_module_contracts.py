@@ -11,7 +11,10 @@ from omeroweb_admin_tools.views import help_view
 
 
 def test_admin_tools_app_ready_invokes_logging_setup(monkeypatch):
-    """Verify test admin tools app ready invokes logging setup."""
+    """Verify admin tools app ready invokes logging setup.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     configured = []
     monkeypatch.setattr(
         apps, "configure_omero_gateway_logging", lambda: configured.append(True)
@@ -26,7 +29,10 @@ def test_admin_tools_app_ready_invokes_logging_setup(monkeypatch):
 def test_admin_help_page_serves_expected_file_and_404s_when_missing(
     tmp_path, monkeypatch
 ):
-    """Verify test admin help page serves expected file and behavior."""
+    """Verify admin help page serves expected file and 404s when missing.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     docs_root = tmp_path / "docs" / "help"
     docs_root.mkdir(parents=True)
     help_file = docs_root / "omeroweb_admin_tools_help.md"
